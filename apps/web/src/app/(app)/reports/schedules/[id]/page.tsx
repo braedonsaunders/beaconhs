@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, count, desc, eq, sql, type SQL } from 'drizzle-orm'
@@ -34,7 +37,10 @@ import { loadScheduleFormData } from '../_data'
 import { ScheduleForm } from '../_schedule-form'
 import { deleteSchedule, setActive, triggerNow, updateSchedule } from './actions'
 
-export const metadata = { title: 'Report schedule' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0d9fe5e16e9812') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['started'] as const
@@ -46,6 +52,8 @@ export default async function ScheduleDetailPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -110,59 +118,75 @@ export default async function ScheduleDetailPage({
       header={
         <DetailHeader
           back={{ href: '/reports/schedules', label: 'Back to schedules' }}
-          title={schedule.name}
-          subtitle={
+          title={tGeneratedValue(schedule.name)}
+          subtitle={tGeneratedValue(
             definition
-              ? `Delivers “${definition.name}” as a PDF email`
-              : 'The underlying report definition no longer exists'
-          }
+              ? tGenerated('m_0d395c74ffad3e', { value0: definition.name })
+              : tGenerated('m_0b1c499d0b9255'),
+          )}
           badge={
             schedule.active ? (
-              <Badge variant="success">active</Badge>
+              <Badge variant="success">
+                <GeneratedText id="m_0af64d5dc843c0" />
+              </Badge>
             ) : (
-              <Badge variant="secondary">paused</Badge>
+              <Badge variant="secondary">
+                <GeneratedText id="m_18a9844f041430" />
+              </Badge>
             )
           }
           actions={
             <>
-              {definition ? (
-                <Link href={`/reports/definitions/${definition.id}`}>
-                  <Button variant="outline" size="sm">
-                    View report
-                  </Button>
-                </Link>
-              ) : null}
-              {canSchedule ? (
-                <>
-                  <form action={triggerBound}>
-                    <Button type="submit" variant="outline" size="sm">
-                      <Zap size={14} className="mr-1.5" />
-                      Run now
-                    </Button>
-                  </form>
-                  <form action={toggleBound}>
-                    <Button type="submit" variant="outline" size="sm">
-                      {schedule.active ? (
-                        <>
-                          <Pause size={14} className="mr-1.5" />
-                          Pause
-                        </>
-                      ) : (
-                        <>
-                          <Play size={14} className="mr-1.5" />
-                          Resume
-                        </>
-                      )}
-                    </Button>
-                  </form>
-                  <form action={deleteBound}>
-                    <Button type="submit" variant="destructive" size="sm">
-                      <Trash2 size={14} className="mr-1.5" />
-                      Delete
-                    </Button>
-                  </form>
-                </>
-              ) : null}
+              <GeneratedValue
+                value={
+                  definition ? (
+                    <Link href={`/reports/definitions/${definition.id}`}>
+                      <Button variant="outline" size="sm">
+                        <GeneratedText id="m_0a0fa830980e0c" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  canSchedule ? (
+                    <>
+                      <form action={triggerBound}>
+                        <Button type="submit" variant="outline" size="sm">
+                          <Zap size={14} className="mr-1.5" />
+                          <GeneratedText id="m_088d61d7784bcf" />
+                        </Button>
+                      </form>
+                      <form action={toggleBound}>
+                        <Button type="submit" variant="outline" size="sm">
+                          <GeneratedValue
+                            value={
+                              schedule.active ? (
+                                <>
+                                  <Pause size={14} className="mr-1.5" />
+                                  <GeneratedText id="m_18a541e86f31d8" />
+                                </>
+                              ) : (
+                                <>
+                                  <Play size={14} className="mr-1.5" />
+                                  <GeneratedText id="m_0607d4d4be574c" />
+                                </>
+                              )
+                            }
+                          />
+                        </Button>
+                      </form>
+                      <form action={deleteBound}>
+                        <Button type="submit" variant="destructive" size="sm">
+                          <Trash2 size={14} className="mr-1.5" />
+                          <GeneratedText id="m_11773f3c3f7558" />
+                        </Button>
+                      </form>
+                    </>
+                  ) : null
+                }
+              />
             </>
           }
         />
@@ -171,91 +195,149 @@ export default async function ScheduleDetailPage({
       <div className="space-y-5">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Configuration</CardTitle>
+            <CardTitle className="text-sm">
+              <GeneratedText id="m_091d9cc13438f5" />
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {canSchedule ? (
-              <ScheduleForm
-                definitions={definitions}
-                members={members}
-                initial={{
-                  definitionId: schedule.definitionId,
-                  name: schedule.name,
-                  cadence: schedule.cadence,
-                  dayOfWeek: schedule.dayOfWeek,
-                  dayOfMonth: schedule.dayOfMonth,
-                  hour: schedule.hour,
-                  minute: schedule.minute,
-                  timezone: schedule.timezone,
-                  recipientUserIds: schedule.recipientUserIds ?? [],
-                  recipientEmails: schedule.recipientEmails ?? [],
-                  filters: schedule.filters ?? {},
-                }}
-                submitLabel="Save changes"
-                action={updateBound}
-                extraFooter={
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Next run:{' '}
-                    <strong>
-                      {schedule.nextRunAt
-                        ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone, ctx.locale)
-                        : '—'}
-                    </strong>{' '}
-                    · Last run:{' '}
-                    <strong>
-                      {schedule.lastRunAt
-                        ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone, ctx.locale)
-                        : 'never'}
-                    </strong>
-                  </p>
-                }
-              />
-            ) : (
-              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-                <ConfigItem label="Report">{definition?.name ?? '—'}</ConfigItem>
-                <ConfigItem label="Cadence">
-                  {formatCadence(
-                    schedule.cadence,
-                    schedule.dayOfWeek,
-                    schedule.dayOfMonth,
-                    schedule.hour,
-                    schedule.minute,
-                    schedule.timezone,
-                  )}
-                </ConfigItem>
-                <ConfigItem label="Recipients">
-                  {recipientCount
-                    ? `${recipientCount} recipient${recipientCount === 1 ? '' : 's'}`
-                    : '—'}
-                </ConfigItem>
-                <ConfigItem label="Timezone">{schedule.timezone}</ConfigItem>
-                <ConfigItem label="Next run">
-                  {schedule.nextRunAt
-                    ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone, ctx.locale)
-                    : '—'}
-                </ConfigItem>
-                <ConfigItem label="Last run">
-                  {schedule.lastRunAt
-                    ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone, ctx.locale)
-                    : 'never'}
-                </ConfigItem>
-              </dl>
-            )}
+            <GeneratedValue
+              value={
+                canSchedule ? (
+                  <ScheduleForm
+                    definitions={definitions}
+                    members={members}
+                    initial={{
+                      definitionId: schedule.definitionId,
+                      name: schedule.name,
+                      cadence: schedule.cadence,
+                      dayOfWeek: schedule.dayOfWeek,
+                      dayOfMonth: schedule.dayOfMonth,
+                      hour: schedule.hour,
+                      minute: schedule.minute,
+                      timezone: schedule.timezone,
+                      recipientUserIds: schedule.recipientUserIds ?? [],
+                      recipientEmails: schedule.recipientEmails ?? [],
+                      filters: schedule.filters ?? {},
+                    }}
+                    submitLabel={tGenerated('m_1ab9025ed1067c')}
+                    action={updateBound}
+                    extraFooter={
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_055eaa561d8421" />
+                        <GeneratedValue value={' '} />
+                        <strong>
+                          <GeneratedValue
+                            value={
+                              schedule.nextRunAt
+                                ? formatDateTime(
+                                    new Date(schedule.nextRunAt),
+                                    ctx.timezone,
+                                    ctx.locale,
+                                  )
+                                : '—'
+                            }
+                          />
+                        </strong>
+                        <GeneratedValue value={' '} />
+                        <GeneratedText id="m_042f569ce77fcd" />
+                        <GeneratedValue value={' '} />
+                        <strong>
+                          <GeneratedValue
+                            value={
+                              schedule.lastRunAt ? (
+                                formatDateTime(
+                                  new Date(schedule.lastRunAt),
+                                  ctx.timezone,
+                                  ctx.locale,
+                                )
+                              ) : (
+                                <GeneratedText id="m_069a3d1a5f8ba4" />
+                              )
+                            }
+                          />
+                        </strong>
+                      </p>
+                    }
+                  />
+                ) : (
+                  <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+                    <ConfigItem label={tGenerated('m_0ab5a972fc80fd')}>
+                      <GeneratedValue value={definition?.name ?? '—'} />
+                    </ConfigItem>
+                    <ConfigItem label={tGenerated('m_1151ed0308b6d1')}>
+                      <GeneratedValue
+                        value={formatCadence(
+                          schedule.cadence,
+                          schedule.dayOfWeek,
+                          schedule.dayOfMonth,
+                          schedule.hour,
+                          schedule.minute,
+                          schedule.timezone,
+                        )}
+                      />
+                    </ConfigItem>
+                    <ConfigItem label={tGenerated('m_0d99b2b56f8b5d')}>
+                      <GeneratedValue
+                        value={
+                          recipientCount ? (
+                            <GeneratedText
+                              id="m_1ed3e2228b6ce2"
+                              values={{
+                                value0: recipientCount,
+                                value1: recipientCount === 1 ? '' : 's',
+                              }}
+                            />
+                          ) : (
+                            '—'
+                          )
+                        }
+                      />
+                    </ConfigItem>
+                    <ConfigItem label={tGenerated('m_14c7a1feb33b17')}>
+                      <GeneratedValue value={schedule.timezone} />
+                    </ConfigItem>
+                    <ConfigItem label={tGenerated('m_05e650592b7158')}>
+                      <GeneratedValue
+                        value={
+                          schedule.nextRunAt
+                            ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone, ctx.locale)
+                            : '—'
+                        }
+                      />
+                    </ConfigItem>
+                    <ConfigItem label={tGenerated('m_1236782a321d73')}>
+                      <GeneratedValue
+                        value={
+                          schedule.lastRunAt ? (
+                            formatDateTime(new Date(schedule.lastRunAt), ctx.timezone, ctx.locale)
+                          ) : (
+                            <GeneratedText id="m_069a3d1a5f8ba4" />
+                          )
+                        }
+                      />
+                    </ConfigItem>
+                  </dl>
+                )
+              }
+            />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Run history ({runData.total})</CardTitle>
+            <CardTitle className="text-sm">
+              <GeneratedText id="m_0c0abeaa90bac6" />
+              <GeneratedValue value={runData.total} />)
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <TableToolbar className="mb-3">
-              <SearchInput placeholder="Search date, status, or trigger…" />
+              <SearchInput placeholder={tGenerated('m_0a26915cb2ee54')} />
               <FilterChips
                 basePath={basePath}
                 currentParams={sp}
                 paramKey="status"
-                label="Status"
+                label={tGenerated('m_0b9da892d6faf0')}
                 options={[
                   { value: 'queued', label: 'Queued' },
                   { value: 'running', label: 'Running' },
@@ -264,66 +346,104 @@ export default async function ScheduleDetailPage({
                 ]}
               />
             </TableToolbar>
-            {runs.length === 0 ? (
-              <EmptyState
-                icon={<History size={24} />}
-                title={listParams.q || statusFilter ? 'No runs match your filters' : 'No runs'}
-                description={
-                  listParams.q || statusFilter
-                    ? 'Clear the search or status filter to see other runs.'
-                    : 'Run now to trigger the first delivery.'
-                }
-              />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Started</TableHead>
-                    <TableHead>Finished</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Rows</TableHead>
-                    <TableHead>PDF</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {runs.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="text-slate-600 dark:text-slate-300">
-                        <Link
-                          href={`/reports/schedules/${id}/runs/${r.id}`}
-                          className="hover:underline"
-                        >
-                          {formatDateTime(new Date(r.startedAt), ctx.timezone, ctx.locale)}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-300">
-                        {r.finishedAt
-                          ? formatDateTime(new Date(r.finishedAt), ctx.timezone, ctx.locale)
-                          : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={r.status} />
-                      </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-300">
-                        {r.rowCount ?? '—'}
-                      </TableCell>
-                      <TableCell>
-                        {r.pdfAttachmentId ? (
-                          <a
-                            href={`/reports/schedules/${id}/runs/${r.id}/pdf`}
-                            className="text-teal-700 hover:underline dark:text-teal-300"
-                          >
-                            Download
-                          </a>
-                        ) : (
-                          <span className="text-slate-300 dark:text-slate-600">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+            <GeneratedValue
+              value={
+                runs.length === 0 ? (
+                  <EmptyState
+                    icon={<History size={24} />}
+                    title={tGeneratedValue(
+                      listParams.q || statusFilter
+                        ? tGenerated('m_1dc097ef89ae5f')
+                        : tGenerated('m_00bdcdd0c9471c'),
+                    )}
+                    description={tGeneratedValue(
+                      listParams.q || statusFilter
+                        ? tGenerated('m_1ebae737f8b478')
+                        : tGenerated('m_17dca5b3eaf18e'),
+                    )}
+                  />
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>
+                          <GeneratedText id="m_1922c581498469" />
+                        </TableHead>
+                        <TableHead>
+                          <GeneratedText id="m_0b4f952ff360b5" />
+                        </TableHead>
+                        <TableHead>
+                          <GeneratedText id="m_0b9da892d6faf0" />
+                        </TableHead>
+                        <TableHead>
+                          <GeneratedText id="m_03be2202673df4" />
+                        </TableHead>
+                        <TableHead>
+                          <GeneratedText id="m_1a2b2ed6729166" />
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <GeneratedValue
+                        value={runs.map((r) => (
+                          <TableRow key={r.id}>
+                            <TableCell className="text-slate-600 dark:text-slate-300">
+                              <Link
+                                href={`/reports/schedules/${id}/runs/${r.id}`}
+                                className="hover:underline"
+                              >
+                                <GeneratedValue
+                                  value={formatDateTime(
+                                    new Date(r.startedAt),
+                                    ctx.timezone,
+                                    ctx.locale,
+                                  )}
+                                />
+                              </Link>
+                            </TableCell>
+                            <TableCell className="text-slate-600 dark:text-slate-300">
+                              <GeneratedValue
+                                value={
+                                  r.finishedAt
+                                    ? formatDateTime(
+                                        new Date(r.finishedAt),
+                                        ctx.timezone,
+                                        ctx.locale,
+                                      )
+                                    : '—'
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <StatusBadge status={r.status} />
+                            </TableCell>
+                            <TableCell className="text-slate-600 dark:text-slate-300">
+                              <GeneratedValue value={r.rowCount ?? '—'} />
+                            </TableCell>
+                            <TableCell>
+                              <GeneratedValue
+                                value={
+                                  r.pdfAttachmentId ? (
+                                    <a
+                                      href={`/reports/schedules/${id}/runs/${r.id}/pdf`}
+                                      className="text-teal-700 hover:underline dark:text-teal-300"
+                                    >
+                                      <GeneratedText id="m_0fcb9c63d263d1" />
+                                    </a>
+                                  ) : (
+                                    <span className="text-slate-300 dark:text-slate-600">—</span>
+                                  )
+                                }
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      />
+                    </TableBody>
+                  </Table>
+                )
+              }
+            />
             <Pagination
               basePath={basePath}
               currentParams={sp}
@@ -342,9 +462,11 @@ function ConfigItem({ label, children }: { label: string; children: React.ReactN
   return (
     <div>
       <dt className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        {label}
+        <GeneratedValue value={label} />
       </dt>
-      <dd className="mt-0.5 text-slate-900 dark:text-slate-100">{children}</dd>
+      <dd className="mt-0.5 text-slate-900 dark:text-slate-100">
+        <GeneratedValue value={children} />
+      </dd>
     </div>
   )
 }

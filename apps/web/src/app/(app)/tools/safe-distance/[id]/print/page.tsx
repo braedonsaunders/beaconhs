@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound } from 'next/navigation'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
@@ -28,7 +30,10 @@ import {
   type SafeDistanceUnit,
 } from '../../_lib'
 
-export const metadata = { title: 'Safe Distance — print' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0e5fde763051e8') }
+}
 export const dynamic = 'force-dynamic'
 
 const M3_TO_FT3 = 35.3147
@@ -44,6 +49,7 @@ export default async function SafeDistancePrintPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -144,10 +150,15 @@ export default async function SafeDistancePrintPage({
 
       <div className="psd-toolbar no-print">
         <div>
-          <strong>Safe Distance — print</strong> · {rec.reference}
+          <strong>
+            <GeneratedText id="m_0e5fde763051e8" />
+          </strong>{' '}
+          · <GeneratedValue value={rec.reference} />
         </div>
         <div>
-          <a href={`/tools/safe-distance/${id}`}>Back</a>
+          <a href={`/tools/safe-distance/${id}`}>
+            <GeneratedText id="m_1a7cefe5a9894e" />
+          </a>
           <BrowserPrintButton />
         </div>
       </div>
@@ -155,107 +166,193 @@ export default async function SafeDistancePrintPage({
       <div className="psd-shell">
         <header className="psd-header">
           <div>
-            <div className="psd-title">Pressure-Test Safe Distance</div>
+            <div className="psd-title">
+              <GeneratedText id="m_0fbd5f3f2d5fd8" />
+            </div>
             <div className="psd-reference">
-              {tenant?.name ?? ''} · {rec.reference} · {rec.name}
+              <GeneratedValue value={tenant?.name ?? ''} /> ·{' '}
+              <GeneratedValue value={rec.reference} /> · <GeneratedValue value={rec.name} />
             </div>
           </div>
         </header>
 
         <section className="psd-row">
-          <Field label="Method" value={SAFE_DISTANCE_METHOD_LABELS[method]} />
-          <Field label="Test pressure" value={formatPressure(rec.testPressure, unit)} />
-          <Field label="Total volume" value={formatVolume(rec.totalVolume, unit)} />
           <Field
-            label="Governing distance"
-            value={<strong>{formatDistance(chosen, unit)}</strong>}
+            label={tGenerated('m_0984e05d5d435f')}
+            value={SAFE_DISTANCE_METHOD_LABELS[method]}
           />
           <Field
-            label="Occurred"
+            label={tGenerated('m_15ad0bfca888c5')}
+            value={formatPressure(rec.testPressure, unit)}
+          />
+          <Field
+            label={tGenerated('m_079362e557e1a4')}
+            value={formatVolume(rec.totalVolume, unit)}
+          />
+          <Field
+            label={tGenerated('m_1d839f68cfc98b')}
+            value={
+              <strong>
+                <GeneratedValue value={formatDistance(chosen, unit)} />
+              </strong>
+            }
+          />
+          <Field
+            label={tGenerated('m_14a5e97535a15a')}
             value={
               rec.occurredAt
                 ? new Date(rec.occurredAt).toISOString().slice(0, 16).replace('T', ' ')
                 : '—'
             }
           />
-          <Field label="Site" value={site?.name ?? '—'} />
-          <Field label="Supervisor" value={supervisorLabel} />
-          <Field label="Operator" value={operatorLabel} />
-          <Field label="Locked" value={rec.locked ? 'Yes' : 'No'} />
+          <Field label={tGenerated('m_020146dd3d3d5a')} value={site?.name ?? '—'} />
+          <Field label={tGenerated('m_0ccb8e5b917b17')} value={supervisorLabel} />
+          <Field label={tGenerated('m_1e720918eae43e')} value={operatorLabel} />
+          <Field label={tGenerated('m_0e259fa0babc2d')} value={rec.locked ? 'Yes' : 'No'} />
         </section>
 
         <div className="psd-block">
-          <h2>Results by method ({distanceUnitLabel(unit)})</h2>
+          <h2>
+            <GeneratedText id="m_15d323ef3193f3" />
+            <GeneratedValue value={distanceUnitLabel(unit)} />)
+          </h2>
           <div className="psd-results">
             <div className="psd-card">
-              <div className="k">Total volume</div>
-              <div className="s">System</div>
-              <div className="v">{formatVolume(rec.totalVolume, unit)}</div>
-            </div>
-            {methods.map((m) => (
-              <div key={m.key} className={`psd-card${m.key === method ? 'chosen' : ''}`}>
-                <div className="k">{SAFE_DISTANCE_METHOD_LABELS[m.key]}</div>
-                <div className="s">{SAFE_DISTANCE_METHOD_SUBTITLES[m.key]}</div>
-                <div className="v">{formatDistance(m.value, unit)}</div>
+              <div className="k">
+                <GeneratedText id="m_079362e557e1a4" />
               </div>
-            ))}
+              <div className="s">
+                <GeneratedText id="m_08f7a859552ffa" />
+              </div>
+              <div className="v">
+                <GeneratedValue value={formatVolume(rec.totalVolume, unit)} />
+              </div>
+            </div>
+            <GeneratedValue
+              value={methods.map((m) => (
+                <div key={m.key} className={`psd-card${m.key === method ? 'chosen' : ''}`}>
+                  <div className="k">
+                    <GeneratedValue value={SAFE_DISTANCE_METHOD_LABELS[m.key]} />
+                  </div>
+                  <div className="s">
+                    <GeneratedValue value={SAFE_DISTANCE_METHOD_SUBTITLES[m.key]} />
+                  </div>
+                  <div className="v">
+                    <GeneratedValue value={formatDistance(m.value, unit)} />
+                  </div>
+                </div>
+              ))}
+            />
           </div>
         </div>
 
-        {segments.length > 0 ? (
-          <div className="psd-block">
-            <h2>Piping system</h2>
-            <table className="psd-pipes">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th>Unit</th>
-                  <th>Length</th>
-                  <th>Int. Ø</th>
-                  <th>Volume ({volUnit})</th>
-                </tr>
-              </thead>
-              <tbody>
-                {segments.map((s, i) => {
-                  const volM3 = Number(s.volumeM3) || 0
-                  const volDisplay = unit === 'imperial' ? volM3 * M3_TO_FT3 : volM3
-                  return (
-                    <tr key={s.id}>
-                      <td>{i + 1}</td>
-                      <td>{s.name ?? '—'}</td>
-                      <td>{SEGMENT_UNIT_LABELS[s.unit as SafeDistanceSegmentUnit]}</td>
-                      <td>{Number(s.lengthValue).toFixed(3)}</td>
-                      <td>{Number(s.internalDiameter).toFixed(3)}</td>
-                      <td>{volDisplay.toFixed(4)}</td>
+        <GeneratedValue
+          value={
+            segments.length > 0 ? (
+              <div className="psd-block">
+                <h2>
+                  <GeneratedText id="m_0d177d4d5e86df" />
+                </h2>
+                <table className="psd-pipes">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>
+                        <GeneratedText id="m_02b18d5c7f6f2d" />
+                      </th>
+                      <th>
+                        <GeneratedText id="m_1b1663e433323c" />
+                      </th>
+                      <th>
+                        <GeneratedText id="m_198c37c515c068" />
+                      </th>
+                      <th>
+                        <GeneratedText id="m_11ff3f85f65522" />
+                      </th>
+                      <th>
+                        <GeneratedText id="m_1da5dfd1bc4dff" />
+                        <GeneratedValue value={volUnit} />)
+                      </th>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
+                  </thead>
+                  <tbody>
+                    <GeneratedValue
+                      value={segments.map((s, i) => {
+                        const volM3 = Number(s.volumeM3) || 0
+                        const volDisplay = unit === 'imperial' ? volM3 * M3_TO_FT3 : volM3
+                        return (
+                          <tr key={s.id}>
+                            <td>
+                              <GeneratedValue value={i + 1} />
+                            </td>
+                            <td>
+                              <GeneratedValue value={s.name ?? '—'} />
+                            </td>
+                            <td>
+                              <GeneratedValue
+                                value={SEGMENT_UNIT_LABELS[s.unit as SafeDistanceSegmentUnit]}
+                              />
+                            </td>
+                            <td>
+                              <GeneratedValue value={Number(s.lengthValue).toFixed(3)} />
+                            </td>
+                            <td>
+                              <GeneratedValue value={Number(s.internalDiameter).toFixed(3)} />
+                            </td>
+                            <td>
+                              <GeneratedValue value={volDisplay.toFixed(4)} />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    />
+                  </tbody>
+                </table>
+              </div>
+            ) : null
+          }
+        />
 
-        {rec.description ? (
-          <div className="psd-block">
-            <h2>Description</h2>
-            <p className="psd-text">{rec.description}</p>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            rec.description ? (
+              <div className="psd-block">
+                <h2>
+                  <GeneratedText id="m_14d923495cf14c" />
+                </h2>
+                <p className="psd-text">
+                  <GeneratedValue value={rec.description} />
+                </p>
+              </div>
+            ) : null
+          }
+        />
 
-        {rec.notes ? (
-          <div className="psd-block">
-            <h2>Notes</h2>
-            <p className="psd-text">{rec.notes}</p>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            rec.notes ? (
+              <div className="psd-block">
+                <h2>
+                  <GeneratedText id="m_0b8dadcb78cd08" />
+                </h2>
+                <p className="psd-text">
+                  <GeneratedValue value={rec.notes} />
+                </p>
+              </div>
+            ) : null
+          }
+        />
 
         <div className="psd-sig">
           <div>
-            <div className="psd-sig-line">Operator signature</div>
+            <div className="psd-sig-line">
+              <GeneratedText id="m_0ddcfc2655f121" />
+            </div>
           </div>
           <div>
-            <div className="psd-sig-line">Supervisor signature</div>
+            <div className="psd-sig-line">
+              <GeneratedText id="m_18510497d7acda" />
+            </div>
           </div>
         </div>
       </div>
@@ -266,8 +363,12 @@ export default async function SafeDistancePrintPage({
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <div className="lbl">{label}</div>
-      <div className="val">{value}</div>
+      <div className="lbl">
+        <GeneratedValue value={label} />
+      </div>
+      <div className="val">
+        <GeneratedValue value={value} />
+      </div>
     </div>
   )
 }

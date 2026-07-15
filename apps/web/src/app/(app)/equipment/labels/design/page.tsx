@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { eq } from 'drizzle-orm'
 import { tenants } from '@beaconhs/db/schema'
 import { PageHeader } from '@beaconhs/ui'
@@ -8,10 +9,14 @@ import { PageContainer } from '@/components/page-layout'
 import { EquipmentLabelStudio } from './_studio'
 import { saveEquipmentLabelDesign } from './_actions'
 
-export const metadata = { title: 'Equipment label design' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_17b4383206c775') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function EquipmentLabelDesignPage() {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
 
@@ -28,8 +33,8 @@ export default async function EquipmentLabelDesignPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="QR label design"
-        description="Design the printed equipment tag — size, layout, and every field. Labels print as PDFs sized exactly for label printers."
+        title={tGenerated('m_0f44d475f864cd')}
+        description={tGenerated('m_1b8fb70c0a62dd')}
         back={{ href: '/equipment/manage', label: 'Back to Manage equipment' }}
       />
       <EquipmentLabelStudio initialDocument={document} onSave={saveEquipmentLabelDesign} />

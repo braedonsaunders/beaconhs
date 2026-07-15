@@ -1,3 +1,4 @@
+import { GeneratedValue } from '@/i18n/generated'
 import { Badge } from '@beaconhs/ui'
 
 export function SeverityBadge({ severity }: { severity: string }) {
@@ -9,7 +10,11 @@ export function SeverityBadge({ severity }: { severity: string }) {
         : severity === 'first_aid_only'
           ? 'secondary'
           : 'outline'
-  return <Badge variant={v as any}>{severity.replace(/_/g, ' ')}</Badge>
+  return (
+    <Badge variant={v as any}>
+      <GeneratedValue value={severity.replace(/_/g, ' ')} />
+    </Badge>
+  )
 }
 
 export function StatusBadge({ status }: { status: string }) {
@@ -21,5 +26,9 @@ export function StatusBadge({ status }: { status: string }) {
         : status === 'reopened'
           ? 'destructive'
           : 'secondary'
-  return <Badge variant={v as any}>{status.replace(/_/g, ' ')}</Badge>
+  return (
+    <Badge variant={v as any}>
+      <GeneratedValue value={status.replace(/_/g, ' ')} />
+    </Badge>
+  )
 }

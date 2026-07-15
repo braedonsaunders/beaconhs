@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // World-class tag editor: an editable chip set with a typeahead. It surfaces the
 // tenant's existing tags (frequency-ordered) so the taxonomy stays tidy, offers
 // an inline "create" affordance for brand-new tags, and is fully keyboard
@@ -29,6 +36,8 @@ export function TagEditor({
   /** Placeholder shown when there are no tags yet. */
   emptyHint?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [input, setInput] = useState('')
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(-1)
@@ -167,126 +176,164 @@ export function TagEditor({
         )}
       >
         <AnimatePresence initial={false}>
-          {tags.map((t) => {
-            const sw = tagSwatch(colorByName.get(t) ?? null)
-            return (
-              <motion.span
-                key={t}
-                layout
-                initial={{ opacity: 0, scale: 0.85 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.85 }}
-                transition={{ type: 'spring', stiffness: 520, damping: 34 }}
-                className={cn(
-                  'inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2.5 text-xs font-medium ring-1 ring-inset',
-                  sw.chip,
-                )}
-              >
-                <span className="max-w-[14rem] truncate">{t}</span>
-                {editable ? (
-                  <button
-                    type="button"
-                    aria-label={`Remove ${t}`}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => remove(t)}
-                    className={cn(
-                      'grid h-4 w-4 place-items-center rounded-full opacity-60 transition hover:opacity-100',
-                      sw.remove,
-                    )}
-                  >
-                    <X size={12} />
-                  </button>
-                ) : null}
-              </motion.span>
-            )
-          })}
+          <GeneratedValue
+            value={tags.map((t) => {
+              const sw = tagSwatch(colorByName.get(t) ?? null)
+              return (
+                <motion.span
+                  key={t}
+                  layout
+                  initial={{ opacity: 0, scale: 0.85 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.85 }}
+                  transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2.5 text-xs font-medium ring-1 ring-inset',
+                    sw.chip,
+                  )}
+                >
+                  <span className="max-w-[14rem] truncate">
+                    <GeneratedValue value={t} />
+                  </span>
+                  <GeneratedValue
+                    value={
+                      editable ? (
+                        <button
+                          type="button"
+                          aria-label={tGenerated('m_101f98a70352fa', { value0: t })}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => remove(t)}
+                          className={cn(
+                            'grid h-4 w-4 place-items-center rounded-full opacity-60 transition hover:opacity-100',
+                            sw.remove,
+                          )}
+                        >
+                          <X size={12} />
+                        </button>
+                      ) : null
+                    }
+                  />
+                </motion.span>
+              )
+            })}
+          />
         </AnimatePresence>
 
-        {editable ? (
-          <input
-            ref={inputRef}
-            value={input}
-            maxLength={JOURNAL_TAG_NAME_LIMIT}
-            onChange={(e) => onChangeInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            onFocus={() => {
-              if (blurTimer.current) clearTimeout(blurTimer.current)
-              setOpen(true)
-            }}
-            onBlur={() => {
-              blurTimer.current = setTimeout(() => {
-                if (query) commit(query)
-                setOpen(false)
-                setHighlight(-1)
-              }, 120)
-            }}
-            placeholder={tags.length ? 'Add a tag…' : emptyHint}
-            role="combobox"
-            aria-expanded={hasMenu}
-            aria-controls={listId}
-            aria-autocomplete="list"
-            aria-activedescendant={highlight >= 0 ? `${listId}-opt-${highlight}` : undefined}
-            // border-0 / focus:ring-0: this input is intentionally chromeless — the
-            // rounded container is the visible frame. Without these it inherits the
-            // @tailwindcss/forms base border (1px, square) and its own focus ring.
-            className="h-7 min-w-[9rem] flex-1 border-0 bg-transparent p-0 px-1 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
-          />
-        ) : tags.length === 0 ? (
-          <span className="px-1 text-sm text-slate-400 dark:text-slate-500">No tags</span>
-        ) : null}
+        <GeneratedValue
+          value={
+            editable ? (
+              <input
+                ref={inputRef}
+                value={input}
+                maxLength={JOURNAL_TAG_NAME_LIMIT}
+                onChange={(e) => onChangeInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                onPaste={onPaste}
+                onFocus={() => {
+                  if (blurTimer.current) clearTimeout(blurTimer.current)
+                  setOpen(true)
+                }}
+                onBlur={() => {
+                  blurTimer.current = setTimeout(() => {
+                    if (query) commit(query)
+                    setOpen(false)
+                    setHighlight(-1)
+                  }, 120)
+                }}
+                placeholder={tGeneratedValue(
+                  tags.length ? tGenerated('m_10a4302faa6817') : emptyHint,
+                )}
+                role="combobox"
+                aria-expanded={hasMenu}
+                aria-controls={listId}
+                aria-autocomplete="list"
+                aria-activedescendant={highlight >= 0 ? `${listId}-opt-${highlight}` : undefined}
+                // border-0 / focus:ring-0: this input is intentionally chromeless — the
+                // rounded container is the visible frame. Without these it inherits the
+                // @tailwindcss/forms base border (1px, square) and its own focus ring.
+                className="h-7 min-w-[9rem] flex-1 border-0 bg-transparent p-0 px-1 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
+              />
+            ) : tags.length === 0 ? (
+              <span className="px-1 text-sm text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_156f36bd0e7922" />
+              </span>
+            ) : null
+          }
+        />
       </div>
 
-      {validationError ? (
-        <p role="alert" className="mt-1 text-xs text-rose-600 dark:text-rose-400">
-          {validationError}
-        </p>
-      ) : null}
+      <GeneratedValue
+        value={
+          validationError ? (
+            <p role="alert" className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+              <GeneratedValue value={validationError} />
+            </p>
+          ) : null
+        }
+      />
 
       <AnimatePresence>
-        {hasMenu ? (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.12 }}
-            className="absolute top-full left-0 z-50 mt-1.5 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800"
-          >
-            <ul id={listId} role="listbox" className="max-h-60 overflow-auto p-1">
-              {matches.map((m, i) => (
-                <Option
-                  key={m.name}
-                  id={`${listId}-opt-${i}`}
-                  active={i === highlight}
-                  onHover={() => setHighlight(i)}
-                  onPick={() => commit(m.name)}
-                >
-                  <span className={cn('h-2 w-2 shrink-0 rounded-full', tagSwatch(m.color).dot)} />
-                  <span className="min-w-0 flex-1 truncate">{renderMatch(m.name, query)}</span>
-                </Option>
-              ))}
-              {canCreate ? (
-                <Option
-                  id={`${listId}-opt-${matches.length}`}
-                  active={highlight === matches.length}
-                  onHover={() => setHighlight(matches.length)}
-                  onPick={() => commit(query)}
-                >
-                  <Plus size={13} className="shrink-0 text-teal-600" />
-                  <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-300">
-                    Create{' '}
-                    <span className="font-semibold text-teal-700 dark:text-teal-300">{query}</span>
-                  </span>
-                </Option>
-              ) : null}
-            </ul>
-            <div className="flex items-center gap-1.5 border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400 dark:border-slate-700 dark:text-slate-500">
-              <CornerDownLeft size={11} /> to add
-              <span className="text-slate-300 dark:text-slate-600">·</span>
-              <span className="font-medium text-slate-400 dark:text-slate-500">↑↓</span> to navigate
-            </div>
-          </motion.div>
-        ) : null}
+        <GeneratedValue
+          value={
+            hasMenu ? (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.12 }}
+                className="absolute top-full left-0 z-50 mt-1.5 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800"
+              >
+                <ul id={listId} role="listbox" className="max-h-60 overflow-auto p-1">
+                  <GeneratedValue
+                    value={matches.map((m, i) => (
+                      <Option
+                        key={m.name}
+                        id={`${listId}-opt-${i}`}
+                        active={i === highlight}
+                        onHover={() => setHighlight(i)}
+                        onPick={() => commit(m.name)}
+                      >
+                        <span
+                          className={cn('h-2 w-2 shrink-0 rounded-full', tagSwatch(m.color).dot)}
+                        />
+                        <span className="min-w-0 flex-1 truncate">
+                          <GeneratedValue value={renderMatch(m.name, query)} />
+                        </span>
+                      </Option>
+                    ))}
+                  />
+                  <GeneratedValue
+                    value={
+                      canCreate ? (
+                        <Option
+                          id={`${listId}-opt-${matches.length}`}
+                          active={highlight === matches.length}
+                          onHover={() => setHighlight(matches.length)}
+                          onPick={() => commit(query)}
+                        >
+                          <Plus size={13} className="shrink-0 text-teal-600" />
+                          <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-300">
+                            <GeneratedText id="m_017309f0f9f564" />
+                            <GeneratedValue value={' '} />
+                            <span className="font-semibold text-teal-700 dark:text-teal-300">
+                              <GeneratedValue value={query} />
+                            </span>
+                          </span>
+                        </Option>
+                      ) : null
+                    }
+                  />
+                </ul>
+                <div className="flex items-center gap-1.5 border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                  <CornerDownLeft size={11} /> <GeneratedText id="m_1c8469493dc283" />
+                  <span className="text-slate-300 dark:text-slate-600">·</span>
+                  <span className="font-medium text-slate-400 dark:text-slate-500">↑↓</span>{' '}
+                  <GeneratedText id="m_1b5732a7479388" />
+                </div>
+              </motion.div>
+            ) : null
+          }
+        />
       </AnimatePresence>
     </div>
   )
@@ -323,7 +370,7 @@ function Option({
             : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60',
         )}
       >
-        {children}
+        <GeneratedValue value={children} />
       </button>
     </li>
   )
@@ -336,11 +383,11 @@ function renderMatch(label: string, query: string) {
   if (idx === -1) return label
   return (
     <>
-      {label.slice(0, idx)}
+      <GeneratedValue value={label.slice(0, idx)} />
       <span className="font-semibold text-slate-900 dark:text-slate-100">
-        {label.slice(idx, idx + query.length)}
+        <GeneratedValue value={label.slice(idx, idx + query.length)} />
       </span>
-      {label.slice(idx + query.length)}
+      <GeneratedValue value={label.slice(idx + query.length)} />
     </>
   )
 }

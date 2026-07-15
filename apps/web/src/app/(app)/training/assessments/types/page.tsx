@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { ClipboardList } from 'lucide-react'
@@ -32,7 +35,10 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { TrainingSubNav } from '../../_components/training-sub-nav'
 import { createAssessmentType } from '../../_actions/assessment-types'
 
-export const metadata = { title: 'Assessment types' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1469477020449a') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'passing', 'questions', 'attempts', 'created', 'updated'] as const
@@ -47,6 +53,8 @@ export default async function AssessmentTypesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'name',
@@ -166,29 +174,31 @@ export default async function AssessmentTypesPage({
       header={
         <>
           <PageHeader
-            title="Assessment types"
-            description="Quiz templates with question banks and passing scores."
+            title={tGenerated('m_1469477020449a')}
+            description={tGenerated('m_0b767c59a5737b')}
             actions={
               <div className="flex items-center gap-2">
                 <SmartBackLink
                   href="/training/assessments"
-                  label="Back to attempts"
+                  label={tGenerated('m_1929fed856c90e')}
                   className="text-sm text-teal-700 hover:underline dark:text-teal-400"
                 />
                 <form action={createAssessmentType}>
-                  <Button type="submit">New assessment type</Button>
+                  <Button type="submit">
+                    <GeneratedText id="m_1d23e917eeb2e4" />
+                  </Button>
                 </form>
               </div>
             }
           />
           <TrainingSubNav active="assessment-types" />
           <TableToolbar>
-            <SearchInput placeholder="Search assessment types" />
+            <SearchInput placeholder={tGenerated('m_1b92223e253fa3')} />
             <FilterChips
               basePath="/training/assessments/types"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={STATUS_OPTIONS.map((o) => ({
                 ...o,
                 count: statusCounts[o.value],
@@ -198,7 +208,7 @@ export default async function AssessmentTypesPage({
               basePath="/training/assessments/types"
               currentParams={sp}
               paramKey="linked"
-              label="Course linkage"
+              label={tGenerated('m_0eb3d67d3f0ae2')}
               options={[
                 { value: 'yes', label: 'Linked to course' },
                 { value: 'no', label: 'Standalone' },
@@ -208,127 +218,198 @@ export default async function AssessmentTypesPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardList size={32} />}
-          title={params.q ? `No assessment types match "${params.q}"` : 'No assessment types'}
-          description="Create a type to build a graded question bank."
-          action={
-            <form action={createAssessmentType}>
-              <Button type="submit">New assessment type</Button>
-            </form>
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                  Name
-                </SortableTh>
-                <TableHead>Linked course</TableHead>
-                <SortableTh {...sortProps} column="passing" active={params.sort === 'passing'}>
-                  Passing
-                </SortableTh>
-                <SortableTh {...sortProps} column="questions" active={params.sort === 'questions'}>
-                  Questions
-                </SortableTh>
-                <SortableTh {...sortProps} column="attempts" active={params.sort === 'attempts'}>
-                  Attempts
-                </SortableTh>
-                <TableHead>Pass rate</TableHead>
-                <TableHead>Graded</TableHead>
-                <TableHead>Status</TableHead>
-                <SortableTh {...sortProps} column="updated" active={params.sort === 'updated'}>
-                  Updated
-                </SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ type, course, questionCount, attemptCount, passCount }) => {
-                const attempts = Number(attemptCount ?? 0)
-                const passes = Number(passCount ?? 0)
-                const passPct = attempts > 0 ? Math.round((passes / attempts) * 100) : null
-                return (
-                  <TableRow key={type.id}>
-                    <TableCell>
-                      <Link
-                        href={`/training/assessments/types/${type.id}`}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {type.name}
-                      </Link>
-                      {type.description ? (
-                        <div className="line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
-                          {type.description}
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">
-                      {course ? (
-                        <Link href={`/training/courses/${course.id}`} className="hover:underline">
-                          <span className="font-mono text-xs">{course.code}</span>
-                          {course.code ? ' · ' : ''}
-                          {course.name}
-                        </Link>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="tabular-nums">{type.passingScore}%</TableCell>
-                    <TableCell className="tabular-nums">{questionCount}</TableCell>
-                    <TableCell className="tabular-nums">{attempts}</TableCell>
-                    <TableCell className="tabular-nums">
-                      {passPct != null ? (
-                        <Badge
-                          variant={
-                            passPct >= 80 ? 'success' : passPct >= 50 ? 'warning' : 'destructive'
-                          }
-                        >
-                          {passPct}%
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {type.graded ? (
-                        <Badge variant="outline" className="text-xs">
-                          Graded
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-xs">
-                          Pass-only
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {type.active ? (
-                        <Badge variant="success">Active</Badge>
-                      ) : (
-                        <Badge variant="secondary">Inactive</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
-                      {type.updatedAt
-                        ? formatDate(new Date(type.updatedAt), ctx.timezone, ctx.locale)
-                        : '—'}
-                    </TableCell>
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<ClipboardList size={32} />}
+              title={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_19ada7765f97e1', { value0: params.q })
+                  : tGenerated('m_1960adc8a1972f'),
+              )}
+              description={tGenerated('m_17d80185441551')}
+              action={
+                <form action={createAssessmentType}>
+                  <Button type="submit">
+                    <GeneratedText id="m_1d23e917eeb2e4" />
+                  </Button>
+                </form>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_0a4456ce9a12f5" />
+                    </TableHead>
+                    <SortableTh {...sortProps} column="passing" active={params.sort === 'passing'}>
+                      <GeneratedText id="m_1cdf12c7dddf29" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="questions"
+                      active={params.sort === 'questions'}
+                    >
+                      <GeneratedText id="m_06d84b0874d447" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="attempts"
+                      active={params.sort === 'attempts'}
+                    >
+                      <GeneratedText id="m_01c2d80ce4b2ca" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_009fe99b6d9fad" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_05407ee4fbb68c" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </TableHead>
+                    <SortableTh {...sortProps} column="updated" active={params.sort === 'updated'}>
+                      <GeneratedText id="m_014ca61c68ab13" />
+                    </SortableTh>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/training/assessments/types"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ type, course, questionCount, attemptCount, passCount }) => {
+                      const attempts = Number(attemptCount ?? 0)
+                      const passes = Number(passCount ?? 0)
+                      const passPct = attempts > 0 ? Math.round((passes / attempts) * 100) : null
+                      return (
+                        <TableRow key={type.id}>
+                          <TableCell>
+                            <Link
+                              href={`/training/assessments/types/${type.id}`}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={type.name} />
+                            </Link>
+                            <GeneratedValue
+                              value={
+                                type.description ? (
+                                  <div className="line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
+                                    <GeneratedValue value={type.description} />
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            <GeneratedValue
+                              value={
+                                course ? (
+                                  <Link
+                                    href={`/training/courses/${course.id}`}
+                                    className="hover:underline"
+                                  >
+                                    <span className="font-mono text-xs">
+                                      <GeneratedValue value={course.code} />
+                                    </span>
+                                    <GeneratedValue value={course.code ? ' · ' : ''} />
+                                    <GeneratedValue value={course.name} />
+                                  </Link>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="tabular-nums">
+                            <GeneratedValue value={type.passingScore} />%
+                          </TableCell>
+                          <TableCell className="tabular-nums">
+                            <GeneratedValue value={questionCount} />
+                          </TableCell>
+                          <TableCell className="tabular-nums">
+                            <GeneratedValue value={attempts} />
+                          </TableCell>
+                          <TableCell className="tabular-nums">
+                            <GeneratedValue
+                              value={
+                                passPct != null ? (
+                                  <Badge
+                                    variant={
+                                      passPct >= 80
+                                        ? 'success'
+                                        : passPct >= 50
+                                          ? 'warning'
+                                          : 'destructive'
+                                    }
+                                  >
+                                    <GeneratedValue value={passPct} />%
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-slate-400">—</span>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <GeneratedValue
+                              value={
+                                type.graded ? (
+                                  <Badge variant="outline" className="text-xs">
+                                    <GeneratedText id="m_05407ee4fbb68c" />
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary" className="text-xs">
+                                    <GeneratedText id="m_1d61d796ca6dea" />
+                                  </Badge>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <GeneratedValue
+                              value={
+                                type.active ? (
+                                  <Badge variant="success">
+                                    <GeneratedText id="m_1e1b1fdb7dd78e" />
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary">
+                                    <GeneratedText id="m_0f47ea07c99dba" />
+                                  </Badge>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
+                            <GeneratedValue
+                              value={
+                                type.updatedAt
+                                  ? formatDate(new Date(type.updatedAt), ctx.timezone, ctx.locale)
+                                  : '—'
+                              }
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/training/assessments/types"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

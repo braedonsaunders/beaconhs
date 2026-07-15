@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 // Light / dark / system switcher. Expanded: a 3-way segmented control. Collapsed
 // (icon-rail sidebar): a single button showing the active mode that cycles
 // light → dark → system. Renders an inert placeholder until mounted so the SSR
@@ -17,6 +19,7 @@ const OPTIONS: { value: Theme; icon: typeof Sun; labelKey: 'light' | 'system' | 
 ]
 
 export function ThemeToggle({ collapsed = false }: { collapsed?: boolean }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const { theme, setTheme, mounted } = useTheme()
   const t = useTranslations('Shell')
 
@@ -28,11 +31,13 @@ export function ThemeToggle({ collapsed = false }: { collapsed?: boolean }) {
       <button
         type="button"
         onClick={() => setTheme(next)}
-        title={t('themeModeChange', { mode: t(active.labelKey) })}
-        aria-label={t('themeMode', { mode: t(active.labelKey) })}
+        title={tGeneratedValue(t('themeModeChange', { mode: t(active.labelKey) }))}
+        aria-label={tGeneratedValue(t('themeMode', { mode: t(active.labelKey) }))}
         className="grid h-9 w-9 place-items-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
       >
-        {mounted ? <Icon size={16} /> : <Monitor size={16} className="opacity-0" />}
+        <GeneratedValue
+          value={mounted ? <Icon size={16} /> : <Monitor size={16} className="opacity-0" />}
+        />
       </button>
     )
   }
@@ -40,31 +45,33 @@ export function ThemeToggle({ collapsed = false }: { collapsed?: boolean }) {
   return (
     <div
       role="radiogroup"
-      aria-label={t('theme')}
+      aria-label={tGeneratedValue(t('theme'))}
       className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800/60"
     >
-      {OPTIONS.map((o) => {
-        const Icon = o.icon
-        const selected = mounted && theme === o.value
-        return (
-          <button
-            key={o.value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            onClick={() => setTheme(o.value)}
-            title={t(o.labelKey)}
-            className={cn(
-              'inline-flex h-7 flex-1 items-center justify-center rounded-md transition-colors',
-              selected
-                ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-700 dark:text-teal-300'
-                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
-            )}
-          >
-            <Icon size={15} />
-          </button>
-        )
-      })}
+      <GeneratedValue
+        value={OPTIONS.map((o) => {
+          const Icon = o.icon
+          const selected = mounted && theme === o.value
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => setTheme(o.value)}
+              title={tGeneratedValue(t(o.labelKey))}
+              className={cn(
+                'inline-flex h-7 flex-1 items-center justify-center rounded-md transition-colors',
+                selected
+                  ? 'bg-white text-teal-700 shadow-sm dark:bg-slate-700 dark:text-teal-300'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+              )}
+            >
+              <Icon size={15} />
+            </button>
+          )
+        })}
+      />
     </div>
   )
 }

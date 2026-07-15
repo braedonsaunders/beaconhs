@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 import { useEffect } from 'react'
 import Link from 'next/link'
 import * as Sentry from '@sentry/nextjs'
@@ -31,20 +33,28 @@ export default function AppError({
           id="app-error-title"
           className="mt-4 text-xl font-semibold text-slate-950 dark:text-white"
         >
-          This page could not load
+          <GeneratedText id="m_00a758ce0c3bab" />
         </h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          Your work was not reported as complete. Try the page again, or return to the dashboard.
+          <GeneratedText id="m_08861ac415cc7a" />
         </p>
-        {error.digest ? (
-          <p className="mt-3 font-mono text-xs text-slate-400">Reference: {error.digest}</p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error.digest ? (
+              <p className="mt-3 font-mono text-xs text-slate-400">
+                <GeneratedText id="m_0d0ba851d7848c" /> <GeneratedValue value={error.digest} />
+              </p>
+            ) : null
+          }
+        />
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <Button type="button" onClick={reset}>
-            <RotateCcw aria-hidden="true" size={15} /> Try again
+            <RotateCcw aria-hidden="true" size={15} /> <GeneratedText id="m_02941fb09831c6" />
           </Button>
           <Button asChild variant="outline">
-            <Link href="/dashboard">Go to dashboard</Link>
+            <Link href="/dashboard">
+              <GeneratedText id="m_132d746a8ad9a0" />
+            </Link>
           </Button>
         </div>
       </section>

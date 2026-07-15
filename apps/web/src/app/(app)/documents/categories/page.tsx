@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { alias } from 'drizzle-orm/pg-core'
 import {
   and,
@@ -49,7 +52,10 @@ import { DocumentsSubNav } from '../_components/documents-sub-nav'
 import { createCategory, deleteCategory, updateCategory } from './_actions'
 import { CategoryParentPicker } from './_parent-picker'
 
-export const metadata = { title: 'Document categories' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1b79874293796e') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/documents/categories'
@@ -60,6 +66,8 @@ export default async function DocumentCategoriesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'name',
@@ -184,17 +192,17 @@ export default async function DocumentCategoriesPage({
       header={
         <>
           <PageHeader
-            title="Document categories"
-            description="Hierarchical groupings for documents. Pick a parent to nest one category beneath another."
+            title={tGenerated('m_1b79874293796e')}
+            description={tGenerated('m_1be9e9a8e10fed')}
           />
           <DocumentsSubNav active="categories" />
           <TableToolbar>
-            <SearchInput placeholder="Search name, description, parent…" />
+            <SearchInput placeholder={tGenerated('m_11ae935f81e17a')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="hierarchy"
-              label="Level"
+              label={tGenerated('m_1cc321f2024ad6')}
               allLabel="All levels"
               options={[
                 { value: 'top', label: 'Top level', count: counts.top },
@@ -205,38 +213,55 @@ export default async function DocumentCategoriesPage({
               basePath={BASE}
               currentParams={sp}
               paramKey="usage"
-              label="Usage"
+              label={tGenerated('m_0ae3b4ff7213f7')}
               options={[
                 { value: 'used', label: 'Used', count: counts.used },
                 { value: 'unused', label: 'Unused', count: counts.unused },
               ]}
             />
           </TableToolbar>
-          {categoryError ? (
-            <div className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
-              <span>{categoryError}</span>
-              <Link href={returnTo as never} className="shrink-0 font-medium underline">
-                Dismiss
-              </Link>
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              categoryError ? (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+                  <span>
+                    <GeneratedValue value={categoryError} />
+                  </span>
+                  <Link href={returnTo as never} className="shrink-0 font-medium underline">
+                    <GeneratedText id="m_024331c508a2cd" />
+                  </Link>
+                </div>
+              ) : null
+            }
+          />
         </>
       }
     >
       <div className="space-y-5">
         <Card>
           <CardHeader>
-            <CardTitle>Create a new category</CardTitle>
+            <CardTitle>
+              <GeneratedText id="m_0e13f2316b2b11" />
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <form action={createCategory} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <input type="hidden" name="returnTo" value={returnTo} />
               <div className="space-y-1.5">
-                <Label htmlFor="name">Name *</Label>
-                <Input id="name" name="name" required placeholder="e.g. Safety / SDS / Acids" />
+                <Label htmlFor="name">
+                  <GeneratedText id="m_1a9978900838e6" />
+                </Label>
+                <Input
+                  id="name"
+                  name="name"
+                  required
+                  placeholder={tGenerated('m_0c7a1ca9c7ba59')}
+                />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="new-category-parent">Parent (optional)</Label>
+                <Label htmlFor="new-category-parent">
+                  <GeneratedText id="m_017400754d27c5" />
+                </Label>
                 <CategoryParentPicker
                   id="new-category-parent"
                   current={null}
@@ -244,132 +269,170 @@ export default async function DocumentCategoriesPage({
                 />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">
+                  <GeneratedText id="m_14d923495cf14c" />
+                </Label>
                 <Textarea id="description" name="description" rows={2} />
               </div>
               <div className="flex justify-end sm:col-span-2">
-                <Button type="submit">Add category</Button>
+                <Button type="submit">
+                  <GeneratedText id="m_0cea1ae29f8826" />
+                </Button>
               </div>
             </form>
           </CardContent>
         </Card>
 
-        {total === 0 ? (
-          <EmptyState
-            icon={<FolderTree size={32} />}
-            title={params.q ? `No categories match "${params.q}"` : 'No categories'}
-            description={
-              params.q || hierarchyFilter || usageFilter
-                ? 'Clear or change the current search and filters.'
-                : 'Add categories like Safety, HR, Operations and nest sub-categories underneath each.'
-            }
-          />
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Categories ({total.toLocaleString()})</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                      Name
-                    </SortableTh>
-                    <SortableTh {...sortProps} column="parent" active={params.sort === 'parent'}>
-                      Parent
-                    </SortableTh>
-                    <TableHead>Description</TableHead>
-                    <SortableTh {...sortProps} column="usage" active={params.sort === 'usage'}>
-                      Used by
-                    </SortableTh>
-                    <TableHead aria-label="Actions" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((row) => {
-                    const formId = `category-${row.id}`
-                    return (
-                      <TableRow key={row.id}>
-                        <TableCell>
-                          <form id={formId} action={updateCategory}>
-                            <input type="hidden" name="id" value={row.id} />
-                            <input type="hidden" name="returnTo" value={returnTo} />
-                            <Input
-                              name="name"
-                              defaultValue={row.name}
-                              required
-                              aria-label={`Name for ${row.name}`}
-                              className="min-w-44"
-                            />
-                          </form>
-                        </TableCell>
-                        <TableCell>
-                          <CategoryParentPicker
-                            key={`${row.id}:${row.parentId ?? 'root'}`}
-                            current={
-                              row.parentId && row.parentName
-                                ? { id: row.parentId, name: row.parentName }
-                                : null
-                            }
-                            initialOptions={initialParentOptions}
-                            excludeId={row.id}
-                            form={formId}
-                            ariaLabel={`Parent category for ${row.name}`}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            name="description"
-                            defaultValue={row.description ?? ''}
-                            placeholder="Description"
-                            aria-label={`Description for ${row.name}`}
-                            form={formId}
-                            className="min-w-52"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={Number(row.usageCount) > 0 ? 'secondary' : 'outline'}>
-                            {Number(row.usageCount).toLocaleString()}{' '}
-                            {Number(row.usageCount) === 1 ? 'document' : 'documents'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-end gap-1">
-                            <Button type="submit" form={formId} size="sm" variant="outline">
-                              Save
-                            </Button>
-                            <form action={deleteCategory}>
-                              <input type="hidden" name="id" value={row.id} />
-                              <input type="hidden" name="returnTo" value={returnTo} />
-                              <ConfirmButton
-                                type="submit"
-                                variant="ghost"
-                                size="sm"
-                                aria-label={`Delete ${row.name}`}
-                                message={`Delete ${row.name}? Its child categories will move up one level.`}
-                                tone="danger"
-                              >
-                                <Trash2 size={14} className="text-red-500" />
-                              </ConfirmButton>
-                            </form>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-              <Pagination
-                basePath={BASE}
-                currentParams={sp}
-                total={total}
-                page={page}
-                perPage={params.perPage}
+        <GeneratedValue
+          value={
+            total === 0 ? (
+              <EmptyState
+                icon={<FolderTree size={32} />}
+                title={tGeneratedValue(
+                  params.q
+                    ? tGenerated('m_1a80a46ad61d9a', { value0: params.q })
+                    : tGenerated('m_0f25984d20d7b4'),
+                )}
+                description={tGeneratedValue(
+                  params.q || hierarchyFilter || usageFilter
+                    ? tGenerated('m_07e00bfe2dcf7e')
+                    : tGenerated('m_06178a5e169f5b'),
+                )}
               />
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    <GeneratedText id="m_115bbcbb07484f" />
+                    <GeneratedValue value={total.toLocaleString()} />)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                          <GeneratedText id="m_02b18d5c7f6f2d" />
+                        </SortableTh>
+                        <SortableTh
+                          {...sortProps}
+                          column="parent"
+                          active={params.sort === 'parent'}
+                        >
+                          <GeneratedText id="m_14583b7cc6c6f9" />
+                        </SortableTh>
+                        <TableHead>
+                          <GeneratedText id="m_14d923495cf14c" />
+                        </TableHead>
+                        <SortableTh {...sortProps} column="usage" active={params.sort === 'usage'}>
+                          <GeneratedText id="m_0b47933c7ed907" />
+                        </SortableTh>
+                        <TableHead aria-label={tGenerated('m_0a7f1858f2ec46')} />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <GeneratedValue
+                        value={rows.map((row) => {
+                          const formId = `category-${row.id}`
+                          return (
+                            <TableRow key={row.id}>
+                              <TableCell>
+                                <form id={formId} action={updateCategory}>
+                                  <input type="hidden" name="id" value={row.id} />
+                                  <input type="hidden" name="returnTo" value={returnTo} />
+                                  <Input
+                                    name="name"
+                                    defaultValue={row.name}
+                                    required
+                                    aria-label={tGenerated('m_046f1d70d4c5f2', {
+                                      value0: row.name,
+                                    })}
+                                    className="min-w-44"
+                                  />
+                                </form>
+                              </TableCell>
+                              <TableCell>
+                                <CategoryParentPicker
+                                  key={`${row.id}:${row.parentId ?? 'root'}`}
+                                  current={
+                                    row.parentId && row.parentName
+                                      ? { id: row.parentId, name: row.parentName }
+                                      : null
+                                  }
+                                  initialOptions={initialParentOptions}
+                                  excludeId={row.id}
+                                  form={formId}
+                                  ariaLabel={`Parent category for ${row.name}`}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  name="description"
+                                  defaultValue={row.description ?? ''}
+                                  placeholder={tGenerated('m_14d923495cf14c')}
+                                  aria-label={tGenerated('m_0402c6c65a4909', { value0: row.name })}
+                                  form={formId}
+                                  className="min-w-52"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={Number(row.usageCount) > 0 ? 'secondary' : 'outline'}
+                                >
+                                  <GeneratedValue value={Number(row.usageCount).toLocaleString()} />
+                                  <GeneratedValue value={' '} />
+                                  <GeneratedValue
+                                    value={
+                                      Number(row.usageCount) === 1 ? (
+                                        <GeneratedText id="m_08927559ee23e3" />
+                                      ) : (
+                                        <GeneratedText id="m_0211a9acf0110a" />
+                                      )
+                                    }
+                                  />
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button type="submit" form={formId} size="sm" variant="outline">
+                                    <GeneratedText id="m_19e6bff894c3c7" />
+                                  </Button>
+                                  <form action={deleteCategory}>
+                                    <input type="hidden" name="id" value={row.id} />
+                                    <input type="hidden" name="returnTo" value={returnTo} />
+                                    <ConfirmButton
+                                      type="submit"
+                                      variant="ghost"
+                                      size="sm"
+                                      aria-label={tGenerated('m_06de1e6d468d0c', {
+                                        value0: row.name,
+                                      })}
+                                      message={tGenerated('m_11c8b19e268a5f', { value0: row.name })}
+                                      tone="danger"
+                                    >
+                                      <Trash2 size={14} className="text-red-500" />
+                                    </ConfirmButton>
+                                  </form>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      />
+                    </TableBody>
+                  </Table>
+                  <Pagination
+                    basePath={BASE}
+                    currentParams={sp}
+                    total={total}
+                    page={page}
+                    perPage={params.perPage}
+                  />
+                </CardContent>
+              </Card>
+            )
+          }
+        />
       </div>
     </ListPageLayout>
   )

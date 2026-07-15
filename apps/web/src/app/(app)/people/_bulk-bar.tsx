@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useMemo, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
@@ -44,6 +51,8 @@ export function BulkPeopleBar({
   /** Viewer may export the selected rows to CSV. */
   canExport: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [action, setAction] = useState<'group' | 'department' | 'status' | 'export'>(
@@ -68,17 +77,17 @@ export function BulkPeopleBar({
   if (!canManage && !canExport) return null
 
   function go() {
-    setError(null)
+    setError(tGeneratedValue(null))
     setInfo(null)
     if (action === 'group') {
       if (!groupId) {
-        setError('Pick a group.')
+        setError(tGenerated('m_090ff45a28fcfb'))
         return
       }
       start(async () => {
         const res = await bulkAssignPeopleToGroup({ personIds: selectedIds, groupId })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
         setInfo(`Assigned ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
@@ -89,7 +98,7 @@ export function BulkPeopleBar({
     }
     if (action === 'department') {
       if (!departmentId) {
-        setError('Pick a department.')
+        setError(tGenerated('m_00a2a26093d846'))
         return
       }
       start(async () => {
@@ -98,7 +107,7 @@ export function BulkPeopleBar({
           departmentId,
         })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
         setInfo(`Assigned ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
@@ -111,7 +120,7 @@ export function BulkPeopleBar({
       start(async () => {
         const res = await bulkSetPeopleStatus({ personIds: selectedIds, status })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
         setInfo(`Updated ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
@@ -124,7 +133,7 @@ export function BulkPeopleBar({
     start(async () => {
       const res = await bulkExportPeopleCsv({ personIds: selectedIds })
       if (!res.ok) {
-        setError(res.error)
+        setError(tGeneratedValue(res.error))
         return
       }
       const blob = new Blob([res.content], { type: 'text/csv;charset=utf-8' })
@@ -146,12 +155,14 @@ export function BulkPeopleBar({
         <button
           type="button"
           onClick={onClear}
-          aria-label="Clear selection"
+          aria-label={tGenerated('m_1013583a7c0e28')}
           className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <X size={14} />
         </button>
-        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
+        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+          <GeneratedValue value={label} />
+        </span>
 
         <Select
           value={action}
@@ -159,83 +170,155 @@ export function BulkPeopleBar({
           className="h-8 min-w-[11rem]"
           disabled={pending}
         >
-          {canManage ? <option value="group">Assign to group</option> : null}
-          {canManage ? <option value="department">Assign to department</option> : null}
-          {canManage ? <option value="status">Set status</option> : null}
-          {canExport ? <option value="export">Export selected to CSV</option> : null}
+          <GeneratedValue
+            value={
+              canManage ? (
+                <option value="group">
+                  <GeneratedText id="m_0aa20ac4bb983a" />
+                </option>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              canManage ? (
+                <option value="department">
+                  <GeneratedText id="m_0c48b039a6bfcd" />
+                </option>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              canManage ? (
+                <option value="status">
+                  <GeneratedText id="m_00da005ac443be" />
+                </option>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              canExport ? (
+                <option value="export">
+                  <GeneratedText id="m_1d9f291cfeb56f" />
+                </option>
+              ) : null
+            }
+          />
         </Select>
 
-        {action === 'group' ? (
-          <div className="flex items-center gap-2">
-            <Users size={14} className="text-slate-500 dark:text-slate-400" />
-            <Select
-              value={groupId}
-              onChange={(e) => setGroupId(e.target.value)}
-              className="h-8 min-w-[12rem]"
-              disabled={pending}
-            >
-              <option value="">Pick group…</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            action === 'group' ? (
+              <div className="flex items-center gap-2">
+                <Users size={14} className="text-slate-500 dark:text-slate-400" />
+                <Select
+                  value={groupId}
+                  onChange={(e) => setGroupId(e.target.value)}
+                  className="h-8 min-w-[12rem]"
+                  disabled={pending}
+                >
+                  <option value="">
+                    <GeneratedText id="m_18b7732e04e56b" />
+                  </option>
+                  <GeneratedValue
+                    value={groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        <GeneratedValue value={g.name} />
+                      </option>
+                    ))}
+                  />
+                </Select>
+              </div>
+            ) : null
+          }
+        />
 
-        {action === 'department' ? (
-          <div className="flex items-center gap-2">
-            <Layers size={14} className="text-slate-500 dark:text-slate-400" />
-            <Select
-              value={departmentId}
-              onChange={(e) => setDepartmentId(e.target.value)}
-              className="h-8 min-w-[12rem]"
-              disabled={pending}
-            >
-              <option value="">Pick department…</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            action === 'department' ? (
+              <div className="flex items-center gap-2">
+                <Layers size={14} className="text-slate-500 dark:text-slate-400" />
+                <Select
+                  value={departmentId}
+                  onChange={(e) => setDepartmentId(e.target.value)}
+                  className="h-8 min-w-[12rem]"
+                  disabled={pending}
+                >
+                  <option value="">
+                    <GeneratedText id="m_156def99c798ae" />
+                  </option>
+                  <GeneratedValue
+                    value={departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        <GeneratedValue value={d.name} />
+                      </option>
+                    ))}
+                  />
+                </Select>
+              </div>
+            ) : null
+          }
+        />
 
-        {action === 'status' ? (
-          <div className="flex items-center gap-2">
-            <ToggleRight size={14} className="text-slate-500 dark:text-slate-400" />
-            <Select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as PeopleStatus)}
-              className="h-8 min-w-[10rem]"
-              disabled={pending}
-            >
-              {(['active', 'inactive', 'terminated'] as PeopleStatus[]).map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABELS[s]}
-                </option>
-              ))}
-            </Select>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            action === 'status' ? (
+              <div className="flex items-center gap-2">
+                <ToggleRight size={14} className="text-slate-500 dark:text-slate-400" />
+                <Select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as PeopleStatus)}
+                  className="h-8 min-w-[10rem]"
+                  disabled={pending}
+                >
+                  <GeneratedValue
+                    value={(['active', 'inactive', 'terminated'] as PeopleStatus[]).map((s) => (
+                      <option key={s} value={s}>
+                        <GeneratedValue value={STATUS_LABELS[s]} />
+                      </option>
+                    ))}
+                  />
+                </Select>
+              </div>
+            ) : null
+          }
+        />
 
         <Button size="sm" onClick={go} disabled={pending}>
-          {pending ? (
-            'Working…'
-          ) : action === 'export' ? (
-            <span className="inline-flex items-center gap-1">
-              <Download size={14} /> Export
-            </span>
-          ) : (
-            'Apply'
-          )}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_09001dc89c0edf" />
+              ) : action === 'export' ? (
+                <span className="inline-flex items-center gap-1">
+                  <Download size={14} /> <GeneratedText id="m_01edcd3d04ad91" />
+                </span>
+              ) : (
+                <GeneratedText id="m_01185cdc1c20a5" />
+              )
+            }
+          />
         </Button>
-        {error ? <span className="text-xs text-red-600 dark:text-red-400">{error}</span> : null}
-        {info ? (
-          <span className="text-xs text-emerald-700 dark:text-emerald-400">{info}</span>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <span className="text-xs text-red-600 dark:text-red-400">
+                <GeneratedValue value={error} />
+              </span>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            info ? (
+              <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                <GeneratedValue value={info} />
+              </span>
+            ) : null
+          }
+        />
       </div>
     </div>,
     document.body,

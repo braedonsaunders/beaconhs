@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The right pane: a Write ↔ PDF surface. Write is the inline Collabora Writer
 // on the document's DOCX master (page setup, comments and track changes live
 // in the file) with a docked AI panel and a fullscreen mode; PDF renders the
@@ -51,6 +58,8 @@ export function DocumentPane({
   latestPublished: { version: number; renderStatus: string | null } | null
   aiEnabled?: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [mode, setMode] = useState<DocumentMode>(defaultMode)
   const [fullscreen, setFullscreen] = useState(false)
@@ -80,10 +89,12 @@ export function DocumentPane({
         await publishDocumentVersion(documentId, changelog)
         setShowPublish(false)
         setChangelog('')
-        toast.success('Version published — the PDF renders in the background')
+        toast.success(tGenerated('m_0af338262dbb88'))
         router.refresh()
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Publish failed')
+        toast.error(
+          tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_01404a5cbe3992')),
+        )
       }
     })
   }
@@ -94,7 +105,9 @@ export function DocumentPane({
         await createBlankDocumentMaster(documentId)
         router.refresh()
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not create the document')
+        toast.error(
+          tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_006a4dba30e7cf')),
+        )
       }
     })
   }
@@ -111,13 +124,21 @@ export function DocumentPane({
           setShowReplace(false)
           void importDocumentMaster(documentId, f.attachmentId)
             .then(() => {
-              toast.success('Word file imported')
+              toast.success(tGenerated('m_00f21769e3be7a'))
               router.refresh()
             })
-            .catch((err) => toast.error(err instanceof Error ? err.message : 'Import failed'))
+            .catch((err) =>
+              toast.error(
+                tGeneratedValue(
+                  err instanceof Error ? err.message : tGenerated('m_1cd7340b2d03df'),
+                ),
+              ),
+            )
         }}
-        label="Drop a .docx or click to choose"
-        hint={master ? 'Replaces the current working document. Maximum 100 MB.' : 'Maximum 100 MB.'}
+        label={tGenerated('m_16adf4c224e3a6')}
+        hint={tGeneratedValue(
+          master ? tGenerated('m_08e49c7718f2fe') : tGenerated('m_02e41dd22d52e7'),
+        )}
       />
     </div>
   )
@@ -139,147 +160,215 @@ export function DocumentPane({
       <div className="flex h-full min-h-0 flex-col bg-slate-100 dark:bg-slate-950">
         <div className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-900">
           <ModeSwitch mode={mode} onChange={setMode} />
-          {master ? (
-            <span
-              className="hidden min-w-0 items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 sm:inline-flex dark:bg-slate-800 dark:text-slate-300"
-              title={master.filename}
-            >
-              <FileUp size={11} />
-              <span className="max-w-[12rem] truncate">{master.filename}</span>
-            </span>
-          ) : null}
-          <span className="text-[11px] text-slate-500 dark:text-slate-400">
-            {latestPublished ? `v${latestPublished.version} published` : 'Never published'}
-          </span>
-          {rendering ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
-              <Loader2 size={11} className="animate-spin" /> rendering PDF…
-            </span>
-          ) : null}
-          <div className="ml-auto flex items-center gap-1.5">
-            {master ? (
-              <>
-                {aiEnabled ? (
-                  <Button
-                    type="button"
-                    variant={aiOpen ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setAiOpen((v) => !v)}
-                  >
-                    <Sparkles size={13} /> AI
-                  </Button>
-                ) : null}
-                <Button asChild variant="outline" size="sm">
-                  <a href={`/documents/${documentId}/master`}>
-                    <Download size={13} /> DOCX
-                  </a>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowReplace((v) => !v)}
+          <GeneratedValue
+            value={
+              master ? (
+                <span
+                  className="hidden min-w-0 items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 sm:inline-flex dark:bg-slate-800 dark:text-slate-300"
+                  title={tGeneratedValue(master.filename)}
                 >
-                  <UploadCloud size={13} /> Replace
-                </Button>
-                <Button type="button" size="sm" onClick={() => setShowPublish((v) => !v)}>
-                  Publish
-                </Button>
-              </>
-            ) : null}
+                  <FileUp size={11} />
+                  <span className="max-w-[12rem] truncate">
+                    <GeneratedValue value={master.filename} />
+                  </span>
+                </span>
+              ) : null
+            }
+          />
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            <GeneratedValue
+              value={
+                latestPublished ? (
+                  <GeneratedText
+                    id="m_08cb7e5d9ed635"
+                    values={{ value0: latestPublished.version }}
+                  />
+                ) : (
+                  <GeneratedText id="m_1fc55ca5a2b03f" />
+                )
+              }
+            />
+          </span>
+          <GeneratedValue
+            value={
+              rendering ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
+                  <Loader2 size={11} className="animate-spin" />{' '}
+                  <GeneratedText id="m_0ea5715ef19bd3" />
+                </span>
+              ) : null
+            }
+          />
+          <div className="ml-auto flex items-center gap-1.5">
+            <GeneratedValue
+              value={
+                master ? (
+                  <>
+                    <GeneratedValue
+                      value={
+                        aiEnabled ? (
+                          <Button
+                            type="button"
+                            variant={aiOpen ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setAiOpen((v) => !v)}
+                          >
+                            <Sparkles size={13} /> <GeneratedText id="m_1e0a86199c09df" />
+                          </Button>
+                        ) : null
+                      }
+                    />
+                    <Button asChild variant="outline" size="sm">
+                      <a href={`/documents/${documentId}/master`}>
+                        <Download size={13} /> <GeneratedText id="m_18c2e68821b0cd" />
+                      </a>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowReplace((v) => !v)}
+                    >
+                      <UploadCloud size={13} /> <GeneratedText id="m_05b540acc16fd1" />
+                    </Button>
+                    <Button type="button" size="sm" onClick={() => setShowPublish((v) => !v)}>
+                      <GeneratedText id="m_0c072fb8baf115" />
+                    </Button>
+                  </>
+                ) : null
+              }
+            />
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => setFullscreen((v) => !v)}
-              aria-label="Toggle fullscreen"
+              aria-label={tGenerated('m_1090707d1671bd')}
             >
-              {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              <GeneratedValue
+                value={fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              />
             </Button>
           </div>
         </div>
 
-        {showReplace ? importPanel : null}
+        <GeneratedValue value={showReplace ? importPanel : null} />
 
-        {showPublish && master ? (
-          <div className="flex items-start gap-2 border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-            <Textarea
-              rows={2}
-              value={changelog}
-              onChange={(e) => setChangelog(e.currentTarget.value)}
-              maxLength={MAX_DOCUMENT_VERSION_NOTE_CHARS}
-              placeholder="What changed in this version (optional)"
-              className="flex-1"
-            />
-            <div className="flex shrink-0 flex-col gap-1.5">
-              <Button type="button" size="sm" disabled={busy} onClick={publish}>
-                {busy ? <Loader2 size={13} className="animate-spin" /> : null} Publish v
-                {(latestPublished?.version ?? 0) + 1}
-              </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setShowPublish(false)}>
-                <X size={13} /> Cancel
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        <div className={cn('flex min-h-0 flex-1', master ? '' : 'app-scroll overflow-y-auto')}>
-          {master ? (
-            <>
-              <CollaboraEmbed
-                key={`${master.attachmentId}:${editorEpoch}`}
-                ref={editorRef}
-                frameName={documentId}
-                fetchSession={() => getDocumentWriterSession(documentId)}
-                className="h-full min-w-0 flex-1"
-              />
-              {aiOpen && aiEnabled ? (
-                <DocumentAiPanel
-                  documentId={documentId}
-                  editorRef={editorRef}
-                  onClose={() => setAiOpen(false)}
-                  onDocChanged={() => {
-                    setEditorEpoch((v) => v + 1)
-                    router.refresh()
-                  }}
-                  className="w-80 shrink-0"
+        <GeneratedValue
+          value={
+            showPublish && master ? (
+              <div className="flex items-start gap-2 border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                <Textarea
+                  rows={2}
+                  value={changelog}
+                  onChange={(e) => setChangelog(e.currentTarget.value)}
+                  maxLength={MAX_DOCUMENT_VERSION_NOTE_CHARS}
+                  placeholder={tGenerated('m_1620b3eac618c8')}
+                  className="flex-1"
                 />
-              ) : null}
-            </>
-          ) : (
-            <div className="mx-auto w-full max-w-xl px-5 py-10">
-              <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  New document
-                </h3>
-                <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-                  Import a Word file or start a blank document. Uploaded PDFs are managed from the
-                  PDF tab.
-                </p>
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => setShowReplace(true)}
-                  >
-                    <FileUp size={13} /> Import Word file
+                <div className="flex shrink-0 flex-col gap-1.5">
+                  <Button type="button" size="sm" disabled={busy} onClick={publish}>
+                    <GeneratedValue
+                      value={busy ? <Loader2 size={13} className="animate-spin" /> : null}
+                    />{' '}
+                    <GeneratedText id="m_01b66d9dba6889" />
+                    <GeneratedValue value={(latestPublished?.version ?? 0) + 1} />
                   </Button>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    disabled={busy}
-                    onClick={startBlank}
+                    onClick={() => setShowPublish(false)}
                   >
-                    {busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}{' '}
-                    Start blank
+                    <X size={13} /> <GeneratedText id="m_112e2e8ecda428" />
                   </Button>
                 </div>
-                {showReplace ? <div className="mt-3">{importPanel}</div> : null}
               </div>
-            </div>
-          )}
+            ) : null
+          }
+        />
+
+        <div className={cn('flex min-h-0 flex-1', master ? '' : 'app-scroll overflow-y-auto')}>
+          <GeneratedValue
+            value={
+              master ? (
+                <>
+                  <CollaboraEmbed
+                    key={`${master.attachmentId}:${editorEpoch}`}
+                    ref={editorRef}
+                    frameName={documentId}
+                    fetchSession={() => getDocumentWriterSession(documentId)}
+                    className="h-full min-w-0 flex-1"
+                  />
+                  <GeneratedValue
+                    value={
+                      aiOpen && aiEnabled ? (
+                        <DocumentAiPanel
+                          documentId={documentId}
+                          editorRef={editorRef}
+                          onClose={() => setAiOpen(false)}
+                          onDocChanged={() => {
+                            setEditorEpoch((v) => v + 1)
+                            router.refresh()
+                          }}
+                          className="w-80 shrink-0"
+                        />
+                      ) : null
+                    }
+                  />
+                </>
+              ) : (
+                <div className="mx-auto w-full max-w-xl px-5 py-10">
+                  <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      <GeneratedText id="m_1c03b1cfc3b5e4" />
+                    </h3>
+                    <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_1c1501ca319466" />
+                    </p>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => setShowReplace(true)}
+                      >
+                        <FileUp size={13} /> <GeneratedText id="m_08f83ac678024e" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={startBlank}
+                      >
+                        <GeneratedValue
+                          value={
+                            busy ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Plus size={13} />
+                            )
+                          }
+                        />
+                        <GeneratedValue value={' '} />
+                        <GeneratedText id="m_1f809c4de18128" />
+                      </Button>
+                    </div>
+                    <GeneratedValue
+                      value={
+                        showReplace ? (
+                          <div className="mt-3">
+                            <GeneratedValue value={importPanel} />
+                          </div>
+                        ) : null
+                      }
+                    />
+                  </div>
+                </div>
+              )
+            }
+          />
         </div>
       </div>
     )
@@ -291,7 +380,7 @@ export function DocumentPane({
         fullscreen ? 'fixed inset-0 z-[80] bg-slate-100 dark:bg-slate-950' : 'h-full min-h-0'
       }
     >
-      {content}
+      <GeneratedValue value={content} />
     </div>
   )
 }

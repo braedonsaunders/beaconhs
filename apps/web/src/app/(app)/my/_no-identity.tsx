@@ -1,3 +1,4 @@
+import { GeneratedText, useGeneratedTranslations } from '@/i18n/generated'
 // Shared empty state for the personal "Workspace" (`/my/*`) views.
 //
 // Every personal view pivots on the signed-in user's own identity in the active
@@ -20,15 +21,18 @@ export function WorkspaceNoIdentity({
   reason: 'no-membership' | 'no-person'
   noun?: string
 }) {
+  const tGenerated = useGeneratedTranslations()
   if (reason === 'no-membership') {
     return (
       <EmptyState
         icon={<ShieldUser size={32} />}
-        title="Personal view"
-        description={`You're signed in as a platform administrator without a member profile in this tenant. The Workspace tracks an individual's own ${noun}, so there is nothing to show here. Switch to a tenant member to use it.`}
+        title={tGenerated('m_0e04affa28a4aa')}
+        description={tGenerated('m_109b5e22755a7e', { value0: noun })}
         action={
           <Link href="/dashboard">
-            <Button variant="outline">Go to dashboard</Button>
+            <Button variant="outline">
+              <GeneratedText id="m_132d746a8ad9a0" />
+            </Button>
           </Link>
         }
       />
@@ -37,11 +41,13 @@ export function WorkspaceNoIdentity({
   return (
     <EmptyState
       icon={<IdCard size={32} />}
-      title="Account not linked"
-      description={`Your account isn't linked to a person record yet. Ask an administrator to link it and your ${noun} will appear here.`}
+      title={tGenerated('m_016d97d3e7d652')}
+      description={tGenerated('m_0a4bfbb66afc6b', { value0: noun })}
       action={
         <Link href="/people">
-          <Button variant="outline">Open people</Button>
+          <Button variant="outline">
+            <GeneratedText id="m_145ecc49015fb2" />
+          </Button>
         </Link>
       }
     />

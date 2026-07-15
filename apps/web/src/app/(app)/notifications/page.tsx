@@ -1,7 +1,11 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { fetchInboxFolders, fetchInboxPage } from './actions'
 import { OutlookInbox } from './_outlook-inbox'
 
-export const metadata = { title: 'Inbox' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_13b9d8a678398c') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function InboxPage() {

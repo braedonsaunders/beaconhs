@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Create / edit flyout for a custom-field definition. URL-driven
 // (?drawer=new | <id>), one UrlDrawer + form handling both modes — mirrors the
 // equipment-type drawer. The field type drives which extra controls show
@@ -64,6 +71,8 @@ export function CustomFieldsDesignerDrawer({
   closeHref: string
   saveAction: SaveAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   function close() {
     router.push(closeHref)
@@ -73,8 +82,10 @@ export function CustomFieldsDesignerDrawer({
     <UrlDrawer
       open={mode !== null}
       closeHref={closeHref}
-      title={mode === 'edit' ? 'Edit custom field' : 'New custom field'}
-      description="Define an extra attribute. Values are captured inline on each record."
+      title={tGeneratedValue(
+        mode === 'edit' ? tGenerated('m_074a585e7afb0d') : tGenerated('m_1ddc0d39deb418'),
+      )}
+      description={tGenerated('m_073bfb443d54ab')}
       size="lg"
     >
       <DesignerForm
@@ -111,6 +122,8 @@ function DesignerForm({
   saveAction: SaveAction
   onDone: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [label, setLabel] = useState(editing?.label ?? '')
   const [fieldType, setFieldType] = useState<CustomFieldType>(editing?.fieldType ?? 'text')
   const [helpText, setHelpText] = useState(editing?.helpText ?? '')
@@ -144,10 +157,10 @@ function DesignerForm({
   }
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     const trimmed = label.trim()
     if (!trimmed) {
-      setError('Label is required.')
+      setError(tGenerated('m_032e518e5b40a1'))
       return
     }
     const cleanOptions = meta.hasOptions
@@ -162,14 +175,14 @@ function DesignerForm({
           .filter((o) => o.value && o.label)
       : undefined
     if (meta.hasOptions && (!cleanOptions || cleanOptions.length === 0)) {
-      setError('Add at least one option.')
+      setError(tGenerated('m_0d84be61d0f239'))
       return
     }
     if (
       cleanOptions &&
       new Set(cleanOptions.map((option) => option.value)).size !== cleanOptions.length
     ) {
-      setError('Each option needs a unique label.')
+      setError(tGenerated('m_175fa61ba6c857'))
       return
     }
     const config = {
@@ -217,7 +230,7 @@ function DesignerForm({
     }
     if (
       destructiveChanges.length > 0 &&
-      !window.confirm(`Save this change? ${destructiveChanges.join('; ')}. This cannot be undone.`)
+      !window.confirm(tGenerated('m_10aac5db2ebced', { value0: destructiveChanges.join('; ') }))
     ) {
       return
     }
@@ -237,7 +250,7 @@ function DesignerForm({
         isActive,
       })
       if (res.ok) onDone()
-      else setError(res.error)
+      else setError(tGeneratedValue(res.error))
     })
   }
 
@@ -250,203 +263,289 @@ function DesignerForm({
       className="space-y-4"
     >
       <div className="space-y-1.5">
-        <Label htmlFor="cf-label">Label *</Label>
+        <Label htmlFor="cf-label">
+          <GeneratedText id="m_1440aa48f9546a" />
+        </Label>
         <Input
           id="cf-label"
           autoFocus
           value={label}
           onChange={(e) => setLabel(e.currentTarget.value)}
-          placeholder="e.g. LEL sensor reading"
+          placeholder={tGenerated('m_161e2a00286530')}
           maxLength={CUSTOM_FIELD_LIMITS.label}
           required
         />
         <p className="text-xs text-slate-400 dark:text-slate-500">
-          A stable key is derived from the label on creation and never changes.
+          <GeneratedText id="m_1fac01d3a190cf" />
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="cf-type">Field type</Label>
+          <Label htmlFor="cf-type">
+            <GeneratedText id="m_1dcd0f4883781f" />
+          </Label>
           <Select
             id="cf-type"
             value={fieldType}
             disabled={!!editing}
             onChange={(e) => setFieldType(e.currentTarget.value as CustomFieldType)}
           >
-            {CUSTOM_FIELD_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {CUSTOM_FIELD_TYPE_META[t].label}
-              </option>
-            ))}
-          </Select>
-          {editing ? (
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              Type is fixed after creation.
-            </p>
-          ) : null}
-        </div>
-        {nativeGroups.length > 0 ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="cf-placement">Appears in</Label>
-            <Select
-              id="cf-placement"
-              value={groupKey}
-              onChange={(e) => setGroupKey(e.currentTarget.value)}
-            >
-              <option value="">Its own section</option>
-              {nativeGroups.map((g) => (
-                <option key={g.key} value={g.key}>
-                  {g.label}
+            <GeneratedValue
+              value={CUSTOM_FIELD_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  <GeneratedValue value={CUSTOM_FIELD_TYPE_META[t].label} />
                 </option>
               ))}
-            </Select>
-          </div>
-        ) : null}
-        {!groupKey ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="cf-group">Group (section heading)</Label>
-            <Input
-              id="cf-group"
-              value={groupLabel}
-              onChange={(e) => setGroupLabel(e.currentTarget.value)}
-              placeholder="e.g. Gas detector"
-              maxLength={CUSTOM_FIELD_LIMITS.groupLabel}
             />
-          </div>
-        ) : null}
+          </Select>
+          <GeneratedValue
+            value={
+              editing ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">
+                  <GeneratedText id="m_0072fbeb120a2c" />
+                </p>
+              ) : null
+            }
+          />
+        </div>
+        <GeneratedValue
+          value={
+            nativeGroups.length > 0 ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="cf-placement">
+                  <GeneratedText id="m_08fcf5dc4a7e37" />
+                </Label>
+                <Select
+                  id="cf-placement"
+                  value={groupKey}
+                  onChange={(e) => setGroupKey(e.currentTarget.value)}
+                >
+                  <option value="">
+                    <GeneratedText id="m_1089d5d07815c7" />
+                  </option>
+                  <GeneratedValue
+                    value={nativeGroups.map((g) => (
+                      <option key={g.key} value={g.key}>
+                        <GeneratedValue value={g.label} />
+                      </option>
+                    ))}
+                  />
+                </Select>
+              </div>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            !groupKey ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="cf-group">
+                  <GeneratedText id="m_051fb491e56a24" />
+                </Label>
+                <Input
+                  id="cf-group"
+                  value={groupLabel}
+                  onChange={(e) => setGroupLabel(e.currentTarget.value)}
+                  placeholder={tGenerated('m_06857ce00f0a8a')}
+                  maxLength={CUSTOM_FIELD_LIMITS.groupLabel}
+                />
+              </div>
+            ) : null
+          }
+        />
       </div>
 
-      {hasSubtype ? (
-        <div className="space-y-1.5">
-          <Label htmlFor="cf-subtype">Applies to {subtypeLabel?.toLowerCase() ?? 'type'}</Label>
-          <Select
-            id="cf-subtype"
-            value={subtypeId}
-            onChange={(e) => setSubtypeId(e.currentTarget.value)}
-          >
-            <option value="">All {subtypeLabel?.toLowerCase() ?? 'types'}</option>
-            {subtypeOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </Select>
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            Scope the field to one {subtypeLabel?.toLowerCase() ?? 'type'}, or leave on “All” to
-            show it on every record.
-          </p>
-          {editing ? (
-            <p className="text-xs text-amber-700 dark:text-amber-300">
-              Moving this field to a specific {subtypeLabel?.toLowerCase() ?? 'type'} permanently
-              removes its saved values from records outside that scope.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {meta.hasOptions ? (
-        <div className="space-y-2">
-          <Label>Options</Label>
-          <div className="space-y-2">
-            {options.map((opt, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Input
-                  value={opt.label}
-                  onChange={(e) => updateOption(i, { label: e.currentTarget.value })}
-                  placeholder="Label"
-                  className="flex-1"
-                  maxLength={CUSTOM_FIELD_LIMITS.optionLabel}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeOption(i)}
-                  className="rounded p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
-                  aria-label="Remove option"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addOption}
-            disabled={options.length >= CUSTOM_FIELD_LIMITS.options}
-          >
-            <Plus size={14} /> Add option
-          </Button>
-        </div>
-      ) : null}
-
-      {meta.supportsUnit || meta.supportsRange ? (
-        <div className="grid grid-cols-2 gap-3">
-          {meta.supportsUnit ? (
+      <GeneratedValue
+        value={
+          hasSubtype ? (
             <div className="space-y-1.5">
-              <Label htmlFor="cf-unit">Unit</Label>
-              <Input
-                id="cf-unit"
-                value={unit}
-                onChange={(e) => setUnit(e.currentTarget.value)}
-                placeholder="e.g. ppm, %, kg"
-                maxLength={CUSTOM_FIELD_LIMITS.unit}
+              <Label htmlFor="cf-subtype">
+                <GeneratedText id="m_1b4e50d87500ba" />{' '}
+                <GeneratedValue
+                  value={subtypeLabel?.toLowerCase() ?? <GeneratedText id="m_1d3e8ca87746ae" />}
+                />
+              </Label>
+              <Select
+                id="cf-subtype"
+                value={subtypeId}
+                onChange={(e) => setSubtypeId(e.currentTarget.value)}
+              >
+                <option value="">
+                  <GeneratedText id="m_17201516610431" />{' '}
+                  <GeneratedValue
+                    value={subtypeLabel?.toLowerCase() ?? <GeneratedText id="m_19c3cf830db44c" />}
+                  />
+                </option>
+                <GeneratedValue
+                  value={subtypeOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      <GeneratedValue value={o.name} />
+                    </option>
+                  ))}
+                />
+              </Select>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_0190e7556a98d5" />{' '}
+                <GeneratedValue
+                  value={subtypeLabel?.toLowerCase() ?? <GeneratedText id="m_1d3e8ca87746ae" />}
+                />
+                <GeneratedText id="m_186e355d12ce64" />
+              </p>
+              <GeneratedValue
+                value={
+                  editing ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      <GeneratedText id="m_1163139b88a5f0" />{' '}
+                      <GeneratedValue
+                        value={
+                          subtypeLabel?.toLowerCase() ?? <GeneratedText id="m_1d3e8ca87746ae" />
+                        }
+                      />{' '}
+                      <GeneratedText id="m_05ee3553244a0f" />
+                    </p>
+                  ) : null
+                }
               />
             </div>
-          ) : null}
-          {meta.supportsRange ? (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="cf-min">Min</Label>
-                <Input
-                  id="cf-min"
-                  type="number"
-                  step="any"
-                  value={min}
-                  onChange={(e) => setMin(e.currentTarget.value)}
+          ) : null
+        }
+      />
+
+      <GeneratedValue
+        value={
+          meta.hasOptions ? (
+            <div className="space-y-2">
+              <Label>
+                <GeneratedText id="m_0e69ebb67d27c2" />
+              </Label>
+              <div className="space-y-2">
+                <GeneratedValue
+                  value={options.map((opt, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        value={opt.label}
+                        onChange={(e) => updateOption(i, { label: e.currentTarget.value })}
+                        placeholder={tGenerated('m_1d088977412efb')}
+                        className="flex-1"
+                        maxLength={CUSTOM_FIELD_LIMITS.optionLabel}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeOption(i)}
+                        className="rounded p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+                        aria-label={tGenerated('m_060bee20495d1a')}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cf-max">Max</Label>
-                <Input
-                  id="cf-max"
-                  type="number"
-                  step="any"
-                  value={max}
-                  onChange={(e) => setMax(e.currentTarget.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cf-step">Step</Label>
-                <Input
-                  id="cf-step"
-                  type="number"
-                  step="any"
-                  value={step}
-                  onChange={(e) => setStep(e.currentTarget.value)}
-                />
-              </div>
-            </>
-          ) : null}
-        </div>
-      ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addOption}
+                disabled={options.length >= CUSTOM_FIELD_LIMITS.options}
+              >
+                <Plus size={14} /> <GeneratedText id="m_157bc1fc2157b9" />
+              </Button>
+            </div>
+          ) : null
+        }
+      />
+
+      <GeneratedValue
+        value={
+          meta.supportsUnit || meta.supportsRange ? (
+            <div className="grid grid-cols-2 gap-3">
+              <GeneratedValue
+                value={
+                  meta.supportsUnit ? (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cf-unit">
+                        <GeneratedText id="m_1b1663e433323c" />
+                      </Label>
+                      <Input
+                        id="cf-unit"
+                        value={unit}
+                        onChange={(e) => setUnit(e.currentTarget.value)}
+                        placeholder={tGenerated('m_1ae44fcb25ead5')}
+                        maxLength={CUSTOM_FIELD_LIMITS.unit}
+                      />
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  meta.supportsRange ? (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="cf-min">
+                          <GeneratedText id="m_100639ca393959" />
+                        </Label>
+                        <Input
+                          id="cf-min"
+                          type="number"
+                          step="any"
+                          value={min}
+                          onChange={(e) => setMin(e.currentTarget.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="cf-max">
+                          <GeneratedText id="m_1929e34b445f83" />
+                        </Label>
+                        <Input
+                          id="cf-max"
+                          type="number"
+                          step="any"
+                          value={max}
+                          onChange={(e) => setMax(e.currentTarget.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="cf-step">
+                          <GeneratedText id="m_0cff7e37da2b3f" />
+                        </Label>
+                        <Input
+                          id="cf-step"
+                          type="number"
+                          step="any"
+                          value={step}
+                          onChange={(e) => setStep(e.currentTarget.value)}
+                        />
+                      </div>
+                    </>
+                  ) : null
+                }
+              />
+            </div>
+          ) : null
+        }
+      />
 
       <div className="space-y-1.5">
-        <Label htmlFor="cf-help">Help text</Label>
+        <Label htmlFor="cf-help">
+          <GeneratedText id="m_0d04877b1a742b" />
+        </Label>
         <Textarea
           id="cf-help"
           value={helpText}
           onChange={(e) => setHelpText(e.currentTarget.value)}
           rows={2}
-          placeholder="Optional guidance shown under the field."
+          placeholder={tGenerated('m_08b210350bc696')}
           maxLength={CUSTOM_FIELD_LIMITS.helpText}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="cf-sort">Sort order</Label>
+          <Label htmlFor="cf-sort">
+            <GeneratedText id="m_1e92b40de46761" />
+          </Label>
           <Input
             id="cf-sort"
             type="number"
@@ -455,37 +554,57 @@ function DesignerForm({
             onChange={(e) => setSortOrder(e.currentTarget.value)}
           />
         </div>
-        {meta.supportsPlaceholder ? (
-          <div className="space-y-1.5">
-            <Label htmlFor="cf-placeholder">Placeholder</Label>
-            <Input
-              id="cf-placeholder"
-              value={placeholder}
-              onChange={(e) => setPlaceholder(e.currentTarget.value)}
-              maxLength={CUSTOM_FIELD_LIMITS.placeholder}
-            />
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            meta.supportsPlaceholder ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="cf-placeholder">
+                  <GeneratedText id="m_1c62a99fb77c0a" />
+                </Label>
+                <Input
+                  id="cf-placeholder"
+                  value={placeholder}
+                  onChange={(e) => setPlaceholder(e.currentTarget.value)}
+                  maxLength={CUSTOM_FIELD_LIMITS.placeholder}
+                />
+              </div>
+            ) : null
+          }
+        />
       </div>
 
       <div className="flex flex-wrap gap-4">
-        <Toggle checked={required} onChange={setRequired} label="Required" />
-        <Toggle checked={isActive} onChange={setIsActive} label="Active" />
+        <Toggle checked={required} onChange={setRequired} label={tGenerated('m_12fe2fe7a9ddad')} />
+        <Toggle checked={isActive} onChange={setIsActive} label={tGenerated('m_1e1b1fdb7dd78e')} />
       </div>
 
-      {error ? (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-          {error}
-        </p>
-      ) : null}
+      <GeneratedValue
+        value={
+          error ? (
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+              <GeneratedValue value={error} />
+            </p>
+          ) : null
+        }
+      />
 
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="outline" onClick={onDone} disabled={pending}>
-          Cancel
+          <GeneratedText id="m_112e2e8ecda428" />
         </Button>
         <Button type="submit" disabled={pending}>
-          {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-          {editing ? 'Save changes' : 'Create field'}
+          <GeneratedValue
+            value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+          />
+          <GeneratedValue
+            value={
+              editing ? (
+                <GeneratedText id="m_1ab9025ed1067c" />
+              ) : (
+                <GeneratedText id="m_1c04a4097c750a" />
+              )
+            }
+          />
         </Button>
       </div>
     </form>
@@ -522,7 +641,7 @@ function Toggle({
           )}
         />
       </span>
-      {label}
+      <GeneratedValue value={label} />
     </button>
   )
 }

@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Records-list panel — the "List" left-rail tab in the App designer.
 //
 // Configures the records LIST table on /apps/templates/[id]/records: which
@@ -71,6 +78,8 @@ export function RecordListPanel({
   initial?: ListConfig
   fields: ListPanelField[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   // Seed the editable column list from the saved config, or the defaults when
   // none are configured (so the editor always shows the real starting table).
   const [columns, setColumns] = useState<ListColumnConfig[]>(() =>
@@ -164,10 +173,10 @@ export function RecordListPanel({
       }
       const res = await updateListConfig({ templateId, list })
       if (!res.ok) {
-        toast.error(res.error ?? 'Could not save')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0af1983403d12e')))
         return
       }
-      toast.success('Records list saved')
+      toast.success(tGenerated('m_0f6148e9f2ec85'))
     })
 
   const canAdd = addableBuiltins.length > 0 || addableFields.length > 0
@@ -175,83 +184,104 @@ export function RecordListPanel({
   return (
     <div className="space-y-4">
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Shape the records table for this App — the columns shown, their order, the default sort, and
-        the default status filter.
+        <GeneratedText id="m_069c0e17c0f410" />
       </p>
 
       <section className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label className="text-xs">Columns</Label>
-          {customised ? (
-            <button
-              type="button"
-              onClick={resetToDefaults}
-              className="text-[11px] font-medium text-teal-600 hover:underline dark:text-teal-400"
-            >
-              Reset to defaults
-            </button>
-          ) : (
-            <span className="text-[11px] text-slate-400 dark:text-slate-500">Using defaults</span>
-          )}
+          <Label className="text-xs">
+            <GeneratedText id="m_04eacfda3069db" />
+          </Label>
+          <GeneratedValue
+            value={
+              customised ? (
+                <button
+                  type="button"
+                  onClick={resetToDefaults}
+                  className="text-[11px] font-medium text-teal-600 hover:underline dark:text-teal-400"
+                >
+                  <GeneratedText id="m_1f67de126c9538" />
+                </button>
+              ) : (
+                <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                  <GeneratedText id="m_03c1aa43a38ec7" />
+                </span>
+              )
+            }
+          />
         </div>
 
-        {columns.length === 0 ? (
-          <p className="rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
-            No columns. Add at least one, or reset to defaults.
-          </p>
-        ) : (
-          <ul className="space-y-1.5">
-            {columns.map((col, i) => (
-              <li
-                key={colKeyId(col)}
-                className="rounded-md border border-slate-200 px-2.5 py-2 dark:border-slate-700"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="flex-1 truncate text-sm font-medium text-slate-700 dark:text-slate-300">
-                    {displayLabel(col)}
-                  </span>
-                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                    {col.source === 'builtin' ? 'Built-in' : 'Field'}
-                  </span>
-                  <div className="flex items-center">
-                    <button
-                      type="button"
-                      onClick={() => move(i, -1)}
-                      disabled={i === 0}
-                      aria-label="Move up"
-                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        <GeneratedValue
+          value={
+            columns.length === 0 ? (
+              <p className="rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                <GeneratedText id="m_01b170d39fc364" />
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                <GeneratedValue
+                  value={columns.map((col, i) => (
+                    <li
+                      key={colKeyId(col)}
+                      className="rounded-md border border-slate-200 px-2.5 py-2 dark:border-slate-700"
                     >
-                      <ArrowUp size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => move(i, 1)}
-                      disabled={i === columns.length - 1}
-                      aria-label="Move down"
-                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                    >
-                      <ArrowDown size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => remove(i)}
-                      aria-label="Remove column"
-                      className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                </div>
-                <Input
-                  value={col.label ?? ''}
-                  onChange={(e) => setLabelOverride(i, e.target.value)}
-                  placeholder={`Label (default: ${displayLabel(col)})`}
-                  className="mt-1.5 h-7 text-xs"
+                      <div className="flex items-center gap-2">
+                        <span className="flex-1 truncate text-sm font-medium text-slate-700 dark:text-slate-300">
+                          <GeneratedValue value={displayLabel(col)} />
+                        </span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                          <GeneratedValue
+                            value={
+                              col.source === 'builtin' ? (
+                                <GeneratedText id="m_09bfd82959f8d2" />
+                              ) : (
+                                <GeneratedText id="m_1dfe960eaa6224" />
+                              )
+                            }
+                          />
+                        </span>
+                        <div className="flex items-center">
+                          <button
+                            type="button"
+                            onClick={() => move(i, -1)}
+                            disabled={i === 0}
+                            aria-label={tGenerated('m_1ec1460770eaa0')}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                          >
+                            <ArrowUp size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => move(i, 1)}
+                            disabled={i === columns.length - 1}
+                            aria-label={tGenerated('m_14ab8cefda3cf9')}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                          >
+                            <ArrowDown size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => remove(i)}
+                            aria-label={tGenerated('m_0605fd789eea1e')}
+                            className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <Input
+                        value={col.label ?? ''}
+                        onChange={(e) => setLabelOverride(i, e.target.value)}
+                        placeholder={tGenerated('m_0ecbfeb2752049', { value0: displayLabel(col) })}
+                        className="mt-1.5 h-7 text-xs"
+                      />
+                    </li>
+                  ))}
                 />
-              </li>
-            ))}
-          </ul>
-        )}
+              </ul>
+            )
+          }
+        />
 
         <div className="flex items-center gap-2">
           <Select
@@ -260,25 +290,47 @@ export function RecordListPanel({
             disabled={!canAdd}
             className="flex-1"
           >
-            <option value="">{canAdd ? 'Add a column…' : 'All columns added'}</option>
-            {addableBuiltins.length ? (
-              <optgroup label="Built-in">
-                {addableBuiltins.map((k) => (
-                  <option key={`builtin:${k}`} value={`builtin:${k}`}>
-                    {BUILTIN_LABEL[k]}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
-            {addableFields.length ? (
-              <optgroup label="Fields">
-                {addableFields.map((f) => (
-                  <option key={`field:${f.id}`} value={`field:${f.id}`}>
-                    {f.label}
-                  </option>
-                ))}
-              </optgroup>
-            ) : null}
+            <option value="">
+              <GeneratedValue
+                value={
+                  canAdd ? (
+                    <GeneratedText id="m_10a2cdb9b25b6b" />
+                  ) : (
+                    <GeneratedText id="m_1643640821919c" />
+                  )
+                }
+              />
+            </option>
+            <GeneratedValue
+              value={
+                addableBuiltins.length ? (
+                  <optgroup label={tGenerated('m_09bfd82959f8d2')}>
+                    <GeneratedValue
+                      value={addableBuiltins.map((k) => (
+                        <option key={`builtin:${k}`} value={`builtin:${k}`}>
+                          <GeneratedValue value={BUILTIN_LABEL[k]} />
+                        </option>
+                      ))}
+                    />
+                  </optgroup>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                addableFields.length ? (
+                  <optgroup label={tGenerated('m_147efea3b670a8')}>
+                    <GeneratedValue
+                      value={addableFields.map((f) => (
+                        <option key={`field:${f.id}`} value={`field:${f.id}`}>
+                          <GeneratedValue value={f.label} />
+                        </option>
+                      ))}
+                    />
+                  </optgroup>
+                ) : null
+              }
+            />
           </Select>
           <Button
             type="button"
@@ -286,66 +338,89 @@ export function RecordListPanel({
             size="sm"
             onClick={add}
             disabled={!addKind}
-            aria-label="Add column"
+            aria-label={tGenerated('m_059cd549852b55')}
           >
             <Plus size={14} />
           </Button>
         </div>
 
         <p className="text-[11px] text-slate-400 dark:text-slate-500">
-          Field columns are display-only — sorting and filtering on app-field values isn&apos;t
-          supported yet.
+          <GeneratedText id="m_07536b1f56f5ac" />
         </p>
       </section>
 
       <section className="space-y-2">
-        <Label className="text-xs">Default sort</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_184e33c0ff4633" />
+        </Label>
         <div className="flex items-center gap-2">
           <Select
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as typeof sortKey)}
             className="flex-1"
           >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.key} value={o.key}>
-                {o.label}
-              </option>
-            ))}
+            <GeneratedValue
+              value={SORT_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>
+                  <GeneratedValue value={o.label} />
+                </option>
+              ))}
+            />
           </Select>
           <button
             type="button"
             onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
             className="flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            aria-label={sortDir === 'asc' ? 'Sort ascending' : 'Sort descending'}
+            aria-label={tGeneratedValue(
+              sortDir === 'asc' ? tGenerated('m_0c8a5fae720673') : tGenerated('m_1bce7fbc0c4e38'),
+            )}
           >
-            {sortDir === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
-            {sortDir === 'asc' ? 'Ascending' : 'Descending'}
+            <GeneratedValue
+              value={sortDir === 'asc' ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
+            />
+            <GeneratedValue
+              value={
+                sortDir === 'asc' ? (
+                  <GeneratedText id="m_0027c5891082cf" />
+                ) : (
+                  <GeneratedText id="m_14a3ccc633a056" />
+                )
+              }
+            />
           </button>
         </div>
       </section>
 
       <section className="space-y-2">
-        <Label className="text-xs">Default status filter</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_1e0e89e45806e4" />
+        </Label>
         <Select value={defaultStatus} onChange={(e) => setDefaultStatus(e.target.value)}>
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value || 'none'} value={o.value}>
-              {o.label}
-            </option>
-          ))}
+          <GeneratedValue
+            value={STATUS_OPTIONS.map((o) => (
+              <option key={o.value || 'none'} value={o.value}>
+                <GeneratedValue value={o.label} />
+              </option>
+            ))}
+          />
         </Select>
         <p className="text-[11px] text-slate-400 dark:text-slate-500">
-          The records page opens pre-filtered to this status. Choose None to show every record.
+          <GeneratedText id="m_1191dfec9eacde" />
         </p>
       </section>
 
       <Button onClick={save} disabled={pending} className="w-full">
-        {pending ? (
-          'Saving…'
-        ) : (
-          <>
-            <Check size={14} /> Save records list
-          </>
-        )}
+        <GeneratedValue
+          value={
+            pending ? (
+              <GeneratedText id="m_106811f2aac664" />
+            ) : (
+              <>
+                <Check size={14} /> <GeneratedText id="m_16defa6a739143" />
+              </>
+            )
+          }
+        />
       </Button>
     </div>
   )

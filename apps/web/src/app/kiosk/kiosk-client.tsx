@@ -1,5 +1,11 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { ArrowLeft, CheckCircle2, LogIn, LogOut, X } from 'lucide-react'
@@ -16,6 +22,8 @@ type Stage =
   | { kind: 'done'; pin: string; person: Person; scanKind: 'in' | 'out'; at: Date }
 
 export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const t = useTranslations('Kiosk')
   const common = useTranslations('Common')
   const locale = useLocale() as AppLocale
@@ -51,7 +59,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
 
   function returnToPicker(pin: string) {
     clearDoneTimeout()
-    setError(null)
+    setError(tGeneratedValue(null))
     setStage({ kind: 'pick', pin })
   }
 
@@ -81,9 +89,9 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
 
   function submitPin(e: React.FormEvent) {
     e.preventDefault()
-    setError(null)
+    setError(tGeneratedValue(null))
     if (!pinInput.trim()) {
-      setError(t('enterPinError'))
+      setError(tGeneratedValue(t('enterPinError')))
       return
     }
     const pin = pinInput.trim()
@@ -91,12 +99,12 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
       try {
         const result = await unlockKiosk({ tenantId, pin })
         if (!result.ok) {
-          setError(localizedError(result.error))
+          setError(tGeneratedValue(localizedError(result.error)))
           return
         }
         setStage({ kind: 'pick', pin })
       } catch {
-        setError(t('unlockError'))
+        setError(tGeneratedValue(t('unlockError')))
       }
     })
   }
@@ -108,7 +116,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
 
   function sign(scanKind: 'in' | 'out') {
     if (stage.kind !== 'sign') return
-    setError(null)
+    setError(tGeneratedValue(null))
     const pin = stage.pin
     const person = stage.person
     start(async () => {
@@ -123,7 +131,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
           pin,
         })
         if (!result.ok) {
-          setError(localizedError(result.error))
+          setError(tGeneratedValue(localizedError(result.error)))
           if (result.error === 'Invalid PIN' || result.error.includes('PIN')) {
             setStage({ kind: 'pin' })
             setPinInput('')
@@ -134,11 +142,11 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
         clearDoneTimeout()
         doneTimeoutRef.current = setTimeout(() => {
           doneTimeoutRef.current = null
-          setError(null)
+          setError(tGeneratedValue(null))
           setStage({ kind: 'pick', pin })
         }, 4000)
       } catch {
-        setError(t('scanError'))
+        setError(tGeneratedValue(t('scanError')))
       }
     })
   }
@@ -155,8 +163,12 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
             <div className="mx-auto mb-2 grid h-12 w-12 place-items-center rounded-full bg-teal-500/20 text-teal-300">
               <LogIn size={24} />
             </div>
-            <h1 className="text-xl font-semibold">{tenantName}</h1>
-            <p className="text-sm text-slate-400">{t('pinPrompt')}</p>
+            <h1 className="text-xl font-semibold">
+              <GeneratedValue value={tenantName} />
+            </h1>
+            <p className="text-sm text-slate-400">
+              <GeneratedValue value={t('pinPrompt')} />
+            </p>
           </header>
           <input
             type="password"
@@ -166,16 +178,24 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
             onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 12))}
             pattern="[0-9]{4,12}"
             maxLength={12}
-            placeholder="PIN"
+            placeholder={tGenerated('m_18edf6c152be49')}
             className="w-full rounded-lg border-0 bg-slate-900 px-4 py-3 text-center text-2xl tracking-widest text-white placeholder-slate-500 focus:ring-2 focus:ring-teal-500 focus:outline-none"
           />
-          {error ? <p className="text-center text-sm text-red-400">{error}</p> : null}
+          <GeneratedValue
+            value={
+              error ? (
+                <p className="text-center text-sm text-red-400">
+                  <GeneratedValue value={error} />
+                </p>
+              ) : null
+            }
+          />
           <button
             type="submit"
             disabled={pending}
             className="w-full rounded-lg bg-teal-500 px-4 py-3 text-base font-semibold text-white hover:bg-teal-400 disabled:opacity-50"
           >
-            {t('unlock')}
+            <GeneratedValue value={t('unlock')} />
           </button>
         </form>
       </div>
@@ -189,14 +209,20 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
         <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-6 py-4">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
             <div>
-              <h1 className="text-lg font-semibold text-slate-900">{tenantName}</h1>
-              <p className="text-xs text-slate-500">{t('namePrompt')}</p>
+              <h1 className="text-lg font-semibold text-slate-900">
+                <GeneratedValue value={tenantName} />
+              </h1>
+              <p className="text-xs text-slate-500">
+                <GeneratedValue value={t('namePrompt')} />
+              </p>
             </div>
           </div>
         </header>
         <main className="mx-auto max-w-3xl p-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <label className="mb-2 block text-sm font-medium text-slate-700">{t('yourName')}</label>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              <GeneratedValue value={t('yourName')} />
+            </label>
             <RemoteSearchSelect
               loadOptions={peopleLoader}
               value=""
@@ -206,15 +232,17 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
                   pickPerson({ id: person.value, name: person.label, detail: person.hint ?? null })
                 }
               }}
-              placeholder={t('searchName')}
-              searchPlaceholder={t('searchNameHelp')}
+              placeholder={tGeneratedValue(t('searchName'))}
+              searchPlaceholder={tGeneratedValue(t('searchNameHelp'))}
               sheetTitle={t('chooseName')}
               ariaLabel={t('directoryLabel')}
               clearable={false}
               className="w-full"
               triggerClassName="h-14 text-base"
             />
-            <p className="mt-3 text-xs text-slate-500">{t('resultHelp')}</p>
+            <p className="mt-3 text-xs text-slate-500">
+              <GeneratedValue value={t('resultHelp')} />
+            </p>
           </div>
         </main>
       </div>
@@ -232,34 +260,42 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
               onClick={() => returnToPicker(stage.pin)}
               className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-teal-700"
             >
-              <ArrowLeft size={14} /> {common('back')}
+              <ArrowLeft size={14} /> <GeneratedValue value={common('back')} />
             </button>
             <button
               type="button"
               onClick={() => returnToPicker(stage.pin)}
               className="text-slate-400 hover:text-slate-700"
-              aria-label={common('close')}
+              aria-label={tGeneratedValue(common('close'))}
             >
               <X size={20} />
             </button>
           </div>
-          <h2 className="text-2xl font-semibold text-slate-900">{stage.person.name}</h2>
-          {stage.person.detail ? (
-            <p className="text-sm text-slate-500">{stage.person.detail}</p>
-          ) : null}
+          <h2 className="text-2xl font-semibold text-slate-900">
+            <GeneratedValue value={stage.person.name} />
+          </h2>
+          <GeneratedValue
+            value={
+              stage.person.detail ? (
+                <p className="text-sm text-slate-500">
+                  <GeneratedValue value={stage.person.detail} />
+                </p>
+              ) : null
+            }
+          />
 
           <div className="mt-4 grid grid-cols-1 gap-3">
             <div>
               <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-                {t('siteOptional')}
+                <GeneratedValue value={t('siteOptional')} />
               </label>
               <RemoteSearchSelect
                 loadOptions={siteLoader}
                 value={siteId}
                 onChange={setSiteId}
-                placeholder={t('noSite')}
-                emptyLabel={t('noSite')}
-                searchPlaceholder={t('searchSites')}
+                placeholder={tGeneratedValue(t('noSite'))}
+                emptyLabel={tGeneratedValue(t('noSite'))}
+                searchPlaceholder={tGeneratedValue(t('searchSites'))}
                 sheetTitle={t('chooseSite')}
                 ariaLabel={t('chooseOptionalSite')}
                 className="mt-1 w-full"
@@ -267,15 +303,15 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
             </div>
             <div>
               <label className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-                {t('crewOptional')}
+                <GeneratedValue value={t('crewOptional')} />
               </label>
               <RemoteSearchSelect
                 loadOptions={crewLoader}
                 value={crewId}
                 onChange={setCrewId}
-                placeholder={t('noCrew')}
-                emptyLabel={t('noCrew')}
-                searchPlaceholder={t('searchCrews')}
+                placeholder={tGeneratedValue(t('noCrew'))}
+                emptyLabel={tGeneratedValue(t('noCrew'))}
+                searchPlaceholder={tGeneratedValue(t('searchCrews'))}
                 sheetTitle={t('chooseCrew')}
                 ariaLabel={t('chooseOptionalCrew')}
                 className="mt-1 w-full"
@@ -283,7 +319,15 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
             </div>
           </div>
 
-          {error ? <p className="mt-4 text-center text-sm text-red-600">{error}</p> : null}
+          <GeneratedValue
+            value={
+              error ? (
+                <p className="mt-4 text-center text-sm text-red-600">
+                  <GeneratedValue value={error} />
+                </p>
+              ) : null
+            }
+          />
 
           <div className="mt-5 grid grid-cols-2 gap-3">
             <button
@@ -293,7 +337,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
               className="flex flex-col items-center justify-center gap-1 rounded-xl bg-emerald-500 px-4 py-6 text-base font-semibold text-white hover:bg-emerald-400 disabled:opacity-50"
             >
               <LogIn size={24} />
-              {t('signIn').toUpperCase()}
+              <GeneratedValue value={t('signIn').toUpperCase()} />
             </button>
             <button
               type="button"
@@ -302,7 +346,7 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
               className="flex flex-col items-center justify-center gap-1 rounded-xl bg-amber-500 px-4 py-6 text-base font-semibold text-white hover:bg-amber-400 disabled:opacity-50"
             >
               <LogOut size={24} />
-              {t('signOut').toUpperCase()}
+              <GeneratedValue value={t('signOut').toUpperCase()} />
             </button>
           </div>
         </div>
@@ -318,18 +362,20 @@ export function KioskClient({ tenantId, tenantName }: { tenantId: string; tenant
           <CheckCircle2 size={32} />
         </div>
         <h2 className="text-2xl font-semibold text-slate-900">
-          {stage.scanKind === 'in' ? t('signedIn') : t('signedOut')}
+          <GeneratedValue value={stage.scanKind === 'in' ? t('signedIn') : t('signedOut')} />
         </h2>
         <p className="mt-1 text-sm text-slate-500">
-          {stage.person.name} ·{' '}
-          {stage.at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+          <GeneratedValue value={stage.person.name} /> ·<GeneratedValue value={' '} />
+          <GeneratedValue
+            value={stage.at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+          />
         </p>
         <button
           type="button"
           onClick={() => returnToPicker(stage.pin)}
           className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:bg-slate-800"
         >
-          {t('done')}
+          <GeneratedValue value={t('done')} />
         </button>
       </div>
     </div>

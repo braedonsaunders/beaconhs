@@ -1,5 +1,7 @@
 'use client'
 
+import { useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // Segmented Write ↔ PDF switch for the document surface. Write = the editor;
 // PDF = the document's PDF (generated from content, or an uploaded source).
 
@@ -16,19 +18,20 @@ export function ModeSwitch({
   mode: DocumentMode
   onChange: (m: DocumentMode) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-800 dark:bg-slate-800">
       <ModeBtn
         active={mode === 'write'}
         onClick={() => onChange('write')}
         icon={<PenLine size={13} />}
-        label="Write"
+        label={tGenerated('m_1100b584efd51b')}
       />
       <ModeBtn
         active={mode === 'pdf'}
         onClick={() => onChange('pdf')}
         icon={<FileText size={13} />}
-        label="PDF"
+        label={tGenerated('m_1a2b2ed6729166')}
       />
     </div>
   )
@@ -56,8 +59,8 @@ function ModeBtn({
           : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
       )}
     >
-      {icon}
-      {label}
+      <GeneratedValue value={icon} />
+      <GeneratedValue value={label} />
     </button>
   )
 }

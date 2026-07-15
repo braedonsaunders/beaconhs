@@ -1,3 +1,4 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // The single shared module sub-nav pill strip — replaces the ~10 bespoke
 // per-module *-sub-nav.tsx copies. Renders an optional back pill (admin pages
 // navigating up to the module home), the tabs, and — when the caller passes
@@ -31,25 +32,35 @@ export function ModuleSubNav({
 }) {
   return (
     <nav className="flex [scrollbar-width:none] flex-nowrap items-center gap-1.5 overflow-x-auto [-ms-overflow-style:none] sm:flex-wrap sm:overflow-x-visible [&::-webkit-scrollbar]:hidden">
-      {back ? (
-        <Link href={back.href as never} className={cn(PILL, IDLE)}>
-          <ChevronLeft size={12} /> {back.label}
-        </Link>
-      ) : null}
-      {tabs.map((t) => (
-        <Link
-          key={t.key}
-          href={t.href as never}
-          className={cn(PILL, t.key === active ? ACTIVE : IDLE)}
-        >
-          {t.label}
-        </Link>
-      ))}
-      {manageHref ? (
-        <Link href={manageHref as never} className={cn(PILL, manageActive ? ACTIVE : IDLE)}>
-          <Settings2 size={12} /> Manage
-        </Link>
-      ) : null}
+      <GeneratedValue
+        value={
+          back ? (
+            <Link href={back.href as never} className={cn(PILL, IDLE)}>
+              <ChevronLeft size={12} /> <GeneratedValue value={back.label} />
+            </Link>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={tabs.map((t) => (
+          <Link
+            key={t.key}
+            href={t.href as never}
+            className={cn(PILL, t.key === active ? ACTIVE : IDLE)}
+          >
+            <GeneratedValue value={t.label} />
+          </Link>
+        ))}
+      />
+      <GeneratedValue
+        value={
+          manageHref ? (
+            <Link href={manageHref as never} className={cn(PILL, manageActive ? ACTIVE : IDLE)}>
+              <Settings2 size={12} /> <GeneratedText id="m_11d42075a22139" />
+            </Link>
+          ) : null
+        }
+      />
     </nav>
   )
 }

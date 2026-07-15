@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 /**
  * Tiny client-side motion wrappers used by the (otherwise server) page
@@ -26,7 +27,7 @@ export function FadeInHeader({
       transition={{ duration: 0.2, ease: [0.22, 0.61, 0.36, 1] }}
       className={cn(className)}
     >
-      {children}
+      <GeneratedValue value={children} />
     </motion.div>
   )
 }
@@ -46,7 +47,7 @@ export function FadeInBody({
       transition={{ duration: 0.25, delay: 0.05, ease: [0.22, 0.61, 0.36, 1] }}
       className={cn('h-full', className)}
     >
-      {children}
+      <GeneratedValue value={children} />
     </motion.div>
   )
 }

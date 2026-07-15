@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 // Lazy record creation — the "don't create an empty draft until the user
 // actually starts" convention (ports the form-fill `createDraftResponse`
@@ -73,7 +74,7 @@ export function LazyRecordProvider({
 
   return (
     <LazyRecordContext.Provider value={{ ensureId, notifySaved }}>
-      {children}
+      <GeneratedValue value={children} />
     </LazyRecordContext.Provider>
   )
 }

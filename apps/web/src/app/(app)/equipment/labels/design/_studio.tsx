@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Equipment QR-label design studio — the same canvas editor the training
 // credential designer uses (shared parts in @/components/design-studio),
 // composed for the ONE tenant label document. Every visual aspect is
@@ -74,6 +81,8 @@ export function EquipmentLabelStudio({
   initialDocument: DesignDocument
   onSave: (document: DesignDocument) => Promise<DesignDocument>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [doc, setDoc] = useState<DesignDocument>(initialDocument)
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
   const [tab, setTab] = useState<RailTab>('inspector')
@@ -138,14 +147,14 @@ export function EquipmentLabelStudio({
   }
 
   function save() {
-    setError(null)
+    setError(tGeneratedValue(null))
     startTransition(async () => {
       try {
         const saved = await onSave(doc)
         setDoc(saved)
         setSavedAt(new Date().toLocaleTimeString())
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Save failed')
+        setError(tGeneratedValue(e instanceof Error ? e.message : tGenerated('m_0731204fbd1b17')))
       }
     })
   }
@@ -154,29 +163,29 @@ export function EquipmentLabelStudio({
     <div className="grid min-h-[70vh] grid-cols-[300px_1fr] overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <aside className="flex min-h-0 flex-col border-r border-slate-200 dark:border-slate-800">
         <div className="shrink-0 border-b border-slate-200 p-3 dark:border-slate-800">
-          <RailLabel icon={<Tag size={13} />} label="Equipment label" />
+          <RailLabel icon={<Tag size={13} />} label={tGenerated('m_1f849ca368e9ff')} />
           <div className="mt-2 grid grid-cols-4 gap-1.5">
             <RailTabButton
               active={tab === 'inspector'}
-              label="Design"
+              label={tGenerated('m_0006b9b63f781f')}
               icon={<SlidersHorizontal size={14} />}
               onClick={() => setTab('inspector')}
             />
             <RailTabButton
               active={tab === 'insert'}
-              label="Insert"
+              label={tGenerated('m_028b340e5141ab')}
               icon={<Shapes size={14} />}
               onClick={() => setTab('insert')}
             />
             <RailTabButton
               active={tab === 'layers'}
-              label="Layers"
+              label={tGenerated('m_1065741cf2a494')}
               icon={<Layers size={14} />}
               onClick={() => setTab('layers')}
             />
             <RailTabButton
               active={tab === 'print'}
-              label="Print"
+              label={tGenerated('m_124553ef26fbe5')}
               icon={<Printer size={14} />}
               onClick={() => setTab('print')}
             />
@@ -184,49 +193,85 @@ export function EquipmentLabelStudio({
         </div>
 
         <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
-          {tab === 'insert' ? <InsertPanel onAdd={addElement} /> : null}
-          {tab === 'layers' ? (
-            <LayersPanel
-              artboard={artboard}
-              selectedElementId={selectedElementId}
-              onSelect={(id) => {
-                setSelectedElementId(id)
-                setTab('inspector')
-              }}
-              onDuplicate={duplicateSelected}
-              onDelete={deleteSelected}
-              onFront={() => moveSelected('front')}
-              onBack={() => moveSelected('back')}
-            />
-          ) : null}
-          {tab === 'inspector' ? (
-            <InspectorPanel
-              artboard={artboard}
-              selectedElement={selectedElement}
-              catalog={CATALOG}
-              onPatchArtboard={patchArtboard}
-              onPatchElement={(patch) => selectedElement && patchElement(selectedElement.id, patch)}
-              onDelete={deleteSelected}
-            />
-          ) : null}
-          {tab === 'print' ? (
-            <PrintPanel artboard={artboard} onPatchArtboard={patchArtboard} />
-          ) : null}
+          <GeneratedValue value={tab === 'insert' ? <InsertPanel onAdd={addElement} /> : null} />
+          <GeneratedValue
+            value={
+              tab === 'layers' ? (
+                <LayersPanel
+                  artboard={artboard}
+                  selectedElementId={selectedElementId}
+                  onSelect={(id) => {
+                    setSelectedElementId(id)
+                    setTab('inspector')
+                  }}
+                  onDuplicate={duplicateSelected}
+                  onDelete={deleteSelected}
+                  onFront={() => moveSelected('front')}
+                  onBack={() => moveSelected('back')}
+                />
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              tab === 'inspector' ? (
+                <InspectorPanel
+                  artboard={artboard}
+                  selectedElement={selectedElement}
+                  catalog={CATALOG}
+                  onPatchArtboard={patchArtboard}
+                  onPatchElement={(patch) =>
+                    selectedElement && patchElement(selectedElement.id, patch)
+                  }
+                  onDelete={deleteSelected}
+                />
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              tab === 'print' ? (
+                <PrintPanel artboard={artboard} onPatchArtboard={patchArtboard} />
+              ) : null
+            }
+          />
         </div>
 
         <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-2">
             <Button type="button" className="flex-1" onClick={save} disabled={pending}>
               <Save size={14} />
-              {pending ? 'Saving' : 'Save label design'}
+              <GeneratedValue
+                value={
+                  pending ? (
+                    <GeneratedText id="m_049969c97f8439" />
+                  ) : (
+                    <GeneratedText id="m_1d500dc60e3e5d" />
+                  )
+                }
+              />
             </Button>
-            {savedAt ? (
-              <span className="text-xs text-slate-500 dark:text-slate-400">Saved {savedAt}</span>
-            ) : null}
+            <GeneratedValue
+              value={
+                savedAt ? (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedText id="m_0a0569b726b225" /> <GeneratedValue value={savedAt} />
+                  </span>
+                ) : null
+              }
+            />
           </div>
-          {error ? <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p> : null}
+          <GeneratedValue
+            value={
+              error ? (
+                <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+                  <GeneratedValue value={error} />
+                </p>
+              ) : null
+            }
+          />
           <p className="mt-2 flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-            <MousePointerClick size={11} /> Click an element on the label to edit it.
+            <MousePointerClick size={11} /> <GeneratedText id="m_1dca6cb7d67754" />
           </p>
         </div>
       </aside>

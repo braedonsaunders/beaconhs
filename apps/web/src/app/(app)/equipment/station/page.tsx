@@ -1,3 +1,5 @@
+import { GeneratedText } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { Settings2 } from 'lucide-react'
 import { and, count, eq, isNull } from 'drizzle-orm'
@@ -18,7 +20,10 @@ import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { StationClient } from './_station-client'
 import { performStationScan, searchStation } from './_actions'
 
-export const metadata = { title: 'Check in / out station' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0dec57bc6dac5b') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function StationPage({
@@ -26,6 +31,7 @@ export default async function StationPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
   const sp = await searchParams
@@ -116,13 +122,13 @@ export default async function StationPage({
       header={
         <>
           <PageHeader
-            title="Check in / out station"
-            description="Scan a badge to set the holder, then scan assets to check them in or out. Works with a USB scanner, phone camera, or by typing a tag."
+            title={tGenerated('m_0dec57bc6dac5b')}
+            description={tGenerated('m_0797549821ff2f')}
             actions={
               canManage ? (
                 <Link href="/equipment/station/settings">
                   <Button variant="outline">
-                    <Settings2 size={14} /> Station settings
+                    <Settings2 size={14} /> <GeneratedText id="m_1474b36d8e0cff" />
                   </Button>
                 </Link>
               ) : undefined

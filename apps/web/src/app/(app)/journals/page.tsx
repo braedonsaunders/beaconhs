@@ -1,10 +1,14 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { requireRequestContext } from '@/lib/auth'
 import { ModuleNav } from '@/components/module-admin/module-nav'
 import { getEntry, getWorkspaceData, listEntries } from './_data'
 import { JournalWorkspace } from './_workspace'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Journals' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_06f47737661294') }
+}
 
 export default async function JournalsPage() {
   const ctx = await requireRequestContext()

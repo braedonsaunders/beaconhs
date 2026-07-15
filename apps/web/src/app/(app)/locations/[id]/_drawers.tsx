@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Create / edit flyout for the location detail page's Contacts tab. Opened via
 // ?drawer=new-contact (create) or ?drawer=edit-contact&contactId=… (edit). A
 // contact has no detail page of its own — it's a sub-record created and edited
@@ -59,6 +66,8 @@ export function ContactDrawer({
   createAction: CreateAction
   updateAction: UpdateAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   function close() {
     router.push(closeHref)
@@ -69,8 +78,10 @@ export function ContactDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title={editing ? 'Edit contact' : 'New contact'}
-      description="Add a contact — site managers, client reps, emergency-only contacts."
+      title={tGeneratedValue(
+        editing ? tGenerated('m_1817230066dcd4') : tGenerated('m_129529d04e6d96'),
+      )}
+      description={tGenerated('m_0c51dcd14d49fc')}
       size="md"
     >
       <ContactForm
@@ -98,6 +109,8 @@ function ContactForm({
   updateAction: UpdateAction
   onDone: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [name, setName] = useState(contact?.name ?? '')
   const [role, setRole] = useState(contact?.role ?? '')
   const [email, setEmail] = useState(contact?.email ?? '')
@@ -108,10 +121,10 @@ function ContactForm({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     const trimmed = name.trim()
     if (!trimmed) {
-      setError('Name is required.')
+      setError(tGenerated('m_1c66cb30434189'))
       return
     }
     startTransition(async () => {
@@ -127,7 +140,7 @@ function ContactForm({
         ? await updateAction({ contactId: contact.id, orgUnitId, ...payload })
         : await createAction({ orgUnitId, ...payload })
       if (res.ok) onDone()
-      else setError(res.error)
+      else setError(tGeneratedValue(res.error))
     })
   }
 
@@ -140,59 +153,69 @@ function ContactForm({
       className="space-y-4"
     >
       <div className="space-y-1.5">
-        <Label htmlFor="contact-name">Name *</Label>
+        <Label htmlFor="contact-name">
+          <GeneratedText id="m_1a9978900838e6" />
+        </Label>
         <Input
           id="contact-name"
           autoFocus
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="e.g. Jordan Lee"
+          placeholder={tGenerated('m_15d21c6eb9e2a9')}
           required
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="contact-role">Role</Label>
+        <Label htmlFor="contact-role">
+          <GeneratedText id="m_1099c1fe8b6614" />
+        </Label>
         <Input
           id="contact-role"
           value={role}
           onChange={(e) => setRole(e.currentTarget.value)}
-          placeholder="e.g. Site Manager"
+          placeholder={tGenerated('m_0a2c926e8e262e')}
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="contact-email">Email</Label>
+        <Label htmlFor="contact-email">
+          <GeneratedText id="m_00a0ba9938bdff" />
+        </Label>
         <Input
           id="contact-email"
           type="email"
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.currentTarget.value)}
-          placeholder="e.g. jordan@acme.com"
+          placeholder={tGenerated('m_03778215225c60')}
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="contact-phone">Phone</Label>
+        <Label htmlFor="contact-phone">
+          <GeneratedText id="m_129b102b56bf3a" />
+        </Label>
         <Input
           id="contact-phone"
           type="tel"
           autoComplete="tel"
           value={phone}
           onChange={(e) => setPhone(e.currentTarget.value)}
-          placeholder="e.g. (555) 010-2233"
+          placeholder={tGenerated('m_1f7b2c238d9e44')}
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="contact-notes">Notes</Label>
+        <Label htmlFor="contact-notes">
+          <GeneratedText id="m_0b8dadcb78cd08" />
+        </Label>
         <Textarea
           id="contact-notes"
           value={notes}
           onChange={(e) => setNotes(e.currentTarget.value)}
           rows={3}
-          placeholder="Optional notes"
+          placeholder={tGenerated('m_1db68018f67929')}
         />
       </div>
 
@@ -203,22 +226,36 @@ function ContactForm({
           onChange={(e) => setIsPrimary(e.currentTarget.checked)}
           className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-900"
         />
-        Mark as primary contact
+        <GeneratedText id="m_09902a604eb9e7" />
       </label>
 
-      {error ? (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-          {error}
-        </p>
-      ) : null}
+      <GeneratedValue
+        value={
+          error ? (
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+              <GeneratedValue value={error} />
+            </p>
+          ) : null
+        }
+      />
 
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="outline" onClick={onDone} disabled={pending}>
-          Cancel
+          <GeneratedText id="m_112e2e8ecda428" />
         </Button>
         <Button type="submit" disabled={pending}>
-          {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-          {contact ? 'Save contact' : 'Create contact'}
+          <GeneratedValue
+            value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+          />
+          <GeneratedValue
+            value={
+              contact ? (
+                <GeneratedText id="m_13469594921a49" />
+              ) : (
+                <GeneratedText id="m_04260e19acd594" />
+              )
+            }
+          />
         </Button>
       </div>
     </form>

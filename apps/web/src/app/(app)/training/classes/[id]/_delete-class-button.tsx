@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText } from '@/i18n/generated'
+
 // Confirm-before-submit delete for the class record. Matches the destructive-
 // action convention used across the app (confirmDialog) so the page stays
 // server-rendered.
@@ -27,7 +29,7 @@ export function DeleteClassButton() {
         })
       }}
     >
-      <Trash2 size={14} /> Delete
+      <Trash2 size={14} /> <GeneratedText id="m_11773f3c3f7558" />
     </Button>
   )
 }

@@ -1,3 +1,4 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Shared layout for the public credential-card pages behind a badge transcript
 // row — the rendered CR80 wallet card (flippable, pixel-identical to print)
 // plus the credential's facts. Server component; data comes from the
@@ -23,12 +24,14 @@ export function PublicCardNotFound({ backHref }: { backHref: string }) {
   return (
     <main className="grid min-h-screen place-items-center bg-slate-100 p-6">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-        <h1 className="text-lg font-semibold text-red-700">Credential not found</h1>
+        <h1 className="text-lg font-semibold text-red-700">
+          <GeneratedText id="m_125b6e7b223e5b" />
+        </h1>
         <p className="mt-1 text-sm text-slate-600">
-          This credential does not exist on the badge holder&apos;s record.
+          <GeneratedText id="m_1e9f15eeda0d09" />
         </p>
         <Link href={backHref} className="mt-3 inline-block text-sm font-semibold text-teal-700">
-          Back to the live record
+          <GeneratedText id="m_1dd8e4c0284375" />
         </Link>
       </div>
     </main>
@@ -66,12 +69,16 @@ export function PublicCardPage({
             href={backHref}
             className="inline-flex items-center gap-1 text-sm font-medium text-slate-300"
           >
-            <ChevronLeft size={16} /> Live training record
+            <ChevronLeft size={16} /> <GeneratedText id="m_1afc63325a11d7" />
           </Link>
           <div className="mt-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="text-lg leading-snug font-bold">{credentialName}</h1>
-              <div className="mt-0.5 text-sm text-slate-300">{personName}</div>
+              <h1 className="text-lg leading-snug font-bold">
+                <GeneratedValue value={credentialName} />
+              </h1>
+              <div className="mt-0.5 text-sm text-slate-300">
+                <GeneratedValue value={personName} />
+              </div>
             </div>
             <StandingChip standing={standing} />
           </div>
@@ -87,34 +94,42 @@ export function PublicCardPage({
             heightIn={heightIn}
           />
           <p className="mt-2 text-center text-[11px] text-slate-400">
-            Tap the card to flip it. This is the card exactly as printed.
+            <GeneratedText id="m_01c62d50d0cfac" />
           </p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-            {facts
-              .filter((fact) => fact.value)
-              .map((fact) => (
-                <div key={fact.label}>
-                  <dt className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-                    {fact.label}
-                  </dt>
-                  <dd className="mt-0.5 text-sm font-medium text-slate-800">{fact.value}</dd>
-                </div>
-              ))}
+            <GeneratedValue
+              value={facts
+                .filter((fact) => fact.value)
+                .map((fact) => (
+                  <div key={fact.label}>
+                    <dt className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
+                      <GeneratedValue value={fact.label} />
+                    </dt>
+                    <dd className="mt-0.5 text-sm font-medium text-slate-800">
+                      <GeneratedValue value={fact.value} />
+                    </dd>
+                  </div>
+                ))}
+            />
           </dl>
         </div>
 
-        {verifyHref ? (
-          <Link
-            href={verifyHref}
-            className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white"
-          >
-            <ShieldCheck size={16} />
-            Verify this certificate
-          </Link>
-        ) : null}
+        <GeneratedValue
+          value={
+            verifyHref ? (
+              <Link
+                href={verifyHref}
+                className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white"
+              >
+                <ShieldCheck size={16} />
+                <GeneratedText id="m_0f7d8d787f42d6" />
+              </Link>
+            ) : null
+          }
+        />
       </div>
     </main>
   )

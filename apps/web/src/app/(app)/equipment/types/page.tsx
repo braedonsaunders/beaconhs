@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Boxes, Plus, Trash2 } from 'lucide-react'
@@ -35,7 +38,10 @@ import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { countScopedCustomFields } from '@/lib/custom-fields/subtype-retirement'
 import { EquipmentTypeDrawer, type TypeEditing } from './_drawers'
 
-export const metadata = { title: 'Equipment types' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_158d4df659b721') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/equipment/types'
@@ -145,6 +151,8 @@ export default async function EquipmentTypesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const drawerParam = pickString(sp.drawer)
   const params = parseListParams(sp, {
@@ -244,131 +252,159 @@ export default async function EquipmentTypesPage({
       header={
         <>
           <PageHeader
-            title="Equipment types"
-            description="The make/model catalogue every asset is classified against."
+            title={tGenerated('m_158d4df659b721')}
+            description={tGenerated('m_0946e99fc80f09')}
             actions={
               <Link href={newHref as never} scroll={false}>
                 <Button>
-                  <Plus size={14} /> New type
+                  <Plus size={14} /> <GeneratedText id="m_1271751c2db342" />
                 </Button>
               </Link>
             }
           />
           <EquipmentSubNav active="types" />
           <TableToolbar>
-            <SearchInput placeholder="Search name, description…" />
+            <SearchInput placeholder={tGenerated('m_1ad7824f9dc087')} />
           </TableToolbar>
         </>
       }
     >
-      {types.length === 0 ? (
-        <EmptyState
-          icon={<Boxes size={32} />}
-          title={params.q ? 'No equipment types match your search' : 'No equipment types'}
-          description="Add a type to group the asset register and define inspection cadence."
-          action={
-            <Link href={newHref as never} scroll={false}>
-              <Button>New type</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="name"
-                  active={params.sort === 'name'}
-                >
-                  Name
-                </SortableTh>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="category"
-                  active={params.sort === 'category'}
-                >
-                  Category
-                </SortableTh>
-                <TableHead className="text-right">Items</TableHead>
-                <TableHead className="text-right">Custom fields</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {types.map(({ type, cat }) => {
-                const n = counts[type.id] ?? 0
-                const templateCount = templateCounts[type.id] ?? 0
-                const fieldCount = fieldCounts[type.id] ?? 0
-                const blockers = [
-                  n > 0 ? `${n} item(s)` : null,
-                  templateCount > 0 ? `${templateCount} inspection type(s)` : null,
-                  fieldCount > 0 ? `${fieldCount} scoped custom field(s)` : null,
-                ].filter(Boolean)
-                const editHref = mergeHref(BASE, sp, { drawer: type.id })
-                return (
-                  <TableRow key={type.id}>
-                    <TableCell>
-                      <Link
-                        href={editHref as never}
-                        scroll={false}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {type.name}
-                      </Link>
-                      {type.description ? (
-                        <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
-                          {type.description}
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">
-                      {cat?.name ?? <span className="text-slate-400">—</span>}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary">{n}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary">{fieldCount}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="inline-flex items-center gap-1">
-                        <Link
-                          href={editHref as never}
-                          scroll={false}
-                          className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
-                        >
-                          Edit
-                        </Link>
-                        <form action={deleteType} className="inline">
-                          <input type="hidden" name="id" value={type.id} />
-                          <button
-                            type="submit"
-                            disabled={blockers.length > 0}
-                            title={
-                              blockers.length > 0
-                                ? `${blockers.join(', ')} reference this type — reassign or remove them before deleting`
-                                : 'Delete type'
-                            }
-                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </form>
-                      </div>
-                    </TableCell>
+      <GeneratedValue
+        value={
+          types.length === 0 ? (
+            <EmptyState
+              icon={<Boxes size={32} />}
+              title={tGeneratedValue(
+                params.q ? tGenerated('m_0c47b8bd30ad4e') : tGenerated('m_18f969407be0ca'),
+              )}
+              description={tGenerated('m_1197a4e3fbab77')}
+              action={
+                <Link href={newHref as never} scroll={false}>
+                  <Button>
+                    <GeneratedText id="m_1271751c2db342" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="name"
+                      active={params.sort === 'name'}
+                    >
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="category"
+                      active={params.sort === 'category'}
+                    >
+                      <GeneratedText id="m_108b41637f364f" />
+                    </SortableTh>
+                    <TableHead className="text-right">
+                      <GeneratedText id="m_16f8d81a1560d8" />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <GeneratedText id="m_164d658c8fd29c" />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <GeneratedText id="m_0a7f1858f2ec46" />
+                    </TableHead>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={types.map(({ type, cat }) => {
+                      const n = counts[type.id] ?? 0
+                      const templateCount = templateCounts[type.id] ?? 0
+                      const fieldCount = fieldCounts[type.id] ?? 0
+                      const blockers = [
+                        n > 0 ? `${n} item(s)` : null,
+                        templateCount > 0 ? `${templateCount} inspection type(s)` : null,
+                        fieldCount > 0 ? `${fieldCount} scoped custom field(s)` : null,
+                      ].filter(Boolean)
+                      const editHref = mergeHref(BASE, sp, { drawer: type.id })
+                      return (
+                        <TableRow key={type.id}>
+                          <TableCell>
+                            <Link
+                              href={editHref as never}
+                              scroll={false}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={type.name} />
+                            </Link>
+                            <GeneratedValue
+                              value={
+                                type.description ? (
+                                  <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
+                                    <GeneratedValue value={type.description} />
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            <GeneratedValue
+                              value={cat?.name ?? <span className="text-slate-400">—</span>}
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="secondary">
+                              <GeneratedValue value={n} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="secondary">
+                              <GeneratedValue value={fieldCount} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <Link
+                                href={editHref as never}
+                                scroll={false}
+                                className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
+                              >
+                                <GeneratedText id="m_03a66f9d34ac7b" />
+                              </Link>
+                              <form action={deleteType} className="inline">
+                                <input type="hidden" name="id" value={type.id} />
+                                <button
+                                  type="submit"
+                                  disabled={blockers.length > 0}
+                                  title={tGeneratedValue(
+                                    blockers.length > 0
+                                      ? tGenerated('m_177c79474d07fd', {
+                                          value0: blockers.join(', '),
+                                        })
+                                      : tGenerated('m_12fda1066d2e96'),
+                                  )}
+                                  className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </form>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+            </div>
+          )
+        }
+      />
 
       <Pagination basePath={BASE} currentParams={sp} total={total} page={page} perPage={perPage} />
 

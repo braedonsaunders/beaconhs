@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound } from 'next/navigation'
 import { and, inArray, isNull } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
@@ -9,7 +10,10 @@ import { loadNavConfig } from '@/lib/nav/resolve'
 import { AdminBackLink } from '../_back-link'
 import { NavEditor } from './_editor'
 
-export const metadata = { title: 'Navigation' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_053fa0513af9ac') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function NavigationAdminPage() {

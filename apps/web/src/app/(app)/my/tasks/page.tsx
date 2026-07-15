@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // "My tasks" — open corrective actions assigned to the current user.
 //
 // Default scope is "anything that's still on my plate" (open / in_progress /
@@ -30,7 +33,10 @@ import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { WorkspaceNoIdentity } from '../_no-identity'
 
-export const metadata = { title: 'My tasks' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_143f41f9fb0bed') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['reference', 'title', 'severity', 'status', 'due_on'] as const
@@ -65,6 +71,8 @@ export default async function MyTasksPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'due_on',
@@ -92,11 +100,13 @@ export default async function MyTasksPage({
         header={
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title="My tasks"
-            description="Corrective actions assigned to you."
+            title={tGenerated('m_143f41f9fb0bed')}
+            description={tGenerated('m_03fda3c0adc42a')}
             actions={
               <Link href="/corrective-actions">
-                <Button variant="outline">All corrective actions</Button>
+                <Button variant="outline">
+                  <GeneratedText id="m_1b1ffdfcad496b" />
+                </Button>
               </Link>
             }
           />
@@ -217,18 +227,20 @@ export default async function MyTasksPage({
         <>
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title="My tasks"
-            description="Corrective actions assigned to you."
+            title={tGenerated('m_143f41f9fb0bed')}
+            description={tGenerated('m_03fda3c0adc42a')}
             actions={
               <div className="flex items-center gap-2">
                 <Link href="/corrective-actions">
-                  <Button variant="outline">All corrective actions</Button>
+                  <Button variant="outline">
+                    <GeneratedText id="m_1b1ffdfcad496b" />
+                  </Button>
                 </Link>
               </div>
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search your tasks…" />
+            <SearchInput placeholder={tGenerated('m_1fd4f947f45a5d')} />
             <Link
               href={
                 overdueOnly
@@ -241,13 +253,21 @@ export default async function MyTasksPage({
                   : 'inline-flex items-center rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
               }
             >
-              {overdueOnly ? 'Showing overdue only' : 'Show overdue only'}
+              <GeneratedValue
+                value={
+                  overdueOnly ? (
+                    <GeneratedText id="m_12f02c518ce066" />
+                  ) : (
+                    <GeneratedText id="m_1bd81b5b144895" />
+                  )
+                }
+              />
             </Link>
             <FilterChips
               basePath="/my/tasks"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={STATUS_OPTIONS.map((o) => ({
                 ...o,
                 count: statusCountsAugmented[o.value],
@@ -257,153 +277,173 @@ export default async function MyTasksPage({
               basePath="/my/tasks"
               currentParams={sp}
               paramKey="severity"
-              label="Severity"
+              label={tGenerated('m_168b365cc671bf')}
               options={SEVERITY_OPTIONS.map((o) => ({ ...o, count: sevCounts[o.value] }))}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<CheckCircle2 size={32} />}
-          title={
-            params.q || sevFilter || overdueOnly || rawStatus !== 'all_open'
-              ? 'No tasks match these filters'
-              : 'No open tasks'
-          }
-          description={
-            rawStatus === 'all_open'
-              ? 'Tasks assigned to you appear here when created.'
-              : 'Adjust the status filter to widen the view.'
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh
-                  basePath="/my/tasks"
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="reference"
-                  active={params.sort === 'reference'}
-                >
-                  Ref
-                </SortableTh>
-                <SortableTh
-                  basePath="/my/tasks"
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="title"
-                  active={params.sort === 'title'}
-                >
-                  Title
-                </SortableTh>
-                <SortableTh
-                  basePath="/my/tasks"
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="severity"
-                  active={params.sort === 'severity'}
-                >
-                  Severity
-                </SortableTh>
-                <SortableTh
-                  basePath="/my/tasks"
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="status"
-                  active={params.sort === 'status'}
-                >
-                  Status
-                </SortableTh>
-                <SortableTh
-                  basePath="/my/tasks"
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="due_on"
-                  active={params.sort === 'due_on'}
-                >
-                  Due
-                </SortableTh>
-                <TableHead>Site</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ ca, site }) => {
-                const overdue =
-                  ca.dueOn && ca.dueOn < todayStr && !['closed', 'cancelled'].includes(ca.status)
-                return (
-                  <TableRow key={ca.id}>
-                    <TableCell className="font-mono text-xs">
-                      <Link href={`/corrective-actions/${ca.id}`} className="hover:underline">
-                        {ca.reference}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        href={`/corrective-actions/${ca.id}`}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {ca.title}
-                      </Link>
-                      {ca.locked ? (
-                        <Badge variant="outline" className="ml-2">
-                          locked
-                        </Badge>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          ca.severity === 'critical' || ca.severity === 'high'
-                            ? 'destructive'
-                            : ca.severity === 'medium'
-                              ? 'warning'
-                              : 'secondary'
-                        }
-                      >
-                        {ca.severity}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          ca.status === 'closed'
-                            ? 'success'
-                            : ca.status === 'cancelled'
-                              ? 'secondary'
-                              : 'warning'
-                        }
-                      >
-                        {ca.status.replace('_', ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className={overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}>
-                        {ca.dueOn ?? '—'}
-                        {overdue ? ' (overdue)' : ''}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">
-                      {site?.name ?? '—'}
-                    </TableCell>
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<CheckCircle2 size={32} />}
+              title={tGeneratedValue(
+                params.q || sevFilter || overdueOnly || rawStatus !== 'all_open'
+                  ? tGenerated('m_0c31a4152aae8f')
+                  : tGenerated('m_05dcf6103a7443'),
+              )}
+              description={tGeneratedValue(
+                rawStatus === 'all_open'
+                  ? tGenerated('m_0d78a115a5c683')
+                  : tGenerated('m_1b7252344f623d'),
+              )}
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      basePath="/my/tasks"
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="reference"
+                      active={params.sort === 'reference'}
+                    >
+                      <GeneratedText id="m_036b564bb88dfe" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath="/my/tasks"
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="title"
+                      active={params.sort === 'title'}
+                    >
+                      <GeneratedText id="m_0decefd558c355" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath="/my/tasks"
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="severity"
+                      active={params.sort === 'severity'}
+                    >
+                      <GeneratedText id="m_168b365cc671bf" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath="/my/tasks"
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="status"
+                      active={params.sort === 'status'}
+                    >
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath="/my/tasks"
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="due_on"
+                      active={params.sort === 'due_on'}
+                    >
+                      <GeneratedText id="m_0c2eb92551e08b" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_020146dd3d3d5a" />
+                    </TableHead>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/my/tasks"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ ca, site }) => {
+                      const overdue =
+                        ca.dueOn &&
+                        ca.dueOn < todayStr &&
+                        !['closed', 'cancelled'].includes(ca.status)
+                      return (
+                        <TableRow key={ca.id}>
+                          <TableCell className="font-mono text-xs">
+                            <Link href={`/corrective-actions/${ca.id}`} className="hover:underline">
+                              <GeneratedValue value={ca.reference} />
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            <Link
+                              href={`/corrective-actions/${ca.id}`}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={ca.title} />
+                            </Link>
+                            <GeneratedValue
+                              value={
+                                ca.locked ? (
+                                  <Badge variant="outline" className="ml-2">
+                                    <GeneratedText id="m_151c7008fca7d4" />
+                                  </Badge>
+                                ) : null
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                ca.severity === 'critical' || ca.severity === 'high'
+                                  ? 'destructive'
+                                  : ca.severity === 'medium'
+                                    ? 'warning'
+                                    : 'secondary'
+                              }
+                            >
+                              <GeneratedValue value={ca.severity} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                ca.status === 'closed'
+                                  ? 'success'
+                                  : ca.status === 'cancelled'
+                                    ? 'secondary'
+                                    : 'warning'
+                              }
+                            >
+                              <GeneratedValue value={ca.status.replace('_', ' ')} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span
+                              className={
+                                overdue ? 'font-medium text-red-700 dark:text-red-400' : ''
+                              }
+                            >
+                              <GeneratedValue value={ca.dueOn ?? '—'} />
+                              <GeneratedValue
+                                value={overdue ? <GeneratedText id="m_0edba4030e6f71" /> : ''}
+                              />
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            <GeneratedValue value={site?.name ?? '—'} />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/my/tasks"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

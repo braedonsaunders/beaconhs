@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, asc, count, desc, ilike, isNotNull, isNull, sql, type SQL } from 'drizzle-orm'
@@ -27,7 +30,10 @@ import { parseListParams, pickString } from '@/lib/list-params'
 import { DocumentsSubNav } from '../_components/documents-sub-nav'
 import { createManagementReview } from './[id]/actions'
 
-export const metadata = { title: 'Management reviews' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0058e514601039') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/documents/management-reviews'
@@ -38,6 +44,8 @@ export default async function ManagementReviewsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const nextParam = pickString(sp.next)
   const nextFilter =
@@ -118,22 +126,24 @@ export default async function ManagementReviewsPage({
       header={
         <>
           <PageHeader
-            title="Management reviews"
-            description="Annual / scheduled board reviews of the SH&S management system — discussion notes, decisions, follow-up actions and next-review dates."
+            title={tGenerated('m_0058e514601039')}
+            description={tGenerated('m_0352b530b59edf')}
             actions={
               <form action={createManagementReview}>
-                <Button type="submit">New review</Button>
+                <Button type="submit">
+                  <GeneratedText id="m_114bc7cb55d176" />
+                </Button>
               </form>
             }
           />
           <DocumentsSubNav active="management-reviews" />
           <TableToolbar>
-            <SearchInput placeholder="Search review titles…" />
+            <SearchInput placeholder={tGenerated('m_1da98bce8ac2b3')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="next"
-              label="Next review"
+              label={tGenerated('m_146d385340eb4f')}
               options={[
                 { value: 'scheduled', label: 'Scheduled', count: scheduledCount },
                 { value: 'unscheduled', label: 'Not scheduled', count: unscheduledCount },
@@ -143,91 +153,109 @@ export default async function ManagementReviewsPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Gavel size={32} />}
-          title={
-            !params.q && !nextFilter ? 'No management reviews recorded' : 'No matching reviews'
-          }
-          description={
-            !params.q && !nextFilter
-              ? 'Capture each annual / quarterly board review of the SH&S system — the documents covered, decisions made, and follow-up actions.'
-              : 'Adjust the search or next-review filter.'
-          }
-          action={
-            !params.q && !nextFilter ? (
-              <form action={createManagementReview}>
-                <Button type="submit">Record first review</Button>
-              </form>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="title"
-                  active={params.sort === 'title'}
-                >
-                  Title
-                </SortableTh>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="periodEnd"
-                  active={params.sort === 'periodEnd'}
-                >
-                  Period
-                </SortableTh>
-                <TableHead>Participants</TableHead>
-                <TableHead>Documents reviewed</TableHead>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="nextReview"
-                  active={params.sort === 'nextReview'}
-                >
-                  Next review
-                </SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>
-                    <Link
-                      href={`/documents/management-reviews/${r.id}`}
-                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Gavel size={32} />}
+              title={tGeneratedValue(
+                !params.q && !nextFilter
+                  ? tGenerated('m_05945a401c1db6')
+                  : tGenerated('m_13aa20f29a803c'),
+              )}
+              description={tGeneratedValue(
+                !params.q && !nextFilter
+                  ? tGenerated('m_085d5da668c6d8')
+                  : tGenerated('m_083e0275050c11'),
+              )}
+              action={
+                !params.q && !nextFilter ? (
+                  <form action={createManagementReview}>
+                    <Button type="submit">
+                      <GeneratedText id="m_0d3b5ce69d3a29" />
+                    </Button>
+                  </form>
+                ) : undefined
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="title"
+                      active={params.sort === 'title'}
                     >
-                      {r.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-300">
-                    {r.periodStart ? `${r.periodStart} → ` : ''}
-                    {r.periodEnd}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{r.participants.length}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{r.documentsReviewedCount}</Badge>
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-300">
-                    {r.nextReviewOn ?? '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                      <GeneratedText id="m_0decefd558c355" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="periodEnd"
+                      active={params.sort === 'periodEnd'}
+                    >
+                      <GeneratedText id="m_1ec8c0e767ebe2" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_09720d00a25962" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_1e8c4796a4ec7d" />
+                    </TableHead>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="nextReview"
+                      active={params.sort === 'nextReview'}
+                    >
+                      <GeneratedText id="m_146d385340eb4f" />
+                    </SortableTh>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell>
+                          <Link
+                            href={`/documents/management-reviews/${r.id}`}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                          >
+                            <GeneratedValue value={r.title} />
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-300">
+                          <GeneratedValue value={r.periodStart ? `${r.periodStart} → ` : ''} />
+                          <GeneratedValue value={r.periodEnd} />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            <GeneratedValue value={r.participants.length} />
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            <GeneratedValue value={r.documentsReviewedCount} />
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-300">
+                          <GeneratedValue value={r.nextReviewOn ?? '—'} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+            </div>
+          )
+        }
+      />
       <Pagination
         basePath={BASE}
         currentParams={sp}

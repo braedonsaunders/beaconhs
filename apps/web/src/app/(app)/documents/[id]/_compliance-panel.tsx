@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { useGeneratedTranslations } from '@/i18n/generated'
 // The Compliance tab body: which compliance obligations this document is part
 // of. Mirrors the hub's rollup query (_compliance/_hub.ts obligationRollup) but
 // scoped to one document via target_ref->>'documentId', and reads the
@@ -124,6 +126,7 @@ export function DocumentCompliancePanel({
   currentParams: Record<string, string | string[] | undefined>
   canAssign: boolean
 }) {
+  const tGenerated = useGeneratedTranslations()
   const createHref = `/compliance/obligations/new?kind=document&documentId=${documentId}`
   const basePath = `/documents/${documentId}`
 
@@ -132,16 +135,20 @@ export function DocumentCompliancePanel({
       <div className="space-y-4">
         <EmptyState
           icon={<ShieldCheck size={24} />}
-          title="Not part of any obligation"
-          description="This document isn't required by a compliance obligation yet. Create one to require people to acknowledge it on a cadence."
+          title={tGenerated('m_18c09e710c69d9')}
+          description={tGenerated('m_0599ebf0af3b5e')}
         />
-        {canAssign ? (
-          <Link href={createHref}>
-            <Button type="button" className="w-full">
-              <Plus size={14} /> Create a compliance obligation
-            </Button>
-          </Link>
-        ) : null}
+        <GeneratedValue
+          value={
+            canAssign ? (
+              <Link href={createHref}>
+                <Button type="button" className="w-full">
+                  <Plus size={14} /> <GeneratedText id="m_1beceb6c11d610" />
+                </Button>
+              </Link>
+            ) : null
+          }
+        />
       </div>
     )
   }
@@ -150,7 +157,7 @@ export function DocumentCompliancePanel({
     <div className="space-y-3">
       <TableToolbar>
         <SearchInput
-          placeholder="Search obligations…"
+          placeholder={tGenerated('m_165fc021aeb94d')}
           paramKey="complianceQ"
           pageParamKey="compliancePage"
         />
@@ -159,7 +166,7 @@ export function DocumentCompliancePanel({
           currentParams={currentParams}
           paramKey="complianceStatus"
           pageParamKey="compliancePage"
-          label="Status"
+          label={tGenerated('m_0b9da892d6faf0')}
           options={[
             { value: 'active', label: 'Active' },
             { value: 'paused', label: 'Paused' },
@@ -168,50 +175,73 @@ export function DocumentCompliancePanel({
         />
       </TableToolbar>
 
-      {obligations.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-          No obligations match these filters.
-        </div>
-      ) : null}
-      {obligations.map((o) => (
-        <Link
-          key={o.id}
-          href={`/compliance/obligations/${o.id}`}
-          className="block rounded-lg border border-slate-200 p-3 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:hover:border-slate-700 dark:hover:bg-slate-800/60"
-        >
-          <div className="flex items-start justify-between gap-2">
-            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-              {o.title}
-            </span>
-            <ArrowUpRight size={14} className="mt-0.5 shrink-0 text-slate-400" />
-          </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <Badge
-              variant={
-                o.status === 'active' ? 'success' : o.status === 'paused' ? 'warning' : 'secondary'
-              }
-            >
-              {o.status}
-            </Badge>
-            <Badge variant="outline">{recurrenceSummary(o.recurrence)}</Badge>
-            {o.overdue > 0 ? <Badge variant="destructive">{o.overdue} overdue</Badge> : null}
-          </div>
-          <div className="mt-2">
-            <div className="mb-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-              <span>
-                {o.completed}/{o.total} people
-              </span>
-              <span>{o.percent}%</span>
+      <GeneratedValue
+        value={
+          obligations.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              <GeneratedText id="m_04d568ef0a596c" />
             </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-              <div
-                className={`h-full rounded-full ${o.overdue > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                style={{ width: `${o.percent}%` }}
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={obligations.map((o) => (
+          <Link
+            key={o.id}
+            href={`/compliance/obligations/${o.id}`}
+            className="block rounded-lg border border-slate-200 p-3 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:hover:border-slate-700 dark:hover:bg-slate-800/60"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                <GeneratedValue value={o.title} />
+              </span>
+              <ArrowUpRight size={14} className="mt-0.5 shrink-0 text-slate-400" />
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Badge
+                variant={
+                  o.status === 'active'
+                    ? 'success'
+                    : o.status === 'paused'
+                      ? 'warning'
+                      : 'secondary'
+                }
+              >
+                <GeneratedValue value={o.status} />
+              </Badge>
+              <Badge variant="outline">
+                <GeneratedValue value={recurrenceSummary(o.recurrence)} />
+              </Badge>
+              <GeneratedValue
+                value={
+                  o.overdue > 0 ? (
+                    <Badge variant="destructive">
+                      <GeneratedValue value={o.overdue} /> <GeneratedText id="m_06e3b632d95096" />
+                    </Badge>
+                  ) : null
+                }
               />
             </div>
-          </div>
-        </Link>
-      ))}
+            <div className="mt-2">
+              <div className="mb-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span>
+                  <GeneratedValue value={o.completed} />/<GeneratedValue value={o.total} />{' '}
+                  <GeneratedText id="m_01376047f0528f" />
+                </span>
+                <span>
+                  <GeneratedValue value={o.percent} />%
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                <div
+                  className={`h-full rounded-full ${o.overdue > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                  style={{ width: `${o.percent}%` }}
+                />
+              </div>
+            </div>
+          </Link>
+        ))}
+      />
 
       <Pagination
         basePath={basePath}
@@ -222,13 +252,17 @@ export function DocumentCompliancePanel({
         pageParamKey="compliancePage"
       />
 
-      {canAssign ? (
-        <Link href={createHref}>
-          <Button type="button" variant="outline" className="w-full">
-            <Plus size={14} /> Create another obligation
-          </Button>
-        </Link>
-      ) : null}
+      <GeneratedValue
+        value={
+          canAssign ? (
+            <Link href={createHref}>
+              <Button type="button" variant="outline" className="w-full">
+                <Plus size={14} /> <GeneratedText id="m_0b70b30e456639" />
+              </Button>
+            </Link>
+          ) : null
+        }
+      />
     </div>
   )
 }

@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useMemo, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
@@ -20,6 +27,8 @@ export function BulkDocumentsBar({
   onClear: () => void
   books: DocumentBookOption[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [action, setAction] = useState<'archive' | 'addToBook' | 'delete'>('archive')
@@ -34,7 +43,7 @@ export function BulkDocumentsBar({
   if (selectedIds.length === 0 || typeof document === 'undefined') return null
 
   async function go() {
-    setError(null)
+    setError(tGeneratedValue(null))
     // Success is surfaced via toast — clearing the selection unmounts the bar,
     // so any inline message would never be seen.
     if (action === 'archive') {
@@ -48,10 +57,15 @@ export function BulkDocumentsBar({
       start(async () => {
         const res = await bulkArchiveDocuments({ documentIds: selectedIds })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
-        toast.success(`Archived ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
+        toast.success(
+          tGenerated('m_1c89fad4ce184c', {
+            value0: res.updated,
+            value1: res.skipped ? `, skipped ${res.skipped}` : '',
+          }),
+        )
         onClear()
         router.refresh()
       })
@@ -68,10 +82,15 @@ export function BulkDocumentsBar({
       start(async () => {
         const res = await bulkDeleteDocuments({ documentIds: selectedIds })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
-        toast.success(`Deleted ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
+        toast.success(
+          tGenerated('m_1a4925e8b8cfed', {
+            value0: res.updated,
+            value1: res.skipped ? `, skipped ${res.skipped}` : '',
+          }),
+        )
         onClear()
         router.refresh()
       })
@@ -79,7 +98,7 @@ export function BulkDocumentsBar({
     }
     // addToBook
     if (!bookId) {
-      setError('Pick a book.')
+      setError(tGenerated('m_0416ca46c70a85'))
       return
     }
     start(async () => {
@@ -88,10 +107,15 @@ export function BulkDocumentsBar({
         bookId,
       })
       if (!res.ok) {
-        setError(res.error)
+        setError(tGeneratedValue(res.error))
         return
       }
-      toast.success(`Added ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
+      toast.success(
+        tGenerated('m_0a87546f305df6', {
+          value0: res.updated,
+          value1: res.skipped ? `, skipped ${res.skipped}` : '',
+        }),
+      )
       onClear()
       router.refresh()
     })
@@ -105,12 +129,14 @@ export function BulkDocumentsBar({
         <button
           type="button"
           onClick={onClear}
-          aria-label="Clear selection"
+          aria-label={tGenerated('m_1013583a7c0e28')}
           className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <X size={14} />
         </button>
-        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
+        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+          <GeneratedValue value={label} />
+        </span>
 
         <Select
           value={action}
@@ -118,29 +144,43 @@ export function BulkDocumentsBar({
           className="h-8 min-w-[11rem]"
           disabled={pending}
         >
-          <option value="archive">Archive</option>
-          <option value="addToBook">Add to book</option>
-          <option value="delete">Delete</option>
+          <option value="archive">
+            <GeneratedText id="m_019c0a64030688" />
+          </option>
+          <option value="addToBook">
+            <GeneratedText id="m_14f77026dd272d" />
+          </option>
+          <option value="delete">
+            <GeneratedText id="m_11773f3c3f7558" />
+          </option>
         </Select>
 
-        {action === 'addToBook' ? (
-          <div className="flex items-center gap-2">
-            <BookOpen size={14} className="text-slate-500" />
-            <Select
-              value={bookId}
-              onChange={(e) => setBookId(e.target.value)}
-              className="h-8 min-w-[14rem]"
-              disabled={pending}
-            >
-              <option value="">Pick book…</option>
-              {books.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            action === 'addToBook' ? (
+              <div className="flex items-center gap-2">
+                <BookOpen size={14} className="text-slate-500" />
+                <Select
+                  value={bookId}
+                  onChange={(e) => setBookId(e.target.value)}
+                  className="h-8 min-w-[14rem]"
+                  disabled={pending}
+                >
+                  <option value="">
+                    <GeneratedText id="m_00a0960cda2f8d" />
+                  </option>
+                  <GeneratedValue
+                    value={books.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        <GeneratedValue value={b.label} />
+                      </option>
+                    ))}
+                  />
+                </Select>
+              </div>
+            ) : null
+          }
+        />
 
         <Button
           size="sm"
@@ -148,23 +188,35 @@ export function BulkDocumentsBar({
           onClick={go}
           disabled={pending}
         >
-          {pending ? (
-            'Working…'
-          ) : action === 'archive' ? (
-            <span className="inline-flex items-center gap-1">
-              <Archive size={14} /> Archive
-            </span>
-          ) : action === 'delete' ? (
-            <span className="inline-flex items-center gap-1">
-              <Trash2 size={14} /> Delete
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1">
-              <BookOpen size={14} /> Add
-            </span>
-          )}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_09001dc89c0edf" />
+              ) : action === 'archive' ? (
+                <span className="inline-flex items-center gap-1">
+                  <Archive size={14} /> <GeneratedText id="m_019c0a64030688" />
+                </span>
+              ) : action === 'delete' ? (
+                <span className="inline-flex items-center gap-1">
+                  <Trash2 size={14} /> <GeneratedText id="m_11773f3c3f7558" />
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1">
+                  <BookOpen size={14} /> <GeneratedText id="m_16c8592e5020a4" />
+                </span>
+              )
+            }
+          />
         </Button>
-        {error ? <span className="text-xs text-red-600 dark:text-red-400">{error}</span> : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <span className="text-xs text-red-600 dark:text-red-400">
+                <GeneratedValue value={error} />
+              </span>
+            ) : null
+          }
+        />
       </div>
     </div>,
     document.body,

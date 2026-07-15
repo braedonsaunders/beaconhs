@@ -1,5 +1,11 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // A rendered credential card you can flip — the REAL front/back artboard HTML
 // produced server-side by `renderDesignDocumentHtml`, embedded in isolated
 // iframes and scaled to the container. Shared by /my/wallet and the public
@@ -25,6 +31,8 @@ export function CredentialFlipCard({
   heightIn: number
   className?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [flipped, setFlipped] = useState(false)
   const naturalW = widthIn * DPI
   const naturalH = heightIn * DPI
@@ -34,7 +42,9 @@ export function CredentialFlipCard({
     <button
       type="button"
       onClick={() => setFlipped((f) => !f)}
-      aria-label={flipped ? 'Show card front' : 'Show card back'}
+      aria-label={tGeneratedValue(
+        flipped ? tGenerated('m_19c4a489746d6b') : tGenerated('m_0477431e3a95fa'),
+      )}
       className={cn(
         'group relative w-full rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500',
         className,
@@ -66,7 +76,7 @@ export function CredentialFlipCard({
       </div>
       <span className="pointer-events-none absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-1 text-[10px] font-medium text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
         <RotateCw size={11} />
-        Flip
+        <GeneratedText id="m_122d5f5df4ce6f" />
       </span>
     </button>
   )

@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The primary "what do you want to build?" picker on the New App page. Choosing
 // a type seeds a kind-specific starter schema (server-side) and drops the user
 // into the designer already shaped for that type.
@@ -65,6 +72,8 @@ const TYPES: TypeDef[] = [
 ]
 
 export function AppTypePicker() {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [selected, setSelected] = useState<AppKind>('form')
   const [name, setName] = useState('')
   const [pending, start] = useTransition()
@@ -73,61 +82,70 @@ export function AppTypePicker() {
 
   const create = () => {
     if (name.trim().length < 2) {
-      toast.error('Give your app a name first')
+      toast.error(tGenerated('m_11ba77cdb1cd08'))
       return
     }
     start(async () => {
       const res = await createApp({ kind: selected, name: name.trim() })
       // A successful createApp redirects; only an error object returns here.
-      if (res && res.ok === false) toast.error(res.error)
+      if (res && res.ok === false) toast.error(tGeneratedValue(res.error))
     })
   }
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {TYPES.map((t) => {
-          const Icon = t.icon
-          const isSel = t.kind === selected
-          return (
-            <button
-              key={t.kind}
-              type="button"
-              onClick={() => setSelected(t.kind)}
-              className={`group flex flex-col rounded-xl border p-4 text-left transition ${
-                isSel
-                  ? 'border-teal-500 bg-white shadow-md ring-1 ring-teal-500'
-                  : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
-              }`}
-            >
-              <span
-                className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg ${t.accent}`}
+        <GeneratedValue
+          value={TYPES.map((t) => {
+            const Icon = t.icon
+            const isSel = t.kind === selected
+            return (
+              <button
+                key={t.kind}
+                type="button"
+                onClick={() => setSelected(t.kind)}
+                className={`group flex flex-col rounded-xl border p-4 text-left transition ${
+                  isSel
+                    ? 'border-teal-500 bg-white shadow-md ring-1 ring-teal-500'
+                    : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                }`}
               >
-                <Icon size={20} />
-              </span>
-              <span className="text-sm font-semibold text-slate-900">{t.title}</span>
-              <span className="mt-1 text-xs leading-snug text-slate-500">{t.blurb}</span>
-            </button>
-          )
-        })}
+                <span
+                  className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg ${t.accent}`}
+                >
+                  <Icon size={20} />
+                </span>
+                <span className="text-sm font-semibold text-slate-900">
+                  <GeneratedValue value={t.title} />
+                </span>
+                <span className="mt-1 text-xs leading-snug text-slate-500">
+                  <GeneratedValue value={t.blurb} />
+                </span>
+              </button>
+            )
+          })}
+        />
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-end">
         <div className="flex-1 space-y-1.5">
-          <Label htmlFor="app-name">Name your {active.title.toLowerCase()}</Label>
+          <Label htmlFor="app-name">
+            <GeneratedText id="m_0deef774518119" />{' '}
+            <GeneratedValue value={active.title.toLowerCase()} />
+          </Label>
           <Input
             id="app-name"
             value={name}
             autoComplete="off"
-            placeholder={
+            placeholder={tGeneratedValue(
               selected === 'register'
-                ? 'e.g. Visitor sign-in register'
+                ? tGenerated('m_160002942dd7b5')
                 : selected === 'checklist'
-                  ? 'e.g. Daily plant pre-start checklist'
+                  ? tGenerated('m_10289a4ae8ee7f')
                   : selected === 'wizard'
-                    ? 'e.g. Incident report wizard'
-                    : 'e.g. Daily site walk'
-            }
+                    ? tGenerated('m_0dda6c57fbf0a4')
+                    : tGenerated('m_197712d6d9e6e1'),
+            )}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') create()
@@ -135,13 +153,18 @@ export function AppTypePicker() {
           />
         </div>
         <Button onClick={create} disabled={pending} className="shrink-0">
-          {pending ? (
-            'Creating…'
-          ) : (
-            <>
-              Create {active.title} <ArrowRight size={15} />
-            </>
-          )}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_14edc14616e78d" />
+              ) : (
+                <>
+                  <GeneratedText id="m_017309f0f9f564" /> <GeneratedValue value={active.title} />{' '}
+                  <ArrowRight size={15} />
+                </>
+              )
+            }
+          />
         </Button>
       </div>
     </div>

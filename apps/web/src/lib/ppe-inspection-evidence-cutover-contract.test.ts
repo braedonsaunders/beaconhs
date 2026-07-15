@@ -31,10 +31,10 @@ describe('PPE inspection evidence cutover contract', () => {
 
   it('keeps the saved checklist and photos visible from inspection history', () => {
     const page = source('../app/(app)/ppe/[id]/page.tsx')
-    expect(page).toContain('View checklist (')
+    expect(page).toContain('<GeneratedText id="m_11bbc82ecbc827" />')
     expect(page).toContain('criterion.questionTextSnapshot')
     expect(page).toContain('criterion.nonComplianceReason')
-    expect(page).toContain('General inspection photos')
+    expect(page).toContain('<GeneratedText id="m_020f32bc59d098" />')
   })
 
   it('exposes checklist evidence to PPE email and PDF templates', () => {
@@ -59,7 +59,7 @@ describe('PPE inspection evidence cutover contract', () => {
     expect(schema).toContain("name: 'ppe_issue_reports_tenant_inspection_fk'")
     expect(page).toContain('eq(ppeIssueReports.itemId, itemId)')
     expect(page).toContain("source: 'manual'")
-    expect(page).toContain('<TableHead>Source</TableHead>')
+    expect(page).toContain('<GeneratedText id="m_1d05fa7a091a9b" />')
     expect(adapter).toContain('source_inspection_id: r.inspectionId ?? null')
     expect(adapter).toContain('r.reportedByNameSnapshot ?? head.reportedByName')
     expect(profiles).toContain("key: 'source_inspection_id'")

@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound } from 'next/navigation'
 import { and, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import {
@@ -22,8 +23,9 @@ const CLASS_SORTS = ['upcoming', 'recent'] as const
 const FILE_SORTS = ['name', 'recent'] as const
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Course · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_0a09aac4bf130a', { value0: id.slice(0, 8) }) }
 }
 
 export default async function CoursePage({

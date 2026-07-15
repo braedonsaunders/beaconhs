@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 // Native-style bottom tab bar, shown below lg. Tabs are the user's first nav
 // destinations from the resolved permission-aware nav (so tenant nav
 // customisation controls what lands here), plus a Menu tab that opens the
@@ -27,6 +29,7 @@ const tabClass = (active: boolean) =>
   )
 
 export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const t = useTranslations('Shell')
   const pathname = usePathname()
   const { setOpen } = useMobileNav()
@@ -42,21 +45,27 @@ export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
 
   return (
     <nav
-      aria-label={t('primaryNavigation')}
+      aria-label={tGeneratedValue(t('primaryNavigation'))}
       className="flex shrink-0 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden dark:border-slate-800 dark:bg-slate-900"
     >
-      {tabs.map((t) => {
-        const active = activeHref === t.href
-        return (
-          <Link key={t.href} href={t.href as never} className={tabClass(active)}>
-            <NavIcon iconKey={t.iconKey} size={20} />
-            <span className="w-full truncate text-center">{t.label}</span>
-          </Link>
-        )
-      })}
+      <GeneratedValue
+        value={tabs.map((t) => {
+          const active = activeHref === t.href
+          return (
+            <Link key={t.href} href={t.href as never} className={tabClass(active)}>
+              <NavIcon iconKey={t.iconKey} size={20} />
+              <span className="w-full truncate text-center">
+                <GeneratedValue value={t.label} />
+              </span>
+            </Link>
+          )
+        })}
+      />
       <button type="button" onClick={() => setOpen(true)} className={tabClass(false)}>
         <Menu size={20} />
-        <span className="w-full truncate text-center">{t('menu')}</span>
+        <span className="w-full truncate text-center">
+          <GeneratedValue value={t('menu')} />
+        </span>
       </button>
     </nav>
   )

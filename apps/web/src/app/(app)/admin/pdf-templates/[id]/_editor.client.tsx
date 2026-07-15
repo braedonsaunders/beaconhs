@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // PDF document editor — a full-height shell with a paper-setup bar, a Design
 // tab (the GrapesJS builder at page width) and a Preview tab (Paged.js paginates
 // the template with sample data into real pages + header/footer + page numbers).
@@ -18,7 +25,7 @@ const PdfBuilder = dynamic(() => import('../_builder.client'), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center text-sm text-slate-400">
-      Loading editor…
+      <GeneratedText id="m_0743b8515ca318" />
     </div>
   ),
 })
@@ -27,7 +34,7 @@ const PagedPreview = dynamic(() => import('../_paged-preview.client'), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center text-sm text-slate-400">
-      Paginating…
+      <GeneratedText id="m_0d7c240956c1d3" />
     </div>
   ),
 })
@@ -69,6 +76,8 @@ export function PdfTemplateEditor({
     subjectLabel?: string | null
   }
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const collections = template.collections ?? []
   const editorRef = useRef<Editor | null>(null)
   const [name, setName] = useState(template.name)
@@ -94,7 +103,7 @@ export function PdfTemplateEditor({
   const onSave = async () => {
     const snap = snapshot()
     if (!snap) {
-      toast.error('Editor not ready')
+      toast.error(tGenerated('m_004a5b87102f57'))
       return
     }
     setBusy(true)
@@ -109,10 +118,10 @@ export function PdfTemplateEditor({
         headerHtml,
         footerHtml,
       })
-      if (res.ok) toast.success('Saved')
-      else toast.error(res.error ?? 'Save failed')
+      if (res.ok) toast.success(tGenerated('m_0a0569b726b225'))
+      else toast.error(tGeneratedValue(res.error ?? tGenerated('m_0731204fbd1b17')))
     } catch {
-      toast.error('Save failed')
+      toast.error(tGenerated('m_0731204fbd1b17'))
     } finally {
       setBusy(false)
     }
@@ -132,7 +141,7 @@ export function PdfTemplateEditor({
         <Link
           href="/admin/pdf-templates"
           className="rounded p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-          aria-label="Back to PDF templates"
+          aria-label={tGenerated('m_13899c0860b860')}
         >
           <ArrowLeft size={18} />
         </Link>
@@ -142,13 +151,20 @@ export function PdfTemplateEditor({
           onChange={(e) => setName(e.target.value)}
           maxLength={200}
           className="h-9 w-56 font-semibold"
-          aria-label="Template name"
+          aria-label={tGenerated('m_1042308a24d5eb')}
         />
-        {template.subjectLabel ? (
-          <span className="hidden text-xs text-slate-500 sm:inline dark:text-slate-400">
-            for <strong>{template.subjectLabel}</strong>
-          </span>
-        ) : null}
+        <GeneratedValue
+          value={
+            template.subjectLabel ? (
+              <span className="hidden text-xs text-slate-500 sm:inline dark:text-slate-400">
+                <GeneratedText id="m_0c496181655d02" />{' '}
+                <strong>
+                  <GeneratedValue value={template.subjectLabel} />
+                </strong>
+              </span>
+            ) : null
+          }
+        />
 
         {/* tabs */}
         <div className="ml-2 inline-flex rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
@@ -157,14 +173,14 @@ export function PdfTemplateEditor({
             onClick={() => setTab('design')}
             className={`rounded px-3 py-1 text-sm ${tab === 'design' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300'}`}
           >
-            Design
+            <GeneratedText id="m_0006b9b63f781f" />
           </button>
           <button
             type="button"
             onClick={showPreview}
             className={`rounded px-3 py-1 text-sm ${tab === 'preview' ? 'bg-teal-600 text-white' : 'text-slate-600 dark:text-slate-300'}`}
           >
-            Preview
+            <GeneratedText id="m_11d37007232de5" />
           </button>
         </div>
 
@@ -173,20 +189,30 @@ export function PdfTemplateEditor({
             value={paperSize}
             onChange={(e) => setPaperSize(e.target.value as PaperSize)}
             className="h-9 w-24"
-            aria-label="Paper size"
+            aria-label={tGenerated('m_185f497c899c62')}
           >
-            <option value="letter">Letter</option>
-            <option value="a4">A4</option>
-            <option value="legal">Legal</option>
+            <option value="letter">
+              <GeneratedText id="m_1715837106bbe7" />
+            </option>
+            <option value="a4">
+              <GeneratedText id="m_0df1bca66cc814" />
+            </option>
+            <option value="legal">
+              <GeneratedText id="m_13bc02323e35ae" />
+            </option>
           </Select>
           <Select
             value={orientation}
             onChange={(e) => setOrientation(e.target.value as Orientation)}
             className="h-9 w-28"
-            aria-label="Orientation"
+            aria-label={tGenerated('m_0af3bf11ca2a12')}
           >
-            <option value="portrait">Portrait</option>
-            <option value="landscape">Landscape</option>
+            <option value="portrait">
+              <GeneratedText id="m_062e481bc6e988" />
+            </option>
+            <option value="landscape">
+              <GeneratedText id="m_0e9e90da7290dd" />
+            </option>
           </Select>
           <Input
             type="number"
@@ -195,63 +221,80 @@ export function PdfTemplateEditor({
             max={50}
             onChange={(e) => setMarginMm(Number(e.target.value) || 0)}
             className="h-9 w-16"
-            aria-label="Margin (mm)"
-            title="Margin (mm)"
+            aria-label={tGenerated('m_1c6c76aa5568a9')}
+            title={tGenerated('m_1c6c76aa5568a9')}
           />
           <Button onClick={onSave} disabled={busy}>
-            <Save size={14} /> {busy ? 'Saving…' : 'Save'}
+            <Save size={14} />{' '}
+            <GeneratedValue
+              value={
+                busy ? (
+                  <GeneratedText id="m_106811f2aac664" />
+                ) : (
+                  <GeneratedText id="m_19e6bff894c3c7" />
+                )
+              }
+            />
           </Button>
         </div>
       </div>
 
       {/* Header / footer bar */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 text-xs dark:border-slate-800 dark:bg-slate-900">
-        <span className="shrink-0 font-medium text-slate-500 dark:text-slate-400">Header</span>
+        <span className="shrink-0 font-medium text-slate-500 dark:text-slate-400">
+          <GeneratedText id="m_05553037a5dd7a" />
+        </span>
         <Input
           value={headerHtml}
           onChange={(e) => setHeaderHtml(e.target.value)}
-          placeholder="e.g. {{reference}}"
+          placeholder={tGenerated('m_0d745d825adcaf')}
           className="h-7 flex-1 text-xs"
-          aria-label="Running header"
+          aria-label={tGenerated('m_10b31f30f70f1d')}
         />
-        <span className="shrink-0 font-medium text-slate-500 dark:text-slate-400">Footer</span>
+        <span className="shrink-0 font-medium text-slate-500 dark:text-slate-400">
+          <GeneratedText id="m_1781699b936a8e" />
+        </span>
         <Input
           value={footerHtml}
           onChange={(e) => setFooterHtml(e.target.value)}
-          placeholder="Page {{page}} of {{pages}}"
+          placeholder={tGenerated('m_170607f1b25ae4')}
           className="h-7 flex-1 text-xs"
-          aria-label="Running footer"
+          aria-label={tGenerated('m_16e1c14feaef14')}
         />
       </div>
 
       {/* Body — Design or Preview */}
       <div className="min-h-0 flex-1">
-        {tab === 'design' ? (
-          <PdfBuilder
-            initialHtml={template.sourceHtml ?? null}
-            pageWidthPx={metrics.pageW}
-            pageHeightPx={metrics.pageH}
-            marginPx={metrics.margin}
-            paperLabel={`${paperSize.toUpperCase()} · ${orientation}`}
-            mergeFields={template.mergeFields}
-            collections={collections}
-            onReady={(ed) => {
-              editorRef.current = ed
-            }}
-          />
-        ) : (
-          <PagedPreview
-            templateId={template.id}
-            html={previewHtml}
-            mergeFields={template.mergeFields}
-            collections={collections}
-            paperSize={paperSize}
-            orientation={orientation}
-            marginMm={marginMm}
-            headerHtml={headerHtml}
-            footerHtml={footerHtml}
-          />
-        )}
+        <GeneratedValue
+          value={
+            tab === 'design' ? (
+              <PdfBuilder
+                initialHtml={template.sourceHtml ?? null}
+                pageWidthPx={metrics.pageW}
+                pageHeightPx={metrics.pageH}
+                marginPx={metrics.margin}
+                paperLabel={`${paperSize.toUpperCase()} · ${orientation}`}
+                mergeFields={template.mergeFields}
+                collections={collections}
+                onReady={(ed) => {
+                  editorRef.current = ed
+                }}
+              />
+            ) : (
+              <PagedPreview
+                templateId={template.id}
+                html={previewHtml}
+                mergeFields={template.mergeFields}
+                collections={collections}
+                paperSize={paperSize}
+                orientation={orientation}
+                marginMm={marginMm}
+                headerHtml={headerHtml}
+                footerHtml={footerHtml}
+              />
+            )
+          }
+        />
       </div>
     </div>
   )

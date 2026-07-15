@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 // Supplies a client-side navigate fn (Next's router.push) to @beaconhs/ui's
 // UrlDrawer via DrawerNavigateContext. Without this, UrlDrawer falls back to a
@@ -14,6 +15,8 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
   const router = useRouter()
   const navigate = useCallback((href: string) => router.push(href as never), [router])
   return (
-    <DrawerNavigateContext.Provider value={navigate}>{children}</DrawerNavigateContext.Provider>
+    <DrawerNavigateContext.Provider value={navigate}>
+      <GeneratedValue value={children} />
+    </DrawerNavigateContext.Provider>
   )
 }

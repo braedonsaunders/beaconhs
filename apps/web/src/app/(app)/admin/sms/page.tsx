@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { SMS_PROVIDER_SPECS } from '@beaconhs/sms'
 import { Button, Card, CardContent, DetailHeader } from '@beaconhs/ui'
@@ -11,9 +13,13 @@ import { SmsTestButton } from '@/components/sms-settings/test-button'
 import { SmsSettingsForm, type SmsProviderSpecLite } from '@/components/sms-settings/settings-form'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'SMS settings' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1bb904defc1373') }
+}
 
 export default async function SmsSettingsPage() {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) redirect('/admin')
 
@@ -36,44 +42,58 @@ export default async function SmsSettingsPage() {
       <div className="max-w-2xl space-y-4">
         <DetailHeader
           back={{ href: '/admin', label: 'Back to admin' }}
-          title="SMS"
-          subtitle="This tenant's SMS provider, sender and encrypted credentials. The platform-wide default and policy are set by your platform administrator."
+          title={tGenerated('m_090cf61ef27662')}
+          subtitle={tGenerated('m_06393b043bbab5')}
         />
         <NotificationsSubNav active="sms" showBack={false} />
 
         <Card>
           <CardContent className="space-y-6 pt-6">
-            {mode === 'tenant_optional' ? (
-              <>
-                <SmsSettingsForm
-                  scope="tenant"
-                  action={saveTenantSms}
-                  specs={specs}
-                  initial={tenant}
-                />
-                <div className="flex items-end justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
-                  <div className="flex-1 space-y-2">
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      Send a test through this tenant&rsquo;s provider
-                    </p>
-                    <SmsTestButton scope="tenant" />
+            <GeneratedValue
+              value={
+                mode === 'tenant_optional' ? (
+                  <>
+                    <SmsSettingsForm
+                      scope="tenant"
+                      action={saveTenantSms}
+                      specs={specs}
+                      initial={tenant}
+                    />
+                    <div className="flex items-end justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+                      <div className="flex-1 space-y-2">
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                          <GeneratedText id="m_02926c12ed3242" />
+                        </p>
+                        <SmsTestButton scope="tenant" />
+                      </div>
+                      <GeneratedValue
+                        value={
+                          tenant.hasKey ? (
+                            <form action={clearTenantSms}>
+                              <Button type="submit" variant="ghost" className="text-red-600">
+                                <GeneratedText id="m_03654054061f7d" />
+                              </Button>
+                            </form>
+                          ) : null
+                        }
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
+                    <GeneratedValue
+                      value={
+                        mode === 'disabled' ? (
+                          <GeneratedText id="m_163b9427098e99" />
+                        ) : (
+                          <GeneratedText id="m_13526206d3dfcf" />
+                        )
+                      }
+                    />
                   </div>
-                  {tenant.hasKey ? (
-                    <form action={clearTenantSms}>
-                      <Button type="submit" variant="ghost" className="text-red-600">
-                        Remove key
-                      </Button>
-                    </form>
-                  ) : null}
-                </div>
-              </>
-            ) : (
-              <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
-                {mode === 'disabled'
-                  ? 'SMS sending is currently disabled across the whole platform by your administrator.'
-                  : 'SMS is managed centrally by your platform administrator — all tenants send through the platform default provider.'}
-              </div>
-            )}
+                )
+              }
+            />
           </CardContent>
         </Card>
       </div>

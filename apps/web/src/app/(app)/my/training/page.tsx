@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // "My training" — the personal training hub:
 //   1. Courses   — available courses + your progress (the learner catalog,
 //                  formerly the standalone "My Learning")
@@ -63,7 +66,10 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { resolveComplianceLink } from '@/app/(app)/compliance/_resolve-link'
 import { WorkspaceNoIdentity } from '../_no-identity'
 
-export const metadata = { title: 'My training' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1eac86f811af44') }
+}
 export const dynamic = 'force-dynamic'
 
 const TABS = ['courses', 'records', 'expiring', 'assigned'] as const
@@ -135,6 +141,8 @@ export default async function MyTrainingPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const tab: Tab = pickActiveTab(sp, TABS, 'courses')
   const listKeys = MY_TRAINING_LIST_KEYS[tab]
@@ -531,11 +539,13 @@ export default async function MyTrainingPage({
         header={
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title="My training"
-            description="Your courses, records and assignments."
+            title={tGenerated('m_1eac86f811af44')}
+            description={tGenerated('m_0fb389e240dd68')}
             actions={
               <Link href="/training/records">
-                <Button variant="outline">All records</Button>
+                <Button variant="outline">
+                  <GeneratedText id="m_1ed29908ee4a45" />
+                </Button>
               </Link>
             }
           />
@@ -567,11 +577,13 @@ export default async function MyTrainingPage({
         <>
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title="My training"
-            description="Your courses, records, upcoming expirations, and outstanding assignments."
+            title={tGenerated('m_1eac86f811af44')}
+            description={tGenerated('m_146848d60c1c35')}
             actions={
               <Link href="/training/records">
-                <Button variant="outline">All records</Button>
+                <Button variant="outline">
+                  <GeneratedText id="m_1ed29908ee4a45" />
+                </Button>
               </Link>
             }
           />
@@ -588,13 +600,13 @@ export default async function MyTrainingPage({
           />
           <TableToolbar>
             <SearchInput
-              placeholder={
+              placeholder={tGeneratedValue(
                 tab === 'courses'
-                  ? 'Search courses…'
+                  ? tGenerated('m_030db64e0bf790')
                   : tab === 'assigned'
-                    ? 'Search assignments…'
-                    : 'Search training records…'
-              }
+                    ? tGenerated('m_14b5a0caf0bc45')
+                    : tGenerated('m_03672d284068a4'),
+              )}
               paramKey={listKeys.q}
               pageParamKey={listKeys.page}
             />
@@ -602,360 +614,482 @@ export default async function MyTrainingPage({
         </>
       }
     >
-      {tab === 'courses' ? (
-        data.courses.length === 0 ? (
-          <>
-            <EmptyState
-              icon={<GraduationCap size={32} />}
-              title={params.q ? 'No courses match your search' : 'No courses available'}
-              description={
-                params.q
-                  ? 'Try a different course name or code.'
-                  : 'Courses with published content appear here.'
-              }
-            />
-            {data.total > 0 ? listPagination : null}
-          </>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {data.courses.map((c) => {
-                const selfLaunch = deliveryMeta(c.deliveryType).selfLaunch
-                const label =
-                  c.status === 'completed'
-                    ? 'Review'
-                    : c.status
-                      ? `Continue · ${c.percent}%`
-                      : selfLaunch
-                        ? 'Start'
-                        : 'View course'
-                return (
-                  <Card
-                    key={c.id}
-                    className="group flex h-full flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md"
-                  >
-                    <CardContent className="flex flex-1 flex-col gap-3 py-5">
-                      <div className="flex items-start justify-between gap-2">
-                        <Badge variant="outline" className="font-normal">
-                          {deliveryLabel(c.deliveryType)}
-                        </Badge>
-                        {c.status === 'completed' ? (
-                          <Badge variant="success">Completed</Badge>
-                        ) : c.status ? (
-                          <Badge variant="secondary">In progress</Badge>
-                        ) : null}
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="line-clamp-2 font-semibold text-slate-900 dark:text-slate-100">
-                          {c.name}
-                        </h3>
-                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                          {c.code}
-                        </p>
-                      </div>
-                      <p className="line-clamp-2 min-h-[2.5rem] text-sm text-slate-600 dark:text-slate-400">
-                        {c.description ?? ''}
-                      </p>
-                      {c.status ? (
-                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                          <div
-                            className="h-full rounded-full bg-teal-500"
-                            style={{ width: `${c.percent}%` }}
-                          />
-                        </div>
-                      ) : null}
-                      <div className="mt-auto pt-1">
-                        <Link href={`/training/learn/${c.id}`}>
-                          <Button
-                            variant={c.status === 'completed' ? 'outline' : 'default'}
-                            className="w-full"
-                          >
-                            {label}
-                          </Button>
-                        </Link>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-            {listPagination}
-          </div>
-        )
-      ) : null}
-
-      {tab === 'records' ? (
-        data.records.length === 0 ? (
-          <>
-            <EmptyState
-              icon={<GraduationCap size={32} />}
-              title={params.q ? 'No records match your search' : 'No training records'}
-              description={
-                params.q
-                  ? 'Try a different course, instructor, or note.'
-                  : 'Records appear here once an instructor or evaluator signs you off.'
-              }
-            />
-            {data.total > 0 ? listPagination : null}
-          </>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Course</TableHead>
-                  <TableHead>Completed</TableHead>
-                  <TableHead>Expires</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Grade</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.records.map(({ rec, course, isLatest }) => {
-                  const superseded = !isLatest
-                  const expiringSoon =
-                    !superseded &&
-                    rec.expiresOn &&
-                    rec.expiresOn >= todayStr &&
-                    rec.expiresOn <=
-                      (() => {
-                        const d = new Date()
-                        d.setDate(d.getDate() + 90)
-                        return d.toISOString().slice(0, 10)
-                      })()
-                  const expired = !superseded && rec.expiresOn && rec.expiresOn < todayStr
-                  return (
-                    <TableRow key={rec.id}>
-                      <TableCell>
-                        <div className="font-medium">{course?.name ?? '—'}</div>
-                        {course?.code ? (
-                          <div className="text-xs text-slate-500">{course.code}</div>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>{rec.completedOn}</TableCell>
-                      <TableCell>
-                        {rec.expiresOn ? (
-                          <span
-                            className={
-                              expired
-                                ? 'font-medium text-red-700 dark:text-red-400'
-                                : expiringSoon
-                                  ? 'font-medium text-amber-700 dark:text-amber-400'
-                                  : ''
-                            }
-                          >
-                            {rec.expiresOn}
-                            {expired
-                              ? ' (expired)'
-                              : expiringSoon
-                                ? ' (soon)'
-                                : superseded
-                                  ? ' (superseded)'
-                                  : ''}
-                          </span>
-                        ) : superseded ? (
-                          <span className="text-slate-500">Superseded</span>
-                        ) : (
-                          <span className="text-slate-500">No expiry</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-400">
-                        {rec.source.replace('_', ' ')}
-                      </TableCell>
-                      <TableCell>
-                        {rec.grade != null ? (
-                          <Badge variant={rec.grade >= 80 ? 'success' : 'warning'}>
-                            {rec.grade}%
-                          </Badge>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-            {listPagination}
-          </>
-        )
-      ) : null}
-
-      {tab === 'expiring' ? (
-        data.expiring.length === 0 ? (
-          <>
-            <EmptyState
-              icon={<GraduationCap size={32} />}
-              title={
-                params.q
-                  ? 'No expiring records match your search'
-                  : 'Nothing expiring in the next 90 days'
-              }
-              description={
-                params.q
-                  ? 'Try a different course or instructor.'
-                  : 'All certifications are valid for at least the next 90 days.'
-              }
-            />
-            {data.total > 0 ? listPagination : null}
-          </>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Course</TableHead>
-                  <TableHead>Expires</TableHead>
-                  <TableHead>Days left</TableHead>
-                  <TableHead>Completed</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.expiring.map(({ rec, course }) => {
-                  const daysLeft = rec.expiresOn
-                    ? Math.ceil(
-                        (new Date(rec.expiresOn).getTime() - new Date().getTime()) /
-                          (1000 * 60 * 60 * 24),
-                      )
-                    : null
-                  return (
-                    <TableRow key={rec.id}>
-                      <TableCell>
-                        <div className="font-medium">{course?.name ?? '—'}</div>
-                      </TableCell>
-                      <TableCell>{rec.expiresOn}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            daysLeft != null && daysLeft <= 14
-                              ? 'destructive'
-                              : daysLeft != null && daysLeft <= 30
-                                ? 'warning'
-                                : 'secondary'
-                          }
+      <GeneratedValue
+        value={
+          tab === 'courses' ? (
+            data.courses.length === 0 ? (
+              <>
+                <EmptyState
+                  icon={<GraduationCap size={32} />}
+                  title={tGeneratedValue(
+                    params.q ? tGenerated('m_1f304eb9d92e71') : tGenerated('m_10c1c62fcdabc0'),
+                  )}
+                  description={tGeneratedValue(
+                    params.q ? tGenerated('m_0c8d85575a79a4') : tGenerated('m_081f16a7150d52'),
+                  )}
+                />
+                <GeneratedValue value={data.total > 0 ? listPagination : null} />
+              </>
+            ) : (
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  <GeneratedValue
+                    value={data.courses.map((c) => {
+                      const selfLaunch = deliveryMeta(c.deliveryType).selfLaunch
+                      const label =
+                        c.status === 'completed'
+                          ? 'Review'
+                          : c.status
+                            ? `Continue · ${c.percent}%`
+                            : selfLaunch
+                              ? 'Start'
+                              : 'View course'
+                      return (
+                        <Card
+                          key={c.id}
+                          className="group flex h-full flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md"
                         >
-                          {daysLeft ?? '—'}d
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-400">
-                        {rec.completedOn}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-            {listPagination}
-          </>
-        )
-      ) : null}
-
-      {tab === 'assigned' ? (
-        data.assigned.length === 0 ? (
-          <>
-            <EmptyState
-              icon={<GraduationCap size={32} />}
-              title={params.q ? 'No assignments match your search' : 'No outstanding assignments'}
-              description={
-                params.q
-                  ? 'Try a different assignment or course name.'
-                  : 'Assigned courses and assessments appear here until completed.'
-              }
-            />
-            {data.total > 0 ? listPagination : null}
-          </>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Assignment</TableHead>
-                  <TableHead>Course / item</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.assigned.map(
-                  ({ status, obligation, course, assessmentType, skillType, enrollment }) => {
-                    const overdue = status.status === 'overdue'
-                    const link = resolveComplianceLink(
-                      obligation.sourceModule,
-                      obligation.targetRef,
-                      {
-                        personId: data.personId,
-                        obligationId: obligation.id,
-                      },
-                    )
-                    const itemName =
-                      course?.name ??
-                      assessmentType?.name ??
-                      skillType?.name ??
-                      (obligation.sourceModule === 'cert_requirement'
-                        ? 'Certification requirement'
-                        : 'Training requirement')
-                    return (
-                      <TableRow key={status.id}>
-                        <TableCell>
-                          <div className="font-medium">{obligation.title}</div>
-                          {obligation.notes ? (
-                            <div className="text-xs text-slate-500">{obligation.notes}</div>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <div>{itemName}</div>
-                          {enrollment ? (
-                            <div className="text-xs text-slate-500">
-                              Course {enrollment.status.replace('_', ' ')}
-                              {enrollment.status === 'in_progress'
-                                ? ` · ${enrollment.progressPercent}%`
-                                : ''}
+                          <CardContent className="flex flex-1 flex-col gap-3 py-5">
+                            <div className="flex items-start justify-between gap-2">
+                              <Badge variant="outline" className="font-normal">
+                                <GeneratedValue value={deliveryLabel(c.deliveryType)} />
+                              </Badge>
+                              <GeneratedValue
+                                value={
+                                  c.status === 'completed' ? (
+                                    <Badge variant="success">
+                                      <GeneratedText id="m_0ba7a5e1b2fa32" />
+                                    </Badge>
+                                  ) : c.status ? (
+                                    <Badge variant="secondary">
+                                      <GeneratedText id="m_1a03b06872ffd9" />
+                                    </Badge>
+                                  ) : null
+                                }
+                              />
                             </div>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <span
-                            className={overdue ? 'font-medium text-red-700 dark:text-red-400' : ''}
-                          >
-                            {status.dueOn ?? '—'}
-                            {overdue ? ' (overdue)' : ''}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              status.status === 'overdue'
-                                ? 'destructive'
-                                : status.status === 'completed'
-                                  ? 'success'
-                                  : 'warning'
-                            }
-                          >
-                            {status.status.replace('_', ' ')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {link ? (
-                            <Link href={link.href as never} prefetch={link.prefetch}>
-                              <Button size="sm" variant="outline">
-                                Open
-                              </Button>
-                            </Link>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  },
-                )}
-              </TableBody>
-            </Table>
-            {listPagination}
-          </>
-        )
-      ) : null}
+                            <div className="min-w-0">
+                              <h3 className="line-clamp-2 font-semibold text-slate-900 dark:text-slate-100">
+                                <GeneratedValue value={c.name} />
+                              </h3>
+                              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                <GeneratedValue value={c.code} />
+                              </p>
+                            </div>
+                            <p className="line-clamp-2 min-h-[2.5rem] text-sm text-slate-600 dark:text-slate-400">
+                              <GeneratedValue value={c.description ?? ''} />
+                            </p>
+                            <GeneratedValue
+                              value={
+                                c.status ? (
+                                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                                    <div
+                                      className="h-full rounded-full bg-teal-500"
+                                      style={{ width: `${c.percent}%` }}
+                                    />
+                                  </div>
+                                ) : null
+                              }
+                            />
+                            <div className="mt-auto pt-1">
+                              <Link href={`/training/learn/${c.id}`}>
+                                <Button
+                                  variant={c.status === 'completed' ? 'outline' : 'default'}
+                                  className="w-full"
+                                >
+                                  <GeneratedValue value={label} />
+                                </Button>
+                              </Link>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  />
+                </div>
+                <GeneratedValue value={listPagination} />
+              </div>
+            )
+          ) : null
+        }
+      />
+
+      <GeneratedValue
+        value={
+          tab === 'records' ? (
+            data.records.length === 0 ? (
+              <>
+                <EmptyState
+                  icon={<GraduationCap size={32} />}
+                  title={tGeneratedValue(
+                    params.q ? tGenerated('m_0a338a2c68c78d') : tGenerated('m_049950ab11f977'),
+                  )}
+                  description={tGeneratedValue(
+                    params.q ? tGenerated('m_019fbdff7df7fb') : tGenerated('m_037ba3d100e713'),
+                  )}
+                />
+                <GeneratedValue value={data.total > 0 ? listPagination : null} />
+              </>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <GeneratedText id="m_14fc1e0739b60e" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_0ba7a5e1b2fa32" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_14f3858b0a9ad6" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_1d05fa7a091a9b" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_0d49c43e2afdff" />
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <GeneratedValue
+                      value={data.records.map(({ rec, course, isLatest }) => {
+                        const superseded = !isLatest
+                        const expiringSoon =
+                          !superseded &&
+                          rec.expiresOn &&
+                          rec.expiresOn >= todayStr &&
+                          rec.expiresOn <=
+                            (() => {
+                              const d = new Date()
+                              d.setDate(d.getDate() + 90)
+                              return d.toISOString().slice(0, 10)
+                            })()
+                        const expired = !superseded && rec.expiresOn && rec.expiresOn < todayStr
+                        return (
+                          <TableRow key={rec.id}>
+                            <TableCell>
+                              <div className="font-medium">
+                                <GeneratedValue value={course?.name ?? '—'} />
+                              </div>
+                              <GeneratedValue
+                                value={
+                                  course?.code ? (
+                                    <div className="text-xs text-slate-500">
+                                      <GeneratedValue value={course.code} />
+                                    </div>
+                                  ) : null
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <GeneratedValue value={rec.completedOn} />
+                            </TableCell>
+                            <TableCell>
+                              <GeneratedValue
+                                value={
+                                  rec.expiresOn ? (
+                                    <span
+                                      className={
+                                        expired
+                                          ? 'font-medium text-red-700 dark:text-red-400'
+                                          : expiringSoon
+                                            ? 'font-medium text-amber-700 dark:text-amber-400'
+                                            : ''
+                                      }
+                                    >
+                                      <GeneratedValue value={rec.expiresOn} />
+                                      <GeneratedValue
+                                        value={
+                                          expired ? (
+                                            <GeneratedText id="m_1626f92cde00e1" />
+                                          ) : expiringSoon ? (
+                                            <GeneratedText id="m_01656be20ac77f" />
+                                          ) : superseded ? (
+                                            <GeneratedText id="m_130614a9ba074e" />
+                                          ) : (
+                                            ''
+                                          )
+                                        }
+                                      />
+                                    </span>
+                                  ) : superseded ? (
+                                    <span className="text-slate-500">
+                                      <GeneratedText id="m_1c93f6d8831de6" />
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-500">
+                                      <GeneratedText id="m_1bbc44c1ce26a7" />
+                                    </span>
+                                  )
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-slate-600 dark:text-slate-400">
+                              <GeneratedValue value={rec.source.replace('_', ' ')} />
+                            </TableCell>
+                            <TableCell>
+                              <GeneratedValue
+                                value={
+                                  rec.grade != null ? (
+                                    <Badge variant={rec.grade >= 80 ? 'success' : 'warning'}>
+                                      <GeneratedValue value={rec.grade} />%
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )
+                                }
+                              />
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    />
+                  </TableBody>
+                </Table>
+                <GeneratedValue value={listPagination} />
+              </>
+            )
+          ) : null
+        }
+      />
+
+      <GeneratedValue
+        value={
+          tab === 'expiring' ? (
+            data.expiring.length === 0 ? (
+              <>
+                <EmptyState
+                  icon={<GraduationCap size={32} />}
+                  title={tGeneratedValue(
+                    params.q ? tGenerated('m_1b5bbcfae1fbbb') : tGenerated('m_0d2ce01afea49b'),
+                  )}
+                  description={tGeneratedValue(
+                    params.q ? tGenerated('m_099c0ee7f26933') : tGenerated('m_1cbe7147278d67'),
+                  )}
+                />
+                <GeneratedValue value={data.total > 0 ? listPagination : null} />
+              </>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <GeneratedText id="m_14fc1e0739b60e" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_14f3858b0a9ad6" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_10b7e0099cb7e3" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_0ba7a5e1b2fa32" />
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <GeneratedValue
+                      value={data.expiring.map(({ rec, course }) => {
+                        const daysLeft = rec.expiresOn
+                          ? Math.ceil(
+                              (new Date(rec.expiresOn).getTime() - new Date().getTime()) /
+                                (1000 * 60 * 60 * 24),
+                            )
+                          : null
+                        return (
+                          <TableRow key={rec.id}>
+                            <TableCell>
+                              <div className="font-medium">
+                                <GeneratedValue value={course?.name ?? '—'} />
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <GeneratedValue value={rec.expiresOn} />
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  daysLeft != null && daysLeft <= 14
+                                    ? 'destructive'
+                                    : daysLeft != null && daysLeft <= 30
+                                      ? 'warning'
+                                      : 'secondary'
+                                }
+                              >
+                                <GeneratedValue value={daysLeft ?? '—'} />
+                                <GeneratedText id="m_113dda91012a7a" />
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-slate-600 dark:text-slate-400">
+                              <GeneratedValue value={rec.completedOn} />
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    />
+                  </TableBody>
+                </Table>
+                <GeneratedValue value={listPagination} />
+              </>
+            )
+          ) : null
+        }
+      />
+
+      <GeneratedValue
+        value={
+          tab === 'assigned' ? (
+            data.assigned.length === 0 ? (
+              <>
+                <EmptyState
+                  icon={<GraduationCap size={32} />}
+                  title={tGeneratedValue(
+                    params.q ? tGenerated('m_0dc15f158287f4') : tGenerated('m_16b64eb23f2809'),
+                  )}
+                  description={tGeneratedValue(
+                    params.q ? tGenerated('m_19c8c12a86c1fd') : tGenerated('m_09eb549810bad5'),
+                  )}
+                />
+                <GeneratedValue value={data.total > 0 ? listPagination : null} />
+              </>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <GeneratedText id="m_1ce516f2203741" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_009033f0e63eac" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_0c2eb92551e08b" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_0b9da892d6faf0" />
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <GeneratedText id="m_0bad495a7046e9" />
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <GeneratedValue
+                      value={data.assigned.map(
+                        ({ status, obligation, course, assessmentType, skillType, enrollment }) => {
+                          const overdue = status.status === 'overdue'
+                          const link = resolveComplianceLink(
+                            obligation.sourceModule,
+                            obligation.targetRef,
+                            {
+                              personId: data.personId,
+                              obligationId: obligation.id,
+                            },
+                          )
+                          const itemName =
+                            course?.name ??
+                            assessmentType?.name ??
+                            skillType?.name ??
+                            (obligation.sourceModule === 'cert_requirement'
+                              ? 'Certification requirement'
+                              : 'Training requirement')
+                          return (
+                            <TableRow key={status.id}>
+                              <TableCell>
+                                <div className="font-medium">
+                                  <GeneratedValue value={obligation.title} />
+                                </div>
+                                <GeneratedValue
+                                  value={
+                                    obligation.notes ? (
+                                      <div className="text-xs text-slate-500">
+                                        <GeneratedValue value={obligation.notes} />
+                                      </div>
+                                    ) : null
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <div>
+                                  <GeneratedValue value={itemName} />
+                                </div>
+                                <GeneratedValue
+                                  value={
+                                    enrollment ? (
+                                      <div className="text-xs text-slate-500">
+                                        <GeneratedText id="m_14fc1e0739b60e" />{' '}
+                                        <GeneratedValue
+                                          value={enrollment.status.replace('_', ' ')}
+                                        />
+                                        <GeneratedValue
+                                          value={
+                                            enrollment.status === 'in_progress'
+                                              ? ` · ${enrollment.progressPercent}%`
+                                              : ''
+                                          }
+                                        />
+                                      </div>
+                                    ) : null
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <span
+                                  className={
+                                    overdue ? 'font-medium text-red-700 dark:text-red-400' : ''
+                                  }
+                                >
+                                  <GeneratedValue value={status.dueOn ?? '—'} />
+                                  <GeneratedValue
+                                    value={overdue ? <GeneratedText id="m_0edba4030e6f71" /> : ''}
+                                  />
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    status.status === 'overdue'
+                                      ? 'destructive'
+                                      : status.status === 'completed'
+                                        ? 'success'
+                                        : 'warning'
+                                  }
+                                >
+                                  <GeneratedValue value={status.status.replace('_', ' ')} />
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <GeneratedValue
+                                  value={
+                                    link ? (
+                                      <Link href={link.href as never} prefetch={link.prefetch}>
+                                        <Button size="sm" variant="outline">
+                                          <GeneratedText id="m_107ab58c3c38bc" />
+                                        </Button>
+                                      </Link>
+                                    ) : (
+                                      <span className="text-slate-400">—</span>
+                                    )
+                                  }
+                                />
+                              </TableCell>
+                            </TableRow>
+                          )
+                        },
+                      )}
+                    />
+                  </TableBody>
+                </Table>
+                <GeneratedValue value={listPagination} />
+              </>
+            )
+          ) : null
+        }
+      />
     </ListPageLayout>
   )
 }

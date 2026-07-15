@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { and, asc, count, desc, eq, ilike, isNull, or, type AnyColumn, type SQL } from 'drizzle-orm'
 import { ClipboardCheck, Plus } from 'lucide-react'
@@ -33,7 +35,10 @@ import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { SortableTh } from '@/components/sortable-th'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Equipment inspections' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0620c94ba8d26d') }
+}
 
 const BASE = '/equipment/inspections'
 const SORTS = ['occurred', 'reference', 'equipment', 'type', 'result', 'status'] as const
@@ -64,6 +69,7 @@ export default async function EquipmentInspectionsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams<Sort>(sp, {
     sort: 'occurred',
@@ -194,13 +200,16 @@ export default async function EquipmentInspectionsPage({
       header={
         <>
           <PageHeader
-            title="Inspections"
-            description={`${total.toLocaleString()} record${total === 1 ? '' : 's'}`}
+            title={tGenerated('m_189bb91aaf5565')}
+            description={tGenerated('m_18faf7c048e1b2', {
+              value0: total.toLocaleString(),
+              value1: total === 1 ? '' : 's',
+            })}
             actions={
               canInspect ? (
                 <Link href="/equipment/inspections/new">
                   <Button>
-                    <Plus size={14} /> New inspection
+                    <Plus size={14} /> <GeneratedText id="m_0f060bce7a52ef" />
                   </Button>
                 </Link>
               ) : undefined
@@ -208,24 +217,26 @@ export default async function EquipmentInspectionsPage({
           />
           <EquipmentSubNav active="inspections" />
           <TableToolbar>
-            <SearchInput placeholder="Search reference, equipment, type…" />
+            <SearchInput placeholder={tGenerated('m_17c97e2e4a7a11')} />
             <div className="flex flex-wrap items-center gap-1.5">
-              {STATUS_FILTERS.map((f) => {
-                const active = statusFilter === f.value
-                return (
-                  <Link
-                    key={f.value || 'all'}
-                    href={mergeHref(BASE, sp, { status: f.value || undefined, page: 1 }) as never}
-                    className={
-                      active
-                        ? 'rounded-full bg-teal-600 px-3 py-1 text-xs font-medium text-white'
-                        : 'rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
-                    }
-                  >
-                    {f.label}
-                  </Link>
-                )
-              })}
+              <GeneratedValue
+                value={STATUS_FILTERS.map((f) => {
+                  const active = statusFilter === f.value
+                  return (
+                    <Link
+                      key={f.value || 'all'}
+                      href={mergeHref(BASE, sp, { status: f.value || undefined, page: 1 }) as never}
+                      className={
+                        active
+                          ? 'rounded-full bg-teal-600 px-3 py-1 text-xs font-medium text-white'
+                          : 'rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                      }
+                    >
+                      <GeneratedValue value={f.label} />
+                    </Link>
+                  )
+                })}
+              />
             </div>
           </TableToolbar>
         </>
@@ -236,83 +247,107 @@ export default async function EquipmentInspectionsPage({
           <TableHeader>
             <TableRow>
               <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
-                Reference
+                <GeneratedText id="m_17dc61a19b605c" />
               </SortableTh>
               <SortableTh {...sortProps} column="equipment" active={params.sort === 'equipment'}>
-                Equipment
+                <GeneratedText id="m_17f17df74f7e69" />
               </SortableTh>
               <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
-                Type
+                <GeneratedText id="m_074ba2f160c506" />
               </SortableTh>
               <SortableTh {...sortProps} column="occurred" active={params.sort === 'occurred'}>
-                Performed
+                <GeneratedText id="m_16b944034f43b6" />
               </SortableTh>
-              <TableHead>Inspector</TableHead>
+              <TableHead>
+                <GeneratedText id="m_08412ea75fe5da" />
+              </TableHead>
               <SortableTh {...sortProps} column="result" active={params.sort === 'result'}>
-                Result
+                <GeneratedText id="m_100e41041dbe51" />
               </SortableTh>
               <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                Status
+                <GeneratedText id="m_0b9da892d6faf0" />
               </SortableTh>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-sm text-slate-500">
-                  No inspections match this filter.
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((r) => {
-                const inspector =
-                  r.inspectorUser ??
-                  ([r.inspectorFirst, r.inspectorLast].filter(Boolean).join(' ') || null) ??
-                  r.inspectorText ??
-                  null
-                return (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">
-                      <Link
-                        href={`/equipment/inspections/${r.id}`}
-                        className="text-teal-700 hover:underline dark:text-teal-400"
-                      >
-                        {r.reference}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-slate-900 dark:text-slate-100">{r.itemName ?? '—'}</div>
-                      {r.itemTag ? (
-                        <div className="font-mono text-xs text-slate-500">{r.itemTag}</div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {r.typeName ?? '—'}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
-                      {r.occurredAt
-                        ? formatDate(new Date(r.occurredAt), ctx.timezone, ctx.locale)
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {inspector ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      {r.result ? (
-                        <Badge variant={RESULT_VARIANT[r.result] ?? 'secondary'}>{r.result}</Badge>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>
-                        {r.status.replace('_', ' ')}
-                      </Badge>
+            <GeneratedValue
+              value={
+                rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-10 text-center text-sm text-slate-500">
+                      <GeneratedText id="m_1ef212a3b97a74" />
                     </TableCell>
                   </TableRow>
+                ) : (
+                  rows.map((r) => {
+                    const inspector =
+                      r.inspectorUser ??
+                      ([r.inspectorFirst, r.inspectorLast].filter(Boolean).join(' ') || null) ??
+                      r.inspectorText ??
+                      null
+                    return (
+                      <TableRow key={r.id}>
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/equipment/inspections/${r.id}`}
+                            className="text-teal-700 hover:underline dark:text-teal-400"
+                          >
+                            <GeneratedValue value={r.reference} />
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-slate-900 dark:text-slate-100">
+                            <GeneratedValue value={r.itemName ?? '—'} />
+                          </div>
+                          <GeneratedValue
+                            value={
+                              r.itemTag ? (
+                                <div className="font-mono text-xs text-slate-500">
+                                  <GeneratedValue value={r.itemTag} />
+                                </div>
+                              ) : null
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-300">
+                          <GeneratedValue value={r.typeName ?? '—'} />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
+                          <GeneratedValue
+                            value={
+                              r.occurredAt
+                                ? formatDate(new Date(r.occurredAt), ctx.timezone, ctx.locale)
+                                : '—'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-300">
+                          <GeneratedValue value={inspector ?? '—'} />
+                        </TableCell>
+                        <TableCell>
+                          <GeneratedValue
+                            value={
+                              r.result ? (
+                                <Badge variant={RESULT_VARIANT[r.result] ?? 'secondary'}>
+                                  <GeneratedValue value={r.result} />
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>
+                            <GeneratedValue value={r.status.replace('_', ' ')} />
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
                 )
-              })
-            )}
+              }
+            />
           </TableBody>
         </Table>
       </div>
@@ -326,8 +361,7 @@ export default async function EquipmentInspectionsPage({
       />
 
       <p className="flex items-center gap-1.5 text-xs text-slate-400">
-        <ClipboardCheck size={12} /> Equipment inspections run from an inspection type&apos;s
-        checklist. Configure types under Manage → Inspection types.
+        <ClipboardCheck size={12} /> <GeneratedText id="m_0235f132f871e4" />
       </p>
     </ListPageLayout>
   )

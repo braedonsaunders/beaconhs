@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 import { useEffect } from 'react'
 import * as Sentry from '@sentry/nextjs'
 
@@ -42,17 +44,20 @@ export default function GlobalError({
             }}
           >
             <h1 id="global-error-title" style={{ margin: 0, fontSize: '1.25rem' }}>
-              BeaconHS could not start
+              <GeneratedText id="m_0447981ecb39ff" />
             </h1>
             <p style={{ margin: '0.75rem 0 0', color: '#475569', lineHeight: 1.5 }}>
-              No action was reported as complete. Try again; if this keeps happening, give your
-              administrator the reference below.
+              <GeneratedText id="m_12d819d902c9ab" />
             </p>
-            {error.digest ? (
-              <p style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                Reference: {error.digest}
-              </p>
-            ) : null}
+            <GeneratedValue
+              value={
+                error.digest ? (
+                  <p style={{ color: '#64748b', fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                    <GeneratedText id="m_0d0ba851d7848c" /> <GeneratedValue value={error.digest} />
+                  </p>
+                ) : null
+              }
+            />
             <button
               type="button"
               onClick={reset}
@@ -68,7 +73,7 @@ export default function GlobalError({
                 padding: '0.65rem 1rem',
               }}
             >
-              Try again
+              <GeneratedText id="m_02941fb09831c6" />
             </button>
           </section>
         </main>

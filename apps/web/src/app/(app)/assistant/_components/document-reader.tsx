@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // In-chat document reader. A right-side slide-out panel that loads a controlled
 // document and renders it without leaving the conversation: in-app documents on
 // a paper surface using the same `documentBodyCss` as the editor/PDF, and
@@ -52,7 +59,7 @@ export function DocumentReaderProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ReaderCtx>(() => ({ open: setDocRef }), [])
   return (
     <Ctx.Provider value={value}>
-      {children}
+      <GeneratedValue value={children} />
       <DocumentReaderDrawer docRef={docRef} onClose={() => setDocRef(null)} />
     </Ctx.Provider>
   )
@@ -64,6 +71,8 @@ export function DocumentReaderProvider({ children }: { children: ReactNode }) {
 type Loaded = { id: string; doc: ReaderDocument | null; error: string | null }
 
 function DocumentReaderDrawer({ docRef, onClose }: { docRef: DocRef | null; onClose: () => void }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [loaded, setLoaded] = useState<Loaded | null>(null)
 
   useEffect(() => {
@@ -115,7 +124,7 @@ function DocumentReaderDrawer({ docRef, onClose }: { docRef: DocRef | null; onCl
   return (
     <ReaderShell
       open={docRef !== null}
-      title={doc?.title ?? docRef?.title ?? 'Document'}
+      title={tGeneratedValue(doc?.title ?? docRef?.title ?? tGenerated('m_18ce070374179f'))}
       docKey={doc?.key ?? docRef?.key ?? null}
       category={doc?.category ?? docRef?.category ?? null}
       status={doc?.status ?? docRef?.status ?? null}
@@ -155,6 +164,8 @@ function ReaderShell({
   pdfUrl: string | null
   onClose: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   return (
     <Drawer open={open} onClose={onClose} size="xl">
       <style dangerouslySetInnerHTML={{ __html: DOC_CSS }} />
@@ -166,20 +177,36 @@ function ReaderShell({
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-base leading-snug font-semibold text-slate-900 dark:text-slate-100">
-            {title}
+            <GeneratedValue value={title} />
           </h2>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-            {docKey ? (
-              <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                {docKey}
-              </code>
-            ) : null}
-            {category ? <span className="truncate">{category}</span> : null}
-            {status ? (
-              <Badge variant={statusVariant(status)} className="capitalize">
-                {humanize(status)}
-              </Badge>
-            ) : null}
+            <GeneratedValue
+              value={
+                docKey ? (
+                  <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    {docKey}
+                  </code>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                category ? (
+                  <span className="truncate">
+                    <GeneratedValue value={category} />
+                  </span>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                status ? (
+                  <Badge variant={statusVariant(status)} className="capitalize">
+                    <GeneratedValue value={humanize(status)} />
+                  </Badge>
+                ) : null
+              }
+            />
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -187,17 +214,19 @@ function ReaderShell({
             href={fullHref}
             target="_blank"
             rel="noreferrer"
-            title="Open full page"
-            aria-label="Open full page"
+            title={tGenerated('m_1878b86755b421')}
+            aria-label={tGenerated('m_1878b86755b421')}
             className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           >
             <ExternalLink className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Open full page</span>
+            <span className="hidden sm:inline">
+              <GeneratedText id="m_1878b86755b421" />
+            </span>
           </a>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={tGenerated('m_19ab80ae228d44')}
             className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           >
             <X className="h-[18px] w-[18px]" />
@@ -205,51 +234,61 @@ function ReaderShell({
         </div>
       </div>
 
-      {loading ? (
-        <ReaderSkeleton />
-      ) : error ? (
-        <ReaderMessage icon={<FileWarning className="h-5 w-5" />} title={error}>
-          You can still open it from the document module if you have access.
-        </ReaderMessage>
-      ) : pdfUrl ? (
-        // Uploaded PDF (incl. scanned/image-only) → browsers render it natively
-        // in the iframe; no pdf.js needed. A slim action row offers download /
-        // new-tab on the same short-lived presigned URL.
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-950">
-          <div className="flex items-center justify-end gap-1.5 border-b border-slate-200 bg-white/95 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/95">
-            <a
-              href={pdfUrl}
-              download
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+      <GeneratedValue
+        value={
+          loading ? (
+            <ReaderSkeleton />
+          ) : error ? (
+            <ReaderMessage
+              icon={<FileWarning className="h-5 w-5" />}
+              title={tGeneratedValue(error)}
             >
-              <Download className="h-3.5 w-3.5" /> Download
-            </a>
-            <a
-              href={pdfUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+              <GeneratedText id="m_05f68b0a86fae7" />
+            </ReaderMessage>
+          ) : pdfUrl ? (
+            // Uploaded PDF (incl. scanned/image-only) → browsers render it natively
+            // in the iframe; no pdf.js needed. A slim action row offers download /
+            // new-tab on the same short-lived presigned URL.
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-950">
+              <div className="flex items-center justify-end gap-1.5 border-b border-slate-200 bg-white/95 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/95">
+                <a
+                  href={pdfUrl}
+                  download
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                >
+                  <Download className="h-3.5 w-3.5" /> <GeneratedText id="m_0fcb9c63d263d1" />
+                </a>
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> <GeneratedText id="m_10b8b9a1a3c87b" />
+                </a>
+              </div>
+              <iframe
+                src={pdfUrl}
+                title={tGeneratedValue(title)}
+                className="h-[calc(100vh-11rem)] min-h-[480px] w-full bg-white"
+              />
+            </div>
+          ) : html ? (
+            // White "paper" surface, kept light even in dark mode so the document
+            // reads like a printed page; doc-body CSS styles headings/lists/tables.
+            <div className="rounded-xl bg-white p-6 text-slate-900 shadow-sm ring-1 ring-slate-200 sm:p-8 dark:ring-slate-800">
+              <article className="doc-reader-body" dangerouslySetInnerHTML={{ __html: html }} />
+            </div>
+          ) : (
+            <ReaderMessage
+              icon={<FileText className="h-5 w-5" />}
+              title={tGenerated('m_0adad31934789c')}
             >
-              <ExternalLink className="h-3.5 w-3.5" /> New tab
-            </a>
-          </div>
-          <iframe
-            src={pdfUrl}
-            title={title}
-            className="h-[calc(100vh-11rem)] min-h-[480px] w-full bg-white"
-          />
-        </div>
-      ) : html ? (
-        // White "paper" surface, kept light even in dark mode so the document
-        // reads like a printed page; doc-body CSS styles headings/lists/tables.
-        <div className="rounded-xl bg-white p-6 text-slate-900 shadow-sm ring-1 ring-slate-200 sm:p-8 dark:ring-slate-800">
-          <article className="doc-reader-body" dangerouslySetInnerHTML={{ __html: html }} />
-        </div>
-      ) : (
-        <ReaderMessage icon={<FileText className="h-5 w-5" />} title="No readable content yet">
-          This document doesn’t have any published content to show.
-        </ReaderMessage>
-      )}
+              <GeneratedText id="m_1c6b7bae993d91" />
+            </ReaderMessage>
+          )
+        }
+      />
     </Drawer>
   )
 }
@@ -259,16 +298,20 @@ function ReaderSkeleton() {
     <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8 dark:ring-slate-800">
       <Skeleton className="h-7 w-2/3" />
       <div className="mt-5 space-y-2.5">
-        {[...Array(3)].map((_, i) => (
-          <Skeleton key={`a${i}`} className="h-3.5 w-full" />
-        ))}
+        <GeneratedValue
+          value={[...Array(3)].map((_, i) => (
+            <Skeleton key={`a${i}`} className="h-3.5 w-full" />
+          ))}
+        />
         <Skeleton className="h-3.5 w-4/5" />
       </div>
       <Skeleton className="mt-7 h-5 w-1/3" />
       <div className="mt-4 space-y-2.5">
-        {[...Array(4)].map((_, i) => (
-          <Skeleton key={`b${i}`} className="h-3.5 w-full" />
-        ))}
+        <GeneratedValue
+          value={[...Array(4)].map((_, i) => (
+            <Skeleton key={`b${i}`} className="h-3.5 w-full" />
+          ))}
+        />
         <Skeleton className="h-3.5 w-3/5" />
       </div>
     </div>
@@ -287,12 +330,20 @@ function ReaderMessage({
   return (
     <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-200 px-6 py-16 text-center dark:border-slate-800">
       <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-        {icon}
+        <GeneratedValue value={icon} />
       </span>
-      <p className="font-medium text-slate-700 dark:text-slate-200">{title}</p>
-      {children ? (
-        <p className="max-w-sm text-sm text-slate-500 dark:text-slate-400">{children}</p>
-      ) : null}
+      <p className="font-medium text-slate-700 dark:text-slate-200">
+        <GeneratedValue value={title} />
+      </p>
+      <GeneratedValue
+        value={
+          children ? (
+            <p className="max-w-sm text-sm text-slate-500 dark:text-slate-400">
+              <GeneratedValue value={children} />
+            </p>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -313,6 +364,7 @@ export function DocumentPreviewCard({
   docKey: string | null
   status: string | null
 }) {
+  const tGenerated = useGeneratedTranslations()
   const reader = useDocumentReader()
   const [loaded, setLoaded] = useState<ReaderDocument | 'error' | null>(null)
 
@@ -363,28 +415,44 @@ export function DocumentPreviewCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium text-slate-800 dark:text-slate-100">
-            {resolvedTitle}
+            <GeneratedValue value={resolvedTitle} />
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-            {resolvedKey ? (
-              <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                {resolvedKey}
-              </code>
-            ) : null}
-            {resolvedCategory ? <span className="truncate">{resolvedCategory}</span> : null}
+            <GeneratedValue
+              value={
+                resolvedKey ? (
+                  <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    {resolvedKey}
+                  </code>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                resolvedCategory ? (
+                  <span className="truncate">
+                    <GeneratedValue value={resolvedCategory} />
+                  </span>
+                ) : null
+              }
+            />
           </div>
         </div>
-        {resolvedStatus ? (
-          <Badge variant={statusVariant(resolvedStatus)} className="shrink-0 capitalize">
-            {humanize(resolvedStatus)}
-          </Badge>
-        ) : null}
+        <GeneratedValue
+          value={
+            resolvedStatus ? (
+              <Badge variant={statusVariant(resolvedStatus)} className="shrink-0 capitalize">
+                <GeneratedValue value={humanize(resolvedStatus)} />
+              </Badge>
+            ) : null
+          }
+        />
         <a
           href={`/documents/${id}`}
           target="_blank"
           rel="noreferrer"
-          title="Open full page"
-          aria-label="Open full page"
+          title={tGenerated('m_1878b86755b421')}
+          aria-label={tGenerated('m_1878b86755b421')}
           className="shrink-0 rounded p-1 text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
         >
           <ExternalLink className="h-4 w-4" />
@@ -394,20 +462,32 @@ export function DocumentPreviewCard({
       <button type="button" onClick={open} className="group block w-full cursor-pointer text-left">
         {/* Page-preview thumbnail on a white "paper" surface, clipped + faded. */}
         <div className="relative max-h-52 overflow-hidden border-t border-slate-100 bg-white px-6 pt-6 dark:border-slate-800">
-          {loaded === null ? (
-            <PreviewSkeleton />
-          ) : doc?.pdfUrl ? (
-            <PreviewPdf />
-          ) : doc?.html ? (
-            <div className="doc-reader-body" dangerouslySetInnerHTML={{ __html: doc.html }} />
-          ) : (
-            <PreviewEmpty error={loaded === 'error'} />
-          )}
+          <GeneratedValue
+            value={
+              loaded === null ? (
+                <PreviewSkeleton />
+              ) : doc?.pdfUrl ? (
+                <PreviewPdf />
+              ) : doc?.html ? (
+                <div className="doc-reader-body" dangerouslySetInnerHTML={{ __html: doc.html }} />
+              ) : (
+                <PreviewEmpty error={loaded === 'error'} />
+              )
+            }
+          />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-white via-white/85 to-transparent" />
         </div>
         <div className="flex items-center justify-center gap-1.5 border-t border-slate-100 bg-white py-2 text-xs font-medium text-teal-700 transition-colors group-hover:bg-teal-50/60 dark:border-slate-800 dark:bg-slate-900 dark:text-teal-300 dark:group-hover:bg-teal-950/30">
           <PanelRightOpen className="h-3.5 w-3.5" />
-          {reader ? 'Open in reader' : 'Open document'}
+          <GeneratedValue
+            value={
+              reader ? (
+                <GeneratedText id="m_1a1d894d7e4dd6" />
+              ) : (
+                <GeneratedText id="m_0f0cc8b090b20d" />
+              )
+            }
+          />
         </div>
       </button>
     </div>
@@ -430,7 +510,17 @@ function PreviewEmpty({ error }: { error: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center text-slate-400">
       <FileText className="h-7 w-7" />
-      <span className="text-xs">{error ? 'Preview unavailable' : 'No preview available'}</span>
+      <span className="text-xs">
+        <GeneratedValue
+          value={
+            error ? (
+              <GeneratedText id="m_1cd9c66eb4db9f" />
+            ) : (
+              <GeneratedText id="m_02dc91386c3cb4" />
+            )
+          }
+        />
+      </span>
     </div>
   )
 }
@@ -443,8 +533,12 @@ function PreviewPdf() {
       <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-teal-100 text-teal-700">
         <FileText className="h-5 w-5" />
       </span>
-      <span className="text-sm font-medium text-slate-700">PDF document</span>
-      <span className="text-xs text-slate-500">Open in the reader to view the pages</span>
+      <span className="text-sm font-medium text-slate-700">
+        <GeneratedText id="m_0728ad8d6726a2" />
+      </span>
+      <span className="text-xs text-slate-500">
+        <GeneratedText id="m_0688d870eec8a2" />
+      </span>
     </div>
   )
 }

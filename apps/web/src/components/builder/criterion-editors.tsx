@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { Camera } from 'lucide-react'
 import { Button, Drawer, Label, Select, Textarea } from '@beaconhs/ui'
 import { useReseededState } from '@/lib/use-reseeded-state'
@@ -38,14 +45,20 @@ function CriterionGroupSelect({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label>Section</Label>
+      <Label>
+        <GeneratedText id="m_0d513924d97753" />
+      </Label>
       <Select value={groupId ?? ''} onChange={(event) => onChange(event.target.value || null)}>
-        <option value="">Ungrouped</option>
-        {groups.map((group) => (
-          <option key={group.id} value={group.id}>
-            {group.label}
-          </option>
-        ))}
+        <option value="">
+          <GeneratedText id="m_124ee6c18e0195" />
+        </option>
+        <GeneratedValue
+          value={groups.map((group) => (
+            <option key={group.id} value={group.id}>
+              <GeneratedValue value={group.label} />
+            </option>
+          ))}
+        />
       </Select>
     </div>
   )
@@ -80,6 +93,8 @@ export function InspectionCriterionEditorDrawer<C extends InspectionCriterion>({
   onClose: () => void
   onSave: (data: InspectionCriterionData) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const criterion = editor?.criterion
   const [text, setText] = useReseededState(editor, criterion?.text ?? '')
   const [responseType, setResponseType] = useReseededState<InspectionResponseType>(
@@ -117,12 +132,14 @@ export function InspectionCriterionEditorDrawer<C extends InspectionCriterion>({
     <Drawer
       open={Boolean(editor)}
       onClose={onClose}
-      title={editor?.mode === 'add' ? 'Add question' : 'Edit question'}
+      title={tGeneratedValue(
+        editor?.mode === 'add' ? tGenerated('m_029dffafbff34b') : tGenerated('m_06b6a61fd2d8b0'),
+      )}
       size="sm"
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button
             disabled={!text.trim() || Boolean(choiceOptionsError)}
@@ -137,65 +154,94 @@ export function InspectionCriterionEditorDrawer<C extends InspectionCriterion>({
               })
             }
           >
-            {editor?.mode === 'add' ? 'Add' : 'Save'}
+            <GeneratedValue
+              value={
+                editor?.mode === 'add' ? (
+                  <GeneratedText id="m_16c8592e5020a4" />
+                ) : (
+                  <GeneratedText id="m_19e6bff894c3c7" />
+                )
+              }
+            />
           </Button>
         </>
       }
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>Question</Label>
+          <Label>
+            <GeneratedText id="m_1a895b5691321b" />
+          </Label>
           <Textarea
             rows={3}
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="e.g. Are walkways clear and unobstructed?"
+            placeholder={tGenerated('m_00b89c25d2ce18')}
             autoFocus
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Response type</Label>
+          <Label>
+            <GeneratedText id="m_15eb6eb85b34f2" />
+          </Label>
           <Select
             value={responseType}
             onChange={(event) => setResponseType(event.target.value as InspectionResponseType)}
           >
-            {INSPECTION_RESPONSE_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {INSPECTION_RESPONSE_LABELS[type]}
-              </option>
-            ))}
+            <GeneratedValue
+              value={INSPECTION_RESPONSE_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  <GeneratedValue value={INSPECTION_RESPONSE_LABELS[type]} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
-        {responseType === 'choice' ? (
-          <div className="space-y-1.5">
-            <Label>Options (one per line)</Label>
-            <Textarea
-              rows={6}
-              value={choiceOptionsText}
-              onChange={(event) => setChoiceOptionsText(event.target.value)}
-              placeholder={'Safe\nNeeds attention\nNot observed'}
-            />
-            {choiceOptionsError ? (
-              <p className="text-xs text-red-600 dark:text-red-400">{choiceOptionsError}</p>
-            ) : (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Inspectors select exactly one option. Existing records keep their original option
-                list if this question changes later.
-              </p>
-            )}
-          </div>
-        ) : null}
-        {groups ? (
-          <CriterionGroupSelect groups={groups} groupId={groupId} onChange={setGroupId} />
-        ) : null}
+        <GeneratedValue
+          value={
+            responseType === 'choice' ? (
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_02057adc77a443" />
+                </Label>
+                <Textarea
+                  rows={6}
+                  value={choiceOptionsText}
+                  onChange={(event) => setChoiceOptionsText(event.target.value)}
+                  placeholder={tGenerated('m_04aa3d9aa111e6')}
+                />
+                <GeneratedValue
+                  value={
+                    choiceOptionsError ? (
+                      <p className="text-xs text-red-600 dark:text-red-400">
+                        <GeneratedValue value={choiceOptionsError} />
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_0871856ca410e1" />
+                      </p>
+                    )
+                  }
+                />
+              </div>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            groups ? (
+              <CriterionGroupSelect groups={groups} groupId={groupId} onChange={setGroupId} />
+            ) : null
+          }
+        />
         <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
           <BuilderCheckboxRow
-            label="Require a photo"
+            label={tGenerated('m_0a9994281e867d')}
             checked={requiresPhoto}
             onChange={setRequiresPhoto}
           />
           <BuilderCheckboxRow
-            label="Require a comment"
+            label={tGenerated('m_1cff8028d13785')}
             checked={requiresComment}
             onChange={setRequiresComment}
           />
@@ -232,6 +278,8 @@ export function SeverityCriterionEditorDrawer<C extends SeverityCriterion>({
   onClose: () => void
   onSave: (data: SeverityCriterionData) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const criterion = editor?.criterion
   const [question, setQuestion] = useReseededState(editor, criterion?.question ?? '')
   const [description, setDescription] = useReseededState(editor, criterion?.description ?? '')
@@ -252,12 +300,14 @@ export function SeverityCriterionEditorDrawer<C extends SeverityCriterion>({
     <Drawer
       open={Boolean(editor)}
       onClose={onClose}
-      title={editor?.mode === 'add' ? 'Add question' : 'Edit question'}
+      title={tGeneratedValue(
+        editor?.mode === 'add' ? tGenerated('m_029dffafbff34b') : tGenerated('m_06b6a61fd2d8b0'),
+      )}
       size="sm"
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button
             disabled={!question.trim()}
@@ -271,51 +321,71 @@ export function SeverityCriterionEditorDrawer<C extends SeverityCriterion>({
               })
             }
           >
-            {editor?.mode === 'add' ? 'Add' : 'Save'}
+            <GeneratedValue
+              value={
+                editor?.mode === 'add' ? (
+                  <GeneratedText id="m_16c8592e5020a4" />
+                ) : (
+                  <GeneratedText id="m_19e6bff894c3c7" />
+                )
+              }
+            />
           </Button>
         </>
       }
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>Question</Label>
+          <Label>
+            <GeneratedText id="m_1a895b5691321b" />
+          </Label>
           <Textarea
             rows={3}
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder="e.g. Webbing free of cuts, fraying, or burns?"
+            placeholder={tGenerated('m_1f0cf0198eb640')}
             autoFocus
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Description</Label>
+          <Label>
+            <GeneratedText id="m_14d923495cf14c" />
+          </Label>
           <Textarea
             rows={2}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder="Optional guidance shown to the inspector."
+            placeholder={tGenerated('m_1f76d2f04d9e1a')}
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Severity on fail</Label>
+          <Label>
+            <GeneratedText id="m_0015e27ccf0f9f" />
+          </Label>
           <Select
             value={severity}
             onChange={(event) => setSeverity(event.target.value as InspectionSeverity)}
           >
-            {INSPECTION_SEVERITIES.map((option) => (
-              <option key={option} value={option}>
-                {INSPECTION_SEVERITY_LABELS[option]}
-              </option>
-            ))}
+            <GeneratedValue
+              value={INSPECTION_SEVERITIES.map((option) => (
+                <option key={option} value={option}>
+                  <GeneratedValue value={INSPECTION_SEVERITY_LABELS[option]} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
-        {groups ? (
-          <CriterionGroupSelect groups={groups} groupId={groupId} onChange={setGroupId} />
-        ) : null}
+        <GeneratedValue
+          value={
+            groups ? (
+              <CriterionGroupSelect groups={groups} groupId={groupId} onChange={setGroupId} />
+            ) : null
+          }
+        />
         <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
           <BuilderCheckboxRow checked={requiresPhoto} onChange={setRequiresPhoto}>
             <span className="flex items-center gap-1.5">
-              <Camera size={13} /> Require a photo
+              <Camera size={13} /> <GeneratedText id="m_0a9994281e867d" />
             </span>
           </BuilderCheckboxRow>
         </div>

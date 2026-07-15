@@ -1,5 +1,11 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useEffect, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Search, X } from 'lucide-react'
@@ -15,6 +21,8 @@ export function SearchInput({
   /** Pagination param to reset when the search changes (sub-tables use prefixed params). */
   pageParamKey?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const pathname = usePathname()
   const router = useRouter()
   const search = useSearchParams()
@@ -55,23 +63,27 @@ export function SearchInput({
       />
       <Input
         type="search"
-        placeholder={placeholder}
+        placeholder={tGeneratedValue(placeholder)}
         value={value}
         onChange={(e) => setEdit({ source: urlValue, value: e.target.value })}
         // Hide the browser's native search clear (×) — we render our own below,
         // so the native one would show a duplicate clear button.
         className="h-8 pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
       />
-      {value ? (
-        <button
-          type="button"
-          aria-label="Clear search"
-          onClick={() => setEdit({ source: urlValue, value: '' })}
-          className="absolute top-2 right-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-500"
-        >
-          <X size={16} />
-        </button>
-      ) : null}
+      <GeneratedValue
+        value={
+          value ? (
+            <button
+              type="button"
+              aria-label={tGenerated('m_0465aaf099e62c')}
+              onClick={() => setEdit({ source: urlValue, value: '' })}
+              className="absolute top-2 right-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-500"
+            >
+              <X size={16} />
+            </button>
+          ) : null
+        }
+      />
     </div>
   )
 }

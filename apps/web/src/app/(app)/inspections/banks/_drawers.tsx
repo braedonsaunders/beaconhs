@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Sub-entity drawer for the inspection banks list page:
 //   • new-bank → create a new inspection criteria bank
 //
@@ -54,6 +61,8 @@ function NewBankDrawer({
   closeHref: string
   action: CreateBankAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -63,10 +72,10 @@ function NewBankDrawer({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     const trimmed = name.trim()
     if (!trimmed) {
-      setError('Name is required.')
+      setError(tGenerated('m_1c66cb30434189'))
       return
     }
     startTransition(async () => {
@@ -80,7 +89,7 @@ function NewBankDrawer({
         router.push(`/inspections/banks/${res.id}?tab=criteria`)
         router.refresh()
       } else {
-        setError(res.error || 'Failed to create bank')
+        setError(tGeneratedValue(res.error || tGenerated('m_0b90bd492a4398')))
       }
     })
   }
@@ -89,8 +98,8 @@ function NewBankDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title="New inspection bank"
-      description="Reusable criteria template — drop one into a new inspection to skip rewriting the question list."
+      title={tGenerated('m_1263fc017a0994')}
+      description={tGenerated('m_08f3632c95611d')}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -100,48 +109,58 @@ function NewBankDrawer({
             onClick={() => router.push(closeHref)}
             disabled={pending}
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            Create bank
+            <GeneratedValue
+              value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            />
+            <GeneratedText id="m_0c650edf7eae2a" />
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="ib-name">Name *</Label>
+          <Label htmlFor="ib-name">
+            <GeneratedText id="m_1a9978900838e6" />
+          </Label>
           <Input
             id="ib-name"
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
-            placeholder="e.g. Site Daily Walk-Through"
+            placeholder={tGenerated('m_00a9c925dbf230')}
             required
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="ib-description">Description</Label>
+          <Label htmlFor="ib-description">
+            <GeneratedText id="m_14d923495cf14c" />
+          </Label>
           <Textarea
             id="ib-description"
             value={description}
             onChange={(e) => setDescription(e.currentTarget.value)}
             rows={3}
-            placeholder="When to use this bank, who it's for"
+            placeholder={tGenerated('m_00d5943f5e4611')}
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="ib-category">Category</Label>
+          <Label htmlFor="ib-category">
+            <GeneratedText id="m_108b41637f364f" />
+          </Label>
           <Select
             id="ib-category"
             value={category}
             onChange={(e) => setCategory(e.currentTarget.value)}
           >
-            {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
+            <GeneratedValue
+              value={CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  <GeneratedValue value={c.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
         <div className="flex items-center gap-2">
@@ -153,15 +172,19 @@ function NewBankDrawer({
             className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
           />
           <Label htmlFor="ib-published" className="!m-0 cursor-pointer">
-            Publish immediately (otherwise saved as draft)
+            <GeneratedText id="m_16b6226be68998" />
           </Label>
         </div>
 
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )

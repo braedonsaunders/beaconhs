@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
@@ -9,7 +11,10 @@ import { RemoteSelectField } from '@/components/remote-search-select'
 import { upsertVehicleLogEntry } from '../_service'
 import { normalizeVehicleLogEntryInput } from '../_entry-input'
 
-export const metadata = { title: 'New vehicle log entry' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1a9195530e3b90') }
+}
 export const dynamic = 'force-dynamic'
 
 async function createEntry(formData: FormData) {
@@ -38,6 +43,7 @@ export default async function NewTruckLogEntryPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const presetTruckId = pickString(sp.truckId) ?? ''
   const presetDate = pickString(sp.date) ?? new Date().toISOString().slice(0, 10)
@@ -58,85 +64,87 @@ export default async function NewTruckLogEntryPage({
       <div className="mx-auto max-w-2xl space-y-6">
         <DetailHeader
           back={{ href: '/equipment/vehicle-log', label: 'Back to vehicle log' }}
-          title="New vehicle log entry"
-          subtitle="One row per vehicle per day. Odometer in/out captures kilometres driven."
+          title={tGenerated('m_1a9195530e3b90')}
+          subtitle={tGenerated('m_090d8c607e4724')}
         />
         <Card>
           <CardContent className="pt-6">
             <form action={createEntry} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Vehicle" required>
+                <Field label={tGenerated('m_1b0bc0895e7f8b')} required>
                   <RemoteSelectField
                     name="equipmentItemId"
                     defaultValue={presetTruckId}
                     lookup="vehicle-equipment"
-                    placeholder="Select a vehicle…"
-                    searchPlaceholder="Search asset tag or vehicle…"
+                    placeholder={tGenerated('m_103f20f5e2c090')}
+                    searchPlaceholder={tGenerated('m_0baabbbb45a63c')}
                     sheetTitle="Select vehicle"
                     clearable={false}
                   />
                 </Field>
-                <Field label="Date" required>
+                <Field label={tGenerated('m_0285c38761c540')} required>
                   <Input name="entryDate" type="date" required defaultValue={initialDate} />
                 </Field>
-                <Field label="Driver" required>
+                <Field label={tGenerated('m_00385063252603')} required>
                   <RemoteSelectField
                     name="driverPersonId"
                     defaultValue=""
                     lookup="vehicle-drivers"
-                    placeholder="Select a driver…"
-                    searchPlaceholder="Search active drivers…"
+                    placeholder={tGenerated('m_16234056fc2934')}
+                    searchPlaceholder={tGenerated('m_1c51de60730f68')}
                     sheetTitle="Select driver"
                     clearable={false}
                   />
                 </Field>
-                <Field label="Customer / site">
+                <Field label={tGenerated('m_09ec32e549824e')}>
                   <RemoteSelectField
                     name="siteOrgUnitId"
                     defaultValue=""
                     lookup="vehicle-customers"
-                    placeholder="Select a customer…"
-                    searchPlaceholder="Search customers…"
+                    placeholder={tGenerated('m_0be0f471b00114')}
+                    searchPlaceholder={tGenerated('m_134f17a2074f34')}
                     sheetTitle="Select customer"
                     clearable
-                    emptyLabel="— None —"
+                    emptyLabel={tGenerated('m_0dd5f8a31ce3e1')}
                   />
                 </Field>
-                <Field label="Start odometer (km)">
+                <Field label={tGenerated('m_0cec84fec3b16f')}>
                   <Input name="startOdometer" type="number" min="0" max="2147483647" step="1" />
                 </Field>
-                <Field label="End odometer (km)">
+                <Field label={tGenerated('m_14beb2fa6adb50')}>
                   <Input name="endOdometer" type="number" min="0" max="2147483647" step="1" />
                 </Field>
-                <Field label="Hours on site">
+                <Field label={tGenerated('m_0c5fdf4fb3e86b')}>
                   <Input
                     name="hoursOnSite"
                     type="number"
                     min="0"
                     max="24"
                     step="0.25"
-                    placeholder="e.g. 8.5"
+                    placeholder={tGenerated('m_0d366c65426260')}
                   />
                 </Field>
-                <Field label="Crew count">
+                <Field label={tGenerated('m_0b59683e270c38')}>
                   <Input name="manpowerCount" type="number" min="0" max="100000" step="1" />
                 </Field>
               </div>
-              <Field label="Notes">
+              <Field label={tGenerated('m_0b8dadcb78cd08')}>
                 <Textarea
                   name="notes"
                   rows={3}
                   maxLength={5000}
-                  placeholder="Anything noteworthy for this trip or maintenance."
+                  placeholder={tGenerated('m_158b69cdcc49c0')}
                 />
               </Field>
               <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
                 <Link href="/equipment/vehicle-log">
                   <Button type="button" variant="outline">
-                    Cancel
+                    <GeneratedText id="m_112e2e8ecda428" />
                   </Button>
                 </Link>
-                <Button type="submit">Save entry</Button>
+                <Button type="submit">
+                  <GeneratedText id="m_0df68f8978fe0a" />
+                </Button>
               </div>
             </form>
           </CardContent>
@@ -160,10 +168,10 @@ function Field({
   return (
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label>
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        <GeneratedValue value={label} />
+        <GeneratedValue value={required ? <span className="text-red-600"> *</span> : null} />
       </Label>
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { and, eq, isNull, notInArray, or } from 'drizzle-orm'
 import { PageHeader } from '@beaconhs/ui'
 import { equipmentInspectionTypes, equipmentItems } from '@beaconhs/db/schema'
@@ -12,13 +13,17 @@ import { NewInspectionForm } from './_new-form'
 
 export const dynamic = 'force-dynamic'
 
-export const metadata = { title: 'Start equipment inspection · BeaconHS' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0ecd15b5b24dec') }
+}
 
 export default async function NewEquipmentInspectionPage({
   searchParams,
 }: {
   searchParams: Promise<{ typeId?: string; itemId?: string }>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const requested = await searchParams
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.inspect')
@@ -112,8 +117,8 @@ export default async function NewEquipmentInspectionPage({
     <PageContainer>
       <div className="space-y-5">
         <PageHeader
-          title="Start an inspection"
-          description="Pick the equipment and the inspection type. The checklist loads from the type."
+          title={tGenerated('m_1edf2b8e0e3013')}
+          description={tGenerated('m_13c82758d5f826')}
           back={{ href: '/equipment/inspections', label: 'Back to inspections' }}
         />
         <NewInspectionForm initialItem={initialItem} initialType={initialType} />

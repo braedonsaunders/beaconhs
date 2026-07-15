@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 import { useActionState } from 'react'
 import { Button } from '@beaconhs/ui'
 import { renameConnection, type RenameConnectionState } from '../_actions'
@@ -17,6 +19,7 @@ export function ConnectionNameForm({
   name: string
   status: string
 }) {
+  const tGenerated = useGeneratedTranslations()
   const [state, action, pending] = useActionState(renameConnection, INITIAL_STATE)
   const savedName = state.status === 'success' ? state.name : name
 
@@ -30,7 +33,7 @@ export function ConnectionNameForm({
           defaultValue={savedName}
           maxLength={INTEGRATION_CONNECTION_NAME_MAX_LENGTH}
           required
-          aria-label="Connection name"
+          aria-label={tGenerated('m_1637c1d2a998c9')}
           aria-describedby="connection-name-status"
           className="max-w-[16rem] min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-2xl font-semibold text-slate-900 hover:border-slate-200 focus:border-teal-400 focus:bg-white focus:outline-none dark:text-slate-100 dark:hover:border-slate-700 dark:focus:bg-slate-900"
         />
@@ -42,7 +45,15 @@ export function ConnectionNameForm({
           disabled={pending}
           className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
         >
-          {pending ? 'Saving…' : 'Save'}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_106811f2aac664" />
+              ) : (
+                <GeneratedText id="m_19e6bff894c3c7" />
+              )
+            }
+          />
         </Button>
       </div>
       <p
@@ -54,11 +65,17 @@ export function ConnectionNameForm({
             : 'text-emerald-600 dark:text-emerald-400'
         }`}
       >
-        {state.status === 'error'
-          ? state.error
-          : state.status === 'success'
-            ? 'Connection name saved.'
-            : '\u00a0'}
+        <GeneratedValue
+          value={
+            state.status === 'error' ? (
+              state.error
+            ) : state.status === 'success' ? (
+              <GeneratedText id="m_1d1f004f2df587" />
+            ) : (
+              '\u00a0'
+            )
+          }
+        />
       </p>
     </form>
   )

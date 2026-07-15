@@ -1,5 +1,13 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
+import { GeneratedText } from '@/i18n/generated'
+
 // Data-visibility scope picker for a role assignment. Mirrors the RoleScope
 // union: tenant-wide · specific sites · a department (departments/groups) ·
 // hand-picked people · crews · self. Multi-value scopes use a SearchSelect +
@@ -53,6 +61,8 @@ function MultiChipSelect({
   placeholder: string
   sheetTitle: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const available = useMemo(() => options.filter((o) => !value.includes(o.value)), [options, value])
   const chosen = value
     .map((v) => options.find((o) => o.value === v))
@@ -63,32 +73,40 @@ function MultiChipSelect({
         value=""
         onChange={(v) => v && onChange([...value, v])}
         options={available}
-        placeholder={placeholder}
-        searchPlaceholder={placeholder}
+        placeholder={tGeneratedValue(placeholder)}
+        searchPlaceholder={tGeneratedValue(placeholder)}
         sheetTitle={sheetTitle}
       />
-      {chosen.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {chosen.map((o) => (
-            <span
-              key={o.value}
-              className="inline-flex items-center gap-1 rounded-full bg-teal-50 py-1 pr-1 pl-2.5 text-xs font-medium text-teal-800 dark:bg-teal-950/50 dark:text-teal-300"
-            >
-              {o.label}
-              <button
-                type="button"
-                aria-label={`Remove ${o.label}`}
-                onClick={() => onChange(value.filter((v) => v !== o.value))}
-                className="rounded-full p-0.5 text-teal-600 hover:bg-teal-100 dark:hover:bg-teal-900"
-              >
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-        </div>
-      ) : (
-        <p className="text-xs text-slate-400 dark:text-slate-500">None selected yet.</p>
-      )}
+      <GeneratedValue
+        value={
+          chosen.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              <GeneratedValue
+                value={chosen.map((o) => (
+                  <span
+                    key={o.value}
+                    className="inline-flex items-center gap-1 rounded-full bg-teal-50 py-1 pr-1 pl-2.5 text-xs font-medium text-teal-800 dark:bg-teal-950/50 dark:text-teal-300"
+                  >
+                    <GeneratedValue value={o.label} />
+                    <button
+                      type="button"
+                      aria-label={tGenerated('m_101f98a70352fa', { value0: o.label })}
+                      onClick={() => onChange(value.filter((v) => v !== o.value))}
+                      className="rounded-full p-0.5 text-teal-600 hover:bg-teal-100 dark:hover:bg-teal-900"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              />
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              <GeneratedText id="m_06cfd9380291af" />
+            </p>
+          )
+        }
+      />
     </div>
   )
 }
@@ -110,6 +128,7 @@ export function ScopePicker({
   groups: ScopeOption[]
   people: ScopeOption[]
 }) {
+  const tGenerated = useGeneratedTranslations()
   const [type, setType] = useState<ScopeType>(defaultScope?.type ?? 'self')
   const [siteIds, setSiteIds] = useState<string[]>(
     defaultScope?.type === 'sites' ? defaultScope.siteIds : [],
@@ -150,68 +169,100 @@ export function ScopePicker({
     <div className="space-y-3">
       <input type="hidden" name={name} value={JSON.stringify(scope)} />
       <div className="space-y-1.5">
-        <Label>Data scope</Label>
+        <Label>
+          <GeneratedText id="m_1e9292e2d1eeca" />
+        </Label>
         <Select value={type} onChange={(e) => setType(e.target.value as ScopeType)}>
-          {TYPE_OPTIONS.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
+          <GeneratedValue
+            value={TYPE_OPTIONS.map((t) => (
+              <option key={t.value} value={t.value}>
+                <GeneratedValue value={t.label} />
+              </option>
+            ))}
+          />
         </Select>
-        {help ? <p className="text-xs text-slate-500 dark:text-slate-400">{help}</p> : null}
+        <GeneratedValue
+          value={
+            help ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <GeneratedValue value={help} />
+              </p>
+            ) : null
+          }
+        />
       </div>
 
-      {type === 'sites' ? (
-        <MultiChipSelect
-          options={sites}
-          value={siteIds}
-          onChange={setSiteIds}
-          placeholder="Add a site…"
-          sheetTitle="Select sites"
-        />
-      ) : null}
-      {type === 'crews' ? (
-        <MultiChipSelect
-          options={crews}
-          value={crewIds}
-          onChange={setCrewIds}
-          placeholder="Add a crew…"
-          sheetTitle="Select crews"
-        />
-      ) : null}
-      {type === 'people' ? (
-        <MultiChipSelect
-          options={people}
-          value={personIds}
-          onChange={setPersonIds}
-          placeholder="Add a person…"
-          sheetTitle="Select people"
-        />
-      ) : null}
-      {type === 'team' ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>Departments</Label>
+      <GeneratedValue
+        value={
+          type === 'sites' ? (
             <MultiChipSelect
-              options={departments}
-              value={departmentIds}
-              onChange={setDepartmentIds}
-              placeholder="Add a department…"
-              sheetTitle="Select departments"
+              options={sites}
+              value={siteIds}
+              onChange={setSiteIds}
+              placeholder={tGenerated('m_11118293bef568')}
+              sheetTitle="Select sites"
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Groups</Label>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          type === 'crews' ? (
             <MultiChipSelect
-              options={groups}
-              value={groupIds}
-              onChange={setGroupIds}
-              placeholder="Add a group…"
-              sheetTitle="Select groups"
+              options={crews}
+              value={crewIds}
+              onChange={setCrewIds}
+              placeholder={tGenerated('m_196c111924cfeb')}
+              sheetTitle="Select crews"
             />
-          </div>
-        </div>
-      ) : null}
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          type === 'people' ? (
+            <MultiChipSelect
+              options={people}
+              value={personIds}
+              onChange={setPersonIds}
+              placeholder={tGenerated('m_04e9474a19cf4c')}
+              sheetTitle="Select people"
+            />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          type === 'team' ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_08416151d62d16" />
+                </Label>
+                <MultiChipSelect
+                  options={departments}
+                  value={departmentIds}
+                  onChange={setDepartmentIds}
+                  placeholder={tGenerated('m_083b0c3d76b76d')}
+                  sheetTitle="Select departments"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_1668000fa2a811" />
+                </Label>
+                <MultiChipSelect
+                  options={groups}
+                  value={groupIds}
+                  onChange={setGroupIds}
+                  placeholder={tGenerated('m_059b16f0ac25bf')}
+                  sheetTitle="Select groups"
+                />
+              </div>
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }

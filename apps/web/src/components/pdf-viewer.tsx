@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // App-themed PDF viewer (pdf.js) — replaces browser-native <iframe> PDF
 // rendering so the chrome follows the app's light/dark theme instead of the
 // browser's grey viewer. Pages render lazily (IntersectionObserver) onto
@@ -95,6 +97,7 @@ function PdfPage({
 }
 
 export function PdfViewer({ url, className }: { url: string; className?: string }) {
+  const tGenerated = useGeneratedTranslations()
   const [resource, setResource] = useState<{
     url: string
     doc: PDFDocumentProxy | null
@@ -151,21 +154,34 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
     <div className={cn('flex min-h-0 flex-col', className)}>
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
         <span className="tabular-nums">
-          {doc ? `Page ${currentPage} of ${doc.numPages}` : 'Loading…'}
+          <GeneratedValue
+            value={
+              doc ? (
+                <GeneratedText
+                  id="m_082902b0a0cd79"
+                  values={{ value0: currentPage, value1: doc.numPages }}
+                />
+              ) : (
+                <GeneratedText id="m_0e65697ec32c03" />
+              )
+            }
+          />
         </span>
         <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
-            aria-label="Zoom out"
+            aria-label={tGenerated('m_00a262469a10eb')}
             className="grid h-6 w-6 place-items-center rounded hover:bg-slate-100 dark:hover:bg-slate-800"
             onClick={() => setZoom((z) => ZOOMS[Math.max(0, ZOOMS.indexOf(z) - 1)] ?? z)}
           >
             <Minus size={12} />
           </button>
-          <span className="w-10 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
+          <span className="w-10 text-center tabular-nums">
+            <GeneratedValue value={Math.round(zoom * 100)} />%
+          </span>
           <button
             type="button"
-            aria-label="Zoom in"
+            aria-label={tGenerated('m_12713157ff4ed0')}
             className="grid h-6 w-6 place-items-center rounded hover:bg-slate-100 dark:hover:bg-slate-800"
             onClick={() =>
               setZoom((z) => ZOOMS[Math.min(ZOOMS.length - 1, ZOOMS.indexOf(z) + 1)] ?? z)
@@ -179,27 +195,33 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
         ref={scrollRef}
         className="app-scroll min-h-0 flex-1 overflow-auto bg-slate-100 dark:bg-slate-950"
       >
-        {error ? (
-          <div className="flex h-full items-center justify-center p-6 text-sm text-rose-600 dark:text-rose-400">
-            {error}
-          </div>
-        ) : !doc ? (
-          <div className="flex h-full items-center justify-center">
-            <Loader2 size={20} className="animate-spin text-slate-400" />
-          </div>
-        ) : (
-          <div className="space-y-4 px-6 py-6">
-            {Array.from({ length: doc.numPages }, (_, i) => (
-              <PdfPage
-                key={i + 1}
-                doc={doc}
-                pageNumber={i + 1}
-                width={width}
-                onVisible={onVisible}
-              />
-            ))}
-          </div>
-        )}
+        <GeneratedValue
+          value={
+            error ? (
+              <div className="flex h-full items-center justify-center p-6 text-sm text-rose-600 dark:text-rose-400">
+                <GeneratedValue value={error} />
+              </div>
+            ) : !doc ? (
+              <div className="flex h-full items-center justify-center">
+                <Loader2 size={20} className="animate-spin text-slate-400" />
+              </div>
+            ) : (
+              <div className="space-y-4 px-6 py-6">
+                <GeneratedValue
+                  value={Array.from({ length: doc.numPages }, (_, i) => (
+                    <PdfPage
+                      key={i + 1}
+                      doc={doc}
+                      pageNumber={i + 1}
+                      width={width}
+                      onVisible={onVisible}
+                    />
+                  ))}
+                />
+              </div>
+            )
+          }
+        />
       </div>
     </div>
   )

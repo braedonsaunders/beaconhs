@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useMemo, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
@@ -17,6 +24,8 @@ export function BulkPpeBar({
   selectedIds: string[]
   onClear: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [action, setAction] = useState<'issue' | 'discard' | 'export'>('issue')
@@ -35,11 +44,11 @@ export function BulkPpeBar({
   if (selectedIds.length === 0 || !mounted) return null
 
   async function go() {
-    setError(null)
+    setError(tGeneratedValue(null))
     setInfo(null)
     if (action === 'issue') {
       if (!personId) {
-        setError('Pick a holder.')
+        setError(tGenerated('m_03a718e0795f65'))
         return
       }
       start(async () => {
@@ -48,7 +57,7 @@ export function BulkPpeBar({
           personId,
         })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
         setInfo(`Issued ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
@@ -71,7 +80,7 @@ export function BulkPpeBar({
           reason: reason.trim() || null,
         })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
         setInfo(`Discarded ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
@@ -84,7 +93,7 @@ export function BulkPpeBar({
     start(async () => {
       const res = await bulkExportPpeCsv({ ppeItemIds: selectedIds })
       if (!res.ok) {
-        setError(res.error)
+        setError(tGeneratedValue(res.error))
         return
       }
       const blob = new Blob([res.content], { type: 'text/csv;charset=utf-8' })
@@ -108,12 +117,14 @@ export function BulkPpeBar({
         <button
           type="button"
           onClick={onClear}
-          aria-label="Clear selection"
+          aria-label={tGenerated('m_1013583a7c0e28')}
           className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <X size={14} />
         </button>
-        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
+        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+          <GeneratedValue value={label} />
+        </span>
 
         <Select
           value={action}
@@ -121,55 +132,87 @@ export function BulkPpeBar({
           className="h-8 min-w-[10rem]"
           disabled={pending}
         >
-          <option value="issue">Issue to person</option>
-          <option value="discard">Discard</option>
-          <option value="export">Export selected to CSV</option>
+          <option value="issue">
+            <GeneratedText id="m_10b50a35e0953a" />
+          </option>
+          <option value="discard">
+            <GeneratedText id="m_056c8c15d77140" />
+          </option>
+          <option value="export">
+            <GeneratedText id="m_1d9f291cfeb56f" />
+          </option>
         </Select>
 
-        {action === 'issue' ? (
-          <div className="flex items-center gap-2">
-            <HandHelping size={14} className="text-slate-500" />
-            <RemoteSearchSelect
-              lookup="ppe-active-people"
-              value={personId}
-              onChange={setPersonId}
-              placeholder="Pick holder…"
-              className="h-8 min-w-[14rem]"
-              disabled={pending}
-            />
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            action === 'issue' ? (
+              <div className="flex items-center gap-2">
+                <HandHelping size={14} className="text-slate-500" />
+                <RemoteSearchSelect
+                  lookup="ppe-active-people"
+                  value={personId}
+                  onChange={setPersonId}
+                  placeholder={tGenerated('m_152d48ab44e3a0')}
+                  className="h-8 min-w-[14rem]"
+                  disabled={pending}
+                />
+              </div>
+            ) : null
+          }
+        />
 
-        {action === 'discard' ? (
-          <input
-            type="text"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason (optional)"
-            className="h-8 w-48 rounded-md border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
-            disabled={pending}
-          />
-        ) : null}
+        <GeneratedValue
+          value={
+            action === 'discard' ? (
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={tGenerated('m_1d2f68230e66e9')}
+                className="h-8 w-48 rounded-md border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
+                disabled={pending}
+              />
+            ) : null
+          }
+        />
 
         <Button size="sm" onClick={go} disabled={pending}>
-          {pending ? (
-            'Working…'
-          ) : action === 'discard' ? (
-            <span className="inline-flex items-center gap-1">
-              <Trash2 size={14} /> Discard
-            </span>
-          ) : action === 'export' ? (
-            <span className="inline-flex items-center gap-1">
-              <Download size={14} /> Export
-            </span>
-          ) : (
-            'Issue'
-          )}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_09001dc89c0edf" />
+              ) : action === 'discard' ? (
+                <span className="inline-flex items-center gap-1">
+                  <Trash2 size={14} /> <GeneratedText id="m_056c8c15d77140" />
+                </span>
+              ) : action === 'export' ? (
+                <span className="inline-flex items-center gap-1">
+                  <Download size={14} /> <GeneratedText id="m_01edcd3d04ad91" />
+                </span>
+              ) : (
+                <GeneratedText id="m_12ac7fffa3512c" />
+              )
+            }
+          />
         </Button>
-        {error ? <span className="text-xs text-red-600 dark:text-red-400">{error}</span> : null}
-        {info ? (
-          <span className="text-xs text-emerald-700 dark:text-emerald-400">{info}</span>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <span className="text-xs text-red-600 dark:text-red-400">
+                <GeneratedValue value={error} />
+              </span>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            info ? (
+              <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                <GeneratedValue value={info} />
+              </span>
+            ) : null
+          }
+        />
       </div>
     </div>,
     document.body,

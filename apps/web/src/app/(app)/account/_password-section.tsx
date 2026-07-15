@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 import { useActionState, useState, useTransition } from 'react'
 import { Alert, AlertDescription, Button, Input, Label } from '@beaconhs/ui'
 import { changePassword, sendPasswordResetEmail } from './actions'
@@ -15,16 +17,29 @@ export function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
     return (
       <div className="space-y-3">
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          You currently sign in with magic links. We can email you a secure link to set a password —
-          then you can also sign in with your email and password.
+          <GeneratedText id="m_069f90c4d821de" />
         </p>
-        {linkState?.ok ? (
-          <Alert variant="success">
-            <AlertDescription>Check your email for a link to set your password.</AlertDescription>
-          </Alert>
-        ) : null}
+        <GeneratedValue
+          value={
+            linkState?.ok ? (
+              <Alert variant="success">
+                <AlertDescription>
+                  <GeneratedText id="m_19245d9071a802" />
+                </AlertDescription>
+              </Alert>
+            ) : null
+          }
+        />
         <Button type="button" variant="outline" onClick={sendLink} disabled={sending}>
-          {sending ? 'Sending…' : 'Email me a link to set a password'}
+          <GeneratedValue
+            value={
+              sending ? (
+                <GeneratedText id="m_0b6d87e6c6b163" />
+              ) : (
+                <GeneratedText id="m_0439baea415d12" />
+              )
+            }
+          />
         </Button>
       </div>
     )
@@ -49,7 +64,9 @@ function ChangePasswordForm({
   return (
     <form action={action} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="cur-pw">Current password</Label>
+        <Label htmlFor="cur-pw">
+          <GeneratedText id="m_0484cae84d33da" />
+        </Label>
         <Input
           id="cur-pw"
           name="currentPassword"
@@ -60,7 +77,9 @@ function ChangePasswordForm({
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="new-pw">New password</Label>
+          <Label htmlFor="new-pw">
+            <GeneratedText id="m_14dee08e358316" />
+          </Label>
           <Input
             id="new-pw"
             name="newPassword"
@@ -71,7 +90,9 @@ function ChangePasswordForm({
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="conf-pw">Confirm new password</Label>
+          <Label htmlFor="conf-pw">
+            <GeneratedText id="m_0c3d6534423493" />
+          </Label>
           <Input
             id="conf-pw"
             name="confirmPassword"
@@ -90,36 +111,71 @@ function ChangePasswordForm({
             name="revokeOther"
             className="h-4 w-4 rounded border-slate-300 accent-teal-600 dark:border-slate-600"
           />
-          Sign out other devices
+          <GeneratedText id="m_1cda7d619d3b0c" />
         </label>
         <button
           type="button"
           onClick={() => setShow((s) => !s)}
           className="text-xs text-slate-600 hover:underline dark:text-slate-300"
         >
-          {show ? 'Hide' : 'Show'} passwords
+          <GeneratedValue
+            value={
+              show ? (
+                <GeneratedText id="m_1b0073432893f9" />
+              ) : (
+                <GeneratedText id="m_00fbddc6309531" />
+              )
+            }
+          />{' '}
+          <GeneratedText id="m_159e71287b4848" />
         </button>
       </div>
 
-      {state?.error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
-        </Alert>
-      ) : null}
-      {state?.ok ? (
-        <Alert variant="success">
-          <AlertDescription>Password changed.</AlertDescription>
-        </Alert>
-      ) : null}
-      {linkState?.ok ? (
-        <Alert variant="success">
-          <AlertDescription>Check your email for a password reset link.</AlertDescription>
-        </Alert>
-      ) : null}
+      <GeneratedValue
+        value={
+          state?.error ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                <GeneratedValue value={state.error} />
+              </AlertDescription>
+            </Alert>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          state?.ok ? (
+            <Alert variant="success">
+              <AlertDescription>
+                <GeneratedText id="m_128c974fabfad3" />
+              </AlertDescription>
+            </Alert>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          linkState?.ok ? (
+            <Alert variant="success">
+              <AlertDescription>
+                <GeneratedText id="m_06ce91cdfb26f6" />
+              </AlertDescription>
+            </Alert>
+          ) : null
+        }
+      />
 
       <div className="flex items-center gap-4">
         <Button type="submit" disabled={pending}>
-          {pending ? 'Updating…' : 'Change password'}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_10d776f0c7968c" />
+              ) : (
+                <GeneratedText id="m_0b61c296fd9fcb" />
+              )
+            }
+          />
         </Button>
         <button
           type="button"
@@ -127,7 +183,15 @@ function ChangePasswordForm({
           disabled={sending}
           className="text-xs text-teal-700 hover:underline disabled:opacity-60 dark:text-teal-300"
         >
-          {sending ? 'Sending…' : 'Forgot current password?'}
+          <GeneratedValue
+            value={
+              sending ? (
+                <GeneratedText id="m_0b6d87e6c6b163" />
+              ) : (
+                <GeneratedText id="m_14f70bf1b56f13" />
+              )
+            }
+          />
         </button>
       </div>
     </form>

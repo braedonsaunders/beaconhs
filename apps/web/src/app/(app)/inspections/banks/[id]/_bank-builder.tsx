@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // Inspection BANK builder — same 1/3-2/3 shell + drag list as the type builder,
 // but flat (a bank is just a reusable pool of criteria that types import from).
 
@@ -80,26 +82,39 @@ export function InspectionBankBuilder({
       renderCriterion={(criterion) => (
         <>
           <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-            {criterion.text}
+            <GeneratedValue value={criterion.text} />
           </span>
           <span className="hidden shrink-0 text-[11px] text-slate-400 sm:inline">
-            {RESPONSE_LABELS[criterion.responseType]}
+            <GeneratedValue value={RESPONSE_LABELS[criterion.responseType]} />
           </span>
-          {criterion.responseType === 'choice' ? (
-            <Badge variant="outline" className="text-[10px]">
-              {criterion.choiceOptions.length} options
-            </Badge>
-          ) : null}
-          {criterion.requiresPhoto ? (
-            <Badge variant="outline" className="text-[10px]">
-              photo
-            </Badge>
-          ) : null}
-          {criterion.requiresComment ? (
-            <Badge variant="outline" className="text-[10px]">
-              comment
-            </Badge>
-          ) : null}
+          <GeneratedValue
+            value={
+              criterion.responseType === 'choice' ? (
+                <Badge variant="outline" className="text-[10px]">
+                  <GeneratedValue value={criterion.choiceOptions.length} />{' '}
+                  <GeneratedText id="m_13be14e62f47a1" />
+                </Badge>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              criterion.requiresPhoto ? (
+                <Badge variant="outline" className="text-[10px]">
+                  <GeneratedText id="m_07cb1cfb72cff4" />
+                </Badge>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              criterion.requiresComment ? (
+                <Badge variant="outline" className="text-[10px]">
+                  <GeneratedText id="m_05b9f700b46533" />
+                </Badge>
+              ) : null
+            }
+          />
         </>
       )}
       renderEditor={(props) => (

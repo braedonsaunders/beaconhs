@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import {
   Badge,
@@ -27,7 +30,10 @@ import { loadObligationFormOptions } from '../_form-options'
 import { ObligationDetailActions } from './_detail-actions'
 import { ObligationEditDrawer, type ObligationEditData } from './_edit-drawer'
 
-export const metadata = { title: 'Obligation' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_186a52fb889daf') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['subject', 'status', 'due', 'completed', 'count'] as const
@@ -46,6 +52,8 @@ export default async function ObligationDetailPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -159,10 +167,12 @@ export default async function ObligationDetailPage({
       <div className="space-y-6">
         <DetailHeader
           back={{ href: '/compliance/obligations', label: 'Back to obligations' }}
-          title={ob.title}
-          subtitle={`${kindLabel(ob.sourceModule)} · ${cadenceLabel(ob.recurrence)}${
-            ob.subjectKind === 'per_person' ? ` · ${audienceLabel}` : ''
-          }`}
+          title={tGeneratedValue(ob.title)}
+          subtitle={tGeneratedValue(
+            `${kindLabel(ob.sourceModule)} · ${cadenceLabel(ob.recurrence)}${
+              ob.subjectKind === 'per_person' ? ` · ${audienceLabel}` : ''
+            }`,
+          )}
           actions={
             <ObligationDetailActions
               id={ob.id}
@@ -175,23 +185,49 @@ export default async function ObligationDetailPage({
         />
 
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">{kindLabel(ob.sourceModule)}</Badge>
+          <Badge variant="secondary">
+            <GeneratedValue value={kindLabel(ob.sourceModule)} />
+          </Badge>
           <Badge variant={ob.status === 'active' ? 'success' : 'secondary'}>
-            {ob.status === 'active' ? 'Active' : ob.status === 'paused' ? 'Disabled' : ob.status}
+            <GeneratedValue
+              value={
+                ob.status === 'active' ? (
+                  <GeneratedText id="m_1e1b1fdb7dd78e" />
+                ) : ob.status === 'paused' ? (
+                  <GeneratedText id="m_0ea7ffe3f671e7" />
+                ) : (
+                  ob.status
+                )
+              }
+            />
           </Badge>
         </div>
 
-        {ob.notes ? <p className="text-sm text-slate-600 dark:text-slate-400">{ob.notes}</p> : null}
+        <GeneratedValue
+          value={
+            ob.notes ? (
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                <GeneratedValue value={ob.notes} />
+              </p>
+            ) : null
+          }
+        />
 
-        <SummaryStrip percent={result.percent} totals={result.totals} title="Compliance" />
+        <SummaryStrip
+          percent={result.percent}
+          totals={result.totals}
+          title={tGenerated('m_096d47f60747b3')}
+        />
 
         <TableToolbar>
-          <SearchInput placeholder={`Search ${subjectNoun.toLowerCase()}s…`} />
+          <SearchInput
+            placeholder={tGenerated('m_13a874065f07f8', { value0: subjectNoun.toLowerCase() })}
+          />
           <FilterChips
             basePath={basePath}
             currentParams={sp}
             paramKey="status"
-            label="Status"
+            label={tGenerated('m_0b9da892d6faf0')}
             options={STATUS_OPTIONS.map((option) => ({
               ...option,
               count: statusCounts[option.value] ?? 0,
@@ -199,100 +235,124 @@ export default async function ObligationDetailPage({
           />
         </TableToolbar>
 
-        {rows.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
-            {result.rows.length === 0
-              ? 'No subjects resolved for this obligation.'
-              : 'No subjects match the search or status filter.'}
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">#</TableHead>
-                <SortableTh
-                  basePath={basePath}
-                  currentParams={sp}
-                  dir={listParams.dir}
-                  column="subject"
-                  active={listParams.sort === 'subject'}
-                >
-                  {subjectNoun}
-                </SortableTh>
-                <SortableTh
-                  basePath={basePath}
-                  currentParams={sp}
-                  dir={listParams.dir}
-                  column="status"
-                  active={listParams.sort === 'status'}
-                >
-                  Status
-                </SortableTh>
-                <SortableTh
-                  basePath={basePath}
-                  currentParams={sp}
-                  dir={listParams.dir}
-                  column="due"
-                  active={listParams.sort === 'due'}
-                >
-                  Due
-                </SortableTh>
-                <SortableTh
-                  basePath={basePath}
-                  currentParams={sp}
-                  dir={listParams.dir}
-                  column="completed"
-                  active={listParams.sort === 'completed'}
-                >
-                  Completed
-                </SortableTh>
-                {hasCounts ? (
-                  <>
+        <GeneratedValue
+          value={
+            rows.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
+                <GeneratedValue
+                  value={
+                    result.rows.length === 0 ? (
+                      <GeneratedText id="m_0d2196aaf22a7a" />
+                    ) : (
+                      <GeneratedText id="m_10b5c83a6fc1d9" />
+                    )
+                  }
+                />
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">#</TableHead>
                     <SortableTh
                       basePath={basePath}
                       currentParams={sp}
                       dir={listParams.dir}
-                      column="count"
-                      active={listParams.sort === 'count'}
+                      column="subject"
+                      active={listParams.sort === 'subject'}
                     >
-                      Count
+                      <GeneratedValue value={subjectNoun} />
                     </SortableTh>
-                    <TableHead>Expected</TableHead>
-                  </>
-                ) : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r, i) => (
-                <TableRow key={r.key}>
-                  <TableCell className="text-slate-500 dark:text-slate-400">
-                    {(page - 1) * listParams.perPage + i + 1}
-                  </TableCell>
-                  <TableCell className="text-slate-900 dark:text-slate-100">{r.label}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={r.status} />
-                  </TableCell>
-                  <TableCell className="text-slate-700 dark:text-slate-300">
-                    {r.dueOn ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-slate-700 dark:text-slate-300">
-                    {r.completedOn ?? '—'}
-                  </TableCell>
-                  {hasCounts ? (
-                    <>
-                      <TableCell className="text-slate-700 dark:text-slate-300">
-                        {r.count ?? '—'}
-                      </TableCell>
-                      <TableCell className="text-slate-700 dark:text-slate-300">
-                        {r.expected ?? '—'}
-                      </TableCell>
-                    </>
-                  ) : null}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+                    <SortableTh
+                      basePath={basePath}
+                      currentParams={sp}
+                      dir={listParams.dir}
+                      column="status"
+                      active={listParams.sort === 'status'}
+                    >
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath={basePath}
+                      currentParams={sp}
+                      dir={listParams.dir}
+                      column="due"
+                      active={listParams.sort === 'due'}
+                    >
+                      <GeneratedText id="m_0c2eb92551e08b" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath={basePath}
+                      currentParams={sp}
+                      dir={listParams.dir}
+                      column="completed"
+                      active={listParams.sort === 'completed'}
+                    >
+                      <GeneratedText id="m_0ba7a5e1b2fa32" />
+                    </SortableTh>
+                    <GeneratedValue
+                      value={
+                        hasCounts ? (
+                          <>
+                            <SortableTh
+                              basePath={basePath}
+                              currentParams={sp}
+                              dir={listParams.dir}
+                              column="count"
+                              active={listParams.sort === 'count'}
+                            >
+                              <GeneratedText id="m_1842bc939bfcba" />
+                            </SortableTh>
+                            <TableHead>
+                              <GeneratedText id="m_177b0d9a8ef383" />
+                            </TableHead>
+                          </>
+                        ) : null
+                      }
+                    />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((r, i) => (
+                      <TableRow key={r.key}>
+                        <TableCell className="text-slate-500 dark:text-slate-400">
+                          <GeneratedValue value={(page - 1) * listParams.perPage + i + 1} />
+                        </TableCell>
+                        <TableCell className="text-slate-900 dark:text-slate-100">
+                          <GeneratedValue value={r.label} />
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={r.status} />
+                        </TableCell>
+                        <TableCell className="text-slate-700 dark:text-slate-300">
+                          <GeneratedValue value={r.dueOn ?? '—'} />
+                        </TableCell>
+                        <TableCell className="text-slate-700 dark:text-slate-300">
+                          <GeneratedValue value={r.completedOn ?? '—'} />
+                        </TableCell>
+                        <GeneratedValue
+                          value={
+                            hasCounts ? (
+                              <>
+                                <TableCell className="text-slate-700 dark:text-slate-300">
+                                  <GeneratedValue value={r.count ?? '—'} />
+                                </TableCell>
+                                <TableCell className="text-slate-700 dark:text-slate-300">
+                                  <GeneratedValue value={r.expected ?? '—'} />
+                                </TableCell>
+                              </>
+                            ) : null
+                          }
+                        />
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+            )
+          }
+        />
 
         <Pagination
           basePath={basePath}

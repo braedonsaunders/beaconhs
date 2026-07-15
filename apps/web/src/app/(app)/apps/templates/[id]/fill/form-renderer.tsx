@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Form filler runtime.
 //
 // Features:
@@ -248,6 +255,8 @@ export function FormRenderer({
   // parent page owns all chrome. `initialResponseId` is always present here.
   inlineAutosave?: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const locale = useLocale()
   // Per-step progress so users can click back into completed steps.
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
@@ -476,9 +485,9 @@ export function FormRenderer({
   // understands they're not on a fresh form.
   useEffect(() => {
     if (isResumed) {
-      toast.success('Draft restored — pick up where you left off')
+      toast.success(tGenerated('m_0bae7689763970'))
     }
-  }, [isResumed])
+  }, [isResumed, tGenerated])
 
   // Tick "Saved Xs ago" every 5s once a save has happened so the label
   // stays current without re-saving.
@@ -817,7 +826,7 @@ export function FormRenderer({
     if (result === false) {
       // persistDraft already set saveStatus/saveError; show a toast so the
       // user knows their navigation succeeded but the save lagged.
-      toast.error('Could not save before navigation — will retry')
+      toast.error(tGenerated('m_1d8a295c4b1d4b'))
     }
   }
 
@@ -825,7 +834,9 @@ export function FormRenderer({
     const errs = validateCurrentStep()
     if (errs.size > 0) {
       setErrors(errs)
-      toast.error(`Fix ${errs.size} issue${errs.size === 1 ? '' : 's'} before continuing`)
+      toast.error(
+        tGenerated('m_051735b7305b06', { value0: errs.size, value1: errs.size === 1 ? '' : 's' }),
+      )
       return
     }
     setErrors(new Map())
@@ -907,16 +918,16 @@ export function FormRenderer({
       if (!res.ok) {
         if (res.errors) {
           setErrors(new Map(res.errors.map((e) => [e.fieldId, e.message])))
-          toast.error('Submit failed — see field errors')
+          toast.error(tGenerated('m_182296d9886284'))
         } else {
           setServerError('Submit failed')
-          toast.error('Submit failed')
+          toast.error(tGenerated('m_051fb158550e48'))
         }
       } else {
         // Clear dirty so the unload-handler doesn't try to overwrite our
         // freshly-submitted row with a stale draft payload.
         setDraftEditState((current) => (current.dirty ? { ...current, dirty: false } : current))
-        toast.success('Form submitted')
+        toast.success(tGenerated('m_1de0dacba80c75'))
       }
       // ok-path navigates via server redirect.
     })
@@ -968,101 +979,114 @@ export function FormRenderer({
       <FillReadOnlyContext.Provider value={readOnly}>
         <OrgUnitOptionsCacheContext.Provider value={orgUnitOptionsCache}>
           <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
-            {inlineTabbed ? (
-              <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
-                {appTabs.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setActiveTabId(t.id)}
-                    className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                      t.id === activeTabId
-                        ? 'border-teal-600 bg-teal-600 text-white'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-                    }`}
-                  >
-                    {localizeText(t.title, locale, t.id)}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {inlineSections.map((sec) => {
-              if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
-              return (
-                <Section
-                  key={sec.id}
-                  title={localizeText(sec.title, locale, sec.id)}
-                  subtitle={
-                    localizeText(
-                      sec.description,
-                      locale,
-                      sec.repeating ? 'Repeatable section' : '',
-                    ) || undefined
-                  }
-                >
-                  <div className="space-y-4">
-                    {sec.repeating ? (
-                      <RepeatingSection
-                        section={sec}
-                        rows={rowsByStep[sec.id] ?? []}
-                        onAdd={() => {
-                          addRow(sec)
-                          // addRow mutates state async; persist the resulting array.
-                          const existing = rowsByStep[sec.id] ?? []
-                          if (sec.maxRows !== undefined && existing.length >= sec.maxRows) return
-                          const next: Record<string, unknown> = {}
-                          for (const f of sec.fields) {
-                            if (!f.defaultValue) continue
-                            const dv = resolveDefaultValue(
-                              f.defaultValue as DefaultValueExpression,
-                              evalCtx,
-                            )
-                            if (dv !== undefined && dv !== null) next[f.id] = dv
-                          }
-                          void saveArray(sec.id, [...existing, next])
-                        }}
-                        onRemove={(i) => {
-                          removeRow(sec, i)
-                          const arr = (rowsByStep[sec.id] ?? []).filter((_, idx) => idx !== i)
-                          void saveArray(sec.id, arr)
-                        }}
-                        onUpdate={(i, patch) => {
-                          updateRow(sec, i, patch)
-                          const arr = (rowsByStep[sec.id] ?? []).map((r, idx) =>
-                            idx === i ? { ...r, ...patch } : r,
-                          )
-                          void saveArray(sec.id, arr)
-                        }}
-                        people={people}
-                        evalCtx={evalCtx}
-                        errors={errors}
-                        sectionError={errors.get(`__section_${sec.id}`) ?? null}
-                      />
-                    ) : (
-                      sec.fields.map((f) => {
-                        if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
-                        return (
-                          <InlineFieldRow
-                            key={f.id}
-                            field={f}
-                            value={values[f.id]}
-                            onChange={(v) => setValue(f.id, v)}
-                            onSetFieldValue={setValue}
-                            error={errors.get(f.id)}
-                            people={people}
-                            evalCtx={evalCtx}
-                            loading={pickerLoading.has(f.id)}
-                            readOnly={readOnly}
-                            saveField={saveField}
-                            saveArray={saveArray}
-                          />
-                        )
-                      })
-                    )}
+            <GeneratedValue
+              value={
+                inlineTabbed ? (
+                  <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
+                    <GeneratedValue
+                      value={appTabs.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setActiveTabId(t.id)}
+                          className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                            t.id === activeTabId
+                              ? 'border-teal-600 bg-teal-600 text-white'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                          }`}
+                        >
+                          <GeneratedValue value={localizeText(t.title, locale, t.id)} />
+                        </button>
+                      ))}
+                    />
                   </div>
-                </Section>
-              )
-            })}
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={inlineSections.map((sec) => {
+                if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+                return (
+                  <Section
+                    key={sec.id}
+                    title={tGeneratedValue(localizeText(sec.title, locale, sec.id))}
+                    subtitle={tGeneratedValue(
+                      localizeText(
+                        sec.description,
+                        locale,
+                        sec.repeating ? 'Repeatable section' : '',
+                      ) || undefined,
+                    )}
+                  >
+                    <div className="space-y-4">
+                      <GeneratedValue
+                        value={
+                          sec.repeating ? (
+                            <RepeatingSection
+                              section={sec}
+                              rows={rowsByStep[sec.id] ?? []}
+                              onAdd={() => {
+                                addRow(sec)
+                                // addRow mutates state async; persist the resulting array.
+                                const existing = rowsByStep[sec.id] ?? []
+                                if (sec.maxRows !== undefined && existing.length >= sec.maxRows)
+                                  return
+                                const next: Record<string, unknown> = {}
+                                for (const f of sec.fields) {
+                                  if (!f.defaultValue) continue
+                                  const dv = resolveDefaultValue(
+                                    f.defaultValue as DefaultValueExpression,
+                                    evalCtx,
+                                  )
+                                  if (dv !== undefined && dv !== null) next[f.id] = dv
+                                }
+                                void saveArray(sec.id, [...existing, next])
+                              }}
+                              onRemove={(i) => {
+                                removeRow(sec, i)
+                                const arr = (rowsByStep[sec.id] ?? []).filter((_, idx) => idx !== i)
+                                void saveArray(sec.id, arr)
+                              }}
+                              onUpdate={(i, patch) => {
+                                updateRow(sec, i, patch)
+                                const arr = (rowsByStep[sec.id] ?? []).map((r, idx) =>
+                                  idx === i ? { ...r, ...patch } : r,
+                                )
+                                void saveArray(sec.id, arr)
+                              }}
+                              people={people}
+                              evalCtx={evalCtx}
+                              errors={errors}
+                              sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                            />
+                          ) : (
+                            sec.fields.map((f) => {
+                              if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
+                              return (
+                                <InlineFieldRow
+                                  key={f.id}
+                                  field={f}
+                                  value={values[f.id]}
+                                  onChange={(v) => setValue(f.id, v)}
+                                  onSetFieldValue={setValue}
+                                  error={errors.get(f.id)}
+                                  people={people}
+                                  evalCtx={evalCtx}
+                                  loading={pickerLoading.has(f.id)}
+                                  readOnly={readOnly}
+                                  saveField={saveField}
+                                  saveArray={saveArray}
+                                />
+                              )
+                            })
+                          )
+                        }
+                      />
+                    </div>
+                  </Section>
+                )
+              })}
+            />
           </fieldset>
         </OrgUnitOptionsCacheContext.Provider>
       </FillReadOnlyContext.Provider>
@@ -1076,7 +1100,7 @@ export function FormRenderer({
   const reviewLink = reviewHref ? (
     <Link href={reviewHref}>
       <Button variant="outline" size="sm">
-        <Eye size={14} /> Review
+        <Eye size={14} /> <GeneratedText id="m_0e315ebf127b18" />
       </Button>
     </Link>
   ) : null
@@ -1094,16 +1118,21 @@ export function FormRenderer({
                   href: returnTo ?? `/apps/templates/${templateId}/records`,
                   label: returnTo ? 'Back to assessment' : 'Back',
                 }}
-                title={templateName}
-                subtitle={
+                title={tGeneratedValue(templateName)}
+                subtitle={tGeneratedValue(
                   initialResponseId
-                    ? `${initialResponseId.slice(0, 8)} · v${version}`
-                    : `v${version}`
-                }
+                    ? tGenerated('m_14c3dfbc8a08e9', {
+                        value0: initialResponseId.slice(0, 8),
+                        value1: version,
+                      })
+                    : tGenerated('m_1480a378beafd1', { value0: version }),
+                )}
                 badge={
                   readOnly ? (
                     responseStatus ? (
-                      <Badge variant="secondary">{responseStatus.replace(/_/g, ' ')}</Badge>
+                      <Badge variant="secondary">
+                        <GeneratedValue value={responseStatus.replace(/_/g, ' ')} />
+                      </Badge>
                     ) : null
                   ) : (
                     <SaveStatus
@@ -1118,22 +1147,26 @@ export function FormRenderer({
                 }
                 actions={
                   <>
-                    {!readOnly ? (
-                      <button
-                        type="button"
-                        onClick={toggleFieldMode}
-                        aria-pressed={fieldMode}
-                        title="High-contrast field mode"
-                        className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
-                          fieldMode
-                            ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
-                            : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
-                        }`}
-                      >
-                        <Sun size={15} />
-                      </button>
-                    ) : null}
-                    {reviewLink}
+                    <GeneratedValue
+                      value={
+                        !readOnly ? (
+                          <button
+                            type="button"
+                            onClick={toggleFieldMode}
+                            aria-pressed={fieldMode}
+                            title={tGenerated('m_0c388e73463aaf')}
+                            className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
+                              fieldMode
+                                ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
+                                : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
+                            }`}
+                          >
+                            <Sun size={15} />
+                          </button>
+                        ) : null
+                      }
+                    />
+                    <GeneratedValue value={reviewLink} />
                   </>
                 }
               />
@@ -1143,18 +1176,27 @@ export function FormRenderer({
                   href={returnTo ?? `/apps/templates/${templateId}/records`}
                   className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
                 >
-                  <ChevronLeft size={13} /> {returnTo ? 'Back to assessment' : 'Back'}
+                  <ChevronLeft size={13} />{' '}
+                  <GeneratedValue
+                    value={
+                      returnTo ? (
+                        <GeneratedText id="m_0addbe9f7bc1a1" />
+                      ) : (
+                        <GeneratedText id="m_1a7cefe5a9894e" />
+                      )
+                    }
+                  />
                 </Link>
                 <div className="flex items-center justify-between gap-2">
                   <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100">
-                    {templateName}
+                    <GeneratedValue value={templateName} />
                   </h1>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={toggleFieldMode}
                       aria-pressed={fieldMode}
-                      title="High-contrast field mode"
+                      title={tGenerated('m_0c388e73463aaf')}
                       className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
                         fieldMode
                           ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
@@ -1171,73 +1213,96 @@ export function FormRenderer({
                         void persistDraft({ values, rows: rowsByStep, stepIndex })
                       }}
                     />
-                    <Badge variant="outline">v{version}</Badge>
-                    {reviewLink}
+                    <Badge variant="outline">
+                      <GeneratedText id="m_1c693e59d64fb2" />
+                      <GeneratedValue value={version} />
+                    </Badge>
+                    <GeneratedValue value={reviewLink} />
                   </div>
                 </div>
                 {/* Progress strip — every workflow step as a clickable pill. Hidden
               on single-step apps (e.g. the Lift Plan), where a one-pill strip
               + progress bar is just noise and makes the header needlessly tall. */}
-                {totalSteps > 1 ? (
-                  <>
-                    <ol className="flex flex-wrap items-center gap-1 text-xs">
-                      {steps.map((s, i) => {
-                        const isCurrent = i === stepIndex
-                        const isCompleted = completedSteps.has(s.key)
-                        const isClickable = i <= stepIndex || isCompleted
-                        return (
-                          <li key={s.key}>
-                            <button
-                              type="button"
-                              disabled={!isClickable}
-                              onClick={() => jumpTo(i)}
-                              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors ${
-                                isCurrent
-                                  ? 'border-teal-600 bg-teal-600 text-white'
-                                  : isCompleted
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                    : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-                              } ${!isClickable ? 'cursor-not-allowed opacity-60' : ''}`}
-                            >
-                              <span
-                                className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
-                                  isCurrent
-                                    ? 'bg-white text-teal-700'
-                                    : isCompleted
-                                      ? 'bg-emerald-500 text-white'
-                                      : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                                }`}
-                              >
-                                {isCompleted && !isCurrent ? <Check size={10} /> : i + 1}
-                              </span>
-                              <span className="truncate">
-                                {localizeText(s.title, locale, s.key)}
-                              </span>
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ol>
-                    <div className="h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                      <div
-                        className="h-full rounded-full bg-teal-600 transition-all"
-                        style={{ width: `${Math.max(8, completion)}%` }}
-                      />
-                    </div>
-                  </>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    totalSteps > 1 ? (
+                      <>
+                        <ol className="flex flex-wrap items-center gap-1 text-xs">
+                          <GeneratedValue
+                            value={steps.map((s, i) => {
+                              const isCurrent = i === stepIndex
+                              const isCompleted = completedSteps.has(s.key)
+                              const isClickable = i <= stepIndex || isCompleted
+                              return (
+                                <li key={s.key}>
+                                  <button
+                                    type="button"
+                                    disabled={!isClickable}
+                                    onClick={() => jumpTo(i)}
+                                    className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors ${
+                                      isCurrent
+                                        ? 'border-teal-600 bg-teal-600 text-white'
+                                        : isCompleted
+                                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                          : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                                    } ${!isClickable ? 'cursor-not-allowed opacity-60' : ''}`}
+                                  >
+                                    <span
+                                      className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
+                                        isCurrent
+                                          ? 'bg-white text-teal-700'
+                                          : isCompleted
+                                            ? 'bg-emerald-500 text-white'
+                                            : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                      }`}
+                                    >
+                                      <GeneratedValue
+                                        value={
+                                          isCompleted && !isCurrent ? <Check size={10} /> : i + 1
+                                        }
+                                      />
+                                    </span>
+                                    <span className="truncate">
+                                      <GeneratedValue
+                                        value={localizeText(s.title, locale, s.key)}
+                                      />
+                                    </span>
+                                  </button>
+                                </li>
+                              )
+                            })}
+                          />
+                        </ol>
+                        <div className="h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                          <div
+                            className="h-full rounded-full bg-teal-600 transition-all"
+                            style={{ width: `${Math.max(8, completion)}%` }}
+                          />
+                        </div>
+                      </>
+                    ) : null
+                  }
+                />
               </div>
             )
           }
           footer={
             readOnly ? undefined : (
               <div className="space-y-2">
-                {serverError ? (
-                  <Alert variant="destructive">
-                    <AlertTitle>Submit failed</AlertTitle>
-                    <AlertDescription>{serverError}</AlertDescription>
-                  </Alert>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    serverError ? (
+                      <Alert variant="destructive">
+                        <AlertTitle>
+                          <GeneratedText id="m_051fb158550e48" />
+                        </AlertTitle>
+                        <AlertDescription>
+                          <GeneratedValue value={serverError} />
+                        </AlertDescription>
+                      </Alert>
+                    ) : null
+                  }
+                />
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -1247,145 +1312,257 @@ export function FormRenderer({
                     className="h-12 px-4"
                   >
                     <ChevronLeft size={16} />
-                    Back
+                    <GeneratedText id="m_1a7cefe5a9894e" />
                   </Button>
-                  {stepIndex < totalSteps - 1 ? (
-                    <Button onClick={next} size="lg" className="h-12 flex-1 text-base">
-                      Next <ChevronRight size={16} />
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={submit}
-                      disabled={pending}
-                      size="lg"
-                      className="h-12 flex-1 text-base"
-                    >
-                      <Check size={16} />
-                      {pending ? 'Submitting…' : 'Submit'}
-                    </Button>
-                  )}
+                  <GeneratedValue
+                    value={
+                      stepIndex < totalSteps - 1 ? (
+                        <Button onClick={next} size="lg" className="h-12 flex-1 text-base">
+                          <GeneratedText id="m_08b5fa148b2af7" /> <ChevronRight size={16} />
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={submit}
+                          disabled={pending}
+                          size="lg"
+                          className="h-12 flex-1 text-base"
+                        >
+                          <Check size={16} />
+                          <GeneratedValue
+                            value={
+                              pending ? (
+                                <GeneratedText id="m_00cfcb628bc131" />
+                              ) : (
+                                <GeneratedText id="m_09ee2ce911f04f" />
+                              )
+                            }
+                          />
+                        </Button>
+                      )
+                    }
+                  />
                 </div>
               </div>
             )
           }
         >
-          {readOnly ? (
-            <Alert variant="warning">
-              <AlertTitle>View only</AlertTitle>
-              <AlertDescription>
-                {responseStatus
-                  ? `This entry is ${responseStatus.replace(/_/g, ' ')}. You don't have permission to edit it.`
-                  : "You don't have permission to edit this entry."}
-              </AlertDescription>
-            </Alert>
-          ) : null}
+          <GeneratedValue
+            value={
+              readOnly ? (
+                <Alert variant="warning">
+                  <AlertTitle>
+                    <GeneratedText id="m_0cd6abb2df6fc8" />
+                  </AlertTitle>
+                  <AlertDescription>
+                    <GeneratedValue
+                      value={
+                        responseStatus ? (
+                          <GeneratedText
+                            id="m_05829ac350a185"
+                            values={{ value0: responseStatus.replace(/_/g, ' ') }}
+                          />
+                        ) : (
+                          <GeneratedText id="m_171450f953a653" />
+                        )
+                      }
+                    />
+                  </AlertDescription>
+                </Alert>
+              ) : null
+            }
+          />
           <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
-            {stepIndex === 0 ? (
-              <PremiumSection
-                title="Site"
-                subtitle="Where this is being recorded"
-                icon={<MapPin size={20} />}
-                tone="teal"
-              >
-                <div className="space-y-1">
-                  <Label>Site</Label>
-                  <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
-                    <option value="">— select —</option>
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              </PremiumSection>
-            ) : null}
-
-            {tabbed ? (
-              <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
-                {appTabs.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setActiveTabId(t.id)}
-                    className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                      t.id === activeTabId
-                        ? 'border-teal-600 bg-teal-600 text-white'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-                    }`}
-                  >
-                    {localizeText(t.title, locale, t.id)}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
-            {renderedSections.length === 0 ? (
-              <PremiumSection
-                title={localizeText(step.title, locale, step.key)}
-                icon={<ClipboardList size={20} />}
-                tone="slate"
-              >
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {tabbed
-                    ? 'This tab has no sections.'
-                    : 'No sections bound to this step. Submit to finalise.'}
-                </p>
-              </PremiumSection>
-            ) : (
-              renderedSections.map((sec, i) => {
-                // Section-level visibility — completely hide the section if showIf
-                // is false against the current values.
-                if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
-                return (
+            <GeneratedValue
+              value={
+                stepIndex === 0 ? (
                   <PremiumSection
-                    key={sec.id}
-                    title={localizeText(sec.title, locale, sec.id)}
-                    subtitle={
-                      localizeText(
-                        sec.description,
-                        locale,
-                        sec.repeating ? 'Repeatable section' : '',
-                      ) || undefined
-                    }
-                    icon={<ClipboardList size={20} />}
-                    tone={SECTION_TONES[i % SECTION_TONES.length]}
-                    count={sec.repeating ? (rowsByStep[sec.id]?.length ?? 0) : undefined}
+                    title={tGenerated('m_020146dd3d3d5a')}
+                    subtitle={tGenerated('m_16bca608598e31')}
+                    icon={<MapPin size={20} />}
+                    tone="teal"
                   >
-                    <div className="space-y-4">
-                      {sec.repeating ? (
-                        <RepeatingSection
-                          section={sec}
-                          rows={rowsByStep[sec.id] ?? []}
-                          onAdd={() => addRow(sec)}
-                          onRemove={(i) => removeRow(sec, i)}
-                          onUpdate={(i, patch) => updateRow(sec, i, patch)}
-                          people={people}
-                          evalCtx={evalCtx}
-                          errors={errors}
-                          sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                    <div className="space-y-1">
+                      <Label>
+                        <GeneratedText id="m_020146dd3d3d5a" />
+                      </Label>
+                      <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+                        <option value="">
+                          <GeneratedText id="m_0a4ceaaee570cc" />
+                        </option>
+                        <GeneratedValue
+                          value={sites.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              <GeneratedValue value={s.name} />
+                            </option>
+                          ))}
                         />
-                      ) : sec.canvas ? (
-                        (() => {
-                          const cls = gridClass(sec.id)
-                          const canvas = sec.canvas
-                          const visible = sec.fields.filter(
-                            (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
+                      </Select>
+                    </div>
+                  </PremiumSection>
+                ) : null
+              }
+            />
+
+            <GeneratedValue
+              value={
+                tabbed ? (
+                  <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
+                    <GeneratedValue
+                      value={appTabs.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setActiveTabId(t.id)}
+                          className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                            t.id === activeTabId
+                              ? 'border-teal-600 bg-teal-600 text-white'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                          }`}
+                        >
+                          <GeneratedValue value={localizeText(t.title, locale, t.id)} />
+                        </button>
+                      ))}
+                    />
+                  </div>
+                ) : null
+              }
+            />
+
+            <GeneratedValue
+              value={
+                renderedSections.length === 0 ? (
+                  <PremiumSection
+                    title={tGeneratedValue(localizeText(step.title, locale, step.key))}
+                    icon={<ClipboardList size={20} />}
+                    tone="slate"
+                  >
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      <GeneratedValue
+                        value={
+                          tabbed ? (
+                            <GeneratedText id="m_04c0e447e102e8" />
+                          ) : (
+                            <GeneratedText id="m_1fa0b63118d05f" />
                           )
-                          const { order, byId } = resolveCanvas(
-                            visible.map((f) => f.id),
-                            canvas.items,
-                            canvas.cols,
-                          )
-                          const byField = new Map(visible.map((f) => [f.id, f]))
-                          return (
-                            <div className={cls}>
-                              <style>{canvasCss(cls, canvas.cols, canvas.rowHeight, byId)}</style>
-                              {order.map((id) => {
-                                const f = byField.get(id)!
-                                return (
-                                  <div key={id} data-ci={id}>
+                        }
+                      />
+                    </p>
+                  </PremiumSection>
+                ) : (
+                  renderedSections.map((sec, i) => {
+                    // Section-level visibility — completely hide the section if showIf
+                    // is false against the current values.
+                    if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+                    return (
+                      <PremiumSection
+                        key={sec.id}
+                        title={tGeneratedValue(localizeText(sec.title, locale, sec.id))}
+                        subtitle={tGeneratedValue(
+                          localizeText(
+                            sec.description,
+                            locale,
+                            sec.repeating ? 'Repeatable section' : '',
+                          ) || undefined,
+                        )}
+                        icon={<ClipboardList size={20} />}
+                        tone={SECTION_TONES[i % SECTION_TONES.length]}
+                        count={sec.repeating ? (rowsByStep[sec.id]?.length ?? 0) : undefined}
+                      >
+                        <div className="space-y-4">
+                          <GeneratedValue
+                            value={
+                              sec.repeating ? (
+                                <RepeatingSection
+                                  section={sec}
+                                  rows={rowsByStep[sec.id] ?? []}
+                                  onAdd={() => addRow(sec)}
+                                  onRemove={(i) => removeRow(sec, i)}
+                                  onUpdate={(i, patch) => updateRow(sec, i, patch)}
+                                  people={people}
+                                  evalCtx={evalCtx}
+                                  errors={errors}
+                                  sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                                />
+                              ) : sec.canvas ? (
+                                (() => {
+                                  const cls = gridClass(sec.id)
+                                  const canvas = sec.canvas
+                                  const visible = sec.fields.filter(
+                                    (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
+                                  )
+                                  const { order, byId } = resolveCanvas(
+                                    visible.map((f) => f.id),
+                                    canvas.items,
+                                    canvas.cols,
+                                  )
+                                  const byField = new Map(visible.map((f) => [f.id, f]))
+                                  return (
+                                    <div className={cls}>
+                                      <style>
+                                        {canvasCss(cls, canvas.cols, canvas.rowHeight, byId)}
+                                      </style>
+                                      <GeneratedValue
+                                        value={order.map((id) => {
+                                          const f = byField.get(id)!
+                                          return (
+                                            <div key={id} data-ci={id}>
+                                              <FieldRow
+                                                field={f}
+                                                value={values[f.id]}
+                                                onChange={(v) => setValue(f.id, v)}
+                                                onSetFieldValue={setValue}
+                                                error={errors.get(f.id)}
+                                                people={people}
+                                                evalCtx={evalCtx}
+                                                loading={pickerLoading.has(f.id)}
+                                              />
+                                            </div>
+                                          )
+                                        })}
+                                      />
+                                    </div>
+                                  )
+                                })()
+                              ) : sec.layout && sec.layout.columns > 1 ? (
+                                (() => {
+                                  const cls = gridClass(sec.id)
+                                  const cols = sec.layout.columns
+                                  const visible = sec.fields.filter(
+                                    (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
+                                  )
+                                  const css = columnsCss(
+                                    cls,
+                                    cols,
+                                    visible.map((f) => ({ id: f.id, span: f.colSpan ?? cols })),
+                                  )
+                                  return (
+                                    <div className={cls}>
+                                      <style>{css}</style>
+                                      <GeneratedValue
+                                        value={visible.map((f) => (
+                                          <div key={f.id} data-cs={f.id}>
+                                            <FieldRow
+                                              field={f}
+                                              value={values[f.id]}
+                                              onChange={(v) => setValue(f.id, v)}
+                                              onSetFieldValue={setValue}
+                                              error={errors.get(f.id)}
+                                              people={people}
+                                              evalCtx={evalCtx}
+                                              loading={pickerLoading.has(f.id)}
+                                            />
+                                          </div>
+                                        ))}
+                                      />
+                                    </div>
+                                  )
+                                })()
+                              ) : (
+                                sec.fields.map((f) => {
+                                  if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
+                                  return (
                                     <FieldRow
+                                      key={f.id}
                                       field={f}
                                       value={values[f.id]}
                                       onChange={(v) => setValue(f.id, v)}
@@ -1395,67 +1572,18 @@ export function FormRenderer({
                                       evalCtx={evalCtx}
                                       loading={pickerLoading.has(f.id)}
                                     />
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )
-                        })()
-                      ) : sec.layout && sec.layout.columns > 1 ? (
-                        (() => {
-                          const cls = gridClass(sec.id)
-                          const cols = sec.layout.columns
-                          const visible = sec.fields.filter(
-                            (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
-                          )
-                          const css = columnsCss(
-                            cls,
-                            cols,
-                            visible.map((f) => ({ id: f.id, span: f.colSpan ?? cols })),
-                          )
-                          return (
-                            <div className={cls}>
-                              <style>{css}</style>
-                              {visible.map((f) => (
-                                <div key={f.id} data-cs={f.id}>
-                                  <FieldRow
-                                    field={f}
-                                    value={values[f.id]}
-                                    onChange={(v) => setValue(f.id, v)}
-                                    onSetFieldValue={setValue}
-                                    error={errors.get(f.id)}
-                                    people={people}
-                                    evalCtx={evalCtx}
-                                    loading={pickerLoading.has(f.id)}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          )
-                        })()
-                      ) : (
-                        sec.fields.map((f) => {
-                          if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
-                          return (
-                            <FieldRow
-                              key={f.id}
-                              field={f}
-                              value={values[f.id]}
-                              onChange={(v) => setValue(f.id, v)}
-                              onSetFieldValue={setValue}
-                              error={errors.get(f.id)}
-                              people={people}
-                              evalCtx={evalCtx}
-                              loading={pickerLoading.has(f.id)}
-                            />
-                          )
-                        })
-                      )}
-                    </div>
-                  </PremiumSection>
+                                  )
+                                })
+                              )
+                            }
+                          />
+                        </div>
+                      </PremiumSection>
+                    )
+                  })
                 )
-              })
-            )}
+              }
+            />
           </fieldset>
         </WizardLayout>
       </OrgUnitOptionsCacheContext.Provider>
@@ -1486,69 +1614,86 @@ function RepeatingSection({
   errors: Map<string, string>
   sectionError: string | null
 }) {
+  const tGenerated = useGeneratedTranslations()
   const max = section.maxRows
   const min = section.minRows ?? 0
 
   return (
     <div className="space-y-3">
-      {sectionError ? (
-        <Alert variant="destructive">
-          <AlertDescription>{sectionError}</AlertDescription>
-        </Alert>
-      ) : null}
-      {rows.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          No rows.
-          {min > 0 ? ` At least ${min} required.` : ''}
-        </p>
-      ) : (
-        rows.map((row, i) => {
-          // Per-row eval context merges the row's own values atop the global
-          // so showIf within the row can compare against its own fields.
-          const rowCtx: EvalContext = {
-            ...evalCtx,
-            values: { ...evalCtx.values, ...row },
-          }
-          return (
-            <div
-              key={i}
-              className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/40"
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                  {formatRowLabel(section, i, row)}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onRemove(i)}
-                  className="ff-chip flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30 dark:hover:bg-red-950/40"
-                  title="Remove"
-                  disabled={rows.length <= min}
+      <GeneratedValue
+        value={
+          sectionError ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                <GeneratedValue value={sectionError} />
+              </AlertDescription>
+            </Alert>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_126f736e7419f7" />
+              <GeneratedValue
+                value={
+                  min > 0 ? <GeneratedText id="m_1217fe2f6bac7c" values={{ value0: min }} /> : ''
+                }
+              />
+            </p>
+          ) : (
+            rows.map((row, i) => {
+              // Per-row eval context merges the row's own values atop the global
+              // so showIf within the row can compare against its own fields.
+              const rowCtx: EvalContext = {
+                ...evalCtx,
+                values: { ...evalCtx.values, ...row },
+              }
+              return (
+                <div
+                  key={i}
+                  className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/40"
                 >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-              <div className="space-y-3">
-                {section.fields.map((f) => {
-                  if (f.showIf && !evaluateLogicRule(f.showIf, rowCtx)) return null
-                  return (
-                    <FieldRow
-                      key={f.id}
-                      field={f}
-                      value={row[f.id]}
-                      onChange={(v) => onUpdate(i, { [f.id]: v })}
-                      onSetFieldValue={(id, v) => onUpdate(i, { [id]: v })}
-                      error={errors.get(`${section.id}.${i}.${f.id}`)}
-                      people={people}
-                      evalCtx={rowCtx}
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                      <GeneratedValue value={formatRowLabel(section, i, row)} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onRemove(i)}
+                      className="ff-chip flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30 dark:hover:bg-red-950/40"
+                      title={tGenerated('m_1a9d8d971b1edb')}
+                      disabled={rows.length <= min}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <GeneratedValue
+                      value={section.fields.map((f) => {
+                        if (f.showIf && !evaluateLogicRule(f.showIf, rowCtx)) return null
+                        return (
+                          <FieldRow
+                            key={f.id}
+                            field={f}
+                            value={row[f.id]}
+                            onChange={(v) => onUpdate(i, { [f.id]: v })}
+                            onSetFieldValue={(id, v) => onUpdate(i, { [id]: v })}
+                            error={errors.get(`${section.id}.${i}.${f.id}`)}
+                            people={people}
+                            evalCtx={rowCtx}
+                          />
+                        )
+                      })}
                     />
-                  )
-                })}
-              </div>
-            </div>
+                  </div>
+                </div>
+              )
+            })
           )
-        })
-      )}
+        }
+      />
       <Button
         variant="outline"
         size="lg"
@@ -1557,7 +1702,7 @@ function RepeatingSection({
         className="ff-chip h-12 w-full border-dashed"
       >
         <Plus size={16} />
-        Add row
+        <GeneratedText id="m_1eabd71bbc0199" />
       </Button>
     </div>
   )
@@ -1609,15 +1754,33 @@ function FieldRow({
   return (
     <div className="space-y-1">
       <Label>
-        {localizeText(field.label, locale, field.id)}
-        {field.required || field.validation?.required ? (
-          <span className="text-red-600"> *</span>
-        ) : null}
-        {loading ? (
-          <span className="ml-2 text-[10px] font-normal text-slate-400">{formT('lookingUp')}</span>
-        ) : null}
+        <GeneratedValue value={localizeText(field.label, locale, field.id)} />
+        <GeneratedValue
+          value={
+            field.required || field.validation?.required ? (
+              <span className="text-red-600"> *</span>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            loading ? (
+              <span className="ml-2 text-[10px] font-normal text-slate-400">
+                <GeneratedValue value={formT('lookingUp')} />
+              </span>
+            ) : null
+          }
+        />
       </Label>
-      {helpText ? <p className="text-xs text-slate-500 dark:text-slate-400">{helpText}</p> : null}
+      <GeneratedValue
+        value={
+          helpText ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              <GeneratedValue value={helpText} />
+            </p>
+          ) : null
+        }
+      />
       <FieldInput
         field={field}
         value={value}
@@ -1626,7 +1789,15 @@ function FieldRow({
         evalCtx={evalCtx}
         onSetFieldValue={onSetFieldValue}
       />
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      <GeneratedValue
+        value={
+          error ? (
+            <p className="text-xs text-red-600">
+              <GeneratedValue value={error} />
+            </p>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -1709,7 +1880,17 @@ function InlineSaveDot({ state }: { state: InlineSaveState }) {
             : 'text-[11px] font-medium text-red-600'
       }
     >
-      {state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved ✓' : 'Not saved — retry'}
+      <GeneratedValue
+        value={
+          state === 'saving' ? (
+            <GeneratedText id="m_106811f2aac664" />
+          ) : state === 'saved' ? (
+            <GeneratedText id="m_0a3bcf685192f1" />
+          ) : (
+            <GeneratedText id="m_13b78c61dbb517" />
+          )
+        }
+      />
     </span>
   )
 }
@@ -1781,19 +1962,35 @@ function InlineFieldRow({
     <div className="space-y-1" onBlur={() => commit(value)}>
       <div className="flex items-center justify-between gap-2">
         <Label>
-          {localizeText(field.label, locale, field.id)}
-          {field.required || field.validation?.required ? (
-            <span className="text-red-600"> *</span>
-          ) : null}
-          {loading ? (
-            <span className="ml-2 text-[10px] font-normal text-slate-400">
-              {formT('lookingUp')}
-            </span>
-          ) : null}
+          <GeneratedValue value={localizeText(field.label, locale, field.id)} />
+          <GeneratedValue
+            value={
+              field.required || field.validation?.required ? (
+                <span className="text-red-600"> *</span>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              loading ? (
+                <span className="ml-2 text-[10px] font-normal text-slate-400">
+                  <GeneratedValue value={formT('lookingUp')} />
+                </span>
+              ) : null
+            }
+          />
         </Label>
-        {nonSaving ? null : <InlineSaveDot state={state} />}
+        <GeneratedValue value={nonSaving ? null : <InlineSaveDot state={state} />} />
       </div>
-      {helpText ? <p className="text-xs text-slate-500 dark:text-slate-400">{helpText}</p> : null}
+      <GeneratedValue
+        value={
+          helpText ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              <GeneratedValue value={helpText} />
+            </p>
+          ) : null
+        }
+      />
       <FieldInput
         field={field}
         value={value}
@@ -1802,7 +1999,15 @@ function InlineFieldRow({
         evalCtx={evalCtx}
         onSetFieldValue={onSetFieldValue}
       />
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      <GeneratedValue
+        value={
+          error ? (
+            <p className="text-xs text-red-600">
+              <GeneratedValue value={error} />
+            </p>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -1822,6 +2027,7 @@ function FieldInput({
   evalCtx: EvalContext
   onSetFieldValue?: (fieldId: string, v: unknown) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const locale = useLocale()
   // Formula fields are render-only: recompute the value on every render via
   // the evaluator and pass through to the display input. When the formula
@@ -1837,7 +2043,7 @@ function FieldInput({
         value={display}
         disabled
         className="bg-slate-50 font-mono text-sm"
-        title="Computed value — recomputed automatically"
+        title={tGenerated('m_030778daefe8eb')}
       />
     )
   }
@@ -1911,8 +2117,8 @@ function FieldInput({
             className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-slate-200 accent-teal-600"
           />
           <span className="w-12 text-right text-sm font-semibold text-slate-700 tabular-nums">
-            {v}
-            {c.unit ? ` ${c.unit}` : ''}
+            <GeneratedValue value={v} />
+            <GeneratedValue value={c.unit ? ` ${c.unit}` : ''} />
           </span>
         </div>
       )
@@ -1927,7 +2133,7 @@ function FieldInput({
             size="sm"
             onClick={() => {
               if (typeof navigator === 'undefined' || !navigator.geolocation) {
-                toast.error('Location is not available on this device')
+                toast.error(tGenerated('m_0027988a09362c'))
                 return
               }
               navigator.geolocation.getCurrentPosition(
@@ -1938,19 +2144,44 @@ function FieldInput({
                     accuracy: p.coords.accuracy,
                     capturedAt: new Date().toISOString(),
                   }),
-                () => toast.error('Could not get your location — check permissions'),
+                () => toast.error(tGenerated('m_1a66e46e2f8f21')),
                 { enableHighAccuracy: true, timeout: 10_000 },
               )
             }}
           >
-            <MapPin size={14} /> {loc ? 'Update location' : 'Capture location'}
+            <MapPin size={14} />{' '}
+            <GeneratedValue
+              value={
+                loc ? (
+                  <GeneratedText id="m_0bcab596e5288c" />
+                ) : (
+                  <GeneratedText id="m_07cd022cc38d60" />
+                )
+              }
+            />
           </Button>
-          {loc ? (
-            <p className="text-xs text-slate-500">
-              {loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}
-              {loc.accuracy ? ` · ±${Math.round(loc.accuracy)}m` : ''}
-            </p>
-          ) : null}
+          <GeneratedValue
+            value={
+              loc ? (
+                <p className="text-xs text-slate-500">
+                  <GeneratedValue value={loc.lat.toFixed(5)} />,{' '}
+                  <GeneratedValue value={loc.lng.toFixed(5)} />
+                  <GeneratedValue
+                    value={
+                      loc.accuracy ? (
+                        <GeneratedText
+                          id="m_170bba2afbd664"
+                          values={{ value0: Math.round(loc.accuracy) }}
+                        />
+                      ) : (
+                        ''
+                      )
+                    }
+                  />
+                </p>
+              ) : null
+            }
+          />
         </div>
       )
     }
@@ -1965,7 +2196,7 @@ function FieldInput({
       if (rows.length === 0 || scale.length === 0) {
         return (
           <p className="text-xs text-slate-400">
-            Add rows and a scale to this grid in the element settings.
+            <GeneratedText id="m_08ff35b4e882af" />
           </p>
         )
       }
@@ -1975,32 +2206,40 @@ function FieldInput({
             <thead>
               <tr>
                 <th className="p-1.5" />
-                {scale.map((s) => (
-                  <th
-                    key={s.value}
-                    className="p-1.5 text-center text-xs font-medium text-slate-500"
-                  >
-                    {s.label}
-                  </th>
-                ))}
+                <GeneratedValue
+                  value={scale.map((s) => (
+                    <th
+                      key={s.value}
+                      className="p-1.5 text-center text-xs font-medium text-slate-500"
+                    >
+                      <GeneratedValue value={s.label} />
+                    </th>
+                  ))}
+                />
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.key} className="border-t border-slate-100">
-                  <td className="py-1.5 pr-2 text-slate-700">{r.label}</td>
-                  {scale.map((s) => (
-                    <td key={s.value} className="p-1.5 text-center">
-                      <input
-                        type="radio"
-                        name={`${field.id}_${r.key}`}
-                        checked={v[r.key] === s.value}
-                        onChange={() => onChange({ ...v, [r.key]: s.value })}
-                      />
+              <GeneratedValue
+                value={rows.map((r) => (
+                  <tr key={r.key} className="border-t border-slate-100">
+                    <td className="py-1.5 pr-2 text-slate-700">
+                      <GeneratedValue value={r.label} />
                     </td>
-                  ))}
-                </tr>
-              ))}
+                    <GeneratedValue
+                      value={scale.map((s) => (
+                        <td key={s.value} className="p-1.5 text-center">
+                          <input
+                            type="radio"
+                            name={`${field.id}_${r.key}`}
+                            checked={v[r.key] === s.value}
+                            onChange={() => onChange({ ...v, [r.key]: s.value })}
+                          />
+                        </td>
+                      ))}
+                    />
+                  </tr>
+                ))}
+              />
             </tbody>
           </table>
         </div>
@@ -2016,7 +2255,7 @@ function FieldInput({
           : undefined
       return (
         <RiskMatrixField
-          label="Select risk rating"
+          label={tGenerated('m_0a8b09bc1dafbb')}
           likelihoodName={`${field.id}.likelihood`}
           severityName={`${field.id}.severity`}
           defaultLikelihood={
@@ -2035,7 +2274,7 @@ function FieldInput({
     }
     case 'formula':
       // No formula configured — fall back to a read-only blank.
-      return <Input disabled placeholder="(no formula)" />
+      return <Input disabled placeholder={tGenerated('m_1989eb71707ad3')} />
     case 'date':
       return (
         <Input
@@ -2065,11 +2304,13 @@ function FieldInput({
       return (
         <Select value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)}>
           <option value="">—</option>
-          {opts.map((o) => (
-            <option key={o.value} value={o.value}>
-              {localizeText(o.label, locale, o.value)}
-            </option>
-          ))}
+          <GeneratedValue
+            value={opts.map((o) => (
+              <option key={o.value} value={o.value}>
+                <GeneratedValue value={localizeText(o.label, locale, o.value)} />
+              </option>
+            ))}
+          />
         </Select>
       )
     }
@@ -2079,31 +2320,35 @@ function FieldInput({
       const cur = (value as string) ?? ''
       return (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {opts.map((o) => {
-            const sel = cur === o.value
-            return (
-              <button
-                key={o.value}
-                type="button"
-                aria-pressed={sel}
-                onClick={() => onChange(sel ? '' : o.value)}
-                className={`ff-chip flex min-h-[48px] items-center gap-2.5 rounded-md border px-4 text-left text-sm font-medium ${
-                  sel
-                    ? 'border-teal-500 bg-teal-50 text-teal-900 dark:border-teal-600 dark:bg-teal-950/40 dark:text-teal-100'
-                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
-                }`}
-              >
-                <span
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-                    sel ? 'border-teal-600' : 'border-slate-300 dark:border-slate-600'
+          <GeneratedValue
+            value={opts.map((o) => {
+              const sel = cur === o.value
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  aria-pressed={sel}
+                  onClick={() => onChange(sel ? '' : o.value)}
+                  className={`ff-chip flex min-h-[48px] items-center gap-2.5 rounded-md border px-4 text-left text-sm font-medium ${
+                    sel
+                      ? 'border-teal-500 bg-teal-50 text-teal-900 dark:border-teal-600 dark:bg-teal-950/40 dark:text-teal-100'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
                   }`}
                 >
-                  {sel ? <span className="h-2.5 w-2.5 rounded-full bg-teal-600" /> : null}
-                </span>
-                {localizeText(o.label, locale, o.value)}
-              </button>
-            )
-          })}
+                  <span
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                      sel ? 'border-teal-600' : 'border-slate-300 dark:border-slate-600'
+                    }`}
+                  >
+                    <GeneratedValue
+                      value={sel ? <span className="h-2.5 w-2.5 rounded-full bg-teal-600" /> : null}
+                    />
+                  </span>
+                  <GeneratedValue value={localizeText(o.label, locale, o.value)} />
+                </button>
+              )
+            })}
+          />
         </div>
       )
     }
@@ -2113,67 +2358,77 @@ function FieldInput({
       const arr = Array.isArray(value) ? (value as string[]) : []
       return (
         <div className="space-y-2">
-          {opts.map((o) => {
-            const sel = arr.includes(o.value)
-            return (
-              <button
-                key={o.value}
-                type="button"
-                aria-pressed={sel}
-                onClick={() => onChange(sel ? arr.filter((v) => v !== o.value) : [...arr, o.value])}
-                className={`ff-chip flex min-h-[48px] w-full items-center gap-3 rounded-md border px-4 text-left text-sm font-medium ${
-                  sel
-                    ? 'border-teal-500 bg-teal-50 text-teal-900 dark:border-teal-600 dark:bg-teal-950/40 dark:text-teal-100'
-                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
-                }`}
-              >
-                <span
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 ${
+          <GeneratedValue
+            value={opts.map((o) => {
+              const sel = arr.includes(o.value)
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  aria-pressed={sel}
+                  onClick={() =>
+                    onChange(sel ? arr.filter((v) => v !== o.value) : [...arr, o.value])
+                  }
+                  className={`ff-chip flex min-h-[48px] w-full items-center gap-3 rounded-md border px-4 text-left text-sm font-medium ${
                     sel
-                      ? 'border-teal-600 bg-teal-600 text-white'
-                      : 'border-slate-300 dark:border-slate-600'
+                      ? 'border-teal-500 bg-teal-50 text-teal-900 dark:border-teal-600 dark:bg-teal-950/40 dark:text-teal-100'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
                   }`}
                 >
-                  {sel ? <Check size={13} /> : null}
-                </span>
-                {localizeText(o.label, locale, o.value)}
-              </button>
-            )
-          })}
+                  <span
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 ${
+                      sel
+                        ? 'border-teal-600 bg-teal-600 text-white'
+                        : 'border-slate-300 dark:border-slate-600'
+                    }`}
+                  >
+                    <GeneratedValue value={sel ? <Check size={13} /> : null} />
+                  </span>
+                  <GeneratedValue value={localizeText(o.label, locale, o.value)} />
+                </button>
+              )
+            })}
+          />
         </div>
       )
     }
     case 'pass_fail_na':
       return (
         <div className="grid grid-cols-3 gap-2">
-          {(
-            [
-              { v: 'pass', label: 'Pass' },
-              { v: 'fail', label: 'Fail' },
-              { v: 'n_a', label: 'N/A' },
-            ] as const
-          ).map(({ v, label }) => {
-            const sel = value === v
-            const tone = sel
-              ? v === 'pass'
-                ? 'border-emerald-500 bg-emerald-100 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-900/40 dark:text-emerald-100'
-                : v === 'fail'
-                  ? 'border-red-500 bg-red-100 text-red-900 dark:border-red-500 dark:bg-red-900/40 dark:text-red-100'
-                  : 'border-slate-400 bg-slate-100 text-slate-800 dark:border-slate-400 dark:bg-slate-700/60 dark:text-slate-100'
-              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-            return (
-              <button
-                key={v}
-                type="button"
-                aria-pressed={sel}
-                onClick={() => onChange(sel ? '' : v)}
-                className={`ff-chip flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-md border text-sm font-semibold ${tone}`}
-              >
-                {v === 'pass' ? <Check size={18} /> : v === 'fail' ? <X size={18} /> : null}
-                {label}
-              </button>
-            )
-          })}
+          <GeneratedValue
+            value={(
+              [
+                { v: 'pass', label: 'Pass' },
+                { v: 'fail', label: 'Fail' },
+                { v: 'n_a', label: 'N/A' },
+              ] as const
+            ).map(({ v, label }) => {
+              const sel = value === v
+              const tone = sel
+                ? v === 'pass'
+                  ? 'border-emerald-500 bg-emerald-100 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-900/40 dark:text-emerald-100'
+                  : v === 'fail'
+                    ? 'border-red-500 bg-red-100 text-red-900 dark:border-red-500 dark:bg-red-900/40 dark:text-red-100'
+                    : 'border-slate-400 bg-slate-100 text-slate-800 dark:border-slate-400 dark:bg-slate-700/60 dark:text-slate-100'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={sel}
+                  onClick={() => onChange(sel ? '' : v)}
+                  className={`ff-chip flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-md border text-sm font-semibold ${tone}`}
+                >
+                  <GeneratedValue
+                    value={
+                      v === 'pass' ? <Check size={18} /> : v === 'fail' ? <X size={18} /> : null
+                    }
+                  />
+                  <GeneratedValue value={label} />
+                </button>
+              )
+            })}
+          />
         </div>
       )
     case 'yes_no_comment': {
@@ -2181,84 +2436,92 @@ function FieldInput({
       return (
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
-            {(
-              [
-                { opt: 'yes', label: 'Yes' },
-                { opt: 'no', label: 'No' },
-              ] as const
-            ).map(({ opt, label }) => {
-              const sel = v.answer === opt
-              const tone = sel
-                ? opt === 'yes'
-                  ? 'border-emerald-500 bg-emerald-100 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-900/40 dark:text-emerald-100'
-                  : 'border-red-500 bg-red-100 text-red-900 dark:border-red-500 dark:bg-red-900/40 dark:text-red-100'
-                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  aria-pressed={sel}
-                  onClick={() => onChange({ ...v, answer: opt })}
-                  className={`ff-chip flex min-h-[48px] items-center justify-center gap-2 rounded-md border text-sm font-semibold ${tone}`}
-                >
-                  {opt === 'yes' ? <Check size={18} /> : <X size={18} />}
-                  {label}
-                </button>
-              )
-            })}
-          </div>
-          {v.answer === 'no' ? (
-            <Textarea
-              rows={2}
-              placeholder="Add a comment (required on No)"
-              value={v.comment ?? ''}
-              onChange={(e) => onChange({ ...v, comment: e.target.value })}
+            <GeneratedValue
+              value={(
+                [
+                  { opt: 'yes', label: 'Yes' },
+                  { opt: 'no', label: 'No' },
+                ] as const
+              ).map(({ opt, label }) => {
+                const sel = v.answer === opt
+                const tone = sel
+                  ? opt === 'yes'
+                    ? 'border-emerald-500 bg-emerald-100 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-900/40 dark:text-emerald-100'
+                    : 'border-red-500 bg-red-100 text-red-900 dark:border-red-500 dark:bg-red-900/40 dark:text-red-100'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    aria-pressed={sel}
+                    onClick={() => onChange({ ...v, answer: opt })}
+                    className={`ff-chip flex min-h-[48px] items-center justify-center gap-2 rounded-md border text-sm font-semibold ${tone}`}
+                  >
+                    <GeneratedValue value={opt === 'yes' ? <Check size={18} /> : <X size={18} />} />
+                    <GeneratedValue value={label} />
+                  </button>
+                )
+              })}
             />
-          ) : null}
+          </div>
+          <GeneratedValue
+            value={
+              v.answer === 'no' ? (
+                <Textarea
+                  rows={2}
+                  placeholder={tGenerated('m_03a7728b77e19a')}
+                  value={v.comment ?? ''}
+                  onChange={(e) => onChange({ ...v, comment: e.target.value })}
+                />
+              ) : null
+            }
+          />
         </div>
       )
     }
     case 'traffic_light':
       return (
         <div className="grid grid-cols-3 gap-2">
-          {[
-            {
-              v: 'green',
-              label: 'Green',
-              dot: 'bg-emerald-500',
-              sel: 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40',
-            },
-            {
-              v: 'yellow',
-              label: 'Yellow',
-              dot: 'bg-amber-400',
-              sel: 'border-amber-500 bg-amber-50 dark:bg-amber-950/40',
-            },
-            {
-              v: 'red',
-              label: 'Red',
-              dot: 'bg-red-500',
-              sel: 'border-red-500 bg-red-50 dark:bg-red-950/40',
-            },
-          ].map((opt) => {
-            const sel = value === opt.v
-            return (
-              <button
-                key={opt.v}
-                type="button"
-                aria-pressed={sel}
-                onClick={() => onChange(sel ? '' : opt.v)}
-                className={`ff-chip flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-md border text-sm font-medium ${
-                  sel
-                    ? `${opt.sel} text-slate-900 dark:text-slate-100`
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 rounded-full ${opt.dot}`} />
-                {opt.label}
-              </button>
-            )
-          })}
+          <GeneratedValue
+            value={[
+              {
+                v: 'green',
+                label: 'Green',
+                dot: 'bg-emerald-500',
+                sel: 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40',
+              },
+              {
+                v: 'yellow',
+                label: 'Yellow',
+                dot: 'bg-amber-400',
+                sel: 'border-amber-500 bg-amber-50 dark:bg-amber-950/40',
+              },
+              {
+                v: 'red',
+                label: 'Red',
+                dot: 'bg-red-500',
+                sel: 'border-red-500 bg-red-50 dark:bg-red-950/40',
+              },
+            ].map((opt) => {
+              const sel = value === opt.v
+              return (
+                <button
+                  key={opt.v}
+                  type="button"
+                  aria-pressed={sel}
+                  onClick={() => onChange(sel ? '' : opt.v)}
+                  className={`ff-chip flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-md border text-sm font-medium ${
+                    sel
+                      ? `${opt.sel} text-slate-900 dark:text-slate-100`
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 rounded-full ${opt.dot}`} />
+                  <GeneratedValue value={opt.label} />
+                </button>
+              )
+            })}
+          />
         </div>
       )
     case 'person_picker':
@@ -2271,8 +2534,8 @@ function FieldInput({
             label: `${p.lastName}, ${p.firstName}`,
             hint: p.employeeNo ?? undefined,
           }))}
-          placeholder="Select a person…"
-          searchPlaceholder="Search people…"
+          placeholder={tGenerated('m_0be39d3a196b5b')}
+          searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
           sheetTitle="Select a person"
           clearable
           emptyLabel="—"
@@ -2283,30 +2546,36 @@ function FieldInput({
       const byId = new Map(people.map((p) => [p.id, p]))
       return (
         <div className="space-y-2">
-          {arr.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {arr.map((id) => {
-                const p = byId.get(id)
-                const label = p ? `${p.lastName}, ${p.firstName}` : id.slice(0, 8)
-                return (
-                  <span
-                    key={id}
-                    className="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 py-0.5 pr-1 pl-2.5 text-xs text-teal-900 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200"
-                  >
-                    {label}
-                    <button
-                      type="button"
-                      onClick={() => onChange(arr.filter((v) => v !== id))}
-                      aria-label={`Remove ${label}`}
-                      className="rounded-full p-0.5 text-teal-600 hover:bg-teal-100 hover:text-teal-900 dark:text-teal-400 dark:hover:bg-teal-900"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                )
-              })}
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              arr.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  <GeneratedValue
+                    value={arr.map((id) => {
+                      const p = byId.get(id)
+                      const label = p ? `${p.lastName}, ${p.firstName}` : id.slice(0, 8)
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 py-0.5 pr-1 pl-2.5 text-xs text-teal-900 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200"
+                        >
+                          <GeneratedValue value={label} />
+                          <button
+                            type="button"
+                            onClick={() => onChange(arr.filter((v) => v !== id))}
+                            aria-label={tGenerated('m_101f98a70352fa', { value0: label })}
+                            className="rounded-full p-0.5 text-teal-600 hover:bg-teal-100 hover:text-teal-900 dark:text-teal-400 dark:hover:bg-teal-900"
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      )
+                    })}
+                  />
+                </div>
+              ) : null
+            }
+          />
           <SearchSelect
             value=""
             onChange={(id) => {
@@ -2319,8 +2588,8 @@ function FieldInput({
                 label: `${p.lastName}, ${p.firstName}`,
                 hint: p.employeeNo ?? undefined,
               }))}
-            placeholder="Add person…"
-            searchPlaceholder="Search people…"
+            placeholder={tGenerated('m_0b3f2e42d2d097')}
+            searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
             sheetTitle="Add a person"
           />
         </div>
@@ -2378,13 +2647,13 @@ function FieldInput({
     case 'heading':
       return (
         <h3 className="text-base font-semibold text-slate-800">
-          {localizeText(field.label, locale, field.id)}
+          <GeneratedValue value={localizeText(field.label, locale, field.id)} />
         </h3>
       )
     case 'paragraph':
       return (
         <p className="text-sm text-slate-600">
-          {localizeText(field.helpText ?? field.label, locale, field.id)}
+          <GeneratedValue value={localizeText(field.helpText ?? field.label, locale, field.id)} />
         </p>
       )
     case 'divider':
@@ -2434,6 +2703,7 @@ function NumberStepper({
   value: unknown
   onChange: (v: unknown) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const c = (field.config ?? {}) as { min?: number; max?: number; step?: number; unit?: string }
   const step = c.step ?? 1
   const num =
@@ -2449,7 +2719,12 @@ function NumberStepper({
     'ff-chip flex w-14 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 active:scale-95 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
   return (
     <div className="flex items-stretch gap-2">
-      <button type="button" className={btn} onClick={() => bump(-1)} aria-label="Decrease">
+      <button
+        type="button"
+        className={btn}
+        onClick={() => bump(-1)}
+        aria-label={tGenerated('m_1bbb2531ada8ce')}
+      >
         <Minus size={18} />
       </button>
       <div className="relative flex-1">
@@ -2466,13 +2741,22 @@ function NumberStepper({
             onChange(Number.isNaN(n) ? '' : n)
           }}
         />
-        {c.unit ? (
-          <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-slate-400">
-            {c.unit}
-          </span>
-        ) : null}
+        <GeneratedValue
+          value={
+            c.unit ? (
+              <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-slate-400">
+                <GeneratedValue value={c.unit} />
+              </span>
+            ) : null
+          }
+        />
       </div>
-      <button type="button" className={btn} onClick={() => bump(1)} aria-label="Increase">
+      <button
+        type="button"
+        className={btn}
+        onClick={() => bump(1)}
+        aria-label={tGenerated('m_12a3f895c3506c')}
+      >
         <Plus size={18} />
       </button>
     </div>
@@ -2494,24 +2778,26 @@ function RatingButtons({
   const cur = typeof value === 'number' ? value : null
   return (
     <div className="flex flex-wrap gap-2">
-      {Array.from({ length: max }, (_, i) => i + 1).map((n) => {
-        const sel = cur === n
-        return (
-          <button
-            key={n}
-            type="button"
-            aria-pressed={sel}
-            onClick={() => onChange(sel ? '' : n)}
-            className={`ff-chip flex h-12 min-w-12 flex-1 items-center justify-center rounded-md border text-lg font-semibold ${
-              sel
-                ? 'border-teal-500 bg-teal-600 text-white'
-                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
-            }`}
-          >
-            {n}
-          </button>
-        )
-      })}
+      <GeneratedValue
+        value={Array.from({ length: max }, (_, i) => i + 1).map((n) => {
+          const sel = cur === n
+          return (
+            <button
+              key={n}
+              type="button"
+              aria-pressed={sel}
+              onClick={() => onChange(sel ? '' : n)}
+              className={`ff-chip flex h-12 min-w-12 flex-1 items-center justify-center rounded-md border text-lg font-semibold ${
+                sel
+                  ? 'border-teal-500 bg-teal-600 text-white'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+              }`}
+            >
+              <GeneratedValue value={n} />
+            </button>
+          )
+        })}
+      />
     </div>
   )
 }
@@ -2527,6 +2813,7 @@ function TableField({
   value: unknown
   onChange: (v: unknown) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const config = (field.config ?? {}) as Partial<TableConfig>
   const columns = (config.columns ?? []) as TableColumn[]
   const rowMode = config.rowMode === 'fixed' ? 'fixed' : 'addable'
@@ -2554,7 +2841,7 @@ function TableField({
   if (columns.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-400">
-        This table has no columns configured.
+        <GeneratedText id="m_0e96f06e9f8960" />
       </p>
     )
   }
@@ -2566,136 +2853,201 @@ function TableField({
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-800/60">
-              {rowMode === 'fixed' ? (
-                <th className="border-b border-slate-200 px-2 py-1.5 text-left text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300" />
-              ) : null}
-              {columns.map((c) => (
-                <th
-                  key={c.key}
-                  className="border-b border-slate-200 px-2 py-1.5 text-left text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                >
-                  {c.label || c.key}
-                </th>
-              ))}
-              {rowMode === 'addable' ? (
-                <th className="w-8 border-b border-slate-200 dark:border-slate-700" />
-              ) : null}
+              <GeneratedValue
+                value={
+                  rowMode === 'fixed' ? (
+                    <th className="border-b border-slate-200 px-2 py-1.5 text-left text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300" />
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={columns.map((c) => (
+                  <th
+                    key={c.key}
+                    className="border-b border-slate-200 px-2 py-1.5 text-left text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                  >
+                    <GeneratedValue value={c.label || c.key} />
+                  </th>
+                ))}
+              />
+              <GeneratedValue
+                value={
+                  rowMode === 'addable' ? (
+                    <th className="w-8 border-b border-slate-200 dark:border-slate-700" />
+                  ) : null
+                }
+              />
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length + 1}
-                  className="px-2 py-3 text-center text-xs text-slate-400"
-                >
-                  No rows. Add one below.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, i) => (
-                <tr
-                  key={i}
-                  className="border-b border-slate-100 last:border-b-0 dark:border-slate-800"
-                >
-                  {rowMode === 'fixed' ? (
-                    <td className="px-2 py-1 text-xs font-medium whitespace-nowrap text-slate-700 dark:text-slate-300">
-                      {fixedRows[i]?.label ?? `Row ${i + 1}`}
+            <GeneratedValue
+              value={
+                rows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={columns.length + 1}
+                      className="px-2 py-3 text-center text-xs text-slate-400"
+                    >
+                      <GeneratedText id="m_1cee12b0954a84" />
                     </td>
-                  ) : null}
-                  {columns.map((c) => (
-                    <td key={c.key} className="px-1.5 py-1 align-top">
-                      <TableCell
-                        column={c}
-                        value={row[c.key]}
-                        onChange={(v) => setCell(i, c.key, v)}
+                  </tr>
+                ) : (
+                  rows.map((row, i) => (
+                    <tr
+                      key={i}
+                      className="border-b border-slate-100 last:border-b-0 dark:border-slate-800"
+                    >
+                      <GeneratedValue
+                        value={
+                          rowMode === 'fixed' ? (
+                            <td className="px-2 py-1 text-xs font-medium whitespace-nowrap text-slate-700 dark:text-slate-300">
+                              <GeneratedValue
+                                value={
+                                  fixedRows[i]?.label ?? (
+                                    <GeneratedText
+                                      id="m_031b307596badd"
+                                      values={{ value0: i + 1 }}
+                                    />
+                                  )
+                                }
+                              />
+                            </td>
+                          ) : null
+                        }
                       />
-                    </td>
-                  ))}
-                  {rowMode === 'addable' ? (
-                    <td className="px-1 py-1 text-center align-middle">
-                      <button
-                        type="button"
-                        onClick={() => removeRow(i)}
-                        disabled={rows.length <= minRows}
-                        title="Remove row"
-                        className="rounded p-1 text-slate-400 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))
-            )}
+                      <GeneratedValue
+                        value={columns.map((c) => (
+                          <td key={c.key} className="px-1.5 py-1 align-top">
+                            <TableCell
+                              column={c}
+                              value={row[c.key]}
+                              onChange={(v) => setCell(i, c.key, v)}
+                            />
+                          </td>
+                        ))}
+                      />
+                      <GeneratedValue
+                        value={
+                          rowMode === 'addable' ? (
+                            <td className="px-1 py-1 text-center align-middle">
+                              <button
+                                type="button"
+                                onClick={() => removeRow(i)}
+                                disabled={rows.length <= minRows}
+                                title={tGenerated('m_12b310a027b08a')}
+                                className="rounded p-1 text-slate-400 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-30"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          ) : null
+                        }
+                      />
+                    </tr>
+                  ))
+                )
+              }
+            />
           </tbody>
         </table>
-        {rowMode === 'addable' ? (
-          <div className="border-t border-slate-200 p-1.5 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={addRow}
-              disabled={maxRows != null && rows.length >= maxRows}
-              className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Plus size={13} /> Add row
-            </button>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            rowMode === 'addable' ? (
+              <div className="border-t border-slate-200 p-1.5 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={addRow}
+                  disabled={maxRows != null && rows.length >= maxRows}
+                  className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Plus size={13} /> <GeneratedText id="m_1eabd71bbc0199" />
+                </button>
+              </div>
+            ) : null
+          }
+        />
       </div>
 
       {/* Mobile: one card per row — never a horizontal scroll on a phone. */}
       <div className="space-y-3 sm:hidden">
-        {rows.length === 0 ? (
-          <p className="text-sm text-slate-500">No rows yet.</p>
-        ) : (
-          rows.map((row, i) => (
-            <div
-              key={i}
-              className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/40"
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                  {rowMode === 'fixed' ? (fixedRows[i]?.label ?? `Row ${i + 1}`) : `Row ${i + 1}`}
-                </span>
-                {rowMode === 'addable' ? (
-                  <button
-                    type="button"
-                    onClick={() => removeRow(i)}
-                    disabled={rows.length <= minRows}
-                    title="Remove row"
-                    className="ff-chip flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30 dark:hover:bg-red-950/40"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                ) : null}
-              </div>
-              <div className="space-y-2.5">
-                {columns.map((c) => (
-                  <div key={c.key} className="space-y-1">
-                    <label className="text-xs font-medium text-slate-500">{c.label || c.key}</label>
-                    <TableCell
-                      column={c}
-                      value={row[c.key]}
-                      onChange={(v) => setCell(i, c.key, v)}
-                      mobile
+        <GeneratedValue
+          value={
+            rows.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                <GeneratedText id="m_119e08753a396f" />
+              </p>
+            ) : (
+              rows.map((row, i) => (
+                <div
+                  key={i}
+                  className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/40"
+                >
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                      <GeneratedValue
+                        value={
+                          rowMode === 'fixed' ? (
+                            (fixedRows[i]?.label ?? (
+                              <GeneratedText id="m_031b307596badd" values={{ value0: i + 1 }} />
+                            ))
+                          ) : (
+                            <GeneratedText id="m_031b307596badd" values={{ value0: i + 1 }} />
+                          )
+                        }
+                      />
+                    </span>
+                    <GeneratedValue
+                      value={
+                        rowMode === 'addable' ? (
+                          <button
+                            type="button"
+                            onClick={() => removeRow(i)}
+                            disabled={rows.length <= minRows}
+                            title={tGenerated('m_12b310a027b08a')}
+                            className="ff-chip flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30 dark:hover:bg-red-950/40"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        ) : null
+                      }
                     />
                   </div>
-                ))}
-              </div>
-            </div>
-          ))
-        )}
-        {rowMode === 'addable' ? (
-          <button
-            type="button"
-            onClick={addRow}
-            disabled={maxRows != null && rows.length >= maxRows}
-            className="ff-chip flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 text-sm font-medium text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-teal-300"
-          >
-            <Plus size={16} /> Add row
-          </button>
-        ) : null}
+                  <div className="space-y-2.5">
+                    <GeneratedValue
+                      value={columns.map((c) => (
+                        <div key={c.key} className="space-y-1">
+                          <label className="text-xs font-medium text-slate-500">
+                            <GeneratedValue value={c.label || c.key} />
+                          </label>
+                          <TableCell
+                            column={c}
+                            value={row[c.key]}
+                            onChange={(v) => setCell(i, c.key, v)}
+                            mobile
+                          />
+                        </div>
+                      ))}
+                    />
+                  </div>
+                </div>
+              ))
+            )
+          }
+        />
+        <GeneratedValue
+          value={
+            rowMode === 'addable' ? (
+              <button
+                type="button"
+                onClick={addRow}
+                disabled={maxRows != null && rows.length >= maxRows}
+                className="ff-chip flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 text-sm font-medium text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-teal-300"
+              >
+                <Plus size={16} /> <GeneratedText id="m_1eabd71bbc0199" />
+              </button>
+            ) : null
+          }
+        />
       </div>
     </div>
   )
@@ -2757,11 +3109,13 @@ function TableCell({
           onChange={(e) => onChange(e.target.value)}
         >
           <option value="">—</option>
-          {(column.options ?? []).map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label || o.value}
-            </option>
-          ))}
+          <GeneratedValue
+            value={(column.options ?? []).map((o) => (
+              <option key={o.value} value={o.value}>
+                <GeneratedValue value={o.label || o.value} />
+              </option>
+            ))}
+          />
         </Select>
       )
     default:
@@ -2786,6 +3140,7 @@ function TypedAttestationField({
   value: unknown
   onChange: (v: unknown) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const locale = useLocale()
   const v = (value ?? {}) as { name?: string; agreed?: boolean }
   const statement =
@@ -2795,7 +3150,7 @@ function TypedAttestationField({
   return (
     <div className="space-y-2">
       <Input
-        placeholder="Type your full name"
+        placeholder={tGenerated('m_099ccdb4b80d5d')}
         value={v.name ?? ''}
         onChange={(e) => onChange({ ...v, name: e.target.value })}
       />
@@ -2806,7 +3161,9 @@ function TypedAttestationField({
           checked={!!v.agreed}
           onChange={(e) => onChange({ ...v, agreed: e.target.checked })}
         />
-        <span>{statement}</span>
+        <span>
+          <GeneratedValue value={statement} />
+        </span>
       </label>
     </div>
   )
@@ -2855,6 +3212,8 @@ function OrgUnitPickerInput({
   value: unknown
   onChange: (v: unknown) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const contextCache = useContext(OrgUnitOptionsCacheContext)
   // Defensive per-instance fallback for a render outside FormRenderer's
   // provider. Lazy state (not a ref) so reading it during render is legal.
@@ -2894,8 +3253,12 @@ function OrgUnitPickerInput({
         label: o.name,
         hint: o.code ?? undefined,
       }))}
-      placeholder={loading ? 'Loading…' : `Select ${article} ${noun}…`}
-      searchPlaceholder={`Search ${noun}s…`}
+      placeholder={tGeneratedValue(
+        loading
+          ? tGenerated('m_0e65697ec32c03')
+          : tGenerated('m_1d3baabf618cbd', { value0: article, value1: noun }),
+      )}
+      searchPlaceholder={tGenerated('m_13a874065f07f8', { value0: noun })}
       sheetTitle={`Select ${article} ${noun}`}
       clearable
       emptyLabel="—"
@@ -2919,6 +3282,8 @@ function LookupInput({
   evalCtx: EvalContext
   onSetFieldValue?: (fieldId: string, v: unknown) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const b = field.binding
   const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
   const hasCascade = !!b?.filterByField && !!b?.filterColumn
@@ -3007,7 +3372,9 @@ function LookupInput({
   if (!sourceKey) {
     return (
       <Select disabled>
-        <option>Configure a data source…</option>
+        <option>
+          <GeneratedText id="m_08824e0636c702" />
+        </option>
       </Select>
     )
   }
@@ -3042,8 +3409,10 @@ function LookupInput({
         value: String(row[valueColumn] ?? ''),
         label: labelForRow(row, b.labelColumn),
       }))}
-      placeholder={waitingParent ? 'Select the previous field first…' : 'Select…'}
-      searchPlaceholder="Search records…"
+      placeholder={tGeneratedValue(
+        waitingParent ? tGenerated('m_071d6ce8114c46') : tGenerated('m_1129f239fbb89a'),
+      )}
+      searchPlaceholder={tGenerated('m_1d213acef86dbc')}
       sheetTitle="Select a record"
       clearable
       emptyLabel="—"
@@ -3081,6 +3450,8 @@ function DataTableInput({
   onChange: (v: unknown) => void
   evalCtx: EvalContext
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const locale = useLocale()
   const formT = useTranslations('Forms')
   const b = field.binding
@@ -3173,7 +3544,12 @@ function DataTableInput({
     where,
   ])
 
-  if (!sourceKey) return <p className="text-xs text-slate-400">Configure a data source…</p>
+  if (!sourceKey)
+    return (
+      <p className="text-xs text-slate-400">
+        <GeneratedText id="m_08824e0636c702" />
+      </p>
+    )
 
   const selectable = b.selectable ?? 'none'
   const showCols = b.columns?.length
@@ -3189,7 +3565,11 @@ function DataTableInput({
   }
 
   if (waitingParent) {
-    return <p className="text-xs text-slate-400">Select the previous field first.</p>
+    return (
+      <p className="text-xs text-slate-400">
+        <GeneratedText id="m_1c34ceb10770ab" />
+      </p>
+    )
   }
 
   const pageCount = Math.max(1, Math.ceil(res.total / pageSize))
@@ -3207,10 +3587,12 @@ function DataTableInput({
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value.slice(0, 100))}
-          placeholder="Search records…"
-          aria-label={formT('searchRecords', {
-            field: localizeText(field.label, locale, 'data table'),
-          })}
+          placeholder={tGenerated('m_1d213acef86dbc')}
+          aria-label={tGeneratedValue(
+            formT('searchRecords', {
+              field: localizeText(field.label, locale, 'data table'),
+            }),
+          )}
           className="h-9 pr-3 pl-8"
         />
       </div>
@@ -3218,80 +3600,135 @@ function DataTableInput({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500">
-              {selectable !== 'none' ? <th className="w-8 px-2 py-1.5" /> : null}
-              {showCols.map((c) => (
-                <th key={c.key} className="px-2 py-1.5 font-medium">
-                  {c.label}
-                </th>
-              ))}
+              <GeneratedValue
+                value={selectable !== 'none' ? <th className="w-8 px-2 py-1.5" /> : null}
+              />
+              <GeneratedValue
+                value={showCols.map((c) => (
+                  <th key={c.key} className="px-2 py-1.5 font-medium">
+                    <GeneratedValue value={c.label} />
+                  </th>
+                ))}
+              />
             </tr>
           </thead>
           <tbody>
-            {res.rows.map((r, i) => {
-              const rowId = String(r.__rowId ?? i)
-              const isSel = selected.includes(rowId)
-              return (
-                <tr
-                  key={rowId}
-                  className={`border-b border-slate-100 ${isSel ? 'bg-teal-50' : ''} ${
-                    selectable !== 'none' ? 'cursor-pointer hover:bg-slate-50' : ''
-                  }`}
-                  onClick={selectable !== 'none' ? () => toggle(rowId) : undefined}
-                >
-                  {selectable !== 'none' ? (
-                    <td className="px-2 py-1.5">
-                      <input
-                        type={selectable === 'single' ? 'radio' : 'checkbox'}
-                        checked={isSel}
-                        aria-label={`${isSel ? 'Deselect' : 'Select'} row ${rowId}`}
-                        onClick={(event) => event.stopPropagation()}
-                        onChange={() => toggle(rowId)}
-                      />
-                    </td>
-                  ) : null}
-                  {showCols.map((c) => (
-                    <td key={c.key} className="px-2 py-1.5 text-slate-700">
-                      {r[c.key] == null || r[c.key] === '' ? '—' : String(r[c.key])}
-                    </td>
-                  ))}
-                </tr>
-              )
-            })}
+            <GeneratedValue
+              value={res.rows.map((r, i) => {
+                const rowId = String(r.__rowId ?? i)
+                const isSel = selected.includes(rowId)
+                return (
+                  <tr
+                    key={rowId}
+                    className={`border-b border-slate-100 ${isSel ? 'bg-teal-50' : ''} ${
+                      selectable !== 'none' ? 'cursor-pointer hover:bg-slate-50' : ''
+                    }`}
+                    onClick={selectable !== 'none' ? () => toggle(rowId) : undefined}
+                  >
+                    <GeneratedValue
+                      value={
+                        selectable !== 'none' ? (
+                          <td className="px-2 py-1.5">
+                            <input
+                              type={selectable === 'single' ? 'radio' : 'checkbox'}
+                              checked={isSel}
+                              aria-label={tGenerated('m_195a8468f60956', {
+                                value0: isSel ? 'Deselect' : 'Select',
+                                value1: rowId,
+                              })}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={() => toggle(rowId)}
+                            />
+                          </td>
+                        ) : null
+                      }
+                    />
+                    <GeneratedValue
+                      value={showCols.map((c) => (
+                        <td key={c.key} className="px-2 py-1.5 text-slate-700">
+                          <GeneratedValue
+                            value={r[c.key] == null || r[c.key] === '' ? '—' : String(r[c.key])}
+                          />
+                        </td>
+                      ))}
+                    />
+                  </tr>
+                )
+              })}
+            />
           </tbody>
         </table>
-        {loading ? <p className="px-3 py-4 text-xs text-slate-400">Loading…</p> : null}
-        {!loading && error ? (
-          <p className="px-3 py-4 text-xs text-red-600">Could not load records. Try again.</p>
-        ) : null}
-        {!loading && !error && res.rows.length === 0 ? (
-          <p className="px-3 py-4 text-xs text-slate-400">No matching records.</p>
-        ) : null}
+        <GeneratedValue
+          value={
+            loading ? (
+              <p className="px-3 py-4 text-xs text-slate-400">
+                <GeneratedText id="m_0e65697ec32c03" />
+              </p>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            !loading && error ? (
+              <p className="px-3 py-4 text-xs text-red-600">
+                <GeneratedText id="m_1fa9ced82f8b16" />
+              </p>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            !loading && !error && res.rows.length === 0 ? (
+              <p className="px-3 py-4 text-xs text-slate-400">
+                <GeneratedText id="m_02c65c639b006d" />
+              </p>
+            ) : null
+          }
+        />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-        <span>{res.total === 0 ? 'No results' : `Showing ${from}–${to} of ${res.total}`}</span>
-        {pageCount > 1 ? (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={page <= 1 || loading}
-              onClick={() => setCurrentPage((current) => Math.max(1, current - 1))}
-              className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span className="px-1">
-              Page {page} of {pageCount}
-            </span>
-            <button
-              type="button"
-              disabled={page >= pageCount || loading}
-              onClick={() => setCurrentPage((current) => Math.min(pageCount, current + 1))}
-              className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
-        ) : null}
+        <span>
+          <GeneratedValue
+            value={
+              res.total === 0 ? (
+                <GeneratedText id="m_0c726da8b78d42" />
+              ) : (
+                <GeneratedText
+                  id="m_1f2236b17eb1ef"
+                  values={{ value0: from, value1: to, value2: res.total }}
+                />
+              )
+            }
+          />
+        </span>
+        <GeneratedValue
+          value={
+            pageCount > 1 ? (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={page <= 1 || loading}
+                  onClick={() => setCurrentPage((current) => Math.max(1, current - 1))}
+                  className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40"
+                >
+                  <GeneratedText id="m_0b628e024bdff1" />
+                </button>
+                <span className="px-1">
+                  <GeneratedText id="m_1f07a454b7b05b" /> <GeneratedValue value={page} />{' '}
+                  <GeneratedText id="m_00e704d1194796" /> <GeneratedValue value={pageCount} />
+                </span>
+                <button
+                  type="button"
+                  disabled={page >= pageCount || loading}
+                  onClick={() => setCurrentPage((current) => Math.min(pageCount, current + 1))}
+                  className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40"
+                >
+                  <GeneratedText id="m_08b5fa148b2af7" />
+                </button>
+              </div>
+            ) : null
+          }
+        />
       </div>
     </div>
   )
@@ -3300,6 +3737,7 @@ function DataTableInput({
 // A display-only KPI / chart — aggregates its source server-side and renders a
 // single number, a bar/line chart, or a proportion list (pie).
 function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContext }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const b = field.binding
   const parentVal = b?.filterByField ? evalCtx.values[b.filterByField] : undefined
   const hasCascade = !!b?.filterByField && !!b?.filterColumn
@@ -3342,7 +3780,12 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
     parentVal,
   ])
 
-  if (!b?.sourceKey) return <p className="text-xs text-slate-400">Configure a data source…</p>
+  if (!b?.sourceKey)
+    return (
+      <p className="text-xs text-slate-400">
+        <GeneratedText id="m_08824e0636c702" />
+      </p>
+    )
 
   const fmt = (n: number | null) =>
     n == null ? '—' : Number.isInteger(n) ? String(n) : n.toFixed(1)
@@ -3353,34 +3796,44 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
       const total = res.groups.reduce((a, g) => a + g.value, 0) || 1
       return (
         <div className="space-y-1.5">
-          {res.groups.map((g) => (
-            <div key={g.key} className="flex items-center gap-2 text-xs">
-              <span className="w-28 truncate text-slate-600">{g.key}</span>
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-teal-500"
-                  style={{ width: `${(g.value / total) * 100}%` }}
-                />
+          <GeneratedValue
+            value={res.groups.map((g) => (
+              <div key={g.key} className="flex items-center gap-2 text-xs">
+                <span className="w-28 truncate text-slate-600">
+                  <GeneratedValue value={g.key} />
+                </span>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-teal-500"
+                    style={{ width: `${(g.value / total) * 100}%` }}
+                  />
+                </div>
+                <span className="w-10 text-right text-slate-500 tabular-nums">
+                  <GeneratedValue value={fmt(g.value)} />
+                </span>
               </div>
-              <span className="w-10 text-right text-slate-500 tabular-nums">{fmt(g.value)}</span>
-            </div>
-          ))}
+            ))}
+          />
         </div>
       )
     }
     const max = Math.max(...res.groups.map((g) => g.value), 1)
     return (
       <div className="flex items-end gap-1.5" style={{ height: 120 }}>
-        {res.groups.map((g) => (
-          <div key={g.key} className="flex flex-1 flex-col items-center justify-end gap-1">
-            <div
-              className="w-full rounded-t bg-teal-400"
-              style={{ height: `${Math.max((g.value / max) * 100, 3)}%` }}
-              title={`${g.key}: ${fmt(g.value)}`}
-            />
-            <span className="w-full truncate text-center text-[9px] text-slate-400">{g.key}</span>
-          </div>
-        ))}
+        <GeneratedValue
+          value={res.groups.map((g) => (
+            <div key={g.key} className="flex flex-1 flex-col items-center justify-end gap-1">
+              <div
+                className="w-full rounded-t bg-teal-400"
+                style={{ height: `${Math.max((g.value / max) * 100, 3)}%` }}
+                title={tGeneratedValue(`${g.key}: ${fmt(g.value)}`)}
+              />
+              <span className="w-full truncate text-center text-[9px] text-slate-400">
+                <GeneratedValue value={g.key} />
+              </span>
+            </div>
+          ))}
+        />
       </div>
     )
   }
@@ -3388,12 +3841,14 @@ function MetricBlock({ field, evalCtx }: { field: FormField; evalCtx: EvalContex
   return (
     <div className="inline-flex flex-col rounded-lg border border-slate-200 bg-white px-4 py-3">
       <span className="text-3xl font-semibold text-slate-800 tabular-nums">
-        {fmt(res?.value ?? null)}
+        <GeneratedValue value={fmt(res?.value ?? null)} />
       </span>
       <span className="mt-0.5 text-[10px] tracking-wide text-slate-400 uppercase">
-        {agg?.fn ?? 'count'}
-        {agg?.column ? ` · ${agg.column}` : ''}
-        {res ? ` · ${res.total} rows` : ''}
+        <GeneratedValue value={agg?.fn ?? <GeneratedText id="m_15f748343d3956" />} />
+        <GeneratedValue value={agg?.column ? ` · ${agg.column}` : ''} />
+        <GeneratedValue
+          value={res ? <GeneratedText id="m_0e814cfafd9944" values={{ value0: res.total }} /> : ''}
+        />
       </span>
     </div>
   )
@@ -3465,72 +3920,150 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
           disabled={attachments.length === 0 || analyzing}
           onClick={analyze}
         >
-          <Sparkles size={14} />{' '}
-          {analyzing ? 'Analyzing…' : a ? 'Re-analyze' : 'Analyze for hazards'}
+          <Sparkles size={14} />
+          <GeneratedValue value={' '} />
+          <GeneratedValue
+            value={
+              analyzing ? (
+                <GeneratedText id="m_03e83706cf8b10" />
+              ) : a ? (
+                <GeneratedText id="m_0535300396f0de" />
+              ) : (
+                <GeneratedText id="m_0fec93e95858fc" />
+              )
+            }
+          />
         </Button>
-        {a ? (
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-medium ${riskTone(a.overallRisk)}`}
-          >
-            {a.overallRisk === 'none' ? 'No concerns' : `${a.overallRisk} risk`}
-          </span>
-        ) : null}
+        <GeneratedValue
+          value={
+            a ? (
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${riskTone(a.overallRisk)}`}
+              >
+                <GeneratedValue
+                  value={
+                    a.overallRisk === 'none' ? (
+                      <GeneratedText id="m_01711e3b6ef4b1" />
+                    ) : (
+                      <GeneratedText id="m_114202332342ab" values={{ value0: a.overallRisk }} />
+                    )
+                  }
+                />
+              </span>
+            ) : null
+          }
+        />
       </div>
-      {err ? <p className="text-xs text-red-600">{err}</p> : null}
-      {a ? (
-        <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-sm">
-          {a.summary ? <p className="text-slate-700">{a.summary}</p> : null}
-          {a.ppe.length > 0 ? (
-            <div>
-              <div className="mb-1 flex items-center gap-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
-                <ShieldCheck size={12} /> PPE
-              </div>
-              <ul className="space-y-0.5">
-                {a.ppe.map((p, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
-                    <span className={p.status === 'present' ? 'text-emerald-600' : 'text-red-600'}>
-                      {p.status === 'present' ? '✓' : '✗'}
-                    </span>
-                    <span className="text-slate-700">
-                      <strong className="capitalize">{p.item}</strong>
-                      <span className="text-slate-500">
-                        {' '}
-                        — {p.status}
-                        {p.detail ? `: ${p.detail}` : ''}
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
+      <GeneratedValue
+        value={
+          err ? (
+            <p className="text-xs text-red-600">
+              <GeneratedValue value={err} />
+            </p>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          a ? (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-sm">
+              <GeneratedValue
+                value={
+                  a.summary ? (
+                    <p className="text-slate-700">
+                      <GeneratedValue value={a.summary} />
+                    </p>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  a.ppe.length > 0 ? (
+                    <div>
+                      <div className="mb-1 flex items-center gap-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+                        <ShieldCheck size={12} /> <GeneratedText id="m_18391e161b9ed6" />
+                      </div>
+                      <ul className="space-y-0.5">
+                        <GeneratedValue
+                          value={a.ppe.map((p, i) => (
+                            <li key={i} className="flex items-start gap-1.5">
+                              <span
+                                className={
+                                  p.status === 'present' ? 'text-emerald-600' : 'text-red-600'
+                                }
+                              >
+                                <GeneratedValue value={p.status === 'present' ? '✓' : '✗'} />
+                              </span>
+                              <span className="text-slate-700">
+                                <strong className="capitalize">
+                                  <GeneratedValue value={p.item} />
+                                </strong>
+                                <span className="text-slate-500">
+                                  <GeneratedValue value={' '} />
+                                  — <GeneratedValue value={p.status} />
+                                  <GeneratedValue value={p.detail ? `: ${p.detail}` : ''} />
+                                </span>
+                              </span>
+                            </li>
+                          ))}
+                        />
+                      </ul>
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  a.hazards.length > 0 ? (
+                    <div>
+                      <div className="mb-1 flex items-center gap-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+                        <AlertTriangle size={12} /> <GeneratedText id="m_168fba897c5202" />
+                      </div>
+                      <ul className="space-y-0.5">
+                        <GeneratedValue
+                          value={a.hazards.map((h, i) => (
+                            <li key={i} className="flex items-start gap-1.5">
+                              <AlertTriangle
+                                size={13}
+                                className={`mt-0.5 shrink-0 ${sevTone(h.severity)}`}
+                              />
+                              <span className="text-slate-700">
+                                <strong className="capitalize">
+                                  <GeneratedValue value={h.type} />
+                                </strong>
+                                <GeneratedValue value={' '} />
+                                <span className={`text-xs uppercase ${sevTone(h.severity)}`}>
+                                  (<GeneratedValue value={h.severity} />)
+                                </span>
+                                <span className="text-slate-500">
+                                  {' '}
+                                  — <GeneratedValue value={h.detail} />
+                                </span>
+                              </span>
+                            </li>
+                          ))}
+                        />
+                      </ul>
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  a.ppe.length === 0 && a.hazards.length === 0 ? (
+                    <p className="text-xs text-emerald-700">
+                      <GeneratedText id="m_04f68a7a34cfe6" />
+                    </p>
+                  ) : null
+                }
+              />
+              <p className="text-[10px] text-slate-400">
+                <GeneratedText id="m_05f4e3346f9aec" />
+              </p>
             </div>
-          ) : null}
-          {a.hazards.length > 0 ? (
-            <div>
-              <div className="mb-1 flex items-center gap-1 text-xs font-semibold tracking-wide text-slate-400 uppercase">
-                <AlertTriangle size={12} /> Hazards
-              </div>
-              <ul className="space-y-0.5">
-                {a.hazards.map((h, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
-                    <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${sevTone(h.severity)}`} />
-                    <span className="text-slate-700">
-                      <strong className="capitalize">{h.type}</strong>{' '}
-                      <span className={`text-xs uppercase ${sevTone(h.severity)}`}>
-                        ({h.severity})
-                      </span>
-                      <span className="text-slate-500"> — {h.detail}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {a.ppe.length === 0 && a.hazards.length === 0 ? (
-            <p className="text-xs text-emerald-700">No PPE issues or hazards detected.</p>
-          ) : null}
-          <p className="text-[10px] text-slate-400">AI-generated — verify before acting.</p>
-        </div>
-      ) : null}
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -3547,6 +4080,7 @@ function PhotoAnnotateInput({
   value: unknown
   onChange: (v: unknown) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const v = (
     value && typeof value === 'object' && !Array.isArray(value) ? value : {}
   ) as PhotoAnnotatedValue
@@ -3588,55 +4122,63 @@ function PhotoAnnotateInput({
       >
         <RawImage
           src={photo.url}
-          alt="Annotate hazards"
+          alt={tGenerated('m_0fe28938af7e45')}
           optimizationReason="authenticated"
           draggable={false}
           className="max-h-80 max-w-full rounded border border-slate-200"
         />
-        {markers.map((m, i) => (
-          <span
-            key={m.id}
-            className="absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-rose-600 text-xs font-bold text-white ring-2 ring-white"
-            style={{ left: `${m.x * 100}%`, top: `${m.y * 100}%` }}
-          >
-            {i + 1}
-          </span>
-        ))}
+        <GeneratedValue
+          value={markers.map((m, i) => (
+            <span
+              key={m.id}
+              className="absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-rose-600 text-xs font-bold text-white ring-2 ring-white"
+              style={{ left: `${m.x * 100}%`, top: `${m.y * 100}%` }}
+            >
+              <GeneratedValue value={i + 1} />
+            </span>
+          ))}
+        />
       </div>
       <p className="text-[11px] text-slate-400">
-        Tap the photo to drop a numbered marker on a hazard.
+        <GeneratedText id="m_02961df16c552c" />
       </p>
-      {markers.length > 0 ? (
-        <ul className="space-y-1">
-          {markers.map((m, i) => (
-            <li key={m.id} className="flex items-center gap-2">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white">
-                {i + 1}
-              </span>
-              <Input
-                value={m.label}
-                placeholder={`Marker ${i + 1} — note`}
-                onChange={(e) => setLabel(m.id, e.target.value)}
-                className="h-8 flex-1"
+      <GeneratedValue
+        value={
+          markers.length > 0 ? (
+            <ul className="space-y-1">
+              <GeneratedValue
+                value={markers.map((m, i) => (
+                  <li key={m.id} className="flex items-center gap-2">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white">
+                      <GeneratedValue value={i + 1} />
+                    </span>
+                    <Input
+                      value={m.label}
+                      placeholder={tGenerated('m_16fb1210fc864b', { value0: i + 1 })}
+                      onChange={(e) => setLabel(m.id, e.target.value)}
+                      className="h-8 flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeMarker(m.id)}
+                      className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500"
+                      title={tGenerated('m_0079038e85c06d')}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </li>
+                ))}
               />
-              <button
-                type="button"
-                onClick={() => removeMarker(m.id)}
-                className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500"
-                title="Remove marker"
-              >
-                <Trash2 size={14} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+            </ul>
+          ) : null
+        }
+      />
       <button
         type="button"
         onClick={() => setFiles([])}
         className="text-xs text-slate-500 hover:underline"
       >
-        Replace photo
+        <GeneratedText id="m_0b4d2076c64fbb" />
       </button>
     </div>
   )
@@ -3645,6 +4187,7 @@ function PhotoAnnotateInput({
 // --- QR / barcode scanner --------------------------------------------------
 
 function QrScannerInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const tGenerated = useGeneratedTranslations()
   const [scanning, setScanning] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -3710,23 +4253,44 @@ function QrScannerInput({ value, onChange }: { value: unknown; onChange: (v: unk
       <div className="flex items-center gap-2">
         <Input
           value={(value as string) ?? ''}
-          placeholder="Scan or type a code"
+          placeholder={tGenerated('m_0a43fb83c91fdf')}
           onChange={(e) => onChange(e.target.value)}
           className="flex-1"
         />
         <Button type="button" variant="outline" size="sm" onClick={scanning ? stop : start}>
-          <ScanLine size={14} /> {scanning ? 'Stop' : 'Scan'}
+          <ScanLine size={14} />{' '}
+          <GeneratedValue
+            value={
+              scanning ? (
+                <GeneratedText id="m_0889ad146e26ca" />
+              ) : (
+                <GeneratedText id="m_198b8dba5a829c" />
+              )
+            }
+          />
         </Button>
       </div>
-      {scanning ? (
-        <video
-          ref={videoRef}
-          muted
-          playsInline
-          className="w-full max-w-xs rounded border border-slate-200"
-        />
-      ) : null}
-      {err ? <p className="text-xs text-amber-600">{err}</p> : null}
+      <GeneratedValue
+        value={
+          scanning ? (
+            <video
+              ref={videoRef}
+              muted
+              playsInline
+              className="w-full max-w-xs rounded border border-slate-200"
+            />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          err ? (
+            <p className="text-xs text-amber-600">
+              <GeneratedValue value={err} />
+            </p>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -3742,6 +4306,7 @@ function RankingInput({
   value: unknown
   onChange: (v: unknown) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const locale = useLocale()
   const opts = field.validation?.options ?? []
   const labelOf = (v: string) => {
@@ -3765,36 +4330,46 @@ function RankingInput({
     onChange(next)
   }
   if (opts.length === 0)
-    return <p className="text-xs text-slate-400">Add options to rank (Element → Options).</p>
+    return (
+      <p className="text-xs text-slate-400">
+        <GeneratedText id="m_0ca96ade46371f" />
+      </p>
+    )
   return (
     <ol className="space-y-1">
-      {ordered.map((v, i) => (
-        <li
-          key={v}
-          className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm"
-        >
-          <span className="w-5 text-center font-semibold text-slate-400">{i + 1}</span>
-          <span className="flex-1 text-slate-700">{labelOf(v)}</span>
-          <button
-            type="button"
-            disabled={i === 0}
-            onClick={() => move(i, -1)}
-            className="rounded p-1 text-slate-400 enabled:hover:bg-slate-100 enabled:hover:text-slate-700 disabled:opacity-30"
-            title="Move up"
+      <GeneratedValue
+        value={ordered.map((v, i) => (
+          <li
+            key={v}
+            className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm"
           >
-            <ChevronUp size={14} />
-          </button>
-          <button
-            type="button"
-            disabled={i === ordered.length - 1}
-            onClick={() => move(i, 1)}
-            className="rounded p-1 text-slate-400 enabled:hover:bg-slate-100 enabled:hover:text-slate-700 disabled:opacity-30"
-            title="Move down"
-          >
-            <ChevronDown size={14} />
-          </button>
-        </li>
-      ))}
+            <span className="w-5 text-center font-semibold text-slate-400">
+              <GeneratedValue value={i + 1} />
+            </span>
+            <span className="flex-1 text-slate-700">
+              <GeneratedValue value={labelOf(v)} />
+            </span>
+            <button
+              type="button"
+              disabled={i === 0}
+              onClick={() => move(i, -1)}
+              className="rounded p-1 text-slate-400 enabled:hover:bg-slate-100 enabled:hover:text-slate-700 disabled:opacity-30"
+              title={tGenerated('m_1ec1460770eaa0')}
+            >
+              <ChevronUp size={14} />
+            </button>
+            <button
+              type="button"
+              disabled={i === ordered.length - 1}
+              onClick={() => move(i, 1)}
+              className="rounded p-1 text-slate-400 enabled:hover:bg-slate-100 enabled:hover:text-slate-700 disabled:opacity-30"
+              title={tGenerated('m_14ab8cefda3cf9')}
+            >
+              <ChevronDown size={14} />
+            </button>
+          </li>
+        ))}
+      />
     </ol>
   )
 }
@@ -3802,6 +4377,7 @@ function RankingInput({
 // --- Rich text (lightweight contentEditable) -------------------------------
 
 function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const tGenerated = useGeneratedTranslations()
   const readOnly = useContext(FillReadOnlyContext)
   const ref = useRef<HTMLDivElement>(null)
   // Capture the sanitized initial document once. React sees the same HTML prop
@@ -3822,7 +4398,7 @@ function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unkn
         <button
           type="button"
           className={btn}
-          title="Bold"
+          title={tGenerated('m_1e62e6d69a0d11')}
           disabled={readOnly}
           onClick={() => exec('bold')}
         >
@@ -3831,7 +4407,7 @@ function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unkn
         <button
           type="button"
           className={btn}
-          title="Italic"
+          title={tGenerated('m_1ee96b6856cb45')}
           disabled={readOnly}
           onClick={() => exec('italic')}
         >
@@ -3840,7 +4416,7 @@ function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unkn
         <button
           type="button"
           className={btn}
-          title="Bulleted list"
+          title={tGenerated('m_1eba1a694e67d0')}
           disabled={readOnly}
           onClick={() => exec('insertUnorderedList')}
         >
@@ -3849,14 +4425,14 @@ function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unkn
         <button
           type="button"
           className={btn}
-          title="Link"
+          title={tGenerated('m_197fef09772e0d')}
           disabled={readOnly}
           onClick={() => {
             const url = window.prompt('Link URL')
             if (!url) return
             const safeUrl = normalizeRichTextLinkUrl(url)
             if (!safeUrl) {
-              toast.error('Use an HTTPS, email, phone, /path, or #anchor link.')
+              toast.error(tGenerated('m_19dc719a9038ec'))
               return
             }
             exec('createLink', safeUrl)
@@ -3929,6 +4505,7 @@ type NominatimHit = {
 }
 
 function AddressInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+  const tGenerated = useGeneratedTranslations()
   const v = (
     value && typeof value === 'object' && !Array.isArray(value) ? value : {}
   ) as AddressValue
@@ -3980,53 +4557,63 @@ function AddressInput({ value, onChange }: { value: unknown; onChange: (v: unkno
       <div className="relative">
         <Input
           value={v.query ?? ''}
-          placeholder="Search an address…"
+          placeholder={tGenerated('m_178de0c94da150')}
           onChange={(e) => onQuery(e.target.value)}
         />
-        {searching ? (
-          <span className="absolute top-2.5 right-2 text-xs text-slate-400">…</span>
-        ) : null}
-        {suggestions.length > 0 ? (
-          <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
-            {suggestions.map((s, i) => (
-              <li key={i}>
-                <button
-                  type="button"
-                  onClick={() => choose(s)}
-                  className="block w-full px-2 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50"
-                >
-                  {s.display_name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <GeneratedValue
+          value={
+            searching ? (
+              <span className="absolute top-2.5 right-2 text-xs text-slate-400">…</span>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            suggestions.length > 0 ? (
+              <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
+                <GeneratedValue
+                  value={suggestions.map((s, i) => (
+                    <li key={i}>
+                      <button
+                        type="button"
+                        onClick={() => choose(s)}
+                        className="block w-full px-2 py-1.5 text-left text-xs text-slate-600 hover:bg-slate-50"
+                      >
+                        <GeneratedValue value={s.display_name} />
+                      </button>
+                    </li>
+                  ))}
+                />
+              </ul>
+            ) : null
+          }
+        />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Input
           value={v.line1 ?? ''}
-          placeholder="Address line 1"
+          placeholder={tGenerated('m_13c9eb2e75e0da')}
           onChange={(e) => set({ line1: e.target.value })}
           className="col-span-2"
         />
         <Input
           value={v.city ?? ''}
-          placeholder="City"
+          placeholder={tGenerated('m_0f8706f757eeb9')}
           onChange={(e) => set({ city: e.target.value })}
         />
         <Input
           value={v.region ?? ''}
-          placeholder="State / region"
+          placeholder={tGenerated('m_09f3fc442fedaf')}
           onChange={(e) => set({ region: e.target.value })}
         />
         <Input
           value={v.postal ?? ''}
-          placeholder="Postal code"
+          placeholder={tGenerated('m_19e342351d140c')}
           onChange={(e) => set({ postal: e.target.value })}
         />
         <Input
           value={v.country ?? ''}
-          placeholder="Country"
+          placeholder={tGenerated('m_1bcca98c4d6c29')}
           onChange={(e) => set({ country: e.target.value })}
         />
       </div>
@@ -4153,13 +4740,15 @@ function SaveStatus({
   error: string | null
   onRetry: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   if (status === 'idle') return null
 
   if (status === 'pending') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
         <Cloud size={11} className="animate-pulse" />
-        Saving…
+        <GeneratedText id="m_106811f2aac664" />
       </span>
     )
   }
@@ -4169,11 +4758,11 @@ function SaveStatus({
       <button
         type="button"
         onClick={onRetry}
-        title={error ?? 'Save failed'}
+        title={tGeneratedValue(error ?? tGenerated('m_0731204fbd1b17'))}
         className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100"
       >
         <CloudOff size={11} />
-        Save failed — retry
+        <GeneratedText id="m_0f20f0bc8118a7" />
       </button>
     )
   }
@@ -4183,7 +4772,7 @@ function SaveStatus({
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200">
       <Check size={11} />
-      {label}
+      <GeneratedValue value={label} />
     </span>
   )
 }

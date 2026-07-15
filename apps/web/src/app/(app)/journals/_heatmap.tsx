@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 // Year-in-pixels: a GitHub-style contribution grid of journaling activity.
 // Click any cell to jump to (or start) that day's entry.
 
@@ -19,6 +21,7 @@ function intensity(count: number): string {
 }
 
 export function Heatmap({ data, onPick }: { data: HeatmapCell[]; onPick: (date: string) => void }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const { columns, monthTicks } = useMemo(() => {
     const counts = new Map(data.map((d) => [d.date, d.count]))
     const today = new Date()
@@ -55,33 +58,41 @@ export function Heatmap({ data, onPick }: { data: HeatmapCell[]; onPick: (date: 
     <div className="app-scroll overflow-x-auto pb-1">
       <div className="inline-flex flex-col gap-1">
         <div className="flex gap-[3px] pl-[2px] text-[8px] leading-none text-slate-400 dark:text-slate-500">
-          {columns.map((_, w) => {
-            const tick = monthTicks.find((t) => t.col === w)
-            return (
-              <div key={w} className="w-[10px] text-center">
-                {tick?.label ?? ''}
-              </div>
-            )
-          })}
+          <GeneratedValue
+            value={columns.map((_, w) => {
+              const tick = monthTicks.find((t) => t.col === w)
+              return (
+                <div key={w} className="w-[10px] text-center">
+                  <GeneratedValue value={tick?.label ?? ''} />
+                </div>
+              )
+            })}
+          />
         </div>
         <div className="flex gap-[3px]">
-          {columns.map((col, w) => (
-            <div key={w} className="flex flex-col gap-[3px]">
-              {col.map((cell) =>
-                cell.future ? (
-                  <div key={cell.date} className="h-[10px] w-[10px]" />
-                ) : (
-                  <button
-                    key={cell.date}
-                    type="button"
-                    title={`${cell.date} · ${cell.count} ${cell.count === 1 ? 'entry' : 'entries'}`}
-                    onClick={() => onPick(cell.date)}
-                    className={`h-[10px] w-[10px] rounded-[2px] ring-1 ring-black/[0.03] transition-colors ring-inset dark:ring-white/[0.04] ${intensity(cell.count)}`}
-                  />
-                ),
-              )}
-            </div>
-          ))}
+          <GeneratedValue
+            value={columns.map((col, w) => (
+              <div key={w} className="flex flex-col gap-[3px]">
+                <GeneratedValue
+                  value={col.map((cell) =>
+                    cell.future ? (
+                      <div key={cell.date} className="h-[10px] w-[10px]" />
+                    ) : (
+                      <button
+                        key={cell.date}
+                        type="button"
+                        title={tGeneratedValue(
+                          `${cell.date} · ${cell.count} ${cell.count === 1 ? 'entry' : 'entries'}`,
+                        )}
+                        onClick={() => onPick(cell.date)}
+                        className={`h-[10px] w-[10px] rounded-[2px] ring-1 ring-black/[0.03] transition-colors ring-inset dark:ring-white/[0.04] ${intensity(cell.count)}`}
+                      />
+                    ),
+                  )}
+                />
+              </div>
+            ))}
+          />
         </div>
       </div>
     </div>

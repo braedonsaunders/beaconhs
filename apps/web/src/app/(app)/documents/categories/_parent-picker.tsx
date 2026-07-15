@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { Check, ChevronDown, Loader2, Search } from 'lucide-react'
 import { Input, Popover, cn } from '@beaconhs/ui'
@@ -20,6 +27,8 @@ export function CategoryParentPicker({
   id?: string
   ariaLabel?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [options, setOptions] = useState(initialOptions)
@@ -78,12 +87,12 @@ export function CategoryParentPicker({
             type="button"
             aria-haspopup="listbox"
             aria-expanded={open}
-            aria-label={ariaLabel}
+            aria-label={tGeneratedValue(ariaLabel)}
             onClick={() => setOpen((value) => !value)}
             className="flex h-9 w-full min-w-40 items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 text-left text-sm text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
           >
             <span className={cn('truncate', !selected && 'text-slate-500 dark:text-slate-400')}>
-              {selected?.name ?? 'Top level'}
+              <GeneratedValue value={selected?.name ?? <GeneratedText id="m_11b75c428eea23" />} />
             </span>
             <ChevronDown size={14} className="shrink-0 text-slate-400" />
           </button>
@@ -98,16 +107,27 @@ export function CategoryParentPicker({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search parent categories…"
-            aria-label="Search parent categories"
+            placeholder={tGenerated('m_036733dd6a8590')}
+            aria-label={tGenerated('m_13c4235756f043')}
             className="h-9 pr-8 pl-8"
             autoFocus
           />
-          {pending ? (
-            <Loader2 size={14} className="absolute top-2.5 right-2.5 animate-spin text-slate-400" />
-          ) : null}
+          <GeneratedValue
+            value={
+              pending ? (
+                <Loader2
+                  size={14}
+                  className="absolute top-2.5 right-2.5 animate-spin text-slate-400"
+                />
+              ) : null
+            }
+          />
         </div>
-        <div role="listbox" aria-label={ariaLabel} className="max-h-64 overflow-auto">
+        <div
+          role="listbox"
+          aria-label={tGeneratedValue(ariaLabel)}
+          className="max-h-64 overflow-auto"
+        >
           <button
             type="button"
             role="option"
@@ -116,32 +136,46 @@ export function CategoryParentPicker({
             className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             <Check size={14} className={cn(selected && 'text-transparent')} />
-            Top level
+            <GeneratedText id="m_11b75c428eea23" />
           </button>
-          {visibleOptions.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              role="option"
-              aria-selected={selected?.id === option.id}
-              onClick={() => choose(option)}
-              className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-            >
-              <Check size={14} className={cn(selected?.id !== option.id && 'text-transparent')} />
-              <span className="truncate">{option.name}</span>
-            </button>
-          ))}
-          {!pending && visibleOptions.length === 0 ? (
-            <p className="px-2 py-5 text-center text-sm text-slate-500">No matching categories</p>
-          ) : null}
-          {loadError ? (
-            <p className="px-2 py-3 text-sm text-red-600 dark:text-red-400">
-              Parent categories could not be loaded. Try the search again.
-            </p>
-          ) : null}
+          <GeneratedValue
+            value={visibleOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                role="option"
+                aria-selected={selected?.id === option.id}
+                onClick={() => choose(option)}
+                className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                <Check size={14} className={cn(selected?.id !== option.id && 'text-transparent')} />
+                <span className="truncate">
+                  <GeneratedValue value={option.name} />
+                </span>
+              </button>
+            ))}
+          />
+          <GeneratedValue
+            value={
+              !pending && visibleOptions.length === 0 ? (
+                <p className="px-2 py-5 text-center text-sm text-slate-500">
+                  <GeneratedText id="m_10a03d3101e449" />
+                </p>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              loadError ? (
+                <p className="px-2 py-3 text-sm text-red-600 dark:text-red-400">
+                  <GeneratedText id="m_1a336c9e730c25" />
+                </p>
+              ) : null
+            }
+          />
         </div>
         <p className="mt-2 border-t border-slate-100 px-2 pt-2 text-xs text-slate-500 dark:border-slate-800">
-          Showing up to 25 matches. Type to narrow the list.
+          <GeneratedText id="m_1e648693380935" />
         </p>
       </Popover>
     </>

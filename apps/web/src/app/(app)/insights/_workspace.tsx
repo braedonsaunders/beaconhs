@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The Insights workspace: a tab bar of dashboards (the user's own), each a
 // customisable grid of built-in widgets AND saved Cards. View mode is locked;
 // Customise unlocks drag / resize / add / remove + Save.
@@ -62,6 +69,8 @@ export function InsightsWorkspace({
   roles: PublishRoleOption[]
   entities: AnalyticsEntity[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [boards, setBoards] = useState<Board[]>(
     initialDashboards.map((d) => ({
@@ -186,9 +195,9 @@ export function InsightsWorkspace({
           ...current,
           [active.id]: JSON.stringify(active.widgets),
         }))
-        toast.success('Dashboard saved')
+        toast.success(tGenerated('m_0ab9d062c0fc84'))
       } else {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
       }
     })
   }
@@ -197,7 +206,7 @@ export function InsightsWorkspace({
     startBusy(async () => {
       const r = await createDashboard('New dashboard')
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
       setBoards((bs) => [
@@ -253,7 +262,7 @@ export function InsightsWorkspace({
               : board,
           ),
         )
-        toast.error(result.error)
+        toast.error(tGeneratedValue(result.error))
         return
       }
       setBoards((current) =>
@@ -278,7 +287,7 @@ export function InsightsWorkspace({
     startBusy(async () => {
       const r = await deleteDashboard(id)
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
       setBoards((bs) => {
@@ -297,7 +306,7 @@ export function InsightsWorkspace({
         return next
       })
       setEditing(false)
-      toast.success('Dashboard deleted')
+      toast.success(tGenerated('m_0f76e69f11ea99'))
     })
   }
 
@@ -306,7 +315,7 @@ export function InsightsWorkspace({
     startBusy(async () => {
       const r = await publishDashboard({ id: active.id, allowedRoles })
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
       setBoards((bs) =>
@@ -314,7 +323,7 @@ export function InsightsWorkspace({
           b.id === active.id ? { ...b, status: 'published' as const, allowedRoles } : b,
         ),
       )
-      toast.success('Published to library')
+      toast.success(tGenerated('m_14d4f6912fd1cc'))
     })
   }
 
@@ -323,13 +332,13 @@ export function InsightsWorkspace({
     startBusy(async () => {
       const r = await unpublishDashboard(active.id)
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
       setBoards((bs) =>
         bs.map((b) => (b.id === active.id ? { ...b, status: 'draft' as const } : b)),
       )
-      toast.success('Unpublished')
+      toast.success(tGenerated('m_05e0d33d6dd310'))
     })
   }
 
@@ -338,25 +347,27 @@ export function InsightsWorkspace({
       {/* Tabs */}
       <div className="flex items-end gap-1 border-b border-slate-200 bg-white px-3 pt-2 dark:border-slate-800 dark:bg-slate-900">
         <div className="app-scroll flex flex-1 items-end gap-1 overflow-x-auto">
-          {boards.map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              onClick={() => switchTab(b.id)}
-              className={cn(
-                'shrink-0 rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
-                b.id === activeId
-                  ? 'border-teal-600 text-teal-700 dark:text-teal-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
-              )}
-            >
-              {b.name}
-            </button>
-          ))}
+          <GeneratedValue
+            value={boards.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => switchTab(b.id)}
+                className={cn(
+                  'shrink-0 rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
+                  b.id === activeId
+                    ? 'border-teal-600 text-teal-700 dark:text-teal-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
+                )}
+              >
+                <GeneratedValue value={b.name} />
+              </button>
+            ))}
+          />
           <button
             type="button"
             onClick={addDashboard}
-            title="New dashboard"
+            title={tGenerated('m_0800d09a80fc11')}
             className="mb-1 grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
           >
             <Plus size={16} />
@@ -368,152 +379,192 @@ export function InsightsWorkspace({
             className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800"
           >
             <Library size={13} />
-            <span className="hidden sm:inline">Library</span>
+            <span className="hidden sm:inline">
+              <GeneratedText id="m_002a2afc4c73f9" />
+            </span>
           </Link>
-          {canCreate ? (
-            <Link
-              href="/insights/cards/new"
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800"
-            >
-              <Plus size={13} />
-              <span className="hidden sm:inline">New card</span>
-            </Link>
-          ) : null}
+          <GeneratedValue
+            value={
+              canCreate ? (
+                <Link
+                  href="/insights/cards/new"
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  <Plus size={13} />
+                  <span className="hidden sm:inline">
+                    <GeneratedText id="m_03e463ccb0a147" />
+                  </span>
+                </Link>
+              ) : null
+            }
+          />
         </div>
       </div>
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
-        {editing && active ? (
-          <>
-            <input
-              value={active.name}
-              maxLength={INSIGHT_DASHBOARD_NAME_MAX_LENGTH}
-              onChange={(e) => renameLocal(e.target.value)}
-              onBlur={persistName}
-              disabled={renaming}
-              aria-label="Dashboard name"
-              className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2.5 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 sm:max-w-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-            />
-            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setPaletteOpen((v) => !v)}
-                className="h-8 text-xs"
-              >
-                <Plus size={13} className="mr-1" /> {paletteOpen ? 'Hide library' : 'Add content'}
-              </Button>
-              {canPublish ? (
-                <PublishControl
-                  key={active.id}
-                  status={active.status}
-                  roles={roles}
-                  initialAllowedRoles={active.allowedRoles}
-                  pending={busy}
-                  onPublish={publish}
-                  onUnpublish={unpublish}
-                  buttonVariant="ghost"
-                  buttonClassName="h-8 text-xs"
+        <GeneratedValue
+          value={
+            editing && active ? (
+              <>
+                <input
+                  value={active.name}
+                  maxLength={INSIGHT_DASHBOARD_NAME_MAX_LENGTH}
+                  onChange={(e) => renameLocal(e.target.value)}
+                  onBlur={persistName}
+                  disabled={renaming}
+                  aria-label={tGenerated('m_02326563903b72')}
+                  className="h-8 min-w-0 flex-1 rounded-md border border-slate-300 px-2.5 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/25 sm:max-w-xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 />
-              ) : null}
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={del}
-                className="h-8 text-xs text-rose-700 hover:bg-rose-50"
-              >
-                <Trash2 size={13} className="mr-1" /> Delete
-              </Button>
-              <Button
-                type="button"
-                onClick={save}
-                disabled={saving || !dirty}
-                className="h-8 text-xs"
-              >
-                {saving ? (
-                  <Loader2 size={13} className="mr-1 animate-spin" />
-                ) : (
-                  <Save size={13} className="mr-1" />
-                )}
-                Save
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={async () => {
-                  if (dirty && active && !(await confirmDialog('Discard unsaved changes?'))) return
-                  if (dirty && active) {
-                    const base = baselines[active.id]
-                    setActiveWidgets(base ? JSON.parse(base) : [])
+                <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setPaletteOpen((v) => !v)}
+                    className="h-8 text-xs"
+                  >
+                    <Plus size={13} className="mr-1" />{' '}
+                    <GeneratedValue
+                      value={
+                        paletteOpen ? (
+                          <GeneratedText id="m_1a70fd8400318b" />
+                        ) : (
+                          <GeneratedText id="m_15d8deb1abdf7c" />
+                        )
+                      }
+                    />
+                  </Button>
+                  <GeneratedValue
+                    value={
+                      canPublish ? (
+                        <PublishControl
+                          key={active.id}
+                          status={active.status}
+                          roles={roles}
+                          initialAllowedRoles={active.allowedRoles}
+                          pending={busy}
+                          onPublish={publish}
+                          onUnpublish={unpublish}
+                          buttonVariant="ghost"
+                          buttonClassName="h-8 text-xs"
+                        />
+                      ) : null
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={del}
+                    className="h-8 text-xs text-rose-700 hover:bg-rose-50"
+                  >
+                    <Trash2 size={13} className="mr-1" /> <GeneratedText id="m_11773f3c3f7558" />
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={save}
+                    disabled={saving || !dirty}
+                    className="h-8 text-xs"
+                  >
+                    <GeneratedValue
+                      value={
+                        saving ? (
+                          <Loader2 size={13} className="mr-1 animate-spin" />
+                        ) : (
+                          <Save size={13} className="mr-1" />
+                        )
+                      }
+                    />
+                    <GeneratedText id="m_19e6bff894c3c7" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      if (dirty && active && !(await confirmDialog('Discard unsaved changes?')))
+                        return
+                      if (dirty && active) {
+                        const base = baselines[active.id]
+                        setActiveWidgets(base ? JSON.parse(base) : [])
+                      }
+                      setEditing(false)
+                    }}
+                    className="h-8 text-xs"
+                  >
+                    <GeneratedText id="m_00609f822e0571" />
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  <GeneratedValue value={active?.name ?? <GeneratedText id="m_06145df9e2eb0d" />} />
+                </span>
+                <GeneratedValue
+                  value={
+                    active && !active.owned ? (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                        <GeneratedText id="m_08d67eeec60bc3" />
+                      </span>
+                    ) : null
                   }
-                  setEditing(false)
-                }}
-                className="h-8 text-xs"
-              >
-                Done
-              </Button>
-            </div>
-          </>
-        ) : (
-          <>
-            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-              {active?.name ?? 'Insights'}
-            </span>
-            {active && !active.owned ? (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                Pinned · view only
-              </span>
-            ) : null}
-            <div className="ml-auto">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setEditing(true)
-                  setPaletteOpen(true)
-                }}
-                disabled={!active || !active.owned}
-                className="h-7 px-2 text-xs text-slate-500 dark:text-slate-400"
-              >
-                <Settings size={13} className="mr-1" /> Customise
-              </Button>
-            </div>
-          </>
-        )}
+                />
+                <div className="ml-auto">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setEditing(true)
+                      setPaletteOpen(true)
+                    }}
+                    disabled={!active || !active.owned}
+                    className="h-7 px-2 text-xs text-slate-500 dark:text-slate-400"
+                  >
+                    <Settings size={13} className="mr-1" /> <GeneratedText id="m_15c087ba59ca55" />
+                  </Button>
+                </div>
+              </>
+            )
+          }
+        />
       </div>
 
       {/* Grid */}
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4">
-        {active ? (
-          <>
-            <DashboardFilters
-              params={active.params}
-              paramMap={active.paramMap}
-              editable={editing && active.owned}
-              cards={paramCards}
-              onSaveParams={saveParams}
-            />
-            <InsightsGrid
-              widgets={active.widgets}
-              nodes={nodes}
-              items={paletteItems}
-              categoryLabels={categoryLabels}
-              editing={editing}
-              paletteOpen={paletteOpen}
-              onChange={setActiveWidgets}
-            />
-          </>
-        ) : (
-          <div className="grid h-full place-items-center">
-            <div className="text-center">
-              <p className="mb-3 text-sm text-slate-500">No dashboards</p>
-              <Button type="button" onClick={addDashboard}>
-                <Plus size={15} className="mr-1.5" /> Create a dashboard
-              </Button>
-            </div>
-          </div>
-        )}
+        <GeneratedValue
+          value={
+            active ? (
+              <>
+                <DashboardFilters
+                  params={active.params}
+                  paramMap={active.paramMap}
+                  editable={editing && active.owned}
+                  cards={paramCards}
+                  onSaveParams={saveParams}
+                />
+                <InsightsGrid
+                  widgets={active.widgets}
+                  nodes={nodes}
+                  items={paletteItems}
+                  categoryLabels={categoryLabels}
+                  editing={editing}
+                  paletteOpen={paletteOpen}
+                  onChange={setActiveWidgets}
+                />
+              </>
+            ) : (
+              <div className="grid h-full place-items-center">
+                <div className="text-center">
+                  <p className="mb-3 text-sm text-slate-500">
+                    <GeneratedText id="m_156369ced94580" />
+                  </p>
+                  <Button type="button" onClick={addDashboard}>
+                    <Plus size={15} className="mr-1.5" /> <GeneratedText id="m_0513f1447bbab2" />
+                  </Button>
+                </div>
+              </div>
+            )
+          }
+        />
       </div>
     </div>
   )

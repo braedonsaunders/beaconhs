@@ -1,5 +1,9 @@
 'use client'
 
+import { useGeneratedTranslations, useGeneratedValueTranslations } from '@/i18n/generated'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // Overview tab (left pane) — edit all document "header" metadata inline. Saves
 // automatically (debounced); no Save button. The document content + PDF live in
 // the right pane (Write / PDF switch).
@@ -35,6 +39,8 @@ export function DocumentOverview({
   categories: { id: string; name: string }[]
   types: { id: string; name: string }[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [m, setM] = useState<OverviewMeta>(initialMeta)
   const [saveState, setSaveState] = useState<SaveState>('saved')
@@ -66,7 +72,7 @@ export function DocumentOverview({
         lastSaveSucceeded = res.ok
         if (!res.ok) {
           setSaveState('error')
-          toast.error(res.error ?? 'Document details could not be saved.')
+          toast.error(tGeneratedValue(res.error ?? tGenerated('m_04c98d3675a95d')))
         }
       }
     } finally {
@@ -80,7 +86,7 @@ export function DocumentOverview({
       if (refreshTimer.current) clearTimeout(refreshTimer.current)
       refreshTimer.current = setTimeout(() => router.refresh(), 400)
     }
-  }, [documentId, router])
+  }, [documentId, router, tGenerated, tGeneratedValue])
 
   function field<K extends keyof OverviewMeta>(k: K, v: OverviewMeta[K]) {
     setM((prev) => {
@@ -106,13 +112,15 @@ export function DocumentOverview({
     <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5 dark:border-slate-800">
         <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-          Document details
+          <GeneratedText id="m_11c253e21845f3" />
         </h3>
         <SaveBadge state={saveState} />
       </div>
       <div className="space-y-4 p-4">
         <div className="space-y-1.5">
-          <Label htmlFor="o-title">Title</Label>
+          <Label htmlFor="o-title">
+            <GeneratedText id="m_0decefd558c355" />
+          </Label>
           <Input
             id="o-title"
             value={m.title}
@@ -123,7 +131,9 @@ export function DocumentOverview({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="o-category">Category</Label>
+            <Label htmlFor="o-category">
+              <GeneratedText id="m_108b41637f364f" />
+            </Label>
             <Select
               id="o-category"
               value={m.categoryId}
@@ -131,15 +141,19 @@ export function DocumentOverview({
               onBlur={() => void flush()}
             >
               <option value="">—</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              <GeneratedValue
+                value={categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    <GeneratedValue value={c.name} />
+                  </option>
+                ))}
+              />
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="o-type">Type</Label>
+            <Label htmlFor="o-type">
+              <GeneratedText id="m_074ba2f160c506" />
+            </Label>
             <Select
               id="o-type"
               value={m.typeId}
@@ -147,21 +161,29 @@ export function DocumentOverview({
               onBlur={() => void flush()}
             >
               <option value="">—</option>
-              {types.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
+              <GeneratedValue
+                value={types.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    <GeneratedValue value={t.name} />
+                  </option>
+                ))}
+              />
             </Select>
           </div>
         </div>
-        {categories.length === 0 && types.length === 0 ? (
-          <p className="text-[11px] text-slate-400 dark:text-slate-500">
-            Create categories &amp; types on the Documents → Categories / Types tabs.
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            categories.length === 0 && types.length === 0 ? (
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_189ee770642b15" />
+              </p>
+            ) : null
+          }
+        />
         <div className="space-y-1.5">
-          <Label htmlFor="o-key">Key</Label>
+          <Label htmlFor="o-key">
+            <GeneratedText id="m_169ff65a3cfc14" />
+          </Label>
           <Input
             id="o-key"
             className="font-mono"
@@ -172,7 +194,9 @@ export function DocumentOverview({
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="o-desc">Short description</Label>
+          <Label htmlFor="o-desc">
+            <GeneratedText id="m_0aa6706195a6c8" />
+          </Label>
           <Textarea
             id="o-desc"
             rows={2}
@@ -184,7 +208,9 @@ export function DocumentOverview({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="o-review">Review every (mo.)</Label>
+            <Label htmlFor="o-review">
+              <GeneratedText id="m_1518910aa83afa" />
+            </Label>
             <Input
               id="o-review"
               type="number"
@@ -197,7 +223,9 @@ export function DocumentOverview({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="o-next">Next review</Label>
+            <Label htmlFor="o-next">
+              <GeneratedText id="m_146d385340eb4f" />
+            </Label>
             <Input
               id="o-next"
               type="date"
@@ -216,19 +244,19 @@ function SaveBadge({ state }: { state: SaveState }) {
   if (state === 'saving')
     return (
       <span className="inline-flex items-center gap-1 text-xs text-amber-600">
-        <CloudUpload size={12} /> Saving…
+        <CloudUpload size={12} /> <GeneratedText id="m_106811f2aac664" />
       </span>
     )
   if (state === 'error') {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-red-600" role="status">
-        <AlertCircle size={12} /> Not saved
+        <AlertCircle size={12} /> <GeneratedText id="m_198e1499058a4a" />
       </span>
     )
   }
   return (
     <span className="inline-flex items-center gap-1 text-xs text-teal-600" role="status">
-      <Check size={12} /> Saved
+      <Check size={12} /> <GeneratedText id="m_0a0569b726b225" />
     </span>
   )
 }

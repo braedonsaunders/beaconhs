@@ -1,5 +1,11 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { CheckSquare, Square } from 'lucide-react'
 
 const selectionButtonClass =
@@ -16,6 +22,7 @@ export function RowSelectionButton({
   onToggle: (id: string) => void
   label?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <button
       type="button"
@@ -24,15 +31,19 @@ export function RowSelectionButton({
         event.stopPropagation()
         onToggle(id)
       }}
-      aria-label={`${selected ? 'Deselect' : 'Select'} ${label}`}
+      aria-label={tGeneratedValue(`${selected ? 'Deselect' : 'Select'} ${label}`)}
       aria-pressed={selected}
       className={selectionButtonClass}
     >
-      {selected ? (
-        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
-      ) : (
-        <Square size={16} />
-      )}
+      <GeneratedValue
+        value={
+          selected ? (
+            <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
+          ) : (
+            <Square size={16} />
+          )
+        }
+      />
     </button>
   )
 }
@@ -44,19 +55,27 @@ export function SelectVisibleRowsButton({
   allSelected: boolean
   onToggleAll: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   return (
     <button
       type="button"
       onClick={onToggleAll}
-      aria-label={allSelected ? 'Deselect all visible rows' : 'Select all visible rows'}
+      aria-label={tGeneratedValue(
+        allSelected ? tGenerated('m_1a255bdfbfd2e9') : tGenerated('m_19cddb09497af5'),
+      )}
       aria-pressed={allSelected}
       className={selectionButtonClass}
     >
-      {allSelected ? (
-        <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
-      ) : (
-        <Square size={16} />
-      )}
+      <GeneratedValue
+        value={
+          allSelected ? (
+            <CheckSquare size={16} className="text-teal-700 dark:text-teal-400" />
+          ) : (
+            <Square size={16} />
+          )
+        }
+      />
     </button>
   )
 }

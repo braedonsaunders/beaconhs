@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Per-app records list — the "home" of a Builder app when pinned to the
 // sidebar. Behaves like a native module: a list of entries (form responses)
 // for THIS template, each row opening the entry's record page
@@ -123,8 +127,9 @@ function formatListCell(
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  if (!isUuid(id)) return { title: 'App records' }
+  if (!isUuid(id)) return { title: tGenerated('m_0d0fb7b561ec9d') }
   const ctx = await requireRequestContext()
   const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
   const [tmpl] = await ctx.db((tx) =>
@@ -143,7 +148,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     title:
       tmpl && canAccessTemplate(ctx, tmpl, effectiveRoleKeys, 'browse-records')
         ? tmpl.name
-        : 'App records',
+        : tGenerated('m_0d0fb7b561ec9d'),
   }
 }
 
@@ -154,6 +159,8 @@ export default async function AppRecordsPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
   const sp = await searchParams
@@ -314,7 +321,7 @@ export default async function AppRecordsPage({
   const newEntryButton = canSubmitResponses ? (
     <form action={createEntry}>
       <Button type="submit">
-        <Plus size={14} /> New entry
+        <Plus size={14} /> <GeneratedText id="m_0036397741744c" />
       </Button>
     </form>
   ) : null
@@ -339,28 +346,32 @@ export default async function AppRecordsPage({
       header={
         <>
           <PageHeader
-            title={tmpl.name}
-            description={tmpl.description ?? 'Entries for this app.'}
+            title={tGeneratedValue(tmpl.name)}
+            description={tGeneratedValue(tmpl.description ?? tGenerated('m_1594ebe51f1acc'))}
             actions={
               <>
-                {canConfigure ? (
-                  <Link href={`/apps/templates/${id}/designer`}>
-                    <Button variant="outline">
-                      <Settings2 size={14} /> Configure
-                    </Button>
-                  </Link>
-                ) : null}
-                {newEntryButton}
+                <GeneratedValue
+                  value={
+                    canConfigure ? (
+                      <Link href={`/apps/templates/${id}/designer`}>
+                        <Button variant="outline">
+                          <Settings2 size={14} /> <GeneratedText id="m_01ffac03eed326" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
+                <GeneratedValue value={newEntryButton} />
               </>
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search ID, subject, site, or submitter…" />
+            <SearchInput placeholder={tGenerated('m_0de8033c150436')} />
             <FilterChips
               basePath={basePath}
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               defaultValue={defaultStatusFilter}
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
@@ -368,146 +379,195 @@ export default async function AppRecordsPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardCheck size={32} />}
-          title={statusFilter || searchQuery ? 'No entries match these filters' : 'No entries yet'}
-          description={
-            statusFilter || searchQuery
-              ? 'Clear or change the current search and status filter.'
-              : 'Create the first entry for this app.'
-          }
-          action={newEntryButton}
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {columns.map((col) =>
-                  col.source === 'builtin' && SORTABLE_BUILTINS.has(col.key) ? (
-                    <SortableTh
-                      key={col.key}
-                      {...sortProps}
-                      column={col.key}
-                      active={listParams.sort === col.key}
-                    >
-                      {colLabel(col)}
-                    </SortableTh>
-                  ) : (
-                    <TableHead key={col.key} className={col.key === 'pdf' ? 'w-16' : undefined}>
-                      {colLabel(col)}
-                    </TableHead>
-                  ),
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ response, site, submittedByName, subjectFirst, subjectLast }) => {
-                const subject =
-                  subjectFirst || subjectLast
-                    ? `${subjectLast ?? ''}${subjectLast ? ', ' : ''}${subjectFirst ?? ''}`.trim()
-                    : null
-                const data = (response.data as Record<string, unknown> | null) ?? {}
-                const cell = (col: ListColumnConfig) => {
-                  if (col.source === 'field') {
-                    return (
-                      <span className="text-xs text-slate-600">
-                        {formatListCell(
-                          fieldMap.get(col.key),
-                          data[col.key],
-                          ctx.locale,
-                          ctx.defaultLocale,
-                        )}
-                      </span>
-                    )
-                  }
-                  switch (col.key) {
-                    case 'id':
-                      return (
-                        <Link
-                          href={`/apps/responses/${response.id}`}
-                          className="font-mono text-xs hover:underline"
-                        >
-                          {response.id.slice(0, 8)}
-                        </Link>
-                      )
-                    case 'subject':
-                      return (
-                        <span className="text-xs text-slate-600">
-                          {subject || <span className="text-slate-400">—</span>}
-                        </span>
-                      )
-                    case 'site':
-                      return <span className="text-xs text-slate-600">{site?.name ?? '—'}</span>
-                    case 'status':
-                      return (
-                        <Badge
-                          variant={
-                            response.status === 'closed' || response.status === 'submitted'
-                              ? 'success'
-                              : response.status === 'rejected' ||
-                                  response.status === 'non_compliant'
-                                ? 'destructive'
-                                : 'warning'
-                          }
-                        >
-                          {response.status.replace('_', ' ')}
-                        </Badge>
-                      )
-                    case 'created_at':
-                      return (
-                        <span className="text-xs text-slate-600 tabular-nums">
-                          {response.createdAt
-                            ? formatDate(new Date(response.createdAt), ctx.timezone, ctx.locale)
-                            : '—'}
-                        </span>
-                      )
-                    case 'submitted_at':
-                      return (
-                        <span className="text-xs text-slate-600 tabular-nums">
-                          {response.submittedAt
-                            ? formatDate(new Date(response.submittedAt), ctx.timezone, ctx.locale)
-                            : '—'}
-                        </span>
-                      )
-                    case 'submittedBy':
-                      return (
-                        <span className="text-xs text-slate-600">
-                          {submittedByName ?? <span className="text-slate-400">—</span>}
-                        </span>
-                      )
-                    case 'pdf':
-                      return response.pdfAttachmentId ? (
-                        <Badge variant="success" className="text-[10px]">
-                          PDF
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )
-                    default:
-                      return <span className="text-slate-400">—</span>
-                  }
-                }
-                return (
-                  <TableRow key={response.id}>
-                    {columns.map((col) => (
-                      <TableCell key={col.key}>{cell(col)}</TableCell>
-                    ))}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<ClipboardCheck size={32} />}
+              title={tGeneratedValue(
+                statusFilter || searchQuery
+                  ? tGenerated('m_0cbf7aa824c49c')
+                  : tGenerated('m_1446c8e422e381'),
+              )}
+              description={tGeneratedValue(
+                statusFilter || searchQuery
+                  ? tGenerated('m_1f90cb0675ecc6')
+                  : tGenerated('m_1c68804ba22aa2'),
+              )}
+              action={newEntryButton}
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <GeneratedValue
+                      value={columns.map((col) =>
+                        col.source === 'builtin' && SORTABLE_BUILTINS.has(col.key) ? (
+                          <SortableTh
+                            key={col.key}
+                            {...sortProps}
+                            column={col.key}
+                            active={listParams.sort === col.key}
+                          >
+                            <GeneratedValue value={colLabel(col)} />
+                          </SortableTh>
+                        ) : (
+                          <TableHead
+                            key={col.key}
+                            className={col.key === 'pdf' ? 'w-16' : undefined}
+                          >
+                            <GeneratedValue value={colLabel(col)} />
+                          </TableHead>
+                        ),
+                      )}
+                    />
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath={basePath}
-            currentParams={sp}
-            total={total}
-            page={page}
-            perPage={listParams.perPage}
-          />
-        </>
-      )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(
+                      ({ response, site, submittedByName, subjectFirst, subjectLast }) => {
+                        const subject =
+                          subjectFirst || subjectLast
+                            ? `${subjectLast ?? ''}${subjectLast ? ', ' : ''}${subjectFirst ?? ''}`.trim()
+                            : null
+                        const data = (response.data as Record<string, unknown> | null) ?? {}
+                        const cell = (col: ListColumnConfig) => {
+                          if (col.source === 'field') {
+                            return (
+                              <span className="text-xs text-slate-600">
+                                <GeneratedValue
+                                  value={formatListCell(
+                                    fieldMap.get(col.key),
+                                    data[col.key],
+                                    ctx.locale,
+                                    ctx.defaultLocale,
+                                  )}
+                                />
+                              </span>
+                            )
+                          }
+                          switch (col.key) {
+                            case 'id':
+                              return (
+                                <Link
+                                  href={`/apps/responses/${response.id}`}
+                                  className="font-mono text-xs hover:underline"
+                                >
+                                  <GeneratedValue value={response.id.slice(0, 8)} />
+                                </Link>
+                              )
+                            case 'subject':
+                              return (
+                                <span className="text-xs text-slate-600">
+                                  <GeneratedValue
+                                    value={subject || <span className="text-slate-400">—</span>}
+                                  />
+                                </span>
+                              )
+                            case 'site':
+                              return (
+                                <span className="text-xs text-slate-600">
+                                  <GeneratedValue value={site?.name ?? '—'} />
+                                </span>
+                              )
+                            case 'status':
+                              return (
+                                <Badge
+                                  variant={
+                                    response.status === 'closed' || response.status === 'submitted'
+                                      ? 'success'
+                                      : response.status === 'rejected' ||
+                                          response.status === 'non_compliant'
+                                        ? 'destructive'
+                                        : 'warning'
+                                  }
+                                >
+                                  <GeneratedValue value={response.status.replace('_', ' ')} />
+                                </Badge>
+                              )
+                            case 'created_at':
+                              return (
+                                <span className="text-xs text-slate-600 tabular-nums">
+                                  <GeneratedValue
+                                    value={
+                                      response.createdAt
+                                        ? formatDate(
+                                            new Date(response.createdAt),
+                                            ctx.timezone,
+                                            ctx.locale,
+                                          )
+                                        : '—'
+                                    }
+                                  />
+                                </span>
+                              )
+                            case 'submitted_at':
+                              return (
+                                <span className="text-xs text-slate-600 tabular-nums">
+                                  <GeneratedValue
+                                    value={
+                                      response.submittedAt
+                                        ? formatDate(
+                                            new Date(response.submittedAt),
+                                            ctx.timezone,
+                                            ctx.locale,
+                                          )
+                                        : '—'
+                                    }
+                                  />
+                                </span>
+                              )
+                            case 'submittedBy':
+                              return (
+                                <span className="text-xs text-slate-600">
+                                  <GeneratedValue
+                                    value={
+                                      submittedByName ?? <span className="text-slate-400">—</span>
+                                    }
+                                  />
+                                </span>
+                              )
+                            case 'pdf':
+                              return response.pdfAttachmentId ? (
+                                <Badge variant="success" className="text-[10px]">
+                                  <GeneratedText id="m_1a2b2ed6729166" />
+                                </Badge>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )
+                            default:
+                              return <span className="text-slate-400">—</span>
+                          }
+                        }
+                        return (
+                          <TableRow key={response.id}>
+                            <GeneratedValue
+                              value={columns.map((col) => (
+                                <TableCell key={col.key}>
+                                  <GeneratedValue value={cell(col)} />
+                                </TableCell>
+                              ))}
+                            />
+                          </TableRow>
+                        )
+                      },
+                    )}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath={basePath}
+                currentParams={sp}
+                total={total}
+                page={page}
+                perPage={listParams.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

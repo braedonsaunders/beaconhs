@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
+import { useUiText } from './text-context'
 import { cn } from './utils'
 
 export function EmptyState({
@@ -18,6 +19,7 @@ export function EmptyState({
   className?: string
 }) {
   const reduce = useReducedMotion()
+  const t = useUiText()
   return (
     <motion.div
       initial={reduce ? false : { opacity: 0, y: 6 }}
@@ -38,10 +40,10 @@ export function EmptyState({
           <span className="[&_svg]:h-7 [&_svg]:w-7">{icon}</span>
         </motion.div>
       ) : null}
-      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t(title)}</h3>
       {description ? (
         <p className="mt-1.5 max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-          {description}
+          {t(description)}
         </p>
       ) : null}
       {action ? <div className="mt-5">{action}</div> : null}

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Hazard sets — pre-bundled selections of hazards admins can drop onto an
 // assessment in a single click. Legacy showed the set's name, the hazards in
 // it (counted + first-N preview), description, when it was last updated, and
@@ -38,7 +41,10 @@ import { HazidSubNav } from '../../_subnav'
 import { createHazardSet, deleteHazardSet, updateHazardSet } from '../../_actions'
 import { HazardSetDrawers, type EditHazardSetDefaults } from './_drawers'
 
-export const metadata = { title: 'Hazard sets' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_176c2abdcd0871') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'size', 'updated'] as const
@@ -66,6 +72,8 @@ export default async function HazardSetsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'name',
@@ -198,21 +206,23 @@ export default async function HazardSetsPage({
         <>
           <HazidSubNav pathname="/hazard-assessments/hazards/sets" />
           <PageHeader
-            title="Hazard sets"
-            description="Hazard bundles added to an assessment in one click."
+            title={tGenerated('m_176c2abdcd0871')}
+            description={tGenerated('m_12cabb60fd9a79')}
             actions={
               <Link href="/hazard-assessments/hazards/sets?drawer=new-hazard-set" scroll={false}>
-                <Button>New hazard set</Button>
+                <Button>
+                  <GeneratedText id="m_1eb142b8a54a70" />
+                </Button>
               </Link>
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search hazard sets…" />
+            <SearchInput placeholder={tGenerated('m_013e8e3bb430d9')} />
             <FilterChips
               basePath="/hazard-assessments/hazards/sets"
               currentParams={sp}
               paramKey="size"
-              label="Size"
+              label={tGenerated('m_11ad4bbeced31b')}
               options={[
                 { value: 'empty', label: 'Empty' },
                 { value: 'small', label: '1–5 hazards' },
@@ -223,109 +233,151 @@ export default async function HazardSetsPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Boxes size={32} />}
-          title={params.q || sizeFilter ? 'No sets match these filters' : 'No hazard sets'}
-          description="Group commonly-co-occurring hazards together to speed up assessments."
-          action={
-            <Link href="/hazard-assessments/hazards/sets?drawer=new-hazard-set" scroll={false}>
-              <Button>New hazard set</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                  Name
-                </SortableTh>
-                <SortableTh {...sortProps} column="size" active={params.sort === 'size'}>
-                  Hazards in set
-                </SortableTh>
-                <TableHead>Preview</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="w-24">Used as default</TableHead>
-                <SortableTh {...sortProps} column="updated" active={params.sort === 'updated'}>
-                  Updated
-                </SortableTh>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => {
-                const previewNames = r.hazardIds
-                  .slice(0, 3)
-                  .map((id) => hazardNamesById.get(id))
-                  .filter(Boolean) as string[]
-                const usage = usageBySet.get(r.id) ?? 0
-                return (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <Link
-                        href={`/hazard-assessments/hazards/sets?drawer=edit-hazard-set&id=${r.id}`}
-                        scroll={false}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {r.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{r.hazardIds.length}</Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                      {previewNames.length === 0 ? (
-                        <span className="text-slate-400">—</span>
-                      ) : (
-                        <>
-                          {previewNames.join(', ')}
-                          {r.hazardIds.length > 3 ? (
-                            <span className="text-slate-400"> +{r.hazardIds.length - 3} more</span>
-                          ) : null}
-                        </>
-                      )}
-                    </TableCell>
-                    <TableCell className="line-clamp-2 max-w-md text-xs text-slate-600 dark:text-slate-400">
-                      {r.description ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      {usage > 0 ? (
-                        <Badge variant="success">{usage}</Badge>
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-500 tabular-nums">
-                      {r.updatedAt
-                        ? formatDate(new Date(r.updatedAt), ctx.timezone, ctx.locale)
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Link
-                        href={`/hazard-assessments/hazards/sets?drawer=edit-hazard-set&id=${r.id}`}
-                        scroll={false}
-                        aria-label={`Edit ${r.name}`}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-                      >
-                        <Pencil size={14} />
-                      </Link>
-                    </TableCell>
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Boxes size={32} />}
+              title={tGeneratedValue(
+                params.q || sizeFilter
+                  ? tGenerated('m_0392e3f3510276')
+                  : tGenerated('m_020f4a2b207d4f'),
+              )}
+              description={tGenerated('m_00b7cadd74d0d7')}
+              action={
+                <Link href="/hazard-assessments/hazards/sets?drawer=new-hazard-set" scroll={false}>
+                  <Button>
+                    <GeneratedText id="m_1eb142b8a54a70" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="size" active={params.sort === 'size'}>
+                      <GeneratedText id="m_0aed2f17101d3d" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_11d37007232de5" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_14d923495cf14c" />
+                    </TableHead>
+                    <TableHead className="w-24">
+                      <GeneratedText id="m_1e82c0d99cf707" />
+                    </TableHead>
+                    <SortableTh {...sortProps} column="updated" active={params.sort === 'updated'}>
+                      <GeneratedText id="m_014ca61c68ab13" />
+                    </SortableTh>
+                    <TableHead className="w-10" />
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/hazard-assessments/hazards/sets"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((r) => {
+                      const previewNames = r.hazardIds
+                        .slice(0, 3)
+                        .map((id) => hazardNamesById.get(id))
+                        .filter(Boolean) as string[]
+                      const usage = usageBySet.get(r.id) ?? 0
+                      return (
+                        <TableRow key={r.id}>
+                          <TableCell>
+                            <Link
+                              href={`/hazard-assessments/hazards/sets?drawer=edit-hazard-set&id=${r.id}`}
+                              scroll={false}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={r.name} />
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              <GeneratedValue value={r.hazardIds.length} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                            <GeneratedValue
+                              value={
+                                previewNames.length === 0 ? (
+                                  <span className="text-slate-400">—</span>
+                                ) : (
+                                  <>
+                                    <GeneratedValue value={previewNames.join(', ')} />
+                                    <GeneratedValue
+                                      value={
+                                        r.hazardIds.length > 3 ? (
+                                          <span className="text-slate-400">
+                                            {' '}
+                                            +{r.hazardIds.length - 3}{' '}
+                                            <GeneratedText id="m_02ae245776e9fe" />
+                                          </span>
+                                        ) : null
+                                      }
+                                    />
+                                  </>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="line-clamp-2 max-w-md text-xs text-slate-600 dark:text-slate-400">
+                            <GeneratedValue value={r.description ?? '—'} />
+                          </TableCell>
+                          <TableCell>
+                            <GeneratedValue
+                              value={
+                                usage > 0 ? (
+                                  <Badge variant="success">
+                                    <GeneratedValue value={usage} />
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-slate-400">—</span>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-500 tabular-nums">
+                            <GeneratedValue
+                              value={
+                                r.updatedAt
+                                  ? formatDate(new Date(r.updatedAt), ctx.timezone, ctx.locale)
+                                  : '—'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Link
+                              href={`/hazard-assessments/hazards/sets?drawer=edit-hazard-set&id=${r.id}`}
+                              scroll={false}
+                              aria-label={tGenerated('m_0a45a3f047a285', { value0: r.name })}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                            >
+                              <Pencil size={14} />
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/hazard-assessments/hazards/sets"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
       <HazardSetDrawers
         openDrawer={
           drawer === 'new-hazard-set'

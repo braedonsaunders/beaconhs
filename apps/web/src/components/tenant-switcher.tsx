@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -19,6 +21,7 @@ export function TenantSwitcher({
   available: Tenant[]
   isSuperAdmin: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const router = useRouter()
   const t = useTranslations('Shell')
   const [open, setOpen] = useState(false)
@@ -35,7 +38,7 @@ export function TenantSwitcher({
         setOpen(false)
         router.refresh()
       } else {
-        toast.error(res.error ?? t('couldNotSwitchTenant'))
+        toast.error(tGeneratedValue(res.error ?? t('couldNotSwitchTenant')))
       }
     })
   }
@@ -45,7 +48,9 @@ export function TenantSwitcher({
     return (
       <span className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-sm text-slate-700 dark:text-slate-200">
         <Building2 size={14} className="shrink-0" />
-        <span className="truncate">{current.name}</span>
+        <span className="truncate">
+          <GeneratedValue value={current.name} />
+        </span>
       </span>
     )
   }
@@ -64,32 +69,46 @@ export function TenantSwitcher({
           className="flex min-w-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60"
         >
           <Building2 size={14} className="shrink-0" />
-          <span className="truncate">{pending ? t('switching') : current.name}</span>
+          <span className="truncate">
+            <GeneratedValue value={pending ? t('switching') : current.name} />
+          </span>
           <ChevronDown size={14} className="shrink-0 text-slate-400 dark:text-slate-500" />
         </button>
       }
     >
       <div className="border-b border-slate-100 px-3 py-2 text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-        {isSuperAdmin ? t('allTenants', { count: available.length }) : t('yourTenants')}
+        <GeneratedValue
+          value={isSuperAdmin ? t('allTenants', { count: available.length }) : t('yourTenants')}
+        />
       </div>
       <ul className="max-h-72 overflow-y-auto py-1">
-        {available.map((t) => (
-          <li key={t.id}>
-            <button
-              type="button"
-              onClick={() => pick(t.id)}
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800/60"
-            >
-              <span className="flex flex-col">
-                <span className="font-medium text-slate-900 dark:text-slate-100">{t.name}</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">{t.slug}</span>
-              </span>
-              {t.id === current.id ? (
-                <Check size={14} className="text-teal-700 dark:text-teal-300" />
-              ) : null}
-            </button>
-          </li>
-        ))}
+        <GeneratedValue
+          value={available.map((t) => (
+            <li key={t.id}>
+              <button
+                type="button"
+                onClick={() => pick(t.id)}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800/60"
+              >
+                <span className="flex flex-col">
+                  <span className="font-medium text-slate-900 dark:text-slate-100">
+                    <GeneratedValue value={t.name} />
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={t.slug} />
+                  </span>
+                </span>
+                <GeneratedValue
+                  value={
+                    t.id === current.id ? (
+                      <Check size={14} className="text-teal-700 dark:text-teal-300" />
+                    ) : null
+                  }
+                />
+              </button>
+            </li>
+          ))}
+        />
       </ul>
     </Popover>
   )

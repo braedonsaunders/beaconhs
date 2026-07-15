@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations } from '@/i18n/generated'
+
 import { useState } from 'react'
 import { Button, Label } from '@beaconhs/ui'
 import type { PickerOption } from '@/lib/picker-options'
@@ -13,6 +15,7 @@ export function NewInspectionForm({
   initialItem?: PickerOption
   initialType?: PickerOption
 }) {
+  const tGenerated = useGeneratedTranslations()
   const [itemId, setItemId] = useState(initialItem?.value ?? '')
   const [itemOption, setItemOption] = useState<PickerOption | undefined>(initialItem)
   const [typeId, setTypeId] = useState(initialType?.value ?? '')
@@ -27,7 +30,9 @@ export function NewInspectionForm({
       <input type="hidden" name="equipmentItemId" value={itemId} />
       <input type="hidden" name="typeId" value={typeId} />
       <div className="space-y-1.5">
-        <Label>Equipment item *</Label>
+        <Label>
+          <GeneratedText id="m_1fb2813300fb71" />
+        </Label>
         <RemoteSearchSelect
           lookup="equipment-inspection-items"
           value={itemId}
@@ -39,14 +44,16 @@ export function NewInspectionForm({
             if (!next) setItemOption(undefined)
           }}
           onOptionChange={setItemOption}
-          placeholder="Select equipment…"
-          searchPlaceholder="Search by name or tag…"
+          placeholder={tGenerated('m_115f6cd16bb283')}
+          searchPlaceholder={tGenerated('m_05b2636288d921')}
           sheetTitle="Select equipment"
           ariaLabel="Equipment item"
         />
       </div>
       <div className="space-y-1.5">
-        <Label>Inspection type *</Label>
+        <Label>
+          <GeneratedText id="m_102414366b6321" />
+        </Label>
         <RemoteSearchSelect
           lookup="equipment-item-inspection-types"
           contextId={equipmentTypeId}
@@ -55,14 +62,14 @@ export function NewInspectionForm({
           onChange={setTypeId}
           onOptionChange={setTypeOption}
           disabled={!itemId}
-          placeholder="Select an inspection type…"
-          searchPlaceholder="Search types…"
+          placeholder={tGenerated('m_00823ac933297d')}
+          searchPlaceholder={tGenerated('m_18e2494ecfa1b5')}
           sheetTitle="Select inspection type"
           ariaLabel="Inspection type"
         />
       </div>
       <Button type="submit" disabled={!itemId || !typeId}>
-        Start inspection
+        <GeneratedText id="m_050ae31d3122aa" />
       </Button>
     </form>
   )

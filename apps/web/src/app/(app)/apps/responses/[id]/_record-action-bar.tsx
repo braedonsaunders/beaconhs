@@ -1,5 +1,9 @@
 'use client'
 
+import { useGeneratedTranslations, useGeneratedValueTranslations } from '@/i18n/generated'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // Configurable record-action buttons for the unified Builder-app record page.
 // Each button is a `manual`-trigger Flow (authored in the designer's Actions
 // tab). Clicking runs that flow through the shared executor via `runRecordAction`
@@ -55,6 +59,8 @@ function RecordActionButtonItem({
   responseId: string
   button: RecordActionButton
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [status, setStatus] = useState<'idle' | 'done' | 'error'>('idle')
@@ -65,7 +71,7 @@ function RecordActionButtonItem({
   async function run() {
     if (button.confirm && !(await confirmDialog(button.confirm))) return
     setStatus('idle')
-    setMessage(null)
+    setMessage(tGeneratedValue(null))
     startTransition(async () => {
       const res = await runRecordAction({
         responseId,
@@ -74,11 +80,11 @@ function RecordActionButtonItem({
       })
       if (res.ok) {
         setStatus('done')
-        setMessage(null)
+        setMessage(tGeneratedValue(null))
         router.refresh()
       } else {
         setStatus('error')
-        setMessage(res.error ?? 'Action failed')
+        setMessage(tGeneratedValue(res.error ?? tGenerated('m_0ccb833431fbf8')))
       }
     })
   }
@@ -86,15 +92,26 @@ function RecordActionButtonItem({
   return (
     <span className="inline-flex items-center gap-2">
       <Button type="button" variant={button.variant ?? 'outline'} onClick={run} disabled={pending}>
-        {Icon ? <Icon size={14} /> : null} {button.label}
+        <GeneratedValue value={Icon ? <Icon size={14} /> : null} />{' '}
+        <GeneratedValue value={button.label} />
       </Button>
-      {pending ? (
-        <span className="text-xs text-slate-500 dark:text-slate-400">Running…</span>
-      ) : status === 'done' ? (
-        <span className="text-xs text-emerald-600 dark:text-emerald-400">Done</span>
-      ) : status === 'error' ? (
-        <span className="text-xs text-red-600 dark:text-red-400">{message}</span>
-      ) : null}
+      <GeneratedValue
+        value={
+          pending ? (
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_1f2c7907712729" />
+            </span>
+          ) : status === 'done' ? (
+            <span className="text-xs text-emerald-600 dark:text-emerald-400">
+              <GeneratedText id="m_00609f822e0571" />
+            </span>
+          ) : status === 'error' ? (
+            <span className="text-xs text-red-600 dark:text-red-400">
+              <GeneratedValue value={message} />
+            </span>
+          ) : null
+        }
+      />
     </span>
   )
 }
@@ -109,13 +126,15 @@ export function RecordActionBar({
   if (buttons.length === 0) return null
   return (
     <>
-      {buttons.map((b) => (
-        <RecordActionButtonItem
-          key={`${b.flowId}:${b.buttonId}`}
-          responseId={responseId}
-          button={b}
-        />
-      ))}
+      <GeneratedValue
+        value={buttons.map((b) => (
+          <RecordActionButtonItem
+            key={`${b.flowId}:${b.buttonId}`}
+            responseId={responseId}
+            button={b}
+          />
+        ))}
+      />
     </>
   )
 }

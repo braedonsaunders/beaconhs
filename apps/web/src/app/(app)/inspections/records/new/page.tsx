@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
 import { ClipboardCheck } from 'lucide-react'
@@ -9,7 +11,10 @@ import { PageContainer } from '@/components/page-layout'
 import { startInspection } from '../_actions'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Start inspection' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_050ae31d3122aa') }
+}
 
 // The full-page "new inspection" form is gone — picking a type happens in the
 // records-list flyout, and everything else is captured inline on the record.
@@ -24,6 +29,7 @@ export default async function NewInspectionConfirmPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const typeId = pickString(sp.typeId)
   if (!typeId) redirect('/inspections/records?drawer=new')
@@ -47,28 +53,31 @@ export default async function NewInspectionConfirmPage({
       <div className="mx-auto max-w-lg space-y-6">
         <DetailHeader
           back={{ href: '/inspections/records', label: 'Back to inspection records' }}
-          title="Start inspection"
+          title={tGenerated('m_050ae31d3122aa')}
         />
         <Card>
           <CardContent className="space-y-4 pt-6">
             <div>
               <div className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                {type.name}
+                <GeneratedValue value={type.name} />
               </div>
-              {type.description ? (
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  {type.description}
-                </p>
-              ) : null}
+              <GeneratedValue
+                value={
+                  type.description ? (
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      <GeneratedValue value={type.description} />
+                    </p>
+                  ) : null
+                }
+              />
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              Starting creates a draft record immediately. Date, site, foreman, and notes are
-              captured on the record itself.
+              <GeneratedText id="m_0e53b5441bc211" />
             </p>
             <form action={startInspection}>
               <input type="hidden" name="typeId" value={type.id} />
               <Button type="submit">
-                <ClipboardCheck size={14} /> Start inspection
+                <ClipboardCheck size={14} /> <GeneratedText id="m_050ae31d3122aa" />
               </Button>
             </form>
           </CardContent>

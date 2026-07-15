@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Alert, AlertDescription, Input, Label, Textarea } from '@beaconhs/ui'
@@ -19,6 +26,8 @@ export function CloseBody({
   formId: string
   closeHref: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [cost, setCost] = useState('')
   const [note, setNote] = useState('')
@@ -26,9 +35,9 @@ export function CloseBody({
   const [error, setError] = useState<string | null>(null)
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     if (cost && !/^[0-9]+(\.[0-9]{1,2})?$/.test(cost.trim())) {
-      setError('Cost impact must be a number like 1234.56 (or leave blank).')
+      setError(tGenerated('m_17bcf7ee256577'))
       return
     }
     start(async () => {
@@ -38,7 +47,7 @@ export function CloseBody({
         closeNotes: note.trim() || null,
       })
       if (!res.ok) {
-        setError(res.error)
+        setError(tGeneratedValue(res.error))
         return
       }
       router.push(closeHref as any)
@@ -57,34 +66,45 @@ export function CloseBody({
     >
       <Alert variant="warning">
         <AlertDescription>
-          Closing will lock the record. Photos, work notes, and verification fields become
-          read-only.
+          <GeneratedText id="m_1eed0c5a3a6409" />
         </AlertDescription>
       </Alert>
       <div className="space-y-1.5">
-        <Label>Cost impact (optional)</Label>
+        <Label>
+          <GeneratedText id="m_1ebfabc8d7bb84" />
+        </Label>
         <Input
           value={cost}
           onChange={(e) => setCost(e.target.value)}
-          placeholder="e.g. 1250.00"
+          placeholder={tGenerated('m_028e8fdc0535ea')}
           inputMode="decimal"
           disabled={pending}
         />
         <p className="text-xs text-slate-500">
-          Used by the "By source" and aging reports to roll up financial exposure.
+          <GeneratedText id="m_0766dbd26a6af4" />
         </p>
       </div>
       <div className="space-y-1.5">
-        <Label>Close note (optional)</Label>
+        <Label>
+          <GeneratedText id="m_1624f930df577f" />
+        </Label>
         <Textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={3}
-          placeholder="Final remarks captured on the timeline."
+          placeholder={tGenerated('m_061ae871843e9c')}
           disabled={pending}
         />
       </div>
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      <GeneratedValue
+        value={
+          error ? (
+            <p className="text-xs text-red-600">
+              <GeneratedValue value={error} />
+            </p>
+          ) : null
+        }
+      />
     </form>
   )
 }

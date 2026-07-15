@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { notFound, redirect } from 'next/navigation'
 import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
@@ -35,7 +38,10 @@ import { SortableTh } from '@/components/sortable-th'
 import { TableToolbar } from '@/components/table-toolbar'
 import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 
-export const metadata = { title: 'Sync run' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1ee59390674a30') }
+}
 export const dynamic = 'force-dynamic'
 
 const ACTION_VARIANT: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
@@ -83,6 +89,8 @@ export default async function SyncRunPage({
   params: Promise<{ id: string; runId: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id, runId } = await params
   if (!isUuid(id) || !isUuid(runId)) notFound()
 
@@ -189,49 +197,83 @@ export default async function SyncRunPage({
         <div className="space-y-1">
           <SmartBackLink
             href={`/admin/integrations/${data.conn.id}`}
-            label={data.conn.name}
+            label={tGeneratedValue(data.conn.name)}
             className="text-xs text-slate-400 hover:text-slate-600"
           />
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              Sync run review
+              <GeneratedText id="m_1507a2d0e071aa" />
             </h1>
             <Badge variant={data.run.status === 'success' ? 'secondary' : 'destructive'}>
-              {data.run.status}
+              <GeneratedValue value={data.run.status} />
             </Badge>
-            {data.run.dryRun ? <Badge variant="outline">preview</Badge> : null}
+            <GeneratedValue
+              value={
+                data.run.dryRun ? (
+                  <Badge variant="outline">
+                    <GeneratedText id="m_0e06ea082af594" />
+                  </Badge>
+                ) : null
+              }
+            />
           </div>
           <p className="text-sm text-slate-500">
-            {formatDateTime(new Date(data.run.startedAt), ctx.timezone, ctx.locale)} ·{' '}
-            {data.run.trigger} ·{' '}
-            {data.run.durationMs != null
-              ? `${(data.run.durationMs / 1000).toFixed(1)}s`
-              : 'running'}
+            <GeneratedValue
+              value={formatDateTime(new Date(data.run.startedAt), ctx.timezone, ctx.locale)}
+            />{' '}
+            ·<GeneratedValue value={' '} />
+            <GeneratedValue value={data.run.trigger} /> ·<GeneratedValue value={' '} />
+            <GeneratedValue
+              value={
+                data.run.durationMs != null ? (
+                  <GeneratedText
+                    id="m_06fa7e2daf6448"
+                    values={{ value0: (data.run.durationMs / 1000).toFixed(1) }}
+                  />
+                ) : (
+                  <GeneratedText id="m_0d9afb3665e95f" />
+                )
+              }
+            />
           </p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Summary</CardTitle>
+            <CardTitle>
+              <GeneratedText id="m_031c356c80b70f" />
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-            <p>{statText(data.run.stats)}</p>
-            {data.run.error ? <p className="text-red-600">{data.run.error}</p> : null}
+            <p>
+              <GeneratedValue value={statText(data.run.stats)} />
+            </p>
+            <GeneratedValue
+              value={
+                data.run.error ? (
+                  <p className="text-red-600">
+                    <GeneratedValue value={data.run.error} />
+                  </p>
+                ) : null
+              }
+            />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Record decisions</CardTitle>
+            <CardTitle>
+              <GeneratedText id="m_08822dc36e354d" />
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <TableToolbar>
-              <SearchInput placeholder="Search IDs, entity, or message…" />
+              <SearchInput placeholder={tGenerated('m_0c67c9dd117e81')} />
               <FilterChips
                 basePath={`/admin/integrations/${data.conn.id}/runs/${runId}`}
                 currentParams={sp}
                 paramKey="action"
-                label="Action"
+                label={tGenerated('m_0bad495a7046e9')}
                 options={ACTIONS.map((action) => ({
                   value: action,
                   label: action,
@@ -242,7 +284,7 @@ export default async function SyncRunPage({
                 basePath={`/admin/integrations/${data.conn.id}/runs/${runId}`}
                 currentParams={sp}
                 paramKey="entity"
-                label="Entity"
+                label={tGenerated('m_1c23275efe6385')}
                 options={ENTITIES.map((entity) => ({
                   value: entity,
                   label: ENTITY_LABELS[entity] ?? entity,
@@ -250,81 +292,105 @@ export default async function SyncRunPage({
                 }))}
               />
             </TableToolbar>
-            {data.changes.length === 0 ? (
-              <p className="text-sm text-slate-400">
-                {listParams.q || actionFilter || entityFilter
-                  ? 'No row decisions match the search or filters.'
-                  : 'This run has no recorded row decisions.'}
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <SortableTh
-                        basePath={`/admin/integrations/${data.conn.id}/runs/${runId}`}
-                        currentParams={sp}
-                        dir={listParams.dir}
-                        column="action"
-                        active={listParams.sort === 'action'}
-                      >
-                        Action
-                      </SortableTh>
-                      <SortableTh
-                        basePath={`/admin/integrations/${data.conn.id}/runs/${runId}`}
-                        currentParams={sp}
-                        dir={listParams.dir}
-                        column="entity"
-                        active={listParams.sort === 'entity'}
-                      >
-                        Entity
-                      </SortableTh>
-                      <SortableTh
-                        basePath={`/admin/integrations/${data.conn.id}/runs/${runId}`}
-                        currentParams={sp}
-                        dir={listParams.dir}
-                        column="external"
-                        active={listParams.sort === 'external'}
-                      >
-                        External ID
-                      </SortableTh>
-                      <TableHead>Canonical row</TableHead>
-                      <TableHead>Changed fields</TableHead>
-                      <TableHead>Message</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.changes.map((change) => (
-                      <TableRow key={change.id}>
-                        <TableCell>
-                          <Badge
-                            variant={ACTION_VARIANT[change.action] ?? 'outline'}
-                            className={cn(change.action === 'unchanged' && 'text-slate-500')}
+            <GeneratedValue
+              value={
+                data.changes.length === 0 ? (
+                  <p className="text-sm text-slate-400">
+                    <GeneratedValue
+                      value={
+                        listParams.q || actionFilter || entityFilter ? (
+                          <GeneratedText id="m_118a748294ce10" />
+                        ) : (
+                          <GeneratedText id="m_04cae0f709a038" />
+                        )
+                      }
+                    />
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <SortableTh
+                            basePath={`/admin/integrations/${data.conn.id}/runs/${runId}`}
+                            currentParams={sp}
+                            dir={listParams.dir}
+                            column="action"
+                            active={listParams.sort === 'action'}
                           >
-                            {change.action}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-slate-700 dark:text-slate-300">
-                          {ENTITY_LABELS[change.entity] ?? change.entity}
-                        </TableCell>
-                        <TableCell className="max-w-xs truncate font-mono text-xs">
-                          {change.externalId}
-                        </TableCell>
-                        <TableCell className="max-w-xs truncate font-mono text-xs text-slate-500">
-                          {change.canonicalId ?? 'not created yet'}
-                        </TableCell>
-                        <TableCell className="max-w-sm text-xs text-slate-600 dark:text-slate-300">
-                          {diffSummary(change.diff)}
-                        </TableCell>
-                        <TableCell className="max-w-md text-xs text-slate-500">
-                          {change.message ?? ''}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+                            <GeneratedText id="m_0bad495a7046e9" />
+                          </SortableTh>
+                          <SortableTh
+                            basePath={`/admin/integrations/${data.conn.id}/runs/${runId}`}
+                            currentParams={sp}
+                            dir={listParams.dir}
+                            column="entity"
+                            active={listParams.sort === 'entity'}
+                          >
+                            <GeneratedText id="m_1c23275efe6385" />
+                          </SortableTh>
+                          <SortableTh
+                            basePath={`/admin/integrations/${data.conn.id}/runs/${runId}`}
+                            currentParams={sp}
+                            dir={listParams.dir}
+                            column="external"
+                            active={listParams.sort === 'external'}
+                          >
+                            <GeneratedText id="m_1a7887d10b2a7d" />
+                          </SortableTh>
+                          <TableHead>
+                            <GeneratedText id="m_09eec0b5aa76ed" />
+                          </TableHead>
+                          <TableHead>
+                            <GeneratedText id="m_1ec108fbc2d70a" />
+                          </TableHead>
+                          <TableHead>
+                            <GeneratedText id="m_0e4ff640f8e7d6" />
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <GeneratedValue
+                          value={data.changes.map((change) => (
+                            <TableRow key={change.id}>
+                              <TableCell>
+                                <Badge
+                                  variant={ACTION_VARIANT[change.action] ?? 'outline'}
+                                  className={cn(change.action === 'unchanged' && 'text-slate-500')}
+                                >
+                                  <GeneratedValue value={change.action} />
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap text-slate-700 dark:text-slate-300">
+                                <GeneratedValue
+                                  value={ENTITY_LABELS[change.entity] ?? change.entity}
+                                />
+                              </TableCell>
+                              <TableCell className="max-w-xs truncate font-mono text-xs">
+                                <GeneratedValue value={change.externalId} />
+                              </TableCell>
+                              <TableCell className="max-w-xs truncate font-mono text-xs text-slate-500">
+                                <GeneratedValue
+                                  value={
+                                    change.canonicalId ?? <GeneratedText id="m_1cfcec0467b319" />
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="max-w-sm text-xs text-slate-600 dark:text-slate-300">
+                                <GeneratedValue value={diffSummary(change.diff)} />
+                              </TableCell>
+                              <TableCell className="max-w-md text-xs text-slate-500">
+                                <GeneratedValue value={change.message ?? ''} />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        />
+                      </TableBody>
+                    </Table>
+                  </div>
+                )
+              }
+            />
             <Pagination
               basePath={`/admin/integrations/${data.conn.id}/runs/${runId}`}
               currentParams={sp}

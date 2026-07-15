@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Calculator editor for one pressure-test record.
 //
 // Controlled inputs drive a LIVE client-side preview (via the shared pure
@@ -90,6 +97,8 @@ function nextKey(): string {
 const M3_TO_FT3 = 35.3147
 
 export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEditorProps) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [saveState, saveAction] = useActionState(saveSafeDistanceRecordForm, {
     ok: true,
   } as ActionResult)
@@ -167,18 +176,28 @@ export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEdit
       <input type="hidden" name="segments" value={JSON.stringify(segmentsForSubmit)} />
 
       <fieldset disabled={locked} className="space-y-6 disabled:opacity-70">
-        {!saveState.ok ? (
-          <Alert variant="destructive">
-            <AlertDescription>{saveState.error}</AlertDescription>
-          </Alert>
-        ) : null}
+        <GeneratedValue
+          value={
+            !saveState.ok ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  <GeneratedValue value={saveState.error} />
+                </AlertDescription>
+              </Alert>
+            ) : null
+          }
+        />
         <Card>
           <CardHeader>
-            <CardTitle>System</CardTitle>
+            <CardTitle>
+              <GeneratedText id="m_08f7a859552ffa" />
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">System name</Label>
+              <Label htmlFor="name">
+                <GeneratedText id="m_1852e9dabcdaf0" />
+              </Label>
               <Input
                 id="name"
                 name="name"
@@ -191,32 +210,45 @@ export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEdit
 
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="method-select">Calculation method</Label>
+                <Label htmlFor="method-select">
+                  <GeneratedText id="m_0c8e90321a13b6" />
+                </Label>
                 <Select
                   id="method-select"
                   value={method}
                   onChange={(e) => setMethod(e.target.value as SafeDistanceMethod)}
                 >
-                  {(['nasa', 'asme', 'lloyds'] as const).map((m) => (
-                    <option key={m} value={m}>
-                      {SAFE_DISTANCE_METHOD_LABELS[m]}
-                    </option>
-                  ))}
+                  <GeneratedValue
+                    value={(['nasa', 'asme', 'lloyds'] as const).map((m) => (
+                      <option key={m} value={m}>
+                        <GeneratedValue value={SAFE_DISTANCE_METHOD_LABELS[m]} />
+                      </option>
+                    ))}
+                  />
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="unit-select">Result unit</Label>
+                <Label htmlFor="unit-select">
+                  <GeneratedText id="m_0c1a2807cadf41" />
+                </Label>
                 <Select
                   id="unit-select"
                   value={unit}
                   onChange={(e) => onUnitChange(e.target.value as SafeDistanceUnit)}
                 >
-                  <option value="imperial">Imperial (psi / ft³ / ft)</option>
-                  <option value="metric">Metric (bar / m³ / m)</option>
+                  <option value="imperial">
+                    <GeneratedText id="m_123d11e20247fd" />
+                  </option>
+                  <option value="metric">
+                    <GeneratedText id="m_068618eb97f2fe" />
+                  </option>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="testPressure">Test pressure ({pressureUnitLabel(unit)})</Label>
+                <Label htmlFor="testPressure">
+                  <GeneratedText id="m_0fa6af928b1b55" />
+                  <GeneratedValue value={pressureUnitLabel(unit)} />)
+                </Label>
                 <Input
                   id="testPressure"
                   name="testPressure"
@@ -232,7 +264,9 @@ export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEdit
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">
+                <GeneratedText id="m_14d923495cf14c" />
+              </Label>
               <Textarea
                 id="description"
                 name="description"
@@ -248,37 +282,42 @@ export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEdit
         {/* Results */}
         <Card>
           <CardHeader>
-            <CardTitle>Safe distance results</CardTitle>
+            <CardTitle>
+              <GeneratedText id="m_067d56e360a7b0" />
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-4">
               <ResultBox
-                label="Total volume"
-                subtitle="System volume"
+                label={tGenerated('m_079362e557e1a4')}
+                subtitle={tGenerated('m_0f03487b7e174c')}
                 value={`${results.totalVolume.toFixed(4)} ${volUnit}`}
               />
               <ResultBox
-                label={SAFE_DISTANCE_METHOD_LABELS.nasa}
-                subtitle={SAFE_DISTANCE_METHOD_SUBTITLES.nasa}
+                label={tGeneratedValue(SAFE_DISTANCE_METHOD_LABELS.nasa)}
+                subtitle={tGeneratedValue(SAFE_DISTANCE_METHOD_SUBTITLES.nasa)}
                 value={`${results.nasa.toFixed(4)} ${distUnit}`}
                 highlight={method === 'nasa'}
               />
               <ResultBox
-                label={SAFE_DISTANCE_METHOD_LABELS.asme}
-                subtitle={SAFE_DISTANCE_METHOD_SUBTITLES.asme}
+                label={tGeneratedValue(SAFE_DISTANCE_METHOD_LABELS.asme)}
+                subtitle={tGeneratedValue(SAFE_DISTANCE_METHOD_SUBTITLES.asme)}
                 value={`${results.asme.toFixed(4)} ${distUnit}`}
                 highlight={method === 'asme'}
               />
               <ResultBox
-                label={SAFE_DISTANCE_METHOD_LABELS.lloyds}
-                subtitle={SAFE_DISTANCE_METHOD_SUBTITLES.lloyds}
+                label={tGeneratedValue(SAFE_DISTANCE_METHOD_LABELS.lloyds)}
+                subtitle={tGeneratedValue(SAFE_DISTANCE_METHOD_SUBTITLES.lloyds)}
                 value={`${results.lloyds.toFixed(4)} ${distUnit}`}
                 highlight={method === 'lloyds'}
               />
             </div>
             <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-              Live preview. Press <strong>Save</strong> to record the calculation — values are
-              recomputed server-side on save.
+              <GeneratedText id="m_003cca8168b35a" />{' '}
+              <strong>
+                <GeneratedText id="m_19e6bff894c3c7" />
+              </strong>{' '}
+              <GeneratedText id="m_183ec9bfacdb38" />
             </p>
           </CardContent>
         </Card>
@@ -287,7 +326,9 @@ export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEdit
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
-              <CardTitle>Piping system</CardTitle>
+              <CardTitle>
+                <GeneratedText id="m_0d177d4d5e86df" />
+              </CardTitle>
               <Button
                 type="button"
                 variant="outline"
@@ -295,150 +336,175 @@ export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEdit
                 onClick={addSegment}
                 disabled={segments.length >= MAX_SAFE_DISTANCE_SEGMENTS}
               >
-                <Plus size={14} /> Add pipe
+                <Plus size={14} /> <GeneratedText id="m_02f1339374f319" />
               </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {segments.length === 0 ? (
-              <p className="rounded-md border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                No pipe segments yet. Add one to build up the system volume.
-              </p>
-            ) : (
-              segments.map((s, i) => {
-                const volM3 = segmentVolumeM3(
-                  Number(s.length) || 0,
-                  Number(s.diameter) || 0,
-                  s.unit,
-                )
-                const volDisplay = unit === 'imperial' ? volM3 * M3_TO_FT3 : volM3
-                return (
-                  <div
-                    key={s.key}
-                    className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900"
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                        Pipe {i + 1}
-                        <span className="ml-2 font-normal">
-                          {volDisplay.toFixed(4)} {volUnit}
-                        </span>
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeSegment(s.key)}
+            <GeneratedValue
+              value={
+                segments.length === 0 ? (
+                  <p className="rounded-md border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    <GeneratedText id="m_1075bc407b5826" />
+                  </p>
+                ) : (
+                  segments.map((s, i) => {
+                    const volM3 = segmentVolumeM3(
+                      Number(s.length) || 0,
+                      Number(s.diameter) || 0,
+                      s.unit,
+                    )
+                    const volDisplay = unit === 'imperial' ? volM3 * M3_TO_FT3 : volM3
+                    return (
+                      <div
+                        key={s.key}
+                        className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900"
                       >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-4">
-                      <div className="space-y-1 sm:col-span-2">
-                        <Label className="text-xs">Name</Label>
-                        <Input
-                          value={s.name}
-                          onChange={(e) => updateSegment(s.key, { name: e.target.value })}
-                          placeholder="e.g. Header run"
-                          maxLength={MAX_SAFE_DISTANCE_SEGMENT_NAME_LENGTH}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Unit</Label>
-                        <Select
-                          value={s.unit}
-                          onChange={(e) =>
-                            updateSegment(s.key, {
-                              unit: e.target.value as SafeDistanceSegmentUnit,
-                            })
-                          }
-                        >
-                          {SEGMENT_UNITS.map((u) => (
-                            <option key={u} value={u}>
-                              {SEGMENT_UNIT_LABELS[u]}
-                            </option>
-                          ))}
-                        </Select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Length</Label>
-                          <Input
-                            type="number"
-                            step="0.0001"
-                            min="0.000001"
-                            max={MAX_SAFE_DISTANCE_SEGMENT_MEASUREMENT}
-                            value={s.length}
-                            onChange={(e) => updateSegment(s.key, { length: e.target.value })}
-                            required
-                          />
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                            <GeneratedText id="m_0d6de0fd9d2030" /> <GeneratedValue value={i + 1} />
+                            <span className="ml-2 font-normal">
+                              <GeneratedValue value={volDisplay.toFixed(4)} />{' '}
+                              <GeneratedValue value={volUnit} />
+                            </span>
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeSegment(s.key)}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Int. Ø</Label>
-                          <Input
-                            type="number"
-                            step="0.0001"
-                            min="0.000001"
-                            max={MAX_SAFE_DISTANCE_SEGMENT_MEASUREMENT}
-                            value={s.diameter}
-                            onChange={(e) => updateSegment(s.key, { diameter: e.target.value })}
-                            required
-                          />
+                        <div className="grid gap-3 sm:grid-cols-4">
+                          <div className="space-y-1 sm:col-span-2">
+                            <Label className="text-xs">
+                              <GeneratedText id="m_02b18d5c7f6f2d" />
+                            </Label>
+                            <Input
+                              value={s.name}
+                              onChange={(e) => updateSegment(s.key, { name: e.target.value })}
+                              placeholder={tGenerated('m_0a62b7d1a6cfd3')}
+                              maxLength={MAX_SAFE_DISTANCE_SEGMENT_NAME_LENGTH}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">
+                              <GeneratedText id="m_1b1663e433323c" />
+                            </Label>
+                            <Select
+                              value={s.unit}
+                              onChange={(e) =>
+                                updateSegment(s.key, {
+                                  unit: e.target.value as SafeDistanceSegmentUnit,
+                                })
+                              }
+                            >
+                              <GeneratedValue
+                                value={SEGMENT_UNITS.map((u) => (
+                                  <option key={u} value={u}>
+                                    <GeneratedValue value={SEGMENT_UNIT_LABELS[u]} />
+                                  </option>
+                                ))}
+                              />
+                            </Select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">
+                                <GeneratedText id="m_198c37c515c068" />
+                              </Label>
+                              <Input
+                                type="number"
+                                step="0.0001"
+                                min="0.000001"
+                                max={MAX_SAFE_DISTANCE_SEGMENT_MEASUREMENT}
+                                value={s.length}
+                                onChange={(e) => updateSegment(s.key, { length: e.target.value })}
+                                required
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">
+                                <GeneratedText id="m_11ff3f85f65522" />
+                              </Label>
+                              <Input
+                                type="number"
+                                step="0.0001"
+                                min="0.000001"
+                                max={MAX_SAFE_DISTANCE_SEGMENT_MEASUREMENT}
+                                value={s.diameter}
+                                onChange={(e) => updateSegment(s.key, { diameter: e.target.value })}
+                                required
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
+                    )
+                  })
                 )
-              })
-            )}
+              }
+            />
           </CardContent>
         </Card>
 
         {/* People & site + notes */}
         <Card>
           <CardHeader>
-            <CardTitle>People &amp; notes</CardTitle>
+            <CardTitle>
+              <GeneratedText id="m_17b7f08c156ed3" />
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="siteOrgUnitId">Site</Label>
+                <Label htmlFor="siteOrgUnitId">
+                  <GeneratedText id="m_020146dd3d3d5a" />
+                </Label>
                 <RemoteSelectField
                   lookup="safe-distance-sites"
                   id="siteOrgUnitId"
                   name="siteOrgUnitId"
                   defaultValue={record.siteOrgUnitId ?? ''}
-                  placeholder="Select a site…"
-                  searchPlaceholder="Search sites…"
+                  placeholder={tGenerated('m_015c668f21e7b9')}
+                  searchPlaceholder={tGenerated('m_1931aa93098220')}
                   sheetTitle="Select a site"
-                  emptyLabel="— No site —"
+                  emptyLabel={tGenerated('m_13cf177934a5e3')}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="supervisorTenantUserId">Supervisor (sign-off)</Label>
+                <Label htmlFor="supervisorTenantUserId">
+                  <GeneratedText id="m_183e78253c1cd7" />
+                </Label>
                 <RemoteSelectField
                   lookup="safe-distance-supervisors"
                   name="supervisorTenantUserId"
                   defaultValue={record.supervisorTenantUserId ?? ''}
-                  placeholder="Select a supervisor…"
+                  placeholder={tGenerated('m_13b112ab491e64')}
                   clearable
-                  emptyLabel="— None —"
+                  emptyLabel={tGenerated('m_0dd5f8a31ce3e1')}
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="operatorPersonId">Operator</Label>
+                <Label htmlFor="operatorPersonId">
+                  <GeneratedText id="m_1e720918eae43e" />
+                </Label>
                 <RemoteSelectField
                   lookup="safe-distance-operators"
                   name="operatorPersonId"
                   defaultValue={record.operatorPersonId ?? ''}
-                  placeholder="Select an operator…"
+                  placeholder={tGenerated('m_14bd5ec9b1e416')}
                   clearable
-                  emptyLabel="— None —"
+                  emptyLabel={tGenerated('m_0dd5f8a31ce3e1')}
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
+              <Label htmlFor="notes">
+                <GeneratedText id="m_0b8dadcb78cd08" />
+              </Label>
               <Textarea
                 id="notes"
                 name="notes"
@@ -451,11 +517,15 @@ export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEdit
           </CardContent>
         </Card>
 
-        {!locked ? (
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-            <SaveButton disabled={segments.length === 0} />
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            !locked ? (
+              <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <SaveButton disabled={segments.length === 0} />
+              </div>
+            ) : null
+          }
+        />
       </fieldset>
     </form>
   )
@@ -465,7 +535,15 @@ function SaveButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus()
   return (
     <Button type="submit" disabled={pending || disabled}>
-      {pending ? 'Saving…' : 'Save calculation'}
+      <GeneratedValue
+        value={
+          pending ? (
+            <GeneratedText id="m_106811f2aac664" />
+          ) : (
+            <GeneratedText id="m_1358c28e0fc21f" />
+          )
+        }
+      />
     </Button>
   )
 }
@@ -489,16 +567,18 @@ function ResultBox({
           : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
       }`}
     >
-      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        <GeneratedValue value={label} />
+      </div>
       <div className="text-[10px] tracking-wide text-slate-400 uppercase dark:text-slate-500">
-        {subtitle}
+        <GeneratedValue value={subtitle} />
       </div>
       <div
         className={`mt-1 text-lg font-semibold ${
           highlight ? 'text-teal-800 dark:text-teal-200' : 'text-slate-900 dark:text-slate-100'
         }`}
       >
-        {value}
+        <GeneratedValue value={value} />
       </div>
     </div>
   )

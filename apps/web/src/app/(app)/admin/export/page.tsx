@@ -1,3 +1,11 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, asc, count, desc, eq, inArray, type SQL } from 'drizzle-orm'
@@ -39,7 +47,10 @@ import {
 } from './_entities'
 import { ExportSourcesTable } from './_sources-table'
 
-export const metadata = { title: 'Data export' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1a4acd935141a8') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/admin/export'
@@ -90,6 +101,8 @@ export default async function ExportHubPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!can(ctx, 'admin.data.export')) notFound()
 
@@ -153,15 +166,15 @@ export default async function ExportHubPage({
         header={
           <>
             <PageHeader
-              title="Data export"
-              description="Select a data source, configure filters, and export through the audited module endpoint."
+              title={tGenerated('m_1a4acd935141a8')}
+              description={tGenerated('m_09ae444bd5691b')}
               back={{ href: '/admin', label: 'Admin' }}
               actions={
                 canReadAudit ? (
                   <Button asChild variant="outline">
                     <Link href="/admin/audit">
                       <ShieldCheck size={14} className="mr-1.5" />
-                      Audit log
+                      <GeneratedText id="m_19635ea35a756a" />
                     </Link>
                   </Button>
                 ) : null
@@ -170,16 +183,19 @@ export default async function ExportHubPage({
             <TableToolbar
               trailing={
                 <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {filteredEntities.length} of {availableEntities.length} sources
+                  <GeneratedValue value={filteredEntities.length} />{' '}
+                  <GeneratedText id="m_00e704d1194796" />{' '}
+                  <GeneratedValue value={availableEntities.length} />{' '}
+                  <GeneratedText id="m_1c0cef8c914131" />
                 </div>
               }
             >
-              <SearchInput placeholder="Search data sources..." />
+              <SearchInput placeholder={tGenerated('m_191199c7599768')} />
               <FilterChips
                 basePath={BASE}
                 currentParams={sp}
                 paramKey="group"
-                label="Group"
+                label={tGenerated('m_0d06af9d4c7f60')}
                 options={EXPORT_GROUPS.map((group) => ({
                   value: group.label,
                   label: group.label,
@@ -190,7 +206,7 @@ export default async function ExportHubPage({
                 basePath={BASE}
                 currentParams={sp}
                 paramKey="sensitivity"
-                label="Sensitivity"
+                label={tGenerated('m_12de0a8fa81d16')}
                 options={SENSITIVITY_OPTIONS.map((option) => ({
                   value: option.value,
                   label: option.label,
@@ -201,7 +217,7 @@ export default async function ExportHubPage({
                 basePath={BASE}
                 currentParams={sp}
                 paramKey="sort"
-                label="Sort"
+                label={tGenerated('m_02801f1ab429b3')}
                 defaultValue="label"
                 hideAll
                 options={[
@@ -214,19 +230,23 @@ export default async function ExportHubPage({
           </>
         }
       >
-        {pageEntities.length === 0 ? (
-          <EmptyState
-            icon={<Download size={32} />}
-            title="No matching data sources"
-            description="Adjust the search or filters to find another available export source."
-          />
-        ) : (
-          <ExportSourcesTable
-            entities={pageEntities}
-            currentParams={sp}
-            selectedKey={selectedSource?.key}
-          />
-        )}
+        <GeneratedValue
+          value={
+            pageEntities.length === 0 ? (
+              <EmptyState
+                icon={<Download size={32} />}
+                title={tGenerated('m_1d4c9bb824f08b')}
+                description={tGenerated('m_17c2b94612a729')}
+              />
+            ) : (
+              <ExportSourcesTable
+                entities={pageEntities}
+                currentParams={sp}
+                selectedKey={selectedSource?.key}
+              />
+            )
+          }
+        />
         <Pagination
           basePath={BASE}
           currentParams={sp}
@@ -240,30 +260,33 @@ export default async function ExportHubPage({
         open={!!selectedSource}
         closeHref={closeHref}
         size="lg"
-        title={selectedSource?.label ?? 'Data source'}
-        description={
+        title={tGeneratedValue(selectedSource?.label ?? tGenerated('m_1e51e17fccd721'))}
+        description={tGeneratedValue(
           selectedSource
             ? `${selectedSource.ownerLabel} / ${selectedSource.defaultScope}`
-            : undefined
-        }
+            : undefined,
+        )}
       >
-        {selectedSource ? <ExportSourceDrawer entity={selectedSource} /> : null}
+        <GeneratedValue
+          value={selectedSource ? <ExportSourceDrawer entity={selectedSource} /> : null}
+        />
       </UrlDrawer>
     </>
   )
 }
 
 function ExportSourceDrawer({ entity }: { entity: ExportEntity }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="space-y-5">
       <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              Data source
+              <GeneratedText id="m_1e51e17fccd721" />
             </div>
             <p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              {entity.description}
+              <GeneratedValue value={entity.description} />
             </p>
           </div>
           <Badge
@@ -275,14 +298,14 @@ function ExportSourceDrawer({ entity }: { entity: ExportEntity }) {
                   : 'secondary'
             }
           >
-            {entity.sensitivity}
+            <GeneratedValue value={entity.sensitivity} />
           </Badge>
         </div>
         <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-          <DrawerFact label="Module" value={entity.ownerLabel} />
-          <DrawerFact label="Scope" value={entity.defaultScope} />
-          <DrawerFact label="Limit" value={entity.rowLimit} />
-          <DrawerFact label="Default sort" value={entity.defaultSort} />
+          <DrawerFact label={tGenerated('m_065b964e065bf7')} value={entity.ownerLabel} />
+          <DrawerFact label={tGenerated('m_1f10a46fc1db73')} value={entity.defaultScope} />
+          <DrawerFact label={tGenerated('m_1e63c44e9357c6')} value={entity.rowLimit} />
+          <DrawerFact label={tGenerated('m_184e33c0ff4633')} value={entity.defaultSort} />
         </dl>
         <div className="mt-4">
           <Link
@@ -290,7 +313,7 @@ function ExportSourceDrawer({ entity }: { entity: ExportEntity }) {
             className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-800 hover:underline dark:text-teal-300 dark:hover:text-teal-200"
           >
             <ArrowUpRight size={14} />
-            Open source page
+            <GeneratedText id="m_1743f02da013fa" />
           </Link>
         </div>
       </section>
@@ -298,98 +321,140 @@ function ExportSourceDrawer({ entity }: { entity: ExportEntity }) {
       <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <div className="mb-4">
           <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Filter and export
+            <GeneratedText id="m_186693a97dd2f5" />
           </div>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            These controls submit directly to the owning module&apos;s CSV endpoint.
+            <GeneratedText id="m_164e1113558346" />
           </p>
         </div>
         <form action={entity.formActionHref ?? entity.csvHref} method="get" className="space-y-4">
-          {Object.entries(entity.fixedParams ?? {}).map(([name, value]) => (
-            <input key={name} type="hidden" name={name} value={value} />
-          ))}
-          {entity.filters.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {entity.filters.map((filter) => (
-                <ExportFilterField key={filter.name} entityKey={entity.key} filter={filter} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              This source has no additional quick filters.
-            </p>
-          )}
+          <GeneratedValue
+            value={Object.entries(entity.fixedParams ?? {}).map(([name, value]) => (
+              <input key={name} type="hidden" name={name} value={value} />
+            ))}
+          />
+          <GeneratedValue
+            value={
+              entity.filters.length > 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <GeneratedValue
+                    value={entity.filters.map((filter) => (
+                      <ExportFilterField key={filter.name} entityKey={entity.key} filter={filter} />
+                    ))}
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  <GeneratedText id="m_1db345dd13681b" />
+                </p>
+              )
+            }
+          />
 
-          {entity.sortOptions.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor={`${entity.key}-sort`}>Sort by</Label>
-                <Select id={`${entity.key}-sort`} name="sort" placeholder="Default sort">
-                  <option value="">Default sort</option>
-                  {entity.sortOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor={`${entity.key}-dir`}>Direction</Label>
-                <Select id={`${entity.key}-dir`} name="dir" placeholder="Default direction">
-                  <option value="">Default direction</option>
-                  {EXPORT_SORT_DIRECTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              entity.sortOptions.length > 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`${entity.key}-sort`}>
+                      <GeneratedText id="m_0843a08505c249" />
+                    </Label>
+                    <Select
+                      id={`${entity.key}-sort`}
+                      name="sort"
+                      placeholder={tGenerated('m_184e33c0ff4633')}
+                    >
+                      <option value="">
+                        <GeneratedText id="m_184e33c0ff4633" />
+                      </option>
+                      <GeneratedValue
+                        value={entity.sortOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            <GeneratedValue value={option.label} />
+                          </option>
+                        ))}
+                      />
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`${entity.key}-dir`}>
+                      <GeneratedText id="m_18c1dfa678c34a" />
+                    </Label>
+                    <Select
+                      id={`${entity.key}-dir`}
+                      name="dir"
+                      placeholder={tGenerated('m_1a98e5887ce38c')}
+                    >
+                      <option value="">
+                        <GeneratedText id="m_1a98e5887ce38c" />
+                      </option>
+                      <GeneratedValue
+                        value={EXPORT_SORT_DIRECTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            <GeneratedValue value={option.label} />
+                          </option>
+                        ))}
+                      />
+                    </Select>
+                  </div>
+                </div>
+              ) : null
+            }
+          />
 
           <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Columns
+                  <GeneratedText id="m_04eacfda3069db" />
                 </div>
                 <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  {entity.columns.length} available. Uncheck anything that should stay out of the
-                  CSV.
+                  <GeneratedValue value={entity.columns.length} />{' '}
+                  <GeneratedText id="m_07f3277d9a6d8e" />
                 </p>
               </div>
-              <Badge variant="secondary">{entity.columns.length}</Badge>
+              <Badge variant="secondary">
+                <GeneratedValue value={entity.columns.length} />
+              </Badge>
             </div>
             <div className="mt-3 grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-              {entity.columns.map((column) => (
-                <label
-                  key={column.key}
-                  className="flex min-w-0 items-start gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
-                >
-                  <input
-                    type="checkbox"
-                    name="columns"
-                    value={column.key}
-                    defaultChecked={column.defaultSelected !== false}
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950"
-                  />
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">{column.label}</span>
-                    {column.description ? (
-                      <span className="mt-0.5 block truncate text-xs text-slate-400 dark:text-slate-500">
-                        {column.description}
+              <GeneratedValue
+                value={entity.columns.map((column) => (
+                  <label
+                    key={column.key}
+                    className="flex min-w-0 items-start gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+                  >
+                    <input
+                      type="checkbox"
+                      name="columns"
+                      value={column.key}
+                      defaultChecked={column.defaultSelected !== false}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-950"
+                    />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">
+                        <GeneratedValue value={column.label} />
                       </span>
-                    ) : null}
-                  </span>
-                </label>
-              ))}
+                      <GeneratedValue
+                        value={
+                          column.description ? (
+                            <span className="mt-0.5 block truncate text-xs text-slate-400 dark:text-slate-500">
+                              <GeneratedValue value={column.description} />
+                            </span>
+                          ) : null
+                        }
+                      />
+                    </span>
+                  </label>
+                ))}
+              />
             </div>
           </div>
 
           <div className="flex justify-end">
             <Button type="submit">
               <Download size={14} />
-              Export filtered CSV
+              <GeneratedText id="m_1e0adf79cb22af" />
             </Button>
           </div>
         </form>
@@ -500,19 +565,25 @@ function ExportFilterField({
   entityKey: string
   filter: ExportFilterControl
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const id = `${entityKey}-${filter.name}`
   if (filter.kind === 'text') {
     return (
       <div className="space-y-1.5">
-        <Label htmlFor={id}>{filter.label}</Label>
-        <Input id={id} name={filter.name} placeholder={filter.placeholder} />
+        <Label htmlFor={id}>
+          <GeneratedValue value={filter.label} />
+        </Label>
+        <Input id={id} name={filter.name} placeholder={tGeneratedValue(filter.placeholder)} />
       </div>
     )
   }
   if (filter.kind === 'date') {
     return (
       <div className="space-y-1.5">
-        <Label htmlFor={id}>{filter.label}</Label>
+        <Label htmlFor={id}>
+          <GeneratedValue value={filter.label} />
+        </Label>
         <Input id={id} name={filter.name} type="date" />
       </div>
     )
@@ -520,7 +591,9 @@ function ExportFilterField({
   if (filter.kind === 'year') {
     return (
       <div className="space-y-1.5">
-        <Label htmlFor={id}>{filter.label}</Label>
+        <Label htmlFor={id}>
+          <GeneratedValue value={filter.label} />
+        </Label>
         <Input
           id={id}
           name={filter.name}
@@ -534,14 +607,24 @@ function ExportFilterField({
   }
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id}>{filter.label}</Label>
-      <Select id={id} name={filter.name} placeholder={filter.emptyLabel ?? 'Any'}>
-        <option value="">{filter.emptyLabel ?? 'Any'}</option>
-        {filter.options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
+      <Label htmlFor={id}>
+        <GeneratedValue value={filter.label} />
+      </Label>
+      <Select
+        id={id}
+        name={filter.name}
+        placeholder={tGeneratedValue(filter.emptyLabel ?? tGenerated('m_1ec3617d2cde86'))}
+      >
+        <option value="">
+          <GeneratedValue value={filter.emptyLabel ?? <GeneratedText id="m_1ec3617d2cde86" />} />
+        </option>
+        <GeneratedValue
+          value={filter.options.map((option) => (
+            <option key={option.value} value={option.value}>
+              <GeneratedValue value={option.label} />
+            </option>
+          ))}
+        />
       </Select>
     </div>
   )
@@ -551,9 +634,11 @@ function DrawerFact({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        {label}
+        <GeneratedValue value={label} />
       </dt>
-      <dd className="mt-1 text-slate-900 dark:text-slate-100">{value}</dd>
+      <dd className="mt-1 text-slate-900 dark:text-slate-100">
+        <GeneratedValue value={value} />
+      </dd>
     </div>
   )
 }

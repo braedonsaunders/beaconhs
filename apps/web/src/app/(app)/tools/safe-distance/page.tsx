@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Gauge } from 'lucide-react'
 import { redirect } from 'next/navigation'
@@ -34,7 +37,10 @@ import {
 } from './_lib'
 import { createSafeDistanceRecord } from './_actions'
 
-export const metadata = { title: 'Safe Distance' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_10d9a8a587b168') }
+}
 
 const SORTS = ['reference', 'occurred_at', 'name', 'method'] as const
 
@@ -61,6 +67,8 @@ export default async function SafeDistanceListPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'occurred_at',
@@ -142,120 +150,162 @@ export default async function SafeDistanceListPage({
       header={
         <>
           <PageHeader
-            title="Safe Distance"
-            description="Pneumatic pressure-test stand-off — NASA-Glenn, ASME PCC-2, and Lloyd's Register."
+            title={tGenerated('m_10d9a8a587b168')}
+            description={tGenerated('m_0f6ba29274dedf')}
             back={{ href: '/tools', label: 'All tools' }}
             actions={
               <div className="flex items-center gap-2">
-                {canExport ? (
-                  <Link href={buildExportHref('/tools/safe-distance/export.csv', sp)}>
-                    <Button variant="outline">Export CSV</Button>
-                  </Link>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    canExport ? (
+                      <Link href={buildExportHref('/tools/safe-distance/export.csv', sp)}>
+                        <Button variant="outline">
+                          <GeneratedText id="m_14c6440eca1edc" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
                 {/* Create a blank record and drop straight into the calculator
                     editor — no separate create form. */}
                 <form action={createSafeDistanceRecord}>
-                  <Button type="submit">New assessment</Button>
+                  <Button type="submit">
+                    <GeneratedText id="m_0b765ce4236ed0" />
+                  </Button>
                 </form>
               </div>
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search reference, name, notes…" />
+            <SearchInput placeholder={tGenerated('m_1920732570b204')} />
             <FilterChips
               basePath="/tools/safe-distance"
               currentParams={sp}
               paramKey="method"
-              label="Method"
+              label={tGenerated('m_0984e05d5d435f')}
               options={METHOD_OPTIONS.map((o) => ({ ...o, count: methodCounts[o.value] }))}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Gauge size={32} />}
-          title={params.q || methodFilter ? 'No assessments match these filters' : 'No assessments'}
-          description="Create a pressure-test assessment to calculate the minimum safe stand-off distance for a piping system under pneumatic test."
-          action={
-            <form action={createSafeDistanceRecord}>
-              <Button type="submit">New assessment</Button>
-            </form>
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
-                  Ref
-                </SortableTh>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                  Name
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="occurred_at"
-                  active={params.sort === 'occurred_at'}
-                >
-                  Date
-                </SortableTh>
-                <SortableTh {...sortProps} column="method" active={params.sort === 'method'}>
-                  Method
-                </SortableTh>
-                <TableHead>Total volume</TableHead>
-                <TableHead>Safe distance</TableHead>
-                <TableHead>Site</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ rec, site }) => (
-                <TableRow key={rec.id}>
-                  <TableCell className="font-mono text-xs">
-                    <Link href={`/tools/safe-distance/${rec.id}`} className="hover:underline">
-                      {rec.reference}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/tools/safe-distance/${rec.id}`}
-                      className="font-medium hover:underline"
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Gauge size={32} />}
+              title={tGeneratedValue(
+                params.q || methodFilter
+                  ? tGenerated('m_1774cc3000b3a2')
+                  : tGenerated('m_0caef616765e46'),
+              )}
+              description={tGenerated('m_1d956da89d3ecd')}
+              action={
+                <form action={createSafeDistanceRecord}>
+                  <Button type="submit">
+                    <GeneratedText id="m_0b765ce4236ed0" />
+                  </Button>
+                </form>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      {...sortProps}
+                      column="reference"
+                      active={params.sort === 'reference'}
                     >
-                      {rec.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-700 dark:text-slate-300">
-                    {rec.occurredAt ? new Date(rec.occurredAt).toISOString().slice(0, 10) : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
-                      {SAFE_DISTANCE_METHOD_LABELS[rec.method as SafeDistanceMethod]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-slate-700 dark:text-slate-300">
-                    {formatVolume(rec.totalVolume, rec.unit as SafeDistanceUnit)}
-                  </TableCell>
-                  <TableCell className="font-medium text-slate-900 dark:text-slate-100">
-                    {formatDistance(chosenResult(rec), rec.unit as SafeDistanceUnit)}
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {site?.name ?? '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/tools/safe-distance"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                      <GeneratedText id="m_036b564bb88dfe" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="occurred_at"
+                      active={params.sort === 'occurred_at'}
+                    >
+                      <GeneratedText id="m_0285c38761c540" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="method" active={params.sort === 'method'}>
+                      <GeneratedText id="m_0984e05d5d435f" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_079362e557e1a4" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0f343b7d03dd86" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_020146dd3d3d5a" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ rec, site }) => (
+                      <TableRow key={rec.id}>
+                        <TableCell className="font-mono text-xs">
+                          <Link href={`/tools/safe-distance/${rec.id}`} className="hover:underline">
+                            <GeneratedValue value={rec.reference} />
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Link
+                            href={`/tools/safe-distance/${rec.id}`}
+                            className="font-medium hover:underline"
+                          >
+                            <GeneratedValue value={rec.name} />
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-slate-700 dark:text-slate-300">
+                          <GeneratedValue
+                            value={
+                              rec.occurredAt
+                                ? new Date(rec.occurredAt).toISOString().slice(0, 10)
+                                : '—'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            <GeneratedValue
+                              value={SAFE_DISTANCE_METHOD_LABELS[rec.method as SafeDistanceMethod]}
+                            />
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-700 dark:text-slate-300">
+                          <GeneratedValue
+                            value={formatVolume(rec.totalVolume, rec.unit as SafeDistanceUnit)}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-900 dark:text-slate-100">
+                          <GeneratedValue
+                            value={formatDistance(chosenResult(rec), rec.unit as SafeDistanceUnit)}
+                          />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={site?.name ?? '—'} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/tools/safe-distance"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

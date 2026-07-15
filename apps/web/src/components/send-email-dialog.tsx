@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Shared "Send email" dialog used by detail pages across modules.
 //
 // Opens when a parent passes `open={true}` (typically driven by ?send=1
@@ -54,6 +61,8 @@ function SendEmailDialogSession({
   sendAction,
   hiddenFields = {},
 }: SendEmailDialogProps) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [submitted, setSubmitted] = useState(false)
@@ -101,19 +110,23 @@ function SendEmailDialogSession({
           <div className="flex items-center gap-2">
             <Mail size={16} className="text-teal-700 dark:text-teal-300" />
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              {title}
-              {reference ? (
-                <span className="ml-2 font-mono text-xs text-slate-500 dark:text-slate-400">
-                  {reference}
-                </span>
-              ) : null}
+              <GeneratedValue value={title} />
+              <GeneratedValue
+                value={
+                  reference ? (
+                    <span className="ml-2 font-mono text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedValue value={reference} />
+                    </span>
+                  ) : null
+                }
+              />
             </h2>
           </div>
           <button
             type="button"
             onClick={() => router.replace(window.location.pathname as any)}
             className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-            aria-label="Close"
+            aria-label={tGenerated('m_19ab80ae228d44')}
           >
             <X size={16} />
           </button>
@@ -122,96 +135,134 @@ function SendEmailDialogSession({
         <form
           action={(fd) => {
             startTransition(async () => {
-              setError(null)
+              setError(tGeneratedValue(null))
               try {
                 await sendAction(fd)
                 setSubmitted(true)
                 setTimeout(() => router.replace(window.location.pathname as any), 800)
               } catch (sendError) {
                 console.error('[send-email-dialog] delivery failed', sendError)
-                setError('Email could not be sent. Check the recipients and try again.')
+                setError(tGenerated('m_17980fffe9226d'))
               }
             })
           }}
           className="space-y-4 p-5"
         >
-          {Object.entries(hiddenFields).map(([k, v]) => (
-            <input key={k} type="hidden" name={k} value={v} />
-          ))}
-          {description ? (
-            <p className="text-sm text-slate-600 dark:text-slate-300">{description}</p>
-          ) : null}
+          <GeneratedValue
+            value={Object.entries(hiddenFields).map(([k, v]) => (
+              <input key={k} type="hidden" name={k} value={v} />
+            ))}
+          />
+          <GeneratedValue
+            value={
+              description ? (
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  <GeneratedValue value={description} />
+                </p>
+              ) : null
+            }
+          />
 
           <div className="space-y-1.5">
-            <Label htmlFor="recipients">Recipients (comma-separated)</Label>
+            <Label htmlFor="recipients">
+              <GeneratedText id="m_11060d3eb82ac1" />
+            </Label>
             <Input
               id="recipients"
               name="recipients"
               type="text"
               value={recipients}
               onChange={(e) => setRecipients(e.target.value)}
-              placeholder="alice@example.com, bob@example.com"
+              placeholder={tGenerated('m_0e47496ed10914')}
             />
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">{recipientsHint}</p>
-            {groups.length > 0 ? (
-              <SearchSelect
-                value=""
-                onChange={addGroup}
-                options={groups}
-                placeholder={groupBusy ? 'Adding group…' : 'Add a notification group…'}
-                searchPlaceholder="Search groups…"
-                ariaLabel="Add a notification group"
-                triggerClassName="mt-1"
-              />
-            ) : null}
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              <GeneratedValue value={recipientsHint} />
+            </p>
+            <GeneratedValue
+              value={
+                groups.length > 0 ? (
+                  <SearchSelect
+                    value=""
+                    onChange={addGroup}
+                    options={groups}
+                    placeholder={tGeneratedValue(
+                      groupBusy ? tGenerated('m_1ed2b9215a67c6') : tGenerated('m_0b4ff673912e40'),
+                    )}
+                    searchPlaceholder={tGenerated('m_15c4d2ca7e95f7')}
+                    ariaLabel="Add a notification group"
+                    triggerClassName="mt-1"
+                  />
+                ) : null
+              }
+            />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="cc">Cc</Label>
+            <Label htmlFor="cc">
+              <GeneratedText id="m_1139d794f4ea9b" />
+            </Label>
             <Input
               id="cc"
               name="cc"
               type="text"
               defaultValue={defaultCc}
-              placeholder="cc@example.com"
+              placeholder={tGenerated('m_1d9fd1a924a5f1')}
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="subjectPrefix">Subject prefix</Label>
+            <Label htmlFor="subjectPrefix">
+              <GeneratedText id="m_155e869f893331" />
+            </Label>
             <Input
               id="subjectPrefix"
               name="subjectPrefix"
               defaultValue={defaultSubjectPrefix}
-              placeholder="Update / Action required / FYI"
+              placeholder={tGenerated('m_1a1fe99effa1f0')}
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="message">Personal note (optional)</Label>
+            <Label htmlFor="message">
+              <GeneratedText id="m_1edfd286d11988" />
+            </Label>
             <Textarea
               id="message"
               name="message"
               rows={4}
-              placeholder="Add context for the recipients."
+              placeholder={tGenerated('m_03ec1b3acac658')}
             />
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-            {error ? (
-              <p role="alert" className="mr-auto text-xs text-red-600 dark:text-red-400">
-                {error}
-              </p>
-            ) : null}
+            <GeneratedValue
+              value={
+                error ? (
+                  <p role="alert" className="mr-auto text-xs text-red-600 dark:text-red-400">
+                    <GeneratedValue value={error} />
+                  </p>
+                ) : null
+              }
+            />
             <button
               type="button"
               onClick={() => router.replace(window.location.pathname as any)}
               className="rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
             >
-              Cancel
+              <GeneratedText id="m_112e2e8ecda428" />
             </button>
             <Button type="submit" disabled={isPending}>
-              {isPending ? 'Sending…' : submitted ? 'Sent ✓' : 'Send email'}
+              <GeneratedValue
+                value={
+                  isPending ? (
+                    <GeneratedText id="m_0b6d87e6c6b163" />
+                  ) : submitted ? (
+                    <GeneratedText id="m_02eee7fc288b21" />
+                  ) : (
+                    <GeneratedText id="m_09dfca28fc95ba" />
+                  )
+                }
+              />
             </Button>
           </div>
         </form>

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Wrench } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
@@ -22,7 +25,10 @@ import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { EquipmentRecordsTable, type EquipmentTableRow } from './_records-table'
 import { EquipmentTypeCategoryFilters } from './_filters'
 
-export const metadata = { title: 'Equipment' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_17f17df74f7e69') }
+}
 
 const SORTS = [
   'asset_tag',
@@ -53,6 +59,8 @@ export default async function EquipmentPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'asset_tag',
@@ -192,31 +200,48 @@ export default async function EquipmentPage({
       header={
         <>
           <PageHeader
-            title="Equipment"
-            description="Asset registry. QR scan + inspections + work orders."
+            title={tGenerated('m_17f17df74f7e69')}
+            description={tGenerated('m_1c3c92bc9defc8')}
             actions={
               <div className="flex items-center gap-2">
-                {canExport ? (
-                  <a href={buildExportHref('/equipment/export.csv', { ...sp, status: statusRaw })}>
-                    <Button variant="outline">Export CSV</Button>
-                  </a>
-                ) : null}
-                {canManageEquipment ? (
-                  <Link href="/equipment/new">
-                    <Button>Add equipment</Button>
-                  </Link>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    canExport ? (
+                      <a
+                        href={buildExportHref('/equipment/export.csv', {
+                          ...sp,
+                          status: statusRaw,
+                        })}
+                      >
+                        <Button variant="outline">
+                          <GeneratedText id="m_14c6440eca1edc" />
+                        </Button>
+                      </a>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    canManageEquipment ? (
+                      <Link href="/equipment/new">
+                        <Button>
+                          <GeneratedText id="m_105ebaff0d3ac5" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
               </div>
             }
           />
           <EquipmentSubNav active="equipment" />
           <TableToolbar>
-            <SearchInput placeholder="Search asset tag, name, serial #" />
+            <SearchInput placeholder={tGenerated('m_17a9e63a53bd0d')} />
             <FilterChips
               basePath="/equipment"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               allLabel="All statuses"
               defaultValue="in_service"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
@@ -225,7 +250,7 @@ export default async function EquipmentPage({
               basePath="/equipment"
               currentParams={sp}
               paramKey="availability"
-              label="Availability"
+              label={tGenerated('m_0a782f11294c36')}
               options={AVAILABILITY_OPTIONS.map((o) => ({
                 ...o,
                 count: availabilityCounts[o.value],
@@ -241,39 +266,49 @@ export default async function EquipmentPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Wrench size={32} />}
-          title={params.q || statusFilter ? 'No equipment matches these filters' : 'No equipment'}
-          description="Add an asset to track inspections, transfers, and work orders."
-          action={
-            canManageEquipment ? (
-              <Link href="/equipment/new">
-                <Button>Add equipment</Button>
-              </Link>
-            ) : undefined
-          }
-        />
-      ) : (
-        <>
-          <EquipmentRecordsTable
-            rows={tableRows}
-            basePath="/equipment"
-            currentParams={sp}
-            sort={params.sort}
-            dir={params.dir}
-            canManage={canManageEquipment}
-            canExport={canExport}
-          />
-          <Pagination
-            basePath="/equipment"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Wrench size={32} />}
+              title={tGeneratedValue(
+                params.q || statusFilter
+                  ? tGenerated('m_093bb01f408194')
+                  : tGenerated('m_0f44a06d1a2711'),
+              )}
+              description={tGenerated('m_191ab10c462021')}
+              action={
+                canManageEquipment ? (
+                  <Link href="/equipment/new">
+                    <Button>
+                      <GeneratedText id="m_105ebaff0d3ac5" />
+                    </Button>
+                  </Link>
+                ) : undefined
+              }
+            />
+          ) : (
+            <>
+              <EquipmentRecordsTable
+                rows={tableRows}
+                basePath="/equipment"
+                currentParams={sp}
+                sort={params.sort}
+                dir={params.dir}
+                canManage={canManageEquipment}
+                canExport={canExport}
+              />
+              <Pagination
+                basePath="/equipment"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

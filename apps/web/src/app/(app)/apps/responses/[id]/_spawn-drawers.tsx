@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Spawn-CAPA / spawn-incident drawers for the response detail page.
 //
 // Renders two URL-state drawers (?drawer=spawn-ca / ?drawer=spawn-incident)
@@ -81,22 +88,30 @@ export function SpawnDrawers({
 }) {
   return (
     <>
-      {openDrawer === 'spawn-ca' ? (
-        <SpawnCAPADrawer
-          closeHref={closeHref}
-          responseId={responseId}
-          prefill={prefill}
-          action={spawnCa}
-        />
-      ) : null}
-      {openDrawer === 'spawn-incident' ? (
-        <SpawnIncidentDrawer
-          closeHref={closeHref}
-          responseId={responseId}
-          prefill={prefill}
-          action={spawnIncident}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          openDrawer === 'spawn-ca' ? (
+            <SpawnCAPADrawer
+              closeHref={closeHref}
+              responseId={responseId}
+              prefill={prefill}
+              action={spawnCa}
+            />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          openDrawer === 'spawn-incident' ? (
+            <SpawnIncidentDrawer
+              closeHref={closeHref}
+              responseId={responseId}
+              prefill={prefill}
+              action={spawnIncident}
+            />
+          ) : null
+        }
+      />
     </>
   )
 }
@@ -112,6 +127,8 @@ function SpawnCAPADrawer({
   prefill: SpawnPrefill
   action: SpawnCAAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [title, setTitle] = useState(prefill.caTitle)
   const [description, setDescription] = useState(prefill.caDescription)
@@ -121,10 +138,10 @@ function SpawnCAPADrawer({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     const t = title.trim()
     if (!t) {
-      setError('Title is required.')
+      setError(tGenerated('m_1877089311a4ac'))
       return
     }
     startTransition(async () => {
@@ -136,12 +153,12 @@ function SpawnCAPADrawer({
         dueOn: dueOn || null,
       })
       if (res.ok) {
-        toast.success(`Created ${res.reference}`)
+        toast.success(tGenerated('m_1f96b34169f66c', { value0: res.reference }))
         router.push(`/corrective-actions/${res.caId}`)
         router.refresh()
       } else {
-        setError(res.error)
-        toast.error(res.error)
+        setError(tGeneratedValue(res.error))
+        toast.error(tGeneratedValue(res.error))
       }
     })
   }
@@ -150,8 +167,8 @@ function SpawnCAPADrawer({
     <UrlDrawer
       open
       closeHref={closeHref}
-      title="Create corrective action"
-      description="Address the non-compliance flagged by this form response."
+      title={tGenerated('m_079cef507d2c7e')}
+      description={tGenerated('m_15e2f6c94ef43f')}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -161,18 +178,22 @@ function SpawnCAPADrawer({
             onClick={() => router.push(closeHref)}
             disabled={pending}
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending || !title.trim()}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            Create CAPA
+            <GeneratedValue
+              value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            />
+            <GeneratedText id="m_07b71156553d0b" />
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="ca-title">Title</Label>
+          <Label htmlFor="ca-title">
+            <GeneratedText id="m_0decefd558c355" />
+          </Label>
           <Input
             id="ca-title"
             value={title}
@@ -181,7 +202,9 @@ function SpawnCAPADrawer({
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="ca-description">Description</Label>
+          <Label htmlFor="ca-description">
+            <GeneratedText id="m_14d923495cf14c" />
+          </Label>
           <Textarea
             id="ca-description"
             value={description}
@@ -189,27 +212,35 @@ function SpawnCAPADrawer({
             rows={6}
           />
           <p className="text-[11px] text-slate-500">
-            Pre-filled with the failed checks from this response. Edit as needed.
+            <GeneratedText id="m_13b5818a1a46d6" />
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="ca-severity">Severity</Label>
+            <Label htmlFor="ca-severity">
+              <GeneratedText id="m_168b365cc671bf" />
+            </Label>
             <Select
               id="ca-severity"
               value={severity}
               onChange={(e) => setSeverity(e.currentTarget.value as (typeof SEVERITIES)[number])}
             >
-              {SEVERITIES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
+              <GeneratedValue
+                value={SEVERITIES.map((s) => (
+                  <option key={s} value={s}>
+                    <GeneratedValue value={s} />
+                  </option>
+                ))}
+              />
             </Select>
-            <p className="text-[11px] text-slate-500">Default chosen from compliance score band.</p>
+            <p className="text-[11px] text-slate-500">
+              <GeneratedText id="m_15766056173fb4" />
+            </p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ca-due">Due on</Label>
+            <Label htmlFor="ca-due">
+              <GeneratedText id="m_04bfc1eaee3a4b" />
+            </Label>
             <Input
               id="ca-due"
               type="date"
@@ -218,11 +249,15 @@ function SpawnCAPADrawer({
             />
           </div>
         </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )
@@ -239,6 +274,8 @@ function SpawnIncidentDrawer({
   prefill: SpawnPrefill
   action: SpawnIncidentAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [title, setTitle] = useState(prefill.incidentTitle)
   const [description, setDescription] = useState(prefill.incidentDescription)
@@ -250,10 +287,10 @@ function SpawnIncidentDrawer({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     const t = title.trim()
     if (!t) {
-      setError('Title is required.')
+      setError(tGenerated('m_1877089311a4ac'))
       return
     }
     // The datetime-local value is zone-less; parse it in the BROWSER's timezone
@@ -261,7 +298,7 @@ function SpawnIncidentDrawer({
     // in its own timezone.
     const occurredAtDate = occurredAt ? new Date(occurredAt) : new Date()
     if (Number.isNaN(occurredAtDate.getTime())) {
-      setError('Enter a valid occurred-at date and time.')
+      setError(tGenerated('m_05412aa7ae5a33'))
       return
     }
     startTransition(async () => {
@@ -275,12 +312,12 @@ function SpawnIncidentDrawer({
         location: location.trim() || null,
       })
       if (res.ok) {
-        toast.success(`Created ${res.reference}`)
+        toast.success(tGenerated('m_1f96b34169f66c', { value0: res.reference }))
         router.push(`/incidents/${res.incidentId}`)
         router.refresh()
       } else {
-        setError(res.error)
-        toast.error(res.error)
+        setError(tGeneratedValue(res.error))
+        toast.error(tGeneratedValue(res.error))
       }
     })
   }
@@ -289,8 +326,8 @@ function SpawnIncidentDrawer({
     <UrlDrawer
       open
       closeHref={closeHref}
-      title="Create incident"
-      description="Escalate this response into an incident report."
+      title={tGenerated('m_0b7f374a64e552')}
+      description={tGenerated('m_02df41e030ed9c')}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -300,18 +337,22 @@ function SpawnIncidentDrawer({
             onClick={() => router.push(closeHref)}
             disabled={pending}
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending || !title.trim()}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            Create incident
+            <GeneratedValue
+              value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            />
+            <GeneratedText id="m_0b7f374a64e552" />
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="inc-title">Title</Label>
+          <Label htmlFor="inc-title">
+            <GeneratedText id="m_0decefd558c355" />
+          </Label>
           <Input
             id="inc-title"
             value={title}
@@ -320,7 +361,9 @@ function SpawnIncidentDrawer({
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="inc-description">Description</Label>
+          <Label htmlFor="inc-description">
+            <GeneratedText id="m_14d923495cf14c" />
+          </Label>
           <Textarea
             id="inc-description"
             value={description}
@@ -330,21 +373,27 @@ function SpawnIncidentDrawer({
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="inc-type">Type</Label>
+            <Label htmlFor="inc-type">
+              <GeneratedText id="m_074ba2f160c506" />
+            </Label>
             <Select
               id="inc-type"
               value={type}
               onChange={(e) => setType(e.currentTarget.value as (typeof INCIDENT_TYPES)[number])}
             >
-              {INCIDENT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t.replace(/_/g, ' ')}
-                </option>
-              ))}
+              <GeneratedValue
+                value={INCIDENT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    <GeneratedValue value={t.replace(/_/g, ' ')} />
+                  </option>
+                ))}
+              />
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="inc-severity">Severity</Label>
+            <Label htmlFor="inc-severity">
+              <GeneratedText id="m_168b365cc671bf" />
+            </Label>
             <Select
               id="inc-severity"
               value={severity}
@@ -352,15 +401,19 @@ function SpawnIncidentDrawer({
                 setSeverity(e.currentTarget.value as (typeof INCIDENT_SEVERITIES)[number])
               }
             >
-              {INCIDENT_SEVERITIES.map((s) => (
-                <option key={s} value={s}>
-                  {s.replace(/_/g, ' ')}
-                </option>
-              ))}
+              <GeneratedValue
+                value={INCIDENT_SEVERITIES.map((s) => (
+                  <option key={s} value={s}>
+                    <GeneratedValue value={s.replace(/_/g, ' ')} />
+                  </option>
+                ))}
+              />
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="inc-occurred">Occurred at</Label>
+            <Label htmlFor="inc-occurred">
+              <GeneratedText id="m_03f174df92cf82" />
+            </Label>
             <Input
               id="inc-occurred"
               type="datetime-local"
@@ -370,20 +423,26 @@ function SpawnIncidentDrawer({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="inc-location">Specific location</Label>
+            <Label htmlFor="inc-location">
+              <GeneratedText id="m_0352b4ecd48a3a" />
+            </Label>
             <Input
               id="inc-location"
               value={location}
               onChange={(e) => setLocation(e.currentTarget.value)}
-              placeholder="Building / area"
+              placeholder={tGenerated('m_1d69847bdc6cd6')}
             />
           </div>
         </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )

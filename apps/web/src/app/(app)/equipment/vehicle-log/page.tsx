@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { and, eq } from 'drizzle-orm'
@@ -22,7 +24,10 @@ import {
 import { runVehicleLogAction } from './_flow-actions'
 import { VehicleLogWorkspaceClient, type VehicleLogRecordAction } from './_workspace.client'
 
-export const metadata = { title: 'Vehicle log' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0dd42a0cc0e7d6') }
+}
 export const dynamic = 'force-dynamic'
 
 async function saveVehicleLogEntryAction(input: SaveVehicleLogEntryInput) {
@@ -75,6 +80,7 @@ export default async function VehicleLogPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const ctx = await requireRequestContext()
   if (
@@ -146,34 +152,43 @@ export default async function VehicleLogPage({
     <ListPageLayout
       header={
         <>
-          <PageHeader title="Vehicle log" description="Driver and vehicle monthly log entry." />
+          <PageHeader
+            title={tGenerated('m_0dd42a0cc0e7d6')}
+            description={tGenerated('m_03f33f3d29e102')}
+          />
           <EquipmentSubNav active="vehicle-log" />
         </>
       }
     >
-      {workspace.drivers.length === 0 || workspace.vehicles.length === 0 ? (
-        <EmptyState
-          icon={<Truck size={32} />}
-          title="Vehicle log is not ready"
-          description="Active drivers and equipment vehicles are required."
-          action={
-            <Link href="/equipment">
-              <Button>Open equipment</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <VehicleLogWorkspaceClient
-          workspace={workspace}
-          canManage={can(ctx, 'equipment.manage')}
-          saveAction={saveVehicleLogEntryAction}
-          applyAction={applyVehicleLogImportAction}
-          deleteMonthAction={deleteMonthAction}
-          recordActions={recordActions}
-          actionEntryId={actionEntryId}
-          runAction={runVehicleLogAction}
-        />
-      )}
+      <GeneratedValue
+        value={
+          workspace.drivers.length === 0 || workspace.vehicles.length === 0 ? (
+            <EmptyState
+              icon={<Truck size={32} />}
+              title={tGenerated('m_0c8f5d0d15b83f')}
+              description={tGenerated('m_151d9816d60f3c')}
+              action={
+                <Link href="/equipment">
+                  <Button>
+                    <GeneratedText id="m_1bfce9c8794d19" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <VehicleLogWorkspaceClient
+              workspace={workspace}
+              canManage={can(ctx, 'equipment.manage')}
+              saveAction={saveVehicleLogEntryAction}
+              applyAction={applyVehicleLogImportAction}
+              deleteMonthAction={deleteMonthAction}
+              recordActions={recordActions}
+              actionEntryId={actionEntryId}
+              runAction={runVehicleLogAction}
+            />
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

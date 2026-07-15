@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import type { Route } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
@@ -796,8 +800,9 @@ async function deleteEquipmentFile(formData: FormData) {
 // ---------------- Page ----------------
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Equipment · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_1f30a629c35ec9', { value0: id.slice(0, 8) }) }
 }
 
 export default async function EquipmentDetailPage({
@@ -807,6 +812,8 @@ export default async function EquipmentDetailPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
   const sp = await searchParams
@@ -1323,154 +1330,230 @@ export default async function EquipmentDetailPage({
       <div className="space-y-5">
         <DetailHeader
           back={{ href: '/equipment', label: 'Back to equipment' }}
-          title={item.name}
-          subtitle={`${item.assetTag}${item.serialNumber ? ` · ${item.serialNumber}` : ''}`}
+          title={tGeneratedValue(item.name)}
+          subtitle={tGeneratedValue(
+            `${item.assetTag}${item.serialNumber ? ` · ${item.serialNumber}` : ''}`,
+          )}
           badge={
             <div className="flex items-center gap-2">
               <Badge variant={item.status === 'in_service' ? 'success' : 'warning'}>
-                {item.status.replace('_', ' ')}
+                <GeneratedValue value={item.status.replace('_', ' ')} />
               </Badge>
-              {item.isMissing ? <Badge variant="destructive">Missing</Badge> : null}
-              {item.isDraft ? <Badge variant="outline">Draft</Badge> : null}
+              <GeneratedValue
+                value={
+                  item.isMissing ? (
+                    <Badge variant="destructive">
+                      <GeneratedText id="m_033d838430bc5f" />
+                    </Badge>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  item.isDraft ? (
+                    <Badge variant="outline">
+                      <GeneratedText id="m_13f3db1d0ca2fe" />
+                    </Badge>
+                  ) : null
+                }
+              />
             </div>
           }
           actions={
             <>
-              {canCreateWorkOrder ? (
-                <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as Route}>
-                  <Button variant="outline">
-                    <Wrench size={14} />
-                    New work order
-                  </Button>
-                </Link>
-              ) : null}
-              {canManageEquipment ? (
-                <Link href={`${basePath}?tab=log&drawer=new-truck-log-entry` as Route}>
-                  <Button variant="outline">
-                    <Truck size={14} />
-                    Log entry
-                  </Button>
-                </Link>
-              ) : null}
+              <GeneratedValue
+                value={
+                  canCreateWorkOrder ? (
+                    <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as Route}>
+                      <Button variant="outline">
+                        <Wrench size={14} />
+                        <GeneratedText id="m_028792f1fdc70a" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  canManageEquipment ? (
+                    <Link href={`${basePath}?tab=log&drawer=new-truck-log-entry` as Route}>
+                      <Button variant="outline">
+                        <Truck size={14} />
+                        <GeneratedText id="m_1004059f966a2a" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
               <Link href={`/equipment/${id}/qr`}>
                 <Button variant="outline">
                   <QrCode size={14} />
-                  QR
+                  <GeneratedText id="m_183a008d67c7c1" />
                 </Button>
               </Link>
-              {item.isMissing ? (
-                <Link href={`${basePath}?drawer=report-found` as Route}>
-                  <Button variant="outline">
-                    <Search size={14} />
-                    Mark as found
-                  </Button>
-                </Link>
-              ) : (
-                <Link href={`${basePath}?drawer=report-missing` as Route}>
-                  <Button variant="outline">
-                    <Search size={14} />
-                    Report missing
-                  </Button>
-                </Link>
-              )}
+              <GeneratedValue
+                value={
+                  item.isMissing ? (
+                    <Link href={`${basePath}?drawer=report-found` as Route}>
+                      <Button variant="outline">
+                        <Search size={14} />
+                        <GeneratedText id="m_1b925bd65abff0" />
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link href={`${basePath}?drawer=report-missing` as Route}>
+                      <Button variant="outline">
+                        <Search size={14} />
+                        <GeneratedText id="m_08cbe6945650bd" />
+                      </Button>
+                    </Link>
+                  )
+                }
+              />
             </>
           }
         />
 
-        {item.isMissing ? (
-          <Alert variant="destructive">
-            <AlertTitle>Reported missing</AlertTitle>
-            <AlertDescription>
-              {(() => {
-                const parts: string[] = []
-                if (item.missingReportedAt) {
-                  parts.push(
-                    `Reported on ${formatDate(new Date(item.missingReportedAt), ctx.timezone, ctx.locale)}`,
-                  )
-                }
-                if (missingReporter?.name) {
-                  parts.push(`by ${missingReporter.name}`)
-                }
-                if (item.missingLastSeenAt) {
-                  parts.push(`— last seen ${item.missingLastSeenAt}`)
-                }
-                if (item.missingLastSeenLocation) {
-                  parts.push(`at ${item.missingLastSeenLocation}`)
-                }
-                const headline = parts.length
-                  ? parts.join(' ')
-                  : `Last seen ${item.lastSeenAt ? formatDateTime(new Date(item.lastSeenAt), ctx.timezone, ctx.locale) : '—'}`
-                return (
-                  <>
-                    <div>{headline}.</div>
-                    {item.missingNotes ? (
-                      <div className="mt-1 text-xs whitespace-pre-wrap">{item.missingNotes}</div>
-                    ) : null}
-                    <div className="mt-1 text-xs">
-                      Use <strong>Mark as found</strong> when the asset is recovered.
-                    </div>
-                  </>
-                )
-              })()}
-            </AlertDescription>
-          </Alert>
-        ) : null}
+        <GeneratedValue
+          value={
+            item.isMissing ? (
+              <Alert variant="destructive">
+                <AlertTitle>
+                  <GeneratedText id="m_00ffd43dd757ec" />
+                </AlertTitle>
+                <AlertDescription>
+                  <GeneratedValue
+                    value={(() => {
+                      const parts: string[] = []
+                      if (item.missingReportedAt) {
+                        parts.push(
+                          `Reported on ${formatDate(new Date(item.missingReportedAt), ctx.timezone, ctx.locale)}`,
+                        )
+                      }
+                      if (missingReporter?.name) {
+                        parts.push(`by ${missingReporter.name}`)
+                      }
+                      if (item.missingLastSeenAt) {
+                        parts.push(`— last seen ${item.missingLastSeenAt}`)
+                      }
+                      if (item.missingLastSeenLocation) {
+                        parts.push(`at ${item.missingLastSeenLocation}`)
+                      }
+                      const headline = parts.length
+                        ? parts.join(' ')
+                        : `Last seen ${item.lastSeenAt ? formatDateTime(new Date(item.lastSeenAt), ctx.timezone, ctx.locale) : '—'}`
+                      return (
+                        <>
+                          <div>
+                            <GeneratedValue value={headline} />.
+                          </div>
+                          <GeneratedValue
+                            value={
+                              item.missingNotes ? (
+                                <div className="mt-1 text-xs whitespace-pre-wrap">
+                                  <GeneratedValue value={item.missingNotes} />
+                                </div>
+                              ) : null
+                            }
+                          />
+                          <div className="mt-1 text-xs">
+                            <GeneratedText id="m_18faed4570d3e8" />{' '}
+                            <strong>
+                              <GeneratedText id="m_1b925bd65abff0" />
+                            </strong>{' '}
+                            <GeneratedText id="m_0b8398cfc958ca" />
+                          </div>
+                        </>
+                      )
+                    })()}
+                  />
+                </AlertDescription>
+              </Alert>
+            ) : null
+          }
+        />
 
         <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
           <aside className="space-y-3">
             <Card>
               <CardContent className="space-y-3 p-5 text-sm">
-                {photoUrl ? (
-                  <a
-                    href={photoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
-                    title="View full size"
-                  >
-                    {/* object-contain + a capped height shows portrait and
+                <GeneratedValue
+                  value={
+                    photoUrl ? (
+                      <a
+                        href={photoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block"
+                        title={tGenerated('m_1facadad2a5607')}
+                      >
+                        {/* object-contain + a capped height shows portrait and
                         landscape photos in full without cropping; the neutral
                         backdrop fills the letterbox gap. */}
-                    <RawImage
-                      src={photoUrl}
-                      alt={item.name}
-                      optimizationReason="authenticated"
-                      className="max-h-56 w-full rounded-md bg-slate-100 object-contain dark:bg-slate-800"
-                    />
-                  </a>
-                ) : (
-                  <div className="flex h-32 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                    <Truck size={48} />
-                  </div>
-                )}
+                        <RawImage
+                          src={photoUrl}
+                          alt={tGeneratedValue(item.name)}
+                          optimizationReason="authenticated"
+                          className="max-h-56 w-full rounded-md bg-slate-100 object-contain dark:bg-slate-800"
+                        />
+                      </a>
+                    ) : (
+                      <div className="flex h-32 items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                        <Truck size={48} />
+                      </div>
+                    )
+                  }
+                />
                 <div className="text-center">
-                  <div className="text-base font-semibold">{item.name}</div>
-                  <div className="text-xs text-slate-500">{type?.name ?? '—'}</div>
+                  <div className="text-base font-semibold">
+                    <GeneratedValue value={item.name} />
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    <GeneratedValue value={type?.name ?? '—'} />
+                  </div>
                 </div>
                 <div className="space-y-1.5 border-t border-slate-100 pt-3">
-                  <SidebarRow label="Asset tag">{item.assetTag}</SidebarRow>
-                  <SidebarRow label="Serial #">{item.serialNumber ?? '—'}</SidebarRow>
-                  <SidebarRow label="Category">{category?.name ?? '—'}</SidebarRow>
-                  <SidebarRow label="Site">{site?.name ?? '—'}</SidebarRow>
-                  <SidebarRow label="Holder">
-                    {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
+                  <SidebarRow label={tGenerated('m_0d9ccb155777db')}>
+                    <GeneratedValue value={item.assetTag} />
                   </SidebarRow>
-                  <SidebarRow label="Purchased">{item.purchaseDate ?? '—'}</SidebarRow>
-                  <SidebarRow label="Warranty">{item.warrantyExpiresOn ?? '—'}</SidebarRow>
-                  <SidebarRow label="Next inspection">
-                    {nextInspectionDue ? (
-                      <span
-                        className={
-                          nextInspectionDue < todayIso
-                            ? 'font-medium text-rose-600 dark:text-rose-400'
-                            : undefined
-                        }
-                      >
-                        {nextInspectionDue}
-                      </span>
-                    ) : (
-                      '—'
-                    )}
+                  <SidebarRow label={tGenerated('m_179218139b624a')}>
+                    <GeneratedValue value={item.serialNumber ?? '—'} />
+                  </SidebarRow>
+                  <SidebarRow label={tGenerated('m_108b41637f364f')}>
+                    <GeneratedValue value={category?.name ?? '—'} />
+                  </SidebarRow>
+                  <SidebarRow label={tGenerated('m_020146dd3d3d5a')}>
+                    <GeneratedValue value={site?.name ?? '—'} />
+                  </SidebarRow>
+                  <SidebarRow label={tGenerated('m_1dd437d2b4ab7f')}>
+                    <GeneratedValue
+                      value={holder ? `${holder.firstName} ${holder.lastName}` : '—'}
+                    />
+                  </SidebarRow>
+                  <SidebarRow label={tGenerated('m_1d9c32b35390f6')}>
+                    <GeneratedValue value={item.purchaseDate ?? '—'} />
+                  </SidebarRow>
+                  <SidebarRow label={tGenerated('m_0ecb62a6c8c55b')}>
+                    <GeneratedValue value={item.warrantyExpiresOn ?? '—'} />
+                  </SidebarRow>
+                  <SidebarRow label={tGenerated('m_1fb9055f09702d')}>
+                    <GeneratedValue
+                      value={
+                        nextInspectionDue ? (
+                          <span
+                            className={
+                              nextInspectionDue < todayIso
+                                ? 'font-medium text-rose-600 dark:text-rose-400'
+                                : undefined
+                            }
+                          >
+                            <GeneratedValue value={nextInspectionDue} />
+                          </span>
+                        ) : (
+                          '—'
+                        )
+                      }
+                    />
                   </SidebarRow>
                 </div>
               </CardContent>
@@ -1504,1098 +1587,1553 @@ export default async function EquipmentDetailPage({
              * outgoing panel fades while the incoming one slides in.
              */}
             <TabContent tabKey={active}>
-              {active === 'overview' ? (
-                <div className="space-y-4">
-                  <Section title="General">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <LiveField
-                        id={id}
-                        field="name"
-                        label="Name"
-                        initialValue={item.name}
-                        maxLength={240}
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="assetTag"
-                        label="Asset tag"
-                        initialValue={item.assetTag}
-                        maxLength={120}
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                      <LiveField
-                        id={id}
-                        field="serialNumber"
-                        label="Serial #"
-                        initialValue={item.serialNumber}
-                        maxLength={240}
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                      <LiveRemoteSelect
-                        id={id}
-                        field="typeId"
-                        label="Type"
-                        initialValue={item.typeId}
-                        initialOption={type ? { value: type.id, label: type.name } : undefined}
-                        lookup="equipment-edit-types"
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                      <LiveRemoteSelect
-                        id={id}
-                        field="categoryId"
-                        label="Category"
-                        initialValue={item.categoryId}
-                        initialOption={
-                          category ? { value: category.id, label: category.name } : undefined
-                        }
-                        lookup="equipment-edit-categories"
-                        emptyLabel="— No category —"
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                      <LiveSelect
-                        id={id}
-                        field="status"
-                        label="Status"
-                        initialValue={item.status}
-                        allowEmpty={false}
-                        options={EQUIPMENT_STATUSES.map((s) => ({
-                          value: s,
-                          label: s.replace('_', ' '),
-                        }))}
-                        disabled={locked}
-                        updateAction={updateEquipmentField}
-                      />
-                      <div className="sm:col-span-2">
-                        <LiveField
-                          id={id}
-                          field="description"
-                          label="Description"
-                          initialValue={item.description}
-                          multiline
-                          maxLength={5000}
-                          disabled={locked}
-                          updateAction={updateEquipmentField}
-                        />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <LiveRichText
-                          id={id}
-                          field="notes"
-                          label="Notes"
-                          initialValue={item.notes}
-                          placeholder="Maintenance / status notes"
-                          disabled={locked}
-                          updateAction={updateEquipmentField}
-                        />
-                      </div>
-                    </div>
-                  </Section>
-
-                  {/*
-                   * Category-driven field groups. Which sections appear is
-                   * configured per equipment category (Manage → Categories),
-                   * so a hand tool shows only what applies while a truck gets
-                   * registration, meters, and specs. Tenant custom fields
-                   * targeting a group render inside it.
-                   */}
-                  {fieldGroups.map((group) => (
-                    <Section key={group.key} title={group.label}>
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        {group.fields.map((f) =>
-                          f.type === 'select' ? (
-                            <LiveSelect
-                              key={f.field}
-                              id={id}
-                              field={f.field}
-                              label={f.label}
-                              initialValue={
-                                (item as unknown as Record<string, unknown>)[f.field] == null
-                                  ? null
-                                  : String((item as unknown as Record<string, unknown>)[f.field])
-                              }
-                              options={f.options ?? []}
-                              allowEmpty={false}
-                              disabled={locked}
-                              updateAction={updateEquipmentField}
-                            />
-                          ) : (
-                            <LiveField
-                              key={f.field}
-                              id={id}
-                              field={f.field}
-                              label={
-                                f.field === 'currentHours' || f.field === 'currentOdometer'
-                                  ? `${f.label}${item.metersUpdatedAt ? ` · read ${formatDate(new Date(item.metersUpdatedAt), ctx.timezone, ctx.locale)}` : ''}`
-                                  : f.label
-                              }
-                              type={f.type}
-                              placeholder={f.placeholder}
-                              maxLength={f.type === 'text' ? 500 : undefined}
-                              initialValue={
-                                (item as unknown as Record<string, unknown>)[f.field] == null
-                                  ? null
-                                  : String((item as unknown as Record<string, unknown>)[f.field])
-                              }
-                              disabled={locked}
-                              updateAction={updateEquipmentField}
-                            />
-                          ),
-                        )}
-                        {(customByGroup.get(group.key) ?? []).map((def) => (
-                          <CustomFieldInput
-                            key={def.id}
-                            entityKind="equipment"
-                            recordId={id}
-                            def={{
-                              key: def.key,
-                              label: def.label,
-                              helpText: def.helpText,
-                              fieldType: def.fieldType,
-                              required: def.required,
-                              config: def.config,
-                            }}
-                            initialValue={customValues[def.key] ?? null}
+              <GeneratedValue
+                value={
+                  active === 'overview' ? (
+                    <div className="space-y-4">
+                      <Section title={tGenerated('m_1086584d9aca6a')}>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <LiveField
+                            id={id}
+                            field="name"
+                            label={tGenerated('m_02b18d5c7f6f2d')}
+                            initialValue={item.name}
+                            maxLength={240}
                             disabled={locked}
-                            updateAction={updateCustomFieldValueAction}
+                            updateAction={updateEquipmentField}
                           />
-                        ))}
-                      </div>
-                    </Section>
-                  ))}
-
-                  <CustomFieldsSection
-                    ctx={ctx}
-                    entityKind="equipment"
-                    recordId={id}
-                    subtypeId={item.typeId}
-                    metadata={item.metadata}
-                    locked={locked}
-                    defs={standaloneCustomDefs}
-                  />
-                </div>
-              ) : null}
-
-              {active === 'work_orders' ? (
-                <div className="space-y-4">
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>Work orders ({workOrdersTotal})</CardTitle>
-                      {canCreateWorkOrder ? (
-                        <Link href={`${basePath}?tab=work_orders&drawer=new-work-order` as Route}>
-                          <Button size="sm">
-                            <Wrench size={14} /> New work order
-                          </Button>
-                        </Link>
-                      ) : null}
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <SearchInput
-                        paramKey="wo_q"
-                        pageParamKey="wo_p"
-                        placeholder="Search reference, summary…"
-                      />
-                      {workOrders.length === 0 ? (
-                        <EmptyState
-                          icon={<Wrench size={24} />}
-                          title={woP.q ? 'No work orders match your search' : 'No work orders'}
-                          description="Open a work order to track repairs or scheduled service."
-                          action={
-                            canCreateWorkOrder ? (
-                              <Link
-                                href={`${basePath}?tab=work_orders&drawer=new-work-order` as Route}
-                              >
-                                <Button size="sm" variant="outline">
-                                  <Wrench size={14} /> New work order
-                                </Button>
-                              </Link>
-                            ) : undefined
-                          }
-                        />
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Ref</TableHead>
-                              <TableHead>Summary</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Opened</TableHead>
-                              <TableHead>Closed</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {workOrders.map((w) => (
-                              <TableRow key={w.id}>
-                                <TableCell className="font-mono text-xs">{w.reference}</TableCell>
-                                <TableCell>{w.summary}</TableCell>
-                                <TableCell>
-                                  <Badge
-                                    variant={
-                                      w.status === 'closed'
-                                        ? 'success'
-                                        : w.status === 'cancelled'
-                                          ? 'secondary'
-                                          : 'warning'
-                                    }
-                                  >
-                                    {w.status.replace('_', ' ')}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  {formatDate(new Date(w.openedAt), ctx.timezone, ctx.locale)}
-                                </TableCell>
-                                <TableCell>
-                                  {w.closedAt
-                                    ? formatDate(new Date(w.closedAt), ctx.timezone, ctx.locale)
-                                    : '—'}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                      <SubPagination
-                        basePath={basePath}
-                        sp={sp}
-                        prefix="wo"
-                        total={workOrdersTotal}
-                        page={woP.page}
-                      />
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
-
-              {active === 'location' ? (
-                <div className="space-y-4">
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>Current custody</CardTitle>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {canTransferCustody ? (
-                          <Link href={`${basePath}?tab=location&drawer=transfer` as Route}>
-                            <Button size="sm" variant="outline">
-                              <ArrowLeftRight size={14} /> Transfer
-                            </Button>
-                          </Link>
-                        ) : null}
-                        {openCheckout && canCheckIn ? (
-                          <Link href={`${basePath}?tab=location&drawer=check-in` as Route}>
-                            <Button size="sm">
-                              <LogIn size={14} /> Check in
-                            </Button>
-                          </Link>
-                        ) : canCheckOut ? (
-                          <Link href={`${basePath}?tab=location&drawer=check-out` as Route}>
-                            <Button size="sm">
-                              <LogOut size={14} /> Check out
-                            </Button>
-                          </Link>
-                        ) : null}
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4 text-sm">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <MapPin size={16} className="text-slate-400" />
-                          {site?.name ?? 'Unassigned'}
+                          <LiveField
+                            id={id}
+                            field="assetTag"
+                            label={tGenerated('m_0d9ccb155777db')}
+                            initialValue={item.assetTag}
+                            maxLength={120}
+                            disabled={locked}
+                            updateAction={updateEquipmentField}
+                          />
+                          <LiveField
+                            id={id}
+                            field="serialNumber"
+                            label={tGenerated('m_179218139b624a')}
+                            initialValue={item.serialNumber}
+                            maxLength={240}
+                            disabled={locked}
+                            updateAction={updateEquipmentField}
+                          />
+                          <LiveRemoteSelect
+                            id={id}
+                            field="typeId"
+                            label={tGenerated('m_074ba2f160c506')}
+                            initialValue={item.typeId}
+                            initialOption={type ? { value: type.id, label: type.name } : undefined}
+                            lookup="equipment-edit-types"
+                            disabled={locked}
+                            updateAction={updateEquipmentField}
+                          />
+                          <LiveRemoteSelect
+                            id={id}
+                            field="categoryId"
+                            label={tGenerated('m_108b41637f364f')}
+                            initialValue={item.categoryId}
+                            initialOption={
+                              category ? { value: category.id, label: category.name } : undefined
+                            }
+                            lookup="equipment-edit-categories"
+                            emptyLabel={tGenerated('m_1f4315be81761d')}
+                            disabled={locked}
+                            updateAction={updateEquipmentField}
+                          />
+                          <LiveSelect
+                            id={id}
+                            field="status"
+                            label={tGenerated('m_0b9da892d6faf0')}
+                            initialValue={item.status}
+                            allowEmpty={false}
+                            options={EQUIPMENT_STATUSES.map((s) => ({
+                              value: s,
+                              label: s.replace('_', ' '),
+                            }))}
+                            disabled={locked}
+                            updateAction={updateEquipmentField}
+                          />
+                          <div className="sm:col-span-2">
+                            <LiveField
+                              id={id}
+                              field="description"
+                              label={tGenerated('m_14d923495cf14c')}
+                              initialValue={item.description}
+                              multiline
+                              maxLength={5000}
+                              disabled={locked}
+                              updateAction={updateEquipmentField}
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <LiveRichText
+                              id={id}
+                              field="notes"
+                              label={tGenerated('m_0b8dadcb78cd08')}
+                              initialValue={item.notes}
+                              placeholder={tGenerated('m_0d8e6ea52b9335')}
+                              disabled={locked}
+                              updateAction={updateEquipmentField}
+                            />
+                          </div>
                         </div>
-                        {holder ? (
-                          <div className="text-slate-600 dark:text-slate-400">
-                            Held by{' '}
-                            <Link
-                              href={`/people/${holder.id}`}
-                              className="text-teal-700 hover:underline dark:text-teal-400"
-                            >
-                              {holder.firstName} {holder.lastName}
-                            </Link>
-                          </div>
-                        ) : null}
-                        {openCheckout ? (
-                          <div className="text-slate-600 dark:text-slate-400">
-                            Currently checked out
-                            {openCheckout.co.expectedReturnOn
-                              ? ` · expected back ${openCheckout.co.expectedReturnOn}`
-                              : ''}
-                            .
-                          </div>
-                        ) : null}
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </Section>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Check-out history ({checkoutsTotal})</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <SearchInput
-                        paramKey="co_q"
-                        pageParamKey="co_p"
-                        placeholder="Search holder, destination, notes…"
-                      />
-                      {checkouts.length === 0 ? (
-                        <EmptyState
-                          icon={<LogOut size={24} />}
-                          title="No checkout history"
-                          description="This item has never been checked out. Use Check out to issue it to a person or site."
-                          action={
-                            canCheckOut ? (
-                              <Link href={`${basePath}?tab=location&drawer=check-out` as Route}>
-                                <Button size="sm" variant="outline">
-                                  <LogOut size={14} /> Check out
-                                </Button>
-                              </Link>
-                            ) : undefined
-                          }
-                        />
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Held by</TableHead>
-                              <TableHead>Destination</TableHead>
-                              <TableHead>Out</TableHead>
-                              <TableHead>Expected</TableHead>
-                              <TableHead>Returned</TableHead>
-                              <TableHead>Condition</TableHead>
-                              <TableHead>Notes</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {checkouts.map(({ co, holder, dest }) => (
-                              <TableRow key={co.id}>
-                                <TableCell>
-                                  {holder ? `${holder.firstName} ${holder.lastName}` : '—'}
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-300">
-                                  {dest?.name ?? '—'}
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-300">
-                                  {formatDate(new Date(co.checkedOutAt), ctx.timezone, ctx.locale)}
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-300">
-                                  {co.expectedReturnOn ?? '—'}
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-300">
-                                  {co.returnedAt
-                                    ? formatDate(new Date(co.returnedAt), ctx.timezone, ctx.locale)
-                                    : '—'}
-                                </TableCell>
-                                <TableCell>
-                                  {co.returnedCondition ? (
-                                    <Badge
-                                      variant={
-                                        co.returnedCondition === 'damaged' ||
-                                        co.returnedCondition === 'unusable'
-                                          ? 'destructive'
-                                          : co.returnedCondition === 'fair'
-                                            ? 'warning'
-                                            : 'success'
+                      {/*
+                       * Category-driven field groups. Which sections appear is
+                       * configured per equipment category (Manage → Categories),
+                       * so a hand tool shows only what applies while a truck gets
+                       * registration, meters, and specs. Tenant custom fields
+                       * targeting a group render inside it.
+                       */}
+                      <GeneratedValue
+                        value={fieldGroups.map((group) => (
+                          <Section key={group.key} title={tGeneratedValue(group.label)}>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              <GeneratedValue
+                                value={group.fields.map((f) =>
+                                  f.type === 'select' ? (
+                                    <LiveSelect
+                                      key={f.field}
+                                      id={id}
+                                      field={f.field}
+                                      label={tGeneratedValue(f.label)}
+                                      initialValue={
+                                        (item as unknown as Record<string, unknown>)[f.field] ==
+                                        null
+                                          ? null
+                                          : String(
+                                              (item as unknown as Record<string, unknown>)[f.field],
+                                            )
                                       }
-                                    >
-                                      {co.returnedCondition}
-                                    </Badge>
-                                  ) : co.returnedAt ? (
-                                    '—'
+                                      options={f.options ?? []}
+                                      allowEmpty={false}
+                                      disabled={locked}
+                                      updateAction={updateEquipmentField}
+                                    />
                                   ) : (
-                                    <Badge variant="warning">out</Badge>
-                                  )}
-                                </TableCell>
-                                <TableCell className="max-w-xs truncate text-xs text-slate-600 dark:text-slate-300">
-                                  {co.returnedNotes ?? co.notes ?? '—'}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                      <SubPagination
-                        basePath={basePath}
-                        sp={sp}
-                        prefix="co"
-                        total={checkoutsTotal}
-                        page={coP.page}
-                      />
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Location history ({historyTotal})</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <SearchInput
-                        paramKey="lh_q"
-                        pageParamKey="lh_p"
-                        placeholder="Search site, holder, note…"
-                      />
-                      {history.length === 0 ? (
-                        <p className="text-sm text-slate-500 dark:text-slate-400">
-                          {lhP.q ? 'No movements match your search.' : 'No movement recorded.'}
-                        </p>
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>When</TableHead>
-                              <TableHead>Site</TableHead>
-                              <TableHead>Holder</TableHead>
-                              <TableHead>Note</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {history.map((row) => (
-                              <TableRow key={row.history.id}>
-                                <TableCell>
-                                  {formatDateTime(
-                                    new Date(row.history.recordedAt),
-                                    ctx.timezone,
-                                    ctx.locale,
-                                  )}
-                                </TableCell>
-                                <TableCell>{row.site?.name ?? '—'}</TableCell>
-                                <TableCell>
-                                  {row.holder
-                                    ? `${row.holder.firstName} ${row.holder.lastName}`
-                                    : '—'}
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-300">
-                                  {row.history.note ?? '—'}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                      <SubPagination
-                        basePath={basePath}
-                        sp={sp}
-                        prefix="lh"
-                        total={historyTotal}
-                        page={lhP.page}
-                      />
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
-
-              {active === 'files' ? (
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                    <CardTitle>Files ({certTotal})</CardTitle>
-                    {locked ? null : (
-                      <Link href={`${basePath}?tab=files&drawer=upload-file` as Route}>
-                        <Button size="sm">
-                          <Plus size={14} /> Upload file
-                        </Button>
-                      </Link>
-                    )}
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <SearchInput
-                      paramKey="f_q"
-                      pageParamKey="f_p"
-                      placeholder="Search filename, label, category…"
-                    />
-                    {certAttachments.length === 0 ? (
-                      <EmptyState
-                        icon={<FileText size={24} />}
-                        title={fP.q ? 'No files match your search' : 'No files attached'}
-                        description="Upload certificates, manuals, photos, receipts, and other documents tagged to this asset."
-                        action={
-                          locked ? undefined : (
-                            <Link href={`${basePath}?tab=files&drawer=upload-file` as Route}>
-                              <Button size="sm" variant="outline">
-                                <Plus size={14} /> Upload file
-                              </Button>
-                            </Link>
-                          )
-                        }
-                      />
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>File</TableHead>
-                            <TableHead>Category</TableHead>
-                            <TableHead>Size</TableHead>
-                            <TableHead>Uploaded</TableHead>
-                            <TableHead></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {certAttachments.map((a) => {
-                            const exif = a.exif as Record<string, unknown> | null
-                            const fileLabel = exif?.label
-                            const fileKind = typeof exif?.kind === 'string' ? exif.kind : null
-                            return (
-                              <TableRow key={a.id}>
-                                <TableCell className="font-medium">
-                                  {typeof fileLabel === 'string' && fileLabel ? (
-                                    <>
-                                      <div>{fileLabel}</div>
-                                      <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
-                                        {a.filename}
-                                      </div>
-                                    </>
-                                  ) : (
-                                    a.filename
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="secondary">
-                                    {(fileKind ?? 'document').replace('_', ' ')}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-300">
-                                  {humanSize(a.sizeBytes)}
-                                </TableCell>
-                                <TableCell>
-                                  {formatDate(new Date(a.createdAt), ctx.timezone, ctx.locale)}
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex items-center justify-end gap-3">
-                                    <a
-                                      href={attachmentUrl(a.id)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                    >
-                                      Open →
-                                    </a>
-                                    {locked ? null : (
-                                      <form action={deleteEquipmentFile} className="inline">
-                                        <input type="hidden" name="itemId" value={id} />
-                                        <input type="hidden" name="attachmentId" value={a.id} />
-                                        <button
-                                          type="submit"
-                                          title="Remove file"
-                                          className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
-                                        >
-                                          <Trash2 size={14} />
-                                        </button>
-                                      </form>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
-                    )}
-                    <SubPagination
-                      basePath={basePath}
-                      sp={sp}
-                      prefix="f"
-                      total={certTotal}
-                      page={fP.page}
-                    />
-                  </CardContent>
-                </Card>
-              ) : null}
-
-              {active === 'inspections' ? (
-                <div className="space-y-4">
-                  {/*
-                   * Recurring schedules — the per-unit cadences (any interval:
-                   * daily, monthly, every 3 months, annual, 5-year, …) that
-                   * drive the maintenance cockpit and overdue tracking.
-                   */}
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>Inspection schedules ({scheduleStats.active})</CardTitle>
-                      {locked ? null : (
-                        <Link href={`${basePath}?tab=inspections&drawer=schedule-new` as Route}>
-                          <Button size="sm">
-                            <CalendarClock size={14} /> Add schedule
-                          </Button>
-                        </Link>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <SearchInput
-                        paramKey="sch_q"
-                        pageParamKey="sch_p"
-                        placeholder="Search inspection, interval, notes…"
-                      />
-                      {schedules.length === 0 ? (
-                        <EmptyState
-                          icon={<CalendarClock size={24} />}
-                          title={
-                            schP.q ? 'No schedules match your search' : 'No recurring inspections'
-                          }
-                          description={
-                            schP.q
-                              ? 'Try a different inspection name, interval, or note.'
-                              : "Add a schedule to track when this unit's next inspection is due — daily, monthly, every 3 months, annual, 5-year, or any other cadence."
-                          }
-                          action={
-                            locked || schP.q ? undefined : (
-                              <Link
-                                href={`${basePath}?tab=inspections&drawer=schedule-new` as Route}
-                              >
-                                <Button size="sm" variant="outline">
-                                  <CalendarClock size={14} /> Add schedule
-                                </Button>
-                              </Link>
-                            )
-                          }
-                        />
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Inspection</TableHead>
-                              <TableHead>Interval</TableHead>
-                              <TableHead>Last completed</TableHead>
-                              <TableHead>Next due</TableHead>
-                              <TableHead></TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {schedules.map(({ schedule, type: schedType }) => {
-                              const overdue = schedule.isActive && schedule.nextDueOn < todayIso
-                              const dueSoon =
-                                schedule.isActive &&
-                                !overdue &&
-                                schedule.nextDueOn <= dueSoonCutoffIso
-                              return (
-                                <TableRow key={schedule.id}>
-                                  <TableCell className="font-medium">
-                                    {schedType?.name ?? schedule.label ?? 'Inspection'}
-                                    {!schedule.isActive ? (
-                                      <Badge variant="secondary" className="ml-2">
-                                        inactive
-                                      </Badge>
-                                    ) : null}
-                                    {schedule.notes ? (
-                                      <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
-                                        {schedule.notes}
-                                      </div>
-                                    ) : null}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="secondary">
-                                      {formatInterval(
-                                        schedule.intervalValue,
-                                        schedule.intervalUnit,
+                                    <LiveField
+                                      key={f.field}
+                                      id={id}
+                                      field={f.field}
+                                      label={tGeneratedValue(
+                                        f.field === 'currentHours' || f.field === 'currentOdometer'
+                                          ? `${f.label}${item.metersUpdatedAt ? ` · read ${formatDate(new Date(item.metersUpdatedAt), ctx.timezone, ctx.locale)}` : ''}`
+                                          : f.label,
                                       )}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-slate-600 dark:text-slate-300">
-                                    {schedule.lastCompletedOn ?? '—'}
-                                  </TableCell>
-                                  <TableCell>
-                                    <span className="flex items-center gap-2">
-                                      {schedule.nextDueOn}
-                                      {overdue ? (
-                                        <Badge variant="destructive">overdue</Badge>
-                                      ) : dueSoon ? (
-                                        <Badge variant="warning">due soon</Badge>
-                                      ) : null}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="flex items-center justify-end gap-3">
-                                      {schedule.inspectionTypeId ? (
-                                        <Link
-                                          href={`/equipment/inspections/new?itemId=${id}&typeId=${schedule.inspectionTypeId}`}
-                                          className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                        >
-                                          Start →
-                                        </Link>
-                                      ) : null}
-                                      {locked ? null : (
-                                        <Link
-                                          href={
-                                            mergeHref(basePath, sp, {
-                                              tab: 'inspections',
-                                              drawer: `schedule-${schedule.id}`,
-                                            }) as Route
-                                          }
-                                          className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                        >
-                                          Edit
-                                        </Link>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              )
-                            })}
-                          </TableBody>
-                        </Table>
-                      )}
-                      <SubPagination
-                        basePath={basePath}
-                        sp={sp}
-                        prefix="sch"
-                        total={schedulesTotal}
-                        page={schP.page}
-                      />
-                      <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3 dark:border-slate-800">
-                        <LiveToggle
-                          id={id}
-                          field="requiresPreUseInspection"
-                          label="Requires pre-use inspection"
-                          initialValue={item.requiresPreUseInspection}
-                          disabled={locked}
-                          updateAction={updateEquipmentField}
-                        />
-                        <LiveRemoteSelect
-                          id={id}
-                          field="preUseInspectionTypeId"
-                          label="Pre-use checklist"
-                          initialValue={item.preUseInspectionTypeId}
-                          initialOption={
-                            selectedPreUseType
-                              ? {
-                                  value: selectedPreUseType.id,
-                                  label: selectedPreUseType.name,
-                                }
-                              : undefined
-                          }
-                          lookup="equipment-item-pre-use-inspection-types"
-                          contextId={item.typeId ?? undefined}
-                          emptyLabel="— No checklist —"
-                          disabled={locked}
-                          updateAction={updateEquipmentField}
-                        />
-                        <ReadOnlyStat
-                          label="Last pre-use inspection"
-                          value={
-                            item.lastPreUseInspectionAt
-                              ? formatDateTime(
-                                  new Date(item.lastPreUseInspectionAt),
-                                  ctx.timezone,
-                                  ctx.locale,
-                                )
-                              : '—'
-                          }
-                        />
-                        {item.requiresPreUseInspection && item.preUseInspectionTypeId ? (
-                          <div className="sm:col-span-3">
-                            <Link
-                              href={`/equipment/inspections/new?itemId=${id}&typeId=${item.preUseInspectionTypeId}`}
-                              className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                            >
-                              Start pre-use inspection →
-                            </Link>
-                          </div>
-                        ) : null}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Ad-hoc reminders — one-off (or repeating) to-dos for this unit. */}
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>Reminders ({openReminderCount})</CardTitle>
-                      {locked ? null : (
-                        <Link href={`${basePath}?tab=inspections&drawer=reminder-new` as Route}>
-                          <Button size="sm" variant="outline">
-                            <BellRing size={14} /> Add reminder
-                          </Button>
-                        </Link>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <SearchInput
-                        paramKey="rem_q"
-                        pageParamKey="rem_p"
-                        placeholder="Search reminder, assignee, details…"
-                      />
-                      {openReminders.length === 0 ? (
-                        <p className="text-sm text-slate-500 dark:text-slate-400">
-                          {remP.q
-                            ? 'No open reminders match your search.'
-                            : 'No open reminders. Add one for ad-hoc maintenance — e.g. check the roof membrane in March.'}
-                        </p>
-                      ) : (
-                        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {openReminders.map(({ reminder, assignee }) => {
-                            const overdue = reminder.dueOn < todayIso
-                            return (
-                              <li
-                                key={reminder.id}
-                                className="flex items-center justify-between gap-3 py-2.5"
-                              >
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
-                                    {reminder.title}
-                                    {reminder.repeatIntervalValue && reminder.repeatIntervalUnit ? (
-                                      <Badge variant="secondary">
-                                        {formatInterval(
-                                          reminder.repeatIntervalValue,
-                                          reminder.repeatIntervalUnit,
-                                        )}
-                                      </Badge>
-                                    ) : null}
-                                  </div>
-                                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                                    Due{' '}
-                                    <span
-                                      className={
-                                        overdue
-                                          ? 'font-medium text-rose-600 dark:text-rose-400'
-                                          : undefined
+                                      type={f.type}
+                                      placeholder={tGeneratedValue(f.placeholder)}
+                                      maxLength={f.type === 'text' ? 500 : undefined}
+                                      initialValue={
+                                        (item as unknown as Record<string, unknown>)[f.field] ==
+                                        null
+                                          ? null
+                                          : String(
+                                              (item as unknown as Record<string, unknown>)[f.field],
+                                            )
                                       }
-                                    >
-                                      {reminder.dueOn}
-                                    </span>
-                                    {assignee
-                                      ? ` · ${assignee.firstName} ${assignee.lastName}`
-                                      : ''}
-                                    {reminder.details ? ` · ${reminder.details}` : ''}
-                                  </div>
-                                </div>
-                                {locked ? null : (
-                                  <div className="flex shrink-0 items-center gap-2">
-                                    <Link
-                                      href={
-                                        mergeHref(basePath, sp, {
-                                          tab: 'inspections',
-                                          drawer: `reminder-${reminder.id}`,
-                                        }) as Route
-                                      }
-                                      className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                    >
-                                      Edit
-                                    </Link>
-                                    <form action={completeEquipmentReminder}>
-                                      <input type="hidden" name="id" value={reminder.id} />
-                                      <Button size="sm" variant="outline" type="submit">
-                                        <Check size={14} /> Done
-                                      </Button>
-                                    </form>
-                                  </div>
+                                      disabled={locked}
+                                      updateAction={updateEquipmentField}
+                                    />
+                                  ),
                                 )}
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      )}
-                      <SubPagination
-                        basePath={basePath}
-                        sp={sp}
-                        prefix="rem"
-                        total={remindersTotal}
-                        page={remP.page}
+                              />
+                              <GeneratedValue
+                                value={(customByGroup.get(group.key) ?? []).map((def) => (
+                                  <CustomFieldInput
+                                    key={def.id}
+                                    entityKind="equipment"
+                                    recordId={id}
+                                    def={{
+                                      key: def.key,
+                                      label: def.label,
+                                      helpText: def.helpText,
+                                      fieldType: def.fieldType,
+                                      required: def.required,
+                                      config: def.config,
+                                    }}
+                                    initialValue={customValues[def.key] ?? null}
+                                    disabled={locked}
+                                    updateAction={updateCustomFieldValueAction}
+                                  />
+                                ))}
+                              />
+                            </div>
+                          </Section>
+                        ))}
                       />
-                    </CardContent>
-                  </Card>
 
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>Inspection history ({inspectionsTotal})</CardTitle>
-                      <Link href={`/equipment/inspections/new?itemId=${id}`}>
-                        <Button size="sm">
-                          <ClipboardCheck size={14} /> New inspection
-                        </Button>
-                      </Link>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <SearchInput
-                        paramKey="ins_q"
-                        pageParamKey="ins_p"
-                        placeholder="Search reference, type…"
+                      <CustomFieldsSection
+                        ctx={ctx}
+                        entityKind="equipment"
+                        recordId={id}
+                        subtypeId={item.typeId}
+                        metadata={item.metadata}
+                        locked={locked}
+                        defs={standaloneCustomDefs}
                       />
-                      {inspectionRecords.length === 0 ? (
-                        <EmptyState
-                          icon={<ClipboardCheck size={24} />}
-                          title={
-                            insP.q ? 'No inspections match your search' : 'No inspections recorded'
-                          }
-                          description="Pre-use, scheduled, and ad-hoc inspections for this asset appear here."
-                          action={
-                            <Link href={`/equipment/inspections/new?itemId=${id}`}>
-                              <Button variant="outline" size="sm">
-                                Start an inspection →
-                              </Button>
-                            </Link>
-                          }
-                        />
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Reference</TableHead>
-                              <TableHead>Type</TableHead>
-                              <TableHead>Performed</TableHead>
-                              <TableHead>Result</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead></TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {inspectionRecords.map(({ record, type }) => (
-                              <TableRow key={record.id}>
-                                <TableCell className="font-medium">
-                                  <Link
-                                    href={`/equipment/inspections/${record.id}`}
-                                    className="text-teal-700 hover:underline dark:text-teal-400"
-                                  >
-                                    {record.reference}
-                                  </Link>
-                                </TableCell>
-                                <TableCell className="text-slate-600 dark:text-slate-300">
-                                  {type?.name ?? '—'}
-                                </TableCell>
-                                <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
-                                  {record.occurredAt
-                                    ? formatDate(
-                                        new Date(record.occurredAt),
-                                        ctx.timezone,
-                                        ctx.locale,
-                                      )
-                                    : '—'}
-                                </TableCell>
-                                <TableCell>
-                                  {record.result ? (
-                                    <Badge
-                                      variant={
-                                        record.result === 'pass'
-                                          ? 'success'
-                                          : record.result === 'fail'
-                                            ? 'destructive'
-                                            : 'secondary'
-                                      }
-                                    >
-                                      {record.result}
-                                    </Badge>
-                                  ) : (
-                                    <span className="text-slate-400">—</span>
+                    </div>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  active === 'work_orders' ? (
+                    <div className="space-y-4">
+                      <Card>
+                        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                          <CardTitle>
+                            <GeneratedText id="m_1902a1015f0a65" />
+                            <GeneratedValue value={workOrdersTotal} />)
+                          </CardTitle>
+                          <GeneratedValue
+                            value={
+                              canCreateWorkOrder ? (
+                                <Link
+                                  href={
+                                    `${basePath}?tab=work_orders&drawer=new-work-order` as Route
+                                  }
+                                >
+                                  <Button size="sm">
+                                    <Wrench size={14} /> <GeneratedText id="m_028792f1fdc70a" />
+                                  </Button>
+                                </Link>
+                              ) : null
+                            }
+                          />
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <SearchInput
+                            paramKey="wo_q"
+                            pageParamKey="wo_p"
+                            placeholder={tGenerated('m_02c4d288df2a2e')}
+                          />
+                          <GeneratedValue
+                            value={
+                              workOrders.length === 0 ? (
+                                <EmptyState
+                                  icon={<Wrench size={24} />}
+                                  title={tGeneratedValue(
+                                    woP.q
+                                      ? tGenerated('m_0208b2983f4109')
+                                      : tGenerated('m_191befd5e4ff41'),
                                   )}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge
-                                    variant={
-                                      record.status === 'closed' || record.status === 'submitted'
-                                        ? 'success'
-                                        : 'warning'
-                                    }
-                                  >
-                                    {record.status.replace('_', ' ')}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <Link
-                                    href={`/equipment/inspections/${record.id}`}
-                                    className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                  >
-                                    View →
-                                  </Link>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                      <SubPagination
-                        basePath={basePath}
-                        sp={sp}
-                        prefix="ins"
-                        total={inspectionsTotal}
-                        page={insP.page}
-                      />
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
+                                  description={tGenerated('m_11c7a4abb4a409')}
+                                  action={
+                                    canCreateWorkOrder ? (
+                                      <Link
+                                        href={
+                                          `${basePath}?tab=work_orders&drawer=new-work-order` as Route
+                                        }
+                                      >
+                                        <Button size="sm" variant="outline">
+                                          <Wrench size={14} />{' '}
+                                          <GeneratedText id="m_028792f1fdc70a" />
+                                        </Button>
+                                      </Link>
+                                    ) : undefined
+                                  }
+                                />
+                              ) : (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>
+                                        <GeneratedText id="m_036b564bb88dfe" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_031c356c80b70f" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0b9da892d6faf0" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_10fb4212cee361" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_003ea77d773d2d" />
+                                      </TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    <GeneratedValue
+                                      value={workOrders.map((w) => (
+                                        <TableRow key={w.id}>
+                                          <TableCell className="font-mono text-xs">
+                                            <GeneratedValue value={w.reference} />
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue value={w.summary} />
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge
+                                              variant={
+                                                w.status === 'closed'
+                                                  ? 'success'
+                                                  : w.status === 'cancelled'
+                                                    ? 'secondary'
+                                                    : 'warning'
+                                              }
+                                            >
+                                              <GeneratedValue value={w.status.replace('_', ' ')} />
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={formatDate(
+                                                new Date(w.openedAt),
+                                                ctx.timezone,
+                                                ctx.locale,
+                                              )}
+                                            />
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={
+                                                w.closedAt
+                                                  ? formatDate(
+                                                      new Date(w.closedAt),
+                                                      ctx.timezone,
+                                                      ctx.locale,
+                                                    )
+                                                  : '—'
+                                              }
+                                            />
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    />
+                                  </TableBody>
+                                </Table>
+                              )
+                            }
+                          />
+                          <SubPagination
+                            basePath={basePath}
+                            sp={sp}
+                            prefix="wo"
+                            total={workOrdersTotal}
+                            page={woP.page}
+                          />
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ) : null
+                }
+              />
 
-              {active === 'log' ? (
-                <div className="space-y-4">
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                      <CardTitle>Log entries ({logTotal})</CardTitle>
-                      <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
-                        <Button size="sm">
-                          <Plus size={14} /> Add log entry
-                        </Button>
-                      </Link>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <SearchInput
-                        paramKey="log_q"
-                        pageParamKey="log_p"
-                        placeholder="Search title, details, kind…"
-                      />
-                      {logEntries.length === 0 ? (
-                        <EmptyState
-                          title={logP.q ? 'No entries match your search' : 'No log entries'}
-                          description="Capture observations, fuel-ups, modifications, and other notes against this asset."
-                          action={
-                            <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
-                              <Button size="sm" variant="outline">
-                                <Plus size={14} /> Add the first entry
-                              </Button>
-                            </Link>
+              <GeneratedValue
+                value={
+                  active === 'location' ? (
+                    <div className="space-y-4">
+                      <Card>
+                        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                          <CardTitle>
+                            <GeneratedText id="m_0de40eb20074ca" />
+                          </CardTitle>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <GeneratedValue
+                              value={
+                                canTransferCustody ? (
+                                  <Link href={`${basePath}?tab=location&drawer=transfer` as Route}>
+                                    <Button size="sm" variant="outline">
+                                      <ArrowLeftRight size={14} />{' '}
+                                      <GeneratedText id="m_164016b2b73317" />
+                                    </Button>
+                                  </Link>
+                                ) : null
+                              }
+                            />
+                            <GeneratedValue
+                              value={
+                                openCheckout && canCheckIn ? (
+                                  <Link href={`${basePath}?tab=location&drawer=check-in` as Route}>
+                                    <Button size="sm">
+                                      <LogIn size={14} /> <GeneratedText id="m_1aa025f1523915" />
+                                    </Button>
+                                  </Link>
+                                ) : canCheckOut ? (
+                                  <Link href={`${basePath}?tab=location&drawer=check-out` as Route}>
+                                    <Button size="sm">
+                                      <LogOut size={14} /> <GeneratedText id="m_0a8918b3f9c991" />
+                                    </Button>
+                                  </Link>
+                                ) : null
+                              }
+                            />
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4 text-sm">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <MapPin size={16} className="text-slate-400" />
+                              <GeneratedValue
+                                value={site?.name ?? <GeneratedText id="m_10d1d0d92a9aaa" />}
+                              />
+                            </div>
+                            <GeneratedValue
+                              value={
+                                holder ? (
+                                  <div className="text-slate-600 dark:text-slate-400">
+                                    <GeneratedText id="m_0c7e58476facb9" />
+                                    <GeneratedValue value={' '} />
+                                    <Link
+                                      href={`/people/${holder.id}`}
+                                      className="text-teal-700 hover:underline dark:text-teal-400"
+                                    >
+                                      <GeneratedValue value={holder.firstName} />{' '}
+                                      <GeneratedValue value={holder.lastName} />
+                                    </Link>
+                                  </div>
+                                ) : null
+                              }
+                            />
+                            <GeneratedValue
+                              value={
+                                openCheckout ? (
+                                  <div className="text-slate-600 dark:text-slate-400">
+                                    <GeneratedText id="m_0e13fb7d29d9df" />
+                                    <GeneratedValue
+                                      value={
+                                        openCheckout.co.expectedReturnOn ? (
+                                          <GeneratedText
+                                            id="m_1f5072ac43774e"
+                                            values={{ value0: openCheckout.co.expectedReturnOn }}
+                                          />
+                                        ) : (
+                                          ''
+                                        )
+                                      }
+                                    />
+                                    .
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>
+                            <GeneratedText id="m_1b20b841eb4427" />
+                            <GeneratedValue value={checkoutsTotal} />)
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <SearchInput
+                            paramKey="co_q"
+                            pageParamKey="co_p"
+                            placeholder={tGenerated('m_12acd2b790c54e')}
+                          />
+                          <GeneratedValue
+                            value={
+                              checkouts.length === 0 ? (
+                                <EmptyState
+                                  icon={<LogOut size={24} />}
+                                  title={tGenerated('m_112af856555113')}
+                                  description={tGenerated('m_1ce7d627818433')}
+                                  action={
+                                    canCheckOut ? (
+                                      <Link
+                                        href={`${basePath}?tab=location&drawer=check-out` as Route}
+                                      >
+                                        <Button size="sm" variant="outline">
+                                          <LogOut size={14} />{' '}
+                                          <GeneratedText id="m_0a8918b3f9c991" />
+                                        </Button>
+                                      </Link>
+                                    ) : undefined
+                                  }
+                                />
+                              ) : (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>
+                                        <GeneratedText id="m_0c7e58476facb9" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0354efc998fbe0" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_03aac7736c44b9" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_177b0d9a8ef383" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0db63ebe793932" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0c33471afd0f99" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0b8dadcb78cd08" />
+                                      </TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    <GeneratedValue
+                                      value={checkouts.map(({ co, holder, dest }) => (
+                                        <TableRow key={co.id}>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={
+                                                holder
+                                                  ? `${holder.firstName} ${holder.lastName}`
+                                                  : '—'
+                                              }
+                                            />
+                                          </TableCell>
+                                          <TableCell className="text-slate-600 dark:text-slate-300">
+                                            <GeneratedValue value={dest?.name ?? '—'} />
+                                          </TableCell>
+                                          <TableCell className="text-slate-600 dark:text-slate-300">
+                                            <GeneratedValue
+                                              value={formatDate(
+                                                new Date(co.checkedOutAt),
+                                                ctx.timezone,
+                                                ctx.locale,
+                                              )}
+                                            />
+                                          </TableCell>
+                                          <TableCell className="text-slate-600 dark:text-slate-300">
+                                            <GeneratedValue value={co.expectedReturnOn ?? '—'} />
+                                          </TableCell>
+                                          <TableCell className="text-slate-600 dark:text-slate-300">
+                                            <GeneratedValue
+                                              value={
+                                                co.returnedAt
+                                                  ? formatDate(
+                                                      new Date(co.returnedAt),
+                                                      ctx.timezone,
+                                                      ctx.locale,
+                                                    )
+                                                  : '—'
+                                              }
+                                            />
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={
+                                                co.returnedCondition ? (
+                                                  <Badge
+                                                    variant={
+                                                      co.returnedCondition === 'damaged' ||
+                                                      co.returnedCondition === 'unusable'
+                                                        ? 'destructive'
+                                                        : co.returnedCondition === 'fair'
+                                                          ? 'warning'
+                                                          : 'success'
+                                                    }
+                                                  >
+                                                    {co.returnedCondition}
+                                                  </Badge>
+                                                ) : co.returnedAt ? (
+                                                  '—'
+                                                ) : (
+                                                  <Badge variant="warning">
+                                                    <GeneratedText id="m_1c07d7f20091c3" />
+                                                  </Badge>
+                                                )
+                                              }
+                                            />
+                                          </TableCell>
+                                          <TableCell className="max-w-xs truncate text-xs text-slate-600 dark:text-slate-300">
+                                            <GeneratedValue
+                                              value={co.returnedNotes ?? co.notes ?? '—'}
+                                            />
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    />
+                                  </TableBody>
+                                </Table>
+                              )
+                            }
+                          />
+                          <SubPagination
+                            basePath={basePath}
+                            sp={sp}
+                            prefix="co"
+                            total={checkoutsTotal}
+                            page={coP.page}
+                          />
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>
+                            <GeneratedText id="m_10e91cc30d2743" />
+                            <GeneratedValue value={historyTotal} />)
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <SearchInput
+                            paramKey="lh_q"
+                            pageParamKey="lh_p"
+                            placeholder={tGenerated('m_0f68bc19b64344')}
+                          />
+                          <GeneratedValue
+                            value={
+                              history.length === 0 ? (
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                  <GeneratedValue
+                                    value={
+                                      lhP.q ? (
+                                        <GeneratedText id="m_0df9a3c13764d8" />
+                                      ) : (
+                                        <GeneratedText id="m_0700918f8ecf46" />
+                                      )
+                                    }
+                                  />
+                                </p>
+                              ) : (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>
+                                        <GeneratedText id="m_13cc128f69897c" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_020146dd3d3d5a" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_1dd437d2b4ab7f" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_16d241f76641bb" />
+                                      </TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    <GeneratedValue
+                                      value={history.map((row) => (
+                                        <TableRow key={row.history.id}>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={formatDateTime(
+                                                new Date(row.history.recordedAt),
+                                                ctx.timezone,
+                                                ctx.locale,
+                                              )}
+                                            />
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue value={row.site?.name ?? '—'} />
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={
+                                                row.holder
+                                                  ? `${row.holder.firstName} ${row.holder.lastName}`
+                                                  : '—'
+                                              }
+                                            />
+                                          </TableCell>
+                                          <TableCell className="text-slate-600 dark:text-slate-300">
+                                            <GeneratedValue value={row.history.note ?? '—'} />
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    />
+                                  </TableBody>
+                                </Table>
+                              )
+                            }
+                          />
+                          <SubPagination
+                            basePath={basePath}
+                            sp={sp}
+                            prefix="lh"
+                            total={historyTotal}
+                            page={lhP.page}
+                          />
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  active === 'files' ? (
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                        <CardTitle>
+                          <GeneratedText id="m_09a3c98fe10087" />
+                          <GeneratedValue value={certTotal} />)
+                        </CardTitle>
+                        <GeneratedValue
+                          value={
+                            locked ? null : (
+                              <Link href={`${basePath}?tab=files&drawer=upload-file` as Route}>
+                                <Button size="sm">
+                                  <Plus size={14} /> <GeneratedText id="m_06dc5804d9c769" />
+                                </Button>
+                              </Link>
+                            )
                           }
                         />
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Kind</TableHead>
-                              <TableHead>Title / details</TableHead>
-                              <TableHead>Person</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {logEntries.map(({ log, person }) => (
-                              <TableRow key={log.id}>
-                                <TableCell className="font-mono text-xs">{log.entryDate}</TableCell>
-                                <TableCell>
-                                  <Badge variant="secondary">{log.kind}</Badge>
-                                </TableCell>
-                                <TableCell>
-                                  {log.title ? (
-                                    <div className="font-medium">{log.title}</div>
-                                  ) : null}
-                                  <div className="text-xs whitespace-pre-wrap text-slate-600">
-                                    {log.details}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-slate-600">
-                                  {person ? `${person.firstName} ${person.lastName}` : '—'}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                      <SubPagination
-                        basePath={basePath}
-                        sp={sp}
-                        prefix="log"
-                        total={logTotal}
-                        page={logP.page}
-                      />
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : null}
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <SearchInput
+                          paramKey="f_q"
+                          pageParamKey="f_p"
+                          placeholder={tGenerated('m_14336d47f7a210')}
+                        />
+                        <GeneratedValue
+                          value={
+                            certAttachments.length === 0 ? (
+                              <EmptyState
+                                icon={<FileText size={24} />}
+                                title={tGeneratedValue(
+                                  fP.q
+                                    ? tGenerated('m_1bc5136c243bd4')
+                                    : tGenerated('m_122d94d2e8b453'),
+                                )}
+                                description={tGenerated('m_00a186628dba7e')}
+                                action={
+                                  locked ? undefined : (
+                                    <Link
+                                      href={`${basePath}?tab=files&drawer=upload-file` as Route}
+                                    >
+                                      <Button size="sm" variant="outline">
+                                        <Plus size={14} /> <GeneratedText id="m_06dc5804d9c769" />
+                                      </Button>
+                                    </Link>
+                                  )
+                                }
+                              />
+                            ) : (
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>
+                                      <GeneratedText id="m_102a42d098d1d2" />
+                                    </TableHead>
+                                    <TableHead>
+                                      <GeneratedText id="m_108b41637f364f" />
+                                    </TableHead>
+                                    <TableHead>
+                                      <GeneratedText id="m_11ad4bbeced31b" />
+                                    </TableHead>
+                                    <TableHead>
+                                      <GeneratedText id="m_028e286aa7b299" />
+                                    </TableHead>
+                                    <TableHead></TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  <GeneratedValue
+                                    value={certAttachments.map((a) => {
+                                      const exif = a.exif as Record<string, unknown> | null
+                                      const fileLabel = exif?.label
+                                      const fileKind =
+                                        typeof exif?.kind === 'string' ? exif.kind : null
+                                      return (
+                                        <TableRow key={a.id}>
+                                          <TableCell className="font-medium">
+                                            <GeneratedValue
+                                              value={
+                                                typeof fileLabel === 'string' && fileLabel ? (
+                                                  <>
+                                                    <div>{fileLabel}</div>
+                                                    <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                                                      {a.filename}
+                                                    </div>
+                                                  </>
+                                                ) : (
+                                                  a.filename
+                                                )
+                                              }
+                                            />
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge variant="secondary">
+                                              <GeneratedValue
+                                                value={(fileKind ?? 'document').replace('_', ' ')}
+                                              />
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell className="text-slate-600 dark:text-slate-300">
+                                            <GeneratedValue value={humanSize(a.sizeBytes)} />
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={formatDate(
+                                                new Date(a.createdAt),
+                                                ctx.timezone,
+                                                ctx.locale,
+                                              )}
+                                            />
+                                          </TableCell>
+                                          <TableCell>
+                                            <div className="flex items-center justify-end gap-3">
+                                              <a
+                                                href={attachmentUrl(a.id)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                              >
+                                                <GeneratedText id="m_0871fb8eeeedd0" />
+                                              </a>
+                                              <GeneratedValue
+                                                value={
+                                                  locked ? null : (
+                                                    <form
+                                                      action={deleteEquipmentFile}
+                                                      className="inline"
+                                                    >
+                                                      <input
+                                                        type="hidden"
+                                                        name="itemId"
+                                                        value={id}
+                                                      />
+                                                      <input
+                                                        type="hidden"
+                                                        name="attachmentId"
+                                                        value={a.id}
+                                                      />
+                                                      <button
+                                                        type="submit"
+                                                        title={tGenerated('m_02038865a602d6')}
+                                                        className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+                                                      >
+                                                        <Trash2 size={14} />
+                                                      </button>
+                                                    </form>
+                                                  )
+                                                }
+                                              />
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
+                                      )
+                                    })}
+                                  />
+                                </TableBody>
+                              </Table>
+                            )
+                          }
+                        />
+                        <SubPagination
+                          basePath={basePath}
+                          sp={sp}
+                          prefix="f"
+                          total={certTotal}
+                          page={fP.page}
+                        />
+                      </CardContent>
+                    </Card>
+                  ) : null
+                }
+              />
 
-              {active === 'activity' ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      <Activity size={14} className="mr-2 inline" /> Activity
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
-                  </CardContent>
-                </Card>
-              ) : null}
+              <GeneratedValue
+                value={
+                  active === 'inspections' ? (
+                    <div className="space-y-4">
+                      {/*
+                       * Recurring schedules — the per-unit cadences (any interval:
+                       * daily, monthly, every 3 months, annual, 5-year, …) that
+                       * drive the maintenance cockpit and overdue tracking.
+                       */}
+                      <Card>
+                        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                          <CardTitle>
+                            <GeneratedText id="m_0fc16ae9bd180d" />
+                            <GeneratedValue value={scheduleStats.active} />)
+                          </CardTitle>
+                          <GeneratedValue
+                            value={
+                              locked ? null : (
+                                <Link
+                                  href={`${basePath}?tab=inspections&drawer=schedule-new` as Route}
+                                >
+                                  <Button size="sm">
+                                    <CalendarClock size={14} />{' '}
+                                    <GeneratedText id="m_0009414f09bdd1" />
+                                  </Button>
+                                </Link>
+                              )
+                            }
+                          />
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <SearchInput
+                            paramKey="sch_q"
+                            pageParamKey="sch_p"
+                            placeholder={tGenerated('m_193581bf81b594')}
+                          />
+                          <GeneratedValue
+                            value={
+                              schedules.length === 0 ? (
+                                <EmptyState
+                                  icon={<CalendarClock size={24} />}
+                                  title={tGeneratedValue(
+                                    schP.q
+                                      ? tGenerated('m_0deb45ba5d4218')
+                                      : tGenerated('m_0867daf3f85e1e'),
+                                  )}
+                                  description={tGeneratedValue(
+                                    schP.q
+                                      ? tGenerated('m_1216539ec285b3')
+                                      : tGenerated('m_08a5da9cb43769'),
+                                  )}
+                                  action={
+                                    locked || schP.q ? undefined : (
+                                      <Link
+                                        href={
+                                          `${basePath}?tab=inspections&drawer=schedule-new` as Route
+                                        }
+                                      >
+                                        <Button size="sm" variant="outline">
+                                          <CalendarClock size={14} />{' '}
+                                          <GeneratedText id="m_0009414f09bdd1" />
+                                        </Button>
+                                      </Link>
+                                    )
+                                  }
+                                />
+                              ) : (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>
+                                        <GeneratedText id="m_0ef24e5f31b073" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0a847756f27f7f" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0db0ed865d584f" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_11af411751990f" />
+                                      </TableHead>
+                                      <TableHead></TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    <GeneratedValue
+                                      value={schedules.map(({ schedule, type: schedType }) => {
+                                        const overdue =
+                                          schedule.isActive && schedule.nextDueOn < todayIso
+                                        const dueSoon =
+                                          schedule.isActive &&
+                                          !overdue &&
+                                          schedule.nextDueOn <= dueSoonCutoffIso
+                                        return (
+                                          <TableRow key={schedule.id}>
+                                            <TableCell className="font-medium">
+                                              <GeneratedValue
+                                                value={
+                                                  schedType?.name ??
+                                                  schedule.label ?? (
+                                                    <GeneratedText id="m_0ef24e5f31b073" />
+                                                  )
+                                                }
+                                              />
+                                              <GeneratedValue
+                                                value={
+                                                  !schedule.isActive ? (
+                                                    <Badge variant="secondary" className="ml-2">
+                                                      <GeneratedText id="m_07690e88572a6c" />
+                                                    </Badge>
+                                                  ) : null
+                                                }
+                                              />
+                                              <GeneratedValue
+                                                value={
+                                                  schedule.notes ? (
+                                                    <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                                                      {schedule.notes}
+                                                    </div>
+                                                  ) : null
+                                                }
+                                              />
+                                            </TableCell>
+                                            <TableCell>
+                                              <Badge variant="secondary">
+                                                <GeneratedValue
+                                                  value={formatInterval(
+                                                    schedule.intervalValue,
+                                                    schedule.intervalUnit,
+                                                  )}
+                                                />
+                                              </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-slate-600 dark:text-slate-300">
+                                              <GeneratedValue
+                                                value={schedule.lastCompletedOn ?? '—'}
+                                              />
+                                            </TableCell>
+                                            <TableCell>
+                                              <span className="flex items-center gap-2">
+                                                <GeneratedValue value={schedule.nextDueOn} />
+                                                <GeneratedValue
+                                                  value={
+                                                    overdue ? (
+                                                      <Badge variant="destructive">
+                                                        <GeneratedText id="m_06e3b632d95096" />
+                                                      </Badge>
+                                                    ) : dueSoon ? (
+                                                      <Badge variant="warning">
+                                                        <GeneratedText id="m_046f5560019a3a" />
+                                                      </Badge>
+                                                    ) : null
+                                                  }
+                                                />
+                                              </span>
+                                            </TableCell>
+                                            <TableCell>
+                                              <div className="flex items-center justify-end gap-3">
+                                                <GeneratedValue
+                                                  value={
+                                                    schedule.inspectionTypeId ? (
+                                                      <Link
+                                                        href={`/equipment/inspections/new?itemId=${id}&typeId=${schedule.inspectionTypeId}`}
+                                                        className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                                      >
+                                                        <GeneratedText id="m_0de51911bb80e2" />
+                                                      </Link>
+                                                    ) : null
+                                                  }
+                                                />
+                                                <GeneratedValue
+                                                  value={
+                                                    locked ? null : (
+                                                      <Link
+                                                        href={
+                                                          mergeHref(basePath, sp, {
+                                                            tab: 'inspections',
+                                                            drawer: `schedule-${schedule.id}`,
+                                                          }) as Route
+                                                        }
+                                                        className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                                      >
+                                                        <GeneratedText id="m_03a66f9d34ac7b" />
+                                                      </Link>
+                                                    )
+                                                  }
+                                                />
+                                              </div>
+                                            </TableCell>
+                                          </TableRow>
+                                        )
+                                      })}
+                                    />
+                                  </TableBody>
+                                </Table>
+                              )
+                            }
+                          />
+                          <SubPagination
+                            basePath={basePath}
+                            sp={sp}
+                            prefix="sch"
+                            total={schedulesTotal}
+                            page={schP.page}
+                          />
+                          <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3 dark:border-slate-800">
+                            <LiveToggle
+                              id={id}
+                              field="requiresPreUseInspection"
+                              label={tGenerated('m_0001f9d2929552')}
+                              initialValue={item.requiresPreUseInspection}
+                              disabled={locked}
+                              updateAction={updateEquipmentField}
+                            />
+                            <LiveRemoteSelect
+                              id={id}
+                              field="preUseInspectionTypeId"
+                              label={tGenerated('m_054ca9b2975cac')}
+                              initialValue={item.preUseInspectionTypeId}
+                              initialOption={
+                                selectedPreUseType
+                                  ? {
+                                      value: selectedPreUseType.id,
+                                      label: selectedPreUseType.name,
+                                    }
+                                  : undefined
+                              }
+                              lookup="equipment-item-pre-use-inspection-types"
+                              contextId={item.typeId ?? undefined}
+                              emptyLabel={tGenerated('m_045c03d42f2f53')}
+                              disabled={locked}
+                              updateAction={updateEquipmentField}
+                            />
+                            <ReadOnlyStat
+                              label={tGenerated('m_066ea9befbd59e')}
+                              value={
+                                item.lastPreUseInspectionAt
+                                  ? formatDateTime(
+                                      new Date(item.lastPreUseInspectionAt),
+                                      ctx.timezone,
+                                      ctx.locale,
+                                    )
+                                  : '—'
+                              }
+                            />
+                            <GeneratedValue
+                              value={
+                                item.requiresPreUseInspection && item.preUseInspectionTypeId ? (
+                                  <div className="sm:col-span-3">
+                                    <Link
+                                      href={`/equipment/inspections/new?itemId=${id}&typeId=${item.preUseInspectionTypeId}`}
+                                      className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                    >
+                                      <GeneratedText id="m_0c0448292f2325" />
+                                    </Link>
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Ad-hoc reminders — one-off (or repeating) to-dos for this unit. */}
+                      <Card>
+                        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                          <CardTitle>
+                            <GeneratedText id="m_072abecbb75c3a" />
+                            <GeneratedValue value={openReminderCount} />)
+                          </CardTitle>
+                          <GeneratedValue
+                            value={
+                              locked ? null : (
+                                <Link
+                                  href={`${basePath}?tab=inspections&drawer=reminder-new` as Route}
+                                >
+                                  <Button size="sm" variant="outline">
+                                    <BellRing size={14} /> <GeneratedText id="m_04b0444a0259a5" />
+                                  </Button>
+                                </Link>
+                              )
+                            }
+                          />
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <SearchInput
+                            paramKey="rem_q"
+                            pageParamKey="rem_p"
+                            placeholder={tGenerated('m_1e87e6122b64af')}
+                          />
+                          <GeneratedValue
+                            value={
+                              openReminders.length === 0 ? (
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                  <GeneratedValue
+                                    value={
+                                      remP.q ? (
+                                        <GeneratedText id="m_1e368e26abc872" />
+                                      ) : (
+                                        <GeneratedText id="m_10d46f2397b88e" />
+                                      )
+                                    }
+                                  />
+                                </p>
+                              ) : (
+                                <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                                  <GeneratedValue
+                                    value={openReminders.map(({ reminder, assignee }) => {
+                                      const overdue = reminder.dueOn < todayIso
+                                      return (
+                                        <li
+                                          key={reminder.id}
+                                          className="flex items-center justify-between gap-3 py-2.5"
+                                        >
+                                          <div className="min-w-0">
+                                            <div className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                              <GeneratedValue value={reminder.title} />
+                                              <GeneratedValue
+                                                value={
+                                                  reminder.repeatIntervalValue &&
+                                                  reminder.repeatIntervalUnit ? (
+                                                    <Badge variant="secondary">
+                                                      {formatInterval(
+                                                        reminder.repeatIntervalValue,
+                                                        reminder.repeatIntervalUnit,
+                                                      )}
+                                                    </Badge>
+                                                  ) : null
+                                                }
+                                              />
+                                            </div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                                              <GeneratedText id="m_0c2eb92551e08b" />
+                                              <GeneratedValue value={' '} />
+                                              <span
+                                                className={
+                                                  overdue
+                                                    ? 'font-medium text-rose-600 dark:text-rose-400'
+                                                    : undefined
+                                                }
+                                              >
+                                                <GeneratedValue value={reminder.dueOn} />
+                                              </span>
+                                              <GeneratedValue
+                                                value={
+                                                  assignee
+                                                    ? ` · ${assignee.firstName} ${assignee.lastName}`
+                                                    : ''
+                                                }
+                                              />
+                                              <GeneratedValue
+                                                value={
+                                                  reminder.details ? ` · ${reminder.details}` : ''
+                                                }
+                                              />
+                                            </div>
+                                          </div>
+                                          <GeneratedValue
+                                            value={
+                                              locked ? null : (
+                                                <div className="flex shrink-0 items-center gap-2">
+                                                  <Link
+                                                    href={
+                                                      mergeHref(basePath, sp, {
+                                                        tab: 'inspections',
+                                                        drawer: `reminder-${reminder.id}`,
+                                                      }) as Route
+                                                    }
+                                                    className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                                  >
+                                                    <GeneratedText id="m_03a66f9d34ac7b" />
+                                                  </Link>
+                                                  <form action={completeEquipmentReminder}>
+                                                    <input
+                                                      type="hidden"
+                                                      name="id"
+                                                      value={reminder.id}
+                                                    />
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      type="submit"
+                                                    >
+                                                      <Check size={14} />{' '}
+                                                      <GeneratedText id="m_00609f822e0571" />
+                                                    </Button>
+                                                  </form>
+                                                </div>
+                                              )
+                                            }
+                                          />
+                                        </li>
+                                      )
+                                    })}
+                                  />
+                                </ul>
+                              )
+                            }
+                          />
+                          <SubPagination
+                            basePath={basePath}
+                            sp={sp}
+                            prefix="rem"
+                            total={remindersTotal}
+                            page={remP.page}
+                          />
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                          <CardTitle>
+                            <GeneratedText id="m_01eff32b4963db" />
+                            <GeneratedValue value={inspectionsTotal} />)
+                          </CardTitle>
+                          <Link href={`/equipment/inspections/new?itemId=${id}`}>
+                            <Button size="sm">
+                              <ClipboardCheck size={14} /> <GeneratedText id="m_0f060bce7a52ef" />
+                            </Button>
+                          </Link>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <SearchInput
+                            paramKey="ins_q"
+                            pageParamKey="ins_p"
+                            placeholder={tGenerated('m_18c4fceefc4fac')}
+                          />
+                          <GeneratedValue
+                            value={
+                              inspectionRecords.length === 0 ? (
+                                <EmptyState
+                                  icon={<ClipboardCheck size={24} />}
+                                  title={tGeneratedValue(
+                                    insP.q
+                                      ? tGenerated('m_0150c11d3f0eb8')
+                                      : tGenerated('m_128fa3f1eca160'),
+                                  )}
+                                  description={tGenerated('m_11123c53db10bc')}
+                                  action={
+                                    <Link href={`/equipment/inspections/new?itemId=${id}`}>
+                                      <Button variant="outline" size="sm">
+                                        <GeneratedText id="m_03a42f8671d199" />
+                                      </Button>
+                                    </Link>
+                                  }
+                                />
+                              ) : (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>
+                                        <GeneratedText id="m_17dc61a19b605c" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_074ba2f160c506" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_16b944034f43b6" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_100e41041dbe51" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0b9da892d6faf0" />
+                                      </TableHead>
+                                      <TableHead></TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    <GeneratedValue
+                                      value={inspectionRecords.map(({ record, type }) => (
+                                        <TableRow key={record.id}>
+                                          <TableCell className="font-medium">
+                                            <Link
+                                              href={`/equipment/inspections/${record.id}`}
+                                              className="text-teal-700 hover:underline dark:text-teal-400"
+                                            >
+                                              <GeneratedValue value={record.reference} />
+                                            </Link>
+                                          </TableCell>
+                                          <TableCell className="text-slate-600 dark:text-slate-300">
+                                            <GeneratedValue value={type?.name ?? '—'} />
+                                          </TableCell>
+                                          <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
+                                            <GeneratedValue
+                                              value={
+                                                record.occurredAt
+                                                  ? formatDate(
+                                                      new Date(record.occurredAt),
+                                                      ctx.timezone,
+                                                      ctx.locale,
+                                                    )
+                                                  : '—'
+                                              }
+                                            />
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={
+                                                record.result ? (
+                                                  <Badge
+                                                    variant={
+                                                      record.result === 'pass'
+                                                        ? 'success'
+                                                        : record.result === 'fail'
+                                                          ? 'destructive'
+                                                          : 'secondary'
+                                                    }
+                                                  >
+                                                    {record.result}
+                                                  </Badge>
+                                                ) : (
+                                                  <span className="text-slate-400">—</span>
+                                                )
+                                              }
+                                            />
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge
+                                              variant={
+                                                record.status === 'closed' ||
+                                                record.status === 'submitted'
+                                                  ? 'success'
+                                                  : 'warning'
+                                              }
+                                            >
+                                              <GeneratedValue
+                                                value={record.status.replace('_', ' ')}
+                                              />
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                            <Link
+                                              href={`/equipment/inspections/${record.id}`}
+                                              className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                            >
+                                              <GeneratedText id="m_1be345fc118df8" />
+                                            </Link>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    />
+                                  </TableBody>
+                                </Table>
+                              )
+                            }
+                          />
+                          <SubPagination
+                            basePath={basePath}
+                            sp={sp}
+                            prefix="ins"
+                            total={inspectionsTotal}
+                            page={insP.page}
+                          />
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  active === 'log' ? (
+                    <div className="space-y-4">
+                      <Card>
+                        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                          <CardTitle>
+                            <GeneratedText id="m_1f439ae7c8b459" />
+                            <GeneratedValue value={logTotal} />)
+                          </CardTitle>
+                          <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
+                            <Button size="sm">
+                              <Plus size={14} /> <GeneratedText id="m_0e31f658c2f794" />
+                            </Button>
+                          </Link>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <SearchInput
+                            paramKey="log_q"
+                            pageParamKey="log_p"
+                            placeholder={tGenerated('m_08b5ce52d99191')}
+                          />
+                          <GeneratedValue
+                            value={
+                              logEntries.length === 0 ? (
+                                <EmptyState
+                                  title={tGeneratedValue(
+                                    logP.q
+                                      ? tGenerated('m_11344a9736976e')
+                                      : tGenerated('m_0501b5bad54cf2'),
+                                  )}
+                                  description={tGenerated('m_195d4afe8f01da')}
+                                  action={
+                                    <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
+                                      <Button size="sm" variant="outline">
+                                        <Plus size={14} /> <GeneratedText id="m_089b693b7f3e46" />
+                                      </Button>
+                                    </Link>
+                                  }
+                                />
+                              ) : (
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>
+                                        <GeneratedText id="m_0285c38761c540" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_1e578efe1574cd" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0bb3c5fab55c31" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_12e926c9216094" />
+                                      </TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    <GeneratedValue
+                                      value={logEntries.map(({ log, person }) => (
+                                        <TableRow key={log.id}>
+                                          <TableCell className="font-mono text-xs">
+                                            <GeneratedValue value={log.entryDate} />
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge variant="secondary">
+                                              <GeneratedValue value={log.kind} />
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={
+                                                log.title ? (
+                                                  <div className="font-medium">{log.title}</div>
+                                                ) : null
+                                              }
+                                            />
+                                            <div className="text-xs whitespace-pre-wrap text-slate-600">
+                                              <GeneratedValue value={log.details} />
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-slate-600">
+                                            <GeneratedValue
+                                              value={
+                                                person
+                                                  ? `${person.firstName} ${person.lastName}`
+                                                  : '—'
+                                              }
+                                            />
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    />
+                                  </TableBody>
+                                </Table>
+                              )
+                            }
+                          />
+                          <SubPagination
+                            basePath={basePath}
+                            sp={sp}
+                            prefix="log"
+                            total={logTotal}
+                            page={logP.page}
+                          />
+                        </CardContent>
+                      </Card>
+                    </div>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  active === 'activity' ? (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>
+                          <Activity size={14} className="mr-2 inline" />{' '}
+                          <GeneratedText id="m_14b78af1b2f95e" />
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ActivityFeed
+                          entries={activity}
+                          timeZone={ctx.timezone}
+                          locale={ctx.locale}
+                        />
+                      </CardContent>
+                    </Card>
+                  ) : null
+                }
+              />
             </TabContent>
           </div>
         </div>
@@ -2611,12 +3149,12 @@ export default async function EquipmentDetailPage({
       <UrlDrawer
         open={drawerKey === 'add-log'}
         closeHref={closeHref}
-        title="Add log entry"
-        description="Capture an observation, fuel-up, modification, or anything else worth recording against this asset."
+        title={tGenerated('m_0e31f658c2f794')}
+        description={tGenerated('m_09f67f2ca76754')}
         size="md"
         footer={
           <Button type="submit" form="equipment-add-log-form">
-            <Plus size={14} /> Add entry
+            <Plus size={14} /> <GeneratedText id="m_1ea3a4ad13d4d7" />
           </Button>
         }
       >
@@ -2626,7 +3164,7 @@ export default async function EquipmentDetailPage({
           className="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
           <input type="hidden" name="itemId" value={id} />
-          <Field label="Date" required>
+          <Field label={tGenerated('m_0285c38761c540')} required>
             <Input
               name="entryDate"
               type="date"
@@ -2634,19 +3172,29 @@ export default async function EquipmentDetailPage({
               defaultValue={new Date().toISOString().slice(0, 10)}
             />
           </Field>
-          <Field label="Kind" required>
+          <Field label={tGenerated('m_1e578efe1574cd')} required>
             <Select name="kind" defaultValue="note">
-              <option value="note">Note</option>
-              <option value="maintenance">Maintenance</option>
-              <option value="fuel">Fuel</option>
-              <option value="incident">Incident</option>
-              <option value="modification">Modification</option>
+              <option value="note">
+                <GeneratedText id="m_16d241f76641bb" />
+              </option>
+              <option value="maintenance">
+                <GeneratedText id="m_08fc3f5f377c0d" />
+              </option>
+              <option value="fuel">
+                <GeneratedText id="m_0505d2be4be0f4" />
+              </option>
+              <option value="incident">
+                <GeneratedText id="m_08be8294ed6700" />
+              </option>
+              <option value="modification">
+                <GeneratedText id="m_0b11f285f21b2f" />
+              </option>
             </Select>
           </Field>
-          <Field label="Title" className="sm:col-span-2">
-            <Input name="title" maxLength={240} placeholder="Short summary (optional)" />
+          <Field label={tGenerated('m_0decefd558c355')} className="sm:col-span-2">
+            <Input name="title" maxLength={240} placeholder={tGenerated('m_11393661c7db12')} />
           </Field>
-          <Field label="Details" required className="sm:col-span-2">
+          <Field label={tGenerated('m_1560d4e2a09d09')} required className="sm:col-span-2">
             <Textarea name="details" rows={5} maxLength={10000} required />
           </Field>
         </form>
@@ -2655,12 +3203,12 @@ export default async function EquipmentDetailPage({
       <UrlDrawer
         open={drawerKey === 'report-missing' && !item.isMissing}
         closeHref={closeHref}
-        title="Report missing"
-        description="Capture when and where the asset was last seen so a follow-up search has context. The detail page will switch to a missing alert until someone marks it as found."
+        title={tGenerated('m_08cbe6945650bd')}
+        description={tGenerated('m_0baf65c8694ca8')}
         size="md"
         footer={
           <Button type="submit" form="equipment-report-missing-form" variant="destructive">
-            <Search size={14} /> Report missing
+            <Search size={14} /> <GeneratedText id="m_08cbe6945650bd" />
           </Button>
         }
       >
@@ -2670,26 +3218,26 @@ export default async function EquipmentDetailPage({
           className="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
           <input type="hidden" name="id" value={id} />
-          <Field label="Last seen date">
+          <Field label={tGenerated('m_09030228796275')}>
             <Input
               name="lastSeenDate"
               type="date"
               defaultValue={new Date().toISOString().slice(0, 10)}
             />
           </Field>
-          <Field label="Last seen location">
+          <Field label={tGenerated('m_0c8ecbc807dca2')}>
             <Input
               name="lastSeenLocation"
               maxLength={500}
-              placeholder={site?.name ?? 'e.g. North yard, Truck 12, Apex shop'}
+              placeholder={tGeneratedValue(site?.name ?? tGenerated('m_09a7b29fc61b54'))}
             />
           </Field>
-          <Field label="Notes" className="sm:col-span-2">
+          <Field label={tGenerated('m_0b8dadcb78cd08')} className="sm:col-span-2">
             <Textarea
               name="notes"
               rows={3}
               maxLength={5000}
-              placeholder="Anything to help the search — who had it last, suspected loss vs theft, etc."
+              placeholder={tGenerated('m_173f4d80a9d74c')}
             />
           </Field>
         </form>
@@ -2698,12 +3246,12 @@ export default async function EquipmentDetailPage({
       <UrlDrawer
         open={drawerKey === 'report-found' && item.isMissing}
         closeHref={closeHref}
-        title="Mark as found"
-        description="Clear the missing flag and optionally note where the asset was recovered. The original missing report is retained for audit."
+        title={tGenerated('m_1b925bd65abff0')}
+        description={tGenerated('m_084d4979dc9492')}
         size="md"
         footer={
           <Button type="submit" form="equipment-report-found-form">
-            <Search size={14} /> Mark as found
+            <Search size={14} /> <GeneratedText id="m_1b925bd65abff0" />
           </Button>
         }
       >
@@ -2713,17 +3261,16 @@ export default async function EquipmentDetailPage({
           className="grid grid-cols-1 gap-3"
         >
           <input type="hidden" name="id" value={id} />
-          <Field label="Found notes (optional)">
+          <Field label={tGenerated('m_191f9b2549b0d1')}>
             <Textarea
               name="foundNotes"
               rows={3}
               maxLength={5000}
-              placeholder="Where was it recovered? Any damage to flag?"
+              placeholder={tGenerated('m_02f19e418c962e')}
             />
           </Field>
           <p className="text-xs text-slate-500">
-            The found timestamp is set to now. Use the Location tab to record the current site /
-            holder once the asset is back in place.
+            <GeneratedText id="m_089aadeb62b13c" />
           </p>
         </form>
       </UrlDrawer>
@@ -2731,12 +3278,12 @@ export default async function EquipmentDetailPage({
       <UrlDrawer
         open={drawerKey === 'check-out' && canCheckOut}
         closeHref={closeHref}
-        title="Check out"
-        description="Hand this item to a person, pin it to a site, and optionally set an expected return date."
+        title={tGenerated('m_0a8918b3f9c991')}
+        description={tGenerated('m_1f803d6126184c')}
         size="md"
         footer={
           <Button type="submit" form="equipment-check-out-form">
-            <LogOut size={14} /> Check out
+            <LogOut size={14} /> <GeneratedText id="m_0a8918b3f9c991" />
           </Button>
         }
       >
@@ -2746,38 +3293,38 @@ export default async function EquipmentDetailPage({
           className="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
           <input type="hidden" name="itemId" value={id} />
-          <Field label="Hand to person">
+          <Field label={tGenerated('m_028916575168d0')}>
             <RemoteSelectField
               name="holderPersonId"
               defaultValue=""
               lookup="equipment-custody-holders"
-              placeholder="Select a person…"
-              searchPlaceholder="Search active people…"
+              placeholder={tGenerated('m_0be39d3a196b5b')}
+              searchPlaceholder={tGenerated('m_06c2338b990aea')}
               sheetTitle="Select holder"
               clearable
-              emptyLabel="— No specific holder —"
+              emptyLabel={tGenerated('m_1edbadeea60fca')}
             />
           </Field>
-          <Field label="Destination site" required>
+          <Field label={tGenerated('m_0dd23138b5c807')} required>
             <RemoteSelectField
               name="destinationOrgUnitId"
               defaultValue=""
               lookup="equipment-custody-sites"
-              placeholder="Select a site…"
-              searchPlaceholder="Search active sites…"
+              placeholder={tGenerated('m_015c668f21e7b9')}
+              searchPlaceholder={tGenerated('m_04cdbf878b38f3')}
               sheetTitle="Select destination site"
               clearable={false}
             />
           </Field>
-          <Field label="Expected return on">
+          <Field label={tGenerated('m_141f9dc55f5052')}>
             <Input name="expectedReturnOn" type="date" />
           </Field>
-          <Field label="Notes" className="sm:col-span-2">
+          <Field label={tGenerated('m_0b8dadcb78cd08')} className="sm:col-span-2">
             <Textarea
               name="notes"
               rows={3}
               maxLength={2000}
-              placeholder="Optional context for this checkout"
+              placeholder={tGenerated('m_1b922a2d2bd506')}
             />
           </Field>
         </form>
@@ -2786,12 +3333,12 @@ export default async function EquipmentDetailPage({
       <UrlDrawer
         open={drawerKey === 'transfer' && canTransferCustody}
         closeHref={closeHref}
-        title="Transfer"
-        description="Move this asset to a new site or holder. The change is recorded in the location history."
+        title={tGenerated('m_164016b2b73317')}
+        description={tGenerated('m_0042d36ee69b03')}
         size="md"
         footer={
           <Button type="submit" form="equipment-transfer-form">
-            <ArrowLeftRight size={14} /> Record transfer
+            <ArrowLeftRight size={14} /> <GeneratedText id="m_1a01e506c443c6" />
           </Button>
         }
       >
@@ -2801,7 +3348,7 @@ export default async function EquipmentDetailPage({
           className="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
           <input type="hidden" name="id" value={id} />
-          <Field label="Move to site">
+          <Field label={tGenerated('m_1f9931fa4d3517')}>
             <RemoteSelectField
               name="siteOrgUnitId"
               defaultValue={item.currentSiteOrgUnitId ?? ''}
@@ -2811,14 +3358,14 @@ export default async function EquipmentDetailPage({
                   ? { value: site.id, label: site.name, hint: site.code ?? undefined }
                   : undefined
               }
-              placeholder="Select a site…"
-              searchPlaceholder="Search active sites…"
+              placeholder={tGenerated('m_015c668f21e7b9')}
+              searchPlaceholder={tGenerated('m_04cdbf878b38f3')}
               sheetTitle="Select site"
               clearable
-              emptyLabel="— Unassigned —"
+              emptyLabel={tGenerated('m_1ba9b3d94af564')}
             />
           </Field>
-          <Field label="Assign to person">
+          <Field label={tGenerated('m_02121b506c0c3a')}>
             <RemoteSelectField
               name="holderPersonId"
               defaultValue={item.currentHolderPersonId ?? ''}
@@ -2832,15 +3379,15 @@ export default async function EquipmentDetailPage({
                     }
                   : undefined
               }
-              placeholder="Select a person…"
-              searchPlaceholder="Search active people…"
+              placeholder={tGenerated('m_0be39d3a196b5b')}
+              searchPlaceholder={tGenerated('m_06c2338b990aea')}
               sheetTitle="Select holder"
               clearable
-              emptyLabel="— No holder —"
+              emptyLabel={tGenerated('m_11c7385abc4192')}
             />
           </Field>
-          <Field label="Note" className="sm:col-span-2">
-            <Input name="note" maxLength={2000} placeholder="Optional context for the audit log" />
+          <Field label={tGenerated('m_16d241f76641bb')} className="sm:col-span-2">
+            <Input name="note" maxLength={2000} placeholder={tGenerated('m_0782a5fee0d972')} />
           </Field>
         </form>
       </UrlDrawer>
@@ -2886,55 +3433,67 @@ export default async function EquipmentDetailPage({
       <UrlDrawer
         open={drawerKey === 'check-in' && canCheckIn}
         closeHref={closeHref}
-        title="Check in (return)"
-        description={
+        title={tGenerated('m_009fb952fb6dea')}
+        description={tGeneratedValue(
           openCheckout
-            ? `Record return from ${
-                openCheckout.holder
+            ? tGenerated('m_0065b019ed7ed3', {
+                value0: openCheckout.holder
                   ? `${openCheckout.holder.firstName} ${openCheckout.holder.lastName}`
-                  : 'the current holder'
-              }.`
-            : 'This item is not currently checked out.'
-        }
+                  : 'the current holder',
+              })
+            : tGenerated('m_081877c9aa7632'),
+        )}
         size="md"
         footer={
           openCheckout ? (
             <Button type="submit" form="equipment-check-in-form">
-              <LogIn size={14} /> Check in
+              <LogIn size={14} /> <GeneratedText id="m_1aa025f1523915" />
             </Button>
           ) : null
         }
       >
-        {openCheckout ? (
-          <form
-            id="equipment-check-in-form"
-            action={checkInFromItem}
-            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-          >
-            <input type="hidden" name="itemId" value={id} />
-            <input type="hidden" name="checkoutId" value={openCheckout.co.id} />
-            <Field label="Returned condition">
-              <Select name="returnedCondition" defaultValue="good">
-                <option value="good">Good</option>
-                <option value="fair">Fair</option>
-                <option value="damaged">Damaged</option>
-                <option value="unusable">Unusable</option>
-              </Select>
-            </Field>
-            <Field label="Notes" className="sm:col-span-2">
-              <Textarea
-                name="returnedNotes"
-                rows={3}
-                maxLength={2000}
-                placeholder="Anything to note about this return"
-              />
-            </Field>
-          </form>
-        ) : (
-          <p className="text-sm text-slate-500">
-            There's no open check-out for this item right now.
-          </p>
-        )}
+        <GeneratedValue
+          value={
+            openCheckout ? (
+              <form
+                id="equipment-check-in-form"
+                action={checkInFromItem}
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+              >
+                <input type="hidden" name="itemId" value={id} />
+                <input type="hidden" name="checkoutId" value={openCheckout.co.id} />
+                <Field label={tGenerated('m_0299a9c737cc7e')}>
+                  <Select name="returnedCondition" defaultValue="good">
+                    <option value="good">
+                      <GeneratedText id="m_08ecbc5495e971" />
+                    </option>
+                    <option value="fair">
+                      <GeneratedText id="m_02f16dedf3c570" />
+                    </option>
+                    <option value="damaged">
+                      <GeneratedText id="m_16d172eabbfe82" />
+                    </option>
+                    <option value="unusable">
+                      <GeneratedText id="m_15640e98690043" />
+                    </option>
+                  </Select>
+                </Field>
+                <Field label={tGenerated('m_0b8dadcb78cd08')} className="sm:col-span-2">
+                  <Textarea
+                    name="returnedNotes"
+                    rows={3}
+                    maxLength={2000}
+                    placeholder={tGenerated('m_1db55aa66a1762')}
+                  />
+                </Field>
+              </form>
+            ) : (
+              <p className="text-sm text-slate-500">
+                <GeneratedText id="m_02651fee97eae9" />
+              </p>
+            )
+          }
+        />
       </UrlDrawer>
     </PageContainer>
   )
@@ -2968,31 +3527,43 @@ function SubPagination({
   return (
     <div className="flex items-center justify-between gap-2 pt-1 text-sm text-slate-600 dark:text-slate-300">
       <span className="text-xs">
-        Showing {(page - 1) * SUB_PER_PAGE + 1}–{Math.min(total, page * SUB_PER_PAGE)} of{' '}
-        {total.toLocaleString()}
+        <GeneratedText id="m_01d77276c22eb1" />{' '}
+        <GeneratedValue value={(page - 1) * SUB_PER_PAGE + 1} />–
+        <GeneratedValue value={Math.min(total, page * SUB_PER_PAGE)} />{' '}
+        <GeneratedText id="m_00e704d1194796" />
+        <GeneratedValue value={' '} />
+        <GeneratedValue value={total.toLocaleString()} />
       </span>
       <div className="flex items-center gap-1">
-        {page <= 1 ? (
-          <span className={disabledCls}>
-            <ChevronLeft size={14} /> Prev
-          </span>
-        ) : (
-          <Link href={prevHref as Route} className={linkCls}>
-            <ChevronLeft size={14} /> Prev
-          </Link>
-        )}
+        <GeneratedValue
+          value={
+            page <= 1 ? (
+              <span className={disabledCls}>
+                <ChevronLeft size={14} /> <GeneratedText id="m_15a155fcc8eaa3" />
+              </span>
+            ) : (
+              <Link href={prevHref as Route} className={linkCls}>
+                <ChevronLeft size={14} /> <GeneratedText id="m_15a155fcc8eaa3" />
+              </Link>
+            )
+          }
+        />
         <span className="px-2 text-xs text-slate-500 dark:text-slate-400">
-          {page} / {pageCount}
+          <GeneratedValue value={page} /> / <GeneratedValue value={pageCount} />
         </span>
-        {page >= pageCount ? (
-          <span className={disabledCls}>
-            Next <ChevronRight size={14} />
-          </span>
-        ) : (
-          <Link href={nextHref as Route} className={linkCls}>
-            Next <ChevronRight size={14} />
-          </Link>
-        )}
+        <GeneratedValue
+          value={
+            page >= pageCount ? (
+              <span className={disabledCls}>
+                <GeneratedText id="m_08b5fa148b2af7" /> <ChevronRight size={14} />
+              </span>
+            ) : (
+              <Link href={nextHref as Route} className={linkCls}>
+                <GeneratedText id="m_08b5fa148b2af7" /> <ChevronRight size={14} />
+              </Link>
+            )
+          }
+        />
       </div>
     </div>
   )
@@ -3001,8 +3572,12 @@ function SubPagination({
 function SidebarRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-xs tracking-wide text-slate-500 uppercase">{label}</span>
-      <span>{children}</span>
+      <span className="text-xs tracking-wide text-slate-500 uppercase">
+        <GeneratedValue value={label} />
+      </span>
+      <span>
+        <GeneratedValue value={children} />
+      </span>
     </div>
   )
 }
@@ -3012,9 +3587,11 @@ function ReadOnlyStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-800/40">
       <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        {label}
+        <GeneratedValue value={label} />
       </div>
-      <div className="mt-0.5 text-sm text-slate-700 dark:text-slate-200">{value}</div>
+      <div className="mt-0.5 text-sm text-slate-700 dark:text-slate-200">
+        <GeneratedValue value={value} />
+      </div>
     </div>
   )
 }
@@ -3033,10 +3610,10 @@ function Field({
   return (
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label>
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        <GeneratedValue value={label} />
+        <GeneratedValue value={required ? <span className="text-red-600"> *</span> : null} />
       </Label>
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }

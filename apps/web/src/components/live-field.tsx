@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Always-editable fields that auto-save through a generic `updateTextField`
 // action — the legacy form's killer mobile trait, modernised. No edit-pencil,
 // no drawer: the input on the page IS the field. Text saves on blur (plus a
@@ -144,7 +151,7 @@ export function SaveDot({ state, onRetry }: { state: SaveState; onRetry?: () => 
         onClick={onRetry}
         className="text-[11px] font-medium text-red-600 hover:underline"
       >
-        Not saved — retry
+        <GeneratedText id="m_13b78c61dbb517" />
       </button>
     )
   }
@@ -158,13 +165,19 @@ export function SaveDot({ state, onRetry }: { state: SaveState; onRetry?: () => 
         state === 'error' && 'text-red-600',
       )}
     >
-      {state === 'saving'
-        ? 'Saving…'
-        : state === 'dirty'
-          ? '…'
-          : state === 'saved'
-            ? 'Saved ✓'
-            : 'Not saved — retry'}
+      <GeneratedValue
+        value={
+          state === 'saving' ? (
+            <GeneratedText id="m_106811f2aac664" />
+          ) : state === 'dirty' ? (
+            '…'
+          ) : state === 'saved' ? (
+            <GeneratedText id="m_0a3bcf685192f1" />
+          ) : (
+            <GeneratedText id="m_13b78c61dbb517" />
+          )
+        }
+      />
     </span>
   )
 }
@@ -181,7 +194,7 @@ function FieldLabel({
   return (
     <div className="flex items-center justify-between gap-2">
       <label className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        {label}
+        <GeneratedValue value={label} />
       </label>
       <SaveDot state={state} onRetry={onRetry} />
     </div>
@@ -218,6 +231,7 @@ export function LiveField({
   disabled?: boolean
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [value, setValue] = useState(initialValue ?? '')
   // Last successfully persisted value — only advanced when a save succeeds, so
   // a failed save keeps the field dirty and the advertised retry actually works.
@@ -277,8 +291,10 @@ export function LiveField({
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={label} state={state} onRetry={retry} />
-      {multiline ? <Textarea rows={rows} {...shared} /> : <Input type={type} {...shared} />}
+      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
+      <GeneratedValue
+        value={multiline ? <Textarea rows={rows} {...shared} /> : <Input type={type} {...shared} />}
+      />
     </div>
   )
 }
@@ -305,6 +321,7 @@ export function LiveSelect({
   disabled?: boolean
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [value, setValue] = useState(initialValue ?? '')
   const baseline = useRef(initialValue ?? '')
   const { state, save, retry } = useFieldAutoSave({
@@ -328,7 +345,7 @@ export function LiveSelect({
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={label} state={state} onRetry={retry} />
+      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
       <Select
         value={value}
         disabled={disabled}
@@ -337,12 +354,22 @@ export function LiveSelect({
           save(e.target.value)
         }}
       >
-        {allowEmpty ? <option value="">{emptyLabel}</option> : null}
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
+        <GeneratedValue
+          value={
+            allowEmpty ? (
+              <option value="">
+                <GeneratedValue value={emptyLabel} />
+              </option>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={options.map((o) => (
+            <option key={o.value} value={o.value}>
+              <GeneratedValue value={o.label} />
+            </option>
+          ))}
+        />
       </Select>
     </div>
   )
@@ -374,6 +401,8 @@ export function LiveRemoteSelect({
   disabled?: boolean
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [value, setValue] = useState(initialValue ?? '')
   const baseline = useRef(initialValue ?? '')
   const { state, save, retry } = useFieldAutoSave({
@@ -395,7 +424,7 @@ export function LiveRemoteSelect({
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={label} state={state} onRetry={retry} />
+      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
       <RemoteSearchSelect
         lookup={lookup}
         contextId={contextId}
@@ -405,12 +434,12 @@ export function LiveRemoteSelect({
           save(next)
         }}
         initialOption={initialOption}
-        placeholder={emptyLabel}
-        searchPlaceholder={`Search ${label.toLowerCase()}…`}
+        placeholder={tGeneratedValue(emptyLabel)}
+        searchPlaceholder={tGenerated('m_1f0a8c50aedb8c', { value0: label.toLowerCase() })}
         sheetTitle={`Select ${label.toLowerCase()}`}
         ariaLabel={label}
         clearable={allowEmpty}
-        emptyLabel={emptyLabel}
+        emptyLabel={tGeneratedValue(emptyLabel)}
         disabled={disabled}
       />
     </div>
@@ -440,6 +469,8 @@ export function LivePersonSelect({
   disabled?: boolean
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [value, setValue] = useState(initialValue ?? '')
   const baseline = useRef(initialValue ?? '')
   const { state, save, retry } = useFieldAutoSave({
@@ -462,7 +493,7 @@ export function LivePersonSelect({
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={label} state={state} onRetry={retry} />
+      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
       <SearchSelect
         value={value}
         onChange={(next) => {
@@ -470,12 +501,12 @@ export function LivePersonSelect({
           save(next)
         }}
         options={options}
-        placeholder={placeholder}
-        searchPlaceholder={searchPlaceholder}
+        placeholder={tGeneratedValue(placeholder)}
+        searchPlaceholder={tGeneratedValue(searchPlaceholder)}
         sheetTitle={sheetTitle}
         ariaLabel={label}
         clearable
-        emptyLabel="— None —"
+        emptyLabel={tGenerated('m_0dd5f8a31ce3e1')}
         disabled={disabled}
       />
     </div>
@@ -498,6 +529,7 @@ export function LiveDateTime({
   disabled?: boolean
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [value, setValue] = useState(initialValue)
   const baseline = useRef(initialValue)
   const { state, setState, save, retry, hasPending } = useFieldAutoSave({
@@ -544,7 +576,7 @@ export function LiveDateTime({
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={label} state={state} onRetry={retry} />
+      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
       <Input
         type="datetime-local"
         value={value}
@@ -576,6 +608,7 @@ export function LiveToggle({
   disabled?: boolean
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [on, setOn] = useState(initialValue)
   const baseline = useRef(initialValue)
   const { state, save, retry } = useFieldAutoSave({
@@ -604,26 +637,34 @@ export function LiveToggle({
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900">
       <span className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-        {label}
-        {state === 'saving' ? (
-          <span className="text-[11px] text-slate-400">Saving…</span>
-        ) : state === 'saved' ? (
-          <span className="text-[11px] text-emerald-600">Saved ✓</span>
-        ) : state === 'error' ? (
-          <button
-            type="button"
-            onClick={retry}
-            className="text-[11px] font-medium text-red-600 hover:underline"
-          >
-            Not saved — retry
-          </button>
-        ) : null}
+        <GeneratedValue value={label} />
+        <GeneratedValue
+          value={
+            state === 'saving' ? (
+              <span className="text-[11px] text-slate-400">
+                <GeneratedText id="m_106811f2aac664" />
+              </span>
+            ) : state === 'saved' ? (
+              <span className="text-[11px] text-emerald-600">
+                <GeneratedText id="m_0a3bcf685192f1" />
+              </span>
+            ) : state === 'error' ? (
+              <button
+                type="button"
+                onClick={retry}
+                className="text-[11px] font-medium text-red-600 hover:underline"
+              >
+                <GeneratedText id="m_13b78c61dbb517" />
+              </button>
+            ) : null
+          }
+        />
       </span>
       <button
         type="button"
         role="switch"
         aria-checked={on}
-        aria-label={label}
+        aria-label={tGeneratedValue(label)}
         disabled={disabled}
         onClick={toggle}
         className={cn(
@@ -677,6 +718,7 @@ export function LiveSeverityRating({
   disabled?: boolean
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [value, setValue] = useState<number | null>(initialValue)
   const baseline = useRef(initialValue)
   const { state, save, retry } = useFieldAutoSave({
@@ -704,32 +746,36 @@ export function LiveSeverityRating({
 
   return (
     <div className="space-y-1">
-      <FieldLabel label={label} state={state} onRetry={retry} />
+      <FieldLabel label={tGeneratedValue(label)} state={state} onRetry={retry} />
       <div className="flex items-center gap-1.5">
-        {[1, 2, 3, 4, 5].map((n) => {
-          const active = value === n
-          return (
-            <button
-              key={n}
-              type="button"
-              disabled={disabled}
-              onClick={() => pick(n)}
-              title={`${n} — ${SEVERITY_LABELS[n]}`}
-              aria-pressed={active}
-              className={cn(
-                'flex h-11 flex-1 items-center justify-center rounded-lg border text-sm font-semibold transition-colors disabled:opacity-50 sm:h-9',
-                active
-                  ? SEVERITY_ACTIVE[n]
-                  : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500',
-              )}
-            >
-              {n}
-            </button>
-          )
-        })}
+        <GeneratedValue
+          value={[1, 2, 3, 4, 5].map((n) => {
+            const active = value === n
+            return (
+              <button
+                key={n}
+                type="button"
+                disabled={disabled}
+                onClick={() => pick(n)}
+                title={tGeneratedValue(`${n} — ${SEVERITY_LABELS[n]}`)}
+                aria-pressed={active}
+                className={cn(
+                  'flex h-11 flex-1 items-center justify-center rounded-lg border text-sm font-semibold transition-colors disabled:opacity-50 sm:h-9',
+                  active
+                    ? SEVERITY_ACTIVE[n]
+                    : 'border-slate-200 bg-white text-slate-400 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500',
+                )}
+              >
+                <GeneratedValue value={n} />
+              </button>
+            )
+          })}
+        />
       </div>
       <p className="text-xs text-slate-400 dark:text-slate-500">
-        {value ? SEVERITY_LABELS[value] : 'Not rated'}
+        <GeneratedValue
+          value={value ? SEVERITY_LABELS[value] : <GeneratedText id="m_13e61f4185333d" />}
+        />
       </p>
     </div>
   )
@@ -770,6 +816,8 @@ export function LiveRichText({
   disabled?: boolean
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(initialValue ?? '')
   const baseline = useRef(initialValue ?? '')
@@ -815,72 +863,86 @@ export function LiveRichText({
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-2">
         <label className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          {label}
+          <GeneratedValue value={label} />
         </label>
         <div className="flex items-center gap-2">
           <SaveDot state={state} onRetry={retry} />
-          {disabled ? null : editing ? (
-            <button
-              type="button"
-              onClick={() => {
-                commit(value)
-                setEditing(false)
-              }}
-              className="text-[11px] font-medium text-teal-700 hover:underline dark:text-teal-400"
-            >
-              Done
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="text-[11px] font-medium text-teal-700 hover:underline dark:text-teal-400"
-            >
-              Edit
-            </button>
-          )}
+          <GeneratedValue
+            value={
+              disabled ? null : editing ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    commit(value)
+                    setEditing(false)
+                  }}
+                  className="text-[11px] font-medium text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  <GeneratedText id="m_00609f822e0571" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setEditing(true)}
+                  className="text-[11px] font-medium text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  <GeneratedText id="m_03a66f9d34ac7b" />
+                </button>
+              )
+            }
+          />
         </div>
       </div>
-      {editing ? (
-        <RichTextEditor
-          defaultValue={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          disabled={disabled}
-          minHeight="120px"
-          normalizeLink={normalizeDocumentHref}
-          onInvalidLink={() => toast.error('Use an HTTPS, email, phone, /path, or #anchor link.')}
-        />
-      ) : (
-        <div
-          role={disabled ? undefined : 'button'}
-          tabIndex={disabled ? undefined : 0}
-          onClick={() => {
-            if (!disabled) setEditing(true)
-          }}
-          onKeyDown={(e) => {
-            if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
-              e.preventDefault()
-              setEditing(true)
-            }
-          }}
-          className={cn(
-            'min-h-[2.5rem] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900',
-            !disabled && 'cursor-text hover:border-slate-300 dark:hover:border-slate-700',
-          )}
-        >
-          {htmlIsEmpty(value) ? (
-            <span className="text-slate-400 dark:text-slate-500">{placeholder}</span>
+      <GeneratedValue
+        value={
+          editing ? (
+            <RichTextEditor
+              defaultValue={value}
+              onChange={onChange}
+              placeholder={tGeneratedValue(placeholder)}
+              disabled={disabled}
+              minHeight="120px"
+              normalizeLink={normalizeDocumentHref}
+              onInvalidLink={() => toast.error(tGenerated('m_19dc719a9038ec'))}
+            />
           ) : (
             <div
-              className="prose prose-sm prose-slate dark:prose-invert max-w-none"
-              // Stored narrative HTML is user-supplied — sanitize before
-              // rendering (defense-in-depth alongside write-side sanitization).
-              dangerouslySetInnerHTML={{ __html: sanitizeDocumentHtml(value) }}
-            />
-          )}
-        </div>
-      )}
+              role={disabled ? undefined : 'button'}
+              tabIndex={disabled ? undefined : 0}
+              onClick={() => {
+                if (!disabled) setEditing(true)
+              }}
+              onKeyDown={(e) => {
+                if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault()
+                  setEditing(true)
+                }
+              }}
+              className={cn(
+                'min-h-[2.5rem] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900',
+                !disabled && 'cursor-text hover:border-slate-300 dark:hover:border-slate-700',
+              )}
+            >
+              <GeneratedValue
+                value={
+                  htmlIsEmpty(value) ? (
+                    <span className="text-slate-400 dark:text-slate-500">
+                      <GeneratedValue value={placeholder} />
+                    </span>
+                  ) : (
+                    <div
+                      className="prose prose-sm prose-slate dark:prose-invert max-w-none"
+                      // Stored narrative HTML is user-supplied — sanitize before
+                      // rendering (defense-in-depth alongside write-side sanitization).
+                      dangerouslySetInnerHTML={{ __html: sanitizeDocumentHtml(value) }}
+                    />
+                  )
+                }
+              />
+            </div>
+          )
+        }
+      />
     </div>
   )
 }

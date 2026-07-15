@@ -1,5 +1,9 @@
 'use client'
 
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
+import { useGeneratedTranslations } from '@/i18n/generated'
+
 // The slideshow deck workspace — Collabora Online is THE editor. Every
 // editable deck is backed by one .pptx master (sourceAttachmentId). Editing
 // and Present both run through Collabora; there is no PDF/image derivative.
@@ -35,6 +39,8 @@ export function SlideDeckEditor({
   beforeDeckMutation?: () => Promise<void>
   className?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [showImport, setShowImport] = useState(false)
   const [presenting, setPresenting] = useState(false)
@@ -50,7 +56,9 @@ export function SlideDeckEditor({
         await createBlankDeckMaster(target, targetId)
         router.refresh()
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not create the deck')
+        toast.error(
+          tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_02d9d59d8cb7d7')),
+        )
       }
     })
   }
@@ -67,120 +75,154 @@ export function SlideDeckEditor({
           setShowImport(false)
           void onImportPptx(f.attachmentId)
             .then(() => {
-              toast.success('PowerPoint imported')
+              toast.success(tGenerated('m_00b3bf0ec59360'))
               router.refresh()
             })
             .catch((error: unknown) => {
-              toast.error(error instanceof Error ? error.message : 'Could not import PowerPoint')
+              toast.error(
+                tGeneratedValue(
+                  error instanceof Error ? error.message : tGenerated('m_130f6b46beb549'),
+                ),
+              )
             })
         }}
-        label="Drop a .pptx or click to choose"
-        hint={
-          master
-            ? 'Replaces the current PowerPoint file. Maximum 1 GiB.'
-            : 'PowerPoint features and speaker notes are preserved. Maximum 1 GiB.'
-        }
+        label={tGenerated('m_1406533d6ede6d')}
+        hint={tGeneratedValue(
+          master ? tGenerated('m_0fd79d920e8ab5') : tGenerated('m_0c6fc67f98ade6'),
+        )}
       />
     </div>
   )
 
   return (
     <div className={cn('flex min-h-0 flex-col', className)}>
-      {master ? (
-        <>
-          {/* toolbar */}
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
-            <span
-              className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-              title={master.filename}
-            >
-              <FileUp size={11} />
-              <span className="max-w-[14rem] truncate">{master.filename}</span>
-            </span>
-            <Button asChild variant="outline" size="sm">
-              <a href={downloadHref}>
-                <Download size={13} /> Download
-              </a>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowImport((v) => !v)}
-            >
-              <FileUp size={13} /> Replace
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setPresenting(true)}>
-              <Play size={13} /> Present
-            </Button>
-          </div>
-
-          {/* editor — flush against the toolbar, no wasted chrome */}
-          <div className="flex min-h-0 flex-1 flex-col">
-            {showImport ? <div className="p-3 pb-0">{importPanel}</div> : null}
-            <CollaboraEmbed
-              key={master.attachmentId}
-              frameName={targetId}
-              fetchSession={() => getPptxEditorSession(target, targetId)}
-              className="min-h-[26rem] flex-1"
-            />
-          </div>
-        </>
-      ) : (
-        <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-2xl space-y-4 px-5 py-8">
-            <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                New presentation
-              </h3>
-              <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-                Import a PowerPoint file or start a blank presentation.
-              </p>
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={starting}
-                  onClick={() => setShowImport((v) => !v)}
+      <GeneratedValue
+        value={
+          master ? (
+            <>
+              {/* toolbar */}
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
+                <span
+                  className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                  title={tGeneratedValue(master.filename)}
                 >
-                  <FileUp size={13} /> Import PowerPoint
+                  <FileUp size={11} />
+                  <span className="max-w-[14rem] truncate">
+                    <GeneratedValue value={master.filename} />
+                  </span>
+                </span>
+                <Button asChild variant="outline" size="sm">
+                  <a href={downloadHref}>
+                    <Download size={13} /> <GeneratedText id="m_0fcb9c63d263d1" />
+                  </a>
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={starting}
-                  onClick={startBlank}
+                  onClick={() => setShowImport((v) => !v)}
                 >
-                  {starting ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}{' '}
-                  Start blank
+                  <FileUp size={13} /> <GeneratedText id="m_05b540acc16fd1" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPresenting(true)}
+                >
+                  <Play size={13} /> <GeneratedText id="m_1c855abf768e34" />
                 </Button>
               </div>
+
+              {/* editor — flush against the toolbar, no wasted chrome */}
+              <div className="flex min-h-0 flex-1 flex-col">
+                <GeneratedValue
+                  value={
+                    showImport ? (
+                      <div className="p-3 pb-0">
+                        <GeneratedValue value={importPanel} />
+                      </div>
+                    ) : null
+                  }
+                />
+                <CollaboraEmbed
+                  key={master.attachmentId}
+                  frameName={targetId}
+                  fetchSession={() => getPptxEditorSession(target, targetId)}
+                  className="min-h-[26rem] flex-1"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-2xl space-y-4 px-5 py-8">
+                <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <GeneratedText id="m_0648b599acb822" />
+                  </h3>
+                  <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+                    <GeneratedText id="m_01d8f317297f75" />
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={starting}
+                      onClick={() => setShowImport((v) => !v)}
+                    >
+                      <FileUp size={13} /> <GeneratedText id="m_07e44e3c0bd608" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={starting}
+                      onClick={startBlank}
+                    >
+                      <GeneratedValue
+                        value={
+                          starting ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <Plus size={13} />
+                          )
+                        }
+                      />
+                      <GeneratedValue value={' '} />
+                      <GeneratedText id="m_1f809c4de18128" />
+                    </Button>
+                  </div>
+                </div>
+                <GeneratedValue value={showImport ? importPanel : null} />
+              </div>
             </div>
-            {showImport ? importPanel : null}
-          </div>
-        </div>
-      )}
+          )
+        }
+      />
 
       {/* present overlay */}
-      {presenting ? (
-        <div className="fixed inset-0 z-[70] flex flex-col bg-black">
-          <button
-            type="button"
-            onClick={() => setPresenting(false)}
-            aria-label="Close presentation"
-            className="absolute top-3 right-3 z-20 grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
-          >
-            <X size={18} />
-          </button>
-          <CollaboraEmbed
-            mode="presentation"
-            frameName={`present-${targetId}`}
-            fetchSession={() => getPptxAuthorPlaybackSession(target, targetId)}
-            className="min-h-0 flex-1"
-          />
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          presenting ? (
+            <div className="fixed inset-0 z-[70] flex flex-col bg-black">
+              <button
+                type="button"
+                onClick={() => setPresenting(false)}
+                aria-label={tGenerated('m_1b2a3bcd3f18e3')}
+                className="absolute top-3 right-3 z-20 grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+              >
+                <X size={18} />
+              </button>
+              <CollaboraEmbed
+                mode="presentation"
+                frameName={`present-${targetId}`}
+                fetchSession={() => getPptxAuthorPlaybackSession(target, targetId)}
+                className="min-h-0 flex-1"
+              />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }

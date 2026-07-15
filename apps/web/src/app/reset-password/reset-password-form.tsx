@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 import { useActionState, useState } from 'react'
 import { Alert, AlertDescription, Button, Input, Label } from '@beaconhs/ui'
 import { submitReset } from './actions'
@@ -12,7 +14,9 @@ export function ResetPasswordForm({ token }: { token: string }) {
     <form action={action} className="space-y-4">
       <input type="hidden" name="token" value={token} />
       <div className="space-y-1.5">
-        <Label htmlFor="password">New password</Label>
+        <Label htmlFor="password">
+          <GeneratedText id="m_14dee08e358316" />
+        </Label>
         <Input
           id="password"
           name="password"
@@ -23,7 +27,9 @@ export function ResetPasswordForm({ token }: { token: string }) {
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="confirmPassword">Confirm password</Label>
+        <Label htmlFor="confirmPassword">
+          <GeneratedText id="m_051f863341b6d5" />
+        </Label>
         <Input
           id="confirmPassword"
           name="confirmPassword"
@@ -38,17 +44,36 @@ export function ResetPasswordForm({ token }: { token: string }) {
         onClick={() => setShow((s) => !s)}
         className="text-xs text-slate-600 hover:underline dark:text-slate-300"
       >
-        {show ? 'Hide' : 'Show'} password
+        <GeneratedValue
+          value={
+            show ? <GeneratedText id="m_1b0073432893f9" /> : <GeneratedText id="m_00fbddc6309531" />
+          }
+        />{' '}
+        <GeneratedText id="m_108e3204c19a56" />
       </button>
 
-      {state?.error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
-        </Alert>
-      ) : null}
+      <GeneratedValue
+        value={
+          state?.error ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                <GeneratedValue value={state.error} />
+              </AlertDescription>
+            </Alert>
+          ) : null
+        }
+      />
 
       <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? 'Updating…' : 'Set new password'}
+        <GeneratedValue
+          value={
+            pending ? (
+              <GeneratedText id="m_10d776f0c7968c" />
+            ) : (
+              <GeneratedText id="m_12d39c2d0416bb" />
+            )
+          }
+        />
       </Button>
     </form>
   )

@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // /journals/tags — tenant admin manages the journal tag vocabulary: rename,
 // merge duplicates, recolour, describe, and prune. Gated by journals.assign
 // (same as Compliance). Mutations rewrite journal_entry_tags + the per-entry
@@ -14,7 +15,10 @@ import { listManagedTags } from './_data'
 import { TagsAdmin } from './_tags-admin'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Journal tags' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_10354b1ac4e4c4') }
+}
 
 const SORTS = ['usage'] as const
 
@@ -23,6 +27,7 @@ export default async function JournalTagsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'journals.assign')) redirect('/journals')
 
@@ -47,7 +52,10 @@ export default async function JournalTagsPage({
     <ListPageLayout
       header={
         <>
-          <PageHeader title="Journal tags" description="Tag vocabulary for daily journals." />
+          <PageHeader
+            title={tGenerated('m_10354b1ac4e4c4')}
+            description={tGenerated('m_1dd382d500117f')}
+          />
           <ModuleNav moduleKey="journals" active="tags" />
         </>
       }

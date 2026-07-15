@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // /ppe/[id] — per-item detail with sub-tabs.
 //
 // Tabs:
@@ -795,8 +799,9 @@ function nextDueDate(kind: 'pre_use' | 'annual', iso: string): string {
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `PPE · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_07616ae47dfc69', { value0: id.slice(0, 8) }) }
 }
 
 export default async function PpeDetailPage({
@@ -806,6 +811,8 @@ export default async function PpeDetailPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -1151,8 +1158,11 @@ export default async function PpeDetailPage({
       header={
         <DetailHeader
           back={{ href: '/ppe', label: 'Back to PPE' }}
-          title={`${type.name} · ${item.serialNumber ?? 'no serial'}`}
-          subtitle={`Size ${item.size ?? '—'} · ${type.category ?? ''}`}
+          title={tGeneratedValue(`${type.name} · ${item.serialNumber ?? 'no serial'}`)}
+          subtitle={tGenerated('m_0034478e1bddc9', {
+            value0: item.size ?? '—',
+            value1: type.category ?? '',
+          })}
           badge={
             <div className="flex items-center gap-2">
               <Badge
@@ -1164,46 +1174,82 @@ export default async function PpeDetailPage({
                       : 'warning'
                 }
               >
-                {item.status.replace('_', ' ')}
+                <GeneratedValue value={item.status.replace('_', ' ')} />
               </Badge>
-              {countData.openIssueCount > 0 ? (
-                <Badge variant="destructive">
-                  {countData.openIssueCount} open issue
-                  {countData.openIssueCount === 1 ? '' : 's'}
-                </Badge>
-              ) : null}
-              {expiringIn !== null && expiringIn <= 30 ? (
-                <Badge variant={expiringIn < 0 ? 'destructive' : 'warning'}>
-                  {expiringIn < 0 ? `Expired ${-expiringIn}d` : `Expires in ${expiringIn}d`}
-                </Badge>
-              ) : null}
+              <GeneratedValue
+                value={
+                  countData.openIssueCount > 0 ? (
+                    <Badge variant="destructive">
+                      <GeneratedValue value={countData.openIssueCount} />{' '}
+                      <GeneratedText id="m_0d9877d90b6b7d" />
+                      <GeneratedValue
+                        value={
+                          countData.openIssueCount === 1 ? (
+                            ''
+                          ) : (
+                            <GeneratedText id="m_00ded356f0f424" />
+                          )
+                        }
+                      />
+                    </Badge>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  expiringIn !== null && expiringIn <= 30 ? (
+                    <Badge variant={expiringIn < 0 ? 'destructive' : 'warning'}>
+                      <GeneratedValue
+                        value={
+                          expiringIn < 0 ? (
+                            <GeneratedText id="m_0c3eb67742e100" values={{ value0: -expiringIn }} />
+                          ) : (
+                            <GeneratedText id="m_051db224696a7d" values={{ value0: expiringIn }} />
+                          )
+                        }
+                      />
+                    </Badge>
+                  ) : null
+                }
+              />
             </div>
           }
           actions={
             <div className="flex flex-wrap items-center gap-2">
-              {canIssue ? (
-                <Link
-                  href={`${basePath}?tab=${active}&drawer=issue-to-person` as any}
-                  scroll={false}
-                >
-                  <Button>
-                    <UserPlus size={14} /> Issue to person
-                  </Button>
-                </Link>
-              ) : null}
-              {canChangeStatus ? (
-                <Link href={`${basePath}?tab=${active}&drawer=change-status` as any} scroll={false}>
-                  <Button variant="outline">
-                    <RefreshCw size={14} /> Change status
-                  </Button>
-                </Link>
-              ) : null}
+              <GeneratedValue
+                value={
+                  canIssue ? (
+                    <Link
+                      href={`${basePath}?tab=${active}&drawer=issue-to-person` as any}
+                      scroll={false}
+                    >
+                      <Button>
+                        <UserPlus size={14} /> <GeneratedText id="m_10b50a35e0953a" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  canChangeStatus ? (
+                    <Link
+                      href={`${basePath}?tab=${active}&drawer=change-status` as any}
+                      scroll={false}
+                    >
+                      <Button variant="outline">
+                        <RefreshCw size={14} /> <GeneratedText id="m_118818fef81797" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
               <Link
                 href={`/ppe/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
                 scroll={false}
               >
                 <Button variant="outline">
-                  <Mail size={14} /> Send email
+                  <Mail size={14} /> <GeneratedText id="m_09dfca28fc95ba" />
                 </Button>
               </Link>
             </div>
@@ -1212,29 +1258,51 @@ export default async function PpeDetailPage({
       }
       alerts={
         <>
-          {countData.openIssueCount > 0 && openIssues[0] ? (
-            <Alert variant="destructive">
-              <AlertTitle>Open issue report</AlertTitle>
-              <AlertDescription>{openIssues[0]!.description}</AlertDescription>
-            </Alert>
-          ) : null}
-          {hasInspections && inspectionDueIn !== null && inspectionDueIn <= 0 ? (
-            <Alert variant="destructive">
-              <AlertTitle>Inspection overdue</AlertTitle>
-              <AlertDescription>
-                The pre-use inspection was due on {item.nextInspectionDue}. Record a new one from
-                the Inspections tab.
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {showCertificates && annualDueIn !== null && annualDueIn <= 0 ? (
-            <Alert variant="destructive">
-              <AlertTitle>Certificate overdue</AlertTitle>
-              <AlertDescription>
-                The third-party recertification was due on {item.nextAnnualInspectionDue}.
-              </AlertDescription>
-            </Alert>
-          ) : null}
+          <GeneratedValue
+            value={
+              countData.openIssueCount > 0 && openIssues[0] ? (
+                <Alert variant="destructive">
+                  <AlertTitle>
+                    <GeneratedText id="m_1a8f774c8d5487" />
+                  </AlertTitle>
+                  <AlertDescription>
+                    <GeneratedValue value={openIssues[0]!.description} />
+                  </AlertDescription>
+                </Alert>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              hasInspections && inspectionDueIn !== null && inspectionDueIn <= 0 ? (
+                <Alert variant="destructive">
+                  <AlertTitle>
+                    <GeneratedText id="m_0efcb286ead8a2" />
+                  </AlertTitle>
+                  <AlertDescription>
+                    <GeneratedText id="m_02af2c143301ac" />{' '}
+                    <GeneratedValue value={item.nextInspectionDue} />
+                    <GeneratedText id="m_01a8c692b32591" />
+                  </AlertDescription>
+                </Alert>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              showCertificates && annualDueIn !== null && annualDueIn <= 0 ? (
+                <Alert variant="destructive">
+                  <AlertTitle>
+                    <GeneratedText id="m_044bdd8da8ecba" />
+                  </AlertTitle>
+                  <AlertDescription>
+                    <GeneratedText id="m_0134ca707501cc" />{' '}
+                    <GeneratedValue value={item.nextAnnualInspectionDue} />.
+                  </AlertDescription>
+                </Alert>
+              ) : null
+            }
+          />
         </>
       }
       subtabs={
@@ -1258,792 +1326,1037 @@ export default async function PpeDetailPage({
       }
     >
       <div className="space-y-5">
-        {active === 'overview' ? (
-          <div className="space-y-5">
-            <Section
-              title="Details"
-              subtitle={
-                canManage
-                  ? 'Changes save automatically.'
-                  : 'Read-only — editing requires the Manage PPE permission.'
-              }
-            >
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <LiveRemoteSelect
-                  id={id}
-                  field="typeId"
-                  label="Type"
-                  initialValue={type.id}
-                  initialOption={{ value: type.id, label: type.name }}
-                  lookup="ppe-types"
-                  allowEmpty={false}
-                  disabled={!canManage}
-                  updateAction={updatePpeField}
-                />
-                <LiveField
-                  id={id}
-                  field="serialNumber"
-                  label="Serial #"
-                  initialValue={item.serialNumber}
-                  placeholder="Serial number"
-                  disabled={!canManage}
-                  updateAction={updatePpeField}
-                />
-                {type.sizingScheme && type.sizingScheme.length > 0 ? (
-                  // Types with a sizing scheme constrain the size to the
-                  // configured list (keeping an out-of-scheme current value
-                  // selectable so it isn't silently lost).
-                  <LiveSelect
-                    id={id}
-                    field="size"
-                    label="Size"
-                    initialValue={item.size}
-                    options={[
-                      ...(item.size && !type.sizingScheme.includes(item.size)
-                        ? [{ value: item.size, label: item.size }]
-                        : []),
-                      ...type.sizingScheme.map((s) => ({ value: s, label: s })),
-                    ]}
-                    disabled={!canManage}
-                    updateAction={updatePpeField}
-                  />
-                ) : (
-                  <LiveField
-                    id={id}
-                    field="size"
-                    label="Size"
-                    initialValue={item.size}
-                    placeholder="e.g. L"
-                    disabled={!canManage}
-                    updateAction={updatePpeField}
-                  />
-                )}
-                <LiveField
-                  id={id}
-                  field="purchaseDate"
-                  label="Purchased"
-                  type="date"
-                  initialValue={item.purchaseDate}
-                  disabled={!canManage}
-                  updateAction={updatePpeField}
-                />
-                <LiveField
-                  id={id}
-                  field="expiresOn"
-                  label="Expires"
-                  type="date"
-                  initialValue={item.expiresOn}
-                  disabled={!canManage}
-                  updateAction={updatePpeField}
-                />
-              </div>
-              <div className="mt-4">
-                <LiveField
-                  id={id}
-                  field="notes"
-                  label="Notes"
-                  multiline
-                  rows={3}
-                  initialValue={item.notes}
-                  placeholder="Anything noteworthy about this item"
-                  disabled={!canManage}
-                  updateAction={updatePpeField}
-                />
-              </div>
-            </Section>
+        <GeneratedValue
+          value={
+            active === 'overview' ? (
+              <div className="space-y-5">
+                <Section
+                  title={tGenerated('m_1560d4e2a09d09')}
+                  subtitle={tGeneratedValue(
+                    canManage ? tGenerated('m_0b782112bd8e71') : tGenerated('m_195e5685c3ad6a'),
+                  )}
+                >
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <LiveRemoteSelect
+                      id={id}
+                      field="typeId"
+                      label={tGenerated('m_074ba2f160c506')}
+                      initialValue={type.id}
+                      initialOption={{ value: type.id, label: type.name }}
+                      lookup="ppe-types"
+                      allowEmpty={false}
+                      disabled={!canManage}
+                      updateAction={updatePpeField}
+                    />
+                    <LiveField
+                      id={id}
+                      field="serialNumber"
+                      label={tGenerated('m_179218139b624a')}
+                      initialValue={item.serialNumber}
+                      placeholder={tGenerated('m_0ff1343b241439')}
+                      disabled={!canManage}
+                      updateAction={updatePpeField}
+                    />
+                    <GeneratedValue
+                      value={
+                        type.sizingScheme && type.sizingScheme.length > 0 ? (
+                          // Types with a sizing scheme constrain the size to the
+                          // configured list (keeping an out-of-scheme current value
+                          // selectable so it isn't silently lost).
+                          <LiveSelect
+                            id={id}
+                            field="size"
+                            label={tGenerated('m_11ad4bbeced31b')}
+                            initialValue={item.size}
+                            options={[
+                              ...(item.size && !type.sizingScheme.includes(item.size)
+                                ? [{ value: item.size, label: item.size }]
+                                : []),
+                              ...type.sizingScheme.map((s) => ({ value: s, label: s })),
+                            ]}
+                            disabled={!canManage}
+                            updateAction={updatePpeField}
+                          />
+                        ) : (
+                          <LiveField
+                            id={id}
+                            field="size"
+                            label={tGenerated('m_11ad4bbeced31b')}
+                            initialValue={item.size}
+                            placeholder={tGenerated('m_05a60ffb4da858')}
+                            disabled={!canManage}
+                            updateAction={updatePpeField}
+                          />
+                        )
+                      }
+                    />
+                    <LiveField
+                      id={id}
+                      field="purchaseDate"
+                      label={tGenerated('m_1d9c32b35390f6')}
+                      type="date"
+                      initialValue={item.purchaseDate}
+                      disabled={!canManage}
+                      updateAction={updatePpeField}
+                    />
+                    <LiveField
+                      id={id}
+                      field="expiresOn"
+                      label={tGenerated('m_14f3858b0a9ad6')}
+                      type="date"
+                      initialValue={item.expiresOn}
+                      disabled={!canManage}
+                      updateAction={updatePpeField}
+                    />
+                  </div>
+                  <div className="mt-4">
+                    <LiveField
+                      id={id}
+                      field="notes"
+                      label={tGenerated('m_0b8dadcb78cd08')}
+                      multiline
+                      rows={3}
+                      initialValue={item.notes}
+                      placeholder={tGenerated('m_154092dbe030f5')}
+                      disabled={!canManage}
+                      updateAction={updatePpeField}
+                    />
+                  </div>
+                </Section>
 
-            <Section
-              title="Status & schedule"
-              subtitle="Maintained automatically by issuance, inspection, and certificate records."
-            >
-              <DetailGrid
-                rows={[
-                  {
-                    label: 'Status',
-                    value: (
-                      <Badge
-                        variant={
-                          item.status === 'issued'
-                            ? 'success'
-                            : item.status === 'in_stock'
-                              ? 'secondary'
-                              : 'warning'
-                        }
-                      >
-                        {item.status.replace('_', ' ')}
-                      </Badge>
-                    ),
-                  },
-                  {
-                    label: 'Currently with',
-                    value: holder ? (
-                      <Link href={`/people/${holder.id}`} className="text-teal-700 hover:underline">
-                        {holder.firstName} {holder.lastName}
-                      </Link>
-                    ) : (
-                      '—'
-                    ),
-                  },
-                  {
-                    label: 'Expires',
-                    value: item.expiresOn ? (
-                      <span
-                        className={
-                          expiringIn !== null && expiringIn < 0
-                            ? 'text-red-700'
-                            : expiringIn !== null && expiringIn <= 30
-                              ? 'text-amber-700'
-                              : ''
-                        }
-                      >
-                        {item.expiresOn}
-                        {expiringIn !== null
-                          ? ` (${expiringIn < 0 ? `${-expiringIn}d overdue` : `${expiringIn}d`})`
-                          : ''}
-                      </span>
-                    ) : (
-                      '—'
-                    ),
-                  },
-                  ...(hasInspections
-                    ? [
-                        { label: 'Last inspection', value: item.lastInspectionOn ?? '—' },
-                        {
-                          label: 'Next inspection due',
-                          value: item.nextInspectionDue ? (
-                            <span
-                              className={
-                                inspectionDueIn !== null && inspectionDueIn < 0
-                                  ? 'text-red-700'
+                <Section
+                  title={tGenerated('m_18f7cb1f3a30eb')}
+                  subtitle={tGenerated('m_0f65a0db3c5387')}
+                >
+                  <DetailGrid
+                    rows={[
+                      {
+                        label: 'Status',
+                        value: (
+                          <Badge
+                            variant={
+                              item.status === 'issued'
+                                ? 'success'
+                                : item.status === 'in_stock'
+                                  ? 'secondary'
+                                  : 'warning'
+                            }
+                          >
+                            <GeneratedValue value={item.status.replace('_', ' ')} />
+                          </Badge>
+                        ),
+                      },
+                      {
+                        label: 'Currently with',
+                        value: holder ? (
+                          <Link
+                            href={`/people/${holder.id}`}
+                            className="text-teal-700 hover:underline"
+                          >
+                            <GeneratedValue value={holder.firstName} />{' '}
+                            <GeneratedValue value={holder.lastName} />
+                          </Link>
+                        ) : (
+                          '—'
+                        ),
+                      },
+                      {
+                        label: 'Expires',
+                        value: item.expiresOn ? (
+                          <span
+                            className={
+                              expiringIn !== null && expiringIn < 0
+                                ? 'text-red-700'
+                                : expiringIn !== null && expiringIn <= 30
+                                  ? 'text-amber-700'
+                                  : ''
+                            }
+                          >
+                            <GeneratedValue value={item.expiresOn} />
+                            <GeneratedValue
+                              value={
+                                expiringIn !== null
+                                  ? ` (${expiringIn < 0 ? `${-expiringIn}d overdue` : `${expiringIn}d`})`
                                   : ''
                               }
-                            >
-                              {item.nextInspectionDue}
-                            </span>
-                          ) : (
-                            '—'
-                          ),
-                        },
-                      ]
-                    : []),
-                  ...(showCertificates
-                    ? [
-                        { label: 'Last certificate', value: item.lastAnnualInspectionOn ?? '—' },
-                        {
-                          label: 'Next certificate due',
-                          value: item.nextAnnualInspectionDue ? (
-                            <span
-                              className={
-                                annualDueIn !== null && annualDueIn < 0 ? 'text-red-700' : ''
-                              }
-                            >
-                              {item.nextAnnualInspectionDue}
-                            </span>
-                          ) : (
-                            '—'
-                          ),
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </Section>
-
-            <CustomFieldsSection
-              ctx={ctx}
-              entityKind="ppe"
-              recordId={item.id}
-              subtypeId={item.typeId}
-              metadata={item.metadata}
-              locked={!canManage}
-            />
-          </div>
-        ) : null}
-
-        {active === 'inspections' ? (
-          <>
-            <Section
-              title={`Inspections (${countData.inspections})`}
-              actions={
-                <div className="flex items-center gap-2">
-                  {hasPreUse ? (
-                    <Link
-                      href={
-                        `${basePath}?tab=inspections&drawer=record-inspection&kind=pre_use` as any
-                      }
-                    >
-                      <Button size="sm">
-                        <ClipboardCheck size={14} /> Pre-use
-                      </Button>
-                    </Link>
-                  ) : null}
-                  {hasAnnual ? (
-                    <Link
-                      href={
-                        `${basePath}?tab=inspections&drawer=record-inspection&kind=annual` as any
-                      }
-                    >
-                      <Button size="sm" variant={hasPreUse ? 'outline' : 'default'}>
-                        <ShieldCheck size={14} /> Annual
-                      </Button>
-                    </Link>
-                  ) : null}
-                </div>
-              }
-            >
-              <TableToolbar className="mb-3">
-                <SearchInput
-                  placeholder="Search inspections…"
-                  paramKey={listKeys.q}
-                  pageParamKey={listKeys.page}
-                />
-                <FilterChips
-                  basePath={basePath}
-                  currentParams={sp}
-                  paramKey={listKeys.filter}
-                  pageParamKey={listKeys.page}
-                  label="Result"
-                  options={[...INSPECTION_FILTERS]}
-                />
-              </TableToolbar>
-              {inspections.length === 0 ? (
-                <EmptyState
-                  icon={<ClipboardCheck size={24} />}
-                  title="No inspections recorded"
-                  action={
-                    <Link
-                      href={
-                        `${basePath}?tab=inspections&drawer=record-inspection&kind=${hasPreUse ? 'pre_use' : 'annual'}` as any
-                      }
-                    >
-                      <Button size="sm" variant="outline">
-                        <ClipboardCheck size={14} /> Record {hasPreUse ? 'pre-use' : 'annual'}{' '}
-                        inspection
-                      </Button>
-                    </Link>
-                  }
-                />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Kind</TableHead>
-                      <TableHead>Result</TableHead>
-                      <TableHead>Inspector</TableHead>
-                      <TableHead>Next due</TableHead>
-                      <TableHead>Notes</TableHead>
-                      <TableHead>CA</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {inspections.map((row) => {
-                      const ca = itemCAs.find((c) => c.sourceEntityId === row.insp.id)
-                      const criteria = inspectionEvidence.criteria.filter(
-                        (criterion) => criterion.inspectionId === row.insp.id,
-                      )
-                      const recordPhotos = inspectionEvidence.photoLinks.filter(
-                        ({ link }) =>
-                          link.inspectionId === row.insp.id && link.criterionResultId === null,
-                      )
-                      return (
-                        <Fragment key={row.insp.id}>
-                          <TableRow>
-                            <TableCell>{row.insp.inspectedOn ?? '—'}</TableCell>
-                            <TableCell>{row.insp.kind.replace('_', ' ')}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={
-                                  row.insp.result === 'pass'
-                                    ? 'success'
-                                    : row.insp.result === 'fail'
-                                      ? 'destructive'
-                                      : 'secondary'
-                                }
-                              >
-                                {row.insp.status === 'in_progress'
-                                  ? 'in progress'
-                                  : (row.insp.result?.replace('_', ' ') ?? '—')}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{row.insp.inspectorNameSnapshot ?? '—'}</TableCell>
-                            <TableCell>{row.insp.nextDueOn ?? '—'}</TableCell>
-                            <TableCell className="text-slate-600">
-                              {row.insp.notes ?? '—'}
-                            </TableCell>
-                            <TableCell>
-                              {ca ? (
-                                <Link
-                                  href={`/corrective-actions/${ca.id}`}
-                                  className="text-teal-700 hover:underline"
+                            />
+                          </span>
+                        ) : (
+                          '—'
+                        ),
+                      },
+                      ...(hasInspections
+                        ? [
+                            { label: 'Last inspection', value: item.lastInspectionOn ?? '—' },
+                            {
+                              label: 'Next inspection due',
+                              value: item.nextInspectionDue ? (
+                                <span
+                                  className={
+                                    inspectionDueIn !== null && inspectionDueIn < 0
+                                      ? 'text-red-700'
+                                      : ''
+                                  }
                                 >
-                                  {ca.reference}
-                                </Link>
+                                  <GeneratedValue value={item.nextInspectionDue} />
+                                </span>
                               ) : (
                                 '—'
-                              )}
-                            </TableCell>
-                          </TableRow>
-                          <TableRow className="bg-slate-50/70 hover:bg-slate-50/70 dark:bg-slate-950/30 dark:hover:bg-slate-950/30">
-                            <TableCell colSpan={7} className="py-2">
-                              <details>
-                                <summary className="cursor-pointer text-sm font-medium text-teal-700 dark:text-teal-300">
-                                  View checklist ({criteria.length} item
-                                  {criteria.length === 1 ? '' : 's'}
-                                  {recordPhotos.length > 0
-                                    ? `, ${recordPhotos.length} general photo${recordPhotos.length === 1 ? '' : 's'}`
-                                    : ''}
-                                  )
-                                </summary>
-                                <div className="mt-3 space-y-2">
-                                  {criteria.length === 0 ? (
-                                    <p className="text-sm text-slate-500">
-                                      No criterion evidence is stored for this inspection.
-                                    </p>
-                                  ) : (
-                                    <ol className="space-y-2">
-                                      {criteria.map((criterion) => {
-                                        const photos = inspectionEvidence.photoLinks.filter(
-                                          ({ link }) => link.criterionResultId === criterion.id,
-                                        )
-                                        return (
-                                          <li
-                                            key={criterion.id}
-                                            className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
-                                          >
-                                            <div className="flex flex-wrap items-start justify-between gap-2">
-                                              <div className="min-w-0">
-                                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                                  {criterion.sequence + 1}.{' '}
-                                                  {criterion.questionTextSnapshot}
-                                                </p>
-                                                {criterion.descriptionSnapshot ? (
-                                                  <p className="mt-1 text-xs text-slate-500">
-                                                    {criterion.descriptionSnapshot}
-                                                  </p>
-                                                ) : null}
-                                              </div>
-                                              <div className="flex items-center gap-1.5">
-                                                <Badge variant="secondary">
-                                                  {criterion.severity}
-                                                </Badge>
-                                                <Badge
-                                                  variant={
-                                                    criterion.answer === 'pass'
-                                                      ? 'success'
-                                                      : criterion.answer === 'fail'
-                                                        ? 'destructive'
-                                                        : 'secondary'
-                                                  }
-                                                >
-                                                  {criterion.answer?.replace('_', ' ') ??
-                                                    'not answered'}
-                                                </Badge>
-                                              </div>
-                                            </div>
-                                            {criterion.nonComplianceReason ? (
-                                              <p className="mt-2 text-sm text-red-700 dark:text-red-300">
-                                                {criterion.nonComplianceReason}
-                                              </p>
-                                            ) : null}
-                                            {photos.length > 0 ? (
-                                              <div className="mt-3 flex flex-wrap gap-2">
-                                                {photos.map(({ attachment }) => (
-                                                  <a
-                                                    key={attachment.id}
-                                                    href={attachmentUrl(attachment.id)}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    title={attachment.filename}
-                                                    className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
-                                                  >
-                                                    <RawImage
-                                                      src={attachmentUrl(attachment.id)}
-                                                      alt={attachment.filename}
-                                                      optimizationReason="authenticated"
-                                                      className="h-full w-full object-cover"
-                                                    />
-                                                  </a>
-                                                ))}
-                                              </div>
-                                            ) : null}
-                                          </li>
-                                        )
-                                      })}
-                                    </ol>
-                                  )}
-                                  {recordPhotos.length > 0 ? (
-                                    <div>
-                                      <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                                        General inspection photos
-                                      </p>
-                                      <div className="flex flex-wrap gap-2">
-                                        {recordPhotos.map(({ attachment }) => (
-                                          <a
-                                            key={attachment.id}
-                                            href={attachmentUrl(attachment.id)}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            title={attachment.filename}
-                                            className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
-                                          >
-                                            <RawImage
-                                              src={attachmentUrl(attachment.id)}
-                                              alt={attachment.filename}
-                                              optimizationReason="authenticated"
-                                              className="h-full w-full object-cover"
-                                            />
-                                          </a>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </details>
-                            </TableCell>
-                          </TableRow>
-                        </Fragment>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-              <Pagination
-                basePath={basePath}
-                currentParams={sp}
-                total={listData.filteredTotal}
-                page={listParams.page}
-                perPage={listParams.perPage}
-                pageParamKey={listKeys.page}
-              />
-            </Section>
-          </>
-        ) : null}
+                              ),
+                            },
+                          ]
+                        : []),
+                      ...(showCertificates
+                        ? [
+                            {
+                              label: 'Last certificate',
+                              value: item.lastAnnualInspectionOn ?? '—',
+                            },
+                            {
+                              label: 'Next certificate due',
+                              value: item.nextAnnualInspectionDue ? (
+                                <span
+                                  className={
+                                    annualDueIn !== null && annualDueIn < 0 ? 'text-red-700' : ''
+                                  }
+                                >
+                                  <GeneratedValue value={item.nextAnnualInspectionDue} />
+                                </span>
+                              ) : (
+                                '—'
+                              ),
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </Section>
 
-        {active === 'annual' ? (
-          <Section
-            title={`Certificates (${countData.annual})`}
-            subtitle="Third-party recertification certificates (e.g. annual harness or fall-arrest inspections)."
-            actions={
-              canManage ? (
-                <Link href={`${basePath}?tab=annual&drawer=add-certificate` as any}>
-                  <Button size="sm">
-                    <Plus size={14} /> Add certificate
-                  </Button>
-                </Link>
-              ) : null
-            }
-          >
-            <TableToolbar className="mb-3">
-              <SearchInput
-                placeholder="Search certificates…"
-                paramKey={listKeys.q}
-                pageParamKey={listKeys.page}
-              />
-              <FilterChips
-                basePath={basePath}
-                currentParams={sp}
-                paramKey={listKeys.filter}
-                pageParamKey={listKeys.page}
-                label="Result"
-                options={[...CERTIFICATE_RESULTS]}
-              />
-            </TableToolbar>
-            {annualRecords.length === 0 ? (
-              <EmptyState
-                icon={<ShieldCheck size={24} />}
-                title="No certificates yet"
-                description="Upload the most recent third-party recertification to start the history."
-                action={
+                <CustomFieldsSection
+                  ctx={ctx}
+                  entityKind="ppe"
+                  recordId={item.id}
+                  subtypeId={item.typeId}
+                  metadata={item.metadata}
+                  locked={!canManage}
+                />
+              </div>
+            ) : null
+          }
+        />
+
+        <GeneratedValue
+          value={
+            active === 'inspections' ? (
+              <>
+                <Section
+                  title={tGenerated('m_08c2969a69d2fe', { value0: countData.inspections })}
+                  actions={
+                    <div className="flex items-center gap-2">
+                      <GeneratedValue
+                        value={
+                          hasPreUse ? (
+                            <Link
+                              href={
+                                `${basePath}?tab=inspections&drawer=record-inspection&kind=pre_use` as any
+                              }
+                            >
+                              <Button size="sm">
+                                <ClipboardCheck size={14} /> <GeneratedText id="m_0169e159d93a5b" />
+                              </Button>
+                            </Link>
+                          ) : null
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          hasAnnual ? (
+                            <Link
+                              href={
+                                `${basePath}?tab=inspections&drawer=record-inspection&kind=annual` as any
+                              }
+                            >
+                              <Button size="sm" variant={hasPreUse ? 'outline' : 'default'}>
+                                <ShieldCheck size={14} /> <GeneratedText id="m_1a86ff2774c6a1" />
+                              </Button>
+                            </Link>
+                          ) : null
+                        }
+                      />
+                    </div>
+                  }
+                >
+                  <TableToolbar className="mb-3">
+                    <SearchInput
+                      placeholder={tGenerated('m_0412484b36fdef')}
+                      paramKey={listKeys.q}
+                      pageParamKey={listKeys.page}
+                    />
+                    <FilterChips
+                      basePath={basePath}
+                      currentParams={sp}
+                      paramKey={listKeys.filter}
+                      pageParamKey={listKeys.page}
+                      label={tGenerated('m_100e41041dbe51')}
+                      options={[...INSPECTION_FILTERS]}
+                    />
+                  </TableToolbar>
+                  <GeneratedValue
+                    value={
+                      inspections.length === 0 ? (
+                        <EmptyState
+                          icon={<ClipboardCheck size={24} />}
+                          title={tGenerated('m_128fa3f1eca160')}
+                          action={
+                            <Link
+                              href={
+                                `${basePath}?tab=inspections&drawer=record-inspection&kind=${hasPreUse ? 'pre_use' : 'annual'}` as any
+                              }
+                            >
+                              <Button size="sm" variant="outline">
+                                <ClipboardCheck size={14} /> <GeneratedText id="m_04b73b25d3382c" />{' '}
+                                <GeneratedValue
+                                  value={
+                                    hasPreUse ? (
+                                      <GeneratedText id="m_1d73764ccc174e" />
+                                    ) : (
+                                      <GeneratedText id="m_13f2e02bbd7b16" />
+                                    )
+                                  }
+                                />
+                                <GeneratedValue value={' '} />
+                                <GeneratedText id="m_1383222293f273" />
+                              </Button>
+                            </Link>
+                          }
+                        />
+                      ) : (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>
+                                <GeneratedText id="m_0285c38761c540" />
+                              </TableHead>
+                              <TableHead>
+                                <GeneratedText id="m_1e578efe1574cd" />
+                              </TableHead>
+                              <TableHead>
+                                <GeneratedText id="m_100e41041dbe51" />
+                              </TableHead>
+                              <TableHead>
+                                <GeneratedText id="m_08412ea75fe5da" />
+                              </TableHead>
+                              <TableHead>
+                                <GeneratedText id="m_11af411751990f" />
+                              </TableHead>
+                              <TableHead>
+                                <GeneratedText id="m_0b8dadcb78cd08" />
+                              </TableHead>
+                              <TableHead>
+                                <GeneratedText id="m_1dc5fc53bbcb19" />
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            <GeneratedValue
+                              value={inspections.map((row) => {
+                                const ca = itemCAs.find((c) => c.sourceEntityId === row.insp.id)
+                                const criteria = inspectionEvidence.criteria.filter(
+                                  (criterion) => criterion.inspectionId === row.insp.id,
+                                )
+                                const recordPhotos = inspectionEvidence.photoLinks.filter(
+                                  ({ link }) =>
+                                    link.inspectionId === row.insp.id &&
+                                    link.criterionResultId === null,
+                                )
+                                return (
+                                  <Fragment key={row.insp.id}>
+                                    <TableRow>
+                                      <TableCell>
+                                        <GeneratedValue value={row.insp.inspectedOn ?? '—'} />
+                                      </TableCell>
+                                      <TableCell>
+                                        <GeneratedValue value={row.insp.kind.replace('_', ' ')} />
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge
+                                          variant={
+                                            row.insp.result === 'pass'
+                                              ? 'success'
+                                              : row.insp.result === 'fail'
+                                                ? 'destructive'
+                                                : 'secondary'
+                                          }
+                                        >
+                                          <GeneratedValue
+                                            value={
+                                              row.insp.status === 'in_progress' ? (
+                                                <GeneratedText id="m_0860b601eae8f5" />
+                                              ) : (
+                                                (row.insp.result?.replace('_', ' ') ?? '—')
+                                              )
+                                            }
+                                          />
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>
+                                        <GeneratedValue
+                                          value={row.insp.inspectorNameSnapshot ?? '—'}
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        <GeneratedValue value={row.insp.nextDueOn ?? '—'} />
+                                      </TableCell>
+                                      <TableCell className="text-slate-600">
+                                        <GeneratedValue value={row.insp.notes ?? '—'} />
+                                      </TableCell>
+                                      <TableCell>
+                                        <GeneratedValue
+                                          value={
+                                            ca ? (
+                                              <Link
+                                                href={`/corrective-actions/${ca.id}`}
+                                                className="text-teal-700 hover:underline"
+                                              >
+                                                {ca.reference}
+                                              </Link>
+                                            ) : (
+                                              '—'
+                                            )
+                                          }
+                                        />
+                                      </TableCell>
+                                    </TableRow>
+                                    <TableRow className="bg-slate-50/70 hover:bg-slate-50/70 dark:bg-slate-950/30 dark:hover:bg-slate-950/30">
+                                      <TableCell colSpan={7} className="py-2">
+                                        <details>
+                                          <summary className="cursor-pointer text-sm font-medium text-teal-700 dark:text-teal-300">
+                                            <GeneratedText id="m_11bbc82ecbc827" />
+                                            <GeneratedValue value={criteria.length} />{' '}
+                                            <GeneratedText id="m_089f2b1abdb347" />
+                                            <GeneratedValue
+                                              value={
+                                                criteria.length === 1 ? (
+                                                  ''
+                                                ) : (
+                                                  <GeneratedText id="m_00ded356f0f424" />
+                                                )
+                                              }
+                                            />
+                                            <GeneratedValue
+                                              value={
+                                                recordPhotos.length > 0 ? (
+                                                  <GeneratedText
+                                                    id="m_060016377c914d"
+                                                    values={{
+                                                      value0: recordPhotos.length,
+                                                      value1: recordPhotos.length === 1 ? '' : 's',
+                                                    }}
+                                                  />
+                                                ) : (
+                                                  ''
+                                                )
+                                              }
+                                            />
+                                            )
+                                          </summary>
+                                          <div className="mt-3 space-y-2">
+                                            <GeneratedValue
+                                              value={
+                                                criteria.length === 0 ? (
+                                                  <p className="text-sm text-slate-500">
+                                                    <GeneratedText id="m_0b4b0b10211872" />
+                                                  </p>
+                                                ) : (
+                                                  <ol className="space-y-2">
+                                                    {criteria.map((criterion) => {
+                                                      const photos =
+                                                        inspectionEvidence.photoLinks.filter(
+                                                          ({ link }) =>
+                                                            link.criterionResultId === criterion.id,
+                                                        )
+                                                      return (
+                                                        <li
+                                                          key={criterion.id}
+                                                          className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+                                                        >
+                                                          <div className="flex flex-wrap items-start justify-between gap-2">
+                                                            <div className="min-w-0">
+                                                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                                                {criterion.sequence + 1}.{' '}
+                                                                {criterion.questionTextSnapshot}
+                                                              </p>
+                                                              {criterion.descriptionSnapshot ? (
+                                                                <p className="mt-1 text-xs text-slate-500">
+                                                                  {criterion.descriptionSnapshot}
+                                                                </p>
+                                                              ) : null}
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5">
+                                                              <Badge variant="secondary">
+                                                                {criterion.severity}
+                                                              </Badge>
+                                                              <Badge
+                                                                variant={
+                                                                  criterion.answer === 'pass'
+                                                                    ? 'success'
+                                                                    : criterion.answer === 'fail'
+                                                                      ? 'destructive'
+                                                                      : 'secondary'
+                                                                }
+                                                              >
+                                                                {criterion.answer?.replace(
+                                                                  '_',
+                                                                  ' ',
+                                                                ) ?? (
+                                                                  <GeneratedText id="m_001b53ad38955a" />
+                                                                )}
+                                                              </Badge>
+                                                            </div>
+                                                          </div>
+                                                          {criterion.nonComplianceReason ? (
+                                                            <p className="mt-2 text-sm text-red-700 dark:text-red-300">
+                                                              {criterion.nonComplianceReason}
+                                                            </p>
+                                                          ) : null}
+                                                          {photos.length > 0 ? (
+                                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                              {photos.map(({ attachment }) => (
+                                                                <a
+                                                                  key={attachment.id}
+                                                                  href={attachmentUrl(
+                                                                    attachment.id,
+                                                                  )}
+                                                                  target="_blank"
+                                                                  rel="noreferrer"
+                                                                  title={attachment.filename}
+                                                                  className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
+                                                                >
+                                                                  <RawImage
+                                                                    src={attachmentUrl(
+                                                                      attachment.id,
+                                                                    )}
+                                                                    alt={attachment.filename}
+                                                                    optimizationReason="authenticated"
+                                                                    className="h-full w-full object-cover"
+                                                                  />
+                                                                </a>
+                                                              ))}
+                                                            </div>
+                                                          ) : null}
+                                                        </li>
+                                                      )
+                                                    })}
+                                                  </ol>
+                                                )
+                                              }
+                                            />
+                                            <GeneratedValue
+                                              value={
+                                                recordPhotos.length > 0 ? (
+                                                  <div>
+                                                    <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                                                      <GeneratedText id="m_020f32bc59d098" />
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                      {recordPhotos.map(({ attachment }) => (
+                                                        <a
+                                                          key={attachment.id}
+                                                          href={attachmentUrl(attachment.id)}
+                                                          target="_blank"
+                                                          rel="noreferrer"
+                                                          title={attachment.filename}
+                                                          className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
+                                                        >
+                                                          <RawImage
+                                                            src={attachmentUrl(attachment.id)}
+                                                            alt={attachment.filename}
+                                                            optimizationReason="authenticated"
+                                                            className="h-full w-full object-cover"
+                                                          />
+                                                        </a>
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                ) : null
+                                              }
+                                            />
+                                          </div>
+                                        </details>
+                                      </TableCell>
+                                    </TableRow>
+                                  </Fragment>
+                                )
+                              })}
+                            />
+                          </TableBody>
+                        </Table>
+                      )
+                    }
+                  />
+                  <Pagination
+                    basePath={basePath}
+                    currentParams={sp}
+                    total={listData.filteredTotal}
+                    page={listParams.page}
+                    perPage={listParams.perPage}
+                    pageParamKey={listKeys.page}
+                  />
+                </Section>
+              </>
+            ) : null
+          }
+        />
+
+        <GeneratedValue
+          value={
+            active === 'annual' ? (
+              <Section
+                title={tGenerated('m_1fd262203ece8f', { value0: countData.annual })}
+                subtitle={tGenerated('m_11c4501096f50d')}
+                actions={
                   canManage ? (
                     <Link href={`${basePath}?tab=annual&drawer=add-certificate` as any}>
-                      <Button size="sm" variant="outline">
-                        <Plus size={14} /> Add the first certificate
+                      <Button size="sm">
+                        <Plus size={14} /> <GeneratedText id="m_101f8f6eb72ed9" />
                       </Button>
                     </Link>
                   ) : null
                 }
-              />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Year</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Inspector</TableHead>
-                    <TableHead>Result</TableHead>
-                    <TableHead>Next due</TableHead>
-                    <TableHead>Certificate</TableHead>
-                    <TableHead>Notes</TableHead>
-                    {canManage ? <TableHead className="text-right">Actions</TableHead> : null}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {annualRecords.map(({ rec, person, cert }) => (
-                    <TableRow key={rec.id}>
-                      <TableCell className="font-mono">{rec.year}</TableCell>
-                      <TableCell>{rec.inspectedOn}</TableCell>
-                      <TableCell>
-                        {person
-                          ? `${person.firstName} ${person.lastName}`
-                          : rec.inspectorName
-                            ? `${rec.inspectorName}${rec.inspectorCompany ? ` (${rec.inspectorCompany})` : ''}`
-                            : '—'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            rec.result === 'pass'
-                              ? 'success'
-                              : rec.result === 'fail'
-                                ? 'destructive'
-                                : 'warning'
-                          }
-                        >
-                          {rec.result}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-slate-600">{rec.nextDueOn ?? '—'}</TableCell>
-                      <TableCell>
-                        {cert ? (
-                          <a
-                            href={attachmentUrl(cert.id)}
-                            className="inline-flex items-center gap-1.5 text-teal-700 hover:underline"
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <FileText size={13} /> {cert.filename}
-                          </a>
-                        ) : (
-                          <span className="text-slate-400">No file</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-slate-600">{rec.notes ?? '—'}</TableCell>
-                      {canManage ? (
-                        <TableCell className="text-right">
-                          <form action={deleteCertificate} className="inline">
-                            <input type="hidden" name="id" value={rec.id} />
-                            <input type="hidden" name="itemId" value={id} />
-                            <Button
-                              type="submit"
-                              size="sm"
-                              variant="ghost"
-                              aria-label="Delete certificate"
-                            >
-                              <Trash2 size={14} className="text-red-500" />
-                            </Button>
-                          </form>
-                        </TableCell>
-                      ) : null}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-            <Pagination
-              basePath={basePath}
-              currentParams={sp}
-              total={listData.filteredTotal}
-              page={listParams.page}
-              perPage={listParams.perPage}
-              pageParamKey={listKeys.page}
-            />
-          </Section>
-        ) : null}
+              >
+                <TableToolbar className="mb-3">
+                  <SearchInput
+                    placeholder={tGenerated('m_1cba69d6d9c5bb')}
+                    paramKey={listKeys.q}
+                    pageParamKey={listKeys.page}
+                  />
+                  <FilterChips
+                    basePath={basePath}
+                    currentParams={sp}
+                    paramKey={listKeys.filter}
+                    pageParamKey={listKeys.page}
+                    label={tGenerated('m_100e41041dbe51')}
+                    options={[...CERTIFICATE_RESULTS]}
+                  />
+                </TableToolbar>
+                <GeneratedValue
+                  value={
+                    annualRecords.length === 0 ? (
+                      <EmptyState
+                        icon={<ShieldCheck size={24} />}
+                        title={tGenerated('m_067baf881152d0')}
+                        description={tGenerated('m_1d1abf5e55716d')}
+                        action={
+                          canManage ? (
+                            <Link href={`${basePath}?tab=annual&drawer=add-certificate` as any}>
+                              <Button size="sm" variant="outline">
+                                <Plus size={14} /> <GeneratedText id="m_004d3bf67c5039" />
+                              </Button>
+                            </Link>
+                          ) : null
+                        }
+                      />
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>
+                              <GeneratedText id="m_1f69767390b86a" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_0285c38761c540" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_08412ea75fe5da" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_100e41041dbe51" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_11af411751990f" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_162675e3afbec7" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_0b8dadcb78cd08" />
+                            </TableHead>
+                            <GeneratedValue
+                              value={
+                                canManage ? (
+                                  <TableHead className="text-right">
+                                    <GeneratedText id="m_0a7f1858f2ec46" />
+                                  </TableHead>
+                                ) : null
+                              }
+                            />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          <GeneratedValue
+                            value={annualRecords.map(({ rec, person, cert }) => (
+                              <TableRow key={rec.id}>
+                                <TableCell className="font-mono">
+                                  <GeneratedValue value={rec.year} />
+                                </TableCell>
+                                <TableCell>
+                                  <GeneratedValue value={rec.inspectedOn} />
+                                </TableCell>
+                                <TableCell>
+                                  <GeneratedValue
+                                    value={
+                                      person
+                                        ? `${person.firstName} ${person.lastName}`
+                                        : rec.inspectorName
+                                          ? `${rec.inspectorName}${rec.inspectorCompany ? ` (${rec.inspectorCompany})` : ''}`
+                                          : '—'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      rec.result === 'pass'
+                                        ? 'success'
+                                        : rec.result === 'fail'
+                                          ? 'destructive'
+                                          : 'warning'
+                                    }
+                                  >
+                                    <GeneratedValue value={rec.result} />
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  <GeneratedValue value={rec.nextDueOn ?? '—'} />
+                                </TableCell>
+                                <TableCell>
+                                  <GeneratedValue
+                                    value={
+                                      cert ? (
+                                        <a
+                                          href={attachmentUrl(cert.id)}
+                                          className="inline-flex items-center gap-1.5 text-teal-700 hover:underline"
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          <FileText size={13} /> {cert.filename}
+                                        </a>
+                                      ) : (
+                                        <span className="text-slate-400">
+                                          <GeneratedText id="m_0a259ba2018245" />
+                                        </span>
+                                      )
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  <GeneratedValue value={rec.notes ?? '—'} />
+                                </TableCell>
+                                <GeneratedValue
+                                  value={
+                                    canManage ? (
+                                      <TableCell className="text-right">
+                                        <form action={deleteCertificate} className="inline">
+                                          <input type="hidden" name="id" value={rec.id} />
+                                          <input type="hidden" name="itemId" value={id} />
+                                          <Button
+                                            type="submit"
+                                            size="sm"
+                                            variant="ghost"
+                                            aria-label={tGenerated('m_13dcd4064c453a')}
+                                          >
+                                            <Trash2 size={14} className="text-red-500" />
+                                          </Button>
+                                        </form>
+                                      </TableCell>
+                                    ) : null
+                                  }
+                                />
+                              </TableRow>
+                            ))}
+                          />
+                        </TableBody>
+                      </Table>
+                    )
+                  }
+                />
+                <Pagination
+                  basePath={basePath}
+                  currentParams={sp}
+                  total={listData.filteredTotal}
+                  page={listParams.page}
+                  perPage={listParams.perPage}
+                  pageParamKey={listKeys.page}
+                />
+              </Section>
+            ) : null
+          }
+        />
 
-        {active === 'issues' ? (
-          <Section
-            title={`Defect reports (${countData.issues})`}
-            actions={
-              <Link href={`${basePath}?tab=issues&drawer=report-issue` as any}>
-                <Button size="sm" variant="destructive">
-                  <AlertTriangle size={14} /> Report defect
-                </Button>
-              </Link>
-            }
-          >
-            <TableToolbar className="mb-3">
-              <SearchInput
-                placeholder="Search defect reports…"
-                paramKey={listKeys.q}
-                pageParamKey={listKeys.page}
-              />
-              <FilterChips
-                basePath={basePath}
-                currentParams={sp}
-                paramKey={listKeys.filter}
-                pageParamKey={listKeys.page}
-                label="Status"
-                options={[...ISSUE_STATUSES]}
-              />
-            </TableToolbar>
-            {issueReports.length === 0 ? (
-              <EmptyState
-                icon={<AlertTriangle size={24} />}
-                title="No defects reported"
-                description="Report a defect when an item is damaged, contaminated, or fails inspection."
-                action={
+        <GeneratedValue
+          value={
+            active === 'issues' ? (
+              <Section
+                title={tGenerated('m_1288fde4e2b904', { value0: countData.issues })}
+                actions={
                   <Link href={`${basePath}?tab=issues&drawer=report-issue` as any}>
-                    <Button size="sm" variant="outline">
-                      <AlertTriangle size={14} /> Report defect
+                    <Button size="sm" variant="destructive">
+                      <AlertTriangle size={14} /> <GeneratedText id="m_06fa5670ff1458" />
                     </Button>
                   </Link>
                 }
-              />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Reported</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Resolution</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {issueReports.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell>
-                        {formatDate(new Date(r.reportedAt), ctx.timezone, ctx.locale)}
-                      </TableCell>
-                      <TableCell className="text-slate-700">{r.description}</TableCell>
-                      <TableCell className="text-slate-600">{r.source}</TableCell>
-                      <TableCell>
-                        <Badge variant={r.status === 'open' ? 'destructive' : 'success'}>
-                          {r.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-slate-600">{r.resolution ?? '—'}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          {r.status === 'open' ? (
-                            <form action={resolveIssue} className="flex items-center gap-1.5">
-                              <input type="hidden" name="id" value={r.id} />
-                              <input type="hidden" name="itemId" value={id} />
-                              <Input
-                                name="resolution"
-                                placeholder="Resolution…"
-                                className="h-8 w-40"
-                              />
-                              <Button type="submit" size="sm">
-                                Resolve
-                              </Button>
-                            </form>
-                          ) : null}
-                          <Link
-                            href={`/ppe/${id}/issues/${r.id}/pdf` as any}
-                            target="_blank"
-                            className="text-xs text-teal-700 hover:underline"
-                          >
-                            PDF
+              >
+                <TableToolbar className="mb-3">
+                  <SearchInput
+                    placeholder={tGenerated('m_04e72d1b716bb4')}
+                    paramKey={listKeys.q}
+                    pageParamKey={listKeys.page}
+                  />
+                  <FilterChips
+                    basePath={basePath}
+                    currentParams={sp}
+                    paramKey={listKeys.filter}
+                    pageParamKey={listKeys.page}
+                    label={tGenerated('m_0b9da892d6faf0')}
+                    options={[...ISSUE_STATUSES]}
+                  />
+                </TableToolbar>
+                <GeneratedValue
+                  value={
+                    issueReports.length === 0 ? (
+                      <EmptyState
+                        icon={<AlertTriangle size={24} />}
+                        title={tGenerated('m_032436c6bb24a0')}
+                        description={tGenerated('m_07813ddb9b7268')}
+                        action={
+                          <Link href={`${basePath}?tab=issues&drawer=report-issue` as any}>
+                            <Button size="sm" variant="outline">
+                              <AlertTriangle size={14} /> <GeneratedText id="m_06fa5670ff1458" />
+                            </Button>
                           </Link>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-            <Pagination
-              basePath={basePath}
-              currentParams={sp}
-              total={listData.filteredTotal}
-              page={listParams.page}
-              perPage={listParams.perPage}
-              pageParamKey={listKeys.page}
-            />
-          </Section>
-        ) : null}
+                        }
+                      />
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>
+                              <GeneratedText id="m_14dedf0d22e940" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_14d923495cf14c" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_1d05fa7a091a9b" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_0b9da892d6faf0" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_1e0580f7c4c4a5" />
+                            </TableHead>
+                            <TableHead></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          <GeneratedValue
+                            value={issueReports.map((r) => (
+                              <TableRow key={r.id}>
+                                <TableCell>
+                                  <GeneratedValue
+                                    value={formatDate(
+                                      new Date(r.reportedAt),
+                                      ctx.timezone,
+                                      ctx.locale,
+                                    )}
+                                  />
+                                </TableCell>
+                                <TableCell className="text-slate-700">
+                                  <GeneratedValue value={r.description} />
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  <GeneratedValue value={r.source} />
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={r.status === 'open' ? 'destructive' : 'success'}>
+                                    <GeneratedValue value={r.status} />
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  <GeneratedValue value={r.resolution ?? '—'} />
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1.5">
+                                    <GeneratedValue
+                                      value={
+                                        r.status === 'open' ? (
+                                          <form
+                                            action={resolveIssue}
+                                            className="flex items-center gap-1.5"
+                                          >
+                                            <input type="hidden" name="id" value={r.id} />
+                                            <input type="hidden" name="itemId" value={id} />
+                                            <Input
+                                              name="resolution"
+                                              placeholder={tGenerated('m_10078fdb11ccd8')}
+                                              className="h-8 w-40"
+                                            />
+                                            <Button type="submit" size="sm">
+                                              <GeneratedText id="m_12ff63cfbc5634" />
+                                            </Button>
+                                          </form>
+                                        ) : null
+                                      }
+                                    />
+                                    <Link
+                                      href={`/ppe/${id}/issues/${r.id}/pdf` as any}
+                                      target="_blank"
+                                      className="text-xs text-teal-700 hover:underline"
+                                    >
+                                      <GeneratedText id="m_1a2b2ed6729166" />
+                                    </Link>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          />
+                        </TableBody>
+                      </Table>
+                    )
+                  }
+                />
+                <Pagination
+                  basePath={basePath}
+                  currentParams={sp}
+                  total={listData.filteredTotal}
+                  page={listParams.page}
+                  perPage={listParams.perPage}
+                  pageParamKey={listKeys.page}
+                />
+              </Section>
+            ) : null
+          }
+        />
 
-        {active === 'history' ? (
-          <Section title={`Issue / return / replace log (${countData.history})`}>
-            <TableToolbar className="mb-3">
-              <SearchInput
-                placeholder="Search custody history…"
-                paramKey={listKeys.q}
-                pageParamKey={listKeys.page}
-              />
-              <FilterChips
-                basePath={basePath}
-                currentParams={sp}
-                paramKey={listKeys.filter}
-                pageParamKey={listKeys.page}
-                label="Action"
-                options={[...HISTORY_ACTIONS]}
-              />
-            </TableToolbar>
-            {issuesLog.length === 0 ? (
-              <p className="text-sm text-slate-500">No issuance history.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>When</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Person</TableHead>
-                    <TableHead>Note</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {issuesLog.map((row) => (
-                    <TableRow key={row.issue.id}>
-                      <TableCell>
-                        {formatDate(new Date(row.issue.occurredAt), ctx.timezone, ctx.locale)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            row.issue.action === 'issue'
-                              ? 'success'
-                              : row.issue.action === 'discard' ||
-                                  row.issue.action === 'mark_damaged'
-                                ? 'destructive'
-                                : 'secondary'
-                          }
-                        >
-                          {row.issue.action}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {row.person ? (
-                          <Link
-                            href={`/people/${row.person.id}`}
-                            className="text-teal-700 hover:underline"
-                          >
-                            {row.person.firstName} {row.person.lastName}
-                          </Link>
-                        ) : (
-                          '—'
-                        )}
-                      </TableCell>
-                      <TableCell className="text-slate-600">{row.issue.note ?? '—'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-            <Pagination
-              basePath={basePath}
-              currentParams={sp}
-              total={listData.filteredTotal}
-              page={listParams.page}
-              perPage={listParams.perPage}
-              pageParamKey={listKeys.page}
-            />
-          </Section>
-        ) : null}
+        <GeneratedValue
+          value={
+            active === 'history' ? (
+              <Section title={tGenerated('m_1fb7d84bdda0a4', { value0: countData.history })}>
+                <TableToolbar className="mb-3">
+                  <SearchInput
+                    placeholder={tGenerated('m_04e17d6ea8569f')}
+                    paramKey={listKeys.q}
+                    pageParamKey={listKeys.page}
+                  />
+                  <FilterChips
+                    basePath={basePath}
+                    currentParams={sp}
+                    paramKey={listKeys.filter}
+                    pageParamKey={listKeys.page}
+                    label={tGenerated('m_0bad495a7046e9')}
+                    options={[...HISTORY_ACTIONS]}
+                  />
+                </TableToolbar>
+                <GeneratedValue
+                  value={
+                    issuesLog.length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        <GeneratedText id="m_1007a9ede8dc27" />
+                      </p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>
+                              <GeneratedText id="m_13cc128f69897c" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_0bad495a7046e9" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_12e926c9216094" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_16d241f76641bb" />
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          <GeneratedValue
+                            value={issuesLog.map((row) => (
+                              <TableRow key={row.issue.id}>
+                                <TableCell>
+                                  <GeneratedValue
+                                    value={formatDate(
+                                      new Date(row.issue.occurredAt),
+                                      ctx.timezone,
+                                      ctx.locale,
+                                    )}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      row.issue.action === 'issue'
+                                        ? 'success'
+                                        : row.issue.action === 'discard' ||
+                                            row.issue.action === 'mark_damaged'
+                                          ? 'destructive'
+                                          : 'secondary'
+                                    }
+                                  >
+                                    <GeneratedValue value={row.issue.action} />
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <GeneratedValue
+                                    value={
+                                      row.person ? (
+                                        <Link
+                                          href={`/people/${row.person.id}`}
+                                          className="text-teal-700 hover:underline"
+                                        >
+                                          {row.person.firstName} {row.person.lastName}
+                                        </Link>
+                                      ) : (
+                                        '—'
+                                      )
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  <GeneratedValue value={row.issue.note ?? '—'} />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          />
+                        </TableBody>
+                      </Table>
+                    )
+                  }
+                />
+                <Pagination
+                  basePath={basePath}
+                  currentParams={sp}
+                  total={listData.filteredTotal}
+                  page={listParams.page}
+                  perPage={listParams.perPage}
+                  pageParamKey={listKeys.page}
+                />
+              </Section>
+            ) : null
+          }
+        />
       </div>
 
       <GenericSendEmailDialog
         open={pickString(sp.send) === '1'}
-        title={openIssues.length > 0 ? 'Send PPE issue report' : 'Send PPE item summary'}
-        description={
-          openIssues.length > 0
-            ? 'Emails the most-recent open defect report (item summary + the report details) to the addresses you enter below.'
-            : 'Emails a summary of this PPE item (type, serial, status, holder, size, expiry) to the addresses you enter below.'
-        }
+        title={tGeneratedValue(
+          openIssues.length > 0 ? tGenerated('m_00d95acdc378ae') : tGenerated('m_10f9f5d1746a3a'),
+        )}
+        description={tGeneratedValue(
+          openIssues.length > 0 ? tGenerated('m_083a8588b6b8ae') : tGenerated('m_121f949b83c154'),
+        )}
         recipientsHint="Enter at least one recipient — each gets their own copy. Nothing is sent if this is left blank."
         reference={item.serialNumber ?? id.slice(0, 8)}
         defaultSubjectPrefix={openIssues.length > 0 ? 'Action required' : 'FYI'}
@@ -2064,14 +2377,16 @@ export default async function PpeDetailPage({
       <UrlDrawer
         open={drawerKey === 'record-inspection'}
         closeHref={closeHref}
-        title={
-          inspectionKind === 'annual' ? 'Record annual inspection' : 'Record pre-use inspection'
-        }
-        description={
+        title={tGeneratedValue(
           inspectionKind === 'annual'
-            ? 'Answer every annual criterion, describe failures, and add required photos. The result is derived from the answers; high-risk failures create a corrective action.'
-            : 'Answer every pre-use criterion, describe failures, and add required photos. The result is derived from the answers; high-risk failures create a corrective action.'
-        }
+            ? tGenerated('m_0933551cc278f8')
+            : tGenerated('m_024460a277c771'),
+        )}
+        description={tGeneratedValue(
+          inspectionKind === 'annual'
+            ? tGenerated('m_1835964e76a7d5')
+            : tGenerated('m_18e0e5e1c782f7'),
+        )}
         size="lg"
       >
         <PpeInspectionForm
@@ -2086,24 +2401,26 @@ export default async function PpeDetailPage({
       <UrlDrawer
         open={drawerKey === 'report-issue'}
         closeHref={closeHref}
-        title="Report defect"
-        description="Logs a defect report against this PPE item. Open reports surface on the dashboard and the item header."
+        title={tGenerated('m_06fa5670ff1458')}
+        description={tGenerated('m_135cced6f154d0')}
         size="md"
         footer={
           <Button type="submit" form="ppe-report-issue-form" variant="destructive">
-            <AlertTriangle size={14} /> Report defect
+            <AlertTriangle size={14} /> <GeneratedText id="m_06fa5670ff1458" />
           </Button>
         }
       >
         <form id="ppe-report-issue-form" action={reportIssue} className="space-y-3">
           <input type="hidden" name="itemId" value={id} />
           <div className="space-y-1.5">
-            <Label>What's wrong? *</Label>
+            <Label>
+              <GeneratedText id="m_1db672a51e011e" />
+            </Label>
             <Textarea
               name="description"
               rows={6}
               required
-              placeholder="Frayed strap, missing buckle, damage from drop, contamination, etc."
+              placeholder={tGenerated('m_11034845dd4aad')}
             />
           </div>
         </form>
@@ -2112,12 +2429,12 @@ export default async function PpeDetailPage({
       <UrlDrawer
         open={drawerKey === 'issue-to-person'}
         closeHref={closeHref}
-        title="Issue to person"
-        description="Hand this item to a named holder and append an issuance row to the ledger."
+        title={tGenerated('m_10b50a35e0953a')}
+        description={tGenerated('m_1da6c99a41b626')}
         size="md"
         footer={
           <Button type="submit" form="ppe-issue-to-person-form">
-            <UserPlus size={14} /> Issue
+            <UserPlus size={14} /> <GeneratedText id="m_12ac7fffa3512c" />
           </Button>
         }
       >
@@ -2125,7 +2442,9 @@ export default async function PpeDetailPage({
           <input type="hidden" name="itemId" value={id} />
           <input type="hidden" name="status" value="issued" />
           <div className="space-y-1.5">
-            <Label>Holder *</Label>
+            <Label>
+              <GeneratedText id="m_03813d435c147b" />
+            </Label>
             <RemoteSelectField
               name="personId"
               defaultValue={item.currentHolderPersonId ?? ''}
@@ -2139,17 +2458,15 @@ export default async function PpeDetailPage({
                     }
                   : undefined
               }
-              placeholder="Pick a person…"
+              placeholder={tGenerated('m_0ba815306341be')}
               clearable={false}
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Note</Label>
-            <Textarea
-              name="note"
-              rows={3}
-              placeholder="Optional context for the issuance ledger entry"
-            />
+            <Label>
+              <GeneratedText id="m_16d241f76641bb" />
+            </Label>
+            <Textarea name="note" rows={3} placeholder={tGenerated('m_13a81f587a96fe')} />
           </div>
         </form>
       </UrlDrawer>
@@ -2157,40 +2474,50 @@ export default async function PpeDetailPage({
       <UrlDrawer
         open={drawerKey === 'change-status'}
         closeHref={closeHref}
-        title="Change status"
-        description="Mark this item as returned, damaged, discarded, in stock, or expired. Issuing to a person uses the dedicated drawer."
+        title={tGenerated('m_118818fef81797')}
+        description={tGenerated('m_1654fb96b987d2')}
         size="md"
         footer={
           <Button type="submit" form="ppe-change-status-form">
-            <RefreshCw size={14} /> Update status
+            <RefreshCw size={14} /> <GeneratedText id="m_0f931aecc2cfc6" />
           </Button>
         }
       >
         <form id="ppe-change-status-form" action={setStatus} className="space-y-3">
           <input type="hidden" name="itemId" value={id} />
           <div className="space-y-1.5">
-            <Label>New status</Label>
+            <Label>
+              <GeneratedText id="m_0b5f0bfe110fb9" />
+            </Label>
             <Select
               name="status"
               defaultValue={item.status === 'issued' ? 'returned' : item.status}
             >
-              <option value="returned">Returned</option>
-              <option value="in_stock">In stock</option>
-              <option value="damaged">Damaged</option>
-              <option value="discarded">Discarded</option>
-              <option value="expired">Expired</option>
+              <option value="returned">
+                <GeneratedText id="m_0db63ebe793932" />
+              </option>
+              <option value="in_stock">
+                <GeneratedText id="m_04a4449373ab9b" />
+              </option>
+              <option value="damaged">
+                <GeneratedText id="m_16d172eabbfe82" />
+              </option>
+              <option value="discarded">
+                <GeneratedText id="m_06ffdeeb54ee1e" />
+              </option>
+              <option value="expired">
+                <GeneratedText id="m_13f7150c94b182" />
+              </option>
             </Select>
             <p className="text-xs text-slate-500">
-              To issue to a person, use the Issue to person action instead.
+              <GeneratedText id="m_124787d234886f" />
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label>Note</Label>
-            <Textarea
-              name="note"
-              rows={3}
-              placeholder="Optional ledger note for this status change"
-            />
+            <Label>
+              <GeneratedText id="m_16d241f76641bb" />
+            </Label>
+            <Textarea name="note" rows={3} placeholder={tGenerated('m_0b4e7d84715e51')} />
           </div>
         </form>
       </UrlDrawer>

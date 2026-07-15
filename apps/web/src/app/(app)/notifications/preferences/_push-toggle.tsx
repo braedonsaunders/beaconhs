@@ -1,5 +1,9 @@
 'use client'
 
+import { useGeneratedTranslations, useGeneratedValueTranslations } from '@/i18n/generated'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // Per-device Web Push enrolment. Distinct from the category × channel matrix
 // below it: that decides *which* notifications route to the push channel; this
 // card grants OS permission and registers *this browser/device* to receive
@@ -44,6 +48,8 @@ function isStandalone(): boolean {
 }
 
 export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string | null }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [status, setStatus] = useState<Status>('loading')
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -80,7 +86,7 @@ export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string | null }
 
   async function enable() {
     if (!vapidPublicKey) {
-      toast.error('Push is not configured on this server.')
+      toast.error(tGenerated('m_1a9433db6ab8ec'))
       return
     }
     setBusy(true)
@@ -89,7 +95,7 @@ export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string | null }
       if (permission !== 'granted') {
         setStatus(permission === 'denied' ? 'blocked' : 'idle')
         if (permission === 'denied') {
-          toast.error('Notifications are blocked. Enable them in your browser settings.')
+          toast.error(tGenerated('m_008d6cbc66114d'))
         }
         return
       }
@@ -104,7 +110,7 @@ export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string | null }
       }
       if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
         await sub.unsubscribe().catch(() => {})
-        toast.error('Could not read the push subscription.')
+        toast.error(tGenerated('m_15ecd60fb99b5b'))
         return
       }
       const res = await savePushSubscription({
@@ -115,14 +121,14 @@ export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string | null }
       })
       if (res.ok) {
         setStatus('subscribed')
-        toast.success('Push notifications enabled on this device.')
+        toast.success(tGenerated('m_03b10f2aec79b8'))
       } else {
         await sub.unsubscribe().catch(() => {})
-        toast.error(res.error ?? 'Could not save the subscription.')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0cf0e78e0807bc')))
       }
     } catch (err) {
       console.warn('[pwa] push subscribe failed:', err)
-      toast.error('Could not enable push notifications.')
+      toast.error(tGenerated('m_10a53fca470f10'))
     } finally {
       setBusy(false)
     }
@@ -137,10 +143,10 @@ export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string | null }
       if (sub) await sub.unsubscribe().catch(() => {})
       if (endpoint) await removePushSubscription({ endpoint })
       setStatus('idle')
-      toast.success('Push notifications disabled on this device.')
+      toast.success(tGenerated('m_06bbcabdd8bff0'))
     } catch (err) {
       console.warn('[pwa] push unsubscribe failed:', err)
-      toast.error('Could not disable push notifications.')
+      toast.error(tGenerated('m_15dc78f8ecc56e'))
     } finally {
       setBusy(false)
     }
@@ -151,9 +157,11 @@ export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string | null }
     try {
       const res = await sendTestPush()
       if (res.ok) {
-        toast.success(`Test push sent to ${res.sent} device${res.sent === 1 ? '' : 's'}.`)
+        toast.success(
+          tGenerated('m_09107121b21a42', { value0: res.sent, value1: res.sent === 1 ? '' : 's' }),
+        )
       } else {
-        toast.error(res.error ?? 'Could not send the test push.')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0afa5e0f3d14ad')))
       }
     } finally {
       setTesting(false)
@@ -175,70 +183,126 @@ export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string | null }
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-          {status === 'ios-install' ? <Smartphone size={18} /> : <BellRing size={18} />}
+          <GeneratedValue
+            value={status === 'ios-install' ? <Smartphone size={18} /> : <BellRing size={18} />}
+          />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100">
-              Push notifications on this device
+              <GeneratedText id="m_0701db2335ff0b" />
             </h3>
-            {status === 'subscribed' ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
-                <Check size={11} /> On
-              </span>
-            ) : null}
+            <GeneratedValue
+              value={
+                status === 'subscribed' ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                    <Check size={11} /> <GeneratedText id="m_0738c9c7544385" />
+                  </span>
+                ) : null
+              }
+            />
           </div>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{description[status]}</p>
+          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+            <GeneratedValue value={description[status]} />
+          </p>
 
-          {status === 'ios-install' ? (
-            <ol className="mt-3 space-y-1.5 text-sm text-slate-600 dark:text-slate-300">
-              <li className="flex items-center gap-2">
-                <span className="text-slate-400 dark:text-slate-500">1.</span>
-                Tap the Share icon
-                <Share size={15} className="text-slate-500 dark:text-slate-400" />
-                in your browser toolbar
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-slate-400 dark:text-slate-500">2.</span>
-                Choose <span className="font-medium">Add to Home Screen</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-slate-400 dark:text-slate-500">3.</span>
-                Open BeaconHS from the new icon, then return here to enable
-              </li>
-            </ol>
-          ) : null}
+          <GeneratedValue
+            value={
+              status === 'ios-install' ? (
+                <ol className="mt-3 space-y-1.5 text-sm text-slate-600 dark:text-slate-300">
+                  <li className="flex items-center gap-2">
+                    <span className="text-slate-400 dark:text-slate-500">1.</span>
+                    <GeneratedText id="m_02cd6a2738a890" />
+                    <Share size={15} className="text-slate-500 dark:text-slate-400" />
+                    <GeneratedText id="m_0b8b304a0c5c91" />
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-slate-400 dark:text-slate-500">2.</span>
+                    <GeneratedText id="m_0a815ce0e3baca" />{' '}
+                    <span className="font-medium">
+                      <GeneratedText id="m_1d4c2089835b29" />
+                    </span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-slate-400 dark:text-slate-500">3.</span>
+                    <GeneratedText id="m_09acfe5d71409a" />
+                  </li>
+                </ol>
+              ) : null
+            }
+          />
 
-          {status === 'idle' ? (
-            <div className="mt-3">
-              <Button type="button" onClick={enable} disabled={busy}>
-                {busy ? <Loader2 size={14} className="animate-spin" /> : <BellRing size={14} />}
-                Enable on this device
-              </Button>
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              status === 'idle' ? (
+                <div className="mt-3">
+                  <Button type="button" onClick={enable} disabled={busy}>
+                    <GeneratedValue
+                      value={
+                        busy ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <BellRing size={14} />
+                        )
+                      }
+                    />
+                    <GeneratedText id="m_180a0f9bd0af49" />
+                  </Button>
+                </div>
+              ) : null
+            }
+          />
 
-          {status === 'subscribed' ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button type="button" onClick={test} disabled={testing || busy}>
-                {testing ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                Send a test push
-              </Button>
-              <Button type="button" variant="outline" onClick={disable} disabled={busy || testing}>
-                {busy ? <Loader2 size={14} className="animate-spin" /> : <BellOff size={14} />}
-                Turn off on this device
-              </Button>
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              status === 'subscribed' ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" onClick={test} disabled={testing || busy}>
+                    <GeneratedValue
+                      value={
+                        testing ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Send size={14} />
+                        )
+                      }
+                    />
+                    <GeneratedText id="m_1b23b0c7c5c899" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={disable}
+                    disabled={busy || testing}
+                  >
+                    <GeneratedValue
+                      value={
+                        busy ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <BellOff size={14} />
+                        )
+                      }
+                    />
+                    <GeneratedText id="m_18257299c963a9" />
+                  </Button>
+                </div>
+              ) : null
+            }
+          />
 
-          {status === 'blocked' ? (
-            <div className="mt-3">
-              <Button type="button" variant="outline" onClick={() => window.location.reload()}>
-                <RotateCw size={14} />
-                Reload
-              </Button>
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              status === 'blocked' ? (
+                <div className="mt-3">
+                  <Button type="button" variant="outline" onClick={() => window.location.reload()}>
+                    <RotateCw size={14} />
+                    <GeneratedText id="m_19e1952e7364a8" />
+                  </Button>
+                </div>
+              ) : null
+            }
+          />
         </div>
       </div>
     </div>

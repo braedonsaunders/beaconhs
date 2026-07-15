@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { and, asc, count, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
 import { notificationGroupMembers, notificationGroups } from '@beaconhs/db/schema'
@@ -11,7 +12,10 @@ import { loadAudienceOptions } from './_options'
 import { NotificationGroupsManager, type GroupRow } from './_manager'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Notification groups' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_086aa4f81b9be9') }
+}
 
 const BASE = '/admin/notifications/groups'
 
@@ -20,6 +24,7 @@ export default async function NotificationGroupsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) redirect('/admin')
   const sp = await searchParams
@@ -99,8 +104,8 @@ export default async function NotificationGroupsPage({
     <PageContainer>
       <div className="space-y-4">
         <DetailHeader
-          title="Notification groups"
-          subtitle="Reusable audiences you can target from any alert — incidents, corrective actions, compliance, Flows, and record shares. A group is a union of roles, departments, sites, crews, people groups, and named individuals (with optional exclusions)."
+          title={tGenerated('m_086aa4f81b9be9')}
+          subtitle={tGenerated('m_0f2b9de7a75008')}
         />
         <NotificationsSubNav active="groups" />
         <NotificationGroupsManager

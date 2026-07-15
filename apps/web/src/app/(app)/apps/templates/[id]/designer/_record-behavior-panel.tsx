@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Record behaviour panel — the "Record" left-rail tab in the App designer.
 //
 // Edits form_templates.recordConfig (jsonb): how a record built from this App
@@ -73,6 +80,8 @@ export function RecordBehaviorPanel({
   initial?: RecordConfig
   roles: { key: string; name: string }[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [editingMode, setEditingMode] = useState<EditingMode>(initial?.editingMode ?? 'guided_fill')
   const [lockEnabled, setLockEnabled] = useState<boolean>(initial?.locking?.enabled ?? false)
   const [trigger, setTrigger] = useState<LockTrigger>(initial?.locking?.trigger ?? 'manual')
@@ -117,56 +126,59 @@ export function RecordBehaviorPanel({
       }
       const res = await updateRecordBehavior({ templateId, recordConfig })
       if (!res.ok) {
-        toast.error(res.error ?? 'Could not save')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0af1983403d12e')))
         return
       }
-      toast.success('Record behaviour saved')
+      toast.success(tGenerated('m_00681575a0664e'))
     })
 
   return (
     <div className="space-y-4">
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        How a record made from this App behaves once it exists — the way it&apos;s edited, and
-        whether finished records can be locked.
+        <GeneratedText id="m_0803b7b920d907" />
       </p>
 
       <section className="space-y-2">
-        <Label className="text-xs">Editing mode</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_0879e428dfc8f6" />
+        </Label>
         <div className="space-y-2">
-          {EDITING_MODES.map((m) => {
-            const active = editingMode === m.value
-            return (
-              <button
-                key={m.value}
-                type="button"
-                onClick={() => setEditingMode(m.value)}
-                aria-pressed={active}
-                className={`flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left transition ${
-                  active
-                    ? 'border-teal-300 bg-teal-50 dark:border-teal-700 dark:bg-teal-950/40'
-                    : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'
-                }`}
-              >
-                <span
-                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+          <GeneratedValue
+            value={EDITING_MODES.map((m) => {
+              const active = editingMode === m.value
+              return (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => setEditingMode(m.value)}
+                  aria-pressed={active}
+                  className={`flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left transition ${
                     active
-                      ? 'border-teal-500 bg-teal-500 text-white'
-                      : 'border-slate-300 dark:border-slate-600'
+                      ? 'border-teal-300 bg-teal-50 dark:border-teal-700 dark:bg-teal-950/40'
+                      : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'
                   }`}
                 >
-                  {active ? <Check size={11} /> : null}
-                </span>
-                <span>
-                  <span className="block text-sm font-medium text-slate-800 dark:text-slate-200">
-                    {m.title}
+                  <span
+                    className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      active
+                        ? 'border-teal-500 bg-teal-500 text-white'
+                        : 'border-slate-300 dark:border-slate-600'
+                    }`}
+                  >
+                    <GeneratedValue value={active ? <Check size={11} /> : null} />
                   </span>
-                  <span className="block text-xs text-slate-500 dark:text-slate-400">
-                    {m.description}
+                  <span>
+                    <span className="block text-sm font-medium text-slate-800 dark:text-slate-200">
+                      <GeneratedValue value={m.title} />
+                    </span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedValue value={m.description} />
+                    </span>
                   </span>
-                </span>
-              </button>
-            )
-          })}
+                </button>
+              )
+            })}
+          />
         </div>
       </section>
 
@@ -180,92 +192,104 @@ export function RecordBehaviorPanel({
           />
           <span>
             <span className="font-medium text-slate-800 dark:text-slate-200">
-              Allow records to be locked
+              <GeneratedText id="m_15cff7e96f61aa" />
             </span>
             <span className="block text-xs text-slate-500 dark:text-slate-400">
-              A locked record is read-only until someone with permission unlocks it.
+              <GeneratedText id="m_1f8c77feb5365e" />
             </span>
           </span>
         </label>
 
-        {lockEnabled ? (
-          <div className="space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-            <div className="space-y-1">
-              <Label className="text-xs">Lock a record</Label>
-              <div className="space-y-1">
-                {LOCK_TRIGGERS.map((opt) => (
-                  <label
-                    key={opt.value}
-                    className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                  >
-                    <input
-                      type="radio"
-                      name="lock-trigger"
-                      checked={trigger === opt.value}
-                      onChange={() => setTrigger(opt.value)}
+        <GeneratedValue
+          value={
+            lockEnabled ? (
+              <div className="space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <div className="space-y-1">
+                  <Label className="text-xs">
+                    <GeneratedText id="m_02e677adb5c678" />
+                  </Label>
+                  <div className="space-y-1">
+                    <GeneratedValue
+                      value={LOCK_TRIGGERS.map((opt) => (
+                        <label
+                          key={opt.value}
+                          className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                        >
+                          <input
+                            type="radio"
+                            name="lock-trigger"
+                            checked={trigger === opt.value}
+                            onChange={() => setTrigger(opt.value)}
+                          />
+                          <span className="text-slate-700 dark:text-slate-300">
+                            <GeneratedValue value={opt.label} />
+                          </span>
+                        </label>
+                      ))}
                     />
-                    <span className="text-slate-700 dark:text-slate-300">{opt.label}</span>
-                  </label>
-                ))}
+                  </div>
+                </div>
+
+                <RoleMultiSelect
+                  label={tGenerated('m_05028cd7450139')}
+                  help="Leave empty to allow anyone with edit access. Admins can always lock."
+                  roles={roles}
+                  selected={lockRoles}
+                  onToggle={(key) => toggleIn(setLockRoles, key)}
+                />
+                <RoleMultiSelect
+                  label={tGenerated('m_1aa712173e01f9')}
+                  help="Leave empty to allow anyone with edit access. Admins can always unlock."
+                  roles={roles}
+                  selected={unlockRoles}
+                  onToggle={(key) => toggleIn(setUnlockRoles, key)}
+                />
+
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={autoLockOnFinalize}
+                    onChange={(e) => setAutoLockOnFinalize(e.target.checked)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">
+                      <GeneratedText id="m_0e15f6f99b6f18" />
+                    </span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_1fb233c2fe56fd" />
+                    </span>
+                  </span>
+                </label>
               </div>
-            </div>
-
-            <RoleMultiSelect
-              label="Who can lock"
-              help="Leave empty to allow anyone with edit access. Admins can always lock."
-              roles={roles}
-              selected={lockRoles}
-              onToggle={(key) => toggleIn(setLockRoles, key)}
-            />
-            <RoleMultiSelect
-              label="Who can unlock"
-              help="Leave empty to allow anyone with edit access. Admins can always unlock."
-              roles={roles}
-              selected={unlockRoles}
-              onToggle={(key) => toggleIn(setUnlockRoles, key)}
-            />
-
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={autoLockOnFinalize}
-                onChange={(e) => setAutoLockOnFinalize(e.target.checked)}
-                className="mt-0.5 h-4 w-4"
-              />
-              <span>
-                <span className="font-medium text-slate-800 dark:text-slate-200">
-                  Lock automatically when finalised
-                </span>
-                <span className="block text-xs text-slate-500 dark:text-slate-400">
-                  Records lock the moment they reach a final state, with no extra step.
-                </span>
-              </span>
-            </label>
-          </div>
-        ) : null}
+            ) : null
+          }
+        />
       </section>
 
       <section className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-700">
         <div className="space-y-0.5">
-          <Label className="text-xs">Record tabs</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_1c3acdb7f9e7b2" />
+          </Label>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Which system tabs appear on a record. Unset defaults to a sensible choice per app.
+            <GeneratedText id="m_023c8de0a422af" />
           </p>
         </div>
         <TabToggle
-          label="Pending review"
+          label={tGenerated('m_08b7d8b7086dea')}
           help="Compliance scoring + sign-off. Off for plain capture apps that don't need review."
           checked={tabReview}
           onChange={setTabReview}
         />
         <TabToggle
-          label="Comments tab"
+          label={tGenerated('m_178ca0601c94ed')}
           help="Let reviewers leave comments on a record."
           checked={tabComments}
           onChange={setTabComments}
         />
         <TabToggle
-          label="Audit trail tab"
+          label={tGenerated('m_1d08c50771a4bc')}
           help="Show the change history tab."
           checked={tabAudit}
           onChange={setTabAudit}
@@ -273,7 +297,15 @@ export function RecordBehaviorPanel({
       </section>
 
       <Button onClick={save} disabled={pending} className="w-full">
-        {pending ? 'Saving…' : 'Save record behaviour'}
+        <GeneratedValue
+          value={
+            pending ? (
+              <GeneratedText id="m_106811f2aac664" />
+            ) : (
+              <GeneratedText id="m_17ba4a8c9186fa" />
+            )
+          }
+        />
       </Button>
     </div>
   )
@@ -299,8 +331,12 @@ function TabToggle({
         className="mt-0.5 h-4 w-4"
       />
       <span>
-        <span className="font-medium text-slate-800 dark:text-slate-200">{label}</span>
-        <span className="block text-xs text-slate-500 dark:text-slate-400">{help}</span>
+        <span className="font-medium text-slate-800 dark:text-slate-200">
+          <GeneratedValue value={label} />
+        </span>
+        <span className="block text-xs text-slate-500 dark:text-slate-400">
+          <GeneratedValue value={help} />
+        </span>
       </span>
     </label>
   )
@@ -321,29 +357,43 @@ function RoleMultiSelect({
 }) {
   return (
     <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
-      {roles.length === 0 ? (
-        <p className="text-xs text-slate-400 dark:text-slate-500">
-          No roles defined for this tenant.
-        </p>
-      ) : (
-        <ul className="space-y-1">
-          {roles.map((r) => (
-            <li key={r.key}>
-              <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
-                <input
-                  type="checkbox"
-                  checked={selected.has(r.key)}
-                  onChange={() => onToggle(r.key)}
-                />
-                <span className="flex-1 text-slate-700 dark:text-slate-300">{r.name}</span>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500">{r.key}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="text-[11px] text-slate-400 dark:text-slate-500">{help}</p>
+      <Label className="text-xs">
+        <GeneratedValue value={label} />
+      </Label>
+      <GeneratedValue
+        value={
+          roles.length === 0 ? (
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              <GeneratedText id="m_008f5a3d7812ab" />
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              <GeneratedValue
+                value={roles.map((r) => (
+                  <li key={r.key}>
+                    <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.key)}
+                        onChange={() => onToggle(r.key)}
+                      />
+                      <span className="flex-1 text-slate-700 dark:text-slate-300">
+                        <GeneratedValue value={r.name} />
+                      </span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                        <GeneratedValue value={r.key} />
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              />
+            </ul>
+          )
+        }
+      />
+      <p className="text-[11px] text-slate-400 dark:text-slate-500">
+        <GeneratedValue value={help} />
+      </p>
     </div>
   )
 }

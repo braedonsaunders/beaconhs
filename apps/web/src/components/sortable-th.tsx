@@ -1,3 +1,4 @@
+import { GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { cn, TableHead } from '@beaconhs/ui'
@@ -48,16 +49,20 @@ function SortLink({
         align === 'right' && 'flex-row-reverse',
       )}
     >
-      {children}
-      {active ? (
-        dir === 'asc' ? (
-          <ArrowUp size={12} className="text-slate-700 dark:text-slate-200" />
-        ) : (
-          <ArrowDown size={12} className="text-slate-700 dark:text-slate-200" />
-        )
-      ) : (
-        <ArrowUpDown size={12} className="text-slate-300" />
-      )}
+      <GeneratedValue value={children} />
+      <GeneratedValue
+        value={
+          active ? (
+            dir === 'asc' ? (
+              <ArrowUp size={12} className="text-slate-700 dark:text-slate-200" />
+            ) : (
+              <ArrowDown size={12} className="text-slate-700 dark:text-slate-200" />
+            )
+          ) : (
+            <ArrowUpDown size={12} className="text-slate-300" />
+          )
+        }
+      />
     </Link>
   )
 }

@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Inline Collabora surface (editing, or native Impress presentation playback).
 //
 // - Fetches a WOPI session via the server action supplied by the host surface,
@@ -53,6 +60,8 @@ export const CollaboraEmbed = forwardRef<
     className?: string
   }
 >(function CollaboraEmbed({ fetchSession, frameName, mode = 'editor', className }, ref) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [session, setSession] = useState<CollaboraSession | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -224,40 +233,69 @@ export const CollaboraEmbed = forwardRef<
         <div className="max-w-md text-center">
           <p className="flex items-center justify-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
             <Presentation size={15} />
-            {session.error === 'not_configured'
-              ? mode === 'presentation'
-                ? 'PowerPoint playback is unavailable'
-                : 'In-browser editing is not configured'
-              : session.error === 'workspace_unavailable'
-                ? 'This workspace is unavailable'
-                : session.error === 'impersonation_blocked'
-                  ? `${mode === 'presentation' ? 'Playback' : 'Editing'} is blocked while viewing as another user`
-                  : session.error === 'access_denied'
-                    ? 'You do not have access to this presentation'
-                    : 'This item has no source file yet'}
+            <GeneratedValue
+              value={
+                session.error === 'not_configured' ? (
+                  mode === 'presentation' ? (
+                    <GeneratedText id="m_03b04f2c9a5b41" />
+                  ) : (
+                    <GeneratedText id="m_0784f424ad139f" />
+                  )
+                ) : session.error === 'workspace_unavailable' ? (
+                  <GeneratedText id="m_054c1502bfc137" />
+                ) : session.error === 'impersonation_blocked' ? (
+                  <GeneratedText
+                    id="m_18d4fc2d9e84b5"
+                    values={{ value0: mode === 'presentation' ? 'Playback' : 'Editing' }}
+                  />
+                ) : session.error === 'access_denied' ? (
+                  <GeneratedText id="m_138cb33820f2eb" />
+                ) : (
+                  <GeneratedText id="m_15869b49360768" />
+                )
+              }
+            />
           </p>
           <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
-            {session.error === 'not_configured'
-              ? mode === 'presentation'
-                ? 'The PowerPoint server did not respond. This presentation cannot be played until it is restored.'
-                : 'The PowerPoint editor did not respond. Try again or contact a platform administrator.'
-              : session.error === 'workspace_unavailable'
-                ? `Ask a platform administrator to restore the workspace before opening ${mode === 'presentation' ? 'the presentation' : 'the editor'}.`
-                : session.error === 'impersonation_blocked'
-                  ? `Exit the impersonation session, then open ${mode === 'presentation' ? 'the presentation' : 'the editor'} as yourself.`
-                  : session.error === 'access_denied'
-                    ? 'Return to the course and use an enrollment or instructor account that can open it.'
-                    : 'Import a file or start a blank one to begin.'}
+            <GeneratedValue
+              value={
+                session.error === 'not_configured' ? (
+                  mode === 'presentation' ? (
+                    <GeneratedText id="m_00922c0e25fb4e" />
+                  ) : (
+                    <GeneratedText id="m_00f626c4fa0e34" />
+                  )
+                ) : session.error === 'workspace_unavailable' ? (
+                  <GeneratedText
+                    id="m_130320500eeb16"
+                    values={{ value0: mode === 'presentation' ? 'the presentation' : 'the editor' }}
+                  />
+                ) : session.error === 'impersonation_blocked' ? (
+                  <GeneratedText
+                    id="m_0a947a2b31e38d"
+                    values={{ value0: mode === 'presentation' ? 'the presentation' : 'the editor' }}
+                  />
+                ) : session.error === 'access_denied' ? (
+                  <GeneratedText id="m_119df2fbc350ca" />
+                ) : (
+                  <GeneratedText id="m_190fd0f0f79fa2" />
+                )
+              }
+            />
           </p>
-          {session.error === 'not_configured' ? (
-            <button
-              type="button"
-              onClick={() => setAttempt((n) => n + 1)}
-              className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-amber-400 px-3 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
-            >
-              Retry
-            </button>
-          ) : null}
+          <GeneratedValue
+            value={
+              session.error === 'not_configured' ? (
+                <button
+                  type="button"
+                  onClick={() => setAttempt((n) => n + 1)}
+                  className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-amber-400 px-3 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
+                >
+                  <GeneratedText id="m_060f1ed88b3989" />
+                </button>
+              ) : null
+            }
+          />
         </div>
       </div>
     )
@@ -265,41 +303,59 @@ export const CollaboraEmbed = forwardRef<
 
   return (
     <div className={cn('relative min-h-0', className)}>
-      {session?.ok ? (
-        <form
-          ref={formRef}
-          action={session.actionUrl}
-          method="POST"
-          target={`collabora-${frameName}`}
-          className="hidden"
-        >
-          <input type="hidden" name="access_token" value={session.accessToken} readOnly />
-          <input
-            type="hidden"
-            name="access_token_ttl"
-            value={String(session.accessTokenTtl)}
-            readOnly
-          />
-        </form>
-      ) : null}
+      <GeneratedValue
+        value={
+          session?.ok ? (
+            <form
+              ref={formRef}
+              action={session.actionUrl}
+              method="POST"
+              target={`collabora-${frameName}`}
+              className="hidden"
+            >
+              <input type="hidden" name="access_token" value={session.accessToken} readOnly />
+              <input
+                type="hidden"
+                name="access_token_ttl"
+                value={String(session.accessTokenTtl)}
+                readOnly
+              />
+            </form>
+          ) : null
+        }
+      />
       <iframe
         ref={iframeRef}
         name={`collabora-${frameName}`}
-        title={mode === 'presentation' ? 'PowerPoint presentation' : 'Editor'}
+        title={tGeneratedValue(
+          mode === 'presentation' ? tGenerated('m_0afabe08c69b48') : tGenerated('m_0030896e629200'),
+        )}
         className="h-full w-full bg-white dark:bg-slate-900"
         allow="autoplay *; clipboard-read *; clipboard-write *; fullscreen *"
         allowFullScreen
       />
-      {!loaded ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-white dark:bg-slate-950">
-          <div className="flex flex-col items-center gap-3">
-            <LogoMark draw animated className="h-16 w-16" />
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              {mode === 'presentation' ? 'Opening PowerPoint…' : 'Opening the editor…'}
-            </span>
-          </div>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          !loaded ? (
+            <div className="absolute inset-0 z-10 grid place-items-center bg-white dark:bg-slate-950">
+              <div className="flex flex-col items-center gap-3">
+                <LogoMark draw animated className="h-16 w-16" />
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <GeneratedValue
+                    value={
+                      mode === 'presentation' ? (
+                        <GeneratedText id="m_1d6945ff37b7bb" />
+                      ) : (
+                        <GeneratedText id="m_17d9ec9feb0904" />
+                      )
+                    }
+                  />
+                </span>
+              </div>
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 })

@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
@@ -21,9 +22,13 @@ import { NOTIFICATION_CATEGORIES } from './_catalog'
 import { NotificationSettingsForm, type ChannelAvailability } from './_form'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Notifications' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_18d4f38ded7c87') }
+}
 
 export default async function NotificationSettingsPage() {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) redirect('/admin')
 
@@ -157,8 +162,8 @@ export default async function NotificationSettingsPage() {
     <PageContainer>
       <div className="space-y-4">
         <DetailHeader
-          title="Notifications"
-          subtitle="Choose who is notified for each kind of alert, through which channels, and how it escalates. These apply tenant-wide; individuals still control their own channels from their inbox settings."
+          title={tGenerated('m_18d4f38ded7c87')}
+          subtitle={tGenerated('m_133c7f1d3c39a0')}
         />
         <NotificationsSubNav active="rules" />
         <NotificationSettingsForm

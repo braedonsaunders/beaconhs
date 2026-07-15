@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Hourglass } from 'lucide-react'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
@@ -14,7 +17,10 @@ import { SortTh } from '@/components/sortable-th'
 import { TableToolbar } from '@/components/table-toolbar'
 import { parseListParams, pickString } from '@/lib/list-params'
 
-export const metadata = { title: 'Corrective action aging' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_112ed207438629') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/corrective-actions/reports/aging'
@@ -81,6 +87,8 @@ export default async function AgingReport({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'age',
@@ -201,35 +209,39 @@ export default async function AgingReport({
         <>
           <CorrectiveActionsSubNav active="aging" />
           <PageHeader
-            title="Corrective action aging"
-            description="Open work bucketed by age — find what's been sitting around too long."
+            title={tGenerated('m_112ed207438629')}
+            description={tGenerated('m_04061670db1e74')}
             back={{ href: '/corrective-actions', label: 'Back to records' }}
           />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {BUCKETS.map((b) => (
-              <div
-                key={b.key}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                    {b.label}
-                  </span>
-                  <Badge className={b.tone} variant="default">
-                    {counts[b.key]}
-                  </Badge>
+            <GeneratedValue
+              value={BUCKETS.map((b) => (
+                <div
+                  key={b.key}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                      <GeneratedValue value={b.label} />
+                    </span>
+                    <Badge className={b.tone} variant="default">
+                      <GeneratedValue value={counts[b.key]} />
+                    </Badge>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={b.help} />
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{b.help}</div>
-              </div>
-            ))}
+              ))}
+            />
           </div>
           <TableToolbar>
-            <SearchInput placeholder="Search ref, title, owner, or site…" />
+            <SearchInput placeholder={tGenerated('m_049dd9970ac051')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="bucket"
-              label="Age"
+              label={tGenerated('m_1fe7464d2a4724')}
               options={BUCKETS.map((bucket) => ({
                 value: bucket.key,
                 label: bucket.label,
@@ -240,7 +252,7 @@ export default async function AgingReport({
               basePath={BASE}
               currentParams={sp}
               paramKey="severity"
-              label="Severity"
+              label={tGenerated('m_168b365cc671bf')}
               options={['low', 'medium', 'high', 'critical'].map((severity) => ({
                 value: severity,
                 label: severity,
@@ -251,7 +263,7 @@ export default async function AgingReport({
               basePath={BASE}
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={['open', 'in_progress', 'pending_verification'].map((status) => ({
                 value: status,
                 label: status.replace('_', ' '),
@@ -262,148 +274,169 @@ export default async function AgingReport({
         </>
       }
     >
-      {pageRows.length === 0 ? (
-        <EmptyState
-          icon={<Hourglass size={32} />}
-          title={enriched.length === 0 ? 'No open corrective actions' : 'No matching actions'}
-          description={
-            enriched.length === 0
-              ? 'Nothing to age — the backlog is empty.'
-              : 'Adjust the search or filters.'
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-                <th className="px-4 py-2">Age bucket</th>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="reference"
-                >
-                  Ref
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="title"
-                >
-                  Title
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="severity"
-                >
-                  Severity
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="status"
-                >
-                  Status
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="owner"
-                >
-                  Owner
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="site"
-                >
-                  Site
-                </SortTh>
-                <th className="px-4 py-2">Assigned</th>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="age"
-                  align="right"
-                  className="text-right"
-                >
-                  Age (days)
-                </SortTh>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {pageRows.map((r) => (
-                <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
-                  <td className="px-4 py-2">
-                    <Badge
-                      className={BUCKETS.find((bucket) => bucket.key === r.bucket)?.tone}
-                      variant="default"
+      <GeneratedValue
+        value={
+          pageRows.length === 0 ? (
+            <EmptyState
+              icon={<Hourglass size={32} />}
+              title={tGeneratedValue(
+                enriched.length === 0
+                  ? tGenerated('m_01baf77931cc70')
+                  : tGenerated('m_0e5996cbd0fb25'),
+              )}
+              description={tGeneratedValue(
+                enriched.length === 0
+                  ? tGenerated('m_18c1c50577773e')
+                  : tGenerated('m_0c29363c482f01'),
+              )}
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
+                    <th className="px-4 py-2">
+                      <GeneratedText id="m_1e4d8e61e66a27" />
+                    </th>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="reference"
                     >
-                      {BUCKETS.find((bucket) => bucket.key === r.bucket)?.label}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2 font-mono text-xs">
-                    <Link href={`/corrective-actions/${r.id}` as any} className="hover:underline">
-                      {r.reference}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2">
-                    <Link
-                      href={`/corrective-actions/${r.id}` as any}
-                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                      <GeneratedText id="m_036b564bb88dfe" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="title"
                     >
-                      {r.title}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2">
-                    <Badge
-                      variant={
-                        r.severity === 'critical' || r.severity === 'high'
-                          ? 'destructive'
-                          : r.severity === 'medium'
-                            ? 'warning'
-                            : 'secondary'
-                      }
+                      <GeneratedText id="m_0decefd558c355" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="severity"
                     >
-                      {r.severity}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2">
-                    <Badge variant="warning">{r.status.replace('_', ' ')}</Badge>
-                  </td>
-                  <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
-                    {r.ownerName ?? '—'}
-                  </td>
-                  <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
-                    {r.siteName ?? '—'}
-                  </td>
-                  <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
-                    {r.assignedOn ?? '—'}
-                  </td>
-                  <td className="px-4 py-2 text-right font-mono text-xs font-medium text-slate-900 dark:text-slate-100">
-                    {r.ageDays}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      <GeneratedText id="m_168b365cc671bf" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="status"
+                    >
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="owner"
+                    >
+                      <GeneratedText id="m_09e0cae12d3f44" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="site"
+                    >
+                      <GeneratedText id="m_020146dd3d3d5a" />
+                    </SortTh>
+                    <th className="px-4 py-2">
+                      <GeneratedText id="m_1f0e0a43fee444" />
+                    </th>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="age"
+                      align="right"
+                      className="text-right"
+                    >
+                      <GeneratedText id="m_021e7347240d37" />
+                    </SortTh>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <GeneratedValue
+                    value={pageRows.map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
+                        <td className="px-4 py-2">
+                          <Badge
+                            className={BUCKETS.find((bucket) => bucket.key === r.bucket)?.tone}
+                            variant="default"
+                          >
+                            <GeneratedValue
+                              value={BUCKETS.find((bucket) => bucket.key === r.bucket)?.label}
+                            />
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2 font-mono text-xs">
+                          <Link
+                            href={`/corrective-actions/${r.id}` as any}
+                            className="hover:underline"
+                          >
+                            <GeneratedValue value={r.reference} />
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2">
+                          <Link
+                            href={`/corrective-actions/${r.id}` as any}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                          >
+                            <GeneratedValue value={r.title} />
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2">
+                          <Badge
+                            variant={
+                              r.severity === 'critical' || r.severity === 'high'
+                                ? 'destructive'
+                                : r.severity === 'medium'
+                                  ? 'warning'
+                                  : 'secondary'
+                            }
+                          >
+                            <GeneratedValue value={r.severity} />
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2">
+                          <Badge variant="warning">
+                            <GeneratedValue value={r.status.replace('_', ' ')} />
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={r.ownerName ?? '—'} />
+                        </td>
+                        <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={r.siteName ?? '—'} />
+                        </td>
+                        <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={r.assignedOn ?? '—'} />
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-xs font-medium text-slate-900 dark:text-slate-100">
+                          <GeneratedValue value={r.ageDays} />
+                        </td>
+                      </tr>
+                    ))}
+                  />
+                </tbody>
+              </table>
+            </div>
+          )
+        }
+      />
       <Pagination
         basePath={BASE}
         currentParams={sp}

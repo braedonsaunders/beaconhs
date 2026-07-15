@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedValue } from '@/i18n/generated'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { Check, ChevronDown } from 'lucide-react'
@@ -80,9 +82,17 @@ export function FilterChips({
               active ? 'text-teal-700/70 dark:text-teal-300' : 'text-slate-500 dark:text-slate-400',
             )}
           >
-            {active ? `${label}:` : label}
+            <GeneratedValue value={active ? `${label}:` : label} />
           </span>
-          {active ? <span className="truncate font-semibold">{active.label}</span> : null}
+          <GeneratedValue
+            value={
+              active ? (
+                <span className="truncate font-semibold">
+                  <GeneratedValue value={active.label} />
+                </span>
+              ) : null
+            }
+          />
           <ChevronDown
             size={14}
             className={cn(
@@ -95,25 +105,31 @@ export function FilterChips({
       }
     >
       <div className="max-h-72 overflow-auto" role="listbox">
-        {!hideAll ? (
-          <FilterItem href={allHref} active={allActive} onSelect={() => setOpen(false)}>
-            {allLabel}
-          </FilterItem>
-        ) : null}
-        {options.map((opt) => (
-          <FilterItem
-            key={opt.value}
-            href={mergeHref(basePath, currentParams, {
-              [paramKey]: opt.value,
-              [pageParamKey]: 1,
-            })}
-            active={current === opt.value}
-            count={opt.count}
-            onSelect={() => setOpen(false)}
-          >
-            {opt.label}
-          </FilterItem>
-        ))}
+        <GeneratedValue
+          value={
+            !hideAll ? (
+              <FilterItem href={allHref} active={allActive} onSelect={() => setOpen(false)}>
+                <GeneratedValue value={allLabel} />
+              </FilterItem>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={options.map((opt) => (
+            <FilterItem
+              key={opt.value}
+              href={mergeHref(basePath, currentParams, {
+                [paramKey]: opt.value,
+                [pageParamKey]: 1,
+              })}
+              active={current === opt.value}
+              count={opt.count}
+              onSelect={() => setOpen(false)}
+            >
+              <GeneratedValue value={opt.label} />
+            </FilterItem>
+          ))}
+        />
       </div>
     </Popover>
   )
@@ -146,17 +162,23 @@ function FilterItem({
       )}
     >
       <Check size={14} className={cn('shrink-0', active ? 'text-teal-600' : 'text-transparent')} />
-      <span className="flex-1 truncate">{children}</span>
-      {typeof count === 'number' ? (
-        <span
-          className={cn(
-            'shrink-0 text-xs tabular-nums',
-            active ? 'text-teal-600' : 'text-slate-400 dark:text-slate-500',
-          )}
-        >
-          {count}
-        </span>
-      ) : null}
+      <span className="flex-1 truncate">
+        <GeneratedValue value={children} />
+      </span>
+      <GeneratedValue
+        value={
+          typeof count === 'number' ? (
+            <span
+              className={cn(
+                'shrink-0 text-xs tabular-nums',
+                active ? 'text-teal-600' : 'text-slate-400 dark:text-slate-500',
+              )}
+            >
+              <GeneratedValue value={count} />
+            </span>
+          ) : null
+        }
+      />
     </Link>
   )
 }

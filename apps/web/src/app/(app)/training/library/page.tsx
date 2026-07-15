@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { FileText, Link2, Paperclip, Presentation, Video } from 'lucide-react'
@@ -26,7 +29,10 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { TrainingSubNav } from '../_components/training-sub-nav'
 import { createContentItem } from './_actions'
 
-export const metadata = { title: 'Content Library' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1f0089a4ed720e') }
+}
 export const dynamic = 'force-dynamic'
 
 const KIND_OPTIONS = [
@@ -55,6 +61,8 @@ export default async function ContentLibraryPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const listParams = parseListParams(sp, {
     sort: 'title',
@@ -143,109 +151,158 @@ export default async function ContentLibraryPage({
       header={
         <>
           <PageHeader
-            title="Content Library"
-            description="Reusable lessons, videos, files, and embeds."
+            title={tGenerated('m_1f0089a4ed720e')}
+            description={tGenerated('m_041bf2ae90961b')}
           />
           <TrainingSubNav active="library" />
           <TableToolbar
             trailing={
               <form action={createContentItem} className="flex items-center gap-1.5">
-                <Input name="title" placeholder="New item title…" className="h-8 w-44" />
+                <Input
+                  name="title"
+                  placeholder={tGenerated('m_1101eeaf71ada7')}
+                  className="h-8 w-44"
+                />
                 <Select name="kind" defaultValue="rich" className="h-8 w-28">
-                  <option value="rich">Lesson</option>
-                  <option value="slides">Slideshow</option>
-                  <option value="video">Video</option>
-                  <option value="file">File</option>
-                  <option value="embed">Embed</option>
+                  <option value="rich">
+                    <GeneratedText id="m_167a70293e1237" />
+                  </option>
+                  <option value="slides">
+                    <GeneratedText id="m_1c373e80a9436f" />
+                  </option>
+                  <option value="video">
+                    <GeneratedText id="m_0813322ae97045" />
+                  </option>
+                  <option value="file">
+                    <GeneratedText id="m_102a42d098d1d2" />
+                  </option>
+                  <option value="embed">
+                    <GeneratedText id="m_1b25408f216531" />
+                  </option>
                 </Select>
                 <Button type="submit" size="sm">
-                  Add
+                  <GeneratedText id="m_16c8592e5020a4" />
                 </Button>
               </form>
             }
           >
-            <SearchInput placeholder="Search library…" />
+            <SearchInput placeholder={tGenerated('m_10dde6040d29e8')} />
             <FilterChips
               basePath="/training/library"
               currentParams={sp}
               paramKey="kind"
-              label="Type"
+              label={tGenerated('m_074ba2f160c506')}
               options={KIND_OPTIONS.map((o) => ({ ...o, count: kindCounts[o.value] }))}
             />
-            {tagVocab.length > 0 ? (
-              <FilterChips
-                basePath="/training/library"
-                currentParams={sp}
-                paramKey="tag"
-                label="Tag"
-                options={tagVocab.map((t) => ({ value: t, label: t }))}
-              />
-            ) : null}
+            <GeneratedValue
+              value={
+                tagVocab.length > 0 ? (
+                  <FilterChips
+                    basePath="/training/library"
+                    currentParams={sp}
+                    paramKey="tag"
+                    label={tGenerated('m_13ba7bb39ca8d9')}
+                    options={tagVocab.map((t) => ({ value: t, label: t }))}
+                  />
+                ) : null
+              }
+            />
           </TableToolbar>
         </>
       }
     >
-      {items.length === 0 ? (
-        <EmptyState
-          icon={<FileText size={32} />}
-          title={
-            q || kindFilter || tagFilter
-              ? 'No items match these filters'
-              : 'Your content library is empty'
-          }
-          description="Create reusable lessons, videos, files, or embeds, then drop them into any course."
-        />
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
-            {items.map((it) => {
-              const used = usageMap[it.id] ?? 0
-              return (
-                <Link key={it.id} href={`/training/library/${it.id}`} className="group block">
-                  <div className="flex h-full flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4 transition-shadow group-hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                        {KIND_ICON[it.kind]}
-                        {KIND_OPTIONS.find((k) => k.value === it.kind)?.label ?? it.kind}
-                      </span>
-                      <Badge variant="secondary">
-                        {used === 0 ? 'unused' : `in ${used} course${used === 1 ? '' : 's'}`}
-                      </Badge>
-                    </div>
-                    <h3 className="truncate font-semibold text-slate-900 dark:text-slate-100">
-                      {it.title}
-                    </h3>
-                    {it.description ? (
-                      <p className="line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
-                        {it.description}
-                      </p>
-                    ) : null}
-                    {it.tags && it.tags.length > 0 ? (
-                      <div className="mt-auto flex flex-wrap gap-1 pt-1">
-                        {it.tags.slice(0, 4).map((t) => (
-                          <span
-                            key={t}
-                            className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                          >
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
-          <Pagination
-            basePath="/training/library"
-            currentParams={sp}
-            total={itemCount}
-            page={listParams.page}
-            perPage={listParams.perPage}
-          />
-        </div>
-      )}
+      <GeneratedValue
+        value={
+          items.length === 0 ? (
+            <EmptyState
+              icon={<FileText size={32} />}
+              title={tGeneratedValue(
+                q || kindFilter || tagFilter
+                  ? tGenerated('m_0fc645de450345')
+                  : tGenerated('m_1a3d06a6f392c7'),
+              )}
+              description={tGenerated('m_1a5195bafec672')}
+            />
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                <GeneratedValue
+                  value={items.map((it) => {
+                    const used = usageMap[it.id] ?? 0
+                    return (
+                      <Link key={it.id} href={`/training/library/${it.id}`} className="group block">
+                        <div className="flex h-full flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4 transition-shadow group-hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                              <GeneratedValue value={KIND_ICON[it.kind]} />
+                              <GeneratedValue
+                                value={
+                                  KIND_OPTIONS.find((k) => k.value === it.kind)?.label ?? it.kind
+                                }
+                              />
+                            </span>
+                            <Badge variant="secondary">
+                              <GeneratedValue
+                                value={
+                                  used === 0 ? (
+                                    <GeneratedText id="m_044bbea37f845d" />
+                                  ) : (
+                                    <GeneratedText
+                                      id="m_1a89361093d7ea"
+                                      values={{ value0: used, value1: used === 1 ? '' : 's' }}
+                                    />
+                                  )
+                                }
+                              />
+                            </Badge>
+                          </div>
+                          <h3 className="truncate font-semibold text-slate-900 dark:text-slate-100">
+                            <GeneratedValue value={it.title} />
+                          </h3>
+                          <GeneratedValue
+                            value={
+                              it.description ? (
+                                <p className="line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
+                                  <GeneratedValue value={it.description} />
+                                </p>
+                              ) : null
+                            }
+                          />
+                          <GeneratedValue
+                            value={
+                              it.tags && it.tags.length > 0 ? (
+                                <div className="mt-auto flex flex-wrap gap-1 pt-1">
+                                  <GeneratedValue
+                                    value={it.tags.slice(0, 4).map((t) => (
+                                      <span
+                                        key={t}
+                                        className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                      >
+                                        {t}
+                                      </span>
+                                    ))}
+                                  />
+                                </div>
+                              ) : null
+                            }
+                          />
+                        </div>
+                      </Link>
+                    )
+                  })}
+                />
+              </div>
+              <Pagination
+                basePath="/training/library"
+                currentParams={sp}
+                total={itemCount}
+                page={listParams.page}
+                perPage={listParams.perPage}
+              />
+            </div>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

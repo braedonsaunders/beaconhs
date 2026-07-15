@@ -1,3 +1,4 @@
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { User } from 'lucide-react'
@@ -15,7 +16,11 @@ export function MobileCardList({
   children: ReactNode
   className?: string
 }) {
-  return <ul className={cn('space-y-2.5 sm:hidden', className)}>{children}</ul>
+  return (
+    <ul className={cn('space-y-2.5 sm:hidden', className)}>
+      <GeneratedValue value={children} />
+    </ul>
+  )
 }
 
 const AVATAR_COLORS = [
@@ -32,6 +37,7 @@ const AVATAR_COLORS = [
 
 /** Initials avatar for the person a record belongs to. */
 function Avatar({ name }: { name: string | null }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const label = name?.trim() || 'Unassigned'
   const parts = label.split(/\s+/)
   const init =
@@ -42,13 +48,13 @@ function Avatar({ name }: { name: string | null }) {
   const color = name ? AVATAR_COLORS[h % AVATAR_COLORS.length] : 'bg-slate-300'
   return (
     <span
-      title={label}
+      title={tGeneratedValue(label)}
       className={cn(
         'grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white',
         color,
       )}
     >
-      {init}
+      <GeneratedValue value={init} />
     </span>
   )
 }
@@ -113,27 +119,59 @@ export function ListCard({
     <div className="min-w-0 flex-1">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          {reference ? (
-            <div className="truncate font-mono text-[11px] font-semibold tracking-wide text-teal-700 dark:text-teal-400">
-              {toPlain(reference)}
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              reference ? (
+                <div className="truncate font-mono text-[11px] font-semibold tracking-wide text-teal-700 dark:text-teal-400">
+                  <GeneratedValue value={toPlain(reference)} />
+                </div>
+              ) : null
+            }
+          />
           <div className="line-clamp-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {toPlain(title)}
+            <GeneratedValue value={toPlain(title)} />
           </div>
         </div>
-        {status ? <div className="shrink-0">{status}</div> : null}
+        <GeneratedValue
+          value={
+            status ? (
+              <div className="shrink-0">
+                <GeneratedValue value={status} />
+              </div>
+            ) : null
+          }
+        />
       </div>
-      {person !== undefined ? (
-        <div className="mt-1.5 flex items-center gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
-          <User size={12} className="shrink-0 text-slate-400" />
-          <span className="truncate">{person?.trim() || 'Unassigned'}</span>
-        </div>
-      ) : null}
-      {meta ? (
-        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{toPlain(meta)}</div>
-      ) : null}
-      {footer ? <div className="mt-2.5 flex flex-wrap items-center gap-1.5">{footer}</div> : null}
+      <GeneratedValue
+        value={
+          person !== undefined ? (
+            <div className="mt-1.5 flex items-center gap-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+              <User size={12} className="shrink-0 text-slate-400" />
+              <span className="truncate">
+                <GeneratedValue value={person?.trim() || <GeneratedText id="m_10d1d0d92a9aaa" />} />
+              </span>
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          meta ? (
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              <GeneratedValue value={toPlain(meta)} />
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          footer ? (
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <GeneratedValue value={footer} />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 
@@ -142,8 +180,8 @@ export function ListCard({
 
   const content = (
     <>
-      {showAvatar ? <Avatar name={avatar} /> : null}
-      {body}
+      <GeneratedValue value={showAvatar ? <Avatar name={avatar} /> : null} />
+      <GeneratedValue value={body} />
     </>
   )
 
@@ -151,46 +189,58 @@ export function ListCard({
   if (leading) {
     return (
       <li className={cn(shell, 'items-start')}>
-        <div className="pt-0.5">{leading}</div>
-        {href ? (
-          <Link href={href as any} className="flex min-w-0 flex-1 gap-3 active:opacity-70">
-            {content}
-          </Link>
-        ) : onClick ? (
-          <button
-            type="button"
-            onClick={onClick}
-            className="flex min-w-0 flex-1 gap-3 text-left active:opacity-70"
-          >
-            {content}
-          </button>
-        ) : (
-          content
-        )}
+        <div className="pt-0.5">
+          <GeneratedValue value={leading} />
+        </div>
+        <GeneratedValue
+          value={
+            href ? (
+              <Link href={href as any} className="flex min-w-0 flex-1 gap-3 active:opacity-70">
+                <GeneratedValue value={content} />
+              </Link>
+            ) : onClick ? (
+              <button
+                type="button"
+                onClick={onClick}
+                className="flex min-w-0 flex-1 gap-3 text-left active:opacity-70"
+              >
+                <GeneratedValue value={content} />
+              </button>
+            ) : (
+              content
+            )
+          }
+        />
       </li>
     )
   }
 
   return (
     <li>
-      {href ? (
-        <Link
-          href={href as any}
-          className={cn(shell, 'active:bg-slate-50 dark:active:bg-slate-800')}
-        >
-          {content}
-        </Link>
-      ) : onClick ? (
-        <button
-          type="button"
-          onClick={onClick}
-          className={cn(shell, 'w-full text-left active:bg-slate-50 dark:active:bg-slate-800')}
-        >
-          {content}
-        </button>
-      ) : (
-        <div className={shell}>{content}</div>
-      )}
+      <GeneratedValue
+        value={
+          href ? (
+            <Link
+              href={href as any}
+              className={cn(shell, 'active:bg-slate-50 dark:active:bg-slate-800')}
+            >
+              <GeneratedValue value={content} />
+            </Link>
+          ) : onClick ? (
+            <button
+              type="button"
+              onClick={onClick}
+              className={cn(shell, 'w-full text-left active:bg-slate-50 dark:active:bg-slate-800')}
+            >
+              <GeneratedValue value={content} />
+            </button>
+          ) : (
+            <div className={shell}>
+              <GeneratedValue value={content} />
+            </div>
+          )
+        }
+      />
     </li>
   )
 }

@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useMemo, useState, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
@@ -34,6 +41,8 @@ export function BulkEquipmentBar({
   canManage: boolean
   canExport: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [action, setAction] = useState<'site' | 'holder' | 'status' | 'export'>(() =>
@@ -55,15 +64,15 @@ export function BulkEquipmentBar({
   if (selectedIds.length === 0 || !mounted) return null
 
   function go() {
-    setError(null)
+    setError(tGeneratedValue(null))
     setInfo(null)
     if (action !== 'export' && !canManage) {
-      setError('You do not have permission to manage equipment.')
+      setError(tGenerated('m_1f2655e7ce2296'))
       return
     }
     if (action === 'site') {
       if (!siteId) {
-        setError('Pick a site.')
+        setError(tGenerated('m_0ea8429976384c'))
         return
       }
       start(async () => {
@@ -72,7 +81,7 @@ export function BulkEquipmentBar({
           siteOrgUnitId: siteId,
         })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
         setInfo(`Transferred ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
@@ -83,7 +92,7 @@ export function BulkEquipmentBar({
     }
     if (action === 'holder') {
       if (!personId) {
-        setError('Pick a holder.')
+        setError(tGenerated('m_03a718e0795f65'))
         return
       }
       start(async () => {
@@ -92,7 +101,7 @@ export function BulkEquipmentBar({
           personId,
         })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
         setInfo(`Assigned ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
@@ -108,7 +117,7 @@ export function BulkEquipmentBar({
           status,
         })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
         setInfo(`Updated ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
@@ -121,7 +130,7 @@ export function BulkEquipmentBar({
     start(async () => {
       const res = await bulkExportEquipmentCsv({ equipmentIds: selectedIds })
       if (!res.ok) {
-        setError(res.error)
+        setError(tGeneratedValue(res.error))
         return
       }
       const blob = new Blob([res.content], { type: 'text/csv;charset=utf-8' })
@@ -145,12 +154,14 @@ export function BulkEquipmentBar({
         <button
           type="button"
           onClick={onClear}
-          aria-label="Clear selection"
+          aria-label={tGenerated('m_1013583a7c0e28')}
           className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <X size={14} />
         </button>
-        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
+        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+          <GeneratedValue value={label} />
+        </span>
 
         <Select
           value={action}
@@ -158,81 +169,145 @@ export function BulkEquipmentBar({
           className="h-8 min-w-[11rem]"
           disabled={pending}
         >
-          {canManage ? <option value="site">Transfer to site</option> : null}
-          {canManage ? <option value="holder">Assign to holder</option> : null}
-          {canManage ? <option value="status">Set status</option> : null}
-          {canExport ? <option value="export">Export selected to CSV</option> : null}
+          <GeneratedValue
+            value={
+              canManage ? (
+                <option value="site">
+                  <GeneratedText id="m_1ae517acfedbc1" />
+                </option>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              canManage ? (
+                <option value="holder">
+                  <GeneratedText id="m_1d6946d1e8f0b4" />
+                </option>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              canManage ? (
+                <option value="status">
+                  <GeneratedText id="m_00da005ac443be" />
+                </option>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              canExport ? (
+                <option value="export">
+                  <GeneratedText id="m_1d9f291cfeb56f" />
+                </option>
+              ) : null
+            }
+          />
         </Select>
 
-        {action === 'site' ? (
-          <div className="flex items-center gap-2">
-            <MapPin size={14} className="text-slate-500" />
-            <RemoteSearchSelect
-              lookup="equipment-custody-sites"
-              value={siteId}
-              onChange={setSiteId}
-              placeholder="Pick site…"
-              searchPlaceholder="Search sites…"
-              sheetTitle="Transfer to site"
-              ariaLabel="Transfer to site"
-              className="min-w-[12rem]"
-              triggerClassName="h-8"
-              disabled={pending}
-            />
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            action === 'site' ? (
+              <div className="flex items-center gap-2">
+                <MapPin size={14} className="text-slate-500" />
+                <RemoteSearchSelect
+                  lookup="equipment-custody-sites"
+                  value={siteId}
+                  onChange={setSiteId}
+                  placeholder={tGenerated('m_172c80e95eae4d')}
+                  searchPlaceholder={tGenerated('m_1931aa93098220')}
+                  sheetTitle="Transfer to site"
+                  ariaLabel="Transfer to site"
+                  className="min-w-[12rem]"
+                  triggerClassName="h-8"
+                  disabled={pending}
+                />
+              </div>
+            ) : null
+          }
+        />
 
-        {action === 'holder' ? (
-          <div className="flex items-center gap-2">
-            <UserCog size={14} className="text-slate-500" />
-            <RemoteSearchSelect
-              lookup="equipment-custody-holders"
-              value={personId}
-              onChange={setPersonId}
-              placeholder="Pick holder…"
-              searchPlaceholder="Search people…"
-              sheetTitle="Assign to holder"
-              ariaLabel="Assign to holder"
-              className="min-w-[14rem]"
-              triggerClassName="h-8"
-              disabled={pending}
-            />
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            action === 'holder' ? (
+              <div className="flex items-center gap-2">
+                <UserCog size={14} className="text-slate-500" />
+                <RemoteSearchSelect
+                  lookup="equipment-custody-holders"
+                  value={personId}
+                  onChange={setPersonId}
+                  placeholder={tGenerated('m_152d48ab44e3a0')}
+                  searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
+                  sheetTitle="Assign to holder"
+                  ariaLabel="Assign to holder"
+                  className="min-w-[14rem]"
+                  triggerClassName="h-8"
+                  disabled={pending}
+                />
+              </div>
+            ) : null
+          }
+        />
 
-        {action === 'status' ? (
-          <div className="flex items-center gap-2">
-            <ToggleRight size={14} className="text-slate-500" />
-            <Select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as EquipmentStatus)}
-              className="h-8 min-w-[11rem]"
-              disabled={pending}
-            >
-              {(Object.keys(STATUS_LABELS) as EquipmentStatus[]).map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABELS[s]}
-                </option>
-              ))}
-            </Select>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            action === 'status' ? (
+              <div className="flex items-center gap-2">
+                <ToggleRight size={14} className="text-slate-500" />
+                <Select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as EquipmentStatus)}
+                  className="h-8 min-w-[11rem]"
+                  disabled={pending}
+                >
+                  <GeneratedValue
+                    value={(Object.keys(STATUS_LABELS) as EquipmentStatus[]).map((s) => (
+                      <option key={s} value={s}>
+                        <GeneratedValue value={STATUS_LABELS[s]} />
+                      </option>
+                    ))}
+                  />
+                </Select>
+              </div>
+            ) : null
+          }
+        />
 
         <Button size="sm" onClick={go} disabled={pending}>
-          {pending ? (
-            'Working…'
-          ) : action === 'export' ? (
-            <span className="inline-flex items-center gap-1">
-              <Download size={14} /> Export
-            </span>
-          ) : (
-            'Apply'
-          )}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_09001dc89c0edf" />
+              ) : action === 'export' ? (
+                <span className="inline-flex items-center gap-1">
+                  <Download size={14} /> <GeneratedText id="m_01edcd3d04ad91" />
+                </span>
+              ) : (
+                <GeneratedText id="m_01185cdc1c20a5" />
+              )
+            }
+          />
         </Button>
-        {error ? <span className="text-xs text-red-600 dark:text-red-400">{error}</span> : null}
-        {info ? (
-          <span className="text-xs text-emerald-700 dark:text-emerald-400">{info}</span>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <span className="text-xs text-red-600 dark:text-red-400">
+                <GeneratedValue value={error} />
+              </span>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            info ? (
+              <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                <GeneratedValue value={info} />
+              </span>
+            ) : null
+          }
+        />
       </div>
     </div>,
     document.body,

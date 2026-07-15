@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // /ppe/types — admin CRUD list of PPE types.
 //
 // Each row shows the type name, category, the count of criteria configured, and
@@ -40,7 +43,10 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
 
-export const metadata = { title: 'PPE types' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0f5423f9b22ae3') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/ppe/types'
@@ -69,6 +75,8 @@ export default async function PpeTypesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'name',
@@ -131,140 +139,178 @@ export default async function PpeTypesPage({
         <>
           <PpeSubNav active="types" />
           <PageHeader
-            title="PPE types"
-            description="PPE catalog with criteria, sizing, and cadence per type."
+            title={tGenerated('m_0f5423f9b22ae3')}
+            description={tGenerated('m_1f13ad253e1349')}
             actions={
               <Link href="/ppe/types/new">
-                <Button>New PPE type</Button>
+                <Button>
+                  <GeneratedText id="m_06547ec49998fb" />
+                </Button>
               </Link>
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search by name or category" />
+            <SearchInput placeholder={tGenerated('m_11a12aae7257b0')} />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<ShieldCheck size={32} />}
-          title={params.q ? `No PPE types match "${params.q}"` : 'No PPE types'}
-          description="Add types like Hard hat, Harness, Safety glasses, Gloves — every PPE item must belong to a type."
-          action={
-            <Link href="/ppe/types/new">
-              <Button>New PPE type</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                    Name
-                  </SortableTh>
-                  <SortableTh {...sortProps} column="category" active={params.sort === 'category'}>
-                    Category
-                  </SortableTh>
-                  <TableHead>Inspectable</TableHead>
-                  <SortableTh
-                    {...sortProps}
-                    column="criteria"
-                    active={params.sort === 'criteria'}
-                    className="text-right"
-                  >
-                    Criteria
-                  </SortableTh>
-                  <SortableTh
-                    {...sortProps}
-                    column="items"
-                    active={params.sort === 'items'}
-                    className="text-right"
-                  >
-                    Items
-                  </SortableTh>
-                  <TableHead className="text-right">Custom fields</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map(({ type: t, itemCount, criteriaCount, fieldCount }) => (
-                  <TableRow key={t.id}>
-                    <TableCell>
-                      <Link
-                        href={`/ppe/types/${t.id}`}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<ShieldCheck size={32} />}
+              title={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_059fe4da628141', { value0: params.q })
+                  : tGenerated('m_0086db99e47e15'),
+              )}
+              description={tGenerated('m_029fde17f662ff')}
+              action={
+                <Link href="/ppe/types/new">
+                  <Button>
+                    <GeneratedText id="m_06547ec49998fb" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                        <GeneratedText id="m_02b18d5c7f6f2d" />
+                      </SortableTh>
+                      <SortableTh
+                        {...sortProps}
+                        column="category"
+                        active={params.sort === 'category'}
                       >
-                        {t.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">
-                      {t.category ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      {t.isInspectable ? (
-                        <Badge variant="success">Yes</Badge>
-                      ) : (
-                        <Badge variant="secondary">No</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant={criteriaCount > 0 ? 'secondary' : 'warning'}>
-                        {criteriaCount}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary">{itemCount}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary">{fieldCount}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-2">
-                        <Link href={`/ppe/types/${t.id}`}>
-                          <Button size="sm" variant="outline">
-                            <Pencil size={12} /> Edit
-                          </Button>
-                        </Link>
-                        <form action={deleteType}>
-                          <input type="hidden" name="id" value={t.id} />
-                          <Button
-                            type="submit"
-                            size="sm"
-                            variant="outline"
-                            disabled={itemCount > 0 || fieldCount > 0}
-                            title={
-                              itemCount > 0 || fieldCount > 0
-                                ? `Cannot delete — ${[
-                                    itemCount > 0 ? `${itemCount} item(s)` : null,
-                                    fieldCount > 0 ? `${fieldCount} scoped custom field(s)` : null,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(' and ')} reference this type`
-                                : 'Delete type'
-                            }
-                          >
-                            <Trash2 size={12} />
-                          </Button>
-                        </form>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <Pagination
-            basePath={BASE}
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                        <GeneratedText id="m_108b41637f364f" />
+                      </SortableTh>
+                      <TableHead>
+                        <GeneratedText id="m_17f3fef7e62178" />
+                      </TableHead>
+                      <SortableTh
+                        {...sortProps}
+                        column="criteria"
+                        active={params.sort === 'criteria'}
+                        className="text-right"
+                      >
+                        <GeneratedText id="m_1a1ce62686f0b8" />
+                      </SortableTh>
+                      <SortableTh
+                        {...sortProps}
+                        column="items"
+                        active={params.sort === 'items'}
+                        className="text-right"
+                      >
+                        <GeneratedText id="m_16f8d81a1560d8" />
+                      </SortableTh>
+                      <TableHead className="text-right">
+                        <GeneratedText id="m_164d658c8fd29c" />
+                      </TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <GeneratedValue
+                      value={rows.map(({ type: t, itemCount, criteriaCount, fieldCount }) => (
+                        <TableRow key={t.id}>
+                          <TableCell>
+                            <Link
+                              href={`/ppe/types/${t.id}`}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={t.name} />
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            <GeneratedValue value={t.category ?? '—'} />
+                          </TableCell>
+                          <TableCell>
+                            <GeneratedValue
+                              value={
+                                t.isInspectable ? (
+                                  <Badge variant="success">
+                                    <GeneratedText id="m_1b34c7d70d09bd" />
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary">
+                                    <GeneratedText id="m_117d1a5e1ef440" />
+                                  </Badge>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={criteriaCount > 0 ? 'secondary' : 'warning'}>
+                              <GeneratedValue value={criteriaCount} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="secondary">
+                              <GeneratedValue value={itemCount} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="secondary">
+                              <GeneratedValue value={fieldCount} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-2">
+                              <Link href={`/ppe/types/${t.id}`}>
+                                <Button size="sm" variant="outline">
+                                  <Pencil size={12} /> <GeneratedText id="m_03a66f9d34ac7b" />
+                                </Button>
+                              </Link>
+                              <form action={deleteType}>
+                                <input type="hidden" name="id" value={t.id} />
+                                <Button
+                                  type="submit"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={itemCount > 0 || fieldCount > 0}
+                                  title={tGeneratedValue(
+                                    itemCount > 0 || fieldCount > 0
+                                      ? tGenerated('m_0ec08428d4f01b', {
+                                          value0: [
+                                            itemCount > 0 ? `${itemCount} item(s)` : null,
+                                            fieldCount > 0
+                                              ? `${fieldCount} scoped custom field(s)`
+                                              : null,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(' and '),
+                                        })
+                                      : tGenerated('m_12fda1066d2e96'),
+                                  )}
+                                >
+                                  <Trash2 size={12} />
+                                </Button>
+                              </form>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    />
+                  </TableBody>
+                </Table>
+              </div>
+              <Pagination
+                basePath={BASE}
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

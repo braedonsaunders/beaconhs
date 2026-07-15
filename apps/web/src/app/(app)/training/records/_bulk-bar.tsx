@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Download, RotateCcw, ShieldOff, X } from 'lucide-react'
@@ -26,6 +33,8 @@ export function BulkTrainingRecordsBar({
   /** training.read.all — gates Export (only all-viewers may bulk-export). */
   canExport: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [action, setAction] = useState<BulkAction>(canManage ? 'renew' : 'export')
@@ -56,7 +65,7 @@ export function BulkTrainingRecordsBar({
   if (actionOptions.length === 0) return null
 
   async function go() {
-    setError(null)
+    setError(tGeneratedValue(null))
     setInfo(null)
     if (action === 'renew') {
       if (
@@ -70,7 +79,7 @@ export function BulkTrainingRecordsBar({
       start(async () => {
         const res = await bulkRenewTrainingRecords({ recordIds: selectedIds })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
         setInfo(`Renewed ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
@@ -94,7 +103,7 @@ export function BulkTrainingRecordsBar({
           reason: reason.trim() || null,
         })
         if (!res.ok) {
-          setError(res.error)
+          setError(tGeneratedValue(res.error))
           return
         }
         setInfo(`Revoked ${res.updated}${res.skipped ? `, skipped ${res.skipped}` : ''}.`)
@@ -107,7 +116,7 @@ export function BulkTrainingRecordsBar({
     start(async () => {
       const res = await bulkExportTrainingRecordsCsv({ recordIds: selectedIds })
       if (!res.ok) {
-        setError(res.error)
+        setError(tGeneratedValue(res.error))
         return
       }
       const blob = new Blob([res.content], { type: 'text/csv;charset=utf-8' })
@@ -129,12 +138,14 @@ export function BulkTrainingRecordsBar({
         <button
           type="button"
           onClick={onClear}
-          aria-label="Clear selection"
+          aria-label={tGenerated('m_1013583a7c0e28')}
           className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <X size={14} />
         </button>
-        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{label}</span>
+        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+          <GeneratedValue value={label} />
+        </span>
 
         <Select
           value={action}
@@ -142,45 +153,69 @@ export function BulkTrainingRecordsBar({
           className="h-8 min-w-[10rem]"
           disabled={pending}
         >
-          {actionOptions.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
+          <GeneratedValue
+            value={actionOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                <GeneratedValue value={o.label} />
+              </option>
+            ))}
+          />
         </Select>
 
-        {action === 'revoke' ? (
-          <input
-            type="text"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason (optional)"
-            className="h-8 w-48 rounded-md border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-            disabled={pending}
-          />
-        ) : null}
+        <GeneratedValue
+          value={
+            action === 'revoke' ? (
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={tGenerated('m_1d2f68230e66e9')}
+                className="h-8 w-48 rounded-md border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                disabled={pending}
+              />
+            ) : null
+          }
+        />
 
         <Button size="sm" onClick={go} disabled={pending}>
-          {pending ? (
-            'Working…'
-          ) : action === 'renew' ? (
-            <span className="inline-flex items-center gap-1">
-              <RotateCcw size={14} /> Renew
-            </span>
-          ) : action === 'revoke' ? (
-            <span className="inline-flex items-center gap-1">
-              <ShieldOff size={14} /> Revoke
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1">
-              <Download size={14} /> Export
-            </span>
-          )}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_09001dc89c0edf" />
+              ) : action === 'renew' ? (
+                <span className="inline-flex items-center gap-1">
+                  <RotateCcw size={14} /> <GeneratedText id="m_1f6557a4319c50" />
+                </span>
+              ) : action === 'revoke' ? (
+                <span className="inline-flex items-center gap-1">
+                  <ShieldOff size={14} /> <GeneratedText id="m_18718dd379a57d" />
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1">
+                  <Download size={14} /> <GeneratedText id="m_01edcd3d04ad91" />
+                </span>
+              )
+            }
+          />
         </Button>
-        {error ? <span className="text-xs text-red-600 dark:text-red-400">{error}</span> : null}
-        {info ? (
-          <span className="text-xs text-emerald-700 dark:text-emerald-400">{info}</span>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <span className="text-xs text-red-600 dark:text-red-400">
+                <GeneratedValue value={error} />
+              </span>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            info ? (
+              <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                <GeneratedValue value={info} />
+              </span>
+            ) : null
+          }
+        />
       </div>
     </div>
   )

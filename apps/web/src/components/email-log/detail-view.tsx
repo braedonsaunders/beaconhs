@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Shared email-log detail — rendered at /admin/email-log/[id] (scope 'tenant')
 // and /platform/email-log/[id] (scope 'platform'). Bodies render in a sandboxed
 // iframe + <pre> so we never execute third-party script tags.
@@ -42,6 +46,8 @@ export async function EmailLogDetailView({
   scope: EmailLogScope
   back: { href: string; label: string }
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
 
   const loadRow = async (tx: Database) => {
@@ -71,34 +77,50 @@ export async function EmailLogDetailView({
       header={
         <DetailHeader
           back={back}
-          title={log.subject}
-          subtitle={`Queued ${formatDateTime(new Date(log.createdAt), ctx.timezone, ctx.locale)}${
-            log.sentAt
+          title={tGeneratedValue(log.subject)}
+          subtitle={tGenerated('m_1ba2554badfb59', {
+            value0: formatDateTime(new Date(log.createdAt), ctx.timezone, ctx.locale),
+            value1: log.sentAt
               ? ` · Sent ${formatDateTime(new Date(log.sentAt), ctx.timezone, ctx.locale)}`
-              : ''
-          }`}
+              : '',
+          })}
           badge={
             <div className="flex items-center gap-2">
-              <Badge variant={statusVariant(log.status)}>{log.status}</Badge>
-              {log.categoryKey ? (
-                <Badge variant="outline" className="font-mono text-[11px]">
-                  {log.categoryKey}
-                </Badge>
-              ) : null}
+              <Badge variant={statusVariant(log.status)}>
+                <GeneratedValue value={log.status} />
+              </Badge>
+              <GeneratedValue
+                value={
+                  log.categoryKey ? (
+                    <Badge variant="outline" className="font-mono text-[11px]">
+                      <GeneratedValue value={log.categoryKey} />
+                    </Badge>
+                  ) : null
+                }
+              />
             </div>
           }
         />
       }
     >
       <div className="space-y-5">
-        <Section title="Envelope" subtitle="From / To / Cc / Bcc">
+        <Section title={tGenerated('m_15e4adc882b93b')} subtitle={tGenerated('m_1ba9ebf4497bf3')}>
           <DetailGrid
             rows={[
-              { label: 'From', value: <span className="font-mono text-xs">{log.fromAddr}</span> },
+              {
+                label: 'From',
+                value: (
+                  <span className="font-mono text-xs">
+                    <GeneratedValue value={log.fromAddr} />
+                  </span>
+                ),
+              },
               {
                 label: 'Reply-to',
                 value: log.replyToAddr ? (
-                  <span className="font-mono text-xs">{log.replyToAddr}</span>
+                  <span className="font-mono text-xs">
+                    <GeneratedValue value={log.replyToAddr} />
+                  </span>
                 ) : (
                   '—'
                 ),
@@ -110,9 +132,13 @@ export async function EmailLogDetailView({
                     '—'
                   ) : (
                     <ul className="space-y-0.5 font-mono text-xs">
-                      {recipients.map((r) => (
-                        <li key={r}>{r}</li>
-                      ))}
+                      <GeneratedValue
+                        value={recipients.map((r) => (
+                          <li key={r}>
+                            <GeneratedValue value={r} />
+                          </li>
+                        ))}
+                      />
                     </ul>
                   ),
               },
@@ -123,9 +149,13 @@ export async function EmailLogDetailView({
                     '—'
                   ) : (
                     <ul className="space-y-0.5 font-mono text-xs">
-                      {cc.map((r) => (
-                        <li key={r}>{r}</li>
-                      ))}
+                      <GeneratedValue
+                        value={cc.map((r) => (
+                          <li key={r}>
+                            <GeneratedValue value={r} />
+                          </li>
+                        ))}
+                      />
                     </ul>
                   ),
               },
@@ -136,9 +166,13 @@ export async function EmailLogDetailView({
                     '—'
                   ) : (
                     <ul className="space-y-0.5 font-mono text-xs">
-                      {bcc.map((r) => (
-                        <li key={r}>{r}</li>
-                      ))}
+                      <GeneratedValue
+                        value={bcc.map((r) => (
+                          <li key={r}>
+                            <GeneratedValue value={r} />
+                          </li>
+                        ))}
+                      />
                     </ul>
                   ),
               },
@@ -149,13 +183,17 @@ export async function EmailLogDetailView({
               },
               {
                 label: 'Tenant',
-                value: tenant?.name ?? <span className="text-slate-400">platform</span>,
+                value: tenant?.name ?? (
+                  <span className="text-slate-400">
+                    <GeneratedText id="m_123000091889d1" />
+                  </span>
+                ),
               },
             ]}
           />
         </Section>
 
-        <Section title="Delivery timeline" subtitle="Lifecycle from queued to terminal status">
+        <Section title={tGenerated('m_02dd8cec1837ae')} subtitle={tGenerated('m_1a329cd239abb4')}>
           <DetailGrid
             rows={[
               {
@@ -183,14 +221,22 @@ export async function EmailLogDetailView({
               {
                 label: 'Provider message id',
                 value: log.providerMessageId ? (
-                  <span className="font-mono text-xs">{log.providerMessageId}</span>
+                  <span className="font-mono text-xs">
+                    <GeneratedValue value={log.providerMessageId} />
+                  </span>
                 ) : (
                   '—'
                 ),
               },
               {
                 label: 'BullMQ job id',
-                value: log.jobId ? <span className="font-mono text-xs">{log.jobId}</span> : '—',
+                value: log.jobId ? (
+                  <span className="font-mono text-xs">
+                    <GeneratedValue value={log.jobId} />
+                  </span>
+                ) : (
+                  '—'
+                ),
               },
               {
                 label: 'HTML size',
@@ -202,52 +248,80 @@ export async function EmailLogDetailView({
               },
             ]}
           />
-          {log.errorMessage ? (
-            <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
-              <div className="mb-1 text-xs font-semibold tracking-wide uppercase">Error</div>
-              <pre className="font-mono text-[12px] whitespace-pre-wrap">{log.errorMessage}</pre>
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              log.errorMessage ? (
+                <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+                  <div className="mb-1 text-xs font-semibold tracking-wide uppercase">
+                    <GeneratedText id="m_1cb826f5006e77" />
+                  </div>
+                  <pre className="font-mono text-[12px] whitespace-pre-wrap">
+                    {log.errorMessage}
+                  </pre>
+                </div>
+              ) : null
+            }
+          />
         </Section>
 
-        {Object.keys(meta).length > 0 ? (
-          <Section title="Meta">
-            <pre className="overflow-x-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-[12px] text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-              {JSON.stringify(meta, null, 2)}
-            </pre>
-          </Section>
-        ) : null}
+        <GeneratedValue
+          value={
+            Object.keys(meta).length > 0 ? (
+              <Section title={tGenerated('m_11206adc9956a4')}>
+                <pre className="overflow-x-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-[12px] text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                  {JSON.stringify(meta, null, 2)}
+                </pre>
+              </Section>
+            ) : null
+          }
+        />
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">HTML body</CardTitle>
+            <CardTitle className="text-base">
+              <GeneratedText id="m_1c02f6ac2cf2ed" />
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {log.htmlBody ? (
-              <iframe
-                title="email-html"
-                sandbox=""
-                srcDoc={log.htmlBody}
-                className="h-[640px] w-full rounded-md border border-slate-200 bg-white"
-              />
-            ) : (
-              <p className="text-sm text-slate-500">No HTML body recorded.</p>
-            )}
+            <GeneratedValue
+              value={
+                log.htmlBody ? (
+                  <iframe
+                    title={tGenerated('m_03ea41a36057c1')}
+                    sandbox=""
+                    srcDoc={log.htmlBody}
+                    className="h-[640px] w-full rounded-md border border-slate-200 bg-white"
+                  />
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    <GeneratedText id="m_0ff4b3247765b0" />
+                  </p>
+                )
+              }
+            />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Text body</CardTitle>
+            <CardTitle className="text-base">
+              <GeneratedText id="m_1f55a9248ef92d" />
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {log.textBody ? (
-              <pre className="max-h-[640px] overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 font-mono text-[12px] whitespace-pre-wrap text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-                {log.textBody}
-              </pre>
-            ) : (
-              <p className="text-sm text-slate-500">No text body recorded.</p>
-            )}
+            <GeneratedValue
+              value={
+                log.textBody ? (
+                  <pre className="max-h-[640px] overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 font-mono text-[12px] whitespace-pre-wrap text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                    {log.textBody}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    <GeneratedText id="m_185b18160a6017" />
+                  </p>
+                )
+              }
+            />
           </CardContent>
         </Card>
       </div>

@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // StationClient — the shared scan-driven check in/out surface.
 // Used by BOTH the in-app station (/equipment/station, authed) and the public
 // mounted-tablet kiosk (/equipment-kiosk, PIN-gated). The two differ only in the
@@ -142,6 +149,8 @@ function useBeeper(enabled: boolean) {
 }
 
 export function StationClient(props: StationClientProps) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const {
     surface,
     tenantName,
@@ -394,15 +403,23 @@ export function StationClient(props: StationClientProps) {
             </div>
             <div>
               <div className={`font-semibold ${big ? 'text-2xl' : 'text-lg'}`}>
-                Check-in / out station
+                <GeneratedText id="m_011f341e191b65" />
               </div>
               <div
                 className={
                   dark ? 'text-sm text-slate-400' : 'text-xs text-slate-500 dark:text-slate-400'
                 }
               >
-                {tenantName}
-                {homeLocationName ? ` · home: ${homeLocationName}` : ''}
+                <GeneratedValue value={tenantName} />
+                <GeneratedValue
+                  value={
+                    homeLocationName ? (
+                      <GeneratedText id="m_0a7b6aa4947a6c" values={{ value0: homeLocationName }} />
+                    ) : (
+                      ''
+                    )
+                  }
+                />
               </div>
             </div>
           </div>
@@ -410,60 +427,88 @@ export function StationClient(props: StationClientProps) {
             <button
               type="button"
               onClick={() => setSoundOn((s) => !s)}
-              title={soundOn ? 'Mute' : 'Unmute'}
+              title={tGeneratedValue(
+                soundOn ? tGenerated('m_10a5fbb2ff3d29') : tGenerated('m_1b91bf2aacb414'),
+              )}
               className={`grid h-9 w-9 place-items-center rounded-lg ${
                 dark
                   ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
               }`}
             >
-              {soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              <GeneratedValue value={soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} />
             </button>
-            {hasCamera ? (
-              <button
-                type="button"
-                onClick={() => setCamOpen(true)}
-                title="Scan with camera"
-                className={`grid h-9 w-9 place-items-center rounded-lg ${
-                  dark
-                    ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
-                }`}
-              >
-                <Camera size={16} />
-              </button>
-            ) : null}
-            {surface === 'app' ? (
-              <button
-                type="button"
-                onClick={toggleKiosk}
-                title={overlay ? 'Exit full screen' : 'Full screen (kiosk)'}
-                className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium ${
-                  dark
-                    ? 'bg-slate-800 text-slate-200 hover:bg-slate-700'
-                    : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900'
-                }`}
-              >
-                {overlay ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-                {overlay ? 'Exit' : 'Kiosk'}
-              </button>
-            ) : null}
-            {kiosk && onExit ? (
-              <button
-                type="button"
-                onClick={onExit}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-800 px-3 text-sm font-medium text-slate-200 hover:bg-slate-700"
-              >
-                <X size={15} /> Lock
-              </button>
-            ) : null}
+            <GeneratedValue
+              value={
+                hasCamera ? (
+                  <button
+                    type="button"
+                    onClick={() => setCamOpen(true)}
+                    title={tGenerated('m_02c5dfd69f92a3')}
+                    className={`grid h-9 w-9 place-items-center rounded-lg ${
+                      dark
+                        ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                    }`}
+                  >
+                    <Camera size={16} />
+                  </button>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                surface === 'app' ? (
+                  <button
+                    type="button"
+                    onClick={toggleKiosk}
+                    title={tGeneratedValue(
+                      overlay ? tGenerated('m_13170d34c93b7d') : tGenerated('m_12f35479024d55'),
+                    )}
+                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium ${
+                      dark
+                        ? 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                        : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900'
+                    }`}
+                  >
+                    <GeneratedValue
+                      value={overlay ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                    />
+                    <GeneratedValue
+                      value={
+                        overlay ? (
+                          <GeneratedText id="m_0fa37c40db012e" />
+                        ) : (
+                          <GeneratedText id="m_084183fe609ceb" />
+                        )
+                      }
+                    />
+                  </button>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                kiosk && onExit ? (
+                  <button
+                    type="button"
+                    onClick={onExit}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-800 px-3 text-sm font-medium text-slate-200 hover:bg-slate-700"
+                  >
+                    <X size={15} /> <GeneratedText id="m_19f2c846c5777a" />
+                  </button>
+                ) : null
+              }
+            />
           </div>
         </div>
 
         {/* ---- context bar: active person + destination + mode ------------- */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1">
-            <Label dark={dark}>Active holder</Label>
+            <Label dark={dark}>
+              <GeneratedText id="m_1b1add08b2dc94" />
+            </Label>
             <RemoteSearchSelect
               lookup={surface === 'app' ? 'equipment-station-holders' : undefined}
               loadOptions={surface === 'kiosk' ? holderOptionsLoader : undefined}
@@ -492,17 +537,19 @@ export function StationClient(props: StationClientProps) {
                     }
                   : undefined
               }
-              placeholder="Scan a badge or pick..."
-              searchPlaceholder="Search people..."
+              placeholder={tGenerated('m_04503ea75bec34')}
+              searchPlaceholder={tGenerated('m_037a6dd15bf3a1')}
               sheetTitle="Active holder"
               ariaLabel="Active holder"
               clearable
-              emptyLabel="No active holder"
+              emptyLabel={tGenerated('m_0c675e3b0fa284')}
               disabled={surface === 'kiosk' && !holderOptionsLoader}
             />
           </div>
           <div className="space-y-1">
-            <Label dark={dark}>Check-out destination</Label>
+            <Label dark={dark}>
+              <GeneratedText id="m_1fe2606b2479cc" />
+            </Label>
             <RemoteSearchSelect
               lookup={surface === 'app' ? 'equipment-station-locations' : undefined}
               loadOptions={surface === 'kiosk' ? locationOptionsLoader : undefined}
@@ -512,50 +559,54 @@ export function StationClient(props: StationClientProps) {
               }}
               onOptionChange={(option) => setDestination(option ?? null)}
               initialOption={destination ?? undefined}
-              placeholder="Pick a destination..."
-              searchPlaceholder="Search locations..."
+              placeholder={tGenerated('m_1d644e29dc6e58')}
+              searchPlaceholder={tGenerated('m_1c7aaef068e315')}
               sheetTitle="Check-out destination"
               ariaLabel="Destination"
               disabled={surface === 'kiosk' && !locationOptionsLoader}
             />
           </div>
           <div className="space-y-1">
-            <Label dark={dark}>Scan does</Label>
+            <Label dark={dark}>
+              <GeneratedText id="m_11220b251d5edc" />
+            </Label>
             <div
               className={`grid grid-cols-3 gap-1 rounded-lg p-1 ${
                 dark ? 'bg-slate-900' : 'bg-slate-100 dark:bg-slate-900'
               }`}
             >
-              {(
-                [
-                  { k: 'toggle', label: 'Toggle', icon: <ArrowLeftRight size={14} /> },
-                  { k: 'out', label: 'Out', icon: <ArrowUpFromLine size={14} /> },
-                  { k: 'in', label: 'In', icon: <ArrowDownToLine size={14} /> },
-                ] as const
-              ).map((opt) => {
-                const active = direction === opt.k
-                return (
-                  <button
-                    key={opt.k}
-                    type="button"
-                    onClick={() => setDirection(opt.k)}
-                    className={`inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold transition ${
-                      active
-                        ? opt.k === 'in'
-                          ? 'bg-emerald-500 text-white'
-                          : opt.k === 'out'
-                            ? 'bg-amber-500 text-white'
-                            : 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                        : dark
-                          ? 'text-slate-400 hover:text-slate-200'
-                          : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
-                    }`}
-                  >
-                    {opt.icon}
-                    {opt.label}
-                  </button>
-                )
-              })}
+              <GeneratedValue
+                value={(
+                  [
+                    { k: 'toggle', label: 'Toggle', icon: <ArrowLeftRight size={14} /> },
+                    { k: 'out', label: 'Out', icon: <ArrowUpFromLine size={14} /> },
+                    { k: 'in', label: 'In', icon: <ArrowDownToLine size={14} /> },
+                  ] as const
+                ).map((opt) => {
+                  const active = direction === opt.k
+                  return (
+                    <button
+                      key={opt.k}
+                      type="button"
+                      onClick={() => setDirection(opt.k)}
+                      className={`inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold transition ${
+                        active
+                          ? opt.k === 'in'
+                            ? 'bg-emerald-500 text-white'
+                            : opt.k === 'out'
+                              ? 'bg-amber-500 text-white'
+                              : 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                          : dark
+                            ? 'text-slate-400 hover:text-slate-200'
+                            : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                      }`}
+                    >
+                      <GeneratedValue value={opt.icon} />
+                      <GeneratedValue value={opt.label} />
+                    </button>
+                  )
+                })}
+              />
             </div>
           </div>
         </div>
@@ -584,7 +635,7 @@ export function StationClient(props: StationClientProps) {
             autoComplete="off"
             autoCapitalize="off"
             spellCheck={false}
-            placeholder="Scan a tag or badge — or type to search"
+            placeholder={tGenerated('m_01ea5981995836')}
             className={`w-full rounded-xl border-2 font-medium transition outline-none disabled:opacity-60 ${
               big ? 'py-6 pr-5 pl-16 text-3xl' : 'py-4 pr-4 pl-12 text-lg'
             } ${
@@ -593,108 +644,167 @@ export function StationClient(props: StationClientProps) {
                 : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400 focus:border-amber-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white'
             }`}
           />
-          {isDesktop &&
-          scanValue.trim().length > 0 &&
-          visibleResults &&
-          (visibleResults.equipment.length > 0 || visibleResults.people.length > 0) ? (
-            <div
-              className={`absolute z-20 mt-1.5 w-full overflow-y-auto rounded-xl border shadow-xl ${
-                big ? 'max-h-[32rem]' : 'max-h-96'
-              } ${
-                dark
-                  ? 'border-slate-700 bg-slate-900'
-                  : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
-              }`}
-            >
-              {visibleResults.people.length > 0 ? (
-                <div className="p-1">
-                  <DropHeader dark={dark}>People — set active holder</DropHeader>
-                  {visibleResults.people.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => pickPerson(p)}
-                      className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left ${
-                        dark ? 'hover:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      <UserRound size={16} className="shrink-0 text-teal-500" />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">{p.name}</span>
-                        <span
-                          className={
-                            dark
-                              ? 'block truncate text-xs text-slate-400'
-                              : 'block truncate text-xs text-slate-500'
-                          }
-                        >
-                          {[p.jobTitle, p.employeeNo].filter(Boolean).join(' · ') || 'Employee'}
-                        </span>
-                      </span>
-                    </button>
-                  ))}
+          <GeneratedValue
+            value={
+              isDesktop &&
+              scanValue.trim().length > 0 &&
+              visibleResults &&
+              (visibleResults.equipment.length > 0 || visibleResults.people.length > 0) ? (
+                <div
+                  className={`absolute z-20 mt-1.5 w-full overflow-y-auto rounded-xl border shadow-xl ${
+                    big ? 'max-h-[32rem]' : 'max-h-96'
+                  } ${
+                    dark
+                      ? 'border-slate-700 bg-slate-900'
+                      : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
+                  }`}
+                >
+                  <GeneratedValue
+                    value={
+                      visibleResults.people.length > 0 ? (
+                        <div className="p-1">
+                          <DropHeader dark={dark}>
+                            <GeneratedText id="m_1415220a1b5ab4" />
+                          </DropHeader>
+                          <GeneratedValue
+                            value={visibleResults.people.map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => pickPerson(p)}
+                                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left ${
+                                  dark
+                                    ? 'hover:bg-slate-800'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                                }`}
+                              >
+                                <UserRound size={16} className="shrink-0 text-teal-500" />
+                                <span className="min-w-0">
+                                  <span className="block truncate text-sm font-medium">
+                                    <GeneratedValue value={p.name} />
+                                  </span>
+                                  <span
+                                    className={
+                                      dark
+                                        ? 'block truncate text-xs text-slate-400'
+                                        : 'block truncate text-xs text-slate-500'
+                                    }
+                                  >
+                                    <GeneratedValue
+                                      value={
+                                        [p.jobTitle, p.employeeNo].filter(Boolean).join(' · ') || (
+                                          <GeneratedText id="m_0d191facfeeb70" />
+                                        )
+                                      }
+                                    />
+                                  </span>
+                                </span>
+                              </button>
+                            ))}
+                          />
+                        </div>
+                      ) : null
+                    }
+                  />
+                  <GeneratedValue
+                    value={
+                      visibleResults.equipment.length > 0 ? (
+                        <div className="p-1">
+                          <DropHeader dark={dark}>
+                            <GeneratedText id="m_112883b51653ef" />{' '}
+                            <GeneratedValue value={scanActionWord(direction)} />
+                          </DropHeader>
+                          <GeneratedValue
+                            value={visibleResults.equipment.map((it) => (
+                              <button
+                                key={it.id}
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => void handleCode(it.assetTag)}
+                                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left ${
+                                  dark
+                                    ? 'hover:bg-slate-800'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                                }`}
+                              >
+                                <PackageCheck
+                                  size={16}
+                                  className={`shrink-0 ${it.isOut ? 'text-amber-500' : 'text-emerald-500'}`}
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium">
+                                    <span className="font-mono text-xs opacity-70">
+                                      <GeneratedValue value={it.assetTag} />
+                                    </span>{' '}
+                                    ·<GeneratedValue value={' '} />
+                                    <GeneratedValue value={it.name} />
+                                  </span>
+                                  <span
+                                    className={
+                                      dark
+                                        ? 'block truncate text-xs text-slate-400'
+                                        : 'block truncate text-xs text-slate-500'
+                                    }
+                                  >
+                                    <GeneratedValue
+                                      value={it.typeName ?? <GeneratedText id="m_17f17df74f7e69" />}
+                                    />
+                                    <GeneratedValue
+                                      value={
+                                        it.isOut && it.holderName ? (
+                                          <GeneratedText
+                                            id="m_0bf146ae8bfb4b"
+                                            values={{ value0: it.holderName }}
+                                          />
+                                        ) : (
+                                          ''
+                                        )
+                                      }
+                                    />
+                                  </span>
+                                </span>
+                                <Badge variant={it.isOut ? 'warning' : 'success'}>
+                                  <GeneratedValue
+                                    value={
+                                      it.isOut ? (
+                                        <GeneratedText id="m_1c07d7f20091c3" />
+                                      ) : (
+                                        <GeneratedText id="m_0e2bad4d6e8bd2" />
+                                      )
+                                    }
+                                  />
+                                </Badge>
+                              </button>
+                            ))}
+                          />
+                        </div>
+                      ) : null
+                    }
+                  />
                 </div>
-              ) : null}
-              {visibleResults.equipment.length > 0 ? (
-                <div className="p-1">
-                  <DropHeader dark={dark}>
-                    Equipment — tap to {scanActionWord(direction)}
-                  </DropHeader>
-                  {visibleResults.equipment.map((it) => (
-                    <button
-                      key={it.id}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => void handleCode(it.assetTag)}
-                      className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left ${
-                        dark ? 'hover:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      <PackageCheck
-                        size={16}
-                        className={`shrink-0 ${it.isOut ? 'text-amber-500' : 'text-emerald-500'}`}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">
-                          <span className="font-mono text-xs opacity-70">{it.assetTag}</span> ·{' '}
-                          {it.name}
-                        </span>
-                        <span
-                          className={
-                            dark
-                              ? 'block truncate text-xs text-slate-400'
-                              : 'block truncate text-xs text-slate-500'
-                          }
-                        >
-                          {it.typeName ?? 'Equipment'}
-                          {it.isOut && it.holderName ? ` · with ${it.holderName}` : ''}
-                        </span>
-                      </span>
-                      <Badge variant={it.isOut ? 'warning' : 'success'}>
-                        {it.isOut ? 'out' : 'in'}
-                      </Badge>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {!isDesktop && visibleResults ? (
-            <MobileStationResultsSheet
-              query={scanValue}
-              results={visibleResults}
-              direction={direction}
-              onQueryChange={setScanValue}
-              onSubmitQuery={() => void handleCode(scanValue)}
-              onClose={() => {
-                setScanValue('')
-                setResults(null)
-              }}
-              onPickPerson={pickPerson}
-              onPickEquipment={(assetTag) => void handleCode(assetTag)}
-            />
-          ) : null}
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              !isDesktop && visibleResults ? (
+                <MobileStationResultsSheet
+                  query={scanValue}
+                  results={visibleResults}
+                  direction={direction}
+                  onQueryChange={setScanValue}
+                  onSubmitQuery={() => void handleCode(scanValue)}
+                  onClose={() => {
+                    setScanValue('')
+                    setResults(null)
+                  }}
+                  onPickPerson={pickPerson}
+                  onPickEquipment={(assetTag) => void handleCode(assetTag)}
+                />
+              ) : null
+            }
+          />
         </div>
 
         {/* ---- feedback + session log ------------------------------------- */}
@@ -710,77 +820,103 @@ export function StationClient(props: StationClientProps) {
                   : 'text-xs font-medium text-slate-500 dark:text-slate-400'
               }
             >
-              This session
+              <GeneratedText id="m_19feb2adfd68b9" />
             </div>
             <ul className="mt-2 space-y-1.5">
-              {log.length === 0 ? (
-                <li className={dark ? 'text-sm text-slate-500' : 'text-sm text-slate-400'}>
-                  Scans you make will appear here.
-                </li>
-              ) : (
-                log.map((e) => (
-                  <li
-                    key={e.key}
-                    className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm ${
-                      dark
-                        ? 'border-slate-800 bg-slate-900'
-                        : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
-                    } ${e.undone ? 'opacity-50' : ''}`}
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      {e.action === 'checked_out' ? (
-                        <ArrowUpFromLine size={15} className="shrink-0 text-amber-500" />
-                      ) : e.action === 'checked_in' ? (
-                        <ArrowDownToLine size={15} className="shrink-0 text-emerald-500" />
-                      ) : (
-                        <XCircle size={15} className="shrink-0 text-red-500" />
-                      )}
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{e.title}</span>
-                        {e.sub ? (
-                          <span
-                            className={
-                              dark
-                                ? 'block truncate text-xs text-slate-400'
-                                : 'block truncate text-xs text-slate-500'
-                            }
-                          >
-                            {e.sub}
-                          </span>
-                        ) : null}
-                      </span>
-                    </span>
-                    {e.assetTag && !e.undone && e.action !== 'error' ? (
-                      <button
-                        type="button"
-                        onClick={() => undo(e)}
-                        className={`shrink-0 rounded px-2 py-1 text-xs font-medium ${
+              <GeneratedValue
+                value={
+                  log.length === 0 ? (
+                    <li className={dark ? 'text-sm text-slate-500' : 'text-sm text-slate-400'}>
+                      <GeneratedText id="m_09737bcac2a4a9" />
+                    </li>
+                  ) : (
+                    log.map((e) => (
+                      <li
+                        key={e.key}
+                        className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm ${
                           dark
-                            ? 'text-slate-300 hover:bg-slate-800'
-                            : 'text-teal-700 hover:bg-teal-50 dark:text-teal-400'
-                        }`}
+                            ? 'border-slate-800 bg-slate-900'
+                            : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
+                        } ${e.undone ? 'opacity-50' : ''}`}
                       >
-                        Undo
-                      </button>
-                    ) : e.undone ? (
-                      <span className="shrink-0 text-xs text-slate-400">undone</span>
-                    ) : null}
-                  </li>
-                ))
-              )}
+                        <span className="flex min-w-0 items-center gap-2">
+                          <GeneratedValue
+                            value={
+                              e.action === 'checked_out' ? (
+                                <ArrowUpFromLine size={15} className="shrink-0 text-amber-500" />
+                              ) : e.action === 'checked_in' ? (
+                                <ArrowDownToLine size={15} className="shrink-0 text-emerald-500" />
+                              ) : (
+                                <XCircle size={15} className="shrink-0 text-red-500" />
+                              )
+                            }
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">
+                              <GeneratedValue value={e.title} />
+                            </span>
+                            <GeneratedValue
+                              value={
+                                e.sub ? (
+                                  <span
+                                    className={
+                                      dark
+                                        ? 'block truncate text-xs text-slate-400'
+                                        : 'block truncate text-xs text-slate-500'
+                                    }
+                                  >
+                                    <GeneratedValue value={e.sub} />
+                                  </span>
+                                ) : null
+                              }
+                            />
+                          </span>
+                        </span>
+                        <GeneratedValue
+                          value={
+                            e.assetTag && !e.undone && e.action !== 'error' ? (
+                              <button
+                                type="button"
+                                onClick={() => undo(e)}
+                                className={`shrink-0 rounded px-2 py-1 text-xs font-medium ${
+                                  dark
+                                    ? 'text-slate-300 hover:bg-slate-800'
+                                    : 'text-teal-700 hover:bg-teal-50 dark:text-teal-400'
+                                }`}
+                              >
+                                <GeneratedText id="m_164c39255db582" />
+                              </button>
+                            ) : e.undone ? (
+                              <span className="shrink-0 text-xs text-slate-400">
+                                <GeneratedText id="m_0c753a26cf9595" />
+                              </span>
+                            ) : null
+                          }
+                        />
+                      </li>
+                    ))
+                  )
+                }
+              />
             </ul>
           </div>
         </div>
 
         {/* ---- live counts -------------------------------------------------- */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <Badge variant="success">{availCount} available</Badge>
+          <Badge variant="success">
+            <GeneratedValue value={availCount} /> <GeneratedText id="m_1e07a9a0372d84" />
+          </Badge>
         </div>
       </div>
 
-      {camOpen ? (
-        <CameraScanner onCode={(c) => handleCode(c)} onClose={() => setCamOpen(false)} />
-      ) : null}
+      <GeneratedValue
+        value={
+          camOpen ? (
+            <CameraScanner onCode={(c) => handleCode(c)} onClose={() => setCamOpen(false)} />
+          ) : null
+        }
+      />
     </div>
   )
 
@@ -795,7 +931,7 @@ function Label({ children, dark }: { children: React.ReactNode; dark: boolean })
         dark ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'
       }`}
     >
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }
@@ -807,7 +943,7 @@ function DropHeader({ children, dark }: { children: React.ReactNode; dark: boole
         dark ? 'text-slate-500' : 'text-slate-400'
       }`}
     >
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }
@@ -840,7 +976,15 @@ function FlashPanel({
         <div>
           <ScanLine size={big ? 40 : 26} className="mx-auto mb-1.5 opacity-60" />
           <div className={`font-medium ${big ? 'text-lg' : 'text-sm'}`}>
-            {pending ? 'Working…' : 'Ready to scan'}
+            <GeneratedValue
+              value={
+                pending ? (
+                  <GeneratedText id="m_09001dc89c0edf" />
+                ) : (
+                  <GeneratedText id="m_0198293431f786" />
+                )
+              }
+            />
           </div>
         </div>
       </div>
@@ -864,15 +1008,21 @@ function FlashPanel({
           big ? 'h-20 w-20' : 'h-14 w-14'
         }`}
       >
-        {tone.icon}
+        <GeneratedValue value={tone.icon} />
       </div>
       <div className="min-w-0">
         <div className={`font-bold tracking-tight ${big ? 'text-4xl' : 'text-2xl'}`}>
-          {flash.title}
+          <GeneratedValue value={flash.title} />
         </div>
-        {flash.sub ? (
-          <div className={`truncate text-white/85 ${big ? 'text-lg' : 'text-sm'}`}>{flash.sub}</div>
-        ) : null}
+        <GeneratedValue
+          value={
+            flash.sub ? (
+              <div className={`truncate text-white/85 ${big ? 'text-lg' : 'text-sm'}`}>
+                <GeneratedValue value={flash.sub} />
+              </div>
+            ) : null
+          }
+        />
       </div>
     </div>
   )
@@ -897,6 +1047,7 @@ function MobileStationResultsSheet({
   onPickPerson: (person: StationSearchResults['people'][number]) => void
   onPickEquipment: (assetTag: string) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   if (typeof document === 'undefined') return null
   const hasResults = results.people.length > 0 || results.equipment.length > 0
   return createPortal(
@@ -922,12 +1073,12 @@ function MobileStationResultsSheet({
           </div>
           <div className="flex items-center justify-between px-4 pt-2 pb-1">
             <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              Scan search
+              <GeneratedText id="m_01c8237f850f0e" />
             </span>
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={tGenerated('m_19ab80ae228d44')}
               className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
             >
               <X size={18} />
@@ -948,88 +1099,136 @@ function MobileStationResultsSheet({
                   onSubmitQuery()
                 }
               }}
-              placeholder="Scan or type to search..."
+              placeholder={tGenerated('m_1ef0ec4afef560')}
               className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pr-3 pl-9 text-base transition outline-none focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20 dark:border-slate-800 dark:bg-slate-900 dark:focus:bg-slate-900"
             />
           </div>
           <div className="mt-1 min-h-0 flex-1 overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            {!hasResults ? (
-              <div className="px-3 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
-                No matches
-              </div>
-            ) : null}
-            {results.people.length > 0 ? (
-              <div>
-                <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
-                  People - set active holder
-                </div>
-                <ul role="listbox" className="py-1">
-                  {results.people.map((person) => (
-                    <li key={person.id}>
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={false}
-                        onClick={() => onPickPerson(person)}
-                        className="flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] text-slate-700 transition-colors active:bg-slate-100 dark:text-slate-200 dark:active:bg-slate-700"
-                      >
-                        <UserRound size={17} className="shrink-0 text-teal-600" />
-                        <span className="min-w-0 flex-1 truncate">
-                          {person.name}
-                          {[person.jobTitle, person.employeeNo].filter(Boolean).length > 0 ? (
-                            <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">
-                              {[person.jobTitle, person.employeeNo].filter(Boolean).join(' - ')}
-                            </span>
-                          ) : null}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {results.equipment.length > 0 ? (
-              <div>
-                <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
-                  Equipment - tap to {scanActionWord(direction)}
-                </div>
-                <ul role="listbox" className="py-1">
-                  {results.equipment.map((item) => (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={false}
-                        onClick={() => onPickEquipment(item.assetTag)}
-                        className="flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] text-slate-700 transition-colors active:bg-slate-100 dark:text-slate-200 dark:active:bg-slate-700"
-                      >
-                        <PackageCheck
-                          size={17}
-                          className={`shrink-0 ${item.isOut ? 'text-amber-500' : 'text-emerald-500'}`}
-                        />
-                        <span className="min-w-0 flex-1 truncate">
-                          <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
-                            {item.assetTag}
-                          </span>{' '}
-                          {item.name}
-                          <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">
-                            {item.typeName ?? 'Equipment'}
-                            {item.isOut && item.holderName ? ` - with ${item.holderName}` : ''}
-                          </span>
-                        </span>
-                        <span
-                          className={`shrink-0 text-xs font-medium ${
-                            item.isOut ? 'text-amber-600' : 'text-emerald-600'
-                          }`}
-                        >
-                          {item.isOut ? 'out' : 'in'}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+            <GeneratedValue
+              value={
+                !hasResults ? (
+                  <div className="px-3 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+                    <GeneratedText id="m_19a9b602cdcf05" />
+                  </div>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                results.people.length > 0 ? (
+                  <div>
+                    <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                      <GeneratedText id="m_07f869efe18bf0" />
+                    </div>
+                    <ul role="listbox" className="py-1">
+                      <GeneratedValue
+                        value={results.people.map((person) => (
+                          <li key={person.id}>
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={false}
+                              onClick={() => onPickPerson(person)}
+                              className="flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] text-slate-700 transition-colors active:bg-slate-100 dark:text-slate-200 dark:active:bg-slate-700"
+                            >
+                              <UserRound size={17} className="shrink-0 text-teal-600" />
+                              <span className="min-w-0 flex-1 truncate">
+                                <GeneratedValue value={person.name} />
+                                <GeneratedValue
+                                  value={
+                                    [person.jobTitle, person.employeeNo].filter(Boolean).length >
+                                    0 ? (
+                                      <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">
+                                        <GeneratedValue
+                                          value={[person.jobTitle, person.employeeNo]
+                                            .filter(Boolean)
+                                            .join(' - ')}
+                                        />
+                                      </span>
+                                    ) : null
+                                  }
+                                />
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      />
+                    </ul>
+                  </div>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                results.equipment.length > 0 ? (
+                  <div>
+                    <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                      <GeneratedText id="m_02bdb6f5c529fe" />{' '}
+                      <GeneratedValue value={scanActionWord(direction)} />
+                    </div>
+                    <ul role="listbox" className="py-1">
+                      <GeneratedValue
+                        value={results.equipment.map((item) => (
+                          <li key={item.id}>
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={false}
+                              onClick={() => onPickEquipment(item.assetTag)}
+                              className="flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] text-slate-700 transition-colors active:bg-slate-100 dark:text-slate-200 dark:active:bg-slate-700"
+                            >
+                              <PackageCheck
+                                size={17}
+                                className={`shrink-0 ${item.isOut ? 'text-amber-500' : 'text-emerald-500'}`}
+                              />
+                              <span className="min-w-0 flex-1 truncate">
+                                <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
+                                  <GeneratedValue value={item.assetTag} />
+                                </span>
+                                <GeneratedValue value={' '} />
+                                <GeneratedValue value={item.name} />
+                                <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">
+                                  <GeneratedValue
+                                    value={item.typeName ?? <GeneratedText id="m_17f17df74f7e69" />}
+                                  />
+                                  <GeneratedValue
+                                    value={
+                                      item.isOut && item.holderName ? (
+                                        <GeneratedText
+                                          id="m_14537052bac1bc"
+                                          values={{ value0: item.holderName }}
+                                        />
+                                      ) : (
+                                        ''
+                                      )
+                                    }
+                                  />
+                                </span>
+                              </span>
+                              <span
+                                className={`shrink-0 text-xs font-medium ${
+                                  item.isOut ? 'text-amber-600' : 'text-emerald-600'
+                                }`}
+                              >
+                                <GeneratedValue
+                                  value={
+                                    item.isOut ? (
+                                      <GeneratedText id="m_1c07d7f20091c3" />
+                                    ) : (
+                                      <GeneratedText id="m_0e2bad4d6e8bd2" />
+                                    )
+                                  }
+                                />
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      />
+                    </ul>
+                  </div>
+                ) : null
+              }
+            />
           </div>
         </motion.div>
       </div>
@@ -1047,6 +1246,7 @@ function CameraScanner({
   onCode: (code: string) => void
   onClose: () => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const videoRef = useRef<HTMLVideoElement>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -1092,7 +1292,7 @@ function CameraScanner({
         }
         void tick()
       } catch {
-        setError('Camera unavailable — use the scan field instead.')
+        setError(tGenerated('m_0da9e7a3a3ce2c'))
       }
     }
     void start()
@@ -1101,7 +1301,7 @@ function CameraScanner({
       cancelAnimationFrame(raf)
       stream?.getTracks().forEach((t) => t.stop())
     }
-  }, [onCode])
+  }, [onCode, tGenerated])
 
   if (typeof document === 'undefined') return null
   return createPortal(
@@ -1109,7 +1309,7 @@ function CameraScanner({
       <div className="w-full max-w-md overflow-hidden rounded-2xl bg-slate-900">
         <div className="flex items-center justify-between px-4 py-3 text-white">
           <span className="flex items-center gap-2 text-sm font-medium">
-            <Camera size={16} /> Point at a tag
+            <Camera size={16} /> <GeneratedText id="m_19aa93cb9761b6" />
           </span>
           <button type="button" onClick={onClose} className="text-slate-300 hover:text-white">
             <X size={20} />
@@ -1118,11 +1318,15 @@ function CameraScanner({
         <div className="relative aspect-square bg-black">
           <video ref={videoRef} muted playsInline className="h-full w-full object-cover" />
           <div className="pointer-events-none absolute inset-8 rounded-xl border-2 border-amber-400/80" />
-          {error ? (
-            <div className="absolute inset-0 grid place-items-center p-6 text-center text-sm text-slate-300">
-              {error}
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              error ? (
+                <div className="absolute inset-0 grid place-items-center p-6 text-center text-sm text-slate-300">
+                  <GeneratedValue value={error} />
+                </div>
+              ) : null
+            }
+          />
         </div>
       </div>
     </div>,

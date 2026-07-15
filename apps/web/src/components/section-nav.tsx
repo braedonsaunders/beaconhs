@@ -1,5 +1,7 @@
 'use client'
 
+import { useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // Sticky jump-nav for a single-page detail form. The whole form lives on one
 // scrolling page (like the legacy product crews already know); these chips
 // scroll to a section instead of navigating, with a scrollspy highlight and a
@@ -19,6 +21,7 @@ export type SectionNavItem = {
 }
 
 export function SectionNav({ sections }: { sections: SectionNavItem[] }) {
+  const tGenerated = useGeneratedTranslations()
   const [active, setActive] = useState(sections[0]?.id ?? '')
   const navRef = useRef<HTMLElement>(null)
 
@@ -80,48 +83,58 @@ export function SectionNav({ sections }: { sections: SectionNavItem[] }) {
   return (
     <nav
       ref={navRef}
-      aria-label="Sections"
+      aria-label={tGenerated('m_1152ba42a0ac4d')}
       className="flex [scrollbar-width:none] flex-nowrap items-center gap-1.5 overflow-x-auto pb-2 [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
     >
-      {sections.map((s) => {
-        const isActive = s.id === active
-        return (
-          <button
-            key={s.id}
-            type="button"
-            data-section={s.id}
-            onClick={() => {
-              document
-                .getElementById(`section-${s.id}`)
-                ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              setActive(s.id)
-            }}
-            className={cn(
-              'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm whitespace-nowrap transition-colors sm:min-h-0 sm:px-3 sm:py-1 sm:text-xs',
-              isActive
-                ? 'border-teal-700 bg-teal-700 font-medium text-white'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
-            )}
-          >
-            {s.done ? (
-              <Check size={12} className={isActive ? 'text-white' : 'text-emerald-600'} />
-            ) : null}
-            {s.label}
-            {typeof s.count === 'number' ? (
-              <span
-                className={cn(
-                  'rounded-full px-1.5 py-0.5 text-[10px] leading-none',
-                  isActive
-                    ? 'bg-white/20 text-white'
-                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-                )}
-              >
-                {s.count}
-              </span>
-            ) : null}
-          </button>
-        )
-      })}
+      <GeneratedValue
+        value={sections.map((s) => {
+          const isActive = s.id === active
+          return (
+            <button
+              key={s.id}
+              type="button"
+              data-section={s.id}
+              onClick={() => {
+                document
+                  .getElementById(`section-${s.id}`)
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                setActive(s.id)
+              }}
+              className={cn(
+                'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm whitespace-nowrap transition-colors sm:min-h-0 sm:px-3 sm:py-1 sm:text-xs',
+                isActive
+                  ? 'border-teal-700 bg-teal-700 font-medium text-white'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
+              )}
+            >
+              <GeneratedValue
+                value={
+                  s.done ? (
+                    <Check size={12} className={isActive ? 'text-white' : 'text-emerald-600'} />
+                  ) : null
+                }
+              />
+              <GeneratedValue value={s.label} />
+              <GeneratedValue
+                value={
+                  typeof s.count === 'number' ? (
+                    <span
+                      className={cn(
+                        'rounded-full px-1.5 py-0.5 text-[10px] leading-none',
+                        isActive
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+                      )}
+                    >
+                      <GeneratedValue value={s.count} />
+                    </span>
+                  ) : null
+                }
+              />
+            </button>
+          )
+        })}
+      />
     </nav>
   )
 }

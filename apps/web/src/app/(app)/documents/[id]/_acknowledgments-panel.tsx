@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The Acknowledgments tab body: a URL-driven, server-paged roster of everyone
 // who has signed, the current user's self-acknowledge action (with an optional
 // signature), and an entry point to the group sign-off sheet.
@@ -64,6 +71,8 @@ export function AcknowledgmentsPanel({
   /** Group sign-off is a documents.manage surface — hide the entry for readers. */
   canManageSignOff: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [sig, setSig] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -75,14 +84,16 @@ export function AcknowledgmentsPanel({
       try {
         const res = await acknowledgeDocument({ documentId, signatureDataUrl: sig })
         if (!res.ok) {
-          toast.error(res.error)
+          toast.error(tGeneratedValue(res.error))
           return
         }
-        toast.success('Document acknowledged')
+        toast.success(tGenerated('m_16ab93413661d2'))
         setSig(null)
         router.refresh()
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not acknowledge')
+        toast.error(
+          tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_1d1fa19fb2f80d')),
+        )
       }
     })
   }
@@ -90,65 +101,103 @@ export function AcknowledgmentsPanel({
   return (
     <div className="space-y-4">
       {/* Self-acknowledge */}
-      {selfStatus === 'acked' ? (
-        <Alert variant="success">
-          <Check size={16} />
-          <AlertTitle>You've acknowledged this</AlertTitle>
-          {selfAckedAt ? (
-            <AlertDescription>Recorded {new Date(selfAckedAt).toLocaleString()}.</AlertDescription>
-          ) : null}
-        </Alert>
-      ) : selfStatus === 'can' ? (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/60">
-          <p className="text-sm text-slate-700 dark:text-slate-200">
-            By acknowledging you confirm you've read and understood this document.
-          </p>
-          <div className="mt-2">
-            <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-              <PenLine size={12} /> Signature <span className="font-normal">(optional)</span>
+      <GeneratedValue
+        value={
+          selfStatus === 'acked' ? (
+            <Alert variant="success">
+              <Check size={16} />
+              <AlertTitle>
+                <GeneratedText id="m_0945deabe6292c" />
+              </AlertTitle>
+              <GeneratedValue
+                value={
+                  selfAckedAt ? (
+                    <AlertDescription>
+                      <GeneratedText id="m_03bc5bb7f90899" />{' '}
+                      <GeneratedValue value={new Date(selfAckedAt).toLocaleString()} />.
+                    </AlertDescription>
+                  ) : null
+                }
+              />
+            </Alert>
+          ) : selfStatus === 'can' ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/60">
+              <p className="text-sm text-slate-700 dark:text-slate-200">
+                <GeneratedText id="m_1359a3381f80a2" />
+              </p>
+              <div className="mt-2">
+                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                  <PenLine size={12} /> <GeneratedText id="m_0c0bc02db58371" />{' '}
+                  <span className="font-normal">
+                    <GeneratedText id="m_1f61ed87b795bd" />
+                  </span>
+                </div>
+                <SignaturePad value={sig} onChange={setSig} height={120} />
+              </div>
+              <Button
+                type="button"
+                className="mt-3 w-full"
+                onClick={submitSelfAck}
+                disabled={pending}
+              >
+                <Check size={14} />{' '}
+                <GeneratedValue
+                  value={
+                    pending ? (
+                      <GeneratedText id="m_0d17b2ff9d6215" />
+                    ) : (
+                      <GeneratedText id="m_12ef6648f77371" />
+                    )
+                  }
+                />
+              </Button>
             </div>
-            <SignaturePad value={sig} onChange={setSig} height={120} />
-          </div>
-          <Button type="button" className="mt-3 w-full" onClick={submitSelfAck} disabled={pending}>
-            <Check size={14} /> {pending ? 'Acknowledging…' : 'Acknowledge'}
-          </Button>
-        </div>
-      ) : selfStatus === 'unpublished' ? (
-        <Alert variant="warning">
-          <AlertTitle>Not yet published</AlertTitle>
-          <AlertDescription>
-            Publish a version before users can acknowledge this document.
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <Alert variant="warning">
-          <AlertTitle>Account not linked to a person</AlertTitle>
-          <AlertDescription>
-            Acknowledgments require a person record in the directory.
-          </AlertDescription>
-        </Alert>
-      )}
+          ) : selfStatus === 'unpublished' ? (
+            <Alert variant="warning">
+              <AlertTitle>
+                <GeneratedText id="m_17f1cc7a464731" />
+              </AlertTitle>
+              <AlertDescription>
+                <GeneratedText id="m_0034e77e69a315" />
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Alert variant="warning">
+              <AlertTitle>
+                <GeneratedText id="m_03a0cae28cdecf" />
+              </AlertTitle>
+              <AlertDescription>
+                <GeneratedText id="m_17af6e2c8f7d2b" />
+              </AlertDescription>
+            </Alert>
+          )
+        }
+      />
 
       {/* Group sign-off entry — the sign-off sheet is manage-only */}
-      {canManageSignOff && selfStatus !== 'unpublished' ? (
-        <Link href={signOffHref}>
-          <Button type="button" variant="outline" className="w-full">
-            <Users size={14} /> Record group sign-off
-          </Button>
-        </Link>
-      ) : null}
+      <GeneratedValue
+        value={
+          canManageSignOff && selfStatus !== 'unpublished' ? (
+            <Link href={signOffHref}>
+              <Button type="button" variant="outline" className="w-full">
+                <Users size={14} /> <GeneratedText id="m_017be457518ec5" />
+              </Button>
+            </Link>
+          ) : null
+        }
+      />
 
       {/* Roster */}
       <div>
         <div className="mb-2">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            Signed by {total}
+            <GeneratedText id="m_0664908f5b6c68" /> <GeneratedValue value={total} />
           </h3>
         </div>
 
         <TableToolbar className="mb-2">
           <SearchInput
-            placeholder="Search people or sessions…"
+            placeholder={tGenerated('m_159cbad753d749')}
             paramKey="ackQ"
             pageParamKey="ackPage"
           />
@@ -157,7 +206,7 @@ export function AcknowledgmentsPanel({
             currentParams={currentParams}
             paramKey="ackType"
             pageParamKey="ackPage"
-            label="Source"
+            label={tGenerated('m_1d05fa7a091a9b')}
             options={[
               { value: 'individual', label: 'Individual' },
               { value: 'group', label: 'Group sign-off' },
@@ -168,7 +217,7 @@ export function AcknowledgmentsPanel({
             currentParams={currentParams}
             paramKey="ackSort"
             pageParamKey="ackPage"
-            label="Order"
+            label={tGenerated('m_126e942baf656b')}
             defaultValue="recent"
             hideAll
             options={[
@@ -178,58 +227,86 @@ export function AcknowledgmentsPanel({
           />
         </TableToolbar>
 
-        {acks.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-            {total === 0 ? (
-              <span className="flex flex-col items-center gap-1">
-                <BadgeCheck size={20} className="text-slate-300 dark:text-slate-600" />
-                No acknowledgments yet
-              </span>
+        <GeneratedValue
+          value={
+            acks.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                <GeneratedValue
+                  value={
+                    total === 0 ? (
+                      <span className="flex flex-col items-center gap-1">
+                        <BadgeCheck size={20} className="text-slate-300 dark:text-slate-600" />
+                        <GeneratedText id="m_0ada9cc345ff47" />
+                      </span>
+                    ) : (
+                      <GeneratedText id="m_1986fdeb7bd8d2" />
+                    )
+                  }
+                />
+              </div>
             ) : (
-              'No acknowledgments match these filters.'
-            )}
-          </div>
-        ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {acks.map((row) => (
-              <li key={row.ackId} className="flex items-center gap-3 py-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  {initials(row.name)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <Link
-                    href={`/people/${row.personId}`}
-                    className="block truncate text-sm font-medium text-slate-900 hover:underline dark:text-slate-100"
-                  >
-                    {row.name}
-                  </Link>
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className="text-xs text-slate-500 dark:text-slate-400"
-                      title={new Date(row.acknowledgedAt).toLocaleString()}
-                    >
-                      {new Date(row.acknowledgedAt).toLocaleDateString()}
-                    </span>
-                    {row.sessionId ? (
-                      <Badge variant="outline" className="gap-1 px-1.5 py-0 text-[10px]">
-                        <Users size={9} />
-                        {row.sessionTitle ? row.sessionTitle : 'Group'}
-                      </Badge>
-                    ) : null}
-                  </div>
-                </div>
-                {row.signatureUrl ? (
-                  <RawImage
-                    src={row.signatureUrl}
-                    alt={`${row.name} signature`}
-                    optimizationReason="authenticated"
-                    className="h-8 w-16 shrink-0 rounded border border-slate-200 bg-white object-contain dark:border-slate-700"
-                  />
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                <GeneratedValue
+                  value={acks.map((row) => (
+                    <li key={row.ackId} className="flex items-center gap-3 py-2">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        <GeneratedValue value={initials(row.name)} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          href={`/people/${row.personId}`}
+                          className="block truncate text-sm font-medium text-slate-900 hover:underline dark:text-slate-100"
+                        >
+                          <GeneratedValue value={row.name} />
+                        </Link>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="text-xs text-slate-500 dark:text-slate-400"
+                            title={tGeneratedValue(new Date(row.acknowledgedAt).toLocaleString())}
+                          >
+                            <GeneratedValue
+                              value={new Date(row.acknowledgedAt).toLocaleDateString()}
+                            />
+                          </span>
+                          <GeneratedValue
+                            value={
+                              row.sessionId ? (
+                                <Badge variant="outline" className="gap-1 px-1.5 py-0 text-[10px]">
+                                  <Users size={9} />
+                                  <GeneratedValue
+                                    value={
+                                      row.sessionTitle ? (
+                                        row.sessionTitle
+                                      ) : (
+                                        <GeneratedText id="m_0d06af9d4c7f60" />
+                                      )
+                                    }
+                                  />
+                                </Badge>
+                              ) : null
+                            }
+                          />
+                        </div>
+                      </div>
+                      <GeneratedValue
+                        value={
+                          row.signatureUrl ? (
+                            <RawImage
+                              src={row.signatureUrl}
+                              alt={tGenerated('m_017383099e620c', { value0: row.name })}
+                              optimizationReason="authenticated"
+                              className="h-8 w-16 shrink-0 rounded border border-slate-200 bg-white object-contain dark:border-slate-700"
+                            />
+                          ) : null
+                        }
+                      />
+                    </li>
+                  ))}
+                />
+              </ul>
+            )
+          }
+        />
 
         <Pagination
           basePath={basePath}

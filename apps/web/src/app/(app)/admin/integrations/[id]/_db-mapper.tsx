@@ -1,5 +1,13 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
+import { GeneratedText } from '@/i18n/generated'
+
 // Live database table-browser + field-mapper. A single SQL connection can feed
 // multiple source streams into the same canonical entity, e.g. customers and
 // jobs both landing as org_units with different levels.
@@ -171,6 +179,8 @@ export function DbMapper({
   entities: string[]
   initialMappings: Record<string, unknown>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [tables, setTables] = useState<TableRef[]>([])
   const [browsing, setBrowsing] = useState(false)
@@ -187,7 +197,7 @@ export function DbMapper({
     if (!t.name) return
     const res = await introspectTable(connectionId, t)
     if (res.ok) setColumns((c) => ({ ...c, [localId]: res.columns ?? [] }))
-    else toast.error(res.error ?? 'Could not read columns')
+    else toast.error(tGeneratedValue(res.error ?? tGenerated('m_02fa4ff201cc72')))
   }
 
   useEffect(() => {
@@ -226,7 +236,7 @@ export function DbMapper({
       return
     }
     setTables(res.tables ?? [])
-    toast.success(`Found ${res.tables?.length ?? 0} table(s).`)
+    toast.success(tGenerated('m_114929c2827651', { value0: res.tables?.length ?? 0 }))
   }
 
   function updateMapping(entity: string, localId: string, patch: Partial<MappingDraft>) {
@@ -278,9 +288,9 @@ export function DbMapper({
     startTransition(async () => {
       const res = await saveDbMapping(connectionId, clean)
       if (res.ok) {
-        toast.success('Mappings saved.')
+        toast.success(tGenerated('m_0115a2c545be23'))
         router.refresh()
-      } else toast.error(res.error ?? 'Save failed.')
+      } else toast.error(tGeneratedValue(res.error ?? tGenerated('m_0824d7cd907294')))
     })
   }
 
@@ -291,215 +301,295 @@ export function DbMapper({
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <CardTitle>Tables &amp; field mapping</CardTitle>
+            <CardTitle>
+              <GeneratedText id="m_08f089aef3ae50" />
+            </CardTitle>
             <p className="mt-1 text-xs text-slate-500">
-              Use column names, static values, or templates like <code>C-{'{{NetsuiteID}}'}</code>.
+              <GeneratedText id="m_1925bcc5b692d6" /> <code>C-{'{{NetsuiteID}}'}</code>.
             </p>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={browse} disabled={browsing}>
-            {browsing ? 'Connecting...' : browsed ? 'Refresh tables' : 'Test & browse tables'}
+            <GeneratedValue
+              value={
+                browsing ? (
+                  <GeneratedText id="m_0004275ec9f230" />
+                ) : browsed ? (
+                  <GeneratedText id="m_0406666880c013" />
+                ) : (
+                  <GeneratedText id="m_0bdcfef3e94d45" />
+                )
+              }
+            />
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {browseError ? (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{browseError}</p>
-        ) : null}
-        {!browsed && !browseError ? (
-          <p className="text-sm text-slate-500">
-            {dbKind ? (
-              <>
-                Save your <strong>{dbKind}</strong> credentials above, then browse the schema to get
-                table and column suggestions. You can still type names manually.
-              </>
-            ) : (
-              <>Choose a database type and save credentials above, then browse the schema.</>
-            )}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            browseError ? (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                <GeneratedValue value={browseError} />
+              </p>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            !browsed && !browseError ? (
+              <p className="text-sm text-slate-500">
+                <GeneratedValue
+                  value={
+                    dbKind ? (
+                      <>
+                        <GeneratedText id="m_007b604913e493" />{' '}
+                        <strong>
+                          <GeneratedValue value={dbKind} />
+                        </strong>{' '}
+                        <GeneratedText id="m_193e867f7884ad" />
+                      </>
+                    ) : (
+                      <>
+                        <GeneratedText id="m_01b93c0d57bb78" />
+                      </>
+                    )
+                  }
+                />
+              </p>
+            ) : null
+          }
+        />
 
         <datalist id="db-table-options">
-          {tableOptions.map((k) => (
-            <option key={k} value={k} />
-          ))}
+          <GeneratedValue
+            value={tableOptions.map((k) => (
+              <option key={k} value={k} />
+            ))}
+          />
         </datalist>
 
-        {entities.map((entity) => {
-          const list = mappings[entity] ?? []
-          return (
-            <section key={entity} className="space-y-3 rounded-lg border border-slate-200 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-800">
-                    {ENTITY_LABELS[entity] ?? entity}
-                  </h4>
-                  <p className="text-xs text-slate-500">{ENTITY_HINTS[entity]}</p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => addMapping(entity)}
-                >
-                  <Plus size={14} /> Add source
-                </Button>
-              </div>
-
-              {list.map((m, index) => {
-                const cols = columns[m.localId] ?? []
-                const currentKey = m.table ? (m.schema ? `${m.schema}.${m.table}` : m.table) : ''
-                const listId = `db-columns-${m.localId}`
-                return (
-                  <div
-                    key={m.localId}
-                    className="space-y-3 rounded-md border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40"
+        <GeneratedValue
+          value={entities.map((entity) => {
+            const list = mappings[entity] ?? []
+            return (
+              <section key={entity} className="space-y-3 rounded-lg border border-slate-200 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800">
+                      <GeneratedValue value={ENTITY_LABELS[entity] ?? entity} />
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      <GeneratedValue value={ENTITY_HINTS[entity]} />
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => addMapping(entity)}
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Input
-                        value={m.label ?? ''}
-                        onChange={(event) =>
-                          updateMapping(entity, m.localId, { label: event.target.value })
-                        }
-                        placeholder={`${ENTITY_LABELS[entity] ?? entity} source ${index + 1}`}
-                        aria-label="Source label"
-                        className="max-w-sm bg-white dark:bg-slate-950"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="ml-auto text-red-600 hover:bg-red-50 hover:text-red-700"
-                        onClick={() => removeMapping(entity, m.localId)}
+                    <Plus size={14} /> <GeneratedText id="m_0b09abc7c21f66" />
+                  </Button>
+                </div>
+
+                <GeneratedValue
+                  value={list.map((m, index) => {
+                    const cols = columns[m.localId] ?? []
+                    const currentKey = m.table
+                      ? m.schema
+                        ? `${m.schema}.${m.table}`
+                        : m.table
+                      : ''
+                    const listId = `db-columns-${m.localId}`
+                    return (
+                      <div
+                        key={m.localId}
+                        className="space-y-3 rounded-md border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40"
                       >
-                        <Trash2 size={14} /> Remove
-                      </Button>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label>Source table or view</Label>
-                        <Input
-                          list="db-table-options"
-                          value={currentKey}
-                          onChange={(event) => setTable(entity, m, event.target.value)}
-                          placeholder="dbo.employees"
-                          className="bg-white dark:bg-slate-950"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>WHERE filter</Label>
-                        <Input
-                          value={m.where ?? ''}
-                          onChange={(event) =>
-                            updateMapping(entity, m.localId, { where: event.target.value })
-                          }
-                          placeholder="IsInactive = 0"
-                          className="bg-white dark:bg-slate-950"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label>Custom SELECT query</Label>
-                      <Textarea
-                        value={m.query ?? ''}
-                        onChange={(event) =>
-                          updateMapping(entity, m.localId, { query: event.target.value })
-                        }
-                        rows={3}
-                        placeholder="Optional. Leave blank to read SELECT * from the table above."
-                        className="bg-white font-mono text-xs dark:bg-slate-950"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <div className="space-y-1.5">
-                        <Label>ID column</Label>
-                        <Input
-                          list={listId}
-                          value={m.idColumn ?? ''}
-                          onChange={(event) =>
-                            updateMapping(entity, m.localId, { idColumn: event.target.value })
-                          }
-                          placeholder="Stable source primary key"
-                          className="bg-white dark:bg-slate-950"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>External ID template</Label>
-                        <Input
-                          value={m.externalIdTemplate ?? ''}
-                          onChange={(event) =>
-                            updateMapping(entity, m.localId, {
-                              externalIdTemplate: event.target.value,
-                            })
-                          }
-                          placeholder="employee:{{NetsuiteID}}"
-                          className="bg-white dark:bg-slate-950"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Cursor column</Label>
-                        <Input
-                          list={listId}
-                          value={m.cursorColumn ?? ''}
-                          onChange={(event) =>
-                            updateMapping(entity, m.localId, { cursorColumn: event.target.value })
-                          }
-                          placeholder="UpdatedAt"
-                          className="bg-white dark:bg-slate-950"
-                        />
-                      </div>
-                    </div>
-
-                    <datalist id={listId}>
-                      {cols.map((c) => (
-                        <option key={c.name} value={c.name}>
-                          {c.type}
-                        </option>
-                      ))}
-                    </datalist>
-
-                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-                      {(ENTITY_FIELDS[entity] ?? []).map((f) => (
-                        <div
-                          key={f.key}
-                          className="grid grid-cols-1 gap-2 rounded border border-slate-100 bg-white p-2 sm:grid-cols-[150px_1fr_1fr] dark:border-slate-800 dark:bg-slate-950"
-                        >
-                          <div>
-                            <Label className="text-xs">{f.label}</Label>
-                            {f.help ? (
-                              <p className="mt-0.5 text-[11px] text-slate-400">{f.help}</p>
-                            ) : null}
-                          </div>
+                        <div className="flex flex-wrap items-center gap-2">
                           <Input
-                            list={listId}
-                            value={m.columns?.[f.key] ?? ''}
+                            value={m.label ?? ''}
                             onChange={(event) =>
-                              setField(entity, m, f.key, 'columns', event.target.value)
+                              updateMapping(entity, m.localId, { label: event.target.value })
                             }
-                            placeholder="Source column"
+                            placeholder={tGenerated('m_108ea7d5e08016', {
+                              value0: ENTITY_LABELS[entity] ?? entity,
+                              value1: index + 1,
+                            })}
+                            aria-label={tGenerated('m_19f1bfd5122468')}
+                            className="max-w-sm bg-white dark:bg-slate-950"
                           />
-                          <Input
-                            value={m.values?.[f.key] ?? ''}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="ml-auto text-red-600 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => removeMapping(entity, m.localId)}
+                          >
+                            <Trash2 size={14} /> <GeneratedText id="m_1a9d8d971b1edb" />
+                          </Button>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label>
+                              <GeneratedText id="m_041ae7c0b57fc0" />
+                            </Label>
+                            <Input
+                              list="db-table-options"
+                              value={currentKey}
+                              onChange={(event) => setTable(entity, m, event.target.value)}
+                              placeholder={tGenerated('m_1034590c9cdac6')}
+                              className="bg-white dark:bg-slate-950"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>
+                              <GeneratedText id="m_04dcc637d60dc5" />
+                            </Label>
+                            <Input
+                              value={m.where ?? ''}
+                              onChange={(event) =>
+                                updateMapping(entity, m.localId, { where: event.target.value })
+                              }
+                              placeholder={tGenerated('m_1b4856b1000588')}
+                              className="bg-white dark:bg-slate-950"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label>
+                            <GeneratedText id="m_13064e62ec4400" />
+                          </Label>
+                          <Textarea
+                            value={m.query ?? ''}
                             onChange={(event) =>
-                              setField(entity, m, f.key, 'values', event.target.value)
+                              updateMapping(entity, m.localId, { query: event.target.value })
                             }
-                            placeholder="Value/template"
+                            rows={3}
+                            placeholder={tGenerated('m_1fa263cd9bbe16')}
+                            className="bg-white font-mono text-xs dark:bg-slate-950"
                           />
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </section>
-          )
-        })}
+
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                          <div className="space-y-1.5">
+                            <Label>
+                              <GeneratedText id="m_0b8e8e8e9239e3" />
+                            </Label>
+                            <Input
+                              list={listId}
+                              value={m.idColumn ?? ''}
+                              onChange={(event) =>
+                                updateMapping(entity, m.localId, { idColumn: event.target.value })
+                              }
+                              placeholder={tGenerated('m_1dee6e4c7039ad')}
+                              className="bg-white dark:bg-slate-950"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>
+                              <GeneratedText id="m_0e15974e315c3e" />
+                            </Label>
+                            <Input
+                              value={m.externalIdTemplate ?? ''}
+                              onChange={(event) =>
+                                updateMapping(entity, m.localId, {
+                                  externalIdTemplate: event.target.value,
+                                })
+                              }
+                              placeholder={tGenerated('m_1932f67466feb0')}
+                              className="bg-white dark:bg-slate-950"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>
+                              <GeneratedText id="m_1973cef4eb7b8b" />
+                            </Label>
+                            <Input
+                              list={listId}
+                              value={m.cursorColumn ?? ''}
+                              onChange={(event) =>
+                                updateMapping(entity, m.localId, {
+                                  cursorColumn: event.target.value,
+                                })
+                              }
+                              placeholder={tGenerated('m_19974b78a7b90c')}
+                              className="bg-white dark:bg-slate-950"
+                            />
+                          </div>
+                        </div>
+
+                        <datalist id={listId}>
+                          <GeneratedValue
+                            value={cols.map((c) => (
+                              <option key={c.name} value={c.name}>
+                                <GeneratedValue value={c.type} />
+                              </option>
+                            ))}
+                          />
+                        </datalist>
+
+                        <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                          <GeneratedValue
+                            value={(ENTITY_FIELDS[entity] ?? []).map((f) => (
+                              <div
+                                key={f.key}
+                                className="grid grid-cols-1 gap-2 rounded border border-slate-100 bg-white p-2 sm:grid-cols-[150px_1fr_1fr] dark:border-slate-800 dark:bg-slate-950"
+                              >
+                                <div>
+                                  <Label className="text-xs">
+                                    <GeneratedValue value={f.label} />
+                                  </Label>
+                                  <GeneratedValue
+                                    value={
+                                      f.help ? (
+                                        <p className="mt-0.5 text-[11px] text-slate-400">
+                                          {f.help}
+                                        </p>
+                                      ) : null
+                                    }
+                                  />
+                                </div>
+                                <Input
+                                  list={listId}
+                                  value={m.columns?.[f.key] ?? ''}
+                                  onChange={(event) =>
+                                    setField(entity, m, f.key, 'columns', event.target.value)
+                                  }
+                                  placeholder={tGenerated('m_1bddb60fbfde4e')}
+                                />
+                                <Input
+                                  value={m.values?.[f.key] ?? ''}
+                                  onChange={(event) =>
+                                    setField(entity, m, f.key, 'values', event.target.value)
+                                  }
+                                  placeholder={tGenerated('m_18f109b747611a')}
+                                />
+                              </div>
+                            ))}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                />
+              </section>
+            )
+          })}
+        />
 
         <div className="flex justify-end">
           <Button type="button" onClick={save} disabled={pending}>
-            {pending ? 'Saving...' : 'Save mappings'}
+            <GeneratedValue
+              value={
+                pending ? (
+                  <GeneratedText id="m_06a499b116c0d7" />
+                ) : (
+                  <GeneratedText id="m_1e133f4330037a" />
+                )
+              }
+            />
           </Button>
         </div>
       </CardContent>

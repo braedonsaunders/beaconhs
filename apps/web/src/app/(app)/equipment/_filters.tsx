@@ -1,5 +1,7 @@
 'use client'
 
+import { useGeneratedTranslations } from '@/i18n/generated'
+
 // Type + Category dropdown filters for the equipment register. Searchable
 // (69 types / 39 categories would be a chip wall) — each navigates on change
 // via searchParams, mirroring the FilterChips contract.
@@ -18,6 +20,7 @@ export function EquipmentTypeCategoryFilters({
   types: SelectOption[]
   categories: SelectOption[]
 }) {
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const cur = (k: string) => {
     const v = currentParams[k]
@@ -41,24 +44,24 @@ export function EquipmentTypeCategoryFilters({
         value={cur('type')}
         onChange={(v) => nav('type', v)}
         options={types}
-        placeholder="All types"
-        searchPlaceholder="Search types…"
+        placeholder={tGenerated('m_182aff8c076ae7')}
+        searchPlaceholder={tGenerated('m_18e2494ecfa1b5')}
         sheetTitle="Filter by type"
         ariaLabel="Filter by type"
         clearable
-        emptyLabel="All types"
+        emptyLabel={tGenerated('m_182aff8c076ae7')}
         triggerClassName="h-9 min-w-[9rem] text-sm"
       />
       <SearchSelect
         value={cur('category')}
         onChange={(v) => nav('category', v)}
         options={categories}
-        placeholder="All categories"
-        searchPlaceholder="Search categories…"
+        placeholder={tGenerated('m_0ad4a0d40e37f8')}
+        searchPlaceholder={tGenerated('m_18b6238bb2c30f')}
         sheetTitle="Filter by category"
         ariaLabel="Filter by category"
         clearable
-        emptyLabel="All categories"
+        emptyLabel={tGenerated('m_0ad4a0d40e37f8')}
         triggerClassName="h-9 min-w-[9rem] text-sm"
       />
     </>

@@ -1,5 +1,13 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
+import { GeneratedText } from '@/i18n/generated'
+
 // Interactive workflow-step panel for /apps/responses/[id].
 //
 // Renders the workflow steps from the template's schema, joined against the
@@ -69,7 +77,11 @@ export function WorkflowPanel({
   }, [currentStepKey, steps])
 
   if (steps.length === 0) {
-    return <p className="text-sm text-slate-500">No workflow configured for this template.</p>
+    return (
+      <p className="text-sm text-slate-500">
+        <GeneratedText id="m_0122051bdf4938" />
+      </p>
+    )
   }
 
   // Terminal states block further actions even on the "current" step.
@@ -77,25 +89,27 @@ export function WorkflowPanel({
 
   return (
     <ol className="space-y-3">
-      {steps.map((step) => {
-        const isCurrent = step.key === resolvedCurrent
-        const isFuture =
-          !isCurrent &&
-          step.status === 'pending' &&
-          step.sequence > (steps.find((s) => s.key === resolvedCurrent)?.sequence ?? -1)
-        return (
-          <li key={step.key}>
-            <WorkflowStepCard
-              step={step}
-              responseId={responseId}
-              isCurrent={isCurrent}
-              isFuture={isFuture}
-              canAct={canAct && isCurrent && !terminal}
-              totalSteps={steps.length}
-            />
-          </li>
-        )
-      })}
+      <GeneratedValue
+        value={steps.map((step) => {
+          const isCurrent = step.key === resolvedCurrent
+          const isFuture =
+            !isCurrent &&
+            step.status === 'pending' &&
+            step.sequence > (steps.find((s) => s.key === resolvedCurrent)?.sequence ?? -1)
+          return (
+            <li key={step.key}>
+              <WorkflowStepCard
+                step={step}
+                responseId={responseId}
+                isCurrent={isCurrent}
+                isFuture={isFuture}
+                canAct={canAct && isCurrent && !terminal}
+                totalSteps={steps.length}
+              />
+            </li>
+          )
+        })}
+      />
     </ol>
   )
 }
@@ -115,22 +129,23 @@ function WorkflowStepCard({
   canAct: boolean
   totalSteps: number
 }) {
+  const tGenerated = useGeneratedTranslations()
   const stateBadge =
     step.status === 'signed' ? (
       <Badge variant="success">
-        <CheckCircle2 size={12} /> Signed
+        <CheckCircle2 size={12} /> <GeneratedText id="m_142c80b0b4c3f4" />
       </Badge>
     ) : step.status === 'rejected' ? (
       <Badge variant="destructive">
-        <XCircle size={12} /> Rejected
+        <XCircle size={12} /> <GeneratedText id="m_1870217cd63ffc" />
       </Badge>
     ) : isCurrent ? (
       <Badge variant="warning">
-        <ChevronRight size={12} /> Current
+        <ChevronRight size={12} /> <GeneratedText id="m_134fafff4446f6" />
       </Badge>
     ) : (
       <Badge variant="secondary">
-        <Circle size={12} /> Pending
+        <Circle size={12} /> <GeneratedText id="m_131b7246255b65" />
       </Badge>
     )
 
@@ -150,77 +165,157 @@ function WorkflowStepCard({
       <header className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs tracking-wide text-slate-500 uppercase">
-            Step {step.sequence + 1} of {totalSteps}
+            <GeneratedText id="m_0cff7e37da2b3f" /> <GeneratedValue value={step.sequence + 1} />{' '}
+            <GeneratedText id="m_00e704d1194796" /> <GeneratedValue value={totalSteps} />
           </div>
-          <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{step.title}</div>
+          <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+            <GeneratedValue value={step.title} />
+          </div>
           <div className="mt-0.5 text-xs text-slate-500">
-            Assignee:{' '}
+            <GeneratedText id="m_1447cf1def2174" />
+            <GeneratedValue value={' '} />
             <span className="font-mono">
-              {step.assigneeKind === 'role'
-                ? `role: ${step.assigneeLabel}`
-                : step.assigneeKind === 'expression'
-                  ? step.assigneeLabel
-                  : step.assigneeLabel}
+              <GeneratedValue
+                value={
+                  step.assigneeKind === 'role' ? (
+                    <GeneratedText id="m_1b7232e0de4d59" values={{ value0: step.assigneeLabel }} />
+                  ) : step.assigneeKind === 'expression' ? (
+                    step.assigneeLabel
+                  ) : (
+                    step.assigneeLabel
+                  )
+                }
+              />
             </span>
-            {step.signatureRequired ? (
-              <span className="ml-2 text-amber-700 dark:text-amber-400">· signature required</span>
-            ) : null}
+            <GeneratedValue
+              value={
+                step.signatureRequired ? (
+                  <span className="ml-2 text-amber-700 dark:text-amber-400">
+                    <GeneratedText id="m_0a6d5e0e208c7e" />
+                  </span>
+                ) : null
+              }
+            />
           </div>
         </div>
-        {stateBadge}
+        <GeneratedValue value={stateBadge} />
       </header>
 
       {/* Signed-step body — signer + signature thumbnail */}
-      {step.status === 'signed' ? (
-        <div className="mt-3 space-y-2 text-sm">
-          <div className="text-slate-700 dark:text-slate-300">
-            Signed by <strong>{step.signedBy ?? '—'}</strong>
-            {step.signedAt ? <> · {new Date(step.signedAt).toLocaleString()}</> : null}
-          </div>
-          {step.signatureUrl ? (
-            <div className="rounded border border-slate-200 bg-white p-1.5 dark:border-slate-700">
-              <RawImage
-                src={step.signatureUrl}
-                alt={`Signature for ${step.title}`}
-                optimizationReason="authenticated"
-                className="max-h-24 w-auto"
+      <GeneratedValue
+        value={
+          step.status === 'signed' ? (
+            <div className="mt-3 space-y-2 text-sm">
+              <div className="text-slate-700 dark:text-slate-300">
+                <GeneratedText id="m_0664908f5b6c68" />{' '}
+                <strong>
+                  <GeneratedValue value={step.signedBy ?? '—'} />
+                </strong>
+                <GeneratedValue
+                  value={
+                    step.signedAt ? (
+                      <>
+                        {' '}
+                        · <GeneratedValue value={new Date(step.signedAt).toLocaleString()} />
+                      </>
+                    ) : null
+                  }
+                />
+              </div>
+              <GeneratedValue
+                value={
+                  step.signatureUrl ? (
+                    <div className="rounded border border-slate-200 bg-white p-1.5 dark:border-slate-700">
+                      <RawImage
+                        src={step.signatureUrl}
+                        alt={tGenerated('m_015c2c2c5023d2', { value0: step.title })}
+                        optimizationReason="authenticated"
+                        className="max-h-24 w-auto"
+                      />
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  step.comment ? (
+                    <div className="text-xs text-slate-500">
+                      <GeneratedText id="m_02a80801f23cc0" />{' '}
+                      <GeneratedValue value={step.comment} />
+                    </div>
+                  ) : null
+                }
               />
             </div>
-          ) : null}
-          {step.comment ? <div className="text-xs text-slate-500">Note: {step.comment}</div> : null}
-        </div>
-      ) : null}
+          ) : null
+        }
+      />
 
       {/* Rejected-step body — reason + when */}
-      {step.status === 'rejected' ? (
-        <div className="mt-3 space-y-1 rounded-md border border-red-200 bg-white p-2 text-sm dark:border-red-900 dark:bg-slate-900">
-          <div className="text-red-800 dark:text-red-300">
-            Rejected by <strong>{step.rejectedBy ?? '—'}</strong>
-            {step.rejectedAt ? <> · {new Date(step.rejectedAt).toLocaleString()}</> : null}
-          </div>
-          <div className="text-slate-700 dark:text-slate-300">
-            <span className="text-xs tracking-wide text-slate-500 uppercase">Reason:</span>{' '}
-            {step.rejectionReason}
-          </div>
-          {canAct ? (
-            <p className="mt-2 text-xs text-slate-500">
-              Re-capture a signature below to re-attempt this step.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          step.status === 'rejected' ? (
+            <div className="mt-3 space-y-1 rounded-md border border-red-200 bg-white p-2 text-sm dark:border-red-900 dark:bg-slate-900">
+              <div className="text-red-800 dark:text-red-300">
+                <GeneratedText id="m_16d1378e47de23" />{' '}
+                <strong>
+                  <GeneratedValue value={step.rejectedBy ?? '—'} />
+                </strong>
+                <GeneratedValue
+                  value={
+                    step.rejectedAt ? (
+                      <>
+                        {' '}
+                        · <GeneratedValue value={new Date(step.rejectedAt).toLocaleString()} />
+                      </>
+                    ) : null
+                  }
+                />
+              </div>
+              <div className="text-slate-700 dark:text-slate-300">
+                <span className="text-xs tracking-wide text-slate-500 uppercase">
+                  <GeneratedText id="m_183a955f0dc9a8" />
+                </span>
+                <GeneratedValue value={' '} />
+                <GeneratedValue value={step.rejectionReason} />
+              </div>
+              <GeneratedValue
+                value={
+                  canAct ? (
+                    <p className="mt-2 text-xs text-slate-500">
+                      <GeneratedText id="m_18d0e71124fd04" />
+                    </p>
+                  ) : null
+                }
+              />
+            </div>
+          ) : null
+        }
+      />
 
       {/* Future / pending non-current: leave header-only */}
-      {isFuture ? <p className="mt-2 text-xs text-slate-500 italic">Awaits earlier step.</p> : null}
+      <GeneratedValue
+        value={
+          isFuture ? (
+            <p className="mt-2 text-xs text-slate-500 italic">
+              <GeneratedText id="m_104d6ee18c4694" />
+            </p>
+          ) : null
+        }
+      />
 
       {/* Action affordances live only on the active step + when the actor can act */}
-      {canAct ? (
-        <ActiveStepActions
-          step={step}
-          responseId={responseId}
-          showResign={step.status === 'rejected'}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          canAct ? (
+            <ActiveStepActions
+              step={step}
+              responseId={responseId}
+              showResign={step.status === 'rejected'}
+            />
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -234,6 +329,8 @@ function ActiveStepActions({
   responseId: string
   showResign: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [mode, setMode] = useState<'idle' | 'sign' | 'reject'>(
     step.status === 'signed' ? 'idle' : 'sign',
   )
@@ -247,13 +344,13 @@ function ActiveStepActions({
     setSignature(null)
     setComment('')
     setReason('')
-    setError(null)
+    setError(tGeneratedValue(null))
   }
 
   function doSign() {
-    setError(null)
+    setError(tGeneratedValue(null))
     if (!signature) {
-      setError('Capture a signature first')
+      setError(tGenerated('m_002521e2b63697'))
       return
     }
     start(async () => {
@@ -264,7 +361,7 @@ function ActiveStepActions({
         comment: comment.trim() || null,
       })
       if (!r.ok) {
-        setError(r.error)
+        setError(tGeneratedValue(r.error))
         return
       }
       // After a successful sign, auto-advance so the actor doesn't have to
@@ -275,7 +372,7 @@ function ActiveStepActions({
         currentStepKey: step.key,
       })
       if (!adv.ok) {
-        setError(adv.error)
+        setError(tGeneratedValue(adv.error))
         return
       }
       clearLocalState()
@@ -284,14 +381,14 @@ function ActiveStepActions({
   }
 
   function doAdvanceWithoutSignature() {
-    setError(null)
+    setError(tGeneratedValue(null))
     start(async () => {
       const r = await advanceWorkflowStep({
         responseId,
         currentStepKey: step.key,
       })
       if (!r.ok) {
-        setError(r.error)
+        setError(tGeneratedValue(r.error))
         return
       }
       clearLocalState()
@@ -300,9 +397,9 @@ function ActiveStepActions({
   }
 
   function doReject() {
-    setError(null)
+    setError(tGeneratedValue(null))
     if (!reason.trim()) {
-      setError('A reason is required')
+      setError(tGenerated('m_0830ced211ca83'))
       return
     }
     start(async () => {
@@ -312,7 +409,7 @@ function ActiveStepActions({
         reason: reason.trim(),
       })
       if (!r.ok) {
-        setError(r.error)
+        setError(tGeneratedValue(r.error))
         return
       }
       clearLocalState()
@@ -326,7 +423,15 @@ function ActiveStepActions({
     return (
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button type="button" onClick={doAdvanceWithoutSignature} disabled={pending}>
-          {pending ? 'Working…' : 'Advance / Close'}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_09001dc89c0edf" />
+              ) : (
+                <GeneratedText id="m_18948560179932" />
+              )
+            }
+          />
         </Button>
         <Button
           type="button"
@@ -334,119 +439,181 @@ function ActiveStepActions({
           onClick={() => setMode('reject')}
           disabled={pending}
         >
-          Reject step
+          <GeneratedText id="m_143a0447de17cc" />
         </Button>
-        {mode === 'reject' ? (
-          <div className="w-full space-y-2 rounded-md border border-red-200 bg-white p-2 dark:border-red-900 dark:bg-slate-900">
-            <Textarea
-              rows={2}
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Reason for rejecting this step…"
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setMode('idle')
-                  clearLocalState()
-                }}
-                disabled={pending}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={doReject}
-                disabled={pending || !reason.trim()}
-              >
-                {pending ? 'Working…' : 'Reject'}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-        {error ? <div className="text-xs text-red-600">{error}</div> : null}
+        <GeneratedValue
+          value={
+            mode === 'reject' ? (
+              <div className="w-full space-y-2 rounded-md border border-red-200 bg-white p-2 dark:border-red-900 dark:bg-slate-900">
+                <Textarea
+                  rows={2}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder={tGenerated('m_0b154bd2db12d1')}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setMode('idle')
+                      clearLocalState()
+                    }}
+                    disabled={pending}
+                  >
+                    <GeneratedText id="m_112e2e8ecda428" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={doReject}
+                    disabled={pending || !reason.trim()}
+                  >
+                    <GeneratedValue
+                      value={
+                        pending ? (
+                          <GeneratedText id="m_09001dc89c0edf" />
+                        ) : (
+                          <GeneratedText id="m_0f51548c04b27f" />
+                        )
+                      }
+                    />
+                  </Button>
+                </div>
+              </div>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            error ? (
+              <div className="text-xs text-red-600">
+                <GeneratedValue value={error} />
+              </div>
+            ) : null
+          }
+        />
       </div>
     )
   }
 
   return (
     <div className="mt-3 space-y-3">
-      {showResign ? (
-        <div className="text-xs tracking-wide text-slate-500 uppercase">Re-sign</div>
-      ) : null}
+      <GeneratedValue
+        value={
+          showResign ? (
+            <div className="text-xs tracking-wide text-slate-500 uppercase">
+              <GeneratedText id="m_05823fa61e640f" />
+            </div>
+          ) : null
+        }
+      />
       {/* SIGN sub-form */}
-      {mode === 'sign' ? (
-        <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
-          <SignaturePad value={signature} onChange={setSignature} />
-          <Textarea
-            rows={1}
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Optional note (e.g. 'pending verification')"
-          />
-          <div className="flex flex-wrap justify-end gap-2">
-            {!step.signatureRequired ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={doAdvanceWithoutSignature}
-                disabled={pending}
-              >
-                Advance without signature
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setMode('reject')}
-              disabled={pending}
-            >
-              Reject step
-            </Button>
-            <Button type="button" onClick={doSign} disabled={pending || !signature}>
-              {pending ? 'Working…' : 'Sign & advance'}
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          mode === 'sign' ? (
+            <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
+              <SignaturePad value={signature} onChange={setSignature} />
+              <Textarea
+                rows={1}
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder={tGenerated('m_1942ee843b69ca')}
+              />
+              <div className="flex flex-wrap justify-end gap-2">
+                <GeneratedValue
+                  value={
+                    !step.signatureRequired ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={doAdvanceWithoutSignature}
+                        disabled={pending}
+                      >
+                        <GeneratedText id="m_18b288e3fea767" />
+                      </Button>
+                    ) : null
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setMode('reject')}
+                  disabled={pending}
+                >
+                  <GeneratedText id="m_143a0447de17cc" />
+                </Button>
+                <Button type="button" onClick={doSign} disabled={pending || !signature}>
+                  <GeneratedValue
+                    value={
+                      pending ? (
+                        <GeneratedText id="m_09001dc89c0edf" />
+                      ) : (
+                        <GeneratedText id="m_049b235e36c6e0" />
+                      )
+                    }
+                  />
+                </Button>
+              </div>
+            </div>
+          ) : null
+        }
+      />
 
       {/* REJECT sub-form */}
-      {mode === 'reject' ? (
-        <div className="space-y-2 rounded-md border border-red-200 bg-white p-2 dark:border-red-900 dark:bg-slate-900">
-          <Textarea
-            rows={3}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason for rejecting this step (required)…"
-          />
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setMode('sign')
-                clearLocalState()
-              }}
-              disabled={pending}
-            >
-              Back to sign
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={doReject}
-              disabled={pending || !reason.trim()}
-            >
-              {pending ? 'Working…' : 'Reject step'}
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          mode === 'reject' ? (
+            <div className="space-y-2 rounded-md border border-red-200 bg-white p-2 dark:border-red-900 dark:bg-slate-900">
+              <Textarea
+                rows={3}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={tGenerated('m_10bc9103b5579b')}
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setMode('sign')
+                    clearLocalState()
+                  }}
+                  disabled={pending}
+                >
+                  <GeneratedText id="m_11d2a6d0007e98" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={doReject}
+                  disabled={pending || !reason.trim()}
+                >
+                  <GeneratedValue
+                    value={
+                      pending ? (
+                        <GeneratedText id="m_09001dc89c0edf" />
+                      ) : (
+                        <GeneratedText id="m_143a0447de17cc" />
+                      )
+                    }
+                  />
+                </Button>
+              </div>
+            </div>
+          ) : null
+        }
+      />
 
-      {error ? <div className="text-xs text-red-600">{error}</div> : null}
+      <GeneratedValue
+        value={
+          error ? (
+            <div className="text-xs text-red-600">
+              <GeneratedValue value={error} />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }

@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Equipment inspection TYPE builder — 1/3 settings rail + 2/3 build surface,
 // mirroring the inspections + PPE type builders. The type owns its criteria
 // directly, organised into drag-reorderable sections; criteria drag within a
@@ -113,6 +120,8 @@ export function EquipmentInspectionTypeBuilder({
   appliesToOptions: AppliesToOption[]
   activitySlot: React.ReactNode
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const checklist = useTypeChecklistController<CriterionData>(
     type.id,
@@ -129,31 +138,36 @@ export function EquipmentInspectionTypeBuilder({
           <>
             <BuilderRailHeader
               icon={<ClipboardList size={15} />}
-              title={type.name}
-              subtitle="Equipment inspection type"
+              title={tGeneratedValue(type.name)}
+              subtitle={tGenerated('m_03b2f52cde82fc')}
             />
             <BuilderRailNavigation active={leftTab} onChange={setLeftTab} />
             <BuilderScroll>
-              {leftTab === 'build' ? (
-                <ChecklistBuildMenu
-                  description={
-                    <>
-                      Build the checklist this inspection runs. Group questions into sections, drag
-                      to reorder, and set each question&apos;s response type, severity, and flags.
-                    </>
-                  }
-                  onAddGroup={checklist.addGroup}
-                  onAddCriterion={() => checklist.openAdd(null)}
-                />
-              ) : leftTab === 'settings' ? (
-                <SettingsPanel
-                  type={type}
-                  appliesToOptions={appliesToOptions}
-                  onDeleted={() => router.push('/equipment/inspection-types')}
-                />
-              ) : (
-                activitySlot
-              )}
+              <GeneratedValue
+                value={
+                  leftTab === 'build' ? (
+                    <ChecklistBuildMenu
+                      description={tGeneratedValue(
+                        <>
+                          Build the checklist this inspection runs. Group questions into sections,
+                          drag to reorder, and set each question&apos;s response type, severity, and
+                          flags.
+                        </>,
+                      )}
+                      onAddGroup={checklist.addGroup}
+                      onAddCriterion={() => checklist.openAdd(null)}
+                    />
+                  ) : leftTab === 'settings' ? (
+                    <SettingsPanel
+                      type={type}
+                      appliesToOptions={appliesToOptions}
+                      onDeleted={() => router.push('/equipment/inspection-types')}
+                    />
+                  ) : (
+                    activitySlot
+                  )
+                }
+              />
             </BuilderScroll>
           </>
         }
@@ -201,34 +215,50 @@ function CriterionContent({ c }: { c: BuilderCriterion }) {
   return (
     <>
       <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-        {c.question}
+        <GeneratedValue value={c.question} />
       </span>
       <span className="hidden shrink-0 text-[11px] text-slate-400 sm:inline">
-        {KIND_LABELS[c.kind]}
+        <GeneratedValue value={KIND_LABELS[c.kind]} />
       </span>
       <Badge variant={severityVariant(c.severity)} className="text-[10px]">
-        {c.severity}
+        <GeneratedValue value={c.severity} />
       </Badge>
-      {c.isCritical ? (
-        <Badge variant="destructive" className="text-[10px]">
-          critical
-        </Badge>
-      ) : null}
-      {!c.isRequired ? (
-        <Badge variant="outline" className="text-[10px]">
-          optional
-        </Badge>
-      ) : null}
-      {c.requiresPhoto ? (
-        <Badge variant="outline" className="text-[10px]">
-          photo
-        </Badge>
-      ) : null}
-      {c.requiresComment ? (
-        <Badge variant="outline" className="text-[10px]">
-          comment
-        </Badge>
-      ) : null}
+      <GeneratedValue
+        value={
+          c.isCritical ? (
+            <Badge variant="destructive" className="text-[10px]">
+              <GeneratedText id="m_027e9229c5c0d4" />
+            </Badge>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          !c.isRequired ? (
+            <Badge variant="outline" className="text-[10px]">
+              <GeneratedText id="m_1577dda730dc14" />
+            </Badge>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          c.requiresPhoto ? (
+            <Badge variant="outline" className="text-[10px]">
+              <GeneratedText id="m_07cb1cfb72cff4" />
+            </Badge>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          c.requiresComment ? (
+            <Badge variant="outline" className="text-[10px]">
+              <GeneratedText id="m_05b9f700b46533" />
+            </Badge>
+          ) : null
+        }
+      />
     </>
   )
 }
@@ -246,6 +276,8 @@ function CriterionEditorDrawer({
   onClose: () => void
   onSave: (data: CriterionData) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const criterion = editor?.criterion
   const [question, setQuestion] = useReseededState(editor, criterion?.question ?? '')
   const [description, setDescription] = useReseededState(editor, criterion?.description ?? '')
@@ -273,12 +305,14 @@ function CriterionEditorDrawer({
     <Drawer
       open={!!editor}
       onClose={onClose}
-      title={editor?.mode === 'add' ? 'Add question' : 'Edit question'}
+      title={tGeneratedValue(
+        editor?.mode === 'add' ? tGenerated('m_029dffafbff34b') : tGenerated('m_06b6a61fd2d8b0'),
+      )}
       size="sm"
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button
             disabled={!question.trim()}
@@ -296,82 +330,108 @@ function CriterionEditorDrawer({
               })
             }
           >
-            {editor?.mode === 'add' ? 'Add' : 'Save'}
+            <GeneratedValue
+              value={
+                editor?.mode === 'add' ? (
+                  <GeneratedText id="m_16c8592e5020a4" />
+                ) : (
+                  <GeneratedText id="m_19e6bff894c3c7" />
+                )
+              }
+            />
           </Button>
         </>
       }
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>Question</Label>
+          <Label>
+            <GeneratedText id="m_1a895b5691321b" />
+          </Label>
           <Textarea
             rows={2}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder='e.g. "Are the brake lights working?"'
+            placeholder={tGenerated('m_1efa198f25d91b')}
             autoFocus
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label>Response type</Label>
+            <Label>
+              <GeneratedText id="m_15eb6eb85b34f2" />
+            </Label>
             <Select value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-              {KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {KIND_LABELS[k]}
-                </option>
-              ))}
+              <GeneratedValue
+                value={KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    <GeneratedValue value={KIND_LABELS[k]} />
+                  </option>
+                ))}
+              />
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Severity</Label>
+            <Label>
+              <GeneratedText id="m_168b365cc671bf" />
+            </Label>
             <Select value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}>
-              {SEVERITIES.map((s) => (
-                <option key={s} value={s}>
-                  {s[0]!.toUpperCase() + s.slice(1)}
-                </option>
-              ))}
+              <GeneratedValue
+                value={SEVERITIES.map((s) => (
+                  <option key={s} value={s}>
+                    <GeneratedValue value={s[0]!.toUpperCase() + s.slice(1)} />
+                  </option>
+                ))}
+              />
             </Select>
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label>Help text</Label>
+          <Label>
+            <GeneratedText id="m_0d04877b1a742b" />
+          </Label>
           <Textarea
             rows={2}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional guidance for the inspector"
+            placeholder={tGenerated('m_0905e10141cf65')}
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Section</Label>
+          <Label>
+            <GeneratedText id="m_0d513924d97753" />
+          </Label>
           <Select value={groupId ?? ''} onChange={(e) => setGroupId(e.target.value || null)}>
-            <option value="">Ungrouped</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.label}
-              </option>
-            ))}
+            <option value="">
+              <GeneratedText id="m_124ee6c18e0195" />
+            </option>
+            <GeneratedValue
+              value={groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  <GeneratedValue value={g.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
         <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
           <BuilderCheckboxRow
-            label="Required answer"
+            label={tGenerated('m_14d46dc4a638d2')}
             checked={isRequired}
             onChange={setIsRequired}
           />
           <BuilderCheckboxRow
-            label="Require a photo"
+            label={tGenerated('m_0a9994281e867d')}
             checked={requiresPhoto}
             onChange={setRequiresPhoto}
           />
           <BuilderCheckboxRow
-            label="Require a comment"
+            label={tGenerated('m_1cff8028d13785')}
             checked={requiresComment}
             onChange={setRequiresComment}
           />
           <BuilderCheckboxRow
-            label="Critical (a fail forces a work order + red flag)"
+            label={tGenerated('m_128a2cbf7aa028')}
             checked={isCritical}
             onChange={setIsCritical}
           />
@@ -392,6 +452,7 @@ function SettingsPanel({
   appliesToOptions: AppliesToOption[]
   onDeleted: () => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const run = useBuilderActionRunner('Failed to save')
   const [name, setName] = React.useState(type.name)
   const [description, setDescription] = React.useState(type.description ?? '')
@@ -424,65 +485,77 @@ function SettingsPanel({
         failsSpawnWorkOrders,
         isActive,
       })
-      toast.success('Saved')
+      toast.success(tGenerated('m_0a0569b726b225'))
     })
   }
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label>Name *</Label>
+        <Label>
+          <GeneratedText id="m_1a9978900838e6" />
+        </Label>
         <Input value={name} onChange={(e) => setName(e.target.value)} required />
       </div>
       <div className="space-y-1.5">
-        <Label>Applies to equipment type</Label>
+        <Label>
+          <GeneratedText id="m_0cd8311e50d877" />
+        </Label>
         <Select value={appliesToTypeId} onChange={(e) => setAppliesToTypeId(e.target.value)}>
-          <option value="">— Any equipment —</option>
-          {appliesToOptions.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
+          <option value="">
+            <GeneratedText id="m_1130ef09787df0" />
+          </option>
+          <GeneratedValue
+            value={appliesToOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                <GeneratedValue value={o.name} />
+              </option>
+            ))}
+          />
         </Select>
       </div>
       <IntervalPicker
         value={interval}
         onChange={setInterval}
-        label="Default interval"
+        label={tGenerated('m_0d61ed6a4b09fb')}
         allowPreUse
         idPrefix="eit-settings-interval"
       />
       <div className="space-y-1.5">
-        <Label>Description</Label>
+        <Label>
+          <GeneratedText id="m_14d923495cf14c" />
+        </Label>
         <Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
-        <legend className="px-1 text-xs font-medium text-slate-500">Behaviour</legend>
+        <legend className="px-1 text-xs font-medium text-slate-500">
+          <GeneratedText id="m_0da99b13b19b75" />
+        </legend>
         <BuilderCheckboxRow
-          label='Allow "pass all" shortcut'
+          label={tGenerated('m_1def60bb7c277d')}
           checked={allowPassAll}
           onChange={setAllowPassAll}
         />
         <BuilderCheckboxRow
-          label="Failed criterion auto-creates a work order"
+          label={tGenerated('m_00bc92b4183bbc')}
           checked={failsSpawnWorkOrders}
           onChange={setFailsSpawnWorkOrders}
         />
         <BuilderCheckboxRow
-          label="Active (available to run)"
+          label={tGenerated('m_0a11d953082971')}
           checked={isActive}
           onChange={setIsActive}
         />
       </fieldset>
       <div className="flex justify-end">
         <Button onClick={save}>
-          <Save size={14} /> Save
+          <Save size={14} /> <GeneratedText id="m_19e6bff894c3c7" />
         </Button>
       </div>
 
       <BuilderDangerZone
-        title="Delete inspection type"
-        description="Removes this type from the library. Existing records are unaffected."
-        buttonLabel="Delete type"
+        title={tGenerated('m_0f55d85091996a')}
+        description={tGenerated('m_1ba34d70c06f79')}
+        buttonLabel={tGenerated('m_12fda1066d2e96')}
         onDelete={deleteType}
       />
     </div>

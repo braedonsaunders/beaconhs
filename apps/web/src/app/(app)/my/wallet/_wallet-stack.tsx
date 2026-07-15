@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Apple-Wallet-style credential gallery.
 //
 // Each card embeds the REAL rendered credential design (front + back artboards
@@ -71,30 +78,35 @@ export function WalletStack({
   design: WalletDesign
   filtered?: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   if (cards.length === 0) {
     return (
       <EmptyState
         icon={<CreditCard size={32} />}
-        title={filtered ? 'No credentials match these filters' : 'No credentials yet'}
-        description={
-          filtered
-            ? 'Clear the search or filters to see your other credentials.'
-            : 'Completed training and granted skills appear here as wallet cards you can flip, carry, and download.'
-        }
+        title={tGeneratedValue(
+          filtered ? tGenerated('m_023d892a1902be') : tGenerated('m_19193b72c4e49a'),
+        )}
+        description={tGeneratedValue(
+          filtered ? tGenerated('m_1bd55dea449f19') : tGenerated('m_10a2da01534583'),
+        )}
       />
     )
   }
 
   return (
     <div className="grid grid-cols-1 gap-x-6 gap-y-7 sm:grid-cols-2 xl:grid-cols-3">
-      {cards.map((card) => (
-        <FlipCard key={card.id} card={card} design={design} />
-      ))}
+      <GeneratedValue
+        value={cards.map((card) => (
+          <FlipCard key={card.id} card={card} design={design} />
+        ))}
+      />
     </div>
   )
 }
 
 function FlipCard({ card, design }: { card: WalletCard; design: WalletDesign }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const status = STATUS[card.status]
   const kind = KIND[card.kind]
 
@@ -109,19 +121,19 @@ function FlipCard({ card, design }: { card: WalletCard; design: WalletDesign }) 
             )}
           >
             <kind.icon size={12} />
-            {kind.label}
+            <GeneratedValue value={kind.label} />
           </span>
           <span
             className="truncate text-sm font-medium text-slate-700 dark:text-slate-200"
-            title={card.title}
+            title={tGeneratedValue(card.title)}
           >
-            {card.title}
+            <GeneratedValue value={card.title} />
           </span>
         </div>
         <span
           className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold', status.cls)}
         >
-          {status.label}
+          <GeneratedValue value={status.label} />
         </span>
       </div>
 
@@ -140,19 +152,23 @@ function FlipCard({ card, design }: { card: WalletCard; design: WalletDesign }) 
           className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 dark:bg-slate-100 dark:text-slate-900"
         >
           <Download size={15} />
-          Download
+          <GeneratedText id="m_0fcb9c63d263d1" />
         </Link>
-        {card.verifyHref ? (
-          <Link
-            href={card.verifyHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            <ShieldCheck size={15} />
-            Verify
-          </Link>
-        ) : null}
+        <GeneratedValue
+          value={
+            card.verifyHref ? (
+              <Link
+                href={card.verifyHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <ShieldCheck size={15} />
+                <GeneratedText id="m_0356d87319457b" />
+              </Link>
+            ) : null
+          }
+        />
       </div>
     </div>
   )

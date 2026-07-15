@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Plus } from 'lucide-react'
@@ -14,6 +21,8 @@ export function ClassAttendeePicker({
   classId: string
   action: (formData: FormData) => Promise<void>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [personId, setPersonId] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -21,7 +30,7 @@ export function ClassAttendeePicker({
 
   function add() {
     if (!personId) return
-    setError(null)
+    setError(tGeneratedValue(null))
     startTransition(async () => {
       const formData = new FormData()
       formData.set('classId', classId)
@@ -29,13 +38,13 @@ export function ClassAttendeePicker({
       try {
         await action(formData)
         setPersonId('')
-        toast.success('Attendee added')
+        toast.success(tGenerated('m_1c05cbdad6fc70'))
         router.refresh()
       } catch (actionError) {
         const message =
           actionError instanceof Error ? actionError.message : 'Could not add attendee.'
-        setError(message)
-        toast.error(message)
+        setError(tGeneratedValue(message))
+        toast.error(tGeneratedValue(message))
       }
     })
   }
@@ -49,8 +58,8 @@ export function ClassAttendeePicker({
             contextId={classId}
             value={personId}
             onChange={setPersonId}
-            placeholder="Add a person to the roster…"
-            searchPlaceholder="Search name, employee number, job title, or email…"
+            placeholder={tGenerated('m_0cfc77616ec7e7')}
+            searchPlaceholder={tGenerated('m_03c9590b6c1f30')}
             sheetTitle="Add an attendee"
             ariaLabel="Person to add"
             clearable={false}
@@ -58,15 +67,21 @@ export function ClassAttendeePicker({
           />
         </div>
         <Button type="button" onClick={add} disabled={!personId || pending}>
-          {pending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-          Add
+          <GeneratedValue
+            value={pending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+          />
+          <GeneratedText id="m_16c8592e5020a4" />
         </Button>
       </div>
-      {error ? (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-          {error}
-        </p>
-      ) : null}
+      <GeneratedValue
+        value={
+          error ? (
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+              <GeneratedValue value={error} />
+            </p>
+          ) : null
+        }
+      />
     </div>
   )
 }

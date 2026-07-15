@@ -1,3 +1,5 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+import { GeneratedValue } from '@/i18n/generated'
 // "My" landing page — a hub of personal views for the signed-in user.
 //
 // Each tile is a one-glance summary card linking to a per-entity list filtered
@@ -35,7 +37,10 @@ import { personCompliance } from '../compliance/_hub'
 import { loadInProgressEntries } from '../dashboard/_metrics'
 import { WorkspaceNoIdentity } from './_no-identity'
 
-export const metadata = { title: 'Workspace' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_01ac914ec691a0') }
+}
 export const dynamic = 'force-dynamic'
 
 // Every tile gets its own hue so the wall reads at a glance; urgency is
@@ -85,6 +90,8 @@ type Tile = {
 }
 
 export default async function MyLandingPage() {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   const membershipId = ctx.membership?.id ?? null
 
@@ -240,7 +247,10 @@ export default async function MyLandingPage() {
     return (
       <PageContainer>
         <div className="space-y-5">
-          <PageHeader title="Workspace" description="Personal views for your account." />
+          <PageHeader
+            title={tGenerated('m_01ac914ec691a0')}
+            description={tGenerated('m_0b1ede3c320d3b')}
+          />
           <WorkspaceNoIdentity reason="no-membership" noun="records, training, and credentials" />
         </div>
       </PageContainer>
@@ -363,68 +373,78 @@ export default async function MyLandingPage() {
     <PageContainer>
       <div className="space-y-5">
         <PageHeader
-          title="Workspace"
-          description={
+          title={tGenerated('m_01ac914ec691a0')}
+          description={tGeneratedValue(
             ctx.membership?.displayName
-              ? `Personal views for ${ctx.membership.displayName}.`
-              : 'Personal views for your account.'
-          }
+              ? tGenerated('m_1f86a3a8b4cc6d', { value0: ctx.membership.displayName })
+              : tGenerated('m_0b1ede3c320d3b'),
+          )}
         />
 
         <div className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
-          {tiles.map((tile) => {
-            const tone = TONES[tile.tone]
-            return (
-              <Link
-                key={tile.href}
-                href={tile.href as never}
-                className="group relative flex h-full min-h-[10rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg sm:p-6 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
-              >
-                {/* oversized ghost icon bleeding off the corner */}
-                <tile.icon
-                  aria-hidden
-                  strokeWidth={1.5}
-                  className={cn(
-                    'pointer-events-none absolute -right-6 -bottom-7 h-36 w-36 -rotate-12 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6',
-                    tone.ghost,
-                  )}
-                />
-                <div className="relative flex h-full flex-col">
-                  <div className="flex items-start justify-between gap-3">
-                    <span
-                      className={cn(
-                        'inline-flex h-11 w-11 items-center justify-center rounded-xl',
-                        tone.chip,
-                      )}
-                    >
-                      <tile.icon size={22} />
-                    </span>
-                    {typeof tile.count === 'number' ? (
-                      <div className="text-3xl font-semibold text-slate-900 tabular-nums dark:text-slate-100">
-                        {tile.count.toLocaleString()}
-                      </div>
-                    ) : null}
+          <GeneratedValue
+            value={tiles.map((tile) => {
+              const tone = TONES[tile.tone]
+              return (
+                <Link
+                  key={tile.href}
+                  href={tile.href as never}
+                  className="group relative flex h-full min-h-[10rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg sm:p-6 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
+                >
+                  {/* oversized ghost icon bleeding off the corner */}
+                  <tile.icon
+                    aria-hidden
+                    strokeWidth={1.5}
+                    className={cn(
+                      'pointer-events-none absolute -right-6 -bottom-7 h-36 w-36 -rotate-12 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6',
+                      tone.ghost,
+                    )}
+                  />
+                  <div className="relative flex h-full flex-col">
+                    <div className="flex items-start justify-between gap-3">
+                      <span
+                        className={cn(
+                          'inline-flex h-11 w-11 items-center justify-center rounded-xl',
+                          tone.chip,
+                        )}
+                      >
+                        <tile.icon size={22} />
+                      </span>
+                      <GeneratedValue
+                        value={
+                          typeof tile.count === 'number' ? (
+                            <div className="text-3xl font-semibold text-slate-900 tabular-nums dark:text-slate-100">
+                              <GeneratedValue value={tile.count.toLocaleString()} />
+                            </div>
+                          ) : null
+                        }
+                      />
+                    </div>
+                    <div className="mt-4 text-base font-semibold text-slate-900 dark:text-slate-100">
+                      <GeneratedValue value={tile.label} />
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      <GeneratedValue value={tile.description} />
+                    </p>
+                    <GeneratedValue
+                      value={
+                        tile.hint ? (
+                          <Badge
+                            variant={tile.hintVariant ?? 'secondary'}
+                            className="mt-auto w-fit font-normal"
+                          >
+                            <GeneratedValue value={tile.hint} />
+                          </Badge>
+                        ) : (
+                          <div className="mt-auto" />
+                        )
+                      }
+                    />
                   </div>
-                  <div className="mt-4 text-base font-semibold text-slate-900 dark:text-slate-100">
-                    {tile.label}
-                  </div>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    {tile.description}
-                  </p>
-                  {tile.hint ? (
-                    <Badge
-                      variant={tile.hintVariant ?? 'secondary'}
-                      className="mt-auto w-fit font-normal"
-                    >
-                      {tile.hint}
-                    </Badge>
-                  ) : (
-                    <div className="mt-auto" />
-                  )}
-                </div>
-              </Link>
-            )
-          })}
+                </Link>
+              )
+            })}
+          />
         </div>
       </div>
     </PageContainer>

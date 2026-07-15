@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Printer } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
@@ -29,7 +32,10 @@ import { SortableTh } from '@/components/sortable-th'
 import { TableToolbar } from '@/components/table-toolbar'
 import { generateBulkQrSheet } from './_actions'
 
-export const metadata = { title: 'Bulk QR generator' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0b23e127482528') }
+}
 export const dynamic = 'force-dynamic'
 const BASE = '/equipment/qr/bulk'
 const SORTS = ['asset_tag', 'name', 'type'] as const
@@ -39,6 +45,8 @@ export default async function BulkQrPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'asset_tag',
@@ -97,87 +105,106 @@ export default async function BulkQrPage({
       header={
         <>
           <PageHeader
-            title="Bulk QR generator"
-            description="Select equipment items to generate a printable A4 sheet of 4×3 QR labels. Submitting opens a print-ready page."
+            title={tGenerated('m_0b23e127482528')}
+            description={tGenerated('m_0f909595638586')}
             back={{ href: '/equipment', label: 'Back to equipment' }}
           />
           <EquipmentSubNav active="equipment" />
           <TableToolbar>
-            <SearchInput placeholder="Search asset tag or name…" />
+            <SearchInput placeholder={tGenerated('m_0ab33e0dd92de5')} />
             <RemoteSearchFilter
               lookup="equipment-types"
               basePath={BASE}
               currentParams={sp}
               paramKey="typeId"
-              placeholder="Type"
+              placeholder={tGenerated('m_074ba2f160c506')}
               allLabel="All types"
-              searchPlaceholder="Search equipment types…"
+              searchPlaceholder={tGenerated('m_129f9c4e0a75c8')}
             />
           </TableToolbar>
           <div className="text-xs text-slate-500 dark:text-slate-400">
-            <Badge variant="secondary">{total} matching items</Badge>
+            <Badge variant="secondary">
+              <GeneratedValue value={total} /> <GeneratedText id="m_198ee0c8c44de2" />
+            </Badge>
           </div>
         </>
       }
     >
-      <Section title="Pick equipment for the QR sheet" defaultOpen>
+      <Section title={tGenerated('m_1dc8a5f3ade7e5')} defaultOpen>
         <form action={generateBulkQrSheet} className="space-y-4">
-          {rows.length === 0 ? (
-            <EmptyState
-              title={params.q || typeParam ? 'No equipment matches your filters' : 'No equipment'}
-              description="Clear the search or type filter to choose other equipment."
-            />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12 text-center">
-                      <SelectAllCheckbox itemName="ids" ariaLabel="Select all visible equipment" />
-                    </TableHead>
-                    <SortableTh
-                      {...sortProps}
-                      column="asset_tag"
-                      active={params.sort === 'asset_tag'}
-                    >
-                      Asset tag
-                    </SortableTh>
-                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                      Name
-                    </SortableTh>
-                    <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
-                      Type
-                    </SortableTh>
-                    <TableHead>QR token</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map(({ item, type }) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="text-center">
-                        <input type="checkbox" name="ids" value={item.id} />
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{item.assetTag}</TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/equipment/${item.id}`}
-                          className="font-medium hover:underline"
+          <GeneratedValue
+            value={
+              rows.length === 0 ? (
+                <EmptyState
+                  title={tGeneratedValue(
+                    params.q || typeParam
+                      ? tGenerated('m_126bb11d3cf45c')
+                      : tGenerated('m_0f44a06d1a2711'),
+                  )}
+                  description={tGenerated('m_18b39d94c6c6fa')}
+                />
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12 text-center">
+                          <SelectAllCheckbox
+                            itemName="ids"
+                            ariaLabel="Select all visible equipment"
+                          />
+                        </TableHead>
+                        <SortableTh
+                          {...sortProps}
+                          column="asset_tag"
+                          active={params.sort === 'asset_tag'}
                         >
-                          {item.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-400">
-                        {type?.name ?? '—'}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                        {item.qrToken.slice(0, 12)}…
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                          <GeneratedText id="m_0d9ccb155777db" />
+                        </SortableTh>
+                        <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                          <GeneratedText id="m_02b18d5c7f6f2d" />
+                        </SortableTh>
+                        <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
+                          <GeneratedText id="m_074ba2f160c506" />
+                        </SortableTh>
+                        <TableHead>
+                          <GeneratedText id="m_0d04212bb3d171" />
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <GeneratedValue
+                        value={rows.map(({ item, type }) => (
+                          <TableRow key={item.id}>
+                            <TableCell className="text-center">
+                              <input type="checkbox" name="ids" value={item.id} />
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">
+                              <GeneratedValue value={item.assetTag} />
+                            </TableCell>
+                            <TableCell>
+                              <Link
+                                href={`/equipment/${item.id}`}
+                                className="font-medium hover:underline"
+                              >
+                                <GeneratedValue value={item.name} />
+                              </Link>
+                            </TableCell>
+                            <TableCell className="text-slate-600 dark:text-slate-400">
+                              <GeneratedValue value={type?.name ?? '—'} />
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                              <GeneratedValue value={item.qrToken.slice(0, 12)} />…
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      />
+                    </TableBody>
+                  </Table>
+                </div>
+              )
+            }
+          />
           <Pagination
             basePath={BASE}
             currentParams={sp}
@@ -187,17 +214,16 @@ export default async function BulkQrPage({
           />
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-800">
             <div className="text-slate-600 dark:text-slate-400">
-              Select equipment on this page. Selections become a printable 4×3 grid (12 labels per
-              page) sized for adhesive vinyl asset tags.
+              <GeneratedText id="m_1f5715ef89b080" />
             </div>
             <div className="flex items-center gap-2">
               <Link href="/equipment">
                 <Button type="button" variant="outline">
-                  Cancel
+                  <GeneratedText id="m_112e2e8ecda428" />
                 </Button>
               </Link>
               <Button type="submit">
-                <Printer size={14} /> Generate sheet
+                <Printer size={14} /> <GeneratedText id="m_0f463343b9f7d7" />
               </Button>
             </div>
           </div>

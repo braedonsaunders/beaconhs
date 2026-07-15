@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // Searchable, filterable transcript list for the public badge page. Filtering
 // is instant and client-side — a gate check is a one-handed phone interaction,
 // so no reloads, no URL round-trips. Every row opens the actual rendered
@@ -40,7 +42,7 @@ export function StandingChip({ standing }: { standing: Standing }) {
     <span
       className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap ${s.chip}`}
     >
-      {s.label}
+      <GeneratedValue value={s.label} />
     </span>
   )
 }
@@ -53,10 +55,18 @@ function ItemCard({ item }: { item: TranscriptItem }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-900">{item.name}</div>
-          {item.code ? (
-            <div className="mt-0.5 font-mono text-[11px] text-slate-400">{item.code}</div>
-          ) : null}
+          <div className="text-sm font-semibold text-slate-900">
+            <GeneratedValue value={item.name} />
+          </div>
+          <GeneratedValue
+            value={
+              item.code ? (
+                <div className="mt-0.5 font-mono text-[11px] text-slate-400">
+                  <GeneratedValue value={item.code} />
+                </div>
+              ) : null
+            }
+          />
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <StandingChip standing={item.standing} />
@@ -65,18 +75,36 @@ function ItemCard({ item }: { item: TranscriptItem }) {
       </div>
       <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
         <span>
-          {item.kind === 'skill' ? 'Granted' : 'Completed'}{' '}
-          <span className="font-medium text-slate-700">{formatDay(item.completedOn)}</span>
+          <GeneratedValue
+            value={
+              item.kind === 'skill' ? (
+                <GeneratedText id="m_10633978809d91" />
+              ) : (
+                <GeneratedText id="m_0ba7a5e1b2fa32" />
+              )
+            }
+          />
+          <GeneratedValue value={' '} />
+          <span className="font-medium text-slate-700">
+            <GeneratedValue value={formatDay(item.completedOn)} />
+          </span>
         </span>
         <span>
-          {item.expiresOn ? (
-            <>
-              Expires{' '}
-              <span className="font-medium text-slate-700">{formatDay(item.expiresOn)}</span>
-            </>
-          ) : (
-            'Does not expire'
-          )}
+          <GeneratedValue
+            value={
+              item.expiresOn ? (
+                <>
+                  <GeneratedText id="m_14f3858b0a9ad6" />
+                  <GeneratedValue value={' '} />
+                  <span className="font-medium text-slate-700">
+                    <GeneratedValue value={formatDay(item.expiresOn)} />
+                  </span>
+                </>
+              ) : (
+                <GeneratedText id="m_1126fc7f5aa942" />
+              )
+            }
+          />
         </span>
       </div>
     </Link>
@@ -87,15 +115,20 @@ function Section({ title, items }: { title: string; items: TranscriptItem[] }) {
   if (!items.length) return null
   return (
     <section className="space-y-2">
-      <h2 className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">{title}</h2>
-      {items.map((item) => (
-        <ItemCard key={item.key} item={item} />
-      ))}
+      <h2 className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+        <GeneratedValue value={title} />
+      </h2>
+      <GeneratedValue
+        value={items.map((item) => (
+          <ItemCard key={item.key} item={item} />
+        ))}
+      />
     </section>
   )
 }
 
 export function TranscriptList({ items }: { items: TranscriptItem[] }) {
+  const tGenerated = useGeneratedTranslations()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Standing | 'all'>('all')
 
@@ -124,43 +157,54 @@ export function TranscriptList({ items }: { items: TranscriptItem[] }) {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.currentTarget.value)}
-            placeholder="Search training and skills"
+            placeholder={tGenerated('m_07d05710d909dd')}
             className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pr-3 pl-9 text-base text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
           />
         </div>
         <div className="flex gap-1.5">
-          {FILTERS.map((f) => {
-            const count =
-              f.value === 'all' ? items.length : items.filter((i) => i.standing === f.value).length
-            return (
-              <button
-                key={f.value}
-                type="button"
-                onClick={() => setFilter(f.value)}
-                className={`flex-1 rounded-full border px-2 py-1.5 text-xs font-semibold transition-colors ${
-                  filter === f.value
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-200 bg-white text-slate-600'
-                }`}
-              >
-                {f.label} <span className="opacity-60">{count}</span>
-              </button>
-            )
-          })}
+          <GeneratedValue
+            value={FILTERS.map((f) => {
+              const count =
+                f.value === 'all'
+                  ? items.length
+                  : items.filter((i) => i.standing === f.value).length
+              return (
+                <button
+                  key={f.value}
+                  type="button"
+                  onClick={() => setFilter(f.value)}
+                  className={`flex-1 rounded-full border px-2 py-1.5 text-xs font-semibold transition-colors ${
+                    filter === f.value
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  <GeneratedValue value={f.label} />{' '}
+                  <span className="opacity-60">
+                    <GeneratedValue value={count} />
+                  </span>
+                </button>
+              )
+            })}
+          />
         </div>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-5 text-center text-sm text-slate-500 shadow-sm">
-          No credentials match.
-        </div>
-      ) : (
-        <>
-          <Section title="Current training" items={current} />
-          <Section title="Skills & qualifications" items={skills} />
-          <Section title="Expired" items={expired} />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          filtered.length === 0 ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-5 text-center text-sm text-slate-500 shadow-sm">
+              <GeneratedText id="m_06b1476a97601e" />
+            </div>
+          ) : (
+            <>
+              <Section title={tGenerated('m_056948ac2c0da4')} items={current} />
+              <Section title={tGenerated('m_1ff6e4a8d161be')} items={skills} />
+              <Section title={tGenerated('m_13f7150c94b182')} items={expired} />
+            </>
+          )
+        }
+      />
     </div>
   )
 }

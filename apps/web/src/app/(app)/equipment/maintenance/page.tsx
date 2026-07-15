@@ -1,3 +1,11 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
 // Equipment maintenance cockpit — the fleet-wide "what should a technician be
 // doing, to which unit, when" view. One merged agenda from three sources:
 // per-unit inspection schedules, ad-hoc reminders, and oil-change tracking.
@@ -56,7 +64,10 @@ import { StatTile } from '@/components/stat-tile'
 import { completeEquipmentReminder } from '../_maintenance-actions'
 import { ReminderDrawer, type ReminderEditing } from '../_maintenance-drawers'
 
-export const metadata = { title: 'Equipment maintenance' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0e6750f1a6b581') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/equipment/maintenance'
@@ -133,6 +144,8 @@ export default async function EquipmentMaintenancePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const ctx = await requireRequestContext()
   const manage = can(ctx, 'equipment.manage')
@@ -479,8 +492,8 @@ export default async function EquipmentMaintenancePage({
       header={
         <>
           <PageHeader
-            title="Maintenance"
-            description="Everything due across the fleet — inspection schedules, reminders, and oil changes."
+            title={tGenerated('m_08fc3f5f377c0d')}
+            description={tGenerated('m_17a93656a9e4d7')}
             actions={
               manage ? (
                 <Link
@@ -488,7 +501,7 @@ export default async function EquipmentMaintenancePage({
                   scroll={false}
                 >
                   <Button>
-                    <Plus size={14} /> Add reminder
+                    <Plus size={14} /> <GeneratedText id="m_04b0444a0259a5" />
                   </Button>
                 </Link>
               ) : undefined
@@ -496,12 +509,12 @@ export default async function EquipmentMaintenancePage({
           />
           <EquipmentSubNav active="maintenance" />
           <TableToolbar>
-            <SearchInput placeholder="Search unit, tag, task…" />
+            <SearchInput placeholder={tGenerated('m_0f08106564c851')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="kind"
-              label="Kind"
+              label={tGenerated('m_1e578efe1574cd')}
               options={[
                 { value: 'inspection', label: 'Inspections' },
                 { value: 'reminder', label: 'Reminders' },
@@ -512,7 +525,7 @@ export default async function EquipmentMaintenancePage({
               basePath={BASE}
               currentParams={sp}
               paramKey="cat"
-              label="Category"
+              label={tGenerated('m_108b41637f364f')}
               options={data.categories.map((c) => ({ value: c.id, label: c.name }))}
             />
           </TableToolbar>
@@ -522,19 +535,31 @@ export default async function EquipmentMaintenancePage({
     >
       <div className="flex h-full min-h-0 flex-col gap-4">
         <div className="grid shrink-0 grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatTile icon={AlarmClock} tone="rose" label="Overdue" value={overdue.length} dense />
+          <StatTile
+            icon={AlarmClock}
+            tone="rose"
+            label={tGenerated('m_1e40bdcf2d1ba1')}
+            value={overdue.length}
+            dense
+          />
           <StatTile
             icon={ClipboardCheck}
             tone="amber"
-            label="Due today"
+            label={tGenerated('m_16bc9720eed909')}
             value={dueToday.length}
             dense
           />
-          <StatTile icon={CalendarClock} tone="sky" label="Next 7 days" value={week.length} dense />
+          <StatTile
+            icon={CalendarClock}
+            tone="sky"
+            label={tGenerated('m_0aa89e9cafb163')}
+            value={week.length}
+            dense
+          />
           <StatTile
             icon={CalendarDays}
             tone="teal"
-            label="Next 30 days"
+            label={tGenerated('m_13c6af1fdd2945')}
             value={next30.length}
             dense
           />
@@ -546,19 +571,32 @@ export default async function EquipmentMaintenancePage({
         <div className="flex min-h-0 flex-1 gap-4">
           <Card className="flex h-full min-h-0 w-full flex-col lg:w-1/3">
             <CardHeader className="shrink-0 pb-3">
-              <CardTitle>Work list ({workTotal})</CardTitle>
+              <CardTitle>
+                <GeneratedText id="m_0e45cb7349c90b" />
+                <GeneratedValue value={workTotal} />)
+              </CardTitle>
             </CardHeader>
             <CardContent className="flex min-h-0 flex-1 flex-col gap-2 pt-0">
               <div className="app-scroll min-h-0 flex-1 overflow-y-auto pr-1">
-                {pageEntries.length === 0 ? (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {q || kindFilter || catFilter
-                      ? 'Nothing due matches the current search or filters.'
-                      : 'Nothing due in this window. Schedules, reminders, and oil changes appear here as their due dates approach.'}
-                  </p>
-                ) : (
-                  <WorkList entries={pageEntries} today={today} manage={manage} sp={sp} />
-                )}
+                <GeneratedValue
+                  value={
+                    pageEntries.length === 0 ? (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        <GeneratedValue
+                          value={
+                            q || kindFilter || catFilter ? (
+                              <GeneratedText id="m_18f1fb1d9679b3" />
+                            ) : (
+                              <GeneratedText id="m_0d1a41bfdf1526" />
+                            )
+                          }
+                        />
+                      </p>
+                    ) : (
+                      <WorkList entries={pageEntries} today={today} manage={manage} sp={sp} />
+                    )
+                  }
+                />
               </div>
               <div className="shrink-0 border-t border-slate-100 dark:border-slate-800">
                 <Pagination
@@ -575,27 +613,33 @@ export default async function EquipmentMaintenancePage({
           {/* Month calendar — navigate months to plan ahead. */}
           <Card className="hidden h-full min-h-0 flex-1 lg:flex lg:flex-col">
             <CardHeader className="flex shrink-0 flex-row items-center justify-between gap-3 space-y-0 pb-3">
-              <CardTitle>{monthLabel}</CardTitle>
+              <CardTitle>
+                <GeneratedValue value={monthLabel} />
+              </CardTitle>
               <div className="flex items-center gap-1">
                 <Link
                   href={mergeHref(BASE, sp, { month: prevMonth }) as never}
                   className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
-                  aria-label="Previous month"
+                  aria-label={tGenerated('m_17404e648473bd')}
                 >
                   <ChevronLeft size={14} />
                 </Link>
-                {month !== currentMonth ? (
-                  <Link
-                    href={mergeHref(BASE, sp, { month: undefined }) as never}
-                    className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
-                  >
-                    Today
-                  </Link>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    month !== currentMonth ? (
+                      <Link
+                        href={mergeHref(BASE, sp, { month: undefined }) as never}
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                      >
+                        <GeneratedText id="m_1fca2ff1421477" />
+                      </Link>
+                    ) : null
+                  }
+                />
                 <Link
                   href={mergeHref(BASE, sp, { month: nextMonth }) as never}
                   className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
-                  aria-label="Next month"
+                  aria-label={tGenerated('m_17ae862fdd8d6e')}
                 >
                   <ChevronRight size={14} />
                 </Link>
@@ -606,86 +650,105 @@ export default async function EquipmentMaintenancePage({
                 className="grid min-h-0 flex-1 grid-cols-7 gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 text-xs dark:border-slate-800 dark:bg-slate-800"
                 style={{ gridTemplateRows: `auto repeat(${weeks}, minmax(0, 1fr))` }}
               >
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                  <div
-                    key={d}
-                    className="bg-slate-50 px-2 py-1.5 text-center font-medium text-slate-500 dark:bg-slate-900 dark:text-slate-400"
-                  >
-                    {d}
-                  </div>
-                ))}
-                {Array.from({ length: leadingBlanks }, (_, i) => (
-                  <div key={`lead-${i}`} className="bg-white dark:bg-slate-900" />
-                ))}
-                {Array.from({ length: daysInMonth }, (_, i) => {
-                  const day = `${month}-${String(i + 1).padStart(2, '0')}`
-                  const dayEntries = byDay.get(day) ?? []
-                  const isToday = day === today
-                  return (
+                <GeneratedValue
+                  value={['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
                     <div
-                      key={day}
-                      className={`min-h-0 space-y-1 overflow-hidden bg-white p-1.5 dark:bg-slate-900 ${
-                        isToday ? 'ring-2 ring-teal-500 ring-inset' : ''
-                      }`}
+                      key={d}
+                      className="bg-slate-50 px-2 py-1.5 text-center font-medium text-slate-500 dark:bg-slate-900 dark:text-slate-400"
                     >
+                      <GeneratedValue value={d} />
+                    </div>
+                  ))}
+                />
+                <GeneratedValue
+                  value={Array.from({ length: leadingBlanks }, (_, i) => (
+                    <div key={`lead-${i}`} className="bg-white dark:bg-slate-900" />
+                  ))}
+                />
+                <GeneratedValue
+                  value={Array.from({ length: daysInMonth }, (_, i) => {
+                    const day = `${month}-${String(i + 1).padStart(2, '0')}`
+                    const dayEntries = byDay.get(day) ?? []
+                    const isToday = day === today
+                    return (
                       <div
-                        className={`text-right text-[11px] ${
-                          isToday
-                            ? 'font-semibold text-teal-600 dark:text-teal-400'
-                            : 'text-slate-400 dark:text-slate-500'
+                        key={day}
+                        className={`min-h-0 space-y-1 overflow-hidden bg-white p-1.5 dark:bg-slate-900 ${
+                          isToday ? 'ring-2 ring-teal-500 ring-inset' : ''
                         }`}
                       >
-                        {i + 1}
+                        <div
+                          className={`text-right text-[11px] ${
+                            isToday
+                              ? 'font-semibold text-teal-600 dark:text-teal-400'
+                              : 'text-slate-400 dark:text-slate-500'
+                          }`}
+                        >
+                          <GeneratedValue value={i + 1} />
+                        </div>
+                        <GeneratedValue
+                          value={(dayEntries.length > 2 ? [] : dayEntries).map((e) => (
+                            <Link
+                              key={e.key}
+                              href={mergeHref(BASE, sp, { drawer: `unit-${e.itemId}` }) as never}
+                              scroll={false}
+                              title={tGeneratedValue(`${e.itemName} — ${e.title}`)}
+                              className={`flex items-center gap-1 truncate rounded px-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                                e.dueOn < today
+                                  ? 'text-rose-600 dark:text-rose-400'
+                                  : 'text-slate-700 dark:text-slate-200'
+                              }`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${KIND_META[e.kind].dot}`}
+                              />
+                              <span className="truncate">
+                                <GeneratedValue value={e.assetTag} /> ·{' '}
+                                <GeneratedValue value={e.title} />
+                              </span>
+                            </Link>
+                          ))}
+                        />
+                        <GeneratedValue
+                          value={
+                            dayEntries.length > 2 ? (
+                              // Busy day → one grouped alert instead of clipped chips;
+                              // opens the day flyout with the full list.
+                              <Link
+                                href={mergeHref(BASE, sp, { drawer: `day-${day}` }) as never}
+                                scroll={false}
+                                className={`flex items-center justify-center gap-1 rounded px-1 py-1 font-semibold ${
+                                  dayEntries.some((e) => e.dueOn < today)
+                                    ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:hover:bg-rose-900/60'
+                                    : 'bg-teal-100 text-teal-800 hover:bg-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:hover:bg-teal-900/60'
+                                }`}
+                              >
+                                <GeneratedValue value={dayEntries.length} />{' '}
+                                <GeneratedText id="m_0fed2a204aff5a" />
+                              </Link>
+                            ) : null
+                          }
+                        />
                       </div>
-                      {(dayEntries.length > 2 ? [] : dayEntries).map((e) => (
-                        <Link
-                          key={e.key}
-                          href={mergeHref(BASE, sp, { drawer: `unit-${e.itemId}` }) as never}
-                          scroll={false}
-                          title={`${e.itemName} — ${e.title}`}
-                          className={`flex items-center gap-1 truncate rounded px-1 py-0.5 hover:bg-slate-100 dark:hover:bg-slate-800 ${
-                            e.dueOn < today
-                              ? 'text-rose-600 dark:text-rose-400'
-                              : 'text-slate-700 dark:text-slate-200'
-                          }`}
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${KIND_META[e.kind].dot}`}
-                          />
-                          <span className="truncate">
-                            {e.assetTag} · {e.title}
-                          </span>
-                        </Link>
-                      ))}
-                      {dayEntries.length > 2 ? (
-                        // Busy day → one grouped alert instead of clipped chips;
-                        // opens the day flyout with the full list.
-                        <Link
-                          href={mergeHref(BASE, sp, { drawer: `day-${day}` }) as never}
-                          scroll={false}
-                          className={`flex items-center justify-center gap-1 rounded px-1 py-1 font-semibold ${
-                            dayEntries.some((e) => e.dueOn < today)
-                              ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:hover:bg-rose-900/60'
-                              : 'bg-teal-100 text-teal-800 hover:bg-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:hover:bg-teal-900/60'
-                          }`}
-                        >
-                          {dayEntries.length} due
-                        </Link>
-                      ) : null}
-                    </div>
-                  )
-                })}
-                {Array.from({ length: trailingBlanks }, (_, i) => (
-                  <div key={`trail-${i}`} className="bg-white dark:bg-slate-900" />
-                ))}
+                    )
+                  })}
+                />
+                <GeneratedValue
+                  value={Array.from({ length: trailingBlanks }, (_, i) => (
+                    <div key={`trail-${i}`} className="bg-white dark:bg-slate-900" />
+                  ))}
+                />
               </div>
               <div className="mt-2 flex shrink-0 flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-                {(Object.keys(KIND_META) as EntryKind[]).map((k) => (
-                  <span key={k} className="flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full ${KIND_META[k].dot}`} />
-                    {KIND_META[k].label}s
-                  </span>
-                ))}
+                <GeneratedValue
+                  value={(Object.keys(KIND_META) as EntryKind[]).map((k) => (
+                    <span key={k} className="flex items-center gap-1.5">
+                      <span className={`h-2 w-2 rounded-full ${KIND_META[k].dot}`} />
+                      <GeneratedValue value={KIND_META[k].label} />
+                      <GeneratedText id="m_00ded356f0f424" />
+                    </span>
+                  ))}
+                />
               </div>
             </CardContent>
           </Card>
@@ -696,7 +759,7 @@ export default async function EquipmentMaintenancePage({
       <UrlDrawer
         open={drawerDay != null}
         closeHref={closeHref}
-        title={
+        title={tGeneratedValue(
           drawerDay
             ? new Date(`${drawerDay}T00:00:00Z`).toLocaleDateString(undefined, {
                 weekday: 'long',
@@ -705,16 +768,24 @@ export default async function EquipmentMaintenancePage({
                 year: 'numeric',
                 timeZone: 'UTC',
               })
-            : ''
-        }
-        description={`${drawerDay ? (byDay.get(drawerDay)?.length ?? 0) : 0} due`}
+            : '',
+        )}
+        description={tGenerated('m_05fded0c6c6e5b', {
+          value0: drawerDay ? (byDay.get(drawerDay)?.length ?? 0) : 0,
+        })}
         size="md"
       >
-        {drawerDay && (byDay.get(drawerDay)?.length ?? 0) > 0 ? (
-          <WorkList entries={byDay.get(drawerDay)!} today={today} manage={manage} sp={sp} />
-        ) : (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Nothing due on this day.</p>
-        )}
+        <GeneratedValue
+          value={
+            drawerDay && (byDay.get(drawerDay)?.length ?? 0) > 0 ? (
+              <WorkList entries={byDay.get(drawerDay)!} today={today} manage={manage} sp={sp} />
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                <GeneratedText id="m_139a2683df869b" />
+              </p>
+            )
+          }
+        />
       </UrlDrawer>
 
       <UnitMaintenanceDrawer
@@ -751,74 +822,97 @@ function WorkList({
 }) {
   return (
     <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-      {entries.map((e) => (
-        <li key={e.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
-          <span className={`h-2 w-2 shrink-0 rounded-full ${KIND_META[e.kind].dot}`} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <Link
-                href={mergeHref(BASE, sp, { drawer: `unit-${e.itemId}` }) as never}
-                scroll={false}
-                className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-              >
-                {e.itemName}
-              </Link>
-              <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
-                {e.assetTag}
-              </span>
-              <span className="text-slate-600 dark:text-slate-300">{e.title}</span>
-              <Badge variant="secondary">{KIND_META[e.kind].label}</Badge>
-            </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              Due{' '}
-              <span
-                className={
-                  e.dueOn < today ? 'font-medium text-rose-600 dark:text-rose-400' : undefined
-                }
-              >
-                {e.dueOn}
-              </span>
-              {e.detail ? ` · ${e.detail}` : ''}
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {e.startHref ? (
-              <Link href={e.startHref as never}>
-                <Button size="sm" variant="outline">
-                  <ClipboardCheck size={14} /> Start
-                </Button>
-              </Link>
-            ) : null}
-            {e.kind === 'oil_change' ? (
-              <Link href={`/equipment/${e.itemId}?tab=log&drawer=add-log`}>
-                <Button size="sm" variant="outline">
-                  <Droplets size={14} /> Log
-                </Button>
-              </Link>
-            ) : null}
-            {manage && e.reminderId ? (
-              <>
+      <GeneratedValue
+        value={entries.map((e) => (
+          <li key={e.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${KIND_META[e.kind].dot}`} />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
                 <Link
-                  href={mergeHref(BASE, sp, { drawer: `reminder-${e.reminderId}` }) as never}
+                  href={mergeHref(BASE, sp, { drawer: `unit-${e.itemId}` }) as never}
                   scroll={false}
-                  className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                  className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                 >
-                  Edit
+                  <GeneratedValue value={e.itemName} />
                 </Link>
-                <form action={completeEquipmentReminder}>
-                  <input type="hidden" name="id" value={e.reminderId} />
-                  <Button size="sm" variant="outline" type="submit">
-                    <Check size={14} /> Done
-                  </Button>
-                </form>
-              </>
-            ) : null}
-            {e.kind === 'reminder' && !manage ? (
-              <BellRing size={14} className="text-slate-300 dark:text-slate-600" />
-            ) : null}
-          </div>
-        </li>
-      ))}
+                <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
+                  <GeneratedValue value={e.assetTag} />
+                </span>
+                <span className="text-slate-600 dark:text-slate-300">
+                  <GeneratedValue value={e.title} />
+                </span>
+                <Badge variant="secondary">
+                  <GeneratedValue value={KIND_META[e.kind].label} />
+                </Badge>
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                <GeneratedText id="m_0c2eb92551e08b" />
+                <GeneratedValue value={' '} />
+                <span
+                  className={
+                    e.dueOn < today ? 'font-medium text-rose-600 dark:text-rose-400' : undefined
+                  }
+                >
+                  <GeneratedValue value={e.dueOn} />
+                </span>
+                <GeneratedValue value={e.detail ? ` · ${e.detail}` : ''} />
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <GeneratedValue
+                value={
+                  e.startHref ? (
+                    <Link href={e.startHref as never}>
+                      <Button size="sm" variant="outline">
+                        <ClipboardCheck size={14} /> <GeneratedText id="m_144de7fabb13dc" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  e.kind === 'oil_change' ? (
+                    <Link href={`/equipment/${e.itemId}?tab=log&drawer=add-log`}>
+                      <Button size="sm" variant="outline">
+                        <Droplets size={14} /> <GeneratedText id="m_10f6648885696d" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  manage && e.reminderId ? (
+                    <>
+                      <Link
+                        href={mergeHref(BASE, sp, { drawer: `reminder-${e.reminderId}` }) as never}
+                        scroll={false}
+                        className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                      >
+                        <GeneratedText id="m_03a66f9d34ac7b" />
+                      </Link>
+                      <form action={completeEquipmentReminder}>
+                        <input type="hidden" name="id" value={e.reminderId} />
+                        <Button size="sm" variant="outline" type="submit">
+                          <Check size={14} /> <GeneratedText id="m_00609f822e0571" />
+                        </Button>
+                      </form>
+                    </>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  e.kind === 'reminder' && !manage ? (
+                    <BellRing size={14} className="text-slate-300 dark:text-slate-600" />
+                  ) : null
+                }
+              />
+            </div>
+          </li>
+        ))}
+      />
     </ul>
   )
 }
@@ -842,209 +936,341 @@ function UnitMaintenanceDrawer({
   timeZone: string
   locale: AppLocale
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   return (
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title={unit?.item.name ?? 'Equipment'}
-      description={
+      title={tGeneratedValue(unit?.item.name ?? tGenerated('m_17f17df74f7e69'))}
+      description={tGeneratedValue(
         unit
           ? [unit.item.assetTag, unit.typeName, unit.categoryName].filter(Boolean).join(' · ')
-          : undefined
-      }
+          : undefined,
+      )}
       size="lg"
       footer={
         unit ? (
           <Link href={`/equipment/${unit.item.id}?tab=inspections`}>
-            <Button>Open full record</Button>
+            <Button>
+              <GeneratedText id="m_087428a2c9120b" />
+            </Button>
           </Link>
         ) : null
       }
     >
-      {!unit ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">Unit not found.</p>
-      ) : (
-        <div className="space-y-5 text-sm">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={unit.item.status === 'in_service' ? 'success' : 'warning'}>
-              {String(unit.item.status).replace(/_/g, ' ')}
-            </Badge>
-            {unit.item.isMissing ? <Badge variant="destructive">Missing</Badge> : null}
-            <span className="text-slate-600 dark:text-slate-300">
-              {unit.siteName ?? 'Unassigned'}
-              {unit.holderName ? ` · held by ${unit.holderName}` : ''}
-            </span>
-          </div>
-
-          <section className="space-y-2">
-            <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-              Inspection schedules ({unit.schedules.length})
-            </h3>
-            {unit.schedules.length === 0 ? (
-              <p className="text-slate-500 dark:text-slate-400">No recurring inspections.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {unit.schedules.map((s) => (
-                  <li key={s.id} className="flex items-center justify-between gap-3 py-2">
-                    <div className="min-w-0">
-                      <div className="font-medium text-slate-900 dark:text-slate-100">
-                        {s.typeName ?? s.label ?? 'Inspection'}
-                        {!s.isActive ? (
-                          <Badge variant="secondary" className="ml-2">
-                            inactive
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        {formatInterval(s.intervalValue, s.intervalUnit)}
-                        {s.lastCompletedOn ? ` · last ${s.lastCompletedOn}` : ''} · next{' '}
-                        <span
-                          className={
-                            s.isActive && s.nextDueOn < today
-                              ? 'font-medium text-rose-600 dark:text-rose-400'
-                              : undefined
-                          }
-                        >
-                          {s.nextDueOn}
-                        </span>
-                      </div>
-                    </div>
-                    {s.inspectionTypeId ? (
-                      <Link
-                        href={`/equipment/inspections/new?itemId=${unit.item.id}&typeId=${s.inspectionTypeId}`}
-                      >
-                        <Button size="sm" variant="outline">
-                          <ClipboardCheck size={14} /> Start
-                        </Button>
-                      </Link>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section className="space-y-2">
-            <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-              Open reminders (
-              {unit.reminders.length === unit.remindersTotal
-                ? unit.remindersTotal
-                : `${unit.reminders.length} of ${unit.remindersTotal}`}
-              )
-            </h3>
-            {unit.reminders.length === 0 ? (
-              <p className="text-slate-500 dark:text-slate-400">No open reminders.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {unit.reminders.map((r) => (
-                  <li key={r.id} className="flex items-center justify-between gap-3 py-2">
-                    <div className="min-w-0">
-                      <div className="font-medium text-slate-900 dark:text-slate-100">
-                        {r.title}
-                        {r.repeat ? (
-                          <Badge variant="secondary" className="ml-2">
-                            {r.repeat}
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        Due{' '}
-                        <span
-                          className={
-                            r.dueOn < today
-                              ? 'font-medium text-rose-600 dark:text-rose-400'
-                              : undefined
-                          }
-                        >
-                          {r.dueOn}
-                        </span>
-                        {r.assignee ? ` · ${r.assignee}` : ''}
-                      </div>
-                    </div>
-                    {manage ? (
-                      <form action={completeEquipmentReminder}>
-                        <input type="hidden" name="id" value={r.id} />
-                        <Button size="sm" variant="outline" type="submit">
-                          <Check size={14} /> Done
-                        </Button>
-                      </form>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {unit.reminders.length < unit.remindersTotal ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Open the full record to search and page through every reminder.
-              </p>
-            ) : null}
-          </section>
-
-          {unit.item.requiresOilChange ? (
-            <section className="space-y-1">
-              <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                Oil change
-              </h3>
-              <p className="text-slate-600 dark:text-slate-300">
-                {unit.item.oilChangeIntervalMonths
-                  ? `${formatInterval(unit.item.oilChangeIntervalMonths, 'month')} · `
-                  : ''}
-                {unit.item.lastOilChangeOn ? `last ${unit.item.lastOilChangeOn} · ` : ''}
-                next{' '}
-                <span
-                  className={
-                    unit.item.nextOilChangeDue && unit.item.nextOilChangeDue < today
-                      ? 'font-medium text-rose-600 dark:text-rose-400'
-                      : undefined
-                  }
-                >
-                  {unit.item.nextOilChangeDue ?? '—'}
-                </span>
-              </p>
-            </section>
-          ) : null}
-
-          <section className="space-y-2">
-            <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-              Recent inspections
-            </h3>
-            {unit.inspections.length === 0 ? (
-              <p className="text-slate-500 dark:text-slate-400">No inspections recorded.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {unit.inspections.map((r) => (
-                  <li key={r.id} className="flex items-center justify-between gap-3 py-2">
-                    <Link
-                      href={`/equipment/inspections/${r.id}`}
-                      className="font-mono text-xs text-teal-700 hover:underline dark:text-teal-400"
-                    >
-                      {r.reference}
-                    </Link>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {formatDate(new Date(r.occurredAt), timeZone, locale)}
-                    </span>
-                    {r.result ? (
-                      <Badge
-                        variant={
-                          r.result === 'pass'
-                            ? 'success'
-                            : r.result === 'fail'
-                              ? 'destructive'
-                              : 'secondary'
-                        }
-                      >
-                        {r.result}
+      <GeneratedValue
+        value={
+          !unit ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_1f993f4f8841df" />
+            </p>
+          ) : (
+            <div className="space-y-5 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={unit.item.status === 'in_service' ? 'success' : 'warning'}>
+                  <GeneratedValue value={String(unit.item.status).replace(/_/g, ' ')} />
+                </Badge>
+                <GeneratedValue
+                  value={
+                    unit.item.isMissing ? (
+                      <Badge variant="destructive">
+                        <GeneratedText id="m_033d838430bc5f" />
                       </Badge>
+                    ) : null
+                  }
+                />
+                <span className="text-slate-600 dark:text-slate-300">
+                  <GeneratedValue
+                    value={unit.siteName ?? <GeneratedText id="m_10d1d0d92a9aaa" />}
+                  />
+                  <GeneratedValue
+                    value={
+                      unit.holderName ? (
+                        <GeneratedText id="m_121fd3987b36ed" values={{ value0: unit.holderName }} />
+                      ) : (
+                        ''
+                      )
+                    }
+                  />
+                </span>
+              </div>
+
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                  <GeneratedText id="m_0fc16ae9bd180d" />
+                  <GeneratedValue value={unit.schedules.length} />)
+                </h3>
+                <GeneratedValue
+                  value={
+                    unit.schedules.length === 0 ? (
+                      <p className="text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_14d1d0bdbefe41" />
+                      </p>
                     ) : (
-                      <Badge variant="warning">{String(r.status).replace(/_/g, ' ')}</Badge>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
-      )}
+                      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                        <GeneratedValue
+                          value={unit.schedules.map((s) => (
+                            <li key={s.id} className="flex items-center justify-between gap-3 py-2">
+                              <div className="min-w-0">
+                                <div className="font-medium text-slate-900 dark:text-slate-100">
+                                  <GeneratedValue
+                                    value={
+                                      s.typeName ??
+                                      s.label ?? <GeneratedText id="m_0ef24e5f31b073" />
+                                    }
+                                  />
+                                  <GeneratedValue
+                                    value={
+                                      !s.isActive ? (
+                                        <Badge variant="secondary" className="ml-2">
+                                          <GeneratedText id="m_07690e88572a6c" />
+                                        </Badge>
+                                      ) : null
+                                    }
+                                  />
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400">
+                                  <GeneratedValue
+                                    value={formatInterval(s.intervalValue, s.intervalUnit)}
+                                  />
+                                  <GeneratedValue
+                                    value={
+                                      s.lastCompletedOn ? (
+                                        <GeneratedText
+                                          id="m_013806e1709e69"
+                                          values={{ value0: s.lastCompletedOn }}
+                                        />
+                                      ) : (
+                                        ''
+                                      )
+                                    }
+                                  />{' '}
+                                  <GeneratedText id="m_06460cbdde5c5a" />
+                                  <GeneratedValue value={' '} />
+                                  <span
+                                    className={
+                                      s.isActive && s.nextDueOn < today
+                                        ? 'font-medium text-rose-600 dark:text-rose-400'
+                                        : undefined
+                                    }
+                                  >
+                                    <GeneratedValue value={s.nextDueOn} />
+                                  </span>
+                                </div>
+                              </div>
+                              <GeneratedValue
+                                value={
+                                  s.inspectionTypeId ? (
+                                    <Link
+                                      href={`/equipment/inspections/new?itemId=${unit.item.id}&typeId=${s.inspectionTypeId}`}
+                                    >
+                                      <Button size="sm" variant="outline">
+                                        <ClipboardCheck size={14} />{' '}
+                                        <GeneratedText id="m_144de7fabb13dc" />
+                                      </Button>
+                                    </Link>
+                                  ) : null
+                                }
+                              />
+                            </li>
+                          ))}
+                        />
+                      </ul>
+                    )
+                  }
+                />
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                  <GeneratedText id="m_1d0f031ad02ec6" />
+                  <GeneratedValue
+                    value={
+                      unit.reminders.length === unit.remindersTotal ? (
+                        unit.remindersTotal
+                      ) : (
+                        <GeneratedText
+                          id="m_098d2de6c8b983"
+                          values={{ value0: unit.reminders.length, value1: unit.remindersTotal }}
+                        />
+                      )
+                    }
+                  />
+                  )
+                </h3>
+                <GeneratedValue
+                  value={
+                    unit.reminders.length === 0 ? (
+                      <p className="text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_0b043686a48300" />
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                        <GeneratedValue
+                          value={unit.reminders.map((r) => (
+                            <li key={r.id} className="flex items-center justify-between gap-3 py-2">
+                              <div className="min-w-0">
+                                <div className="font-medium text-slate-900 dark:text-slate-100">
+                                  <GeneratedValue value={r.title} />
+                                  <GeneratedValue
+                                    value={
+                                      r.repeat ? (
+                                        <Badge variant="secondary" className="ml-2">
+                                          {r.repeat}
+                                        </Badge>
+                                      ) : null
+                                    }
+                                  />
+                                </div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400">
+                                  <GeneratedText id="m_0c2eb92551e08b" />
+                                  <GeneratedValue value={' '} />
+                                  <span
+                                    className={
+                                      r.dueOn < today
+                                        ? 'font-medium text-rose-600 dark:text-rose-400'
+                                        : undefined
+                                    }
+                                  >
+                                    <GeneratedValue value={r.dueOn} />
+                                  </span>
+                                  <GeneratedValue value={r.assignee ? ` · ${r.assignee}` : ''} />
+                                </div>
+                              </div>
+                              <GeneratedValue
+                                value={
+                                  manage ? (
+                                    <form action={completeEquipmentReminder}>
+                                      <input type="hidden" name="id" value={r.id} />
+                                      <Button size="sm" variant="outline" type="submit">
+                                        <Check size={14} /> <GeneratedText id="m_00609f822e0571" />
+                                      </Button>
+                                    </form>
+                                  ) : null
+                                }
+                              />
+                            </li>
+                          ))}
+                        />
+                      </ul>
+                    )
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    unit.reminders.length < unit.remindersTotal ? (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_1ebf1e0e84a84c" />
+                      </p>
+                    ) : null
+                  }
+                />
+              </section>
+
+              <GeneratedValue
+                value={
+                  unit.item.requiresOilChange ? (
+                    <section className="space-y-1">
+                      <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                        <GeneratedText id="m_181cffe4b37051" />
+                      </h3>
+                      <p className="text-slate-600 dark:text-slate-300">
+                        <GeneratedValue
+                          value={
+                            unit.item.oilChangeIntervalMonths
+                              ? `${formatInterval(unit.item.oilChangeIntervalMonths, 'month')} · `
+                              : ''
+                          }
+                        />
+                        <GeneratedValue
+                          value={
+                            unit.item.lastOilChangeOn ? (
+                              <GeneratedText
+                                id="m_0adad9941e336d"
+                                values={{ value0: unit.item.lastOilChangeOn }}
+                              />
+                            ) : (
+                              ''
+                            )
+                          }
+                        />
+                        <GeneratedText id="m_09c5b70a54fbbd" />
+                        <GeneratedValue value={' '} />
+                        <span
+                          className={
+                            unit.item.nextOilChangeDue && unit.item.nextOilChangeDue < today
+                              ? 'font-medium text-rose-600 dark:text-rose-400'
+                              : undefined
+                          }
+                        >
+                          <GeneratedValue value={unit.item.nextOilChangeDue ?? '—'} />
+                        </span>
+                      </p>
+                    </section>
+                  ) : null
+                }
+              />
+
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                  <GeneratedText id="m_0f603593430a93" />
+                </h3>
+                <GeneratedValue
+                  value={
+                    unit.inspections.length === 0 ? (
+                      <p className="text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_1a945f0976f47b" />
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                        <GeneratedValue
+                          value={unit.inspections.map((r) => (
+                            <li key={r.id} className="flex items-center justify-between gap-3 py-2">
+                              <Link
+                                href={`/equipment/inspections/${r.id}`}
+                                className="font-mono text-xs text-teal-700 hover:underline dark:text-teal-400"
+                              >
+                                <GeneratedValue value={r.reference} />
+                              </Link>
+                              <span className="text-xs text-slate-500 dark:text-slate-400">
+                                <GeneratedValue
+                                  value={formatDate(new Date(r.occurredAt), timeZone, locale)}
+                                />
+                              </span>
+                              <GeneratedValue
+                                value={
+                                  r.result ? (
+                                    <Badge
+                                      variant={
+                                        r.result === 'pass'
+                                          ? 'success'
+                                          : r.result === 'fail'
+                                            ? 'destructive'
+                                            : 'secondary'
+                                      }
+                                    >
+                                      {r.result}
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="warning">
+                                      {String(r.status).replace(/_/g, ' ')}
+                                    </Badge>
+                                  )
+                                }
+                              />
+                            </li>
+                          ))}
+                        />
+                      </ul>
+                    )
+                  }
+                />
+              </section>
+            </div>
+          )
+        }
+      />
     </UrlDrawer>
   )
 }

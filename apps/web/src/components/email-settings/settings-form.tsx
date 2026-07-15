@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useState } from 'react'
 import { Button, Input, Label, SearchSelect, Select } from '@beaconhs/ui'
 
@@ -68,6 +75,8 @@ export function EmailSettingsForm({
   initial: EmailFormInitial
   scope: 'tenant' | 'platform'
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [enabled, setEnabled] = useState(initial.enabled)
   const [provider, setProvider] = useState(initial.provider)
   const [mode, setMode] = useState(initial.mode ?? 'tenant_optional')
@@ -103,7 +112,9 @@ export function EmailSettingsForm({
 
   return (
     <form action={action} className="space-y-5">
-      {platformLive ? <input type="hidden" name="enabled" value="on" /> : null}
+      <GeneratedValue
+        value={platformLive ? <input type="hidden" name="enabled" value="on" /> : null}
+      />
       <label className="flex items-center gap-2.5">
         <input
           type="checkbox"
@@ -114,36 +125,58 @@ export function EmailSettingsForm({
           className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
         />
         <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
-          {scope === 'platform'
-            ? 'Enable the platform default provider'
-            : 'Enable this tenant provider override'}
+          <GeneratedValue
+            value={
+              scope === 'platform' ? (
+                <GeneratedText id="m_1d70faa3e3f8d7" />
+              ) : (
+                <GeneratedText id="m_037bad42cae534" />
+              )
+            }
+          />
         </span>
       </label>
       <p className="-mt-3 text-xs text-slate-500 dark:text-slate-400">
-        {scope === 'tenant'
-          ? 'When this override is off, the tenant uses the platform default provider.'
-          : platformLive
-            ? 'A live policy requires the platform default provider, so it remains enabled.'
-            : 'The kill switch stops delivery even if you keep this provider ready for later.'}
+        <GeneratedValue
+          value={
+            scope === 'tenant' ? (
+              <GeneratedText id="m_0f6caa4a185b84" />
+            ) : platformLive ? (
+              <GeneratedText id="m_19bff16f744f4a" />
+            ) : (
+              <GeneratedText id="m_0ef26ce5b4af98" />
+            )
+          }
+        />
       </p>
 
-      {scope === 'platform' ? (
-        <div className="space-y-1.5">
-          <Label>Policy</Label>
-          <input type="hidden" name="mode" value={mode} />
-          <SearchSelect
-            value={mode}
-            onChange={setMode}
-            options={MODE_OPTIONS}
-            sheetTitle="Email policy"
-            ariaLabel="Email policy"
-          />
-          <p className="text-xs text-slate-400 dark:text-slate-500">{MODE_HELP[mode]}</p>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          scope === 'platform' ? (
+            <div className="space-y-1.5">
+              <Label>
+                <GeneratedText id="m_08099822651b95" />
+              </Label>
+              <input type="hidden" name="mode" value={mode} />
+              <SearchSelect
+                value={mode}
+                onChange={setMode}
+                options={MODE_OPTIONS}
+                sheetTitle="Email policy"
+                ariaLabel="Email policy"
+              />
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedValue value={MODE_HELP[mode]} />
+              </p>
+            </div>
+          ) : null
+        }
+      />
 
       <div className="space-y-1.5">
-        <Label>Provider</Label>
+        <Label>
+          <GeneratedText id="m_1c4d663fc7d77f" />
+        </Label>
         <input type="hidden" name="provider" value={provider} />
         <SearchSelect
           value={provider}
@@ -152,33 +185,63 @@ export function EmailSettingsForm({
           sheetTitle="Provider"
           ariaLabel="Email provider"
         />
-        {spec.docsHint ? (
-          <p className="text-xs text-slate-400 dark:text-slate-500">{spec.docsHint}</p>
-        ) : null}
-        {!savedProvider ? (
-          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
-            The saved {savedProviderLabel} credential will not be reused for {spec.label}.{' '}
-            {spec.secretRequired
-              ? `Enter a new ${spec.secretLabel.toLowerCase()} before enabling this provider.`
-              : `Enter a new ${spec.secretLabel.toLowerCase()} only if this provider requires authentication.`}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            spec.docsHint ? (
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedValue value={spec.docsHint} />
+              </p>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            !savedProvider ? (
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                <GeneratedText id="m_19d5d48924fdd1" />{' '}
+                <GeneratedValue value={savedProviderLabel} />{' '}
+                <GeneratedText id="m_118afa0cf3ded9" /> <GeneratedValue value={spec.label} />.
+                <GeneratedValue value={' '} />
+                <GeneratedValue
+                  value={
+                    spec.secretRequired ? (
+                      <GeneratedText
+                        id="m_06e09cf19f7af7"
+                        values={{ value0: spec.secretLabel.toLowerCase() }}
+                      />
+                    ) : (
+                      <GeneratedText
+                        id="m_1ce60173eda55d"
+                        values={{ value0: spec.secretLabel.toLowerCase() }}
+                      />
+                    )
+                  }
+                />
+              </p>
+            ) : null
+          }
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label>From name</Label>
+          <Label>
+            <GeneratedText id="m_1517626a477a3d" />
+          </Label>
           <Input
             name="fromName"
             maxLength={128}
             defaultValue={initial.fromName}
-            placeholder="BeaconHS"
+            placeholder={tGenerated('m_1721f79d9a7f66')}
           />
         </div>
         <div className="space-y-1.5">
           <Label>
-            From email{' '}
-            <span className="font-normal text-slate-400 dark:text-slate-500">(required)</span>
+            <GeneratedText id="m_1a6fdf928a11ae" />
+            <GeneratedValue value={' '} />
+            <span className="font-normal text-slate-400 dark:text-slate-500">
+              <GeneratedText id="m_10e150ecbb7cd1" />
+            </span>
           </Label>
           <Input
             name="fromEmail"
@@ -186,149 +249,208 @@ export function EmailSettingsForm({
             required={requiresCompleteProvider}
             maxLength={254}
             defaultValue={initial.fromEmail}
-            placeholder="no-reply@yourcompany.com"
+            placeholder={tGenerated('m_174c6870953866')}
           />
         </div>
       </div>
 
       <div className="space-y-1.5">
         <Label>
-          Reply-to{' '}
-          <span className="font-normal text-slate-400 dark:text-slate-500">(optional)</span>
+          <GeneratedText id="m_0df0f8e26af42f" />
+          <GeneratedValue value={' '} />
+          <span className="font-normal text-slate-400 dark:text-slate-500">
+            <GeneratedText id="m_1f61ed87b795bd" />
+          </span>
         </Label>
         <Input
           name="replyTo"
           type="email"
           maxLength={254}
           defaultValue={initial.replyTo}
-          placeholder="safety@yourcompany.com"
+          placeholder={tGenerated('m_1a4d6beb67fc36')}
         />
       </div>
 
-      {spec.hasSecret ? (
-        <div className="space-y-1.5">
-          <Label>
-            {spec.secretLabel}
-            {spec.secretRequired ? (
-              <span className="font-normal text-slate-400 dark:text-slate-500">
-                {' '}
-                (required when enabled)
-              </span>
-            ) : (
-              <span className="font-normal text-slate-400 dark:text-slate-500"> (optional)</span>
-            )}
-          </Label>
-          <Input
-            key={provider}
-            type="password"
-            name="secret"
-            autoComplete="off"
-            maxLength={4096}
-            placeholder={keyPlaceholder}
-            required={
-              requiresCompleteProvider && spec.secretRequired && !(initial.hasKey && savedProvider)
-            }
-          />
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            {initial.hasKey && savedProvider
-              ? 'A credential is stored, encrypted (AES-256-GCM). Leave blank to keep the existing one.'
-              : !savedProvider
-                ? spec.secretRequired
-                  ? `Enter a new ${spec.secretLabel.toLowerCase()} for ${spec.label}. The previous provider credential will be discarded when you save.`
-                  : `The previous provider credential will be discarded when you save. Leave this blank only when ${spec.label} accepts unauthenticated delivery.`
-                : 'Stored encrypted with a key derived from the app secret — never written to env or shown again.'}
-          </p>
-        </div>
-      ) : null}
-
-      {spec.fields.length ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {spec.fields.map((f) => {
-            if (f.kind === 'boolean') {
-              return (
-                <label key={f.key} className="flex items-center gap-2.5 sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    name={f.key}
-                    defaultChecked={f.key === 'smtpSecure' ? initial.smtpSecure : false}
-                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
-                  />
-                  <span className="text-sm text-slate-800 dark:text-slate-100">{f.label}</span>
-                </label>
-              )
-            }
-            if (f.kind === 'select') {
-              return (
-                <div key={f.key} className="space-y-1.5">
-                  <Label>{f.label}</Label>
-                  <Select
-                    name={f.key}
-                    defaultValue={initialField(f.key) || f.options?.[0]?.value}
-                    aria-label={f.label}
-                    sheetTitle={f.label}
-                  >
-                    {f.options?.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              )
-            }
-            return (
-              <div key={f.key} className="space-y-1.5">
-                <Label>
-                  {f.label}
-                  {f.required ? (
-                    <span className="font-normal text-slate-400 dark:text-slate-500">
-                      {' '}
-                      (required when enabled)
-                    </span>
-                  ) : (
-                    <span className="font-normal text-slate-400 dark:text-slate-500">
-                      {' '}
-                      (optional)
-                    </span>
-                  )}
-                </Label>
-                <Input
-                  name={f.key}
-                  type={f.kind === 'number' ? 'number' : 'text'}
-                  required={requiresCompleteProvider && Boolean(f.required)}
-                  min={f.kind === 'number' ? 1 : undefined}
-                  max={f.kind === 'number' ? 65_535 : undefined}
-                  maxLength={f.kind === 'text' ? (f.key === 'smtpUsername' ? 320 : 253) : undefined}
-                  step={f.kind === 'number' ? 1 : undefined}
-                  pattern={
-                    f.key === 'mailgunDomain'
-                      ? '^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$'
-                      : f.key === 'smtpHost'
-                        ? '^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$'
-                        : undefined
+      <GeneratedValue
+        value={
+          spec.hasSecret ? (
+            <div className="space-y-1.5">
+              <Label>
+                <GeneratedValue value={spec.secretLabel} />
+                <GeneratedValue
+                  value={
+                    spec.secretRequired ? (
+                      <span className="font-normal text-slate-400 dark:text-slate-500">
+                        <GeneratedValue value={' '} />
+                        <GeneratedText id="m_0ac4f1a98cf4e6" />
+                      </span>
+                    ) : (
+                      <span className="font-normal text-slate-400 dark:text-slate-500">
+                        {' '}
+                        <GeneratedText id="m_1f61ed87b795bd" />
+                      </span>
+                    )
                   }
-                  title={
-                    f.key === 'mailgunDomain'
-                      ? 'Enter a domain such as mg.example.com, without a protocol or path.'
-                      : f.key === 'smtpHost'
-                        ? 'Enter a host such as smtp.example.com, without a protocol or path.'
-                        : undefined
-                  }
-                  defaultValue={initialField(f.key)}
-                  placeholder={f.placeholder}
                 />
-                {f.help ? (
-                  <p className="text-xs text-slate-400 dark:text-slate-500">{f.help}</p>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-      ) : null}
+              </Label>
+              <Input
+                key={provider}
+                type="password"
+                name="secret"
+                autoComplete="off"
+                maxLength={4096}
+                placeholder={tGeneratedValue(keyPlaceholder)}
+                required={
+                  requiresCompleteProvider &&
+                  spec.secretRequired &&
+                  !(initial.hasKey && savedProvider)
+                }
+              />
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedValue
+                  value={
+                    initial.hasKey && savedProvider ? (
+                      <GeneratedText id="m_09b10f4c97f05c" />
+                    ) : !savedProvider ? (
+                      spec.secretRequired ? (
+                        <GeneratedText
+                          id="m_0649953f1efff8"
+                          values={{ value0: spec.secretLabel.toLowerCase(), value1: spec.label }}
+                        />
+                      ) : (
+                        <GeneratedText id="m_017c2586f41d9b" values={{ value0: spec.label }} />
+                      )
+                    ) : (
+                      <GeneratedText id="m_0ae8c197586ac1" />
+                    )
+                  }
+                />
+              </p>
+            </div>
+          ) : null
+        }
+      />
+
+      <GeneratedValue
+        value={
+          spec.fields.length ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <GeneratedValue
+                value={spec.fields.map((f) => {
+                  if (f.kind === 'boolean') {
+                    return (
+                      <label key={f.key} className="flex items-center gap-2.5 sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          name={f.key}
+                          defaultChecked={f.key === 'smtpSecure' ? initial.smtpSecure : false}
+                          className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
+                        />
+                        <span className="text-sm text-slate-800 dark:text-slate-100">
+                          <GeneratedValue value={f.label} />
+                        </span>
+                      </label>
+                    )
+                  }
+                  if (f.kind === 'select') {
+                    return (
+                      <div key={f.key} className="space-y-1.5">
+                        <Label>
+                          <GeneratedValue value={f.label} />
+                        </Label>
+                        <Select
+                          name={f.key}
+                          defaultValue={initialField(f.key) || f.options?.[0]?.value}
+                          aria-label={tGeneratedValue(f.label)}
+                          sheetTitle={f.label}
+                        >
+                          <GeneratedValue
+                            value={f.options?.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                <GeneratedValue value={o.label} />
+                              </option>
+                            ))}
+                          />
+                        </Select>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div key={f.key} className="space-y-1.5">
+                      <Label>
+                        <GeneratedValue value={f.label} />
+                        <GeneratedValue
+                          value={
+                            f.required ? (
+                              <span className="font-normal text-slate-400 dark:text-slate-500">
+                                <GeneratedValue value={' '} />
+                                <GeneratedText id="m_0ac4f1a98cf4e6" />
+                              </span>
+                            ) : (
+                              <span className="font-normal text-slate-400 dark:text-slate-500">
+                                <GeneratedValue value={' '} />
+                                <GeneratedText id="m_1f61ed87b795bd" />
+                              </span>
+                            )
+                          }
+                        />
+                      </Label>
+                      <Input
+                        name={f.key}
+                        type={f.kind === 'number' ? 'number' : 'text'}
+                        required={requiresCompleteProvider && Boolean(f.required)}
+                        min={f.kind === 'number' ? 1 : undefined}
+                        max={f.kind === 'number' ? 65_535 : undefined}
+                        maxLength={
+                          f.kind === 'text' ? (f.key === 'smtpUsername' ? 320 : 253) : undefined
+                        }
+                        step={f.kind === 'number' ? 1 : undefined}
+                        pattern={
+                          f.key === 'mailgunDomain'
+                            ? '^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$'
+                            : f.key === 'smtpHost'
+                              ? '^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$'
+                              : undefined
+                        }
+                        title={tGeneratedValue(
+                          f.key === 'mailgunDomain'
+                            ? tGenerated('m_04a3641fb916db')
+                            : f.key === 'smtpHost'
+                              ? tGenerated('m_07d41e03f3392f')
+                              : undefined,
+                        )}
+                        defaultValue={initialField(f.key)}
+                        placeholder={tGeneratedValue(f.placeholder)}
+                      />
+                      <GeneratedValue
+                        value={
+                          f.help ? (
+                            <p className="text-xs text-slate-400 dark:text-slate-500">
+                              <GeneratedValue value={f.help} />
+                            </p>
+                          ) : null
+                        }
+                      />
+                    </div>
+                  )
+                })}
+              />
+            </div>
+          ) : null
+        }
+      />
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
         <Button type="submit">
-          {scope === 'platform' ? 'Save platform email' : 'Save email settings'}
+          <GeneratedValue
+            value={
+              scope === 'platform' ? (
+                <GeneratedText id="m_0bc76c5a58e687" />
+              ) : (
+                <GeneratedText id="m_0b179209b24699" />
+              )
+            }
+          />
         </Button>
       </div>
     </form>

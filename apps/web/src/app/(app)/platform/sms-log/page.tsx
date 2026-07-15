@@ -1,6 +1,10 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { SmsLogListView } from '@/components/sms-log/list-view'
 
-export const metadata = { title: 'SMS log · Platform' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1a33caf0f3356d') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function PlatformSmsLogPage({

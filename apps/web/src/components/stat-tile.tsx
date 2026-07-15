@@ -1,3 +1,4 @@
+import { GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import type { LucideIcon } from 'lucide-react'
 import { Badge, cn } from '@beaconhs/ui'
@@ -84,16 +85,20 @@ export function StatTile({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-base font-semibold tracking-tight text-slate-900 tabular-nums dark:text-slate-100">
-            {value}
+            <GeneratedValue value={value} />
           </span>
-          {hint != null ? (
-            <Badge variant={hintVariant} className="shrink-0 font-normal">
-              {hint}
-            </Badge>
-          ) : null}
+          <GeneratedValue
+            value={
+              hint != null ? (
+                <Badge variant={hintVariant} className="shrink-0 font-normal">
+                  <GeneratedValue value={hint} />
+                </Badge>
+              ) : null
+            }
+          />
         </div>
         <div className="truncate text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          {label}
+          <GeneratedValue value={label} />
         </div>
       </div>
     </div>
@@ -117,16 +122,20 @@ export function StatTile({
             compact ? 'text-base' : 'text-2xl',
           )}
         >
-          {value}
+          <GeneratedValue value={value} />
         </div>
         <div className="mt-0.5 truncate text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          {label}
+          <GeneratedValue value={label} />
         </div>
-        {hint != null ? (
-          <Badge variant={hintVariant} className="mt-2 font-normal">
-            {hint}
-          </Badge>
-        ) : null}
+        <GeneratedValue
+          value={
+            hint != null ? (
+              <Badge variant={hintVariant} className="mt-2 font-normal">
+                <GeneratedValue value={hint} />
+              </Badge>
+            ) : null
+          }
+        />
       </div>
     </>
   )
@@ -140,9 +149,11 @@ export function StatTile({
       href={href as never}
       className={cn(base, pad, 'hover:-translate-y-0.5 hover:shadow-md', className)}
     >
-      {body}
+      <GeneratedValue value={body} />
     </Link>
   ) : (
-    <div className={cn(base, pad, className)}>{body}</div>
+    <div className={cn(base, pad, className)}>
+      <GeneratedValue value={body} />
+    </div>
   )
 }

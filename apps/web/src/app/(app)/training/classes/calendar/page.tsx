@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Monthly calendar of scheduled training classes.
 // Companion view to /training/classes (list view) — the coordinator
 // switches between them via the toggle in the header.
@@ -21,7 +24,10 @@ import { ListPageLayout } from '@/components/page-layout'
 import { TrainingSubNav } from '../../_components/training-sub-nav'
 import { startClass } from '../_actions'
 
-export const metadata = { title: 'Class calendar' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_16f8dd69242565') }
+}
 export const dynamic = 'force-dynamic'
 
 // ---------- date utils (no extra library) ----------
@@ -110,6 +116,8 @@ export default async function TrainingClassesCalendarPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const { year, month } = parseMonth(pickString(sp.month))
   const ctx = await requireRequestContext()
@@ -174,22 +182,26 @@ export default async function TrainingClassesCalendarPage({
       header={
         <>
           <PageHeader
-            title="Training calendar"
-            description="Month at a glance — every scheduled class shown on the day it starts."
+            title={tGenerated('m_028eeca3f08014')}
+            description={tGenerated('m_088e35aecf2c57')}
             actions={
               <div className="flex items-center gap-2">
                 <Link href="/training/classes">
                   <Button variant="outline">
-                    <List size={14} /> List view
+                    <List size={14} /> <GeneratedText id="m_03151b31668c90" />
                   </Button>
                 </Link>
-                {canManageClasses ? (
-                  <form action={startClass}>
-                    <Button type="submit">
-                      <Plus size={14} /> Schedule new class
-                    </Button>
-                  </form>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    canManageClasses ? (
+                      <form action={startClass}>
+                        <Button type="submit">
+                          <Plus size={14} /> <GeneratedText id="m_1ed51714de09bd" />
+                        </Button>
+                      </form>
+                    ) : null
+                  }
+                />
               </div>
             }
           />
@@ -198,38 +210,46 @@ export default async function TrainingClassesCalendarPage({
             <div className="flex items-center gap-2">
               <Link
                 href={`/training/classes/calendar?month=${fmtMonth(prev.year, prev.month)}`}
-                aria-label="Previous month"
+                aria-label={tGenerated('m_17404e648473bd')}
               >
                 <Button variant="outline" size="sm">
                   <ChevronLeft size={14} />
                 </Button>
               </Link>
               <div className="min-w-[10rem] text-center text-sm font-medium text-slate-800 dark:text-slate-200">
-                {monthLabel(year, month)}
+                <GeneratedValue value={monthLabel(year, month)} />
               </div>
               <Link
                 href={`/training/classes/calendar?month=${fmtMonth(next.year, next.month)}`}
-                aria-label="Next month"
+                aria-label={tGenerated('m_17ae862fdd8d6e')}
               >
                 <Button variant="outline" size="sm">
                   <ChevronRight size={14} />
                 </Button>
               </Link>
-              {!isCurrentMonth ? (
-                <Link
-                  href={`/training/classes/calendar?month=${fmtMonth(
-                    todayMonth.year,
-                    todayMonth.month,
-                  )}`}
-                >
-                  <Button variant="ghost" size="sm">
-                    Today
-                  </Button>
-                </Link>
-              ) : null}
+              <GeneratedValue
+                value={
+                  !isCurrentMonth ? (
+                    <Link
+                      href={`/training/classes/calendar?month=${fmtMonth(
+                        todayMonth.year,
+                        todayMonth.month,
+                      )}`}
+                    >
+                      <Button variant="ghost" size="sm">
+                        <GeneratedText id="m_1fca2ff1421477" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400">
-              {rows.length} class{rows.length === 1 ? '' : 'es'} this view
+              <GeneratedValue value={rows.length} /> <GeneratedText id="m_02685702af0d26" />
+              <GeneratedValue
+                value={rows.length === 1 ? '' : <GeneratedText id="m_0a89df0a48c94c" />}
+              />{' '}
+              <GeneratedText id="m_0a4576ce81467c" />
             </div>
           </div>
         </>
@@ -237,89 +257,120 @@ export default async function TrainingClassesCalendarPage({
     >
       <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
-          {DOW.map((d) => (
-            <div key={d} className="px-2 py-2 text-center">
-              {d}
-            </div>
-          ))}
+          <GeneratedValue
+            value={DOW.map((d) => (
+              <div key={d} className="px-2 py-2 text-center">
+                <GeneratedValue value={d} />
+              </div>
+            ))}
+          />
         </div>
         <div className="grid grid-cols-7">
-          {days.map((cell, idx) => {
-            const chips = byDay.get(cell.iso) ?? []
-            const dayNum = cell.date.getDate()
-            return (
-              <div
-                key={cell.iso + idx}
-                className={[
-                  'min-h-[110px] border-r border-b border-slate-100 p-1.5 dark:border-slate-800',
-                  idx % 7 === 6 ? 'border-r-0' : '',
-                  cell.inMonth
-                    ? 'bg-white dark:bg-slate-900'
-                    : 'bg-slate-50/60 dark:bg-slate-900/80',
-                ].join(' ')}
-              >
-                <div className="mb-1 flex items-center justify-between">
-                  <span
-                    className={[
-                      'inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-medium tabular-nums',
-                      cell.isToday
-                        ? 'bg-teal-600 text-white'
-                        : cell.inMonth
-                          ? 'text-slate-700 dark:text-slate-300'
-                          : 'text-slate-400',
-                    ].join(' ')}
-                  >
-                    {dayNum}
-                  </span>
-                  {chips.length > 3 ? (
-                    <span className="text-[10px] text-slate-400">{chips.length}</span>
-                  ) : null}
+          <GeneratedValue
+            value={days.map((cell, idx) => {
+              const chips = byDay.get(cell.iso) ?? []
+              const dayNum = cell.date.getDate()
+              return (
+                <div
+                  key={cell.iso + idx}
+                  className={[
+                    'min-h-[110px] border-r border-b border-slate-100 p-1.5 dark:border-slate-800',
+                    idx % 7 === 6 ? 'border-r-0' : '',
+                    cell.inMonth
+                      ? 'bg-white dark:bg-slate-900'
+                      : 'bg-slate-50/60 dark:bg-slate-900/80',
+                  ].join(' ')}
+                >
+                  <div className="mb-1 flex items-center justify-between">
+                    <span
+                      className={[
+                        'inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-medium tabular-nums',
+                        cell.isToday
+                          ? 'bg-teal-600 text-white'
+                          : cell.inMonth
+                            ? 'text-slate-700 dark:text-slate-300'
+                            : 'text-slate-400',
+                      ].join(' ')}
+                    >
+                      <GeneratedValue value={dayNum} />
+                    </span>
+                    <GeneratedValue
+                      value={
+                        chips.length > 3 ? (
+                          <span className="text-[10px] text-slate-400">
+                            <GeneratedValue value={chips.length} />
+                          </span>
+                        ) : null
+                      }
+                    />
+                  </div>
+                  <ul className="space-y-0.5">
+                    <GeneratedValue
+                      value={chips.slice(0, 4).map((c) => (
+                        <li key={c.id}>
+                          <Link
+                            href={`/training/classes/${c.id}`}
+                            title={tGeneratedValue(`${c.title} — ${c.courseName}`)}
+                            className={[
+                              'block truncate rounded px-1.5 py-0.5 text-[11px] leading-tight transition-colors',
+                              c.cancelled
+                                ? 'bg-slate-100 text-slate-500 line-through hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                                : c.completed
+                                  ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-500/10'
+                                  : 'bg-teal-50 text-teal-900 hover:bg-teal-100 dark:bg-teal-500/10 dark:text-teal-200',
+                            ].join(' ')}
+                          >
+                            <span className="text-[10px] text-slate-500 tabular-nums dark:text-slate-400">
+                              <GeneratedValue
+                                value={c.start.toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  timeZone: ctx.timezone,
+                                })}
+                              />
+                            </span>
+                            <GeneratedValue value={' '} />
+                            <span className="font-medium">
+                              <GeneratedValue value={c.title} />
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    />
+                    <GeneratedValue
+                      value={
+                        chips.length > 4 ? (
+                          <li className="px-1.5 text-[10px] text-slate-400">
+                            +<GeneratedValue value={chips.length - 4} />{' '}
+                            <GeneratedText id="m_02ae245776e9fe" />
+                          </li>
+                        ) : null
+                      }
+                    />
+                  </ul>
                 </div>
-                <ul className="space-y-0.5">
-                  {chips.slice(0, 4).map((c) => (
-                    <li key={c.id}>
-                      <Link
-                        href={`/training/classes/${c.id}`}
-                        title={`${c.title} — ${c.courseName}`}
-                        className={[
-                          'block truncate rounded px-1.5 py-0.5 text-[11px] leading-tight transition-colors',
-                          c.cancelled
-                            ? 'bg-slate-100 text-slate-500 line-through hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
-                            : c.completed
-                              ? 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-500/10'
-                              : 'bg-teal-50 text-teal-900 hover:bg-teal-100 dark:bg-teal-500/10 dark:text-teal-200',
-                        ].join(' ')}
-                      >
-                        <span className="text-[10px] text-slate-500 tabular-nums dark:text-slate-400">
-                          {c.start.toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            timeZone: ctx.timezone,
-                          })}
-                        </span>{' '}
-                        <span className="font-medium">{c.title}</span>
-                      </Link>
-                    </li>
-                  ))}
-                  {chips.length > 4 ? (
-                    <li className="px-1.5 text-[10px] text-slate-400">+{chips.length - 4} more</li>
-                  ) : null}
-                </ul>
-              </div>
-            )
-          })}
+              )
+            })}
+          />
         </div>
       </div>
 
-      {rows.length === 0 ? (
-        <div className="mt-4 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
-          <CalendarDays size={14} className="text-slate-400" />
-          <span>No classes scheduled in {monthLabel(year, month)}.</span>
-          <Badge variant="outline" className="ml-auto">
-            tip
-          </Badge>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <div className="mt-4 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
+              <CalendarDays size={14} className="text-slate-400" />
+              <span>
+                <GeneratedText id="m_18ab7c10f93054" />{' '}
+                <GeneratedValue value={monthLabel(year, month)} />.
+              </span>
+              <Badge variant="outline" className="ml-auto">
+                <GeneratedText id="m_1daba91d100651" />
+              </Badge>
+            </div>
+          ) : null
+        }
+      />
     </ListPageLayout>
   )
 }

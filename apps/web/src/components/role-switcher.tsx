@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -24,6 +26,7 @@ export function RoleSwitcher({
   current: { id: string | null; name: string }
   available: Role[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const router = useRouter()
   const t = useTranslations('Shell')
   const [open, setOpen] = useState(false)
@@ -42,7 +45,7 @@ export function RoleSwitcher({
         setOpen(false)
         router.refresh()
       } else {
-        toast.error(res.error ?? t('couldNotSwitchRole'))
+        toast.error(tGeneratedValue(res.error ?? t('couldNotSwitchRole')))
       }
     })
   }
@@ -61,13 +64,15 @@ export function RoleSwitcher({
           className="flex min-w-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60"
         >
           <UserCog size={14} className="shrink-0" />
-          <span className="truncate">{pending ? t('switching') : current.name}</span>
+          <span className="truncate">
+            <GeneratedValue value={pending ? t('switching') : current.name} />
+          </span>
           <ChevronDown size={14} className="shrink-0 text-slate-400 dark:text-slate-500" />
         </button>
       }
     >
       <div className="border-b border-slate-100 px-3 py-2 text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-        {t('actingAsRole')}
+        <GeneratedValue value={t('actingAsRole')} />
       </div>
       <ul className="max-h-72 overflow-y-auto py-1">
         <li>
@@ -78,34 +83,48 @@ export function RoleSwitcher({
           >
             <span className="flex flex-col">
               <span className="font-medium text-slate-900 dark:text-slate-100">
-                {t('allRoles')}
+                <GeneratedValue value={t('allRoles')} />
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {t('combinedPermissions')}
+                <GeneratedValue value={t('combinedPermissions')} />
               </span>
             </span>
-            {current.id === null ? (
-              <Check size={14} className="text-teal-700 dark:text-teal-300" />
-            ) : null}
+            <GeneratedValue
+              value={
+                current.id === null ? (
+                  <Check size={14} className="text-teal-700 dark:text-teal-300" />
+                ) : null
+              }
+            />
           </button>
         </li>
-        {available.map((r) => (
-          <li key={r.id}>
-            <button
-              type="button"
-              onClick={() => pick(r.id)}
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800/60"
-            >
-              <span className="flex flex-col">
-                <span className="font-medium text-slate-900 dark:text-slate-100">{r.name}</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">{r.key}</span>
-              </span>
-              {r.id === current.id ? (
-                <Check size={14} className="text-teal-700 dark:text-teal-300" />
-              ) : null}
-            </button>
-          </li>
-        ))}
+        <GeneratedValue
+          value={available.map((r) => (
+            <li key={r.id}>
+              <button
+                type="button"
+                onClick={() => pick(r.id)}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800/60"
+              >
+                <span className="flex flex-col">
+                  <span className="font-medium text-slate-900 dark:text-slate-100">
+                    <GeneratedValue value={r.name} />
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={r.key} />
+                  </span>
+                </span>
+                <GeneratedValue
+                  value={
+                    r.id === current.id ? (
+                      <Check size={14} className="text-teal-700 dark:text-teal-300" />
+                    ) : null
+                  }
+                />
+              </button>
+            </li>
+          ))}
+        />
       </ul>
     </Popover>
   )

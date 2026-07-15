@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Shared SMS-log detail — rendered at /admin/sms-log/[id] (scope 'tenant') and
 // /platform/sms-log/[id] (scope 'platform'). Mirrors the email-log detail.
 
@@ -39,6 +43,8 @@ export async function SmsLogDetailView({
   scope: SmsLogScope
   back: { href: string; label: string }
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
 
   const loadRow = async (tx: Database) => {
@@ -65,31 +71,40 @@ export async function SmsLogDetailView({
       header={
         <DetailHeader
           back={back}
-          title={log.recipient ?? 'SMS'}
-          subtitle={`Sent ${formatDateTime(new Date(log.createdAt), ctx.timezone, ctx.locale)}${
-            log.provider ? ` · via ${log.provider}` : ''
-          }`}
+          title={tGeneratedValue(log.recipient ?? tGenerated('m_090cf61ef27662'))}
+          subtitle={tGenerated('m_0affd4b7cf5554', {
+            value0: formatDateTime(new Date(log.createdAt), ctx.timezone, ctx.locale),
+            value1: log.provider ? ` · via ${log.provider}` : '',
+          })}
           badge={
             <div className="flex items-center gap-2">
-              <Badge variant={statusVariant(log.status)}>{log.status}</Badge>
-              {log.categoryKey ? (
-                <Badge variant="outline" className="font-mono text-[11px]">
-                  {log.categoryKey}
-                </Badge>
-              ) : null}
+              <Badge variant={statusVariant(log.status)}>
+                <GeneratedValue value={log.status} />
+              </Badge>
+              <GeneratedValue
+                value={
+                  log.categoryKey ? (
+                    <Badge variant="outline" className="font-mono text-[11px]">
+                      <GeneratedValue value={log.categoryKey} />
+                    </Badge>
+                  ) : null
+                }
+              />
             </div>
           }
         />
       }
     >
       <div className="space-y-5">
-        <Section title="Delivery" subtitle="Recipient, provider and outcome">
+        <Section title={tGenerated('m_03db87cb2e7846')} subtitle={tGenerated('m_1b29db08c7188e')}>
           <DetailGrid
             rows={[
               {
                 label: 'To',
                 value: log.recipient ? (
-                  <span className="font-mono text-xs">{log.recipient}</span>
+                  <span className="font-mono text-xs">
+                    <GeneratedValue value={log.recipient} />
+                  </span>
                 ) : (
                   <span className="text-slate-400">—</span>
                 ),
@@ -100,7 +115,11 @@ export async function SmsLogDetailView({
               },
               {
                 label: 'Status',
-                value: <Badge variant={statusVariant(log.status)}>{log.status}</Badge>,
+                value: (
+                  <Badge variant={statusVariant(log.status)}>
+                    <GeneratedValue value={log.status} />
+                  </Badge>
+                ),
               },
               {
                 label: 'Category',
@@ -108,7 +127,11 @@ export async function SmsLogDetailView({
               },
               {
                 label: 'Tenant',
-                value: tenant?.name ?? <span className="text-slate-400">platform</span>,
+                value: tenant?.name ?? (
+                  <span className="text-slate-400">
+                    <GeneratedText id="m_123000091889d1" />
+                  </span>
+                ),
               },
               {
                 label: 'Created',
@@ -123,14 +146,22 @@ export async function SmsLogDetailView({
               {
                 label: 'Provider message id',
                 value: log.providerMessageId ? (
-                  <span className="font-mono text-xs">{log.providerMessageId}</span>
+                  <span className="font-mono text-xs">
+                    <GeneratedValue value={log.providerMessageId} />
+                  </span>
                 ) : (
                   '—'
                 ),
               },
               {
                 label: 'BullMQ job id',
-                value: log.jobId ? <span className="font-mono text-xs">{log.jobId}</span> : '—',
+                value: log.jobId ? (
+                  <span className="font-mono text-xs">
+                    <GeneratedValue value={log.jobId} />
+                  </span>
+                ) : (
+                  '—'
+                ),
               },
               {
                 label: 'Length',
@@ -138,34 +169,54 @@ export async function SmsLogDetailView({
               },
             ]}
           />
-          {log.errorMessage ? (
-            <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
-              <div className="mb-1 text-xs font-semibold tracking-wide uppercase">Error</div>
-              <pre className="font-mono text-[12px] whitespace-pre-wrap">{log.errorMessage}</pre>
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              log.errorMessage ? (
+                <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+                  <div className="mb-1 text-xs font-semibold tracking-wide uppercase">
+                    <GeneratedText id="m_1cb826f5006e77" />
+                  </div>
+                  <pre className="font-mono text-[12px] whitespace-pre-wrap">
+                    {log.errorMessage}
+                  </pre>
+                </div>
+              ) : null
+            }
+          />
         </Section>
 
-        {Object.keys(meta).length > 0 ? (
-          <Section title="Meta">
-            <pre className="overflow-x-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-[12px] text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-              {JSON.stringify(meta, null, 2)}
-            </pre>
-          </Section>
-        ) : null}
+        <GeneratedValue
+          value={
+            Object.keys(meta).length > 0 ? (
+              <Section title={tGenerated('m_11206adc9956a4')}>
+                <pre className="overflow-x-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-[12px] text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                  {JSON.stringify(meta, null, 2)}
+                </pre>
+              </Section>
+            ) : null
+          }
+        />
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Message</CardTitle>
+            <CardTitle className="text-base">
+              <GeneratedText id="m_0e4ff640f8e7d6" />
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {log.body ? (
-              <pre className="max-h-[480px] overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 font-mono text-[13px] whitespace-pre-wrap text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-                {log.body}
-              </pre>
-            ) : (
-              <p className="text-sm text-slate-500">No message body recorded.</p>
-            )}
+            <GeneratedValue
+              value={
+                log.body ? (
+                  <pre className="max-h-[480px] overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 font-mono text-[13px] whitespace-pre-wrap text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                    {log.body}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    <GeneratedText id="m_1d743375ec7e06" />
+                  </p>
+                )
+              }
+            />
           </CardContent>
         </Card>
       </div>

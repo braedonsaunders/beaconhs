@@ -15,8 +15,8 @@ describe('people directory primary-title contract', () => {
     expect(page).toContain("params.sort === 'title'")
     expect(page).toContain('primaryTitleName,')
     expect(table).toContain('<SortTh column="title"')
-    expect(table).toContain('Primary job title')
-    expect(table).toContain("{r.primaryTitleName ?? '—'}")
+    expect(table).toContain('<GeneratedText id="m_1a4bbe2908d1a5" />')
+    expect(table).toContain("<GeneratedValue value={r.primaryTitleName ?? '—'} />")
   })
 
   it('keeps the matching CSV export and user guide truthful', () => {

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
@@ -14,7 +17,10 @@ import { parseListParams, pickString } from '@/lib/list-params'
 import { loadScopeOptions } from '../users/_scope-data'
 import { BulkRoleAssignmentForm } from './_components/bulk-role-assignment-form'
 
-export const metadata = { title: 'Roles' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1ed71c1e30c002') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'permissions', 'members'] as const
@@ -25,6 +31,8 @@ export default async function AdminRolesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!can(ctx, 'admin.roles.manage')) redirect('/admin')
   const sp = await searchParams
@@ -152,42 +160,56 @@ export default async function AdminRolesPage({
       <div className="space-y-5">
         <DetailHeader
           back={{ href: '/admin', label: 'Back to admin' }}
-          title="Roles"
-          subtitle="Bundles of permissions you assign to members."
+          title={tGenerated('m_1ed71c1e30c002')}
+          subtitle={tGenerated('m_0a95f0af2a4546')}
           actions={
             <div className="flex items-center gap-2 whitespace-nowrap">
-              {scopeOptions ? (
-                <BulkRoleAssignmentForm
-                  roles={data.allRoleOptions}
-                  members={data.members}
-                  scopeOptions={scopeOptions}
-                />
-              ) : null}
+              <GeneratedValue
+                value={
+                  scopeOptions ? (
+                    <BulkRoleAssignmentForm
+                      roles={data.allRoleOptions}
+                      members={data.members}
+                      scopeOptions={scopeOptions}
+                    />
+                  ) : null
+                }
+              />
               <Link href="/admin/roles/new">
-                <Button>New role</Button>
+                <Button>
+                  <GeneratedText id="m_166bee8f545e03" />
+                </Button>
               </Link>
             </div>
           }
         />
 
-        {error ? (
-          <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            {error}
-          </div>
-        ) : null}
-        {notice ? (
-          <div className="rounded-md border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-300">
-            {notice}
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+                <GeneratedValue value={error} />
+              </div>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            notice ? (
+              <div className="rounded-md border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-300">
+                <GeneratedValue value={notice} />
+              </div>
+            ) : null
+          }
+        />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <SearchInput placeholder="Search role name or description…" />
+          <SearchInput placeholder={tGenerated('m_16049bdab5e799')} />
           <FilterChips
             basePath={BASE}
             currentParams={sp}
             paramKey="type"
-            label="Type"
+            label={tGenerated('m_074ba2f160c506')}
             options={[
               { value: 'built_in', label: 'Built-in', count: data.typeCounts.built_in ?? 0 },
               { value: 'custom', label: 'Custom', count: data.typeCounts.custom ?? 0 },
@@ -195,66 +217,90 @@ export default async function AdminRolesPage({
           />
         </div>
 
-        {rows.length === 0 ? (
-          <EmptyState
-            title={!listParams.q && !typeFilter ? 'No roles' : 'No matching roles'}
-            description={
-              !listParams.q && !typeFilter
-                ? 'Create a role to start assigning access.'
-                : 'Adjust the search or type filter.'
-            }
-          />
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
-                  <SortTh column="name" {...sortProps}>
-                    Name
-                  </SortTh>
-                  <th className="px-3 py-2">Description</th>
-                  <SortTh column="permissions" {...sortProps}>
-                    Permissions
-                  </SortTh>
-                  <SortTh column="members" {...sortProps}>
-                    Members
-                  </SortTh>
-                  <th className="px-3 py-2">Type</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {rows.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
-                    <td className="px-3 py-2">
-                      <Link
-                        href={`/admin/roles/${r.id}` as any}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {r.name}
-                      </Link>
-                    </td>
-                    <td className="max-w-md px-3 py-2 text-slate-600 dark:text-slate-400">
-                      <span className="line-clamp-1">{r.description ?? '—'}</span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                      {r.permissionCount}
-                    </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                      {r.memberCount}
-                    </td>
-                    <td className="px-3 py-2">
-                      {r.isBuiltIn ? (
-                        <Badge variant="secondary">Built-in</Badge>
-                      ) : (
-                        <Badge variant="outline">Custom</Badge>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <GeneratedValue
+          value={
+            rows.length === 0 ? (
+              <EmptyState
+                title={tGeneratedValue(
+                  !listParams.q && !typeFilter
+                    ? tGenerated('m_0f1763e8701d84')
+                    : tGenerated('m_0ae43c02f5c18b'),
+                )}
+                description={tGeneratedValue(
+                  !listParams.q && !typeFilter
+                    ? tGenerated('m_09f55428d4bd7f')
+                    : tGenerated('m_10cb445cb3e7bf'),
+                )}
+              />
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
+                      <SortTh column="name" {...sortProps}>
+                        <GeneratedText id="m_02b18d5c7f6f2d" />
+                      </SortTh>
+                      <th className="px-3 py-2">
+                        <GeneratedText id="m_14d923495cf14c" />
+                      </th>
+                      <SortTh column="permissions" {...sortProps}>
+                        <GeneratedText id="m_0f16ebbc2ed672" />
+                      </SortTh>
+                      <SortTh column="members" {...sortProps}>
+                        <GeneratedText id="m_0ef3898622f868" />
+                      </SortTh>
+                      <th className="px-3 py-2">
+                        <GeneratedText id="m_074ba2f160c506" />
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    <GeneratedValue
+                      value={rows.map((r) => (
+                        <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
+                          <td className="px-3 py-2">
+                            <Link
+                              href={`/admin/roles/${r.id}` as any}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={r.name} />
+                            </Link>
+                          </td>
+                          <td className="max-w-md px-3 py-2 text-slate-600 dark:text-slate-400">
+                            <span className="line-clamp-1">
+                              <GeneratedValue value={r.description ?? '—'} />
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                            <GeneratedValue value={r.permissionCount} />
+                          </td>
+                          <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                            <GeneratedValue value={r.memberCount} />
+                          </td>
+                          <td className="px-3 py-2">
+                            <GeneratedValue
+                              value={
+                                r.isBuiltIn ? (
+                                  <Badge variant="secondary">
+                                    <GeneratedText id="m_09bfd82959f8d2" />
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline">
+                                    <GeneratedText id="m_1721ac81d2a5c0" />
+                                  </Badge>
+                                )
+                              }
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    />
+                  </tbody>
+                </table>
+              </div>
+            )
+          }
+        />
         <Pagination
           basePath={BASE}
           currentParams={sp}

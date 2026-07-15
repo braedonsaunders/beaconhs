@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { ListChecks } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
@@ -24,7 +27,10 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { HazidSubNav } from '../_subnav'
 
-export const metadata = { title: 'Assessment types' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1469477020449a') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/hazard-assessments/types'
@@ -39,6 +45,8 @@ export default async function AssessmentTypesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const styleParam = pickString(sp.style)
   const styleFilter =
@@ -97,21 +105,23 @@ export default async function AssessmentTypesPage({
         <>
           <HazidSubNav pathname="/hazard-assessments/types" />
           <PageHeader
-            title="Assessment types"
-            description="Templates that drive sections, defaults, eligibility, and embedded Builder apps for new assessments."
+            title={tGenerated('m_1469477020449a')}
+            description={tGenerated('m_0b483f48c89125')}
             actions={
               <Link href="/hazard-assessments/types/new">
-                <Button>New assessment type</Button>
+                <Button>
+                  <GeneratedText id="m_1d23e917eeb2e4" />
+                </Button>
               </Link>
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search assessment types…" />
+            <SearchInput placeholder={tGenerated('m_0ce3985d801819')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="style"
-              label="Style"
+              label={tGenerated('m_03cf3a97d03fef')}
               options={[
                 { value: 'task_based', label: 'Task-based', count: taskBasedCount },
                 { value: 'hazard_based', label: 'Hazard-based', count: hazardBasedCount },
@@ -121,75 +131,105 @@ export default async function AssessmentTypesPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<ListChecks size={32} />}
-          title={!params.q && !styleFilter ? 'No types' : 'No matching types'}
-          description={
-            !params.q && !styleFilter
-              ? "Most crews need at least a 'Standard hazard assessment' and a 'Confined space assessment'."
-              : 'Adjust the search or style filter.'
-          }
-          action={
-            !params.q && !styleFilter ? (
-              <Link href="/hazard-assessments/types/new">
-                <Button>Add a type</Button>
-              </Link>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="name"
-                  active={params.sort === 'name'}
-                >
-                  Name
-                </SortableTh>
-                <TableHead>Optional sections</TableHead>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="style"
-                  active={params.sort === 'style'}
-                >
-                  Style
-                </SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>
-                    <Link
-                      href={`/hazard-assessments/types/${r.id}`}
-                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<ListChecks size={32} />}
+              title={tGeneratedValue(
+                !params.q && !styleFilter
+                  ? tGenerated('m_0d3b5a36a8779b')
+                  : tGenerated('m_17d7f44539abd3'),
+              )}
+              description={tGeneratedValue(
+                !params.q && !styleFilter
+                  ? tGenerated('m_0d998a4fb9f946')
+                  : tGenerated('m_1cbb449aadde60'),
+              )}
+              action={
+                !params.q && !styleFilter ? (
+                  <Link href="/hazard-assessments/types/new">
+                    <Button>
+                      <GeneratedText id="m_14df422e6bfe41" />
+                    </Button>
+                  </Link>
+                ) : undefined
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="name"
+                      active={params.sort === 'name'}
                     >
-                      {r.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {r.hasPPE ? <Badge variant="secondary">PPE</Badge> : null}
-                      {r.hasQuestions ? <Badge variant="secondary">Q&amp;A</Badge> : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {styleLabel(r.style)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_0715227000cfd5" />
+                    </TableHead>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="style"
+                      active={params.sort === 'style'}
+                    >
+                      <GeneratedText id="m_03cf3a97d03fef" />
+                    </SortableTh>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell>
+                          <Link
+                            href={`/hazard-assessments/types/${r.id}`}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                          >
+                            <GeneratedValue value={r.name} />
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            <GeneratedValue
+                              value={
+                                r.hasPPE ? (
+                                  <Badge variant="secondary">
+                                    <GeneratedText id="m_18391e161b9ed6" />
+                                  </Badge>
+                                ) : null
+                              }
+                            />
+                            <GeneratedValue
+                              value={
+                                r.hasQuestions ? (
+                                  <Badge variant="secondary">
+                                    <GeneratedText id="m_0ef5343512ffa9" />
+                                  </Badge>
+                                ) : null
+                              }
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={styleLabel(r.style)} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+            </div>
+          )
+        }
+      />
       <Pagination
         basePath={BASE}
         currentParams={sp}

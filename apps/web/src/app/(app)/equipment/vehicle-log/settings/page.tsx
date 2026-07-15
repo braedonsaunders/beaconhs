@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { and, asc, count, eq, ilike, or, sql } from 'drizzle-orm'
 import { PageHeader } from '@beaconhs/ui'
 import { people, vehicleLogSettings } from '@beaconhs/db/schema'
@@ -8,7 +9,10 @@ import { driverVehicleLogMode } from '../_service'
 import { VehicleLogSettingsForm } from './_form.client'
 import { parseListParams, pickString } from '@/lib/list-params'
 
-export const metadata = { title: 'Vehicle log settings' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0fab21e2e4bd27') }
+}
 export const dynamic = 'force-dynamic'
 
 const OVERRIDE_SORTS = ['name', 'mode'] as const
@@ -18,6 +22,7 @@ export default async function VehicleLogSettingsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'name',
@@ -90,8 +95,8 @@ export default async function VehicleLogSettingsPage({
       header={
         <>
           <PageHeader
-            title="Vehicle log settings"
-            description="Which entry modes drivers use and where each driver lands by default."
+            title={tGenerated('m_0fab21e2e4bd27')}
+            description={tGenerated('m_030f391e467fd4')}
           />
           <EquipmentSubNav active="vehicle-log-settings" />
         </>

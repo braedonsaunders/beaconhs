@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Shared design-studio editor core — the Fabric canvas, zoom/viewport
 // machinery, and the Insert / Layers / Inspector / Print rail panels used by
 // every design-document studio (training credential Card studio, equipment
@@ -185,6 +192,8 @@ export function CanvasZoomControls({
   ReturnType<typeof useDesignZoom>,
   'zoom' | 'fitMode' | 'fullscreen' | 'zoomBy' | 'zoomTo' | 'fitToWindow' | 'setFullscreen'
 >) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   return (
     <>
       <Button
@@ -193,18 +202,18 @@ export function CanvasZoomControls({
         size="sm"
         onClick={() => zoomBy(1 / 1.2)}
         disabled={zoom <= ZOOM_MIN}
-        aria-label="Zoom out"
-        title="Zoom out (⌘ + scroll)"
+        aria-label={tGenerated('m_00a262469a10eb')}
+        title={tGenerated('m_0dc23dde86c8b5')}
       >
         <ZoomOut size={14} />
       </Button>
       <button
         type="button"
         onClick={() => zoomTo(1)}
-        title="Zoom to 100%"
+        title={tGenerated('m_0f91231303cad9')}
         className="w-12 rounded px-1 py-1 text-center text-xs font-medium text-slate-600 tabular-nums hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
       >
-        {Math.round(zoom * 100)}%
+        <GeneratedValue value={Math.round(zoom * 100)} />%
       </button>
       <Button
         type="button"
@@ -212,8 +221,8 @@ export function CanvasZoomControls({
         size="sm"
         onClick={() => zoomBy(1.2)}
         disabled={zoom >= ZOOM_MAX}
-        aria-label="Zoom in"
-        title="Zoom in (⌘ + scroll)"
+        aria-label={tGenerated('m_12713157ff4ed0')}
+        title={tGenerated('m_11077f6d324dbc')}
       >
         <ZoomIn size={14} />
       </Button>
@@ -222,8 +231,8 @@ export function CanvasZoomControls({
         variant={fitMode ? 'secondary' : 'ghost'}
         size="sm"
         onClick={fitToWindow}
-        aria-label="Fit to window"
-        title="Fit to window"
+        aria-label={tGenerated('m_0289ca594569dc')}
+        title={tGenerated('m_0289ca594569dc')}
       >
         <Scan size={14} />
       </Button>
@@ -232,10 +241,14 @@ export function CanvasZoomControls({
         variant="ghost"
         size="sm"
         onClick={() => setFullscreen(!fullscreen)}
-        aria-label={fullscreen ? 'Exit full screen' : 'Full screen'}
-        title={fullscreen ? 'Exit full screen (Esc)' : 'Full screen'}
+        aria-label={tGeneratedValue(
+          fullscreen ? tGenerated('m_13170d34c93b7d') : tGenerated('m_11f08bcd4894cb'),
+        )}
+        title={tGeneratedValue(
+          fullscreen ? tGenerated('m_1a44c3eb34ab88') : tGenerated('m_11f08bcd4894cb'),
+        )}
       >
-        {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+        <GeneratedValue value={fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />} />
       </Button>
     </>
   )
@@ -568,35 +581,47 @@ function displayTextForElement(
 // --- Rail panels --------------------------------------------------------------
 
 export function InsertPanel({ onAdd }: { onAdd: (kind: DesignElement['kind']) => void }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="space-y-3">
-      <RailLabel label="Add elements" icon={<Sparkles size={14} />} />
-      <ElementButton label="Text box" icon={<Type size={15} />} onClick={() => onAdd('text')} />
+      <RailLabel label={tGenerated('m_16f99327318dfb')} icon={<Sparkles size={14} />} />
       <ElementButton
-        label="Data field"
+        label={tGenerated('m_1c7e7e07a32853')}
+        icon={<Type size={15} />}
+        onClick={() => onAdd('text')}
+      />
+      <ElementButton
+        label={tGenerated('m_138222fc315717')}
         icon={<BadgeCheck size={15} />}
         onClick={() => onAdd('field')}
       />
       <ElementButton
-        label="Shape"
+        label={tGenerated('m_1849b2d387c738')}
         icon={<RectangleHorizontal size={15} />}
         onClick={() => onAdd('rect')}
       />
       <ElementButton
-        label="Ellipse / seal base"
+        label={tGenerated('m_0f020b4cd561e6')}
         icon={<BadgeCheck size={15} />}
         onClick={() => onAdd('ellipse')}
       />
       <ElementButton
-        label="Image placeholder"
+        label={tGenerated('m_13ea99a078fa96')}
         icon={<ImageIcon size={15} />}
         onClick={() => onAdd('image')}
       />
-      <ElementButton label="QR code" icon={<QrCode size={15} />} onClick={() => onAdd('qr')} />
-      <ElementButton label="Seal" icon={<BadgeCheck size={15} />} onClick={() => onAdd('seal')} />
+      <ElementButton
+        label={tGenerated('m_02316e48e168d8')}
+        icon={<QrCode size={15} />}
+        onClick={() => onAdd('qr')}
+      />
+      <ElementButton
+        label={tGenerated('m_13312cc3ff1e8a')}
+        icon={<BadgeCheck size={15} />}
+        onClick={() => onAdd('seal')}
+      />
       <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
-        Fields bind to live record data at render time. Moving or editing them here changes every
-        future PDF without storing generated files.
+        <GeneratedText id="m_1623eb9979e59c" />
       </div>
     </div>
   )
@@ -619,11 +644,14 @@ export function LayersPanel({
   onFront: () => void
   onBack: () => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <RailLabel label="Layers" icon={<Layers3 size={14} />} />
-        <Badge variant="secondary">{artboard.elements.length}</Badge>
+        <RailLabel label={tGenerated('m_1065741cf2a494')} icon={<Layers3 size={14} />} />
+        <Badge variant="secondary">
+          <GeneratedValue value={artboard.elements.length} />
+        </Badge>
       </div>
       <div className="flex gap-1">
         <Button
@@ -632,7 +660,7 @@ export function LayersPanel({
           size="sm"
           onClick={onDuplicate}
           disabled={!selectedElementId}
-          title="Duplicate"
+          title={tGenerated('m_13fa26360f0fe9')}
         >
           <Copy size={14} />
         </Button>
@@ -642,7 +670,7 @@ export function LayersPanel({
           size="sm"
           onClick={onFront}
           disabled={!selectedElementId}
-          title="Bring forward"
+          title={tGenerated('m_0beb88c08048c3')}
         >
           <BringToFront size={14} />
         </Button>
@@ -652,7 +680,7 @@ export function LayersPanel({
           size="sm"
           onClick={onBack}
           disabled={!selectedElementId}
-          title="Send backward"
+          title={tGenerated('m_081ec96d0986e6')}
         >
           <SendToBack size={14} />
         </Button>
@@ -662,31 +690,39 @@ export function LayersPanel({
           size="sm"
           onClick={onDelete}
           disabled={!selectedElementId}
-          title="Delete"
+          title={tGenerated('m_11773f3c3f7558')}
         >
           <Trash2 size={14} />
         </Button>
       </div>
       <div className="space-y-1.5">
-        {[...artboard.elements].reverse().map((element) => (
-          <button
-            key={element.id}
-            type="button"
-            onClick={() => onSelect(element.id)}
-            className={cn(
-              'flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-sm',
-              element.id === selectedElementId
-                ? 'border-teal-700 bg-teal-50 text-teal-900 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-200'
-                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800',
-            )}
-          >
-            {iconForElement(element)}
-            <span className="min-w-0 flex-1 truncate">{element.name}</span>
-            {element.locked ? (
-              <Lock size={12} className="text-slate-400 dark:text-slate-500" />
-            ) : null}
-          </button>
-        ))}
+        <GeneratedValue
+          value={[...artboard.elements].reverse().map((element) => (
+            <button
+              key={element.id}
+              type="button"
+              onClick={() => onSelect(element.id)}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-sm',
+                element.id === selectedElementId
+                  ? 'border-teal-700 bg-teal-50 text-teal-900 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-200'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800',
+              )}
+            >
+              <GeneratedValue value={iconForElement(element)} />
+              <span className="min-w-0 flex-1 truncate">
+                <GeneratedValue value={element.name} />
+              </span>
+              <GeneratedValue
+                value={
+                  element.locked ? (
+                    <Lock size={12} className="text-slate-400 dark:text-slate-500" />
+                  ) : null
+                }
+              />
+            </button>
+          ))}
+        />
       </div>
     </div>
   )
@@ -707,11 +743,13 @@ export function InspectorPanel({
   onPatchElement: (patch: Partial<DesignElement>) => void
   onDelete: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   if (!selectedElement) {
     return (
       <div className="space-y-3">
-        <RailLabel label="Artboard" icon={<Grid3X3 size={14} />} />
-        <Field label="Name">
+        <RailLabel label={tGenerated('m_1604ec41b6c59b')} icon={<Grid3X3 size={14} />} />
+        <Field label={tGenerated('m_02b18d5c7f6f2d')}>
           <Input
             value={artboard.name}
             maxLength={DESIGN_DOCUMENT_LIMITS.artboardNameLength}
@@ -719,25 +757,24 @@ export function InspectorPanel({
           />
         </Field>
         <ColorField
-          label="Background"
+          label={tGenerated('m_197c46ade6d75f')}
           value={artboard.background}
           onChange={(background) => onPatchArtboard({ background })}
         />
         <div className="grid grid-cols-2 gap-2">
           <NumberField
-            label="Width"
+            label={tGenerated('m_13260774b3499b')}
             value={artboard.width}
             onChange={(width) => onPatchArtboard({ width, format: 'custom' })}
           />
           <NumberField
-            label="Height"
+            label={tGenerated('m_0e936e6e874290')}
             value={artboard.height}
             onChange={(height) => onPatchArtboard({ height, format: 'custom' })}
           />
         </div>
         <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
-          Select a layer or click an object on the artboard to edit its position, content, and
-          styling.
+          <GeneratedText id="m_12b9991889a2c8" />
         </div>
       </div>
     )
@@ -750,23 +787,25 @@ export function InspectorPanel({
       <div className="rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50">
         <div className="flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {iconForElement(selectedElement)}
-            {meta.label}
+            <GeneratedValue value={iconForElement(selectedElement)} />
+            <GeneratedValue value={meta.label} />
           </span>
           <Button
             type="button"
             variant="ghost"
             size="sm"
             onClick={onDelete}
-            aria-label="Delete element"
+            aria-label={tGenerated('m_175a029083c608')}
           >
             <Trash2 size={14} className="text-rose-500" />
           </Button>
         </div>
-        <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">{meta.hint}</p>
+        <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">
+          <GeneratedValue value={meta.hint} />
+        </p>
       </div>
 
-      <Field label="Layer name">
+      <Field label={tGenerated('m_0568217366722b')}>
         <Input
           value={selectedElement.name}
           maxLength={DESIGN_DOCUMENT_LIMITS.elementNameLength}
@@ -774,236 +813,305 @@ export function InspectorPanel({
         />
       </Field>
 
-      {selectedElement.kind === 'text' ? (
-        <Field label="Text">
-          <Textarea
-            rows={3}
-            value={selectedElement.text}
-            maxLength={DESIGN_DOCUMENT_LIMITS.textLength}
-            onChange={(e) =>
-              onPatchElement({ text: e.currentTarget.value } as Partial<DesignElement>)
-            }
-          />
-        </Field>
-      ) : null}
-
-      {selectedElement.kind === 'field' ? (
-        <>
-          <Field label="Data field">
-            <Select
-              value={selectedElement.field}
-              onChange={(e) =>
-                onPatchElement({
-                  field: e.currentTarget.value as DesignDataField,
-                } as Partial<DesignElement>)
-              }
-            >
-              {catalog.options.map((field) => (
-                <option key={field.value} value={field.value}>
-                  {field.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <div className="rounded-md border border-teal-100 bg-teal-50/60 px-2.5 py-2 text-xs text-teal-900 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-200">
-            <span className="font-semibold">Sample:</span>{' '}
-            {`${selectedElement.prefix ?? ''}${
-              selectedElement.transform === 'uppercase'
-                ? (catalog.sample[selectedElement.field] ?? '').toUpperCase()
-                : (catalog.sample[selectedElement.field] ?? '')
-            }${selectedElement.suffix ?? ''}`}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Prefix">
-              <Input
-                value={selectedElement.prefix ?? ''}
-                maxLength={DESIGN_DOCUMENT_LIMITS.fieldAffixLength}
+      <GeneratedValue
+        value={
+          selectedElement.kind === 'text' ? (
+            <Field label={tGenerated('m_1ca9a0811729da')}>
+              <Textarea
+                rows={3}
+                value={selectedElement.text}
+                maxLength={DESIGN_DOCUMENT_LIMITS.textLength}
                 onChange={(e) =>
-                  onPatchElement({ prefix: e.currentTarget.value } as Partial<DesignElement>)
+                  onPatchElement({ text: e.currentTarget.value } as Partial<DesignElement>)
                 }
               />
             </Field>
-            <Field label="Suffix">
+          ) : null
+        }
+      />
+
+      <GeneratedValue
+        value={
+          selectedElement.kind === 'field' ? (
+            <>
+              <Field label={tGenerated('m_138222fc315717')}>
+                <Select
+                  value={selectedElement.field}
+                  onChange={(e) =>
+                    onPatchElement({
+                      field: e.currentTarget.value as DesignDataField,
+                    } as Partial<DesignElement>)
+                  }
+                >
+                  <GeneratedValue
+                    value={catalog.options.map((field) => (
+                      <option key={field.value} value={field.value}>
+                        <GeneratedValue value={field.label} />
+                      </option>
+                    ))}
+                  />
+                </Select>
+              </Field>
+              <div className="rounded-md border border-teal-100 bg-teal-50/60 px-2.5 py-2 text-xs text-teal-900 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-200">
+                <span className="font-semibold">
+                  <GeneratedText id="m_1dd2ac78e8c792" />
+                </span>
+                <GeneratedValue value={' '} />
+                <GeneratedValue
+                  value={`${selectedElement.prefix ?? ''}${
+                    selectedElement.transform === 'uppercase'
+                      ? (catalog.sample[selectedElement.field] ?? '').toUpperCase()
+                      : (catalog.sample[selectedElement.field] ?? '')
+                  }${selectedElement.suffix ?? ''}`}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label={tGenerated('m_00adfbfb276db4')}>
+                  <Input
+                    value={selectedElement.prefix ?? ''}
+                    maxLength={DESIGN_DOCUMENT_LIMITS.fieldAffixLength}
+                    onChange={(e) =>
+                      onPatchElement({ prefix: e.currentTarget.value } as Partial<DesignElement>)
+                    }
+                  />
+                </Field>
+                <Field label={tGenerated('m_09b4b90bca1cb7')}>
+                  <Input
+                    value={selectedElement.suffix ?? ''}
+                    maxLength={DESIGN_DOCUMENT_LIMITS.fieldAffixLength}
+                    onChange={(e) =>
+                      onPatchElement({ suffix: e.currentTarget.value } as Partial<DesignElement>)
+                    }
+                  />
+                </Field>
+                <Field label={tGenerated('m_0079cd733e75d4')}>
+                  <Input
+                    value={selectedElement.fallback ?? ''}
+                    maxLength={DESIGN_DOCUMENT_LIMITS.fieldFallbackLength}
+                    placeholder={tGenerated('m_0dbb83eaf1e96a')}
+                    onChange={(e) =>
+                      onPatchElement({ fallback: e.currentTarget.value } as Partial<DesignElement>)
+                    }
+                  />
+                </Field>
+                <Field label={tGenerated('m_1f6288d5ae6aab')}>
+                  <Select
+                    value={selectedElement.transform ?? 'none'}
+                    onChange={(e) =>
+                      onPatchElement({
+                        transform: e.currentTarget.value as
+                          'none' | 'uppercase' | 'date-long' | 'date-short',
+                      } as Partial<DesignElement>)
+                    }
+                  >
+                    <option value="none">
+                      <GeneratedText id="m_010faf405829a4" />
+                    </option>
+                    <option value="uppercase">
+                      <GeneratedText id="m_00f3b16bbcf76e" />
+                    </option>
+                    <option value="date-long">
+                      <GeneratedText id="m_0c99c9ba644d36" />
+                    </option>
+                    <option value="date-short">
+                      <GeneratedText id="m_1561c322acbb37" />
+                    </option>
+                  </Select>
+                </Field>
+              </div>
+            </>
+          ) : null
+        }
+      />
+
+      <GeneratedValue
+        value={
+          selectedElement.kind === 'image' ? (
+            <>
+              <Field label={tGenerated('m_17d5e70f58b666')}>
+                <Select
+                  value={selectedElement.source}
+                  onChange={(e) =>
+                    onPatchElement({
+                      source: e.currentTarget.value as any,
+                    } as Partial<DesignElement>)
+                  }
+                >
+                  <GeneratedValue
+                    value={catalog.imageSources.map((source) => (
+                      <option key={source.value} value={source.value}>
+                        <GeneratedValue value={source.label} />
+                      </option>
+                    ))}
+                  />
+                </Select>
+              </Field>
+              <GeneratedValue
+                value={
+                  selectedElement.source === 'url' ? (
+                    <Field label={tGenerated('m_1febb31a01f5e7')}>
+                      <Input
+                        value={selectedElement.url ?? ''}
+                        maxLength={DESIGN_DOCUMENT_LIMITS.imageUrlLength}
+                        placeholder="https://…"
+                        onChange={(e) =>
+                          onPatchElement({ url: e.currentTarget.value } as Partial<DesignElement>)
+                        }
+                      />
+                    </Field>
+                  ) : null
+                }
+              />
+            </>
+          ) : null
+        }
+      />
+
+      <GeneratedValue
+        value={
+          selectedElement.kind === 'seal' ? (
+            <Field label={tGenerated('m_020e4445dee967')}>
               <Input
-                value={selectedElement.suffix ?? ''}
-                maxLength={DESIGN_DOCUMENT_LIMITS.fieldAffixLength}
+                value={selectedElement.text ?? ''}
+                maxLength={DESIGN_DOCUMENT_LIMITS.sealTextLength}
+                placeholder={tGenerated('m_17413c3fbf4b8e')}
                 onChange={(e) =>
-                  onPatchElement({ suffix: e.currentTarget.value } as Partial<DesignElement>)
+                  onPatchElement({ text: e.currentTarget.value } as Partial<DesignElement>)
                 }
               />
             </Field>
-            <Field label="If empty, show">
-              <Input
-                value={selectedElement.fallback ?? ''}
-                maxLength={DESIGN_DOCUMENT_LIMITS.fieldFallbackLength}
-                placeholder="leave blank to hide"
-                onChange={(e) =>
-                  onPatchElement({ fallback: e.currentTarget.value } as Partial<DesignElement>)
-                }
+          ) : null
+        }
+      />
+
+      <GeneratedValue
+        value={
+          selectedElement.kind === 'qr' ? (
+            <div className="grid grid-cols-1 gap-2">
+              <ColorField
+                label={tGenerated('m_0570e24c85cf95')}
+                value={selectedElement.foreground ?? '#0f172a'}
+                onChange={(foreground) => onPatchElement({ foreground } as Partial<DesignElement>)}
               />
-            </Field>
-            <Field label="Format">
-              <Select
-                value={selectedElement.transform ?? 'none'}
-                onChange={(e) =>
-                  onPatchElement({
-                    transform: e.currentTarget.value as
-                      'none' | 'uppercase' | 'date-long' | 'date-short',
-                  } as Partial<DesignElement>)
-                }
-              >
-                <option value="none">As is</option>
-                <option value="uppercase">UPPERCASE</option>
-                <option value="date-long">Date — June 11, 2026</option>
-                <option value="date-short">Date — Jun 11, 2026</option>
-              </Select>
-            </Field>
-          </div>
-        </>
-      ) : null}
-
-      {selectedElement.kind === 'image' ? (
-        <>
-          <Field label="Image source">
-            <Select
-              value={selectedElement.source}
-              onChange={(e) =>
-                onPatchElement({ source: e.currentTarget.value as any } as Partial<DesignElement>)
-              }
-            >
-              {catalog.imageSources.map((source) => (
-                <option key={source.value} value={source.value}>
-                  {source.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {selectedElement.source === 'url' ? (
-            <Field label="Image URL">
-              <Input
-                value={selectedElement.url ?? ''}
-                maxLength={DESIGN_DOCUMENT_LIMITS.imageUrlLength}
-                placeholder="https://…"
-                onChange={(e) =>
-                  onPatchElement({ url: e.currentTarget.value } as Partial<DesignElement>)
-                }
+              <ColorField
+                label={tGenerated('m_0a5bcbdd19d2fe')}
+                value={selectedElement.background ?? '#ffffff'}
+                onChange={(background) => onPatchElement({ background } as Partial<DesignElement>)}
               />
-            </Field>
-          ) : null}
-        </>
-      ) : null}
-
-      {selectedElement.kind === 'seal' ? (
-        <Field label="Seal text">
-          <Input
-            value={selectedElement.text ?? ''}
-            maxLength={DESIGN_DOCUMENT_LIMITS.sealTextLength}
-            placeholder="Issuer initials when blank"
-            onChange={(e) =>
-              onPatchElement({ text: e.currentTarget.value } as Partial<DesignElement>)
-            }
-          />
-        </Field>
-      ) : null}
-
-      {selectedElement.kind === 'qr' ? (
-        <div className="grid grid-cols-1 gap-2">
-          <ColorField
-            label="Code"
-            value={selectedElement.foreground ?? '#0f172a'}
-            onChange={(foreground) => onPatchElement({ foreground } as Partial<DesignElement>)}
-          />
-          <ColorField
-            label="Backdrop"
-            value={selectedElement.background ?? '#ffffff'}
-            onChange={(background) => onPatchElement({ background } as Partial<DesignElement>)}
-          />
-        </div>
-      ) : null}
+            </div>
+          ) : null
+        }
+      />
       <div className="grid grid-cols-2 gap-2">
-        <NumberField label="X" value={selectedElement.x} onChange={(x) => onPatchElement({ x })} />
-        <NumberField label="Y" value={selectedElement.y} onChange={(y) => onPatchElement({ y })} />
         <NumberField
-          label="W"
+          label={tGenerated('m_1fd44044202a6a')}
+          value={selectedElement.x}
+          onChange={(x) => onPatchElement({ x })}
+        />
+        <NumberField
+          label={tGenerated('m_1211a6d4c9ccc9')}
+          value={selectedElement.y}
+          onChange={(y) => onPatchElement({ y })}
+        />
+        <NumberField
+          label={tGenerated('m_01c1568339229c')}
           value={selectedElement.width}
           onChange={(width) => onPatchElement({ width })}
         />
         <NumberField
-          label="H"
+          label={tGenerated('m_1987fe754d02dc')}
           value={selectedElement.height}
           onChange={(height) => onPatchElement({ height })}
         />
         <NumberField
-          label="Rotate"
+          label={tGenerated('m_02bf057e3c5db8')}
           value={selectedElement.rotation ?? 0}
           onChange={(rotation) => onPatchElement({ rotation })}
         />
         <NumberField
-          label="Opacity"
+          label={tGenerated('m_1c646d8dbbfc57')}
           value={selectedElement.opacity ?? 1}
           step={0.05}
           onChange={(opacity) => onPatchElement({ opacity })}
         />
       </div>
-      {'color' in selectedElement ? (
-        <ColorField
-          label="Text color"
-          value={selectedElement.color ?? '#0f172a'}
-          onChange={(color) => onPatchElement({ color } as Partial<DesignElement>)}
-        />
-      ) : null}
-      {'fill' in selectedElement ? (
-        <ColorField
-          label="Fill"
-          value={selectedElement.fill ?? '#ffffff'}
-          onChange={(fill) => onPatchElement({ fill } as Partial<DesignElement>)}
-        />
-      ) : null}
-      {'stroke' in selectedElement ? (
-        <ColorField
-          label="Stroke"
-          value={selectedElement.stroke ?? '#cbd5e1'}
-          onChange={(stroke) => onPatchElement({ stroke } as Partial<DesignElement>)}
-        />
-      ) : null}
-      {'fontSize' in selectedElement ? (
-        <>
-          <NumberField
-            label="Font size"
-            value={selectedElement.fontSize ?? 12}
-            onChange={(fontSize) => onPatchElement({ fontSize } as Partial<DesignElement>)}
-          />
-          <div className="grid grid-cols-3 gap-1">
-            <Button
-              type="button"
-              variant={selectedElement.align === 'left' ? 'secondary' : 'outline'}
-              size="sm"
-              onClick={() => onPatchElement({ align: 'left' } as Partial<DesignElement>)}
-            >
-              <AlignLeft size={14} />
-            </Button>
-            <Button
-              type="button"
-              variant={selectedElement.align === 'center' ? 'secondary' : 'outline'}
-              size="sm"
-              onClick={() => onPatchElement({ align: 'center' } as Partial<DesignElement>)}
-            >
-              <AlignCenter size={14} />
-            </Button>
-            <Button
-              type="button"
-              variant={selectedElement.align === 'right' ? 'secondary' : 'outline'}
-              size="sm"
-              onClick={() => onPatchElement({ align: 'right' } as Partial<DesignElement>)}
-            >
-              <AlignRight size={14} />
-            </Button>
-          </div>
-        </>
-      ) : null}
+      <GeneratedValue
+        value={
+          'color' in selectedElement ? (
+            <ColorField
+              label={tGenerated('m_1d84613a5c9677')}
+              value={selectedElement.color ?? '#0f172a'}
+              onChange={(color) => onPatchElement({ color } as Partial<DesignElement>)}
+            />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          'fill' in selectedElement ? (
+            <ColorField
+              label={tGenerated('m_1c8876b26b038d')}
+              value={selectedElement.fill ?? '#ffffff'}
+              onChange={(fill) => onPatchElement({ fill } as Partial<DesignElement>)}
+            />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          'stroke' in selectedElement ? (
+            <ColorField
+              label={tGenerated('m_1283da4b0e20fd')}
+              value={selectedElement.stroke ?? '#cbd5e1'}
+              onChange={(stroke) => onPatchElement({ stroke } as Partial<DesignElement>)}
+            />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          'fontSize' in selectedElement ? (
+            <>
+              <NumberField
+                label={tGenerated('m_148c58241fd1d4')}
+                value={selectedElement.fontSize ?? 12}
+                onChange={(fontSize) => onPatchElement({ fontSize } as Partial<DesignElement>)}
+              />
+              <div className="grid grid-cols-3 gap-1">
+                <Button
+                  type="button"
+                  variant={selectedElement.align === 'left' ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => onPatchElement({ align: 'left' } as Partial<DesignElement>)}
+                >
+                  <AlignLeft size={14} />
+                </Button>
+                <Button
+                  type="button"
+                  variant={selectedElement.align === 'center' ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => onPatchElement({ align: 'center' } as Partial<DesignElement>)}
+                >
+                  <AlignCenter size={14} />
+                </Button>
+                <Button
+                  type="button"
+                  variant={selectedElement.align === 'right' ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => onPatchElement({ align: 'right' } as Partial<DesignElement>)}
+                >
+                  <AlignRight size={14} />
+                </Button>
+              </div>
+            </>
+          ) : null
+        }
+      />
       <LayerToggle
         checked={!selectedElement.locked}
-        label={selectedElement.locked ? 'Locked' : 'Unlocked'}
+        label={tGeneratedValue(
+          selectedElement.locked ? tGenerated('m_0e259fa0babc2d') : tGenerated('m_16508b5ee9cd07'),
+        )}
         onChange={(unlocked) => onPatchElement({ locked: !unlocked })}
         icon={selectedElement.locked ? <Lock size={14} /> : <Unlock size={14} />}
       />
@@ -1018,6 +1126,7 @@ export function PrintPanel({
   artboard: DesignArtboard
   onPatchArtboard: (patch: Partial<DesignArtboard>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const profile = artboard.printProfile ?? {
     provider: 'browser-pdf' as PrintProvider,
     media: artboard.format === 'cr80-front' || artboard.format === 'cr80-back' ? 'cr80' : 'letter',
@@ -1027,8 +1136,8 @@ export function PrintPanel({
   }
   return (
     <div className="space-y-4">
-      <RailLabel label="Print profile" icon={<Printer size={14} />} />
-      <Field label="Provider">
+      <RailLabel label={tGenerated('m_06fbf5dca19848')} icon={<Printer size={14} />} />
+      <Field label={tGenerated('m_1c4d663fc7d77f')}>
         <Select
           value={profile.provider}
           onChange={(e) =>
@@ -1037,14 +1146,16 @@ export function PrintPanel({
             })
           }
         >
-          {PRINT_PROVIDERS.map((provider) => (
-            <option key={provider.id} value={provider.id}>
-              {provider.label}
-            </option>
-          ))}
+          <GeneratedValue
+            value={PRINT_PROVIDERS.map((provider) => (
+              <option key={provider.id} value={provider.id}>
+                <GeneratedValue value={provider.label} />
+              </option>
+            ))}
+          />
         </Select>
       </Field>
-      <Field label="Media">
+      <Field label={tGenerated('m_09db70b9dfd3ed')}>
         <Select
           value={profile.media}
           onChange={(e) =>
@@ -1053,39 +1164,57 @@ export function PrintPanel({
             })
           }
         >
-          <option value="letter">Letter</option>
-          <option value="cr80">CR80 card</option>
-          <option value="custom">Custom</option>
+          <option value="letter">
+            <GeneratedText id="m_1715837106bbe7" />
+          </option>
+          <option value="cr80">
+            <GeneratedText id="m_19dd6efbf62fcd" />
+          </option>
+          <option value="custom">
+            <GeneratedText id="m_1721ac81d2a5c0" />
+          </option>
         </Select>
       </Field>
       <LayerToggle
         checked={profile.duplex === true}
-        label="Duplex / two-sided"
+        label={tGenerated('m_09cdda4df8e928')}
         onChange={(duplex) => onPatchArtboard({ printProfile: { ...profile, duplex } })}
       />
       <LayerToggle
         checked={profile.edgeToEdge !== false}
-        label="Edge-to-edge"
+        label={tGenerated('m_10f5cd6acb899b')}
         onChange={(edgeToEdge) => onPatchArtboard({ printProfile: { ...profile, edgeToEdge } })}
       />
       <div className="space-y-2">
-        {PRINT_PROVIDERS.map((provider) => (
-          <div
-            key={provider.id}
-            className={cn(
-              'rounded-md border p-2 text-xs leading-5',
-              provider.id === profile.provider
-                ? 'border-teal-700 bg-teal-50 text-teal-900 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-200'
-                : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
-            )}
-          >
-            <div className="font-semibold">{provider.label}</div>
-            <div>{provider.notes}</div>
-            {provider.requiresLocalBridge ? (
-              <div className="mt-1 font-medium">Requires local printer bridge.</div>
-            ) : null}
-          </div>
-        ))}
+        <GeneratedValue
+          value={PRINT_PROVIDERS.map((provider) => (
+            <div
+              key={provider.id}
+              className={cn(
+                'rounded-md border p-2 text-xs leading-5',
+                provider.id === profile.provider
+                  ? 'border-teal-700 bg-teal-50 text-teal-900 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-200'
+                  : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
+              )}
+            >
+              <div className="font-semibold">
+                <GeneratedValue value={provider.label} />
+              </div>
+              <div>
+                <GeneratedValue value={provider.notes} />
+              </div>
+              <GeneratedValue
+                value={
+                  provider.requiresLocalBridge ? (
+                    <div className="mt-1 font-medium">
+                      <GeneratedText id="m_1618e6c010fa0a" />
+                    </div>
+                  ) : null
+                }
+              />
+            </div>
+          ))}
+        />
       </div>
     </div>
   )
@@ -1104,11 +1233,12 @@ export function RailTabButton({
   icon: ReactNode
   onClick: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <button
       type="button"
       onClick={onClick}
-      title={label}
+      title={tGeneratedValue(label)}
       className={cn(
         'grid h-9 place-items-center rounded-md border text-xs',
         active
@@ -1116,7 +1246,7 @@ export function RailTabButton({
           : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800',
       )}
     >
-      {icon}
+      <GeneratedValue value={icon} />
     </button>
   )
 }
@@ -1124,8 +1254,8 @@ export function RailTabButton({
 export function RailLabel({ icon, label }: { icon: ReactNode; label: string }) {
   return (
     <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
-      {icon}
-      {label}
+      <GeneratedValue value={icon} />
+      <GeneratedValue value={label} />
     </div>
   )
 }
@@ -1133,8 +1263,10 @@ export function RailLabel({ icon, label }: { icon: ReactNode; label: string }) {
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{label}</span>
-      {children}
+      <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+        <GeneratedValue value={label} />
+      </span>
+      <GeneratedValue value={children} />
     </label>
   )
 }
@@ -1154,8 +1286,8 @@ function ElementButton({
       onClick={onClick}
       className="flex w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
     >
-      {icon}
-      {label}
+      <GeneratedValue value={icon} />
+      <GeneratedValue value={label} />
     </button>
   )
 }
@@ -1174,8 +1306,10 @@ export function LayerToggle({
   return (
     <label className="flex cursor-pointer items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
       <span className="flex min-w-0 items-center gap-2 text-slate-700 dark:text-slate-200">
-        {icon}
-        <span className="truncate">{label}</span>
+        <GeneratedValue value={icon} />
+        <span className="truncate">
+          <GeneratedValue value={label} />
+        </span>
       </span>
       <input
         type="checkbox"
@@ -1198,7 +1332,9 @@ function ColorField({
 }) {
   return (
     <label className="flex items-center gap-2">
-      <span className="w-20 text-xs font-medium text-slate-600 dark:text-slate-300">{label}</span>
+      <span className="w-20 text-xs font-medium text-slate-600 dark:text-slate-300">
+        <GeneratedValue value={label} />
+      </span>
       <input
         type="color"
         value={value}
@@ -1226,8 +1362,9 @@ function NumberField({
   step?: number
   onChange: (value: number) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
-    <Field label={label}>
+    <Field label={tGeneratedValue(label)}>
       <Input
         type="number"
         step={step}

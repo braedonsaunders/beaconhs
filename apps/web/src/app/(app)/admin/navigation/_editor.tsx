@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // In-UI sidebar editor. Org-wide, admin-only (gated by admin.nav.manage on the
 // page + every server action). Lets an admin reorder / rename / re-icon / hide
 // built-in modules, pin form templates as native-looking items, add custom
@@ -129,6 +136,8 @@ export function NavEditor({
   initialConfig: TenantNavConfig
   templates: TemplateLite[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [groups, setGroups] = useState<EGroup[]>(() => toEditor(initialConfig))
   const [dirty, setDirty] = useState(false)
@@ -152,7 +161,7 @@ export function NavEditor({
     mutate(groups.map((g) => (g.id === groupId ? { ...g, label } : g)))
   const removeGroup = (groupId: string) => {
     if (groups.length <= 1) {
-      toast.error('Keep at least one group.')
+      toast.error(tGenerated('m_110a472e15364d'))
       return
     }
     mutate(groups.filter((g) => g.id !== groupId))
@@ -186,7 +195,7 @@ export function NavEditor({
         return g
       }),
     )
-    toast.success('Moved')
+    toast.success(tGenerated('m_0a27525f69a1a1'))
   }
   const addItem = (groupId: string, item: NavItemConfig) => {
     mutate(
@@ -216,10 +225,10 @@ export function NavEditor({
     start(async () => {
       const res = await saveNavConfig(fromEditor(groups))
       if (!res.ok) {
-        toast.error(res.error ?? 'Failed to save')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_084d4d5382264e')))
         return
       }
-      toast.success('Sidebar saved')
+      toast.success(tGenerated('m_144ce43c8ff99b'))
       setDirty(false)
       router.refresh()
     })
@@ -236,7 +245,7 @@ export function NavEditor({
       // Rebuild client state from the returned defaults — `initialConfig` is
       // the stale pre-reset prop and router.refresh() does not remount us.
       const res = await resetNavConfig()
-      toast.success('Reset to defaults')
+      toast.success(tGenerated('m_1f67de126c9538'))
       setGroups(toEditor(res.config))
       setDirty(false)
       router.refresh()
@@ -247,56 +256,73 @@ export function NavEditor({
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">Navigation</h1>
+          <h1 className="text-2xl font-semibold">
+            <GeneratedText id="m_053fa0513af9ac" />
+          </h1>
           <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-            Customise the left sidebar for everyone in this workspace — reorder, rename, change
-            icons, hide modules, and pin forms so they look like native modules.
+            <GeneratedText id="m_08d3d05d78c2ba" />
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {dirty ? (
-            <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-              Unsaved changes
-            </span>
-          ) : null}
+          <GeneratedValue
+            value={
+              dirty ? (
+                <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                  <GeneratedText id="m_1175a27a9b33f7" />
+                </span>
+              ) : null
+            }
+          />
           <Button variant="outline" onClick={reset} disabled={pending}>
-            <RotateCcw size={14} /> Reset
+            <RotateCcw size={14} /> <GeneratedText id="m_1bd5864b59f5f2" />
           </Button>
           <Button onClick={save} disabled={pending || !dirty}>
-            <Save size={14} /> {pending ? 'Saving…' : 'Save changes'}
+            <Save size={14} />{' '}
+            <GeneratedValue
+              value={
+                pending ? (
+                  <GeneratedText id="m_106811f2aac664" />
+                ) : (
+                  <GeneratedText id="m_1ab9025ed1067c" />
+                )
+              }
+            />
           </Button>
         </div>
       </header>
 
       <Alert variant="info">
         <Info size={16} />
-        <AlertTitle>Applies to everyone</AlertTitle>
+        <AlertTitle>
+          <GeneratedText id="m_1722cee51cb72b" />
+        </AlertTitle>
         <AlertDescription>
-          This layout is shared by the whole workspace. Each member still only sees items they have
-          permission to open, so hiding here is for tidiness — not access control.
+          <GeneratedText id="m_0edd95fe2a818a" />
         </AlertDescription>
       </Alert>
 
       <Reorder.Group axis="y" values={groups} onReorder={mutate} as="div" className="space-y-4">
-        {groups.map((group) => (
-          <GroupCard
-            key={group.id}
-            group={group}
-            groups={groups}
-            templatesById={templatesById}
-            onReorderItems={(items) => onReorderItems(group.id, items)}
-            onRenameGroup={(label) => renameGroup(group.id, label)}
-            onRemoveGroup={() => removeGroup(group.id)}
-            onAdd={() => setAddTarget(group.id)}
-            onPatchItem={(u, patch) => patchItem(group.id, u, patch)}
-            onRemoveItem={(u) => removeItem(group.id, u)}
-            onMoveItem={(u, to) => moveItem(group.id, u, to)}
-          />
-        ))}
+        <GeneratedValue
+          value={groups.map((group) => (
+            <GroupCard
+              key={group.id}
+              group={group}
+              groups={groups}
+              templatesById={templatesById}
+              onReorderItems={(items) => onReorderItems(group.id, items)}
+              onRenameGroup={(label) => renameGroup(group.id, label)}
+              onRemoveGroup={() => removeGroup(group.id)}
+              onAdd={() => setAddTarget(group.id)}
+              onPatchItem={(u, patch) => patchItem(group.id, u, patch)}
+              onRemoveItem={(u) => removeItem(group.id, u)}
+              onMoveItem={(u, to) => moveItem(group.id, u, to)}
+            />
+          ))}
+        />
       </Reorder.Group>
 
       <Button variant="outline" onClick={addGroup}>
-        <FolderPlus size={15} /> Add group
+        <FolderPlus size={15} /> <GeneratedText id="m_17f5673d4b9449" />
       </Button>
 
       <AddDrawer
@@ -341,6 +367,7 @@ function GroupCard({
   onRemoveItem: (u: string) => void
   onMoveItem: (u: string, toGroupId: string) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const controls = useDragControls()
   return (
     <Reorder.Item
@@ -353,7 +380,7 @@ function GroupCard({
       <header className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
         <button
           type="button"
-          aria-label="Drag group to reorder"
+          aria-label={tGenerated('m_0b6106e20b65df')}
           onPointerDown={(e) => controls.start(e)}
           className="cursor-grab touch-none rounded p-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
         >
@@ -362,52 +389,58 @@ function GroupCard({
         <Input
           value={group.label}
           onChange={(e) => onRenameGroup(e.target.value)}
-          aria-label="Group name"
+          aria-label={tGenerated('m_1c636cc7ca34e0')}
           className="h-8 max-w-[18rem] border-transparent bg-transparent text-xs font-semibold tracking-wider text-slate-600 uppercase hover:border-slate-200 focus:border-slate-300 dark:text-slate-300 dark:hover:border-slate-700 dark:focus:border-slate-600"
         />
         <Badge variant="secondary" className="text-[10px]">
-          {group.items.length}
+          <GeneratedValue value={group.items.length} />
         </Badge>
         <div className="ml-auto">
-          <IconBtn title="Delete group" onClick={onRemoveGroup}>
+          <IconBtn title={tGenerated('m_1c97c9724f36ef')} onClick={onRemoveGroup}>
             <Trash2 size={15} className="text-rose-500" />
           </IconBtn>
         </div>
       </header>
 
       <div className="p-2">
-        {group.items.length === 0 ? (
-          <p className="px-2 py-5 text-center text-xs text-slate-400 dark:text-slate-500">
-            Empty group. Add a module, form, or link below.
-          </p>
-        ) : (
-          <Reorder.Group
-            axis="y"
-            values={group.items}
-            onReorder={onReorderItems}
-            as="div"
-            className="space-y-1.5"
-          >
-            {group.items.map((item) => (
-              <ItemRow
-                key={item.uid}
-                item={item}
-                display={displayFor(item, templatesById)}
-                groupId={group.id}
-                groups={groups}
-                onPatch={(patch) => onPatchItem(item.uid, patch)}
-                onRemove={() => onRemoveItem(item.uid)}
-                onMove={(to) => onMoveItem(item.uid, to)}
-              />
-            ))}
-          </Reorder.Group>
-        )}
+        <GeneratedValue
+          value={
+            group.items.length === 0 ? (
+              <p className="px-2 py-5 text-center text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_153621a4dc7020" />
+              </p>
+            ) : (
+              <Reorder.Group
+                axis="y"
+                values={group.items}
+                onReorder={onReorderItems}
+                as="div"
+                className="space-y-1.5"
+              >
+                <GeneratedValue
+                  value={group.items.map((item) => (
+                    <ItemRow
+                      key={item.uid}
+                      item={item}
+                      display={displayFor(item, templatesById)}
+                      groupId={group.id}
+                      groups={groups}
+                      onPatch={(patch) => onPatchItem(item.uid, patch)}
+                      onRemove={() => onRemoveItem(item.uid)}
+                      onMove={(to) => onMoveItem(item.uid, to)}
+                    />
+                  ))}
+                />
+              </Reorder.Group>
+            )
+          }
+        />
         <button
           type="button"
           onClick={onAdd}
           className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-medium text-slate-500 transition-colors hover:border-teal-400 hover:bg-teal-50 hover:text-teal-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-teal-600 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
         >
-          <Plus size={14} /> Add item
+          <Plus size={14} /> <GeneratedText id="m_0b8d1437a1693b" />
         </button>
       </div>
     </Reorder.Item>
@@ -431,6 +464,8 @@ function ItemRow({
   onRemove: () => void
   onMove: (toGroupId: string) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const controls = useDragControls()
   const [editing, setEditing] = useState(false)
   const hidden = item.hidden ?? false
@@ -445,7 +480,7 @@ function ItemRow({
       <div className="flex items-center gap-2 px-2 py-1.5">
         <button
           type="button"
-          aria-label="Drag to reorder"
+          aria-label={tGenerated('m_0b04b904ce4f9a')}
           onPointerDown={(e) => controls.start(e)}
           className="cursor-grab touch-none rounded p-1 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
         >
@@ -457,91 +492,115 @@ function ItemRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
-              {display.label}
+              <GeneratedValue value={display.label} />
             </span>
             <Badge variant="secondary" className="text-[10px]">
-              {display.type}
+              <GeneratedValue value={display.type} />
             </Badge>
-            {hidden ? (
-              <Badge variant="outline" className="text-[10px]">
-                Hidden
-              </Badge>
-            ) : null}
-            {display.missing ? (
-              <Badge variant="destructive" className="text-[10px]">
-                Missing
-              </Badge>
-            ) : null}
+            <GeneratedValue
+              value={
+                hidden ? (
+                  <Badge variant="outline" className="text-[10px]">
+                    <GeneratedText id="m_01cb6961ee0ba3" />
+                  </Badge>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                display.missing ? (
+                  <Badge variant="destructive" className="text-[10px]">
+                    <GeneratedText id="m_033d838430bc5f" />
+                  </Badge>
+                ) : null
+              }
+            />
           </div>
           <div className="truncate text-[11px] text-slate-400 dark:text-slate-500">
-            {display.sub}
+            <GeneratedValue value={display.sub} />
           </div>
         </div>
         <div className="flex items-center gap-0.5">
           <IconBtn
-            title={hidden ? 'Show' : 'Hide'}
+            title={tGeneratedValue(
+              hidden ? tGenerated('m_00fbddc6309531') : tGenerated('m_1b0073432893f9'),
+            )}
             onClick={() => onPatch({ hidden: hidden ? undefined : true })}
           >
-            {hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+            <GeneratedValue value={hidden ? <EyeOff size={14} /> : <Eye size={14} />} />
           </IconBtn>
-          <IconBtn title="Edit" onClick={() => setEditing((s) => !s)} active={editing}>
+          <IconBtn
+            title={tGenerated('m_03a66f9d34ac7b')}
+            onClick={() => setEditing((s) => !s)}
+            active={editing}
+          >
             <Pencil size={14} />
           </IconBtn>
-          <IconBtn title="Remove" onClick={onRemove}>
+          <IconBtn title={tGenerated('m_1a9d8d971b1edb')} onClick={onRemove}>
             <Trash2 size={14} className="text-rose-500" />
           </IconBtn>
         </div>
       </div>
 
-      {editing ? (
-        <div className="space-y-3 border-t border-slate-100 bg-slate-50/60 px-3 py-3 dark:border-slate-800 dark:bg-slate-800/40">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label className="text-xs">Label override</Label>
-              <Input
-                value={item.label ?? ''}
-                placeholder={display.label}
-                onChange={(e) => onPatch({ label: e.target.value || undefined })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Icon</Label>
-              <div className="flex items-center gap-2">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700">
-                  <NavIcon iconKey={display.iconKey} size={16} />
-                </span>
+      <GeneratedValue
+        value={
+          editing ? (
+            <div className="space-y-3 border-t border-slate-100 bg-slate-50/60 px-3 py-3 dark:border-slate-800 dark:bg-slate-800/40">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">
+                    <GeneratedText id="m_14a897470e979c" />
+                  </Label>
+                  <Input
+                    value={item.label ?? ''}
+                    placeholder={tGeneratedValue(display.label)}
+                    onChange={(e) => onPatch({ label: e.target.value || undefined })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">
+                    <GeneratedText id="m_158279b74f9a6e" />
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700">
+                      <NavIcon iconKey={display.iconKey} size={16} />
+                    </span>
+                    <SearchSelect
+                      className="flex-1"
+                      value={item.iconKey ?? ''}
+                      onChange={(v) => onPatch({ iconKey: v || undefined })}
+                      options={ICON_KEYS.map((k) => ({ value: k, label: k }))}
+                      clearable
+                      emptyLabel={tGenerated('m_1f7e78461783a1')}
+                      placeholder={tGenerated('m_1f7e78461783a1')}
+                      searchPlaceholder={tGenerated('m_0e50365bbb945f')}
+                      sheetTitle="Pick an icon"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  <GeneratedText id="m_0d5780d08ac6d2" />
+                </Label>
                 <SearchSelect
-                  className="flex-1"
-                  value={item.iconKey ?? ''}
-                  onChange={(v) => onPatch({ iconKey: v || undefined })}
-                  options={ICON_KEYS.map((k) => ({ value: k, label: k }))}
-                  clearable
-                  emptyLabel="Default"
-                  placeholder="Default"
-                  searchPlaceholder="Search icons…"
-                  sheetTitle="Pick an icon"
+                  value={groupId}
+                  onChange={(v) => {
+                    if (v && v !== groupId) onMove(v)
+                  }}
+                  options={groups.map((g) => ({ value: g.id, label: g.label }))}
+                  sheetTitle="Move to group"
                 />
               </div>
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
+                  <Check size={14} /> <GeneratedText id="m_00609f822e0571" />
+                </Button>
+              </div>
             </div>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Move to group</Label>
-            <SearchSelect
-              value={groupId}
-              onChange={(v) => {
-                if (v && v !== groupId) onMove(v)
-              }}
-              options={groups.map((g) => ({ value: g.id, label: g.label }))}
-              sheetTitle="Move to group"
-            />
-          </div>
-          <div className="flex justify-end">
-            <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
-              <Check size={14} /> Done
-            </Button>
-          </div>
-        </div>
-      ) : null}
+          ) : null
+        }
+      />
     </Reorder.Item>
   )
 }
@@ -559,6 +618,8 @@ function AddDrawer({
   onTemplateResolved: (template: TemplateLite) => void
   onAdd: (item: NavItemConfig) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [linkLabel, setLinkLabel] = useState('')
   const [linkHref, setLinkHref] = useState('')
 
@@ -566,14 +627,16 @@ function AddDrawer({
     <Drawer
       open={open}
       onClose={onClose}
-      title="Add to sidebar"
-      description="Pin a form, add a built-in module, or link to any page."
+      title={tGenerated('m_10117a1f68a720')}
+      description={tGenerated('m_1d5547eeffd22b')}
     >
       <div className="space-y-7">
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Pin a form</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            <GeneratedText id="m_136300f8d7fbf6" />
+          </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Surface any form template as a sidebar item — it behaves like a native module.
+            <GeneratedText id="m_058b15e39773b4" />
           </p>
           <RemoteSearchSelect
             lookup="admin-navigation-form-templates"
@@ -591,8 +654,8 @@ function AddDrawer({
                 status: option.meta.status,
               })
             }}
-            placeholder="Choose a form…"
-            searchPlaceholder="Search forms…"
+            placeholder={tGenerated('m_0ccf5fd06050bc')}
+            searchPlaceholder={tGenerated('m_14d56f6fc82486')}
             sheetTitle="Pin a form"
             ariaLabel="Pin a form"
             clearable={false}
@@ -600,9 +663,11 @@ function AddDrawer({
         </section>
 
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Add a module</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            <GeneratedText id="m_17cb5cf4c51d20" />
+          </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Built-in app sections. Modules already in the sidebar are hidden from this list.
+            <GeneratedText id="m_03469245a2081d" />
           </p>
           <SearchSelect
             value=""
@@ -610,31 +675,39 @@ function AddDrawer({
               if (v) onAdd({ kind: 'module', moduleKey: v })
             }}
             options={availableModules.map((m) => ({ value: m.key, label: m.label, hint: m.group }))}
-            placeholder={availableModules.length ? 'Choose a module…' : 'All modules are placed'}
-            searchPlaceholder="Search modules…"
+            placeholder={tGeneratedValue(
+              availableModules.length
+                ? tGenerated('m_03241b80e9fcca')
+                : tGenerated('m_033568c3c9b473'),
+            )}
+            searchPlaceholder={tGenerated('m_0adb88307522d5')}
             sheetTitle="Add a module"
           />
         </section>
 
         <section className="space-y-2">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-            Add a custom link
+            <GeneratedText id="m_1d263676dcbef2" />
           </h3>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label className="text-xs">Label</Label>
+              <Label className="text-xs">
+                <GeneratedText id="m_1d088977412efb" />
+              </Label>
               <Input
                 value={linkLabel}
                 onChange={(e) => setLinkLabel(e.target.value)}
-                placeholder="e.g. Company intranet"
+                placeholder={tGenerated('m_15d0d39e1a0a34')}
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">URL / path</Label>
+              <Label className="text-xs">
+                <GeneratedText id="m_17d7f8e3d48e5e" />
+              </Label>
               <Input
                 value={linkHref}
                 onChange={(e) => setLinkHref(e.target.value)}
-                placeholder="/reports or https://…"
+                placeholder={tGenerated('m_0f00e77a0a91f9')}
               />
             </div>
           </div>
@@ -648,7 +721,7 @@ function AddDrawer({
               setLinkHref('')
             }}
           >
-            <Plus size={14} /> Add link
+            <Plus size={14} /> <GeneratedText id="m_16e1f414591109" />
           </Button>
         </section>
       </div>
@@ -667,16 +740,17 @@ function IconBtn({
   active?: boolean
   children: ReactNode
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <button
       type="button"
-      title={title}
+      title={tGeneratedValue(title)}
       onClick={onClick}
       className={`rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200 ${
         active ? 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200' : ''
       }`}
     >
-      {children}
+      <GeneratedValue value={children} />
     </button>
   )
 }

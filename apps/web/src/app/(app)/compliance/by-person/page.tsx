@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHeader, TableRow } from '@beaconhs/ui'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -20,7 +22,10 @@ import { ComplianceSubNav } from '../_sub-nav'
 import { OBLIGATION_KINDS, type ObligationKind } from '../obligations/_meta'
 import { PersonPicker } from './_person-picker'
 
-export const metadata = { title: 'Compliance · By person' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_00740d4935c614') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/compliance/by-person'
@@ -31,6 +36,7 @@ export default async function ByPersonPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.read')
@@ -82,8 +88,8 @@ export default async function ByPersonPage({
       header={
         <>
           <PageHeader
-            title="Compliance"
-            description="Every obligation one person is responsible for, across every kind."
+            title={tGenerated('m_096d47f60747b3')}
+            description={tGenerated('m_015c1866d10130')}
           />
           <ComplianceSubNav active="by-person" />
         </>
@@ -92,98 +98,124 @@ export default async function ByPersonPage({
       <div className="space-y-6">
         <PersonPicker selected={personId ?? ''} />
 
-        {personId ? (
-          <TableToolbar>
-            <SearchInput placeholder="Search obligation, kind, or status…" />
-            <FilterChips
-              basePath={BASE}
-              currentParams={sp}
-              paramKey="status"
-              label="Status"
-              options={PERSON_STATUS_FILTERS.map((filter) => ({
-                ...filter,
-                count: statusCounts[filter.value] ?? 0,
-              }))}
-            />
-            <FilterChips
-              basePath={BASE}
-              currentParams={sp}
-              paramKey="kind"
-              label="Kind"
-              options={OBLIGATION_KINDS.map((kind) => ({
-                value: kind,
-                label: kindLabel(kind),
-                count: kindCounts[kind] ?? 0,
-              }))}
-            />
-          </TableToolbar>
-        ) : null}
+        <GeneratedValue
+          value={
+            personId ? (
+              <TableToolbar>
+                <SearchInput placeholder={tGenerated('m_1e16c5f9400e36')} />
+                <FilterChips
+                  basePath={BASE}
+                  currentParams={sp}
+                  paramKey="status"
+                  label={tGenerated('m_0b9da892d6faf0')}
+                  options={PERSON_STATUS_FILTERS.map((filter) => ({
+                    ...filter,
+                    count: statusCounts[filter.value] ?? 0,
+                  }))}
+                />
+                <FilterChips
+                  basePath={BASE}
+                  currentParams={sp}
+                  paramKey="kind"
+                  label={tGenerated('m_1e578efe1574cd')}
+                  options={OBLIGATION_KINDS.map((kind) => ({
+                    value: kind,
+                    label: kindLabel(kind),
+                    count: kindCounts[kind] ?? 0,
+                  }))}
+                />
+              </TableToolbar>
+            ) : null
+          }
+        />
 
-        {!personId ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
-            Pick a person above to see every obligation they are scoped into.
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-            {allRows.length === 0
-              ? "This person isn't a subject of any active obligation."
-              : 'No obligations match the search or filters.'}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <SummaryStrip percent={percent} totals={totals} title="Across all kinds" />
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {[
-                    ['kind', 'Kind'],
-                    ['title', 'Obligation'],
-                    ['status', 'Status'],
-                    ['due', 'Due'],
-                    ['completed', 'Completed'],
-                  ].map(([column, label]) => (
-                    <SortableTh
-                      key={column}
-                      basePath={BASE}
-                      currentParams={sp}
-                      dir={params.dir}
-                      column={column!}
-                      active={params.sort === column}
-                    >
-                      {label}
-                    </SortableTh>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r, i) => (
-                  <TableRow key={`${r.obligationId}:${i}`}>
-                    <TableCell>
-                      <Badge variant="secondary">{kindLabel(r.kind)}</Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-900 dark:text-slate-100">{r.title}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={r.status} />
-                    </TableCell>
-                    <TableCell className="text-slate-700 dark:text-slate-300">
-                      {r.dueOn ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-slate-700 dark:text-slate-300">
-                      {r.completedOn ?? '—'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Pagination
-              basePath={BASE}
-              currentParams={sp}
-              total={filtered.length}
-              page={page}
-              perPage={params.perPage}
-            />
-          </div>
-        )}
+        <GeneratedValue
+          value={
+            !personId ? (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
+                <GeneratedText id="m_04856d3476c441" />
+              </div>
+            ) : rows.length === 0 ? (
+              <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                <GeneratedValue
+                  value={
+                    allRows.length === 0 ? (
+                      <GeneratedText id="m_083d499637ae9b" />
+                    ) : (
+                      <GeneratedText id="m_171a1486034173" />
+                    )
+                  }
+                />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <SummaryStrip
+                  percent={percent}
+                  totals={totals}
+                  title={tGenerated('m_03a532e728943c')}
+                />
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <GeneratedValue
+                        value={[
+                          ['kind', 'Kind'],
+                          ['title', 'Obligation'],
+                          ['status', 'Status'],
+                          ['due', 'Due'],
+                          ['completed', 'Completed'],
+                        ].map(([column, label]) => (
+                          <SortableTh
+                            key={column}
+                            basePath={BASE}
+                            currentParams={sp}
+                            dir={params.dir}
+                            column={column!}
+                            active={params.sort === column}
+                          >
+                            <GeneratedValue value={label} />
+                          </SortableTh>
+                        ))}
+                      />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <GeneratedValue
+                      value={rows.map((r, i) => (
+                        <TableRow key={`${r.obligationId}:${i}`}>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              <GeneratedValue value={kindLabel(r.kind)} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-slate-900 dark:text-slate-100">
+                            <GeneratedValue value={r.title} />
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={r.status} />
+                          </TableCell>
+                          <TableCell className="text-slate-700 dark:text-slate-300">
+                            <GeneratedValue value={r.dueOn ?? '—'} />
+                          </TableCell>
+                          <TableCell className="text-slate-700 dark:text-slate-300">
+                            <GeneratedValue value={r.completedOn ?? '—'} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    />
+                  </TableBody>
+                </Table>
+                <Pagination
+                  basePath={BASE}
+                  currentParams={sp}
+                  total={filtered.length}
+                  page={page}
+                  perPage={params.perPage}
+                />
+              </div>
+            )
+          }
+        />
       </div>
     </ListPageLayout>
   )

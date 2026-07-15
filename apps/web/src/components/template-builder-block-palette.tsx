@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 import { Braces, Table2 } from 'lucide-react'
 
 type PaletteBlock = {
@@ -28,34 +30,41 @@ export function TemplateBuilderBlockPalette<T extends PaletteBlock>({
   dragStart: (block: T, event: DragEvent) => void
   dragStop: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <div className="space-y-4 pb-6">
-      {Array.from(mapCategoryBlocks.entries()).map(([category, blocks]) => (
-        <div key={category || 'general'}>
-          <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-            {category || 'Elements'}
-          </p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {blocks.map((block) => {
-              const id = block.getId()
-              const label = blockLabel(block)
-              return (
-                <div
-                  key={id}
-                  draggable
-                  onDragStart={(event) => dragStart(block, event.nativeEvent)}
-                  onDragEnd={dragStop}
-                  title={label}
-                  className="flex cursor-grab flex-col items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-2 text-center text-[10px] leading-tight text-slate-600 shadow-sm transition hover:border-teal-400 hover:text-teal-700 active:cursor-grabbing dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                >
-                  <BlockIcon id={id} />
-                  <span>{label}</span>
-                </div>
-              )
-            })}
+      <GeneratedValue
+        value={Array.from(mapCategoryBlocks.entries()).map(([category, blocks]) => (
+          <div key={category || 'general'}>
+            <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
+              <GeneratedValue value={category || <GeneratedText id="m_094a7426a3a90a" />} />
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              <GeneratedValue
+                value={blocks.map((block) => {
+                  const id = block.getId()
+                  const label = blockLabel(block)
+                  return (
+                    <div
+                      key={id}
+                      draggable
+                      onDragStart={(event) => dragStart(block, event.nativeEvent)}
+                      onDragEnd={dragStop}
+                      title={tGeneratedValue(label)}
+                      className="flex cursor-grab flex-col items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-2 text-center text-[10px] leading-tight text-slate-600 shadow-sm transition hover:border-teal-400 hover:text-teal-700 active:cursor-grabbing dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                    >
+                      <BlockIcon id={id} />
+                      <span>
+                        <GeneratedValue value={label} />
+                      </span>
+                    </div>
+                  )
+                })}
+              />
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      />
     </div>
   )
 }

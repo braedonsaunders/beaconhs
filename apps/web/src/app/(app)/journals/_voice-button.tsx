@@ -1,5 +1,11 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Voice dictation via the browser SpeechRecognition API (no data leaves the
 // device). Renders nothing on unsupported browsers.
 
@@ -44,6 +50,8 @@ export function VoiceButton({
   disabled?: boolean
   className?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [listening, setListening] = useState(false)
   const supported = useSyncExternalStore(
     subscribe,
@@ -98,8 +106,12 @@ export function VoiceButton({
       type="button"
       onClick={toggle}
       disabled={disabled}
-      title={listening ? 'Stop dictation' : 'Dictate'}
-      aria-label={listening ? 'Stop dictation' : 'Dictate'}
+      title={tGeneratedValue(
+        listening ? tGenerated('m_08cfcd683eded3') : tGenerated('m_0903f1daa7e4e3'),
+      )}
+      aria-label={tGeneratedValue(
+        listening ? tGenerated('m_08cfcd683eded3') : tGenerated('m_0903f1daa7e4e3'),
+      )}
       className={cn(
         'inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors',
         listening
@@ -109,7 +121,7 @@ export function VoiceButton({
         className,
       )}
     >
-      {listening ? <Square size={14} /> : <Mic size={15} />}
+      <GeneratedValue value={listening ? <Square size={14} /> : <Mic size={15} />} />
     </button>
   )
 }

@@ -1,3 +1,4 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound, redirect } from 'next/navigation'
 import { Card, CardContent, DetailHeader } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
@@ -7,13 +8,18 @@ import { loadScheduleFormData } from '../_data'
 import { ScheduleForm } from '../_schedule-form'
 import { createSchedule } from './actions'
 
-export const metadata = { title: 'Subscribe to report' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_029449419e6ed5') }
+}
 
 export default async function NewSchedulePage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!can(ctx, 'reports.schedule')) redirect('/reports/schedules')
   const sp = await searchParams
@@ -32,8 +38,12 @@ export default async function NewSchedulePage({
               ? { href: `/reports/definitions/${preset.id}`, label: `Back to ${preset.name}` }
               : { href: '/reports/schedules', label: 'Back to schedules' }
           }
-          title={preset ? `Subscribe to ${preset.name}` : 'Subscribe to a report'}
-          subtitle="Delivers the report as a PDF email on a recurring schedule."
+          title={tGeneratedValue(
+            preset
+              ? tGenerated('m_1a2df4b944122f', { value0: preset.name })
+              : tGenerated('m_1919496659d390'),
+          )}
+          subtitle={tGenerated('m_1139008657c692')}
         />
         <Card>
           <CardContent className="pt-6">
@@ -41,7 +51,7 @@ export default async function NewSchedulePage({
               definitions={definitions}
               members={members}
               initial={preset ? { definitionId: preset.id } : undefined}
-              submitLabel="Create schedule"
+              submitLabel={tGenerated('m_1c516d834dca35')}
               action={createSchedule}
             />
           </CardContent>

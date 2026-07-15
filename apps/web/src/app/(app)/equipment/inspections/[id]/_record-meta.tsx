@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // Record-level live fields (occurred-at, hours, notes) — autosave on change/blur,
 // no Save button, matching the criterion fill cards.
 
@@ -41,7 +43,17 @@ function Dot({ state }: { state: SaveState }) {
         state === 'error' && 'text-red-600',
       )}
     >
-      {state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved ✓' : 'Retry'}
+      <GeneratedValue
+        value={
+          state === 'saving' ? (
+            <GeneratedText id="m_106811f2aac664" />
+          ) : state === 'saved' ? (
+            <GeneratedText id="m_0a3bcf685192f1" />
+          ) : (
+            <GeneratedText id="m_060f1ed88b3989" />
+          )
+        }
+      />
     </span>
   )
 }
@@ -63,6 +75,7 @@ export function RecordMeta({
   notes: string
   locked: boolean
 }) {
+  const tGenerated = useGeneratedTranslations()
   const occurred = useField(setRecordOccurredAt, recordId)
   const hrs = useField(setRecordHours, recordId)
   const note = useField(setRecordNotes, recordId)
@@ -73,17 +86,27 @@ export function RecordMeta({
     return (
       <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-3 text-sm sm:grid-cols-3 dark:border-slate-800">
         <div>
-          <div className="text-xs text-slate-500">Performed</div>
-          <div className="text-slate-800 dark:text-slate-200">{occurredAtDisplay || '—'}</div>
+          <div className="text-xs text-slate-500">
+            <GeneratedText id="m_16b944034f43b6" />
+          </div>
+          <div className="text-slate-800 dark:text-slate-200">
+            <GeneratedValue value={occurredAtDisplay || '—'} />
+          </div>
         </div>
         <div>
-          <div className="text-xs text-slate-500">Hours / reading</div>
-          <div className="text-slate-800 dark:text-slate-200">{hours || '—'}</div>
+          <div className="text-xs text-slate-500">
+            <GeneratedText id="m_080c848fd3c5e4" />
+          </div>
+          <div className="text-slate-800 dark:text-slate-200">
+            <GeneratedValue value={hours || '—'} />
+          </div>
         </div>
         <div className="sm:col-span-3">
-          <div className="text-xs text-slate-500">Notes</div>
+          <div className="text-xs text-slate-500">
+            <GeneratedText id="m_0b8dadcb78cd08" />
+          </div>
           <div className="whitespace-pre-wrap text-slate-800 dark:text-slate-200">
-            {notes || '—'}
+            <GeneratedValue value={notes || '—'} />
           </div>
         </div>
       </div>
@@ -94,7 +117,7 @@ export function RecordMeta({
     <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-2 dark:border-slate-800">
       <div className="space-y-1">
         <Label className="text-xs">
-          Performed <Dot state={occurred.state} />
+          <GeneratedText id="m_16b944034f43b6" /> <Dot state={occurred.state} />
         </Label>
         <Input
           type="datetime-local"
@@ -104,7 +127,7 @@ export function RecordMeta({
       </div>
       <div className="space-y-1">
         <Label className="text-xs">
-          Hours / meter reading <Dot state={hrs.state} />
+          <GeneratedText id="m_08a3b41b1849a6" /> <Dot state={hrs.state} />
         </Label>
         <Input
           type="number"
@@ -116,12 +139,12 @@ export function RecordMeta({
       </div>
       <div className="space-y-1 sm:col-span-2">
         <Label className="text-xs">
-          Notes <Dot state={note.state} />
+          <GeneratedText id="m_0b8dadcb78cd08" /> <Dot state={note.state} />
         </Label>
         <Textarea
           rows={2}
           value={noteVal}
-          placeholder="Anything worth noting about this inspection"
+          placeholder={tGenerated('m_1e0941b8765445')}
           onChange={(e) => {
             setNoteVal(e.target.value)
             if (noteTimer.current) clearTimeout(noteTimer.current)

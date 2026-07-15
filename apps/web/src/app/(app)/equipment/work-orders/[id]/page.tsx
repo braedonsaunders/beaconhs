@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -255,8 +259,9 @@ async function sendEmailAction(formData: FormData) {
 // ---------------- Page ----------------
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `WO · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_168d111aeb2bb7', { value0: id.slice(0, 8) }) }
 }
 
 export default async function WorkOrderDetailPage({
@@ -266,6 +271,8 @@ export default async function WorkOrderDetailPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
   const sp = await searchParams
@@ -319,43 +326,59 @@ export default async function WorkOrderDetailPage({
       header={
         <DetailHeader
           back={{ href: '/equipment/work-orders', label: 'Back to work orders' }}
-          title={wo.summary}
-          subtitle={`${wo.reference} · opened ${formatDate(new Date(wo.openedAt), ctx.timezone, ctx.locale)}${
-            wo.closedAt
+          title={tGeneratedValue(wo.summary)}
+          subtitle={tGenerated('m_072fe7cb4f37d0', {
+            value0: wo.reference,
+            value1: formatDate(new Date(wo.openedAt), ctx.timezone, ctx.locale),
+            value2: wo.closedAt
               ? ` · closed ${formatDate(new Date(wo.closedAt), ctx.timezone, ctx.locale)}`
-              : ''
-          }`}
+              : '',
+          })}
           badge={
             <div className="flex items-center gap-2">
-              <Badge variant={priorityBadgeVariant(wo.priority)}>{wo.priority}</Badge>
-              <Badge variant={statusBadgeVariant(wo.status)}>{statusLabel(wo.status)}</Badge>
+              <Badge variant={priorityBadgeVariant(wo.priority)}>
+                <GeneratedValue value={wo.priority} />
+              </Badge>
+              <Badge variant={statusBadgeVariant(wo.status)}>
+                <GeneratedValue value={statusLabel(wo.status)} />
+              </Badge>
             </div>
           }
           actions={
             <>
               <Link href={`/equipment/work-orders/${id}/pdf` as any} target="_blank">
                 <Button variant="outline">
-                  <FileText size={14} /> PDF
+                  <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
                 </Button>
               </Link>
-              {canSend ? (
-                <Link
-                  href={
-                    `/equipment/work-orders/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
-                  }
-                  scroll={false}
-                >
-                  <Button variant="outline">
-                    <Mail size={14} /> Send email
-                  </Button>
-                </Link>
-              ) : null}
-              {canClose && !closed ? (
-                <form action={markComplete}>
-                  <input type="hidden" name="id" value={id} />
-                  <Button type="submit">Mark complete</Button>
-                </form>
-              ) : null}
+              <GeneratedValue
+                value={
+                  canSend ? (
+                    <Link
+                      href={
+                        `/equipment/work-orders/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
+                      }
+                      scroll={false}
+                    >
+                      <Button variant="outline">
+                        <Mail size={14} /> <GeneratedText id="m_09dfca28fc95ba" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  canClose && !closed ? (
+                    <form action={markComplete}>
+                      <input type="hidden" name="id" value={id} />
+                      <Button type="submit">
+                        <GeneratedText id="m_12d2de6d02bb72" />
+                      </Button>
+                    </form>
+                  ) : null
+                }
+              />
             </>
           }
         />
@@ -379,214 +402,274 @@ export default async function WorkOrderDetailPage({
       }
     >
       <div className="space-y-5">
-        {active === 'overview' ? (
-          <>
-            <Section title="General">
-              <DetailGrid
-                rows={[
-                  { label: 'Reference', value: <span className="font-mono">{wo.reference}</span> },
-                  {
-                    label: 'Equipment',
-                    value: item ? (
-                      <Link
-                        href={`/equipment/${item.id}`}
-                        className="text-teal-700 hover:underline"
-                      >
-                        <span className="font-mono text-xs">{item.assetTag}</span> · {item.name}
-                      </Link>
-                    ) : (
-                      '—'
-                    ),
-                  },
-                  { label: 'Priority', value: wo.priority },
-                  { label: 'Status', value: statusLabel(wo.status) },
-                  {
-                    label: 'Assignee',
-                    value: assigneeUser?.name ?? assignee?.displayName ?? '—',
-                  },
-                  {
-                    label: 'Reported by',
-                    value: reporter ? (
-                      <Link
-                        href={`/people/${reporter.id}`}
-                        className="text-teal-700 hover:underline"
-                      >
-                        {reporter.firstName} {reporter.lastName}
-                      </Link>
-                    ) : (
-                      '—'
-                    ),
-                  },
-                  {
-                    label: 'Reported at',
-                    value: formatDateTime(new Date(wo.openedAt), ctx.timezone, ctx.locale),
-                  },
-                  {
-                    label: 'Completed at',
-                    value: wo.closedAt
-                      ? formatDateTime(new Date(wo.closedAt), ctx.timezone, ctx.locale)
-                      : '—',
-                  },
-                  { label: 'Cost', value: wo.cost ? `$${wo.cost}` : '—' },
-                ]}
-              />
-              {wo.description ? (
-                <div className="mt-4">
-                  <div className="text-xs tracking-wide text-slate-500 uppercase">Description</div>
-                  <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">
-                    {wo.description}
-                  </p>
-                </div>
-              ) : null}
-            </Section>
-            {canClose ? (
-              <Section title="Edit details">
-                <form action={updateOverview} className="space-y-4">
+        <GeneratedValue
+          value={
+            active === 'overview' ? (
+              <>
+                <Section title={tGenerated('m_1086584d9aca6a')}>
+                  <DetailGrid
+                    rows={[
+                      {
+                        label: 'Reference',
+                        value: (
+                          <span className="font-mono">
+                            <GeneratedValue value={wo.reference} />
+                          </span>
+                        ),
+                      },
+                      {
+                        label: 'Equipment',
+                        value: item ? (
+                          <Link
+                            href={`/equipment/${item.id}`}
+                            className="text-teal-700 hover:underline"
+                          >
+                            <span className="font-mono text-xs">
+                              <GeneratedValue value={item.assetTag} />
+                            </span>{' '}
+                            · <GeneratedValue value={item.name} />
+                          </Link>
+                        ) : (
+                          '—'
+                        ),
+                      },
+                      { label: 'Priority', value: wo.priority },
+                      { label: 'Status', value: statusLabel(wo.status) },
+                      {
+                        label: 'Assignee',
+                        value: assigneeUser?.name ?? assignee?.displayName ?? '—',
+                      },
+                      {
+                        label: 'Reported by',
+                        value: reporter ? (
+                          <Link
+                            href={`/people/${reporter.id}`}
+                            className="text-teal-700 hover:underline"
+                          >
+                            <GeneratedValue value={reporter.firstName} />{' '}
+                            <GeneratedValue value={reporter.lastName} />
+                          </Link>
+                        ) : (
+                          '—'
+                        ),
+                      },
+                      {
+                        label: 'Reported at',
+                        value: formatDateTime(new Date(wo.openedAt), ctx.timezone, ctx.locale),
+                      },
+                      {
+                        label: 'Completed at',
+                        value: wo.closedAt
+                          ? formatDateTime(new Date(wo.closedAt), ctx.timezone, ctx.locale)
+                          : '—',
+                      },
+                      { label: 'Cost', value: wo.cost ? `$${wo.cost}` : '—' },
+                    ]}
+                  />
+                  <GeneratedValue
+                    value={
+                      wo.description ? (
+                        <div className="mt-4">
+                          <div className="text-xs tracking-wide text-slate-500 uppercase">
+                            <GeneratedText id="m_14d923495cf14c" />
+                          </div>
+                          <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700">
+                            <GeneratedValue value={wo.description} />
+                          </p>
+                        </div>
+                      ) : null
+                    }
+                  />
+                </Section>
+                <GeneratedValue
+                  value={
+                    canClose ? (
+                      <Section title={tGenerated('m_09ff2b2cb08089')}>
+                        <form action={updateOverview} className="space-y-4">
+                          <input type="hidden" name="id" value={id} />
+                          <Field label={tGenerated('m_031c356c80b70f')} required>
+                            <Input
+                              name="summary"
+                              required
+                              maxLength={500}
+                              defaultValue={wo.summary}
+                            />
+                          </Field>
+                          <Field label={tGenerated('m_14d923495cf14c')}>
+                            <Textarea
+                              name="description"
+                              rows={4}
+                              maxLength={10000}
+                              defaultValue={wo.description ?? ''}
+                            />
+                          </Field>
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <Field label={tGenerated('m_00f0e2904a371c')} required>
+                              <Select name="priority" defaultValue={wo.priority}>
+                                <option value="low">
+                                  <GeneratedText id="m_0ba423ff31902f" />
+                                </option>
+                                <option value="med">
+                                  <GeneratedText id="m_1bec287326cfa6" />
+                                </option>
+                                <option value="high">
+                                  <GeneratedText id="m_08e161aa889d60" />
+                                </option>
+                              </Select>
+                            </Field>
+                            <Field label={tGenerated('m_0b44d2ea8f2b0f')}>
+                              <RemoteSelectField
+                                name="assignedToTenantUserId"
+                                defaultValue={wo.assignedToTenantUserId ?? ''}
+                                lookup="equipment-work-order-assignees"
+                                initialOption={
+                                  assignee
+                                    ? {
+                                        value: assignee.id,
+                                        label:
+                                          assigneeUser?.name ??
+                                          assignee.displayName ??
+                                          assignee.id.slice(0, 6),
+                                        hint: assigneeUser?.email ?? undefined,
+                                      }
+                                    : undefined
+                                }
+                                placeholder={tGenerated('m_00fa515d7be44e')}
+                                searchPlaceholder={tGenerated('m_1f0bd3ac120c16')}
+                                sheetTitle="Assign to"
+                                emptyLabel={tGenerated('m_10d1d0d92a9aaa')}
+                              />
+                            </Field>
+                            <Field label={tGenerated('m_036d83ad48ca7a')} className="sm:col-span-2">
+                              <RemoteSelectField
+                                name="reportedByPersonId"
+                                defaultValue={wo.reportedByPersonId ?? ''}
+                                lookup="equipment-work-order-reporters"
+                                initialOption={
+                                  reporter
+                                    ? {
+                                        value: reporter.id,
+                                        label: `${reporter.lastName}, ${reporter.firstName}`,
+                                        hint: reporter.employeeNo ?? undefined,
+                                      }
+                                    : undefined
+                                }
+                                placeholder={tGenerated('m_0be39d3a196b5b')}
+                                searchPlaceholder={tGenerated('m_06c2338b990aea')}
+                                sheetTitle="Reported by"
+                                clearable
+                                emptyLabel={tGenerated('m_16c1eee898d62b')}
+                              />
+                            </Field>
+                          </div>
+                          <div className="flex justify-end">
+                            <Button type="submit" disabled={closed}>
+                              <GeneratedText id="m_1ab9025ed1067c" />
+                            </Button>
+                          </div>
+                        </form>
+                      </Section>
+                    ) : null
+                  }
+                />
+              </>
+            ) : null
+          }
+        />
+
+        <GeneratedValue
+          value={
+            active === 'action_taken' ? (
+              <Section title={tGenerated('m_0da1a29f41377e')}>
+                <form action={updateActionTaken} className="space-y-4">
                   <input type="hidden" name="id" value={id} />
-                  <Field label="Summary" required>
-                    <Input name="summary" required maxLength={500} defaultValue={wo.summary} />
-                  </Field>
-                  <Field label="Description">
+                  <Field label={tGenerated('m_1ec44561fbf9f2')}>
                     <Textarea
-                      name="description"
-                      rows={4}
-                      maxLength={10000}
-                      defaultValue={wo.description ?? ''}
+                      name="actionTaken"
+                      rows={8}
+                      defaultValue={wo.actionTaken ?? ''}
+                      placeholder={tGenerated('m_164af55611ddcb')}
                     />
                   </Field>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Field label="Priority" required>
-                      <Select name="priority" defaultValue={wo.priority}>
-                        <option value="low">Low</option>
-                        <option value="med">Medium</option>
-                        <option value="high">High</option>
-                      </Select>
-                    </Field>
-                    <Field label="Assign to">
-                      <RemoteSelectField
-                        name="assignedToTenantUserId"
-                        defaultValue={wo.assignedToTenantUserId ?? ''}
-                        lookup="equipment-work-order-assignees"
-                        initialOption={
-                          assignee
-                            ? {
-                                value: assignee.id,
-                                label:
-                                  assigneeUser?.name ??
-                                  assignee.displayName ??
-                                  assignee.id.slice(0, 6),
-                                hint: assigneeUser?.email ?? undefined,
-                              }
-                            : undefined
-                        }
-                        placeholder="Select an assignee..."
-                        searchPlaceholder="Search active members..."
-                        sheetTitle="Assign to"
-                        emptyLabel="Unassigned"
-                      />
-                    </Field>
-                    <Field label="Reported by" className="sm:col-span-2">
-                      <RemoteSelectField
-                        name="reportedByPersonId"
-                        defaultValue={wo.reportedByPersonId ?? ''}
-                        lookup="equipment-work-order-reporters"
-                        initialOption={
-                          reporter
-                            ? {
-                                value: reporter.id,
-                                label: `${reporter.lastName}, ${reporter.firstName}`,
-                                hint: reporter.employeeNo ?? undefined,
-                              }
-                            : undefined
-                        }
-                        placeholder="Select a person…"
-                        searchPlaceholder="Search active people…"
-                        sheetTitle="Reported by"
-                        clearable
-                        emptyLabel="— Not specified —"
-                      />
-                    </Field>
-                  </div>
+                  <Field label={tGenerated('m_1831ba2d5aad68')}>
+                    <Input
+                      name="cost"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      defaultValue={wo.cost ?? ''}
+                      placeholder={tGenerated('m_12e483ccb4462e')}
+                    />
+                  </Field>
                   <div className="flex justify-end">
-                    <Button type="submit" disabled={closed}>
-                      Save changes
+                    <Button type="submit">
+                      <GeneratedText id="m_19e6bff894c3c7" />
                     </Button>
                   </div>
                 </form>
               </Section>
-            ) : null}
-          </>
-        ) : null}
+            ) : null
+          }
+        />
 
-        {active === 'action_taken' ? (
-          <Section title="Action taken">
-            <form action={updateActionTaken} className="space-y-4">
-              <input type="hidden" name="id" value={id} />
-              <Field label="What was done?">
-                <Textarea
-                  name="actionTaken"
-                  rows={8}
-                  defaultValue={wo.actionTaken ?? ''}
-                  placeholder="Steps taken, parts replaced, calibration values, etc."
-                />
-              </Field>
-              <Field label="Cost (USD)">
-                <Input
-                  name="cost"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  defaultValue={wo.cost ?? ''}
-                  placeholder="Parts + labour"
-                />
-              </Field>
-              <div className="flex justify-end">
-                <Button type="submit">Save</Button>
-              </div>
-            </form>
-          </Section>
-        ) : null}
-
-        {active === 'status' ? (
-          <Section title="Status">
-            <form action={updateStatus} className="flex items-end gap-3">
-              <input type="hidden" name="id" value={id} />
-              <div className="space-y-1.5">
-                <Label>Move to</Label>
-                <Select name="status" defaultValue={wo.status}>
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {statusLabel(s)}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <Button type="submit">Update</Button>
-            </form>
-            {!closed ? (
-              <div className="mt-6">
-                <form action={markComplete} className="inline">
+        <GeneratedValue
+          value={
+            active === 'status' ? (
+              <Section title={tGenerated('m_0b9da892d6faf0')}>
+                <form action={updateStatus} className="flex items-end gap-3">
                   <input type="hidden" name="id" value={id} />
-                  <Button type="submit" variant="outline">
-                    Mark complete (sets completed at)
+                  <div className="space-y-1.5">
+                    <Label>
+                      <GeneratedText id="m_1e8891cb78e5a3" />
+                    </Label>
+                    <Select name="status" defaultValue={wo.status}>
+                      <GeneratedValue
+                        value={STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            <GeneratedValue value={statusLabel(s)} />
+                          </option>
+                        ))}
+                      />
+                    </Select>
+                  </div>
+                  <Button type="submit">
+                    <GeneratedText id="m_064b3b737bd09e" />
                   </Button>
                 </form>
-              </div>
-            ) : null}
-          </Section>
-        ) : null}
+                <GeneratedValue
+                  value={
+                    !closed ? (
+                      <div className="mt-6">
+                        <form action={markComplete} className="inline">
+                          <input type="hidden" name="id" value={id} />
+                          <Button type="submit" variant="outline">
+                            <GeneratedText id="m_115130989d99d9" />
+                          </Button>
+                        </form>
+                      </div>
+                    ) : null
+                  }
+                />
+              </Section>
+            ) : null
+          }
+        />
 
-        {active === 'activity' ? (
-          <Section title={`Activity (${activity.length})`}>
-            <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
-          </Section>
-        ) : null}
+        <GeneratedValue
+          value={
+            active === 'activity' ? (
+              <Section title={tGenerated('m_158532c8e94ad5', { value0: activity.length })}>
+                <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+              </Section>
+            ) : null
+          }
+        />
       </div>
 
       <GenericSendEmailDialog
         open={canSend && pickString(sp.send) === '1'}
-        title="Send work order"
-        description="Sends a recap of this work order to the tenant admin distribution list and the assignee. Add explicit recipients below to override."
+        title={tGenerated('m_02219de96950f7')}
+        description={tGenerated('m_0acac69535236d')}
         reference={wo.reference}
         defaultSubjectPrefix="Update"
         sendAction={async (fd) => {
@@ -613,10 +696,10 @@ function Field({
   return (
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label>
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        <GeneratedValue value={label} />
+        <GeneratedValue value={required ? <span className="text-red-600"> *</span> : null} />
       </Label>
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }

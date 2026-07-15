@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Per-module "default print template" assignment. For each native module whose
 // PDF button can be templated, pick a tenant template (or keep the generic
 // field summary). Changing the Select fires the setModuleDefaultTemplate action.
@@ -14,14 +21,18 @@ import { setModuleDefaultTemplate } from './_actions'
 export function ModuleDefaultsPanel({ rows }: { rows: ModulePdfDefaultRow[] }) {
   return (
     <div className="space-y-3">
-      {rows.map((row) => (
-        <ModuleRow key={row.moduleKey} row={row} />
-      ))}
+      <GeneratedValue
+        value={rows.map((row) => (
+          <ModuleRow key={row.moduleKey} row={row} />
+        ))}
+      />
     </div>
   )
 }
 
 function ModuleRow({ row }: { row: ModulePdfDefaultRow }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, startTransition] = React.useTransition()
   const [value, setValue] = React.useState(row.selectedId ?? '')
@@ -37,11 +48,11 @@ function ModuleRow({ row }: { row: ModulePdfDefaultRow }) {
       })
       if (res.ok) {
         toast.success(
-          next ? 'Default print template updated.' : 'Reverted to the field-summary PDF.',
+          tGeneratedValue(next ? tGenerated('m_1ef193bf357af4') : tGenerated('m_0a02770cdc5136')),
         )
         router.refresh()
       } else {
-        toast.error(res.error ?? 'Could not update the default.')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_1ee9c316c5ab19')))
         setValue(previous)
       }
     })
@@ -52,13 +63,21 @@ function ModuleRow({ row }: { row: ModulePdfDefaultRow }) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-700 dark:bg-slate-900">
       <div className="min-w-0">
-        <p className="font-medium text-slate-900 dark:text-slate-100">{row.label}</p>
+        <p className="font-medium text-slate-900 dark:text-slate-100">
+          <GeneratedValue value={row.label} />
+        </p>
         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-          {noTemplates
-            ? 'No template built for this module yet — create one above with this module as its record type.'
-            : value
-              ? 'Print button renders this template.'
-              : 'Print button renders the generic field-summary PDF.'}
+          <GeneratedValue
+            value={
+              noTemplates ? (
+                <GeneratedText id="m_092f302e877a3a" />
+              ) : value ? (
+                <GeneratedText id="m_12b85b9130804a" />
+              ) : (
+                <GeneratedText id="m_0d6c405cc9347e" />
+              )
+            }
+          />
         </p>
       </div>
       <div className="sm:w-72 sm:shrink-0">
@@ -66,14 +85,18 @@ function ModuleRow({ row }: { row: ModulePdfDefaultRow }) {
           value={value}
           onChange={onChange}
           disabled={pending || noTemplates}
-          aria-label={`Default print template for ${row.label}`}
+          aria-label={tGenerated('m_195230d2917694', { value0: row.label })}
         >
-          <option value="">Field summary (no template)</option>
-          {row.options.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
+          <option value="">
+            <GeneratedText id="m_1e47177b1d2ac3" />
+          </option>
+          <GeneratedValue
+            value={row.options.map((o) => (
+              <option key={o.id} value={o.id}>
+                <GeneratedValue value={o.name} />
+              </option>
+            ))}
+          />
         </Select>
       </div>
     </div>

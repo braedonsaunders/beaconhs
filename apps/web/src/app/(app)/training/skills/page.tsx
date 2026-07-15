@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Skills — the operational list of externally-issued skills & certifications
 // held by people (training_skill_assignments × skill type × authority).
 // Course-completion certificates live under /training/records ("Certificates");
@@ -44,7 +47,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { TrainingSubNav } from '../_components/training-sub-nav'
 import { startSkillAssignment } from './_actions'
 
-export const metadata = { title: 'Skills' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1a286702b9eafe') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['person', 'skill', 'authority', 'granted_on', 'expires_on'] as const
@@ -60,6 +66,8 @@ export default async function SkillsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'expires_on',
@@ -242,58 +250,68 @@ export default async function SkillsPage({
       header={
         <>
           <PageHeader
-            title="Skills"
-            description="Skills and certifications across the workforce, with expiry tracking."
+            title={tGenerated('m_1a286702b9eafe')}
+            description={tGenerated('m_0514314894a66e')}
             actions={
               canManage ? (
                 <form action={startSkillAssignment}>
-                  <Button type="submit">New skill</Button>
+                  <Button type="submit">
+                    <GeneratedText id="m_11f7ed63086856" />
+                  </Button>
                 </form>
               ) : undefined
             }
           />
           <TrainingSubNav active="skills" />
           <TableToolbar>
-            <SearchInput placeholder="Search person, skill, code, authority…" />
-            {peopleList.length > 0 ? (
-              <SearchFilter
-                basePath="/training/skills"
-                currentParams={sp}
-                paramKey="person"
-                placeholder="All people"
-                searchPlaceholder="Search people…"
-                options={peopleList.map((p) => ({
-                  value: p.id,
-                  label: `${p.lastName}, ${p.firstName}`,
-                  hint: p.employeeNo ?? undefined,
-                }))}
-              />
-            ) : null}
-            {skillTypesList.length > 0 ? (
-              <SearchFilter
-                basePath="/training/skills"
-                currentParams={sp}
-                paramKey="skill"
-                placeholder="All skills"
-                searchPlaceholder="Search skills…"
-                options={skillTypesList.map((t) => ({
-                  value: t.id,
-                  label: t.code ? `${t.code} · ${t.name}` : t.name,
-                }))}
-              />
-            ) : null}
+            <SearchInput placeholder={tGenerated('m_0bd32260bea276')} />
+            <GeneratedValue
+              value={
+                peopleList.length > 0 ? (
+                  <SearchFilter
+                    basePath="/training/skills"
+                    currentParams={sp}
+                    paramKey="person"
+                    placeholder={tGenerated('m_0110de6e7a2824')}
+                    searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
+                    options={peopleList.map((p) => ({
+                      value: p.id,
+                      label: `${p.lastName}, ${p.firstName}`,
+                      hint: p.employeeNo ?? undefined,
+                    }))}
+                  />
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                skillTypesList.length > 0 ? (
+                  <SearchFilter
+                    basePath="/training/skills"
+                    currentParams={sp}
+                    paramKey="skill"
+                    placeholder={tGenerated('m_0cd43e2a5d625f')}
+                    searchPlaceholder={tGenerated('m_01c96b731f0653')}
+                    options={skillTypesList.map((t) => ({
+                      value: t.id,
+                      label: t.code ? `${t.code} · ${t.name}` : t.name,
+                    }))}
+                  />
+                ) : null
+              }
+            />
             <FilterChips
               basePath="/training/skills"
               currentParams={sp}
               paramKey="authority"
-              label="Authority"
+              label={tGenerated('m_012397255c5bd0')}
               options={authorities.map((a) => ({ value: a.id, label: a.name }))}
             />
             <FilterChips
               basePath="/training/skills"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               defaultValue="valid"
               options={STATUS_OPTIONS}
             />
@@ -301,155 +319,199 @@ export default async function SkillsPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Star size={32} />}
-          title={
-            params.q || statusFilter || authorityFilter || personFilter || skillFilter
-              ? 'No skills match these filters'
-              : 'No skills recorded'
-          }
-          description="Add a skill with New skill, or manage the catalogue under Manage → Skill types."
-          action={
-            canManage ? (
-              <form action={startSkillAssignment}>
-                <Button type="submit">New skill</Button>
-              </form>
-            ) : undefined
-          }
-        />
-      ) : (
-        <>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortableTh
-                    basePath="/training/skills"
-                    currentParams={sp}
-                    column="person"
-                    active={params.sort === 'person'}
-                    dir={params.dir}
-                  >
-                    Person
-                  </SortableTh>
-                  <SortableTh
-                    basePath="/training/skills"
-                    currentParams={sp}
-                    column="skill"
-                    active={params.sort === 'skill'}
-                    dir={params.dir}
-                  >
-                    Skill / certification
-                  </SortableTh>
-                  <SortableTh
-                    basePath="/training/skills"
-                    currentParams={sp}
-                    column="authority"
-                    active={params.sort === 'authority'}
-                    dir={params.dir}
-                  >
-                    Authority
-                  </SortableTh>
-                  <SortableTh
-                    basePath="/training/skills"
-                    currentParams={sp}
-                    column="granted_on"
-                    active={params.sort === 'granted_on'}
-                    dir={params.dir}
-                  >
-                    Granted
-                  </SortableTh>
-                  <SortableTh
-                    basePath="/training/skills"
-                    currentParams={sp}
-                    column="expires_on"
-                    active={params.sort === 'expires_on'}
-                    dir={params.dir}
-                  >
-                    Expires
-                  </SortableTh>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Credentials</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map(({ assignment, type, authority, person }) => {
-                  const exp = assignment.expiresOn
-                  const days = exp
-                    ? Math.round((new Date(exp).getTime() - nowMs) / 86_400_000)
-                    : null
-                  return (
-                    <TableRow key={assignment.id}>
-                      <TableCell>
-                        <Link
-                          href={`/people/${person.id}?tab=skills`}
-                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                        >
-                          {person.lastName}, {person.firstName}
-                        </Link>
-                        {person.employeeNo ? (
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            #{person.employeeNo}
-                          </div>
-                        ) : null}
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/training/skills/${assignment.id}`}
-                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                        >
-                          {type.code ? (
-                            <span className="font-mono text-xs">{type.code}</span>
-                          ) : null}
-                          {type.code ? ' · ' : ''}
-                          {type.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-400">
-                        {authority.name}
-                      </TableCell>
-                      <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
-                        {assignment.grantedOn}
-                      </TableCell>
-                      <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
-                        {exp ?? <span className="text-slate-400">Never</span>}
-                      </TableCell>
-                      <TableCell>
-                        {days === null ? (
-                          <Badge variant="secondary">No expiry</Badge>
-                        ) : days < 0 ? (
-                          <Badge variant="destructive">Expired</Badge>
-                        ) : days <= 90 ? (
-                          <Badge variant="warning">{days}d left</Badge>
-                        ) : (
-                          <Badge variant="success">Valid</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end">
-                          <Button asChild variant="ghost" size="sm">
-                            <Link href={`/training/skills/${assignment.id}?tab=outputs`}>
-                              <FileText size={15} /> View
-                            </Link>
-                          </Button>
-                        </div>
-                      </TableCell>
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Star size={32} />}
+              title={tGeneratedValue(
+                params.q || statusFilter || authorityFilter || personFilter || skillFilter
+                  ? tGenerated('m_1c3645e00f9723')
+                  : tGenerated('m_19a7c8ccab4550'),
+              )}
+              description={tGenerated('m_0b0992289890da')}
+              action={
+                canManage ? (
+                  <form action={startSkillAssignment}>
+                    <Button type="submit">
+                      <GeneratedText id="m_11f7ed63086856" />
+                    </Button>
+                  </form>
+                ) : undefined
+              }
+            />
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableTh
+                        basePath="/training/skills"
+                        currentParams={sp}
+                        column="person"
+                        active={params.sort === 'person'}
+                        dir={params.dir}
+                      >
+                        <GeneratedText id="m_12e926c9216094" />
+                      </SortableTh>
+                      <SortableTh
+                        basePath="/training/skills"
+                        currentParams={sp}
+                        column="skill"
+                        active={params.sort === 'skill'}
+                        dir={params.dir}
+                      >
+                        <GeneratedText id="m_0f4481ed349502" />
+                      </SortableTh>
+                      <SortableTh
+                        basePath="/training/skills"
+                        currentParams={sp}
+                        column="authority"
+                        active={params.sort === 'authority'}
+                        dir={params.dir}
+                      >
+                        <GeneratedText id="m_012397255c5bd0" />
+                      </SortableTh>
+                      <SortableTh
+                        basePath="/training/skills"
+                        currentParams={sp}
+                        column="granted_on"
+                        active={params.sort === 'granted_on'}
+                        dir={params.dir}
+                      >
+                        <GeneratedText id="m_10633978809d91" />
+                      </SortableTh>
+                      <SortableTh
+                        basePath="/training/skills"
+                        currentParams={sp}
+                        column="expires_on"
+                        active={params.sort === 'expires_on'}
+                        dir={params.dir}
+                      >
+                        <GeneratedText id="m_14f3858b0a9ad6" />
+                      </SortableTh>
+                      <TableHead>
+                        <GeneratedText id="m_0b9da892d6faf0" />
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <GeneratedText id="m_1894c01eeb4f73" />
+                      </TableHead>
                     </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </div>
-          <Pagination
-            basePath="/training/skills"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                  </TableHeader>
+                  <TableBody>
+                    <GeneratedValue
+                      value={rows.map(({ assignment, type, authority, person }) => {
+                        const exp = assignment.expiresOn
+                        const days = exp
+                          ? Math.round((new Date(exp).getTime() - nowMs) / 86_400_000)
+                          : null
+                        return (
+                          <TableRow key={assignment.id}>
+                            <TableCell>
+                              <Link
+                                href={`/people/${person.id}?tab=skills`}
+                                className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                              >
+                                <GeneratedValue value={person.lastName} />,{' '}
+                                <GeneratedValue value={person.firstName} />
+                              </Link>
+                              <GeneratedValue
+                                value={
+                                  person.employeeNo ? (
+                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                                      #<GeneratedValue value={person.employeeNo} />
+                                    </div>
+                                  ) : null
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Link
+                                href={`/training/skills/${assignment.id}`}
+                                className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                              >
+                                <GeneratedValue
+                                  value={
+                                    type.code ? (
+                                      <span className="font-mono text-xs">
+                                        <GeneratedValue value={type.code} />
+                                      </span>
+                                    ) : null
+                                  }
+                                />
+                                <GeneratedValue value={type.code ? ' · ' : ''} />
+                                <GeneratedValue value={type.name} />
+                              </Link>
+                            </TableCell>
+                            <TableCell className="text-slate-600 dark:text-slate-400">
+                              <GeneratedValue value={authority.name} />
+                            </TableCell>
+                            <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
+                              <GeneratedValue value={assignment.grantedOn} />
+                            </TableCell>
+                            <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
+                              <GeneratedValue
+                                value={
+                                  exp ?? (
+                                    <span className="text-slate-400">
+                                      <GeneratedText id="m_1ab6ba88ce908e" />
+                                    </span>
+                                  )
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <GeneratedValue
+                                value={
+                                  days === null ? (
+                                    <Badge variant="secondary">
+                                      <GeneratedText id="m_1bbc44c1ce26a7" />
+                                    </Badge>
+                                  ) : days < 0 ? (
+                                    <Badge variant="destructive">
+                                      <GeneratedText id="m_13f7150c94b182" />
+                                    </Badge>
+                                  ) : days <= 90 ? (
+                                    <Badge variant="warning">
+                                      <GeneratedValue value={days} />
+                                      <GeneratedText id="m_0a3d63460246cf" />
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="success">
+                                      <GeneratedText id="m_1e418d0475450c" />
+                                    </Badge>
+                                  )
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end">
+                                <Button asChild variant="ghost" size="sm">
+                                  <Link href={`/training/skills/${assignment.id}?tab=outputs`}>
+                                    <FileText size={15} /> <GeneratedText id="m_1c586ede56112d" />
+                                  </Link>
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    />
+                  </TableBody>
+                </Table>
+              </div>
+              <Pagination
+                basePath="/training/skills"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // HazID task library — reusable task templates with default hazards / controls
 // that crews drop onto a job-specific assessment. Legacy showed the task
 // name, default controls, the number of linked hazards, SWP / SJP document
@@ -41,7 +44,10 @@ import { HazidSubNav } from '../_subnav'
 import { createTaskLibrary, deleteTaskLibrary, updateTaskLibrary } from '../_actions'
 import { TaskLibraryDrawers, type EditTaskDefaults } from './_drawers'
 
-export const metadata = { title: 'Task library' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0778cf4540dec3') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'hazards', 'updated', 'usage'] as const
@@ -69,6 +75,8 @@ export default async function TaskLibraryPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'name',
@@ -218,21 +226,23 @@ export default async function TaskLibraryPage({
         <>
           <HazidSubNav pathname="/hazard-assessments/tasks" />
           <PageHeader
-            title="Task library"
-            description="Reusable task templates with default hazards and controls."
+            title={tGenerated('m_0778cf4540dec3')}
+            description={tGenerated('m_00ba4e3ed93787')}
             actions={
               <Link href="/hazard-assessments/tasks?drawer=new-task" scroll={false}>
-                <Button>New task</Button>
+                <Button>
+                  <GeneratedText id="m_0ce13fcbf98954" />
+                </Button>
               </Link>
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search tasks, controls…" />
+            <SearchInput placeholder={tGenerated('m_129b8dcbbe570c')} />
             <FilterChips
               basePath="/hazard-assessments/tasks"
               currentParams={sp}
               paramKey="hazardSize"
-              label="Hazards"
+              label={tGenerated('m_168fba897c5202')}
               options={[
                 { value: 'empty', label: 'No hazards' },
                 { value: 'small', label: '1–5' },
@@ -243,7 +253,7 @@ export default async function TaskLibraryPage({
               basePath="/hazard-assessments/tasks"
               currentParams={sp}
               paramKey="docs"
-              label="Docs"
+              label={tGenerated('m_0fb3a1a85d45fb')}
               options={[
                 { value: 'swp', label: 'Has SWP' },
                 { value: 'sjp', label: 'Has SJP' },
@@ -255,142 +265,203 @@ export default async function TaskLibraryPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardList size={32} />}
-          title={
-            params.q || docFilter || hazardSizeFilter ? 'No tasks match these filters' : 'No tasks'
-          }
-          description="Build common job steps for crews to pull into an assessment."
-          action={
-            <Link href="/hazard-assessments/tasks?drawer=new-task" scroll={false}>
-              <Button>Add task</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                  Name
-                </SortableTh>
-                <SortableTh {...sortProps} column="hazards" active={params.sort === 'hazards'}>
-                  Linked hazards
-                </SortableTh>
-                <TableHead>Preview hazards</TableHead>
-                <TableHead>Default controls</TableHead>
-                <TableHead className="w-24">SWP / SJP</TableHead>
-                <TableHead className="w-24">Pinned to sites</TableHead>
-                <SortableTh {...sortProps} column="usage" active={params.sort === 'usage'}>
-                  Used in assessments
-                </SortableTh>
-                <SortableTh {...sortProps} column="updated" active={params.sort === 'updated'}>
-                  Updated
-                </SortableTh>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ task, usageCount }) => {
-                const preview = task.hazardIds
-                  .slice(0, 3)
-                  .map((id) => hazardNamesById.get(id))
-                  .filter(Boolean) as string[]
-                return (
-                  <TableRow key={task.id}>
-                    <TableCell>
-                      <Link
-                        href={`/hazard-assessments/tasks?drawer=edit-task&id=${task.id}`}
-                        scroll={false}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {task.name}
-                      </Link>
-                      {task.description ? (
-                        <div className="line-clamp-1 text-xs text-slate-500">
-                          {task.description}
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{task.hazardIds.length}</Badge>
-                    </TableCell>
-                    <TableCell className="max-w-xs text-xs text-slate-600 dark:text-slate-400">
-                      {preview.length === 0 ? (
-                        <span className="text-slate-400">—</span>
-                      ) : (
-                        <>
-                          {preview.join(', ')}
-                          {task.hazardIds.length > 3 ? (
-                            <span className="text-slate-400"> +{task.hazardIds.length - 3}</span>
-                          ) : null}
-                        </>
-                      )}
-                    </TableCell>
-                    <TableCell className="max-w-md text-xs text-slate-600 dark:text-slate-400">
-                      {task.controls ? (
-                        <RichContent
-                          html={task.controls}
-                          className="prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 max-h-12 overflow-hidden text-xs"
-                        />
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        {task.swpDocumentId ? (
-                          <Badge variant="outline" className="text-xs">
-                            <FileText size={10} className="mr-1" /> SWP
-                          </Badge>
-                        ) : null}
-                        {task.sjpDocumentId ? (
-                          <Badge variant="outline" className="text-xs">
-                            <FileText size={10} className="mr-1" /> SJP
-                          </Badge>
-                        ) : null}
-                        {!task.swpDocumentId && !task.sjpDocumentId ? (
-                          <span className="text-xs text-slate-400">—</span>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell className="tabular-nums">
-                      <Badge variant="secondary">{locationCountByTask.get(task.id) ?? 0}</Badge>
-                    </TableCell>
-                    <TableCell className="tabular-nums">
-                      <Badge variant="secondary">{Number(usageCount ?? 0)}</Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-500 tabular-nums">
-                      {task.updatedAt
-                        ? formatDate(new Date(task.updatedAt), ctx.timezone, ctx.locale)
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Link
-                        href={`/hazard-assessments/tasks?drawer=edit-task&id=${task.id}`}
-                        scroll={false}
-                        aria-label={`Edit ${task.name}`}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-                      >
-                        <Pencil size={14} />
-                      </Link>
-                    </TableCell>
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<ClipboardList size={32} />}
+              title={tGeneratedValue(
+                params.q || docFilter || hazardSizeFilter
+                  ? tGenerated('m_0c31a4152aae8f')
+                  : tGenerated('m_106a06e175c1af'),
+              )}
+              description={tGenerated('m_13a1823dfac300')}
+              action={
+                <Link href="/hazard-assessments/tasks?drawer=new-task" scroll={false}>
+                  <Button>
+                    <GeneratedText id="m_02ac1cf154a4f9" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="hazards" active={params.sort === 'hazards'}>
+                      <GeneratedText id="m_0d68207e1f7148" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_070073ccfd3c6b" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0e1defb9956b5b" />
+                    </TableHead>
+                    <TableHead className="w-24">
+                      <GeneratedText id="m_1e7d77353d3f3c" />
+                    </TableHead>
+                    <TableHead className="w-24">
+                      <GeneratedText id="m_08958367191647" />
+                    </TableHead>
+                    <SortableTh {...sortProps} column="usage" active={params.sort === 'usage'}>
+                      <GeneratedText id="m_1b4c707a917c44" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="updated" active={params.sort === 'updated'}>
+                      <GeneratedText id="m_014ca61c68ab13" />
+                    </SortableTh>
+                    <TableHead className="w-10" />
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/hazard-assessments/tasks"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ task, usageCount }) => {
+                      const preview = task.hazardIds
+                        .slice(0, 3)
+                        .map((id) => hazardNamesById.get(id))
+                        .filter(Boolean) as string[]
+                      return (
+                        <TableRow key={task.id}>
+                          <TableCell>
+                            <Link
+                              href={`/hazard-assessments/tasks?drawer=edit-task&id=${task.id}`}
+                              scroll={false}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={task.name} />
+                            </Link>
+                            <GeneratedValue
+                              value={
+                                task.description ? (
+                                  <div className="line-clamp-1 text-xs text-slate-500">
+                                    <GeneratedValue value={task.description} />
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              <GeneratedValue value={task.hazardIds.length} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="max-w-xs text-xs text-slate-600 dark:text-slate-400">
+                            <GeneratedValue
+                              value={
+                                preview.length === 0 ? (
+                                  <span className="text-slate-400">—</span>
+                                ) : (
+                                  <>
+                                    <GeneratedValue value={preview.join(', ')} />
+                                    <GeneratedValue
+                                      value={
+                                        task.hazardIds.length > 3 ? (
+                                          <span className="text-slate-400">
+                                            {' '}
+                                            +{task.hazardIds.length - 3}
+                                          </span>
+                                        ) : null
+                                      }
+                                    />
+                                  </>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="max-w-md text-xs text-slate-600 dark:text-slate-400">
+                            <GeneratedValue
+                              value={
+                                task.controls ? (
+                                  <RichContent
+                                    html={task.controls}
+                                    className="prose-p:my-0 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 max-h-12 overflow-hidden text-xs"
+                                  />
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <GeneratedValue
+                                value={
+                                  task.swpDocumentId ? (
+                                    <Badge variant="outline" className="text-xs">
+                                      <FileText size={10} className="mr-1" />{' '}
+                                      <GeneratedText id="m_1d87789b4402b5" />
+                                    </Badge>
+                                  ) : null
+                                }
+                              />
+                              <GeneratedValue
+                                value={
+                                  task.sjpDocumentId ? (
+                                    <Badge variant="outline" className="text-xs">
+                                      <FileText size={10} className="mr-1" />{' '}
+                                      <GeneratedText id="m_0ae2fddd892366" />
+                                    </Badge>
+                                  ) : null
+                                }
+                              />
+                              <GeneratedValue
+                                value={
+                                  !task.swpDocumentId && !task.sjpDocumentId ? (
+                                    <span className="text-xs text-slate-400">—</span>
+                                  ) : null
+                                }
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell className="tabular-nums">
+                            <Badge variant="secondary">
+                              <GeneratedValue value={locationCountByTask.get(task.id) ?? 0} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="tabular-nums">
+                            <Badge variant="secondary">
+                              <GeneratedValue value={Number(usageCount ?? 0)} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-500 tabular-nums">
+                            <GeneratedValue
+                              value={
+                                task.updatedAt
+                                  ? formatDate(new Date(task.updatedAt), ctx.timezone, ctx.locale)
+                                  : '—'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Link
+                              href={`/hazard-assessments/tasks?drawer=edit-task&id=${task.id}`}
+                              scroll={false}
+                              aria-label={tGenerated('m_0a45a3f047a285', { value0: task.name })}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                            >
+                              <Pencil size={14} />
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/hazard-assessments/tasks"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
       <TaskLibraryDrawers
         openDrawer={
           drawer === 'new-task' ? 'new-task' : drawer === 'edit-task' ? 'edit-task' : null

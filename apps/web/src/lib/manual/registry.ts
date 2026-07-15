@@ -3,6 +3,7 @@
 
 import type { RequestContext } from '@beaconhs/tenant'
 import { can } from '@beaconhs/tenant'
+import { translateSystemCopy } from '@beaconhs/i18n/messages'
 import { GETTING_STARTED_ARTICLES } from './content/getting-started'
 import { FRONTLINE_ARTICLES } from './content/frontline'
 import { KNOWLEDGE_ASSETS_ARTICLES } from './content/knowledge-assets'
@@ -18,6 +19,16 @@ const MANUAL_ARTICLES: ManualArticle[] = [
 
 const BY_SLUG = new Map(MANUAL_ARTICLES.map((a) => [a.slug, a]))
 
+function localizeArticle(ctx: RequestContext, article: ManualArticle): ManualArticle {
+  if (ctx.locale === 'en') return article
+  return {
+    ...article,
+    title: translateSystemCopy(ctx.locale, article.title),
+    summary: translateSystemCopy(ctx.locale, article.summary),
+    body: translateSystemCopy(ctx.locale, article.body),
+  }
+}
+
 /** Can this user see this article? Mirrors the nav registry's gating. */
 function canSeeArticle(ctx: RequestContext, article: ManualArticle): boolean {
   if (article.requiredPermission && !can(ctx, article.requiredPermission)) return false
@@ -28,14 +39,16 @@ function canSeeArticle(ctx: RequestContext, article: ManualArticle): boolean {
 
 /** Every article the user may read, in registry order. */
 function visibleManualArticles(ctx: RequestContext): ManualArticle[] {
-  return MANUAL_ARTICLES.filter((a) => canSeeArticle(ctx, a))
+  return MANUAL_ARTICLES.filter((a) => canSeeArticle(ctx, a)).map((article) =>
+    localizeArticle(ctx, article),
+  )
 }
 
 /** A single article, or null when unknown / not permitted. */
 export function manualArticleForUser(ctx: RequestContext, slug: string): ManualArticle | null {
   const a = BY_SLUG.get(slug)
   if (!a || !canSeeArticle(ctx, a)) return null
-  return a
+  return localizeArticle(ctx, a)
 }
 
 /** Visible articles grouped in MANUAL_GROUP_ORDER, empty groups dropped. */

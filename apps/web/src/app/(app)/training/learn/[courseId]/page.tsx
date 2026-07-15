@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import { Card, CardContent, DetailHeader } from '@beaconhs/ui'
@@ -31,11 +34,13 @@ import { isUuid } from '@/lib/list-params'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ courseId: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { courseId } = await params
-  return { title: `Learn · ${courseId.slice(0, 8)}` }
+  return { title: tGenerated('m_10fabf3f2e34dd', { value0: courseId.slice(0, 8) }) }
 }
 
 export default async function PlayerPage({ params }: { params: Promise<{ courseId: string }> }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
   const { courseId } = await params
   if (!isUuid(courseId)) notFound()
 
@@ -226,85 +231,93 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
       header={
         <DetailHeader
           back={{ href: '/my/training', label: 'My Learning' }}
-          title={course.name}
-          subtitle={course.code}
+          title={tGeneratedValue(course.name)}
+          subtitle={tGeneratedValue(course.code)}
         />
       }
     >
       <style dangerouslySetInnerHTML={{ __html: lessonProseCss('.lesson-prose') }} />
-      {!person ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-            Your account is not linked to a worker profile, so progress is not tracked. Ask an
-            administrator to link your People record.
-          </CardContent>
-        </Card>
-      ) : course.deliveryType === 'external_certificate' ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-            {renewalRequired
-              ? 'This external certification is due for renewal. '
-              : 'This course tracks certifications earned outside the app. '}
-            There is nothing to take here. Your training team records the certificate; completed
-            certificates appear under{' '}
-            <a
-              href="/my/training?tab=records"
-              className="text-teal-700 underline dark:text-teal-300"
-            >
-              My training
-            </a>
-            .
-          </CardContent>
-        </Card>
-      ) : renewalRequired && !deliveryMeta(course.deliveryType).selfLaunch ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-            This course is due again and is delivered by your training team. Ask them to enroll you
-            in the new session; your earlier certificate remains in your records.
-          </CardContent>
-        </Card>
-      ) : renewalRequired ? (
-        <EnrollGate
-          courseId={courseId}
-          courseName={course.name}
-          summary={htmlToSnippet(course.description, 240) || null}
-          renewal
-        />
-      ) : !enrollment && !deliveryMeta(course.deliveryType).selfLaunch ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-            This course is delivered by your training team — it can&apos;t be started from here.
-            Once you&apos;re enrolled, it appears under{' '}
-            <a href="/my/training" className="text-teal-700 underline dark:text-teal-300">
-              My training
-            </a>
-            .
-          </CardContent>
-        </Card>
-      ) : !enrollment ? (
-        <EnrollGate
-          courseId={courseId}
-          courseName={course.name}
-          summary={htmlToSnippet(course.description, 240) || null}
-        />
-      ) : course.deliveryType === 'online' ? (
-        <OnlineCoursePlayer
-          enrollmentId={enrollment.id}
-          instructionsHtml={course.instructions}
-          onlineUrl={course.onlineUrl}
-          completed={enrollment.status === 'completed'}
-          certificateRecordId={enrollment.recordId ?? null}
-        />
-      ) : (
-        <CoursePlayer
-          modules={modules}
-          enrollmentId={enrollment.id}
-          attachmentUrls={attachmentUrls}
-          completed={enrollment.status === 'completed'}
-          certificateRecordId={enrollment.recordId ?? null}
-          issuesRecord={deliveryMeta(course.deliveryType).autoIssuesRecord}
-        />
-      )}
+      <GeneratedValue
+        value={
+          !person ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                <GeneratedText id="m_19c21b3540290c" />
+              </CardContent>
+            </Card>
+          ) : course.deliveryType === 'external_certificate' ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                <GeneratedValue
+                  value={
+                    renewalRequired ? (
+                      <GeneratedText id="m_139ffe50389d3a" />
+                    ) : (
+                      <GeneratedText id="m_1b553f8e636b13" />
+                    )
+                  }
+                />
+                <GeneratedText id="m_1dfba6c600e8f3" />
+                <GeneratedValue value={' '} />
+                <a
+                  href="/my/training?tab=records"
+                  className="text-teal-700 underline dark:text-teal-300"
+                >
+                  <GeneratedText id="m_1eac86f811af44" />
+                </a>
+                .
+              </CardContent>
+            </Card>
+          ) : renewalRequired && !deliveryMeta(course.deliveryType).selfLaunch ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                <GeneratedText id="m_0ff828bd1b5676" />
+              </CardContent>
+            </Card>
+          ) : renewalRequired ? (
+            <EnrollGate
+              courseId={courseId}
+              courseName={course.name}
+              summary={htmlToSnippet(course.description, 240) || null}
+              renewal
+            />
+          ) : !enrollment && !deliveryMeta(course.deliveryType).selfLaunch ? (
+            <Card>
+              <CardContent className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                <GeneratedText id="m_0f2c9bd0066ecf" />
+                <GeneratedValue value={' '} />
+                <a href="/my/training" className="text-teal-700 underline dark:text-teal-300">
+                  <GeneratedText id="m_1eac86f811af44" />
+                </a>
+                .
+              </CardContent>
+            </Card>
+          ) : !enrollment ? (
+            <EnrollGate
+              courseId={courseId}
+              courseName={course.name}
+              summary={htmlToSnippet(course.description, 240) || null}
+            />
+          ) : course.deliveryType === 'online' ? (
+            <OnlineCoursePlayer
+              enrollmentId={enrollment.id}
+              instructionsHtml={course.instructions}
+              onlineUrl={course.onlineUrl}
+              completed={enrollment.status === 'completed'}
+              certificateRecordId={enrollment.recordId ?? null}
+            />
+          ) : (
+            <CoursePlayer
+              modules={modules}
+              enrollmentId={enrollment.id}
+              attachmentUrls={attachmentUrls}
+              completed={enrollment.status === 'completed'}
+              certificateRecordId={enrollment.recordId ?? null}
+              issuesRecord={deliveryMeta(course.deliveryType).autoIssuesRecord}
+            />
+          )
+        }
+      />
     </DetailPageLayout>
   )
 }

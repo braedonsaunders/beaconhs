@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Record actions panel — the "Actions" left-rail tab in the App designer.
 //
 // Manages the BUTTONS that appear on a record. Each button is a `manual`-trigger
@@ -150,8 +157,7 @@ export function RecordActionsPanel({
   return (
     <div className="space-y-4">
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Buttons people see on a record. Each runs a flow on click — create a CAPA, send an email,
-        change status, and more. Add one here, then refine its logic in Flows.
+        <GeneratedText id="m_04c26741b8a61a" />
       </p>
 
       <ButtonList templateId={templateId} buttons={buttons} />
@@ -168,6 +174,8 @@ function ButtonList({
   templateId: string
   buttons: { flow: FlowSummary; trigger: Extract<TriggerData, { trigger: 'manual' }> }[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [pending, start] = useTransition()
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -177,10 +185,12 @@ function ButtonList({
       const res = await setFlowEnabled(id, enabled)
       setBusyId(null)
       if (!res.ok) {
-        toast.error(res.error ?? 'Could not update the button')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0ace7111b8a4ca')))
         return
       }
-      toast.success(enabled ? 'Button enabled' : 'Button disabled')
+      toast.success(
+        tGeneratedValue(enabled ? tGenerated('m_17a1ffe7b619a7') : tGenerated('m_1263bc1887a413')),
+      )
       // Reflect the change without a full reload.
       window.location.reload()
     })
@@ -199,10 +209,10 @@ function ButtonList({
       const res = await deleteFlow(id)
       setBusyId(null)
       if (!res.ok) {
-        toast.error('Could not delete the button')
+        toast.error(tGenerated('m_065983a28dd74f'))
         return
       }
-      toast.success('Button deleted')
+      toast.success(tGenerated('m_17a3631fb2f4e4'))
       window.location.reload()
     })
   }
@@ -210,63 +220,78 @@ function ButtonList({
   if (buttons.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
-        No action buttons yet.
+        <GeneratedText id="m_1e0d6150fa36c1" />
       </p>
     )
   }
 
   return (
     <ul className="space-y-2">
-      {buttons.map(({ flow, trigger }) => (
-        <li key={flow.id} className="rounded-md border border-slate-200 p-3 dark:border-slate-700">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-sm font-medium text-slate-800 dark:text-slate-200">
-                <MousePointerClick size={13} className="shrink-0 text-slate-400" />
-                <span className="truncate">{trigger.label || 'Untitled button'}</span>
-              </div>
-              <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                {firstActionLabel(flow.graph)}
-                {!flow.enabled ? (
-                  <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                    Disabled
+      <GeneratedValue
+        value={buttons.map(({ flow, trigger }) => (
+          <li
+            key={flow.id}
+            className="rounded-md border border-slate-200 p-3 dark:border-slate-700"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-sm font-medium text-slate-800 dark:text-slate-200">
+                  <MousePointerClick size={13} className="shrink-0 text-slate-400" />
+                  <span className="truncate">
+                    <GeneratedValue
+                      value={trigger.label || <GeneratedText id="m_177ebf9909c429" />}
+                    />
                   </span>
-                ) : null}
+                </div>
+                <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  <GeneratedValue value={firstActionLabel(flow.graph)} />
+                  <GeneratedValue
+                    value={
+                      !flow.enabled ? (
+                        <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                          <GeneratedText id="m_0ea7ffe3f671e7" />
+                        </span>
+                      ) : null
+                    }
+                  />
+                </div>
               </div>
+              <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={flow.enabled}
+                  disabled={pending && busyId === flow.id}
+                  onChange={(e) => toggle(flow.id, e.target.checked)}
+                />
+                <GeneratedText id="m_0738c9c7544385" />
+              </label>
             </div>
-            <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-              <input
-                type="checkbox"
-                checked={flow.enabled}
+            <div className="mt-2 flex items-center gap-2">
+              <Link
+                href={`/apps/templates/${templateId}/designer?surface=flows`}
+                className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+              >
+                <ExternalLink size={12} /> <GeneratedText id="m_1f5548c5f64859" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => remove(flow.id, trigger.label || 'this')}
                 disabled={pending && busyId === flow.id}
-                onChange={(e) => toggle(flow.id, e.target.checked)}
-              />
-              On
-            </label>
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <Link
-              href={`/apps/templates/${templateId}/designer?surface=flows`}
-              className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
-            >
-              <ExternalLink size={12} /> Edit as flow
-            </Link>
-            <button
-              type="button"
-              onClick={() => remove(flow.id, trigger.label || 'this')}
-              disabled={pending && busyId === flow.id}
-              className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:underline disabled:opacity-50 dark:text-rose-400"
-            >
-              <Trash2 size={12} /> Delete
-            </button>
-          </div>
-        </li>
-      ))}
+                className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-rose-600 hover:underline disabled:opacity-50 dark:text-rose-400"
+              >
+                <Trash2 size={12} /> <GeneratedText id="m_11773f3c3f7558" />
+              </button>
+            </div>
+          </li>
+        ))}
+      />
     </ul>
   )
 }
 
 function AddButtonForm({ templateId, nextOrder }: { templateId: string; nextOrder: number }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [label, setLabel] = useState('')
   const [actionKind, setActionKind] = useState<QuickAction>('export_pdf')
   const [icon, setIcon] = useState('')
@@ -276,13 +301,13 @@ function AddButtonForm({ templateId, nextOrder }: { templateId: string; nextOrde
   const add = () => {
     const trimmed = label.trim()
     if (trimmed.length < 2) {
-      toast.error('Give the button a label')
+      toast.error(tGenerated('m_1679c2ed292c3d'))
       return
     }
     start(async () => {
       const created = await createFlow({ type: 'form_template', key: templateId }, trimmed)
       if (!created.ok || !created.id) {
-        toast.error(created.error ?? 'Could not create the button')
+        toast.error(tGeneratedValue(created.error ?? tGenerated('m_158f2495bcddb0')))
         return
       }
       const graph = buildButtonGraph({
@@ -295,15 +320,15 @@ function AddButtonForm({ templateId, nextOrder }: { templateId: string; nextOrde
       const saved = await saveFlow(created.id, graph)
       if (!saved.ok) {
         await deleteFlow(created.id)
-        toast.error(saved.error ?? 'Could not save the button')
+        toast.error(tGeneratedValue(saved.error ?? tGenerated('m_1da8a415304d10')))
         return
       }
       const enabled = await setFlowEnabled(created.id, true)
       if (!enabled.ok) {
-        toast.error(enabled.error ?? 'The button was saved but could not be enabled')
+        toast.error(tGeneratedValue(enabled.error ?? tGenerated('m_0f6e0471488eed')))
         return
       }
-      toast.success('Button added')
+      toast.success(tGenerated('m_0aeca8ac2599fe'))
       window.location.reload()
     })
   }
@@ -311,53 +336,77 @@ function AddButtonForm({ templateId, nextOrder }: { templateId: string; nextOrde
   return (
     <div className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-700">
       <div className="text-sm font-medium text-slate-800 dark:text-slate-200">
-        Add action button
+        <GeneratedText id="m_05253329e74fe1" />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Label</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_1d088977412efb" />
+        </Label>
         <Input
           value={label}
-          placeholder="e.g. Close out, Raise CAPA"
+          placeholder={tGenerated('m_0fa92e5594b03b')}
           onChange={(e) => setLabel(e.target.value)}
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Runs</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_142e7fa174a9b9" />
+        </Label>
         <Select value={actionKind} onChange={(e) => setActionKind(e.target.value as QuickAction)}>
-          {QUICK_ACTIONS.map((k) => (
-            <option key={k} value={k}>
-              {ACTION_LABEL[k]}
-            </option>
-          ))}
+          <GeneratedValue
+            value={QUICK_ACTIONS.map((k) => (
+              <option key={k} value={k}>
+                <GeneratedValue value={ACTION_LABEL[k]} />
+              </option>
+            ))}
+          />
         </Select>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <Label className="text-xs">Style</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_03cf3a97d03fef" />
+          </Label>
           <Select value={variant} onChange={(e) => setVariant(e.target.value as ButtonVariant)}>
-            {VARIANTS.map((v) => (
-              <option key={v.value} value={v.value}>
-                {v.label}
-              </option>
-            ))}
+            <GeneratedValue
+              value={VARIANTS.map((v) => (
+                <option key={v.value} value={v.value}>
+                  <GeneratedValue value={v.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Icon</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_158279b74f9a6e" />
+          </Label>
           <Input
             value={icon}
-            placeholder="Optional, e.g. check"
+            placeholder={tGenerated('m_0627f8a8876dd0')}
             onChange={(e) => setIcon(e.target.value)}
           />
         </div>
       </div>
       <p className="text-[11px] text-slate-400 dark:text-slate-500">
-        These choices are ready immediately. Add actions that need recipients, fields, statuses, or
-        target apps on the full **Flows** surface. Icon names follow lucide (for example{' '}
-        <span className="font-mono">check</span>).
+        <GeneratedText id="m_073488ed2e8c75" />
+        <GeneratedValue value={' '} />
+        <span className="font-mono">
+          <GeneratedText id="m_1cfe02e5abf380" />
+        </span>
+        ).
       </p>
       <Button onClick={add} disabled={pending} className="w-full">
-        <Plus size={14} /> {pending ? 'Adding…' : 'Add button'}
+        <Plus size={14} />{' '}
+        <GeneratedValue
+          value={
+            pending ? (
+              <GeneratedText id="m_184412952a7847" />
+            ) : (
+              <GeneratedText id="m_0736cc3d80b217" />
+            )
+          }
+        />
       </Button>
     </div>
   )

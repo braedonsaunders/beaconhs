@@ -1,5 +1,11 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useCallback, useEffect, useState, useTransition } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { ScanLine } from 'lucide-react'
@@ -14,6 +20,8 @@ import {
 } from './actions'
 
 export function EquipmentKioskClient(props: { tenantId: string; tenantName: string }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const t = useTranslations('EquipmentKiosk')
   const locale = useLocale()
   const { tenantId } = props
@@ -59,16 +67,16 @@ export function EquipmentKioskClient(props: { tenantId: string; tenantName: stri
 
   function unlock(e: React.FormEvent) {
     e.preventDefault()
-    setError(null)
+    setError(tGeneratedValue(null))
     const candidate = pinInput.trim()
     if (!candidate) {
-      setError(t('enterPinError'))
+      setError(tGeneratedValue(t('enterPinError')))
       return
     }
     start(async () => {
       const res = await unlockEquipmentKiosk({ tenantId, pin: candidate })
       if (!res.ok) {
-        setError(res.error)
+        setError(tGeneratedValue(res.error))
         setConfig(null)
         return
       }
@@ -89,8 +97,12 @@ export function EquipmentKioskClient(props: { tenantId: string; tenantName: stri
             <div className="mx-auto mb-2 grid h-12 w-12 place-items-center rounded-full bg-amber-500/15 text-amber-300">
               <ScanLine size={24} />
             </div>
-            <h1 className="text-xl font-semibold">{props.tenantName}</h1>
-            <p className="text-sm text-slate-400">{t('pinPrompt')}</p>
+            <h1 className="text-xl font-semibold">
+              <GeneratedValue value={props.tenantName} />
+            </h1>
+            <p className="text-sm text-slate-400">
+              <GeneratedValue value={t('pinPrompt')} />
+            </p>
           </header>
           <input
             type="password"
@@ -99,16 +111,24 @@ export function EquipmentKioskClient(props: { tenantId: string; tenantName: stri
             autoFocus
             value={pinInput}
             onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
-            placeholder="PIN"
+            placeholder={tGenerated('m_18edf6c152be49')}
             className="w-full rounded-lg border-0 bg-slate-950 px-4 py-3 text-center text-2xl tracking-widest text-white placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:outline-none"
           />
-          {error ? <p className="text-center text-sm text-red-400">{error}</p> : null}
+          <GeneratedValue
+            value={
+              error ? (
+                <p className="text-center text-sm text-red-400">
+                  <GeneratedValue value={error} />
+                </p>
+              ) : null
+            }
+          />
           <button
             type="submit"
             disabled={pending}
             className="w-full rounded-lg bg-amber-500 px-4 py-3 text-base font-semibold text-white hover:bg-amber-400 disabled:opacity-50"
           >
-            {pending ? t('checking') : t('unlock')}
+            <GeneratedValue value={pending ? t('checking') : t('unlock')} />
           </button>
         </form>
       </div>

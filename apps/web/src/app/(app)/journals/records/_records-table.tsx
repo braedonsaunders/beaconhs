@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Client table + flyouts for the journal records list. Rows and flyouts are
 // CLIENT-state driven (not URL params), so opening/closing a flyout never
 // re-runs the page's server component — the list no longer refetches or
@@ -46,6 +53,8 @@ export function JournalRecordsTable({
   tagColors: Record<string, string | null>
   sortProps: SortProps
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const locale = useLocale() as AppLocale
   const colorMap = useMemo(() => new Map(Object.entries(tagColors)), [tagColors])
 
@@ -102,29 +111,37 @@ export function JournalRecordsTable({
     <>
       {/* Phones: tappable cards. */}
       <MobileCardList>
-        {items.map((it) => (
-          <ListCard
-            key={it.id}
-            onClick={() => openRead(it.id)}
-            person={it.authorName}
-            reference={it.reference}
-            status={<StatusBadge status={it.status} />}
-            title={it.snippet || it.title || 'Journal entry'}
-            meta={`${formatLongDate(it.entryDate, locale)}${it.siteName ? ` · ${it.siteName}` : ''}`}
-            footer={
-              <>
-                {it.tags.slice(0, 3).map((t) => (
-                  <TagChip key={t} tag={t} color={colorMap.get(t) ?? null} />
-                ))}
-                {it.photoCount > 0 ? (
-                  <span className="inline-flex items-center gap-0.5 text-[11px] text-slate-400">
-                    <ImageIcon size={11} /> {it.photoCount}
-                  </span>
-                ) : null}
-              </>
-            }
-          />
-        ))}
+        <GeneratedValue
+          value={items.map((it) => (
+            <ListCard
+              key={it.id}
+              onClick={() => openRead(it.id)}
+              person={it.authorName}
+              reference={it.reference}
+              status={<StatusBadge status={it.status} />}
+              title={tGeneratedValue(it.snippet || it.title || tGenerated('m_0bcbd007dbc0d9'))}
+              meta={`${formatLongDate(it.entryDate, locale)}${it.siteName ? ` · ${it.siteName}` : ''}`}
+              footer={
+                <>
+                  <GeneratedValue
+                    value={it.tags.slice(0, 3).map((t) => (
+                      <TagChip key={t} tag={t} color={colorMap.get(t) ?? null} />
+                    ))}
+                  />
+                  <GeneratedValue
+                    value={
+                      it.photoCount > 0 ? (
+                        <span className="inline-flex items-center gap-0.5 text-[11px] text-slate-400">
+                          <ImageIcon size={11} /> <GeneratedValue value={it.photoCount} />
+                        </span>
+                      ) : null
+                    }
+                  />
+                </>
+              }
+            />
+          ))}
+        />
       </MobileCardList>
 
       {/* Tablet/desktop: sortable table, whole row opens the flyout. */}
@@ -133,21 +150,25 @@ export function JournalRecordsTable({
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
               <SortTh column="reference" {...sortProps}>
-                Reference
+                <GeneratedText id="m_17dc61a19b605c" />
               </SortTh>
               <SortTh column="author" {...sortProps}>
-                Author
+                <GeneratedText id="m_03b265bab9b2a5" />
               </SortTh>
               <SortTh column="date" {...sortProps}>
-                Date
+                <GeneratedText id="m_0285c38761c540" />
               </SortTh>
               <SortTh column="site" {...sortProps}>
-                Site
+                <GeneratedText id="m_020146dd3d3d5a" />
               </SortTh>
-              <th className="px-3 py-2">Details</th>
-              <th className="px-3 py-2">Tags</th>
+              <th className="px-3 py-2">
+                <GeneratedText id="m_1560d4e2a09d09" />
+              </th>
+              <th className="px-3 py-2">
+                <GeneratedText id="m_168fcd8afec105" />
+              </th>
               <SortTh column="status" {...sortProps}>
-                Status
+                <GeneratedText id="m_0b9da892d6faf0" />
               </SortTh>
               <th className="w-10 px-3 py-2 text-center">
                 <ImageIcon size={13} className="inline" />
@@ -155,50 +176,64 @@ export function JournalRecordsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {items.map((it) => (
-              <tr
-                key={it.id}
-                onClick={() => openRead(it.id)}
-                className={cn(
-                  'cursor-pointer transition-colors',
-                  it.id === readId
-                    ? 'bg-teal-50/60 dark:bg-teal-500/10'
-                    : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/60',
-                )}
-              >
-                <td className="px-3 py-2 font-mono text-xs font-medium text-slate-900 dark:text-slate-100">
-                  {it.reference}
-                </td>
-                <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
-                  {it.authorName ?? 'Unassigned'}
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap text-slate-600 tabular-nums dark:text-slate-400">
-                  {formatLongDate(it.entryDate, locale)}
-                </td>
-                <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                  {it.siteName ?? '—'}
-                </td>
-                <td className="max-w-[22rem] px-3 py-2 text-slate-600 dark:text-slate-400">
-                  <span className="line-clamp-1">{it.snippet || '—'}</span>
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex max-w-[14rem] flex-wrap gap-1">
-                    {it.tags.slice(0, 3).map((t) => (
-                      <TagChip key={t} tag={t} color={colorMap.get(t) ?? null} />
-                    ))}
-                    {it.tags.length > 3 ? (
-                      <span className="text-[10px] text-slate-400">+{it.tags.length - 3}</span>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <StatusBadge status={it.status} />
-                </td>
-                <td className="px-3 py-2 text-center text-xs text-slate-400">
-                  {it.photoCount || ''}
-                </td>
-              </tr>
-            ))}
+            <GeneratedValue
+              value={items.map((it) => (
+                <tr
+                  key={it.id}
+                  onClick={() => openRead(it.id)}
+                  className={cn(
+                    'cursor-pointer transition-colors',
+                    it.id === readId
+                      ? 'bg-teal-50/60 dark:bg-teal-500/10'
+                      : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/60',
+                  )}
+                >
+                  <td className="px-3 py-2 font-mono text-xs font-medium text-slate-900 dark:text-slate-100">
+                    <GeneratedValue value={it.reference} />
+                  </td>
+                  <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
+                    <GeneratedValue
+                      value={it.authorName ?? <GeneratedText id="m_10d1d0d92a9aaa" />}
+                    />
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-slate-600 tabular-nums dark:text-slate-400">
+                    <GeneratedValue value={formatLongDate(it.entryDate, locale)} />
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                    <GeneratedValue value={it.siteName ?? '—'} />
+                  </td>
+                  <td className="max-w-[22rem] px-3 py-2 text-slate-600 dark:text-slate-400">
+                    <span className="line-clamp-1">
+                      <GeneratedValue value={it.snippet || '—'} />
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex max-w-[14rem] flex-wrap gap-1">
+                      <GeneratedValue
+                        value={it.tags.slice(0, 3).map((t) => (
+                          <TagChip key={t} tag={t} color={colorMap.get(t) ?? null} />
+                        ))}
+                      />
+                      <GeneratedValue
+                        value={
+                          it.tags.length > 3 ? (
+                            <span className="text-[10px] text-slate-400">
+                              +<GeneratedValue value={it.tags.length - 3} />
+                            </span>
+                          ) : null
+                        }
+                      />
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <StatusBadge status={it.status} />
+                  </td>
+                  <td className="px-3 py-2 text-center text-xs text-slate-400">
+                    <GeneratedValue value={it.photoCount || ''} />
+                  </td>
+                </tr>
+              ))}
+            />
           </tbody>
         </table>
       </div>
@@ -208,34 +243,42 @@ export function JournalRecordsTable({
         open={!!readId}
         onClose={closeRead}
         size="lg"
-        title={readEntry ? (readEntry.authorName ?? 'Journal entry') : 'Journal entry'}
-        description={
+        title={tGeneratedValue(
+          readEntry
+            ? (readEntry.authorName ?? tGenerated('m_0bcbd007dbc0d9'))
+            : tGenerated('m_0bcbd007dbc0d9'),
+        )}
+        description={tGeneratedValue(
           readEntry
             ? `${formatLongDate(readEntry.entryDate, locale)} · ${readEntry.reference}`
-            : undefined
-        }
+            : undefined,
+        )}
         footer={
           readEntry ? (
             <div className="flex w-full items-center justify-end gap-2">
               <a href={`/journals/${readEntry.id}/pdf`} target="_blank" rel="noopener noreferrer">
                 <Button variant="outline">
-                  <FileDown size={14} /> PDF
+                  <FileDown size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
                 </Button>
               </a>
               <Button onClick={() => openWorkspace(readEntry.id)}>
-                <PenLine size={14} /> Open full entry
+                <PenLine size={14} /> <GeneratedText id="m_0891c66f86aa35" />
               </Button>
             </div>
           ) : undefined
         }
       >
-        {readLoading ? (
-          <LoadingPane />
-        ) : readEntry ? (
-          <JournalView entry={readEntry} tagColors={colorMap} />
-        ) : (
-          <Unavailable />
-        )}
+        <GeneratedValue
+          value={
+            readLoading ? (
+              <LoadingPane />
+            ) : readEntry ? (
+              <JournalView entry={readEntry} tagColors={colorMap} />
+            ) : (
+              <Unavailable />
+            )
+          }
+        />
       </Drawer>
 
       {/* Editable author-workspace flyout */}
@@ -244,21 +287,29 @@ export function JournalRecordsTable({
         onClose={closeWorkspace}
         size="2xl"
         bodyClassName="overflow-hidden"
-        title={ws ? `${ws.author.name ?? 'Journal'} — full entry` : 'Journal'}
-        description={ws ? 'Browse and edit this author’s journals.' : undefined}
-      >
-        {wsLoading ? (
-          <LoadingPane />
-        ) : ws ? (
-          <JournalWorkspace
-            initialData={ws.data}
-            initialEntry={ws.entry}
-            initialGroupBy="date"
-            author={ws.author}
-          />
-        ) : (
-          <Unavailable />
+        title={tGeneratedValue(
+          ws
+            ? tGenerated('m_16e19a3c2841e4', { value0: ws.author.name ?? 'Journal' })
+            : tGenerated('m_10c742aace3a46'),
         )}
+        description={tGeneratedValue(ws ? tGenerated('m_12444fa23f4d7a') : undefined)}
+      >
+        <GeneratedValue
+          value={
+            wsLoading ? (
+              <LoadingPane />
+            ) : ws ? (
+              <JournalWorkspace
+                initialData={ws.data}
+                initialEntry={ws.entry}
+                initialGroupBy="date"
+                author={ws.author}
+              />
+            ) : (
+              <Unavailable />
+            )
+          }
+        />
       </Drawer>
     </>
   )
@@ -275,7 +326,7 @@ function LoadingPane() {
 function Unavailable() {
   return (
     <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-      This journal is unavailable or you don’t have access to it.
+      <GeneratedText id="m_00a553cd589c60" />
     </p>
   )
 }
@@ -285,7 +336,11 @@ function StatusBadge({ status }: { status: JournalStatus }) {
   const label = statusMeta(status, locale).label
   const variant =
     status === 'submitted' ? 'success' : status === 'archived' ? 'secondary' : 'warning'
-  return <Badge variant={variant}>{label}</Badge>
+  return (
+    <Badge variant={variant}>
+      <GeneratedValue value={label} />
+    </Badge>
+  )
 }
 
 function TagChip({ tag, color }: { tag: string; color: string | null }) {
@@ -298,7 +353,7 @@ function TagChip({ tag, color }: { tag: string; color: string | null }) {
       )}
     >
       <span className={cn('h-1.5 w-1.5 rounded-full', sw.dot)} />
-      {tag}
+      <GeneratedValue value={tag} />
     </span>
   )
 }

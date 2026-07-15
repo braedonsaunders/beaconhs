@@ -1,5 +1,7 @@
 'use client'
 
+import { useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // Edit an obligation in a right-side flyout, opened from the detail page via
 // ?drawer=edit (so it survives refresh and is link-shareable). Reuses the
 // unified ObligationForm in embedded mode — on save it closes the drawer and
@@ -29,6 +31,7 @@ export function ObligationEditDrawer({
   edit: ObligationEditData | null
   closeHref: string
 }) {
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   function close() {
     router.push(closeHref)
@@ -38,20 +41,24 @@ export function ObligationEditDrawer({
     <UrlDrawer
       open={edit !== null}
       closeHref={closeHref}
-      title="Edit obligation"
-      description="Update the target, audience, and cadence. Compliance re-computes immediately on save."
+      title={tGenerated('m_17a2d7d0c66b35')}
+      description={tGenerated('m_0e0e1f163269fd')}
       size="xl"
     >
-      {edit ? (
-        <ObligationForm
-          key={edit.initial.id}
-          initialKind={edit.kind}
-          targets={edit.targets}
-          audienceOptions={edit.audienceOptions}
-          initial={edit.initial}
-          onClose={close}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          edit ? (
+            <ObligationForm
+              key={edit.initial.id}
+              initialKind={edit.kind}
+              targets={edit.targets}
+              audienceOptions={edit.audienceOptions}
+              initial={edit.initial}
+              onClose={close}
+            />
+          ) : null
+        }
+      />
     </UrlDrawer>
   )
 }

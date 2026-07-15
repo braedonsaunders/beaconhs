@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
@@ -13,11 +17,14 @@ import { PageContainer } from '@/components/page-layout'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `QR · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_1d63957988eac1', { value0: id.slice(0, 8) }) }
 }
 
 export default async function EquipmentQrPage({ params }: { params: Promise<{ id: string }> }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
   const ctx = await requireRequestContext()
@@ -53,16 +60,12 @@ export default async function EquipmentQrPage({ params }: { params: Promise<{ id
       <div className="mx-auto max-w-3xl space-y-5">
         <DetailHeader
           back={{ href: `/equipment/${id}`, label: 'Back to equipment' }}
-          title={`QR label — ${row.item.name}`}
-          subtitle={`${row.item.assetTag}${row.type ? ` · ${row.type.name}` : ''}`}
+          title={tGenerated('m_1bd9fcc355c45a', { value0: row.item.name })}
+          subtitle={tGeneratedValue(`${row.item.assetTag}${row.type ? ` · ${row.type.name}` : ''}`)}
           actions={
-            <Button
-              asChild
-              variant="outline"
-              title="Print-ready label PDF at the designed tag size"
-            >
+            <Button asChild variant="outline" title={tGenerated('m_055217343f2cbe')}>
               <a href={`/equipment/${id}/qr/pdf`} target="_blank" rel="noopener noreferrer">
-                Download label PDF
+                <GeneratedText id="m_04aed76b78cb4a" />
               </a>
             </Button>
           }
@@ -74,56 +77,72 @@ export default async function EquipmentQrPage({ params }: { params: Promise<{ id
               {/* The QR tile stays on white so scanners read it in dark mode too. */}
               <div
                 className="w-full max-w-72 rounded-md bg-white p-2 [&_svg]:h-auto [&_svg]:w-full"
-                aria-label={`QR code for ${row.item.name}`}
+                aria-label={tGenerated('m_1ca73787528309', { value0: row.item.name })}
                 dangerouslySetInnerHTML={{ __html: svg }}
               />
             </div>
             <div className="space-y-3">
               <div>
                 <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                  Asset tag
+                  <GeneratedText id="m_0d9ccb155777db" />
                 </div>
                 <div className="font-mono text-2xl font-semibold dark:text-slate-100">
-                  {row.item.assetTag}
+                  <GeneratedValue value={row.item.assetTag} />
                 </div>
               </div>
               <div>
                 <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                  Name
+                  <GeneratedText id="m_02b18d5c7f6f2d" />
                 </div>
-                <div className="text-lg dark:text-slate-100">{row.item.name}</div>
+                <div className="text-lg dark:text-slate-100">
+                  <GeneratedValue value={row.item.name} />
+                </div>
               </div>
-              {row.type ? (
-                <div>
-                  <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                    Type
-                  </div>
-                  <div className="dark:text-slate-200">{row.type.name}</div>
-                </div>
-              ) : null}
-              {row.item.serialNumber ? (
-                <div>
-                  <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                    Serial
-                  </div>
-                  <div className="font-mono text-sm dark:text-slate-200">
-                    {row.item.serialNumber}
-                  </div>
-                </div>
-              ) : null}
+              <GeneratedValue
+                value={
+                  row.type ? (
+                    <div>
+                      <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                        <GeneratedText id="m_074ba2f160c506" />
+                      </div>
+                      <div className="dark:text-slate-200">
+                        <GeneratedValue value={row.type.name} />
+                      </div>
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  row.item.serialNumber ? (
+                    <div>
+                      <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                        <GeneratedText id="m_1365d9cb50ba5f" />
+                      </div>
+                      <div className="font-mono text-sm dark:text-slate-200">
+                        <GeneratedValue value={row.item.serialNumber} />
+                      </div>
+                    </div>
+                  ) : null
+                }
+              />
               <div className="pt-3 text-xs text-slate-500 dark:text-slate-400">
-                Scan to verify, log pre-use inspection, or transfer location.
+                <GeneratedText id="m_19981785e9f8dd" />
               </div>
             </div>
           </div>
         </div>
 
         <div className="rounded-md border border-slate-200 bg-slate-50/50 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
-          <div className="font-medium text-slate-800 dark:text-slate-100">Scan URL</div>
-          <div className="mt-1 font-mono text-xs break-all">{scanUrl}</div>
+          <div className="font-medium text-slate-800 dark:text-slate-100">
+            <GeneratedText id="m_1686561a46957f" />
+          </div>
+          <div className="mt-1 font-mono text-xs break-all">
+            <GeneratedValue value={scanUrl} />
+          </div>
           <div className="mt-3">
             <Link href={scanUrl} className="text-teal-700 hover:underline dark:text-teal-400">
-              Try it
+              <GeneratedText id="m_05f2766626d94e" />
             </Link>
           </div>
         </div>

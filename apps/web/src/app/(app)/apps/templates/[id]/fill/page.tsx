@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound, redirect } from 'next/navigation'
 import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import {
@@ -22,8 +23,9 @@ import { FormRenderer } from './form-renderer'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Fill · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_0d322720da7266', { value0: id.slice(0, 8) }) }
 }
 
 export default async function FillTemplatePage({

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import {
@@ -28,7 +31,10 @@ import { MODULE_ADMIN } from '@/lib/module-admin/registry'
 import { mergeHref, pickString } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Admin' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_10cc1dd29ed900') }
+}
 
 // Per-accent class sets. Kept as complete literal strings so Tailwind's scanner
 // picks them up (dynamic `bg-${x}` names would be purged).
@@ -230,6 +236,8 @@ export default async function AdminPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   const sp = await searchParams
   const activeCat = pickString(sp.cat) ?? 'all'
@@ -277,98 +285,114 @@ export default async function AdminPage({
       <div className="space-y-6">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Admin</h1>
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
+              <GeneratedText id="m_10cc1dd29ed900" />
+            </h1>
             <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-              Everything that configures this workspace.
+              <GeneratedText id="m_1d92ea1af5753f" />
             </p>
           </div>
-          <SearchInput placeholder="Search settings…" />
+          <SearchInput placeholder={tGenerated('m_0546cc40781f5f')} />
         </header>
 
         <div className="flex flex-wrap gap-1.5">
-          {categories.map((c) => {
-            const active = activeCat === c.key
-            return (
-              <Link
-                key={c.key}
-                href={mergeHref(basePath, sp, {
-                  cat: c.key === 'all' ? undefined : c.key,
-                  q: undefined,
-                })}
-                className={cn(
-                  'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                  active
-                    ? 'border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-300'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800/60',
-                )}
-              >
-                {c.label}
-              </Link>
-            )
-          })}
+          <GeneratedValue
+            value={categories.map((c) => {
+              const active = activeCat === c.key
+              return (
+                <Link
+                  key={c.key}
+                  href={mergeHref(basePath, sp, {
+                    cat: c.key === 'all' ? undefined : c.key,
+                    q: undefined,
+                  })}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                    active
+                      ? 'border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-300'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800/60',
+                  )}
+                >
+                  <GeneratedValue value={c.label} />
+                </Link>
+              )
+            })}
+          />
         </div>
 
-        {visibleGroups.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-            No settings match “{query}”.
-          </p>
-        ) : (
-          visibleGroups.map((group) => {
-            const accent = ACCENTS[group.accent]
-            return (
-              <section key={group.key} className="space-y-2.5">
-                <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-                  {group.label}
-                </h2>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                  {group.tiles.map((tile) => (
-                    <Link
-                      key={tile.href}
-                      href={tile.href as never}
-                      title={tile.desc}
-                      className={cn(
-                        'group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900',
-                        accent.border,
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'grid h-10 w-10 shrink-0 place-items-center rounded-lg ring-1',
-                          accent.chip,
-                        )}
-                      >
-                        {tile.icon}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                            {tile.title}
-                          </h3>
-                          {tile.badge ? (
-                            <Badge variant="secondary" className="shrink-0 text-[10px]">
-                              {tile.badge}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                          {tile.desc}
-                        </p>
-                      </div>
-                      <ArrowUpRight
-                        size={15}
-                        aria-hidden
-                        className={cn(
-                          'shrink-0 text-slate-300 opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:opacity-100 dark:text-slate-600',
-                          accent.link,
-                        )}
+        <GeneratedValue
+          value={
+            visibleGroups.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                <GeneratedText id="m_00bd5d477b0f1d" />
+                <GeneratedValue value={query} />
+                ”.
+              </p>
+            ) : (
+              visibleGroups.map((group) => {
+                const accent = ACCENTS[group.accent]
+                return (
+                  <section key={group.key} className="space-y-2.5">
+                    <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+                      <GeneratedValue value={group.label} />
+                    </h2>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                      <GeneratedValue
+                        value={group.tiles.map((tile) => (
+                          <Link
+                            key={tile.href}
+                            href={tile.href as never}
+                            title={tGeneratedValue(tile.desc)}
+                            className={cn(
+                              'group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900',
+                              accent.border,
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'grid h-10 w-10 shrink-0 place-items-center rounded-lg ring-1',
+                                accent.chip,
+                              )}
+                            >
+                              <GeneratedValue value={tile.icon} />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                  <GeneratedValue value={tile.title} />
+                                </h3>
+                                <GeneratedValue
+                                  value={
+                                    tile.badge ? (
+                                      <Badge variant="secondary" className="shrink-0 text-[10px]">
+                                        <GeneratedValue value={tile.badge} />
+                                      </Badge>
+                                    ) : null
+                                  }
+                                />
+                              </div>
+                              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                                <GeneratedValue value={tile.desc} />
+                              </p>
+                            </div>
+                            <ArrowUpRight
+                              size={15}
+                              aria-hidden
+                              className={cn(
+                                'shrink-0 text-slate-300 opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:opacity-100 dark:text-slate-600',
+                                accent.link,
+                              )}
+                            />
+                          </Link>
+                        ))}
                       />
-                    </Link>
-                  ))}
-                </div>
-              </section>
+                    </div>
+                  </section>
+                )
+              })
             )
-          })
-        )}
+          }
+        />
       </div>
     </PageContainer>
   )

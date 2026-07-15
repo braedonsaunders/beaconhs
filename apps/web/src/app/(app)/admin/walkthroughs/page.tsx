@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Admin config for guided tours (walkthroughs): per-tour enable, auto-start on
 // first sign-in, and role scoping — plus a Preview that runs the tour exactly
 // as users see it (no progress is recorded in preview).
@@ -16,9 +18,13 @@ import { loadWalkthroughSettings } from '@/lib/walkthroughs/service'
 import { saveWalkthroughSetting } from './_actions'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Walkthroughs' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_138622b56e90e2') }
+}
 
 export default async function AdminWalkthroughsPage() {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) redirect('/admin')
 
@@ -35,117 +41,155 @@ export default async function AdminWalkthroughsPage() {
       <div className="mx-auto max-w-4xl space-y-6">
         <PageHeader
           back={{ href: '/admin', label: 'Admin' }}
-          title="Walkthroughs"
-          description="Guided tours that highlight the real UI, step by step. Choose which tours are on, which start automatically for new users, and which roles see each one."
+          title={tGenerated('m_138622b56e90e2')}
+          description={tGenerated('m_0ebc38516db6e7')}
         />
 
         <div className="space-y-4">
-          {WALKTHROUGHS.map((w) => {
-            const s = settingById.get(w.id)!
-            const scoped = s.roleIds.length > 0
-            return (
-              <form
-                key={w.id}
-                action={saveWalkthroughSetting}
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-              >
-                <input type="hidden" name="walkthroughId" value={w.id} />
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {w.title}
-                      </h2>
-                      {!s.enabled ? <Badge variant="secondary">Off</Badge> : null}
-                      {s.enabled && s.autoStart ? <Badge>Auto-start</Badge> : null}
+          <GeneratedValue
+            value={WALKTHROUGHS.map((w) => {
+              const s = settingById.get(w.id)!
+              const scoped = s.roleIds.length > 0
+              return (
+                <form
+                  key={w.id}
+                  action={saveWalkthroughSetting}
+                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                >
+                  <input type="hidden" name="walkthroughId" value={w.id} />
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          <GeneratedValue value={w.title} />
+                        </h2>
+                        <GeneratedValue
+                          value={
+                            !s.enabled ? (
+                              <Badge variant="secondary">
+                                <GeneratedText id="m_0580723cde1d9a" />
+                              </Badge>
+                            ) : null
+                          }
+                        />
+                        <GeneratedValue
+                          value={
+                            s.enabled && s.autoStart ? (
+                              <Badge>
+                                <GeneratedText id="m_10ebb1254bdf21" />
+                              </Badge>
+                            ) : null
+                          }
+                        />
+                      </div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        <GeneratedValue value={w.description} />
+                      </p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500">
+                        <GeneratedValue value={w.steps.length} />{' '}
+                        <GeneratedText id="m_016d2d0e46cf8a" />{' '}
+                        <GeneratedValue value={w.startPath} />
+                      </p>
                     </div>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">{w.description}</p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500">
-                      {w.steps.length} steps · starts on {w.startPath}
-                    </p>
-                  </div>
-                  <Link
-                    href={`${w.startPath}?walkthrough=${w.id}&wt_preview=1` as never}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-sm font-medium text-teal-800 transition-colors hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-200 dark:hover:bg-teal-950"
-                  >
-                    <PlayCircle size={15} /> Preview
-                  </Link>
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2 dark:border-slate-800">
-                  <div className="space-y-2.5">
-                    <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
-                      <input
-                        type="checkbox"
-                        name="enabled"
-                        defaultChecked={s.enabled}
-                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-800"
-                      />
-                      <span>
-                        <span className="font-medium">Enabled</span>
-                        <span className="block text-xs text-slate-500 dark:text-slate-400">
-                          Off hides the tour from the User Guide and never auto-starts it.
-                        </span>
-                      </span>
-                    </label>
-                    <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
-                      <input
-                        type="checkbox"
-                        name="autoStart"
-                        defaultChecked={s.autoStart}
-                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-800"
-                      />
-                      <span>
-                        <span className="font-medium">Start automatically</span>
-                        <span className="block text-xs text-slate-500 dark:text-slate-400">
-                          Runs once for each matching user who hasn't seen it.
-                        </span>
-                      </span>
-                    </label>
+                    <Link
+                      href={`${w.startPath}?walkthrough=${w.id}&wt_preview=1` as never}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-sm font-medium text-teal-800 transition-colors hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-200 dark:hover:bg-teal-950"
+                    >
+                      <PlayCircle size={15} /> <GeneratedText id="m_11d37007232de5" />
+                    </Link>
                   </div>
 
-                  <fieldset>
-                    <legend className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Roles
-                    </legend>
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                      {scoped
-                        ? 'Only the checked roles see this tour.'
-                        : 'No roles checked — every role sees this tour.'}
-                    </p>
-                    <div className="mt-2 flex max-h-36 flex-wrap gap-x-4 gap-y-1.5 overflow-y-auto">
-                      {roleRows.map((r) => (
-                        <label
-                          key={r.id}
-                          className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300"
-                        >
-                          <input
-                            type="checkbox"
-                            name="roleIds"
-                            value={r.id}
-                            defaultChecked={s.roleIds.includes(r.id)}
-                            className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-800"
-                          />
-                          {r.name}
-                        </label>
-                      ))}
-                      {roleRows.length === 0 ? (
-                        <p className="text-xs text-slate-400 dark:text-slate-500">
-                          No roles defined yet.
-                        </p>
-                      ) : null}
+                  <div className="mt-4 grid grid-cols-1 gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2 dark:border-slate-800">
+                    <div className="space-y-2.5">
+                      <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          name="enabled"
+                          defaultChecked={s.enabled}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-800"
+                        />
+                        <span>
+                          <span className="font-medium">
+                            <GeneratedText id="m_0dd399c5304eb6" />
+                          </span>
+                          <span className="block text-xs text-slate-500 dark:text-slate-400">
+                            <GeneratedText id="m_099a62214b9d61" />
+                          </span>
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          name="autoStart"
+                          defaultChecked={s.autoStart}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-800"
+                        />
+                        <span>
+                          <span className="font-medium">
+                            <GeneratedText id="m_11b152737c6278" />
+                          </span>
+                          <span className="block text-xs text-slate-500 dark:text-slate-400">
+                            <GeneratedText id="m_0eed6b6e3a7b33" />
+                          </span>
+                        </span>
+                      </label>
                     </div>
-                  </fieldset>
-                </div>
 
-                <div className="mt-4 flex justify-end">
-                  <Button type="submit" size="sm">
-                    Save
-                  </Button>
-                </div>
-              </form>
-            )
-          })}
+                    <fieldset>
+                      <legend className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        <GeneratedText id="m_1ed71c1e30c002" />
+                      </legend>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedValue
+                          value={
+                            scoped ? (
+                              <GeneratedText id="m_1a0a745fa2d874" />
+                            ) : (
+                              <GeneratedText id="m_08f6fc31ce78d2" />
+                            )
+                          }
+                        />
+                      </p>
+                      <div className="mt-2 flex max-h-36 flex-wrap gap-x-4 gap-y-1.5 overflow-y-auto">
+                        <GeneratedValue
+                          value={roleRows.map((r) => (
+                            <label
+                              key={r.id}
+                              className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300"
+                            >
+                              <input
+                                type="checkbox"
+                                name="roleIds"
+                                value={r.id}
+                                defaultChecked={s.roleIds.includes(r.id)}
+                                className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-800"
+                              />
+                              <GeneratedValue value={r.name} />
+                            </label>
+                          ))}
+                        />
+                        <GeneratedValue
+                          value={
+                            roleRows.length === 0 ? (
+                              <p className="text-xs text-slate-400 dark:text-slate-500">
+                                <GeneratedText id="m_0d3aaa3bb9c390" />
+                              </p>
+                            ) : null
+                          }
+                        />
+                      </div>
+                    </fieldset>
+                  </div>
+
+                  <div className="mt-4 flex justify-end">
+                    <Button type="submit" size="sm">
+                      <GeneratedText id="m_19e6bff894c3c7" />
+                    </Button>
+                  </div>
+                </form>
+              )
+            })}
+          />
         </div>
       </div>
     </PageContainer>

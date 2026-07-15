@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ClipboardCheck, PencilRuler, Plus } from 'lucide-react'
@@ -20,7 +23,10 @@ import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { createDraftResponse } from './templates/[id]/fill/actions'
 import { moduleScopeWhere } from '@/lib/visibility'
 
-export const metadata = { title: 'Builder' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_07f039d1ce81ec') }
+}
 
 // Tailwind classes per app kind (badge on each card; 'form' is the default and
 // not badged to keep the grid quiet).
@@ -47,6 +53,8 @@ export default async function FormsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const rawKind = pickString(sp.kind)
   const kindFilter = formTemplateKind.enumValues.includes(
@@ -166,52 +174,65 @@ export default async function FormsPage({
         <>
           <header className="flex flex-wrap items-end justify-between gap-3">
             <div className="space-y-1">
-              <h1 className="text-2xl font-semibold">Builder</h1>
+              <h1 className="text-2xl font-semibold">
+                <GeneratedText id="m_07f039d1ce81ec" />
+              </h1>
               <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                Your Apps — forms, wizards, checklists, registers, and mini-apps. Build with the
-                drag-drop designer, automate with Flows, then fill, review, and pin the ones your
-                crews use most to the sidebar.
+                <GeneratedText id="m_181eacbaca4566" />
               </p>
               <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-slate-500 dark:text-slate-400">
                 <span>
-                  <strong className="text-slate-800 dark:text-slate-200">{stats.templates}</strong>{' '}
-                  templates
+                  <strong className="text-slate-800 dark:text-slate-200">
+                    <GeneratedValue value={stats.templates} />
+                  </strong>
+                  <GeneratedValue value={' '} />
+                  <GeneratedText id="m_02877322a055ff" />
                 </span>
                 <span>
-                  <strong className="text-slate-800 dark:text-slate-200">{stats.published}</strong>{' '}
-                  published
+                  <strong className="text-slate-800 dark:text-slate-200">
+                    <GeneratedValue value={stats.published} />
+                  </strong>
+                  <GeneratedValue value={' '} />
+                  <GeneratedText id="m_17f8c524f67082" />
                 </span>
                 <span>
-                  <strong className="text-slate-800 dark:text-slate-200">{stats.responses}</strong>{' '}
-                  responses
+                  <strong className="text-slate-800 dark:text-slate-200">
+                    <GeneratedValue value={stats.responses} />
+                  </strong>
+                  <GeneratedValue value={' '} />
+                  <GeneratedText id="m_0c3df2423f6796" />
                 </span>
                 <Link href="/apps/responses" className="text-teal-700 hover:underline">
-                  Browse responses →
+                  <GeneratedText id="m_1ff3e44ad33662" />
                 </Link>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {canGenerate ? <AiGenerateButton /> : null}
-              {canCreate ? (
-                <Link href="/apps/templates/new">
-                  <Button>
-                    <Plus size={15} /> New app
-                  </Button>
-                </Link>
-              ) : null}
+              <GeneratedValue value={canGenerate ? <AiGenerateButton /> : null} />
+              <GeneratedValue
+                value={
+                  canCreate ? (
+                    <Link href="/apps/templates/new">
+                      <Button>
+                        <Plus size={15} /> <GeneratedText id="m_1a050bcb668962" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
             </div>
           </header>
 
           <div className="flex flex-wrap items-center gap-2">
             <FormsKindNav active={kindFilter} currentParams={sp} />
             <div className="ml-auto w-full sm:w-72">
-              <SearchInput placeholder="Search apps…" />
+              <SearchInput placeholder={tGenerated('m_1924fb5aeba7f0')} />
             </div>
             <FilterChips
               basePath="/apps"
               currentParams={sp}
               paramKey="sort"
-              label="Sort"
+              label={tGenerated('m_02801f1ab429b3')}
               options={SORT_OPTIONS}
               defaultValue="updated"
               hideAll
@@ -220,7 +241,7 @@ export default async function FormsPage({
               basePath="/apps"
               currentParams={sp}
               paramKey="dir"
-              label="Direction"
+              label={tGenerated('m_18c1dfa678c34a')}
               options={DIRECTION_OPTIONS}
               defaultValue="desc"
               hideAll
@@ -229,103 +250,153 @@ export default async function FormsPage({
         </>
       }
     >
-      {templates.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardCheck size={32} />}
-          title={q || kindFilter ? 'No matching apps' : 'No apps yet'}
-          description="Build a form, wizard, checklist, register, or mini-app with the designer."
-          action={
-            canCreate ? (
-              <Link href="/apps/templates/new">
-                <Button>Create app</Button>
-              </Link>
-            ) : undefined
-          }
-        />
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {templates.map((t) => {
-              const stat = counts.get(t.id)
-              const responseCount = stat?.c ?? 0
-              const last = stat?.last ?? null
-              const canOperate = canAccessTemplate(ctx, t, effectiveRoleKeys, 'operate')
-              return (
-                <div
-                  key={t.id}
-                  className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100 dark:bg-teal-950/40 dark:text-teal-300 dark:ring-teal-900">
-                      <NavIcon iconKey={t.iconKey ?? 'clipboard-check'} size={20} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/apps/templates/${t.id}`}
-                        className="block truncate font-semibold text-slate-900 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-400"
+      <GeneratedValue
+        value={
+          templates.length === 0 ? (
+            <EmptyState
+              icon={<ClipboardCheck size={32} />}
+              title={tGeneratedValue(
+                q || kindFilter ? tGenerated('m_1f6c0c9963e0a9') : tGenerated('m_067d36f4bd2b2a'),
+              )}
+              description={tGenerated('m_0841287a50d8c3')}
+              action={
+                canCreate ? (
+                  <Link href="/apps/templates/new">
+                    <Button>
+                      <GeneratedText id="m_040c01febdc357" />
+                    </Button>
+                  </Link>
+                ) : undefined
+              }
+            />
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <GeneratedValue
+                  value={templates.map((t) => {
+                    const stat = counts.get(t.id)
+                    const responseCount = stat?.c ?? 0
+                    const last = stat?.last ?? null
+                    const canOperate = canAccessTemplate(ctx, t, effectiveRoleKeys, 'operate')
+                    return (
+                      <div
+                        key={t.id}
+                        className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
                       >
-                        {t.name}
-                      </Link>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-                        <Badge variant={t.status === 'published' ? 'success' : 'secondary'}>
-                          {t.status}
-                        </Badge>
-                        {t.kind && t.kind !== 'form' ? (
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${KIND_BADGE[t.kind] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}
-                          >
-                            {t.kind === 'mini_app' ? 'mini-app' : t.kind}
+                        <div className="flex items-start gap-3">
+                          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100 dark:bg-teal-950/40 dark:text-teal-300 dark:ring-teal-900">
+                            <NavIcon iconKey={t.iconKey ?? 'clipboard-check'} size={20} />
                           </span>
-                        ) : null}
+                          <div className="min-w-0 flex-1">
+                            <Link
+                              href={`/apps/templates/${t.id}`}
+                              className="block truncate font-semibold text-slate-900 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-400"
+                            >
+                              <GeneratedValue value={t.name} />
+                            </Link>
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                              <Badge variant={t.status === 'published' ? 'success' : 'secondary'}>
+                                <GeneratedValue value={t.status} />
+                              </Badge>
+                              <GeneratedValue
+                                value={
+                                  t.kind && t.kind !== 'form' ? (
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${KIND_BADGE[t.kind] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}
+                                    >
+                                      <GeneratedValue
+                                        value={
+                                          t.kind === 'mini_app' ? (
+                                            <GeneratedText id="m_100a6ba3073e4b" />
+                                          ) : (
+                                            t.kind
+                                          )
+                                        }
+                                      />
+                                    </span>
+                                  ) : null
+                                }
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <GeneratedValue
+                          value={
+                            t.description ? (
+                              <p className="mt-3 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
+                                <GeneratedValue value={t.description} />
+                              </p>
+                            ) : null
+                          }
+                        />
+
+                        <div className="mt-3 flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+                          <span>
+                            <GeneratedValue value={responseCount} />{' '}
+                            <GeneratedText id="m_14d72e539938a0" />
+                            <GeneratedValue
+                              value={
+                                responseCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />
+                              }
+                            />
+                          </span>
+                          <GeneratedValue
+                            value={
+                              last ? (
+                                <span>
+                                  <GeneratedText id="m_16f3d969202a17" />{' '}
+                                  <GeneratedValue
+                                    value={formatDate(new Date(last), ctx.timezone, ctx.locale)}
+                                  />
+                                </span>
+                              ) : null
+                            }
+                          />
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                          <GeneratedValue
+                            value={
+                              canSubmitResponses && canOperate ? (
+                                <form action={createEntry}>
+                                  <input type="hidden" name="templateId" value={t.id} />
+                                  <Button size="sm" type="submit">
+                                    <GeneratedText id="m_0036397741744c" />
+                                  </Button>
+                                </form>
+                              ) : null
+                            }
+                          />
+                          <GeneratedValue
+                            value={
+                              canCreate ? (
+                                <Link href={`/apps/templates/${t.id}/designer`}>
+                                  <Button size="sm" variant="outline">
+                                    <PencilRuler size={14} />{' '}
+                                    <GeneratedText id="m_0006b9b63f781f" />
+                                  </Button>
+                                </Link>
+                              ) : null
+                            }
+                          />
+                        </div>
                       </div>
-                    </div>
-                  </div>
-
-                  {t.description ? (
-                    <p className="mt-3 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">
-                      {t.description}
-                    </p>
-                  ) : null}
-
-                  <div className="mt-3 flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-                    <span>
-                      {responseCount} response{responseCount === 1 ? '' : 's'}
-                    </span>
-                    {last ? (
-                      <span>· last {formatDate(new Date(last), ctx.timezone, ctx.locale)}</span>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-                    {canSubmitResponses && canOperate ? (
-                      <form action={createEntry}>
-                        <input type="hidden" name="templateId" value={t.id} />
-                        <Button size="sm" type="submit">
-                          New entry
-                        </Button>
-                      </form>
-                    ) : null}
-                    {canCreate ? (
-                      <Link href={`/apps/templates/${t.id}/designer`}>
-                        <Button size="sm" variant="outline">
-                          <PencilRuler size={14} /> Design
-                        </Button>
-                      </Link>
-                    ) : null}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-          <Pagination
-            basePath="/apps"
-            currentParams={sp}
-            total={total}
-            page={page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                    )
+                  })}
+                />
+              </div>
+              <Pagination
+                basePath="/apps"
+                currentParams={sp}
+                total={total}
+                page={page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

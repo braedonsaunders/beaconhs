@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -56,8 +60,9 @@ const TASK_SORTS = ['order'] as const
 const PERSON_SORTS = ['person'] as const
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Title tasks · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_1b33d830e131f4', { value0: id.slice(0, 8) }) }
 }
 
 export default async function TitleTasksPage({
@@ -67,6 +72,8 @@ export default async function TitleTasksPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -276,14 +283,18 @@ export default async function TitleTasksPage({
       <div className="space-y-5">
         <DetailHeader
           back={{ href: `/people/titles/${row.id}`, label: 'Back to title' }}
-          title={`${row.name} — Tasks`}
-          subtitle={`Manage the job-description task list and review who has signed off.`}
+          title={tGenerated('m_1ea49accc839a0', { value0: row.name })}
+          subtitle={tGenerated('m_1ae5360e5b04d9')}
         />
-        {errorMessage ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-            {errorMessage}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            errorMessage ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+                <GeneratedValue value={errorMessage} />
+              </p>
+            ) : null
+          }
+        />
         <TabNav
           basePath={basePath}
           currentParams={sp}
@@ -298,365 +309,467 @@ export default async function TitleTasksPage({
           ]}
         />
 
-        {active === 'manage' ? (
-          <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <FileText size={16} />
-                  Tasks
-                  <Badge variant="secondary">{taskCount}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <TableToolbar>
-                  <SearchInput
-                    placeholder="Search tasks…"
-                    paramKey="taskQ"
-                    pageParamKey="taskPage"
-                  />
-                  <FilterChips
-                    basePath={basePath}
-                    currentParams={sp}
-                    paramKey="taskStatus"
-                    label="Status"
-                    defaultValue="active"
-                    pageParamKey="taskPage"
-                    options={[
-                      { value: 'active', label: 'Active' },
-                      { value: 'archived', label: 'Archived' },
-                    ]}
-                    allLabel="All"
-                  />
-                </TableToolbar>
-                {tasks.length === 0 ? (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {taskParams.q
-                      ? 'No tasks match your search.'
-                      : 'No tasks. Add one with the form on the right.'}
-                  </p>
-                ) : (
-                  <ol className="space-y-2">
-                    {tasks.map((t, i) => {
-                      const isEditing = !t.deletedAt && editing?.id === t.id
-                      const ackCount = ackCountByTask.get(t.id) ?? 0
-                      const position = (taskParams.page - 1) * taskParams.perPage + i
-                      return (
-                        <li
-                          key={t.id}
-                          className="flex items-start gap-3 rounded border border-slate-200 px-3 py-2 dark:border-slate-800"
-                        >
-                          <div className="flex shrink-0 flex-col items-center gap-1 pt-1">
-                            <form action={reorderTitleTask}>
-                              <input type="hidden" name="id" value={t.id} />
-                              <input type="hidden" name="direction" value="up" />
-                              <Button
-                                type="submit"
-                                size="sm"
-                                variant="ghost"
-                                disabled={
-                                  Boolean(t.deletedAt) || Boolean(taskParams.q) || position === 0
-                                }
-                                className="h-6 w-6 p-0"
-                              >
-                                <ArrowUp size={12} />
-                              </Button>
-                            </form>
-                            <span className="text-xs font-medium text-slate-400">
-                              {position + 1}
-                            </span>
-                            <form action={reorderTitleTask}>
-                              <input type="hidden" name="id" value={t.id} />
-                              <input type="hidden" name="direction" value="down" />
-                              <Button
-                                type="submit"
-                                size="sm"
-                                variant="ghost"
-                                disabled={
-                                  Boolean(t.deletedAt) ||
-                                  Boolean(taskParams.q) ||
-                                  position >= taskCount - 1
-                                }
-                                className="h-6 w-6 p-0"
-                              >
-                                <ArrowDown size={12} />
-                              </Button>
-                            </form>
-                          </div>
-                          {isEditing ? (
-                            <form action={updateTitleTask} className="flex-1 space-y-2">
-                              <input type="hidden" name="id" value={t.id} />
-                              <Input
-                                name="task"
-                                defaultValue={t.task}
-                                placeholder="Task statement"
-                              />
-                              <Textarea
-                                name="description"
-                                rows={2}
-                                defaultValue={t.description ?? ''}
-                                placeholder="Optional supporting detail"
-                              />
-                              <div className="flex gap-2">
-                                <Button type="submit" size="sm">
-                                  Save
-                                </Button>
-                                <Link href={closeEditHref as never}>
-                                  <Button type="button" size="sm" variant="outline">
-                                    Cancel
-                                  </Button>
-                                </Link>
-                              </div>
-                            </form>
-                          ) : (
-                            <div className="min-w-0 flex-1">
-                              <div className="font-medium text-slate-900 dark:text-slate-100">
-                                {t.task}
-                              </div>
-                              {t.description ? (
-                                <div className="text-xs text-slate-500 dark:text-slate-400">
-                                  {t.description}
-                                </div>
-                              ) : null}
-                              <div className="mt-1 text-xs text-slate-400">
-                                {ackCount}/{assignmentCount} acknowledged
-                              </div>
-                            </div>
-                          )}
-                          <div className="flex shrink-0 gap-1">
-                            {t.deletedAt ? (
-                              <form action={restoreTitleTask}>
-                                <input type="hidden" name="id" value={t.id} />
-                                <Button type="submit" size="sm" variant="outline">
-                                  Restore
-                                </Button>
-                              </form>
-                            ) : (
-                              <>
-                                <Link href={mergeHref(basePath, sp, { edit: t.id }) as never}>
-                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
-                                    <Pencil size={12} />
-                                  </Button>
-                                </Link>
-                                <form action={archiveTitleTask}>
-                                  <input type="hidden" name="id" value={t.id} />
-                                  <Button
-                                    type="submit"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+        <GeneratedValue
+          value={
+            active === 'manage' ? (
+              <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <FileText size={16} />
+                      <GeneratedText id="m_188947cc3ae6ae" />
+                      <Badge variant="secondary">
+                        <GeneratedValue value={taskCount} />
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <TableToolbar>
+                      <SearchInput
+                        placeholder={tGenerated('m_1624adb342c906')}
+                        paramKey="taskQ"
+                        pageParamKey="taskPage"
+                      />
+                      <FilterChips
+                        basePath={basePath}
+                        currentParams={sp}
+                        paramKey="taskStatus"
+                        label={tGenerated('m_0b9da892d6faf0')}
+                        defaultValue="active"
+                        pageParamKey="taskPage"
+                        options={[
+                          { value: 'active', label: 'Active' },
+                          { value: 'archived', label: 'Archived' },
+                        ]}
+                        allLabel="All"
+                      />
+                    </TableToolbar>
+                    <GeneratedValue
+                      value={
+                        tasks.length === 0 ? (
+                          <p className="text-sm text-slate-500 dark:text-slate-400">
+                            <GeneratedValue
+                              value={
+                                taskParams.q ? (
+                                  <GeneratedText id="m_1eadf9fc611f2c" />
+                                ) : (
+                                  <GeneratedText id="m_1ddd75c47bd5f6" />
+                                )
+                              }
+                            />
+                          </p>
+                        ) : (
+                          <ol className="space-y-2">
+                            <GeneratedValue
+                              value={tasks.map((t, i) => {
+                                const isEditing = !t.deletedAt && editing?.id === t.id
+                                const ackCount = ackCountByTask.get(t.id) ?? 0
+                                const position = (taskParams.page - 1) * taskParams.perPage + i
+                                return (
+                                  <li
+                                    key={t.id}
+                                    className="flex items-start gap-3 rounded border border-slate-200 px-3 py-2 dark:border-slate-800"
                                   >
-                                    <Archive size={12} />
-                                  </Button>
-                                </form>
-                              </>
-                            )}
-                          </div>
-                        </li>
-                      )
-                    })}
-                  </ol>
-                )}
-                <Pagination
-                  basePath={basePath}
-                  currentParams={sp}
-                  total={filteredTaskCount}
-                  page={taskParams.page}
-                  perPage={taskParams.perPage}
-                  pageParamKey="taskPage"
-                />
-              </CardContent>
-            </Card>
+                                    <div className="flex shrink-0 flex-col items-center gap-1 pt-1">
+                                      <form action={reorderTitleTask}>
+                                        <input type="hidden" name="id" value={t.id} />
+                                        <input type="hidden" name="direction" value="up" />
+                                        <Button
+                                          type="submit"
+                                          size="sm"
+                                          variant="ghost"
+                                          disabled={
+                                            Boolean(t.deletedAt) ||
+                                            Boolean(taskParams.q) ||
+                                            position === 0
+                                          }
+                                          className="h-6 w-6 p-0"
+                                        >
+                                          <ArrowUp size={12} />
+                                        </Button>
+                                      </form>
+                                      <span className="text-xs font-medium text-slate-400">
+                                        <GeneratedValue value={position + 1} />
+                                      </span>
+                                      <form action={reorderTitleTask}>
+                                        <input type="hidden" name="id" value={t.id} />
+                                        <input type="hidden" name="direction" value="down" />
+                                        <Button
+                                          type="submit"
+                                          size="sm"
+                                          variant="ghost"
+                                          disabled={
+                                            Boolean(t.deletedAt) ||
+                                            Boolean(taskParams.q) ||
+                                            position >= taskCount - 1
+                                          }
+                                          className="h-6 w-6 p-0"
+                                        >
+                                          <ArrowDown size={12} />
+                                        </Button>
+                                      </form>
+                                    </div>
+                                    <GeneratedValue
+                                      value={
+                                        isEditing ? (
+                                          <form
+                                            action={updateTitleTask}
+                                            className="flex-1 space-y-2"
+                                          >
+                                            <input type="hidden" name="id" value={t.id} />
+                                            <Input
+                                              name="task"
+                                              defaultValue={t.task}
+                                              placeholder={tGenerated('m_1ca942def5ad3c')}
+                                            />
+                                            <Textarea
+                                              name="description"
+                                              rows={2}
+                                              defaultValue={t.description ?? ''}
+                                              placeholder={tGenerated('m_024a791515a658')}
+                                            />
+                                            <div className="flex gap-2">
+                                              <Button type="submit" size="sm">
+                                                <GeneratedText id="m_19e6bff894c3c7" />
+                                              </Button>
+                                              <Link href={closeEditHref as never}>
+                                                <Button type="button" size="sm" variant="outline">
+                                                  <GeneratedText id="m_112e2e8ecda428" />
+                                                </Button>
+                                              </Link>
+                                            </div>
+                                          </form>
+                                        ) : (
+                                          <div className="min-w-0 flex-1">
+                                            <div className="font-medium text-slate-900 dark:text-slate-100">
+                                              {t.task}
+                                            </div>
+                                            {t.description ? (
+                                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                                {t.description}
+                                              </div>
+                                            ) : null}
+                                            <div className="mt-1 text-xs text-slate-400">
+                                              {ackCount}/{assignmentCount}{' '}
+                                              <GeneratedText id="m_1ceb0ab315f62b" />
+                                            </div>
+                                          </div>
+                                        )
+                                      }
+                                    />
+                                    <div className="flex shrink-0 gap-1">
+                                      <GeneratedValue
+                                        value={
+                                          t.deletedAt ? (
+                                            <form action={restoreTitleTask}>
+                                              <input type="hidden" name="id" value={t.id} />
+                                              <Button type="submit" size="sm" variant="outline">
+                                                <GeneratedText id="m_19500e41842c99" />
+                                              </Button>
+                                            </form>
+                                          ) : (
+                                            <>
+                                              <Link
+                                                href={
+                                                  mergeHref(basePath, sp, { edit: t.id }) as never
+                                                }
+                                              >
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="h-7 w-7 p-0"
+                                                >
+                                                  <Pencil size={12} />
+                                                </Button>
+                                              </Link>
+                                              <form action={archiveTitleTask}>
+                                                <input type="hidden" name="id" value={t.id} />
+                                                <Button
+                                                  type="submit"
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                                                >
+                                                  <Archive size={12} />
+                                                </Button>
+                                              </form>
+                                            </>
+                                          )
+                                        }
+                                      />
+                                    </div>
+                                  </li>
+                                )
+                              })}
+                            />
+                          </ol>
+                        )
+                      }
+                    />
+                    <Pagination
+                      basePath={basePath}
+                      currentParams={sp}
+                      total={filteredTaskCount}
+                      page={taskParams.page}
+                      perPage={taskParams.perPage}
+                      pageParamKey="taskPage"
+                    />
+                  </CardContent>
+                </Card>
 
-            {taskStatus === 'active' ? (
+                <GeneratedValue
+                  value={
+                    taskStatus === 'active' ? (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-base">
+                            <Plus size={14} />
+                            <GeneratedText id="m_02ac1cf154a4f9" />
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <form action={addTitleTask} className="space-y-3">
+                            <input type="hidden" name="titleId" value={row.id} />
+                            <div className="space-y-1.5">
+                              <Label htmlFor="task">
+                                <GeneratedText id="m_0655612f96394b" />
+                              </Label>
+                              <Input
+                                id="task"
+                                name="task"
+                                required
+                                placeholder={tGenerated('m_0fefc82a14af56')}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor="description">
+                                <GeneratedText id="m_1c8deb557c95d3" />
+                              </Label>
+                              <Textarea
+                                id="description"
+                                name="description"
+                                rows={3}
+                                placeholder={tGenerated('m_13a2e91908d4d6')}
+                              />
+                            </div>
+                            <Button type="submit" className="w-full">
+                              <GeneratedText id="m_02ac1cf154a4f9" />
+                            </Button>
+                          </form>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">
+                            <GeneratedText id="m_1daa7e8c4bf33e" />
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-slate-500 dark:text-slate-400">
+                            <GeneratedText id="m_099ade4cc913ae" />
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )
+                  }
+                />
+              </div>
+            ) : null
+          }
+        />
+
+        <GeneratedValue
+          value={
+            active === 'matrix' ? (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Plus size={14} />
-                    Add task
+                  <CardTitle className="text-base">
+                    <GeneratedText id="m_1295c888318f43" />
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <form action={addTitleTask} className="space-y-3">
-                    <input type="hidden" name="titleId" value={row.id} />
-                    <div className="space-y-1.5">
-                      <Label htmlFor="task">Task *</Label>
-                      <Input
-                        id="task"
-                        name="task"
-                        required
-                        placeholder="e.g. Perform daily harness inspection"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="description">Detail (optional)</Label>
-                      <Textarea
-                        id="description"
-                        name="description"
-                        rows={3}
-                        placeholder="Anything the worker should know to perform the task safely."
-                      />
-                    </div>
-                    <Button type="submit" className="w-full">
-                      Add task
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Archived task history</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Restore a task from the list before editing it or collecting new
-                    acknowledgements.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        ) : null}
-
-        {active === 'matrix' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Acknowledgement matrix</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <TableToolbar>
-                <SearchInput placeholder="Search tasks…" paramKey="taskQ" pageParamKey="taskPage" />
-                <SearchInput
-                  placeholder="Search people…"
-                  paramKey="personQ"
-                  pageParamKey="personPage"
-                />
-              </TableToolbar>
-              {assignments.length === 0 || tasks.length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  {assignmentCount === 0
-                    ? 'No one is assigned to this title.'
-                    : taskCount === 0
-                      ? 'No tasks are defined.'
-                      : 'No matrix rows match these searches.'}
-                </p>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-left dark:border-slate-800">
-                        <th className="sticky left-0 z-10 bg-white px-2 py-2 font-semibold text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-                          Person
-                        </th>
-                        {tasks.map((t, i) => (
-                          <th
-                            key={t.id}
-                            className="px-1 py-2 text-center font-normal text-slate-500 dark:text-slate-400"
-                            title={t.task}
-                          >
-                            <div className="rotate-180 text-[10px] [writing-mode:vertical-rl]">
-                              {(taskParams.page - 1) * taskParams.perPage + i + 1}.{' '}
-                              {t.task.slice(0, 40)}
-                            </div>
-                          </th>
-                        ))}
-                        <th className="px-2 py-2 text-right font-semibold text-slate-500 dark:text-slate-400">
-                          Done
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {assignments.map(({ person }) => {
-                        const done = perPersonComplete.get(person.id) ?? 0
-                        return (
-                          <tr
-                            key={person.id}
-                            className="border-b border-slate-100 dark:border-slate-800"
-                          >
-                            <td className="sticky left-0 z-10 bg-white px-2 py-1 dark:bg-slate-900">
-                              <Link
-                                href={`/people/${person.id}?tab=title`}
-                                className="font-medium hover:underline"
-                              >
-                                {person.lastName}, {person.firstName}
-                              </Link>
-                            </td>
-                            {tasks.map((t) => {
-                              const ack = ackMap.get(`${t.id}|${person.id}`)
-                              return (
-                                <td key={t.id} className="px-1 py-1 text-center">
-                                  {ack ? (
-                                    <form action={revokeTitleTaskAck} className="inline-flex">
-                                      <input type="hidden" name="taskId" value={t.id} />
-                                      <input type="hidden" name="personId" value={person.id} />
-                                      <button
-                                        type="submit"
-                                        title={`Acknowledged ${formatDate(new Date(ack.acknowledgedAt), ctx.timezone, ctx.locale)} — click to revoke`}
-                                        className="text-emerald-600 hover:text-emerald-800"
-                                      >
-                                        <CheckSquare size={14} />
-                                      </button>
-                                    </form>
-                                  ) : (
-                                    <form action={acknowledgeTitleTask} className="inline-flex">
-                                      <input type="hidden" name="taskId" value={t.id} />
-                                      <input type="hidden" name="personId" value={person.id} />
-                                      <button
-                                        type="submit"
-                                        title="Mark acknowledged"
-                                        className="text-slate-300 hover:text-slate-500"
-                                      >
-                                        <Square size={14} />
-                                      </button>
-                                    </form>
-                                  )}
-                                </td>
+                <CardContent className="space-y-3">
+                  <TableToolbar>
+                    <SearchInput
+                      placeholder={tGenerated('m_1624adb342c906')}
+                      paramKey="taskQ"
+                      pageParamKey="taskPage"
+                    />
+                    <SearchInput
+                      placeholder={tGenerated('m_0b842b664b4f3b')}
+                      paramKey="personQ"
+                      pageParamKey="personPage"
+                    />
+                  </TableToolbar>
+                  <GeneratedValue
+                    value={
+                      assignments.length === 0 || tasks.length === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          <GeneratedValue
+                            value={
+                              assignmentCount === 0 ? (
+                                <GeneratedText id="m_139b59a2a65191" />
+                              ) : taskCount === 0 ? (
+                                <GeneratedText id="m_06053265f3665d" />
+                              ) : (
+                                <GeneratedText id="m_052d87c5061e52" />
                               )
-                            })}
-                            <td className="px-2 py-1 text-right">
-                              <Badge variant={done === taskCount ? 'success' : 'secondary'}>
-                                {done}/{taskCount}
-                              </Badge>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <div className="grid gap-2 lg:grid-cols-2">
-                <div>
-                  <p className="px-3 pt-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Task columns
-                  </p>
-                  <Pagination
-                    basePath={basePath}
-                    currentParams={sp}
-                    total={filteredTaskCount}
-                    page={taskParams.page}
-                    perPage={taskParams.perPage}
-                    pageParamKey="taskPage"
+                            }
+                          />
+                        </p>
+                      ) : (
+                        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-200 text-left dark:border-slate-800">
+                                <th className="sticky left-0 z-10 bg-white px-2 py-2 font-semibold text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                                  <GeneratedText id="m_12e926c9216094" />
+                                </th>
+                                <GeneratedValue
+                                  value={tasks.map((t, i) => (
+                                    <th
+                                      key={t.id}
+                                      className="px-1 py-2 text-center font-normal text-slate-500 dark:text-slate-400"
+                                      title={tGeneratedValue(t.task)}
+                                    >
+                                      <div className="rotate-180 text-[10px] [writing-mode:vertical-rl]">
+                                        <GeneratedValue
+                                          value={(taskParams.page - 1) * taskParams.perPage + i + 1}
+                                        />
+                                        .<GeneratedValue value={' '} />
+                                        <GeneratedValue value={t.task.slice(0, 40)} />
+                                      </div>
+                                    </th>
+                                  ))}
+                                />
+                                <th className="px-2 py-2 text-right font-semibold text-slate-500 dark:text-slate-400">
+                                  <GeneratedText id="m_00609f822e0571" />
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <GeneratedValue
+                                value={assignments.map(({ person }) => {
+                                  const done = perPersonComplete.get(person.id) ?? 0
+                                  return (
+                                    <tr
+                                      key={person.id}
+                                      className="border-b border-slate-100 dark:border-slate-800"
+                                    >
+                                      <td className="sticky left-0 z-10 bg-white px-2 py-1 dark:bg-slate-900">
+                                        <Link
+                                          href={`/people/${person.id}?tab=title`}
+                                          className="font-medium hover:underline"
+                                        >
+                                          <GeneratedValue value={person.lastName} />,{' '}
+                                          <GeneratedValue value={person.firstName} />
+                                        </Link>
+                                      </td>
+                                      <GeneratedValue
+                                        value={tasks.map((t) => {
+                                          const ack = ackMap.get(`${t.id}|${person.id}`)
+                                          return (
+                                            <td key={t.id} className="px-1 py-1 text-center">
+                                              {ack ? (
+                                                <form
+                                                  action={revokeTitleTaskAck}
+                                                  className="inline-flex"
+                                                >
+                                                  <input type="hidden" name="taskId" value={t.id} />
+                                                  <input
+                                                    type="hidden"
+                                                    name="personId"
+                                                    value={person.id}
+                                                  />
+                                                  <button
+                                                    type="submit"
+                                                    title={tGenerated('m_0c2c81c0acdb39', {
+                                                      value0: formatDate(
+                                                        new Date(ack.acknowledgedAt),
+                                                        ctx.timezone,
+                                                        ctx.locale,
+                                                      ),
+                                                    })}
+                                                    className="text-emerald-600 hover:text-emerald-800"
+                                                  >
+                                                    <CheckSquare size={14} />
+                                                  </button>
+                                                </form>
+                                              ) : (
+                                                <form
+                                                  action={acknowledgeTitleTask}
+                                                  className="inline-flex"
+                                                >
+                                                  <input type="hidden" name="taskId" value={t.id} />
+                                                  <input
+                                                    type="hidden"
+                                                    name="personId"
+                                                    value={person.id}
+                                                  />
+                                                  <button
+                                                    type="submit"
+                                                    title={tGenerated('m_01945eacf6c376')}
+                                                    className="text-slate-300 hover:text-slate-500"
+                                                  >
+                                                    <Square size={14} />
+                                                  </button>
+                                                </form>
+                                              )}
+                                            </td>
+                                          )
+                                        })}
+                                      />
+                                      <td className="px-2 py-1 text-right">
+                                        <Badge
+                                          variant={done === taskCount ? 'success' : 'secondary'}
+                                        >
+                                          <GeneratedValue value={done} />/
+                                          <GeneratedValue value={taskCount} />
+                                        </Badge>
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              />
+                            </tbody>
+                          </table>
+                        </div>
+                      )
+                    }
                   />
-                </div>
-                <div>
-                  <p className="px-3 pt-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-                    People rows
-                  </p>
-                  <Pagination
-                    basePath={basePath}
-                    currentParams={sp}
-                    total={filteredAssignmentCount}
-                    page={personParams.page}
-                    perPage={personParams.perPage}
-                    pageParamKey="personPage"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : null}
+                  <div className="grid gap-2 lg:grid-cols-2">
+                    <div>
+                      <p className="px-3 pt-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_04e9780a1f6d71" />
+                      </p>
+                      <Pagination
+                        basePath={basePath}
+                        currentParams={sp}
+                        total={filteredTaskCount}
+                        page={taskParams.page}
+                        perPage={taskParams.perPage}
+                        pageParamKey="taskPage"
+                      />
+                    </div>
+                    <div>
+                      <p className="px-3 pt-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_0cc8674fc9a782" />
+                      </p>
+                      <Pagination
+                        basePath={basePath}
+                        currentParams={sp}
+                        total={filteredAssignmentCount}
+                        page={personParams.page}
+                        perPage={personParams.perPage}
+                        pageParamKey="personPage"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null
+          }
+        />
       </div>
     </PageContainer>
   )

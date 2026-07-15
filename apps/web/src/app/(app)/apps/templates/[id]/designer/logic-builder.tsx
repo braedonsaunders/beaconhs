@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 import { Plus, Trash2 } from 'lucide-react'
 import { Button, Input, Select } from '@beaconhs/ui'
 import type { LogicRule } from '@beaconhs/forms-core'
@@ -93,84 +95,112 @@ export function LogicBuilder({
   }
 
   if (availableFields.length === 0) {
-    return <p className="text-xs text-slate-500">No other fields to reference.</p>
+    return (
+      <p className="text-xs text-slate-500">
+        <GeneratedText id="m_05d940858b4013" />
+      </p>
+    )
   }
 
   return (
     <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50/50 p-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-slate-600">Show when</span>
+        <span className="text-xs font-semibold text-slate-600">
+          <GeneratedText id="m_1909228b977073" />
+        </span>
         <Select
           className="h-7 w-24 text-xs"
           value={combinator}
           onChange={(e) => setCombinator(e.target.value as 'and' | 'or')}
         >
-          <option value="and">all of</option>
-          <option value="or">any of</option>
+          <option value="and">
+            <GeneratedText id="m_08e225d31bbb92" />
+          </option>
+          <option value="or">
+            <GeneratedText id="m_18655a7ba036e7" />
+          </option>
         </Select>
       </div>
-      {clauses.length === 0 ? (
-        <p className="text-xs text-slate-500">Always visible.</p>
-      ) : (
-        <ul className="space-y-1.5">
-          {clauses.map((c, i) => {
-            const clause = c as SimpleRule
-            const opMeta = OPS.find((o) => o.value === clause.op)
-            return (
-              <li key={i} className="flex items-center gap-1">
-                <Select
-                  className="h-8 flex-1 text-xs"
-                  value={clause.field}
-                  onChange={(e) => updateClause(i, { field: e.target.value })}
-                >
-                  {availableFields.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.label} ({f.id})
-                    </option>
-                  ))}
-                </Select>
-                <Select
-                  className="h-8 w-28 text-xs"
-                  value={clause.op}
-                  onChange={(e) => {
-                    const nextOp = e.target.value as SimpleRule['op']
-                    updateClause(i, {
-                      op: nextOp,
-                      value: OPS.find((o) => o.value === nextOp)?.takesValue
-                        ? coerceClauseValue(nextOp, clause.value)
-                        : undefined,
-                    })
-                  }}
-                >
-                  {OPS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
-                {opMeta?.takesValue ? (
-                  <Input
-                    className="h-8 flex-1 text-xs"
-                    value={displayClauseValue(clause.value)}
-                    onChange={(e) =>
-                      updateClause(i, { value: coerceClauseValue(clause.op, e.target.value) })
-                    }
-                  />
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => removeClause(i)}
-                  className="text-slate-400 hover:text-red-500"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      <GeneratedValue
+        value={
+          clauses.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              <GeneratedText id="m_1f4f0e0d31c570" />
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              <GeneratedValue
+                value={clauses.map((c, i) => {
+                  const clause = c as SimpleRule
+                  const opMeta = OPS.find((o) => o.value === clause.op)
+                  return (
+                    <li key={i} className="flex items-center gap-1">
+                      <Select
+                        className="h-8 flex-1 text-xs"
+                        value={clause.field}
+                        onChange={(e) => updateClause(i, { field: e.target.value })}
+                      >
+                        <GeneratedValue
+                          value={availableFields.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              <GeneratedValue value={f.label} /> (<GeneratedValue value={f.id} />)
+                            </option>
+                          ))}
+                        />
+                      </Select>
+                      <Select
+                        className="h-8 w-28 text-xs"
+                        value={clause.op}
+                        onChange={(e) => {
+                          const nextOp = e.target.value as SimpleRule['op']
+                          updateClause(i, {
+                            op: nextOp,
+                            value: OPS.find((o) => o.value === nextOp)?.takesValue
+                              ? coerceClauseValue(nextOp, clause.value)
+                              : undefined,
+                          })
+                        }}
+                      >
+                        <GeneratedValue
+                          value={OPS.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              <GeneratedValue value={o.label} />
+                            </option>
+                          ))}
+                        />
+                      </Select>
+                      <GeneratedValue
+                        value={
+                          opMeta?.takesValue ? (
+                            <Input
+                              className="h-8 flex-1 text-xs"
+                              value={displayClauseValue(clause.value)}
+                              onChange={(e) =>
+                                updateClause(i, {
+                                  value: coerceClauseValue(clause.op, e.target.value),
+                                })
+                              }
+                            />
+                          ) : null
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeClause(i)}
+                        className="text-slate-400 hover:text-red-500"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </li>
+                  )
+                })}
+              />
+            </ul>
+          )
+        }
+      />
       <Button size="sm" variant="outline" onClick={addClause}>
-        <Plus size={12} /> Add clause
+        <Plus size={12} /> <GeneratedText id="m_040c74bbbf4722" />
       </Button>
     </div>
   )

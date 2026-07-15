@@ -1,3 +1,5 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+import { GeneratedValue } from '@/i18n/generated'
 import { headers } from 'next/headers'
 import { getTranslations } from 'next-intl/server'
 import { eq } from 'drizzle-orm'
@@ -12,10 +14,14 @@ import { ProfileForm } from './_profile-form'
 import { PasswordSection } from './_password-section'
 import { SignatureSection } from './_signature-section'
 
-export const metadata = { title: 'Account' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1cc23a3583b150') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function AccountPage() {
+  const tGeneratedValue = await getGeneratedValueTranslations()
   const ctx = await requireRequestContext()
   const t = await getTranslations('Account')
 
@@ -64,12 +70,19 @@ export default async function AccountPage() {
   return (
     <PageContainer>
       <div className="mx-auto w-full max-w-2xl space-y-6">
-        <PageHeader title={t('title')} description={t('description')} />
+        <PageHeader
+          title={tGeneratedValue(t('title'))}
+          description={tGeneratedValue(t('description'))}
+        />
 
         <Card>
           <CardHeader>
-            <CardTitle>{t('profile')}</CardTitle>
-            <CardDescription>{t('profileDescription')}</CardDescription>
+            <CardTitle>
+              <GeneratedValue value={t('profile')} />
+            </CardTitle>
+            <CardDescription>
+              <GeneratedValue value={t('profileDescription')} />
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ProfileForm
@@ -86,8 +99,12 @@ export default async function AccountPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{t('signature')}</CardTitle>
-            <CardDescription>{t('signatureDescription')}</CardDescription>
+            <CardTitle>
+              <GeneratedValue value={t('signature')} />
+            </CardTitle>
+            <CardDescription>
+              <GeneratedValue value={t('signatureDescription')} />
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <SignatureSection currentUrl={signatureUrl} linked={ctx.personId != null} />
@@ -96,9 +113,13 @@ export default async function AccountPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{t('password')}</CardTitle>
+            <CardTitle>
+              <GeneratedValue value={t('password')} />
+            </CardTitle>
             <CardDescription>
-              {hasPassword ? t('passwordChangeDescription') : t('passwordAddDescription')}
+              <GeneratedValue
+                value={hasPassword ? t('passwordChangeDescription') : t('passwordAddDescription')}
+              />
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Drawers for the person detail page:
 //   • upload-person-file → FileUploader + kind picker + label, inserts a
 //     person_files row pointing at the uploaded attachment
@@ -49,6 +56,8 @@ function UploadFileDrawer({
   closeHref: string
   personId: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [kind, setKind] = useState<string>('resume')
   const [label, setLabel] = useState('')
@@ -63,13 +72,13 @@ function UploadFileDrawer({
     setKind('resume')
     setLabel('')
     setUploaded(null)
-    setError(null)
+    setError(tGeneratedValue(null))
   }
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     if (!uploaded) {
-      setError('Upload a file first.')
+      setError(tGenerated('m_0daf9e378e0646'))
       return
     }
     const labelTrimmed = label.trim() || uploaded.filename
@@ -81,13 +90,13 @@ function UploadFileDrawer({
         kind,
       })
       if (res.ok) {
-        toast.success('File uploaded')
+        toast.success(tGenerated('m_01f37a7f2f8620'))
         reset()
         router.push(closeHref)
         router.refresh()
       } else {
-        setError(res.error)
-        toast.error(res.error)
+        setError(tGeneratedValue(res.error))
+        toast.error(tGeneratedValue(res.error))
       }
     })
   }
@@ -96,8 +105,8 @@ function UploadFileDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title="Upload personal file"
-      description="Resumes, certifications, ID copies and other personal documents."
+      title={tGenerated('m_1da7b84128df4d')}
+      description={tGenerated('m_1630da2c6c36ea')}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -110,68 +119,90 @@ function UploadFileDrawer({
             }}
             disabled={pending}
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending || !uploaded}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            Save file
+            <GeneratedValue
+              value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            />
+            <GeneratedText id="m_1290fc0a8f85ce" />
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="kind">Kind</Label>
+          <Label htmlFor="kind">
+            <GeneratedText id="m_1e578efe1574cd" />
+          </Label>
           <Select id="kind" value={kind} onChange={(e) => setKind(e.currentTarget.value)}>
-            {FILE_KINDS.map((k) => (
-              <option key={k.value} value={k.value}>
-                {k.label}
-              </option>
-            ))}
+            <GeneratedValue
+              value={FILE_KINDS.map((k) => (
+                <option key={k.value} value={k.value}>
+                  <GeneratedValue value={k.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="label">Label</Label>
+          <Label htmlFor="label">
+            <GeneratedText id="m_1d088977412efb" />
+          </Label>
           <Input
             id="label"
             value={label}
             onChange={(e) => setLabel(e.currentTarget.value)}
-            placeholder={uploaded?.filename ?? 'e.g. 2024 forklift cert'}
+            placeholder={tGeneratedValue(uploaded?.filename ?? tGenerated('m_1198f8f081eeba'))}
           />
-          <p className="text-[11px] text-slate-500">Defaults to the filename if left blank.</p>
+          <p className="text-[11px] text-slate-500">
+            <GeneratedText id="m_1f63bb2da02c0a" />
+          </p>
         </div>
         <div className="space-y-1.5">
-          <Label>File</Label>
-          {uploaded ? (
-            <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
-              <span className="font-medium text-emerald-900">{uploaded.filename}</span>
-              <button
-                type="button"
-                onClick={() => setUploaded(null)}
-                className="text-xs font-medium text-emerald-800 hover:underline"
-              >
-                Replace
-              </button>
-            </div>
-          ) : (
-            <FileUploader
-              requestUploadAction={requestUpload}
-              finalizeUploadAction={finalizeUpload}
-              kind="document"
-              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.heic,.webp"
-              onUploaded={(f) =>
-                setUploaded({ attachmentId: f.attachmentId, filename: f.filename })
-              }
-              label="Drop file or click to choose"
-              hint="Up to 50 MB. PDF, Word, or image."
-            />
-          )}
+          <Label>
+            <GeneratedText id="m_102a42d098d1d2" />
+          </Label>
+          <GeneratedValue
+            value={
+              uploaded ? (
+                <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
+                  <span className="font-medium text-emerald-900">
+                    <GeneratedValue value={uploaded.filename} />
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setUploaded(null)}
+                    className="text-xs font-medium text-emerald-800 hover:underline"
+                  >
+                    <GeneratedText id="m_05b540acc16fd1" />
+                  </button>
+                </div>
+              ) : (
+                <FileUploader
+                  requestUploadAction={requestUpload}
+                  finalizeUploadAction={finalizeUpload}
+                  kind="document"
+                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.heic,.webp"
+                  onUploaded={(f) =>
+                    setUploaded({ attachmentId: f.attachmentId, filename: f.filename })
+                  }
+                  label={tGenerated('m_036e77b40339a7')}
+                  hint={tGenerated('m_0658b272b8f51b')}
+                />
+              )
+            }
+          />
         </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )

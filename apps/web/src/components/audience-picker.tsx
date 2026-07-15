@@ -1,5 +1,9 @@
 'use client'
 
+import { useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
+import { GeneratedText } from '@/i18n/generated'
+
 // Shared audience builder — the union of every per-module audience model.
 //
 // Generalised from the documents `new-assignment-form.tsx` builder (which only
@@ -100,6 +104,7 @@ export function AudiencePicker({
   pendingValue: string
   onPendingValueChange: (v: string) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const types = ALL_AUDIENCE_TYPES.filter((t) => allowedTypes.includes(t))
   const [resolvedOptions, setResolvedOptions] = useState(options)
 
@@ -164,18 +169,19 @@ export function AudiencePicker({
       <CardHeader>
         <CardTitle>
           <span className="flex items-center gap-2">
-            <Users size={16} /> Audience
+            <Users size={16} /> <GeneratedText id="m_1d6e21e94d2295" />
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Add one or more audience targets. The resolved people set is the union of every row;
-          duplicates are de-duped.
+          <GeneratedText id="m_0b49aaed2d4b1b" />
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[180px_1fr_auto] sm:items-end">
           <div className="space-y-1.5">
-            <Label htmlFor="aud-type">Type</Label>
+            <Label htmlFor="aud-type">
+              <GeneratedText id="m_074ba2f160c506" />
+            </Label>
             <Select
               id="aud-type"
               value={pendingType}
@@ -184,77 +190,95 @@ export function AudiencePicker({
                 onPendingValueChange('')
               }}
             >
-              {types.map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_LABEL[t]}
-                </option>
-              ))}
+              <GeneratedValue
+                value={types.map((t) => (
+                  <option key={t} value={t}>
+                    <GeneratedValue value={TYPE_LABEL[t]} />
+                  </option>
+                ))}
+              />
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="aud-value">Pick</Label>
-            {pendingType === 'everyone' ? (
-              <Input
-                id="aud-value"
-                value="All active people"
-                disabled
-                className="bg-slate-50 dark:bg-slate-900"
-              />
-            ) : (
-              <RemoteSearchSelect
-                id="aud-value"
-                lookup={lookupFor(pendingType)}
-                value={pendingValue}
-                onChange={onPendingValueChange}
-                onOptionChange={(option) => rememberOption(pendingType, option)}
-                initialOption={valueOptions().find((option) => option.value === pendingValue)}
-                excludedValues={value
-                  .filter((item) => item.type === pendingType)
-                  .map((item) => item.entityKey)}
-                placeholder="— pick —"
-                searchPlaceholder={`Search ${TYPE_LABEL[pendingType].toLowerCase()}…`}
-                sheetTitle={`Select a ${TYPE_LABEL[pendingType].toLowerCase()}`}
-                ariaLabel={`Pick a ${TYPE_LABEL[pendingType].toLowerCase()}`}
-                clearable
-                emptyLabel="— pick —"
-              />
-            )}
+            <Label htmlFor="aud-value">
+              <GeneratedText id="m_12ef8453778e3d" />
+            </Label>
+            <GeneratedValue
+              value={
+                pendingType === 'everyone' ? (
+                  <Input
+                    id="aud-value"
+                    value="All active people"
+                    disabled
+                    className="bg-slate-50 dark:bg-slate-900"
+                  />
+                ) : (
+                  <RemoteSearchSelect
+                    id="aud-value"
+                    lookup={lookupFor(pendingType)}
+                    value={pendingValue}
+                    onChange={onPendingValueChange}
+                    onOptionChange={(option) => rememberOption(pendingType, option)}
+                    initialOption={valueOptions().find((option) => option.value === pendingValue)}
+                    excludedValues={value
+                      .filter((item) => item.type === pendingType)
+                      .map((item) => item.entityKey)}
+                    placeholder={tGenerated('m_1e9cb0f49f978f')}
+                    searchPlaceholder={tGenerated('m_1f0a8c50aedb8c', {
+                      value0: TYPE_LABEL[pendingType].toLowerCase(),
+                    })}
+                    sheetTitle={`Select a ${TYPE_LABEL[pendingType].toLowerCase()}`}
+                    ariaLabel={`Pick a ${TYPE_LABEL[pendingType].toLowerCase()}`}
+                    clearable
+                    emptyLabel={tGenerated('m_1e9cb0f49f978f')}
+                  />
+                )
+              }
+            />
           </div>
           <Button type="button" variant="outline" onClick={add}>
-            <Plus size={14} /> Add
+            <Plus size={14} /> <GeneratedText id="m_16c8592e5020a4" />
           </Button>
         </div>
 
-        {value.length === 0 ? (
-          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-            No audience yet — add at least one above.
-          </div>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {value.map((a, idx) => (
-              <li
-                key={`${a.type}-${a.entityKey}-${idx}`}
-                className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
-              >
-                <span className="flex items-center gap-2">
-                  <Badge variant="secondary">{TYPE_LABEL[a.type]}</Badge>
-                  <span className="text-slate-900 dark:text-slate-100">
-                    {audienceLabel(a, resolvedOptions)}
-                  </span>
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => remove(idx)}
-                  aria-label="Remove"
-                >
-                  <Trash2 size={14} className="text-red-500" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <GeneratedValue
+          value={
+            value.length === 0 ? (
+              <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                <GeneratedText id="m_17cdd0f4ce49be" />
+              </div>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                <GeneratedValue
+                  value={value.map((a, idx) => (
+                    <li
+                      key={`${a.type}-${a.entityKey}-${idx}`}
+                      className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Badge variant="secondary">
+                          <GeneratedValue value={TYPE_LABEL[a.type]} />
+                        </Badge>
+                        <span className="text-slate-900 dark:text-slate-100">
+                          <GeneratedValue value={audienceLabel(a, resolvedOptions)} />
+                        </span>
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => remove(idx)}
+                        aria-label={tGenerated('m_1a9d8d971b1edb')}
+                      >
+                        <Trash2 size={14} className="text-red-500" />
+                      </Button>
+                    </li>
+                  ))}
+                />
+              </ul>
+            )
+          }
+        />
       </CardContent>
     </Card>
   )

@@ -1,3 +1,4 @@
+import { GeneratedValue } from '@/i18n/generated'
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import { headers } from 'next/headers'
@@ -5,15 +6,23 @@ import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages, getTimeZone } from 'next-intl/server'
 import { AppLinkProvider } from '@/components/app-link-provider'
 import { SplashScreen } from '@/components/brand-splash'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 
-export const metadata: Metadata = {
-  title: { default: 'BeaconHS', template: '%s · BeaconHS' },
-  description: 'Health & Safety platform',
-  // The manifest <link> is rendered manually in <head> below so it can carry
-  // crossorigin="use-credentials" — without it the browser fetches the manifest
-  // without the session cookie and the per-tenant branding can't be resolved.
-  applicationName: 'BeaconHS',
-  appleWebApp: { capable: true, statusBarStyle: 'default', title: 'BeaconHS' },
+export async function generateMetadata(): Promise<Metadata> {
+  const tGenerated = await getGeneratedTranslations()
+  return {
+    title: { default: 'BeaconHS', template: '%s · BeaconHS' },
+    description: tGenerated('m_1502d68cae153f'),
+    // The manifest <link> is rendered manually in <head> below so it can carry
+    // crossorigin="use-credentials" — without it the browser fetches the manifest
+    // without the session cookie and the per-tenant branding can't be resolved.
+    applicationName: 'BeaconHS',
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: 'default',
+      title: tGenerated('m_1721f79d9a7f66'),
+    },
+  }
 }
 
 export const viewport: Viewport = {
@@ -56,7 +65,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="h-full overflow-hidden bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
         <NextIntlClientProvider locale={locale} messages={messages} timeZone={timeZone}>
-          <AppLinkProvider>{children}</AppLinkProvider>
+          <AppLinkProvider>
+            <GeneratedValue value={children} />
+          </AppLinkProvider>
         </NextIntlClientProvider>
         <SplashScreen />
       </body>

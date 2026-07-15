@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // Live monitoring panel for a monitored-session response. Renders a ticking
 // countdown to the next check-in, a one-tap "I'm OK" check-in (with optional
 // GPS), end/cancel, and recent check-ins. Server-side, the worker scan escalates
@@ -107,78 +109,121 @@ export function MonitorPanel({
     <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          Live session monitoring
+          <GeneratedText id="m_0670dadb98c566" />
         </h3>
-        <Badge variant={badge.variant}>{badge.label}</Badge>
+        <Badge variant={badge.variant}>
+          <GeneratedValue value={badge.label} />
+        </Badge>
       </div>
 
-      {escalated ? (
-        <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
-          Check-in missed — supervisor and safety roles have been alerted.
-          {readOnly ? '' : ' A check-in below re-activates the session.'}
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          escalated ? (
+            <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+              <GeneratedText id="m_1c4908d99b29a3" />
+              <GeneratedValue value={readOnly ? '' : <GeneratedText id="m_155dde85c5eec6" />} />
+            </div>
+          ) : null
+        }
+      />
 
-      {live ? (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              {overdue ? 'Check-in overdue by' : 'Next check-in in'}
+      <GeneratedValue
+        value={
+          live ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  <GeneratedValue
+                    value={
+                      overdue ? (
+                        <GeneratedText id="m_1c06fd431a5e1c" />
+                      ) : (
+                        <GeneratedText id="m_114facd703ff51" />
+                      )
+                    }
+                  />
+                </div>
+                <div className={`font-mono text-2xl font-bold tabular-nums ${countdownColor}`}>
+                  <GeneratedValue value={remaining != null ? mmss(remaining) : '—'} />
+                </div>
+                <GeneratedValue
+                  value={
+                    intervalMinutes ? (
+                      <div className="text-xs text-slate-400">
+                        <GeneratedText id="m_19ab783c16e8b0" />{' '}
+                        <GeneratedValue value={intervalMinutes} />{' '}
+                        <GeneratedText id="m_083d1dd2c7e5fd" />
+                      </div>
+                    ) : null
+                  }
+                />
+              </div>
+              <GeneratedValue
+                value={
+                  !readOnly ? (
+                    <div className="flex items-center gap-2">
+                      <Button onClick={doCheckin} disabled={pending} size="lg">
+                        <GeneratedValue
+                          value={
+                            pending ? (
+                              <Loader2 size={16} className="mr-1.5 animate-spin" />
+                            ) : (
+                              <Check size={16} />
+                            )
+                          }
+                        />
+                        <GeneratedText id="m_07a89bd8cbf317" />
+                      </Button>
+                    </div>
+                  ) : null
+                }
+              />
             </div>
-            <div className={`font-mono text-2xl font-bold tabular-nums ${countdownColor}`}>
-              {remaining != null ? mmss(remaining) : '—'}
-            </div>
-            {intervalMinutes ? (
-              <div className="text-xs text-slate-400">every {intervalMinutes} min</div>
-            ) : null}
-          </div>
-          {!readOnly ? (
-            <div className="flex items-center gap-2">
-              <Button onClick={doCheckin} disabled={pending} size="lg">
-                {pending ? (
-                  <Loader2 size={16} className="mr-1.5 animate-spin" />
-                ) : (
-                  <Check size={16} />
-                )}
-                I&apos;m OK — check in
+          ) : (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_1e3528b0e0abf0" />{' '}
+              <GeneratedValue value={badge.label.toLowerCase()} />.
+            </p>
+          )
+        }
+      />
+
+      <GeneratedValue
+        value={
+          err ? (
+            <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+              <GeneratedValue value={err} />
+            </p>
+          ) : null
+        }
+      />
+
+      <GeneratedValue
+        value={
+          live && !readOnly ? (
+            <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => doClose(endSession)}
+                disabled={pending}
+              >
+                <Square size={13} /> <GeneratedText id="m_118e8191f82dea" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => doClose(cancelSession)}
+                disabled={pending}
+              >
+                <GeneratedText id="m_112e2e8ecda428" />
               </Button>
             </div>
-          ) : null}
-        </div>
-      ) : (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          This session is {badge.label.toLowerCase()}.
-        </p>
-      )}
+          ) : null
+        }
+      />
 
-      {err ? (
-        <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-          {err}
-        </p>
-      ) : null}
-
-      {live && !readOnly ? (
-        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => doClose(endSession)}
-            disabled={pending}
-          >
-            <Square size={13} /> End session
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => doClose(cancelSession)}
-            disabled={pending}
-          >
-            Cancel
-          </Button>
-        </div>
-      ) : null}
-
-      {history}
+      <GeneratedValue value={history} />
     </div>
   )
 }

@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 // Tenant-configurable risk model, shared across the Hazard Assessments module
 // (and anywhere else that scores risk). The single source of truth is the
 // tenant's saved `RiskMatrixConfig` — axis labels, per-cell score/label/colour —
@@ -164,7 +166,11 @@ export function RiskMatrixProvider({
   children: React.ReactNode
 }) {
   const value = useMemo(() => normalizeMatrix(matrix), [matrix])
-  return <RiskMatrixContext.Provider value={value}>{children}</RiskMatrixContext.Provider>
+  return (
+    <RiskMatrixContext.Provider value={value}>
+      <GeneratedValue value={children} />
+    </RiskMatrixContext.Provider>
+  )
 }
 
 // --- Colour helpers --------------------------------------------------------
@@ -193,7 +199,8 @@ function readableTextColor(hex: string): string {
 function NotRated({ prefix }: { prefix?: string }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-500/10 ring-inset dark:bg-slate-800 dark:text-slate-400">
-      {prefix ? `${prefix} · ` : ''}Not rated
+      <GeneratedValue value={prefix ? `${prefix} · ` : ''} />
+      <GeneratedText id="m_13e61f4185333d" />
     </span>
   )
 }
@@ -216,10 +223,18 @@ function RiskChip({
         className="size-2 shrink-0 rounded-full ring-1 ring-black/10"
         style={{ background: color }}
       />
-      {prefix ? <span className="opacity-70">{prefix}</span> : null}
+      <GeneratedValue
+        value={
+          prefix ? (
+            <span className="opacity-70">
+              <GeneratedValue value={prefix} />
+            </span>
+          ) : null
+        }
+      />
       <span className="font-semibold tabular-nums">
-        {score}
-        {label ? ` · ${label}` : ''}
+        <GeneratedValue value={score} />
+        <GeneratedValue value={label ? ` · ${label}` : ''} />
       </span>
     </span>
   )
@@ -227,6 +242,7 @@ function RiskChip({
 
 /** Chip for a precomputed 1-based score (e.g. an aggregated "worst risk"). */
 export function RiskScoreChip({ score, prefix }: { score: number | null; prefix?: string }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const matrix = useRiskMatrix()
   if (score == null) return <NotRated prefix={prefix} />
   const cell = bandForScore(matrix, score)
@@ -234,7 +250,7 @@ export function RiskScoreChip({ score, prefix }: { score: number | null; prefix?
     <RiskChip
       color={cell?.color ?? '#94a3b8'}
       score={score}
-      label={cell?.label ?? ''}
+      label={tGeneratedValue(cell?.label ?? '')}
       prefix={prefix}
     />
   )
@@ -250,10 +266,18 @@ export function RiskScoreBadge({
   severity?: number | null
   prefix?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const matrix = useRiskMatrix()
   const cell = cellFor(matrix, likelihood, severity)
   if (!cell) return <NotRated prefix={prefix} />
-  return <RiskChip color={cell.color} score={cell.score} label={cell.label} prefix={prefix} />
+  return (
+    <RiskChip
+      color={cell.color}
+      score={cell.score}
+      label={tGeneratedValue(cell.label)}
+      prefix={prefix}
+    />
+  )
 }
 
 /** Pre-control → post-control residual indicator: two score chips + an arrow. */
@@ -304,6 +328,7 @@ export function RiskMatrixGrid({
   disabled?: boolean
   className?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const sev = matrix.axes.severity.values
   const lik = matrix.axes.likelihood.values
   const interactive = Boolean(onSelect)
@@ -318,62 +343,76 @@ export function RiskMatrixGrid({
       >
         {/* Header row: severity S1…Sn */}
         <div />
-        {sev.map((label, i) => (
-          <div
-            key={`sev-${i}`}
-            title={label}
-            className="truncate px-1 pb-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400"
-          >
-            S{i + 1}
-          </div>
-        ))}
-        {/* Body rows */}
-        {rows.map((li) => (
-          <Fragment key={`row-${li}`}>
+        <GeneratedValue
+          value={sev.map((label, i) => (
             <div
-              title={lik[li]}
-              className="flex items-center justify-end pr-1.5 text-[10px] font-medium text-slate-500 dark:text-slate-400"
+              key={`sev-${i}`}
+              title={tGeneratedValue(label)}
+              className="truncate px-1 pb-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400"
             >
-              L{li + 1}
+              <GeneratedText id="m_16a715c725d406" />
+              <GeneratedValue value={i + 1} />
             </div>
-            {sev.map((_, si) => {
-              const cell = matrix.cells[`${si}:${li}`]
-              const color = cell?.color ?? '#94a3b8'
-              const isSelected = selected?.severity === si + 1 && selected?.likelihood === li + 1
-              const shared =
-                'flex h-11 items-center justify-center rounded-sm text-xs font-semibold transition sm:h-9 sm:text-[11px]'
-              const style = { background: color, color: readableTextColor(color) }
-              const title = `${lik[li]} × ${sev[si]} = ${cell?.score ?? ''}${cell?.label ? ` · ${cell.label}` : ''}`
+          ))}
+        />
+        {/* Body rows */}
+        <GeneratedValue
+          value={rows.map((li) => (
+            <Fragment key={`row-${li}`}>
+              <div
+                title={tGeneratedValue(lik[li])}
+                className="flex items-center justify-end pr-1.5 text-[10px] font-medium text-slate-500 dark:text-slate-400"
+              >
+                <GeneratedText id="m_182c889ab6dd96" />
+                <GeneratedValue value={li + 1} />
+              </div>
+              <GeneratedValue
+                value={sev.map((_, si) => {
+                  const cell = matrix.cells[`${si}:${li}`]
+                  const color = cell?.color ?? '#94a3b8'
+                  const isSelected =
+                    selected?.severity === si + 1 && selected?.likelihood === li + 1
+                  const shared =
+                    'flex h-11 items-center justify-center rounded-sm text-xs font-semibold transition sm:h-9 sm:text-[11px]'
+                  const style = { background: color, color: readableTextColor(color) }
+                  const title = `${lik[li]} × ${sev[si]} = ${cell?.score ?? ''}${cell?.label ? ` · ${cell.label}` : ''}`
 
-              if (!interactive) {
-                return (
-                  <div key={`c-${si}-${li}`} title={title} className={shared} style={style}>
-                    {cell?.score ?? ''}
-                  </div>
-                )
-              }
-              return (
-                <button
-                  key={`c-${si}-${li}`}
-                  type="button"
-                  disabled={disabled}
-                  title={title}
-                  aria-pressed={isSelected}
-                  onClick={() => onSelect?.(li + 1, si + 1)}
-                  className={cn(
-                    shared,
-                    'hover:brightness-110 active:brightness-95',
-                    isSelected && 'font-bold ring-2 ring-slate-900 ring-inset dark:ring-white',
-                    disabled && 'cursor-not-allowed opacity-60',
-                  )}
-                  style={style}
-                >
-                  {cell?.score ?? ''}
-                </button>
-              )
-            })}
-          </Fragment>
-        ))}
+                  if (!interactive) {
+                    return (
+                      <div
+                        key={`c-${si}-${li}`}
+                        title={tGeneratedValue(title)}
+                        className={shared}
+                        style={style}
+                      >
+                        <GeneratedValue value={cell?.score ?? ''} />
+                      </div>
+                    )
+                  }
+                  return (
+                    <button
+                      key={`c-${si}-${li}`}
+                      type="button"
+                      disabled={disabled}
+                      title={tGeneratedValue(title)}
+                      aria-pressed={isSelected}
+                      onClick={() => onSelect?.(li + 1, si + 1)}
+                      className={cn(
+                        shared,
+                        'hover:brightness-110 active:brightness-95',
+                        isSelected && 'font-bold ring-2 ring-slate-900 ring-inset dark:ring-white',
+                        disabled && 'cursor-not-allowed opacity-60',
+                      )}
+                      style={style}
+                    >
+                      <GeneratedValue value={cell?.score ?? ''} />
+                    </button>
+                  )
+                })}
+              />
+            </Fragment>
+          ))}
+        />
       </div>
     </div>
   )
@@ -426,7 +465,7 @@ export function RiskMatrixField({
     <fieldset className="space-y-1.5" disabled={disabled}>
       <div className="flex items-center justify-between gap-2">
         <legend className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          {label}
+          <GeneratedValue value={label} />
         </legend>
         <RiskScoreBadge likelihood={likelihood} severity={severity} />
       </div>
@@ -442,13 +481,18 @@ export function RiskMatrixField({
         }}
       />
       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-        {likLabel && sevLabel ? (
-          <>
-            {likLabel} likelihood × {sevLabel} severity. Select the cell again to clear.
-          </>
-        ) : (
-          'Select the cell where likelihood meets severity.'
-        )}
+        <GeneratedValue
+          value={
+            likLabel && sevLabel ? (
+              <>
+                <GeneratedValue value={likLabel} /> <GeneratedText id="m_033fc0f555f2d1" />{' '}
+                <GeneratedValue value={sevLabel} /> <GeneratedText id="m_013e7516f5d2ac" />
+              </>
+            ) : (
+              <GeneratedText id="m_1a4be3846f6837" />
+            )
+          }
+        />
       </p>
     </fieldset>
   )

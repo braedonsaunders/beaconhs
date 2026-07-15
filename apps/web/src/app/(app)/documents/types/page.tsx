@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { revalidatePath } from 'next/cache'
 import {
   and,
@@ -46,7 +49,10 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { DocumentsSubNav } from '../_components/documents-sub-nav'
 
-export const metadata = { title: 'Document types' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_16fcb25a72b387') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/documents/types'
@@ -138,6 +144,8 @@ export default async function DocumentTypesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const usageParam = pickString(sp.usage)
   const usageFilter = usageParam === 'used' || usageParam === 'unused' ? usageParam : undefined
@@ -215,17 +223,17 @@ export default async function DocumentTypesPage({
       header={
         <>
           <PageHeader
-            title="Document types"
-            description="Admin-managed classification for documents. Each type can have a name, key, colour and description."
+            title={tGenerated('m_16fcb25a72b387')}
+            description={tGenerated('m_008a6a05407473')}
           />
           <DocumentsSubNav active="types" />
           <TableToolbar>
-            <SearchInput placeholder="Search name, key, description…" />
+            <SearchInput placeholder={tGenerated('m_0221566cc10150')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="usage"
-              label="Usage"
+              label={tGenerated('m_0ae3b4ff7213f7')}
               options={[
                 { value: 'used', label: 'Used', count: usedCount },
                 { value: 'unused', label: 'Unused', count: unusedCount },
@@ -238,143 +246,188 @@ export default async function DocumentTypesPage({
       <div className="space-y-5">
         <Card>
           <CardHeader>
-            <CardTitle>Create a new type</CardTitle>
+            <CardTitle>
+              <GeneratedText id="m_06607bad805033" />
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <form action={createType} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="name">Name *</Label>
-                <Input id="name" name="name" required placeholder="e.g. Policy" />
+                <Label htmlFor="name">
+                  <GeneratedText id="m_1a9978900838e6" />
+                </Label>
+                <Input
+                  id="name"
+                  name="name"
+                  required
+                  placeholder={tGenerated('m_1a0d3e771cb437')}
+                />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="key">Key</Label>
-                <Input id="key" name="key" placeholder="auto-generated from name" />
+                <Label htmlFor="key">
+                  <GeneratedText id="m_169ff65a3cfc14" />
+                </Label>
+                <Input id="key" name="key" placeholder={tGenerated('m_1bde8095d3803d')} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="color">Colour</Label>
+                <Label htmlFor="color">
+                  <GeneratedText id="m_1242677f454516" />
+                </Label>
                 <Input id="color" name="color" type="color" defaultValue="#0f766e" />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">
+                  <GeneratedText id="m_14d923495cf14c" />
+                </Label>
                 <Textarea id="description" name="description" rows={2} />
               </div>
               <div className="flex justify-end sm:col-span-2">
-                <Button type="submit">Add type</Button>
+                <Button type="submit">
+                  <GeneratedText id="m_0e7e7c12ed8560" />
+                </Button>
               </div>
             </form>
           </CardContent>
         </Card>
 
-        {rows.length === 0 ? (
-          <EmptyState
-            icon={<Tag size={32} />}
-            title={!params.q && !usageFilter ? 'No document types' : 'No matching document types'}
-            description={
-              !params.q && !usageFilter
-                ? 'Add types like Policy, Procedure, SDS, Manual so authors can classify documents consistently.'
-                : 'Adjust the search or usage filter.'
-            }
-          />
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Existing types ({total})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <SortableTh
-                        basePath={BASE}
-                        currentParams={sp}
-                        dir={params.dir}
-                        column="name"
-                        active={params.sort === 'name'}
-                      >
-                        Name
-                      </SortableTh>
-                      <SortableTh
-                        basePath={BASE}
-                        currentParams={sp}
-                        dir={params.dir}
-                        column="key"
-                        active={params.sort === 'key'}
-                      >
-                        Key
-                      </SortableTh>
-                      <TableHead>Colour</TableHead>
-                      <TableHead>Used by</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((t) => {
-                      const usage = usageMap[t.id] ?? 0
-                      return (
-                        <TableRow key={t.id}>
-                          <TableCell>
-                            <form
-                              action={updateType}
-                              className="flex flex-col gap-2 sm:flex-row sm:items-center"
-                            >
-                              <input type="hidden" name="id" value={t.id} />
-                              <Input
-                                name="name"
-                                defaultValue={t.name}
-                                className="max-w-xs min-w-0"
-                              />
-                              <Input
-                                name="description"
-                                defaultValue={t.description ?? ''}
-                                placeholder="description"
-                                className="max-w-md min-w-0"
-                              />
-                              <Input
-                                name="color"
-                                type="color"
-                                defaultValue={t.color ?? '#0f766e'}
-                                className="h-8 w-12 shrink-0 p-0"
-                              />
-                              <Button type="submit" size="sm" variant="outline">
-                                Save
-                              </Button>
-                            </form>
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">{t.key}</TableCell>
-                          <TableCell>
-                            <span
-                              className="inline-block h-4 w-8 rounded border border-slate-200 align-middle"
-                              style={{ background: t.color ?? '#0f766e' }}
-                            />
-                          </TableCell>
-                          <TableCell className="text-slate-600">
-                            <Badge variant={usage > 0 ? 'secondary' : 'outline'}>
-                              {usage} {usage === 1 ? 'document' : 'documents'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <form action={deleteType} className="inline">
-                              <input type="hidden" name="id" value={t.id} />
-                              <Button
-                                type="submit"
-                                variant="ghost"
-                                size="sm"
-                                aria-label="Delete type"
-                              >
-                                <Trash2 size={14} className="text-red-500" />
-                              </Button>
-                            </form>
-                          </TableCell>
+        <GeneratedValue
+          value={
+            rows.length === 0 ? (
+              <EmptyState
+                icon={<Tag size={32} />}
+                title={tGeneratedValue(
+                  !params.q && !usageFilter
+                    ? tGenerated('m_1db2b978cbe389')
+                    : tGenerated('m_19a7102421fb99'),
+                )}
+                description={tGeneratedValue(
+                  !params.q && !usageFilter
+                    ? tGenerated('m_0270d26ad980b0')
+                    : tGenerated('m_129e288f81c0c1'),
+                )}
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    <GeneratedText id="m_1c4a1719773bee" />
+                    <GeneratedValue value={total} />)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <SortableTh
+                            basePath={BASE}
+                            currentParams={sp}
+                            dir={params.dir}
+                            column="name"
+                            active={params.sort === 'name'}
+                          >
+                            <GeneratedText id="m_02b18d5c7f6f2d" />
+                          </SortableTh>
+                          <SortableTh
+                            basePath={BASE}
+                            currentParams={sp}
+                            dir={params.dir}
+                            column="key"
+                            active={params.sort === 'key'}
+                          >
+                            <GeneratedText id="m_169ff65a3cfc14" />
+                          </SortableTh>
+                          <TableHead>
+                            <GeneratedText id="m_1242677f454516" />
+                          </TableHead>
+                          <TableHead>
+                            <GeneratedText id="m_0b47933c7ed907" />
+                          </TableHead>
+                          <TableHead></TableHead>
                         </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                      </TableHeader>
+                      <TableBody>
+                        <GeneratedValue
+                          value={rows.map((t) => {
+                            const usage = usageMap[t.id] ?? 0
+                            return (
+                              <TableRow key={t.id}>
+                                <TableCell>
+                                  <form
+                                    action={updateType}
+                                    className="flex flex-col gap-2 sm:flex-row sm:items-center"
+                                  >
+                                    <input type="hidden" name="id" value={t.id} />
+                                    <Input
+                                      name="name"
+                                      defaultValue={t.name}
+                                      className="max-w-xs min-w-0"
+                                    />
+                                    <Input
+                                      name="description"
+                                      defaultValue={t.description ?? ''}
+                                      placeholder={tGenerated('m_072f698e1dc2a6')}
+                                      className="max-w-md min-w-0"
+                                    />
+                                    <Input
+                                      name="color"
+                                      type="color"
+                                      defaultValue={t.color ?? '#0f766e'}
+                                      className="h-8 w-12 shrink-0 p-0"
+                                    />
+                                    <Button type="submit" size="sm" variant="outline">
+                                      <GeneratedText id="m_19e6bff894c3c7" />
+                                    </Button>
+                                  </form>
+                                </TableCell>
+                                <TableCell className="font-mono text-xs">
+                                  <GeneratedValue value={t.key} />
+                                </TableCell>
+                                <TableCell>
+                                  <span
+                                    className="inline-block h-4 w-8 rounded border border-slate-200 align-middle"
+                                    style={{ background: t.color ?? '#0f766e' }}
+                                  />
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  <Badge variant={usage > 0 ? 'secondary' : 'outline'}>
+                                    <GeneratedValue value={usage} />{' '}
+                                    <GeneratedValue
+                                      value={
+                                        usage === 1 ? (
+                                          <GeneratedText id="m_08927559ee23e3" />
+                                        ) : (
+                                          <GeneratedText id="m_0211a9acf0110a" />
+                                        )
+                                      }
+                                    />
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <form action={deleteType} className="inline">
+                                    <input type="hidden" name="id" value={t.id} />
+                                    <Button
+                                      type="submit"
+                                      variant="ghost"
+                                      size="sm"
+                                      aria-label={tGenerated('m_12fda1066d2e96')}
+                                    >
+                                      <Trash2 size={14} className="text-red-500" />
+                                    </Button>
+                                  </form>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        />
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          }
+        />
         <Pagination
           basePath={BASE}
           currentParams={sp}

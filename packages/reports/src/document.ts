@@ -77,6 +77,7 @@ export type ReportDocumentInput = {
   generatedAt: Date
   summary?: ReportSummaryItem[]
   groups: ReportGroup[]
+  translate?: (source: string) => string
 }
 
 /** Escape a string into a CSS `content:` literal. */
@@ -222,10 +223,11 @@ export function buildReportDocumentCss(
  *  buildReportDocumentCss() and buildReportPageCss() (browser preview passes
  *  both to Paged.js; the PDF shell puts them in <head>). */
 export function renderReportDocumentBodyHtml(input: ReportDocumentInput): string {
+  const translate = input.translate ?? ((source: string) => source)
   const summaryCells = (input.summary ?? [])
     .map(
       (s) => `<div class="sum">
-        <div class="sum-label">${escapeHtml(s.label)}</div>
+        <div class="sum-label">${escapeHtml(translate(s.label))}</div>
         <div class="sum-value">${escapeHtml(String(s.value))}</div>
       </div>`,
     )
@@ -235,12 +237,12 @@ export function renderReportDocumentBodyHtml(input: ReportDocumentInput): string
     .map((g) => {
       if (g.isEmpty || g.rows.length === 0) {
         return `<section class="group">
-          <h2>${escapeHtml(g.title)}</h2>
-          ${g.subtitle ? `<div class="subtitle">${escapeHtml(g.subtitle)}</div>` : ''}
-          <div class="empty">No data.</div>
+          <h2>${escapeHtml(translate(g.title))}</h2>
+          ${g.subtitle ? `<div class="subtitle">${escapeHtml(translate(g.subtitle))}</div>` : ''}
+          <div class="empty">${escapeHtml(translate('No data.'))}</div>
         </section>`
       }
-      const head = g.columns.map((c) => `<th>${escapeHtml(c)}</th>`).join('')
+      const head = g.columns.map((c) => `<th>${escapeHtml(translate(c))}</th>`).join('')
       const body = g.rows
         .map(
           (r) =>
@@ -253,8 +255,8 @@ export function renderReportDocumentBodyHtml(input: ReportDocumentInput): string
         )
         .join('')
       return `<section class="group">
-        <h2>${escapeHtml(g.title)}</h2>
-        ${g.subtitle ? `<div class="subtitle">${escapeHtml(g.subtitle)}</div>` : ''}
+        <h2>${escapeHtml(translate(g.title))}</h2>
+        ${g.subtitle ? `<div class="subtitle">${escapeHtml(translate(g.subtitle))}</div>` : ''}
         <table>
           <thead><tr>${head}</tr></thead>
           <tbody>${body}</tbody>
@@ -272,7 +274,7 @@ export function renderReportDocumentBodyHtml(input: ReportDocumentInput): string
     <div class="meta">
       <div><strong>${escapeHtml(input.tenantName)}</strong></div>
       <div>${escapeHtml(input.dateRangeLabel)}</div>
-      <div>Generated ${escapeHtml(input.generatedAt.toISOString().slice(0, 19).replace('T', ' '))}</div>
+      <div>${escapeHtml(translate('Generated'))} ${escapeHtml(input.generatedAt.toISOString().slice(0, 19).replace('T', ' '))}</div>
     </div>
   </header>
   ${summaryCells ? `<div class="summary">${summaryCells}</div>` : ''}

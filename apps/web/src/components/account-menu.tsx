@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 // Top-bar account menu: identity header, personal navigation, theme switch, and
 // sign-out — all in one portal-based Popover (mirrors TenantSwitcher/PlatformMenu).
 // Replaces the old inert "Account" label + standalone sign-out button.
@@ -37,6 +39,7 @@ export function AccountMenu({
   email: string
   isSuperAdmin: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const router = useRouter()
   const t = useTranslations('Shell')
   const common = useTranslations('Common')
@@ -55,15 +58,17 @@ export function AccountMenu({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label={t('accountMenu')}
+          aria-label={tGeneratedValue(t('accountMenu'))}
           aria-expanded={open}
           aria-haspopup="menu"
           className="flex shrink-0 items-center gap-2 rounded-md border border-transparent px-1.5 py-1 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
         >
           <span className="grid h-7 w-7 place-items-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
-            {initials}
+            <GeneratedValue value={initials} />
           </span>
-          <span className="hidden max-w-[10rem] truncate sm:inline">{label}</span>
+          <span className="hidden max-w-[10rem] truncate sm:inline">
+            <GeneratedValue value={label} />
+          </span>
           <ChevronDown
             size={14}
             className="hidden shrink-0 text-slate-400 sm:inline dark:text-slate-500"
@@ -73,33 +78,43 @@ export function AccountMenu({
     >
       <div className="flex items-center gap-3 border-b border-slate-100 px-3 py-3 dark:border-slate-800">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-200 text-sm font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
-          {initials}
+          <GeneratedValue value={initials} />
         </span>
         <span className="flex min-w-0 flex-col">
           <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-            {label}
+            <GeneratedValue value={label} />
           </span>
-          {email ? (
-            <span className="truncate text-xs text-slate-500 dark:text-slate-400">{email}</span>
-          ) : null}
+          <GeneratedValue
+            value={
+              email ? (
+                <span className="truncate text-xs text-slate-500 dark:text-slate-400">
+                  <GeneratedValue value={email} />
+                </span>
+              ) : null
+            }
+          />
         </span>
       </div>
 
-      {isSuperAdmin ? (
-        <div className="flex items-center gap-1.5 border-b border-slate-100 px-3 py-1.5 text-xs font-medium text-amber-700 dark:border-slate-800 dark:text-amber-300">
-          <ShieldCheck size={13} className="shrink-0" />
-          {t('superAdmin')}
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          isSuperAdmin ? (
+            <div className="flex items-center gap-1.5 border-b border-slate-100 px-3 py-1.5 text-xs font-medium text-amber-700 dark:border-slate-800 dark:text-amber-300">
+              <ShieldCheck size={13} className="shrink-0" />
+              <GeneratedValue value={t('superAdmin')} />
+            </div>
+          ) : null
+        }
+      />
 
       <nav className="py-1" role="menu">
         <Link href="/account" role="menuitem" onClick={() => setOpen(false)} className={itemClass}>
           <Settings size={15} className="text-slate-500 dark:text-slate-400" />
-          {t('accountSettings')}
+          <GeneratedValue value={t('accountSettings')} />
         </Link>
         <Link href="/my" role="menuitem" onClick={() => setOpen(false)} className={itemClass}>
           <UserRound size={15} className="text-slate-500 dark:text-slate-400" />
-          {t('myWork')}
+          <GeneratedValue value={t('myWork')} />
         </Link>
         <Link
           href="/notifications/preferences"
@@ -108,13 +123,13 @@ export function AccountMenu({
           className={itemClass}
         >
           <Bell size={15} className="text-slate-500 dark:text-slate-400" />
-          {t('notificationPreferences')}
+          <GeneratedValue value={t('notificationPreferences')} />
         </Link>
       </nav>
 
       <div className="border-t border-slate-100 px-3 py-2.5 dark:border-slate-800">
         <div className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-          {t('theme')}
+          <GeneratedValue value={t('theme')} />
         </div>
         <ThemeToggle />
       </div>
@@ -133,7 +148,7 @@ export function AccountMenu({
           className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:text-slate-200 dark:hover:bg-slate-800/60"
         >
           <LogOut size={15} className="text-slate-500 dark:text-slate-400" />
-          {pending ? t('signingOut') : t('signOut')}
+          <GeneratedValue value={pending ? t('signingOut') : t('signOut')} />
         </button>
       </div>
     </Popover>

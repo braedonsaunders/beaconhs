@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 // Client-side filter controls shared by the email-log and SMS-log list views:
 // a debounced text param filter (recipient address / phone) and from/to date
 // pickers. Updates push to the URL via router.replace so the list page (server
@@ -23,6 +25,7 @@ export function TextParamFilter({
   placeholder?: string
   className?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const search = useSearchParams()
   const initialValue = search.get(paramKey) ?? ''
 
@@ -32,9 +35,9 @@ export function TextParamFilter({
     <TextParamFilterControl
       key={`${paramKey}:${initialValue}`}
       paramKey={paramKey}
-      label={label}
+      label={tGeneratedValue(label)}
       type={type}
-      placeholder={placeholder}
+      placeholder={tGeneratedValue(placeholder)}
       className={className}
       initialValue={initialValue}
     />
@@ -56,6 +59,7 @@ function TextParamFilterControl({
   className: string
   initialValue: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const pathname = usePathname()
   const router = useRouter()
   const search = useSearchParams()
@@ -80,7 +84,7 @@ function TextParamFilterControl({
   return (
     <div className="space-y-1.5">
       <Label htmlFor={paramKey} className="text-xs">
-        {label}
+        <GeneratedValue value={label} />
       </Label>
       <Input
         id={paramKey}
@@ -88,7 +92,7 @@ function TextParamFilterControl({
         className={className}
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder={placeholder}
+        placeholder={tGeneratedValue(placeholder)}
       />
     </div>
   )
@@ -116,7 +120,7 @@ export function DateRangeFilter() {
     <>
       <div className="space-y-1.5">
         <Label htmlFor="from" className="text-xs">
-          From
+          <GeneratedText id="m_154c9d7a784dda" />
         </Label>
         <Input
           key={`from:${from}`}
@@ -132,7 +136,7 @@ export function DateRangeFilter() {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="to" className="text-xs">
-          To
+          <GeneratedText id="m_0ea10a854847b2" />
         </Label>
         <Input
           key={`to:${to}`}

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Users } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
@@ -23,7 +26,10 @@ import { SortableTh } from '@/components/sortable-th'
 import { PeopleSubNav } from '../_components/people-sub-nav'
 import { createGroup } from '../_actions/groups'
 
-export const metadata = { title: 'People — Groups' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0cd4ee8439efd8') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/people/groups'
@@ -34,6 +40,8 @@ export default async function GroupsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const errorMessage = typeof sp.error === 'string' ? sp.error : null
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
@@ -89,114 +97,148 @@ export default async function GroupsPage({
         <>
           <PeopleSubNav active="groups" />
           <PageHeader
-            title="Groups"
-            description="Tag arbitrary people with cross-cutting labels (JHSC members, fire wardens, first-aid responders, etc.)."
+            title={tGenerated('m_1668000fa2a811')}
+            description={tGenerated('m_0e4410137a242e')}
             actions={
               <form action={createGroup}>
-                <Button type="submit">Add group</Button>
+                <Button type="submit">
+                  <GeneratedText id="m_17f5673d4b9449" />
+                </Button>
               </form>
             }
           />
-          <SearchInput placeholder="Search by name or description" />
-          {errorMessage ? (
-            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-              {errorMessage}
-            </p>
-          ) : null}
+          <SearchInput placeholder={tGenerated('m_05fb9a41d3a163')} />
+          <GeneratedValue
+            value={
+              errorMessage ? (
+                <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+                  <GeneratedValue value={errorMessage} />
+                </p>
+              ) : null
+            }
+          />
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Users size={32} />}
-          title={params.q ? `No groups match "${params.q}"` : 'No groups'}
-          description={
-            params.q
-              ? 'Try a different search.'
-              : 'Flag people for emergency response, committee membership, or other cross-cutting groupings.'
-          }
-          action={
-            params.q ? undefined : (
-              <form action={createGroup}>
-                <Button type="submit">New group</Button>
-              </form>
-            )
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  column="name"
-                  active={params.sort === 'name'}
-                  dir={params.dir}
-                >
-                  Name
-                </SortableTh>
-                <TableHead>Description</TableHead>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  column="members"
-                  active={params.sort === 'members'}
-                  dir={params.dir}
-                >
-                  Members
-                </SortableTh>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((g) => (
-                <TableRow key={g.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {g.color ? (
-                        <span
-                          className="inline-block h-3 w-3 rounded-full border border-slate-200 dark:border-slate-700"
-                          style={{ background: g.color }}
-                          aria-hidden
-                        />
-                      ) : null}
-                      <Link
-                        href={`/people/groups/${g.id}`}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {g.name}
-                      </Link>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-300">
-                    {g.description ? <span className="line-clamp-2">{g.description}</span> : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{g.memberCount}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link
-                      href={`/people/groups/${g.id}`}
-                      className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Users size={32} />}
+              title={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_0cbcddbf88928f', { value0: params.q })
+                  : tGenerated('m_15e9b91153fa04'),
+              )}
+              description={tGeneratedValue(
+                params.q ? tGenerated('m_11f3c16abb0f07') : tGenerated('m_158d6dbaed49bc'),
+              )}
+              action={
+                params.q ? undefined : (
+                  <form action={createGroup}>
+                    <Button type="submit">
+                      <GeneratedText id="m_1cffae5082cb21" />
+                    </Button>
+                  </form>
+                )
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      column="name"
+                      active={params.sort === 'name'}
+                      dir={params.dir}
                     >
-                      View →
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath={BASE}
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_14d923495cf14c" />
+                    </TableHead>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      column="members"
+                      active={params.sort === 'members'}
+                      dir={params.dir}
+                    >
+                      <GeneratedText id="m_0ef3898622f868" />
+                    </SortableTh>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((g) => (
+                      <TableRow key={g.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <GeneratedValue
+                              value={
+                                g.color ? (
+                                  <span
+                                    className="inline-block h-3 w-3 rounded-full border border-slate-200 dark:border-slate-700"
+                                    style={{ background: g.color }}
+                                    aria-hidden
+                                  />
+                                ) : null
+                              }
+                            />
+                            <Link
+                              href={`/people/groups/${g.id}`}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={g.name} />
+                            </Link>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-300">
+                          <GeneratedValue
+                            value={
+                              g.description ? (
+                                <span className="line-clamp-2">
+                                  <GeneratedValue value={g.description} />
+                                </span>
+                              ) : (
+                                '—'
+                              )
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            <GeneratedValue value={g.memberCount} />
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Link
+                            href={`/people/groups/${g.id}`}
+                            className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                          >
+                            <GeneratedText id="m_1be345fc118df8" />
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath={BASE}
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

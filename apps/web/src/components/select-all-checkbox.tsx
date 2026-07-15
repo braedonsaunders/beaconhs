@@ -1,4 +1,5 @@
 'use client'
+import { useGeneratedValueTranslations } from '@/i18n/generated'
 
 export function SelectAllCheckbox({
   itemName,
@@ -7,10 +8,11 @@ export function SelectAllCheckbox({
   itemName: string
   ariaLabel: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <input
       type="checkbox"
-      aria-label={ariaLabel}
+      aria-label={tGeneratedValue(ariaLabel)}
       onChange={(event) => {
         const form = event.currentTarget.form
         if (!form) return

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Plus, Tags, Trash2 } from 'lucide-react'
@@ -28,7 +31,10 @@ import { SortableTh } from '@/components/sortable-th'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { EquipmentCategoryDrawer, type CategoryEditing } from './_drawers'
 
-export const metadata = { title: 'Equipment categories' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_036072b03312d9') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/equipment/categories'
@@ -148,6 +154,8 @@ export default async function EquipmentCategoriesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const drawerParam = pickString(sp.drawer)
   const params = parseListParams(sp, {
@@ -239,140 +247,167 @@ export default async function EquipmentCategoriesPage({
       header={
         <>
           <PageHeader
-            title="Equipment categories"
-            description="Buckets that group equipment types — e.g. Tools, Vehicles, Lifts. Used to organize the register, filters, and reports."
+            title={tGenerated('m_036072b03312d9')}
+            description={tGenerated('m_050607f7d845e6')}
             actions={
               <Link href={newHref as never} scroll={false}>
                 <Button>
-                  <Plus size={14} /> New category
+                  <Plus size={14} /> <GeneratedText id="m_1736ef0672df5e" />
                 </Button>
               </Link>
             }
           />
           <EquipmentSubNav active="categories" />
           <TableToolbar>
-            <SearchInput placeholder="Search name, slug, description…" />
+            <SearchInput placeholder={tGenerated('m_0113f71994b934')} />
           </TableToolbar>
         </>
       }
     >
-      {categories.length === 0 ? (
-        <EmptyState
-          icon={<Tags size={32} />}
-          title={params.q ? 'No categories match your search' : 'No categories'}
-          description="Create a category to organize equipment types in the register, filters, and reports."
-          action={
-            <Link href={newHref as never} scroll={false}>
-              <Button>New category</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="name"
-                  active={params.sort === 'name'}
-                >
-                  Name
-                </SortableTh>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="slug"
-                  active={params.sort === 'slug'}
-                >
-                  Slug
-                </SortableTh>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="order"
-                  active={params.sort === 'order'}
-                  align="right"
-                  className="text-right"
-                >
-                  Order
-                </SortableTh>
-                <TableHead className="text-right">Types</TableHead>
-                <TableHead className="text-right">Items</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {categories.map((c) => {
-                const typeUse = typeCounts[c.id] ?? 0
-                const itemUse = itemCounts[c.id] ?? 0
-                const used = typeUse + itemUse
-                const editHref = mergeHref(BASE, sp, { drawer: c.id })
-                return (
-                  <TableRow key={c.id}>
-                    <TableCell>
-                      <Link
-                        href={editHref as never}
-                        scroll={false}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {c.name}
-                      </Link>
-                      {c.description ? (
-                        <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
-                          {c.description}
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                      {c.slug}
-                    </TableCell>
-                    <TableCell className="text-right text-slate-600 tabular-nums dark:text-slate-400">
-                      {c.sortOrder}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary">{typeUse}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant="secondary">{itemUse}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="inline-flex items-center gap-1">
-                        <Link
-                          href={editHref as never}
-                          scroll={false}
-                          className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
-                        >
-                          Edit
-                        </Link>
-                        <form action={deleteCategory} className="inline">
-                          <input type="hidden" name="id" value={c.id} />
-                          <button
-                            type="submit"
-                            disabled={used > 0}
-                            title={
-                              used > 0
-                                ? `${typeUse} type(s) and ${itemUse} item(s) reference this category — reassign before deleting`
-                                : 'Delete category'
-                            }
-                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </form>
-                      </div>
-                    </TableCell>
+      <GeneratedValue
+        value={
+          categories.length === 0 ? (
+            <EmptyState
+              icon={<Tags size={32} />}
+              title={tGeneratedValue(
+                params.q ? tGenerated('m_1edf71302e0fae') : tGenerated('m_0f25984d20d7b4'),
+              )}
+              description={tGenerated('m_06659dc02fe07f')}
+              action={
+                <Link href={newHref as never} scroll={false}>
+                  <Button>
+                    <GeneratedText id="m_1736ef0672df5e" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="name"
+                      active={params.sort === 'name'}
+                    >
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="slug"
+                      active={params.sort === 'slug'}
+                    >
+                      <GeneratedText id="m_0c70a274b9df45" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="order"
+                      active={params.sort === 'order'}
+                      align="right"
+                      className="text-right"
+                    >
+                      <GeneratedText id="m_126e942baf656b" />
+                    </SortableTh>
+                    <TableHead className="text-right">
+                      <GeneratedText id="m_020a0fef103306" />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <GeneratedText id="m_16f8d81a1560d8" />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <GeneratedText id="m_0a7f1858f2ec46" />
+                    </TableHead>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={categories.map((c) => {
+                      const typeUse = typeCounts[c.id] ?? 0
+                      const itemUse = itemCounts[c.id] ?? 0
+                      const used = typeUse + itemUse
+                      const editHref = mergeHref(BASE, sp, { drawer: c.id })
+                      return (
+                        <TableRow key={c.id}>
+                          <TableCell>
+                            <Link
+                              href={editHref as never}
+                              scroll={false}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={c.name} />
+                            </Link>
+                            <GeneratedValue
+                              value={
+                                c.description ? (
+                                  <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
+                                    <GeneratedValue value={c.description} />
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                            <GeneratedValue value={c.slug} />
+                          </TableCell>
+                          <TableCell className="text-right text-slate-600 tabular-nums dark:text-slate-400">
+                            <GeneratedValue value={c.sortOrder} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="secondary">
+                              <GeneratedValue value={typeUse} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="secondary">
+                              <GeneratedValue value={itemUse} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <Link
+                                href={editHref as never}
+                                scroll={false}
+                                className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
+                              >
+                                <GeneratedText id="m_03a66f9d34ac7b" />
+                              </Link>
+                              <form action={deleteCategory} className="inline">
+                                <input type="hidden" name="id" value={c.id} />
+                                <button
+                                  type="submit"
+                                  disabled={used > 0}
+                                  title={tGeneratedValue(
+                                    used > 0
+                                      ? tGenerated('m_0ae47ef5a6d974', {
+                                          value0: typeUse,
+                                          value1: itemUse,
+                                        })
+                                      : tGenerated('m_1bebbaa23fbe2c'),
+                                  )}
+                                  className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </form>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+            </div>
+          )
+        }
+      />
 
       <Pagination basePath={BASE} currentParams={sp} total={total} page={page} perPage={perPage} />
 

@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -30,6 +32,7 @@ export function ReorderableList({
   initial: BookItem[]
   locked: boolean
 }) {
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [items, setItems] = useState(initial)
@@ -96,84 +99,111 @@ export function ReorderableList({
 
   return (
     <ol className="space-y-2 text-sm">
-      {items.map((row, idx) => (
-        <li
-          key={row.documentId}
-          draggable={!locked}
-          onDragStart={() => onDragStart(idx)}
-          onDragOver={(e) => onDragOver(e, idx)}
-          onDrop={() => onDrop(idx)}
-          onDragEnd={onDragEnd}
-          className={`flex items-center justify-between gap-3 rounded-md border bg-white px-3 py-2 transition-colors dark:bg-slate-900 ${
-            overIdx === idx && dragIdx !== idx
-              ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40'
-              : dragIdx === idx
-                ? 'border-slate-300 opacity-60 dark:border-slate-600'
-                : 'border-slate-200 dark:border-slate-800'
-          } ${pending ? 'cursor-progress' : locked ? 'cursor-default' : 'cursor-grab'}`}
-        >
-          <div className="flex min-w-0 items-center gap-3">
-            {!locked ? (
-              <GripVertical
-                size={14}
-                className="shrink-0 text-slate-400 dark:text-slate-500"
-                aria-hidden
+      <GeneratedValue
+        value={items.map((row, idx) => (
+          <li
+            key={row.documentId}
+            draggable={!locked}
+            onDragStart={() => onDragStart(idx)}
+            onDragOver={(e) => onDragOver(e, idx)}
+            onDrop={() => onDrop(idx)}
+            onDragEnd={onDragEnd}
+            className={`flex items-center justify-between gap-3 rounded-md border bg-white px-3 py-2 transition-colors dark:bg-slate-900 ${
+              overIdx === idx && dragIdx !== idx
+                ? 'border-teal-500 bg-teal-50 dark:bg-teal-950/40'
+                : dragIdx === idx
+                  ? 'border-slate-300 opacity-60 dark:border-slate-600'
+                  : 'border-slate-200 dark:border-slate-800'
+            } ${pending ? 'cursor-progress' : locked ? 'cursor-default' : 'cursor-grab'}`}
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <GeneratedValue
+                value={
+                  !locked ? (
+                    <GripVertical
+                      size={14}
+                      className="shrink-0 text-slate-400 dark:text-slate-500"
+                      aria-hidden
+                    />
+                  ) : null
+                }
               />
-            ) : null}
-            <span className="w-6 shrink-0 font-mono text-xs text-slate-400 dark:text-slate-500">
-              {idx + 1}.
-            </span>
-            <Link
-              href={`/documents/${row.documentId}`}
-              className="truncate font-medium text-slate-900 hover:underline dark:text-slate-100"
-            >
-              {row.title}
-            </Link>
-            {row.status !== 'published' ? <Badge variant="warning">{row.status}</Badge> : null}
-            {locked ? (
-              row.pinnedVersion ? (
-                <Badge variant="secondary">v{row.pinnedVersion}</Badge>
-              ) : (
-                <Badge variant="warning">Snapshot missing</Badge>
-              )
-            ) : null}
-          </div>
-          {!locked ? (
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={idx === 0 || pending}
-                aria-label="Move up"
-                onClick={() => move(row.documentId, 'up')}
+              <span className="w-6 shrink-0 font-mono text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedValue value={idx + 1} />.
+              </span>
+              <Link
+                href={`/documents/${row.documentId}`}
+                className="truncate font-medium text-slate-900 hover:underline dark:text-slate-100"
               >
-                <ArrowUp size={14} />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={idx === items.length - 1 || pending}
-                aria-label="Move down"
-                onClick={() => move(row.documentId, 'down')}
-              >
-                <ArrowDown size={14} />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={pending}
-                aria-label="Remove from book"
-                onClick={() => remove(row.documentId)}
-              >
-                <Trash2 size={14} className="text-red-500" />
-              </Button>
+                <GeneratedValue value={row.title} />
+              </Link>
+              <GeneratedValue
+                value={
+                  row.status !== 'published' ? (
+                    <Badge variant="warning">
+                      <GeneratedValue value={row.status} />
+                    </Badge>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  locked ? (
+                    row.pinnedVersion ? (
+                      <Badge variant="secondary">
+                        <GeneratedText id="m_1c693e59d64fb2" />
+                        <GeneratedValue value={row.pinnedVersion} />
+                      </Badge>
+                    ) : (
+                      <Badge variant="warning">
+                        <GeneratedText id="m_1b1d4d34556ccf" />
+                      </Badge>
+                    )
+                  ) : null
+                }
+              />
             </div>
-          ) : null}
-        </li>
-      ))}
+            <GeneratedValue
+              value={
+                !locked ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={idx === 0 || pending}
+                      aria-label={tGenerated('m_1ec1460770eaa0')}
+                      onClick={() => move(row.documentId, 'up')}
+                    >
+                      <ArrowUp size={14} />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={idx === items.length - 1 || pending}
+                      aria-label={tGenerated('m_14ab8cefda3cf9')}
+                      onClick={() => move(row.documentId, 'down')}
+                    >
+                      <ArrowDown size={14} />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={pending}
+                      aria-label={tGenerated('m_0d64d4cdef1d99')}
+                      onClick={() => remove(row.documentId)}
+                    >
+                      <Trash2 size={14} className="text-red-500" />
+                    </Button>
+                  </div>
+                ) : null
+              }
+            />
+          </li>
+        ))}
+      />
     </ol>
   )
 }

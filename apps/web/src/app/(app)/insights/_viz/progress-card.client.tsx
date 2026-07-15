@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // Progress-vs-goal renderer. Uses the first measure as the value; a percentage
 // measure is shown directly, otherwise value/goal drives the bar. Dark-mode aware.
 
@@ -34,11 +36,13 @@ export function ProgressCard({
   return (
     <div className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <span className="truncate text-xs font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
-        {label ?? measure?.label ?? 'Progress'}
+        <GeneratedValue
+          value={label ?? measure?.label ?? <GeneratedText id="m_19781b1ab256cf" />}
+        />
       </span>
       <div>
         <div className="mb-1.5 text-3xl font-bold text-slate-900 tabular-nums dark:text-slate-100">
-          {pct == null ? '—' : `${Math.round(pct)}%`}
+          <GeneratedValue value={pct == null ? '—' : `${Math.round(pct)}%`} />
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
           <div className={cn('h-full rounded-full', tone)} style={{ width: `${clamped}%` }} />

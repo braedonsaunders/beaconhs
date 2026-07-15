@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
@@ -23,6 +25,7 @@ export function DocumentMultiPicker({
   initial: string[]
   available: Option[]
 }) {
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [selected, setSelected] = useState<string[]>(initial)
@@ -51,7 +54,7 @@ export function DocumentMultiPicker({
       <div className="flex items-end gap-2">
         <div className="flex-1 space-y-1">
           <label className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-            Add document
+            <GeneratedText id="m_039f30f3ee2357" />
           </label>
           <RemoteSearchSelect
             lookup="management-review-documents"
@@ -65,44 +68,60 @@ export function DocumentMultiPicker({
               ])
             }}
             excludedValues={selected}
-            placeholder="Select a document…"
-            searchPlaceholder="Search documents…"
+            placeholder={tGenerated('m_196e88a3aba48a')}
+            searchPlaceholder={tGenerated('m_1df7e3e7125cc6')}
             sheetTitle="Add document"
             clearable
-            emptyLabel="— pick —"
+            emptyLabel={tGenerated('m_1e9cb0f49f978f')}
           />
         </div>
         <Button type="button" variant="outline" onClick={add}>
-          <Plus size={14} /> Add
+          <Plus size={14} /> <GeneratedText id="m_16c8592e5020a4" />
         </Button>
       </div>
 
-      {selected.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">No documents added.</p>
-      ) : (
-        <ul className="space-y-2">
-          {selected.map((id) => {
-            const o = byId.get(id)
-            return (
-              <li
-                key={id}
-                className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
-              >
-                <span className="truncate text-slate-900 dark:text-slate-100">
-                  {o?.label ?? id}
-                </span>
-                <Button type="button" variant="ghost" size="sm" onClick={() => remove(id)}>
-                  <Trash2 size={14} className="text-red-500" />
-                </Button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      <GeneratedValue
+        value={
+          selected.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_1450b2cdf0ee9a" />
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              <GeneratedValue
+                value={selected.map((id) => {
+                  const o = byId.get(id)
+                  return (
+                    <li
+                      key={id}
+                      className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
+                    >
+                      <span className="truncate text-slate-900 dark:text-slate-100">
+                        <GeneratedValue value={o?.label ?? id} />
+                      </span>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => remove(id)}>
+                        <Trash2 size={14} className="text-red-500" />
+                      </Button>
+                    </li>
+                  )
+                })}
+              />
+            </ul>
+          )
+        }
+      />
 
       <div className="flex justify-end">
         <Button type="button" disabled={pending} onClick={save}>
-          {pending ? 'Saving…' : 'Save documents'}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_106811f2aac664" />
+              ) : (
+                <GeneratedText id="m_14500914ee57db" />
+              )
+            }
+          />
         </Button>
       </div>
     </div>
@@ -121,6 +140,7 @@ export function ActionItemsPicker({
   initial: string[]
   available: Option[]
 }) {
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [selected, setSelected] = useState<string[]>(initial)
@@ -149,7 +169,7 @@ export function ActionItemsPicker({
       <div className="flex items-end gap-2">
         <div className="flex-1 space-y-1">
           <label className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-            Link a corrective action
+            <GeneratedText id="m_1447daa2f32540" />
           </label>
           <RemoteSearchSelect
             lookup="management-review-actions"
@@ -163,47 +183,65 @@ export function ActionItemsPicker({
               ])
             }}
             excludedValues={selected}
-            placeholder="Select a corrective action…"
-            searchPlaceholder="Search corrective actions…"
+            placeholder={tGenerated('m_03c9cf64b5325a')}
+            searchPlaceholder={tGenerated('m_033816d1cadbb5')}
             sheetTitle="Link corrective action"
             clearable
-            emptyLabel="— pick —"
+            emptyLabel={tGenerated('m_1e9cb0f49f978f')}
           />
         </div>
         <Button type="button" variant="outline" onClick={add}>
-          <Plus size={14} /> Add
+          <Plus size={14} /> <GeneratedText id="m_16c8592e5020a4" />
         </Button>
       </div>
 
-      {selected.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">No follow-up actions linked.</p>
-      ) : (
-        <ul className="space-y-2">
-          {selected.map((id) => {
-            const o = byId.get(id)
-            return (
-              <li
-                key={id}
-                className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
-              >
-                <span className="flex items-center gap-2">
-                  <Badge variant="outline">CA</Badge>
-                  <span className="truncate text-slate-900 dark:text-slate-100">
-                    {o?.label ?? id}
-                  </span>
-                </span>
-                <Button type="button" variant="ghost" size="sm" onClick={() => remove(id)}>
-                  <Trash2 size={14} className="text-red-500" />
-                </Button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      <GeneratedValue
+        value={
+          selected.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_0d9aa668384e5e" />
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              <GeneratedValue
+                value={selected.map((id) => {
+                  const o = byId.get(id)
+                  return (
+                    <li
+                      key={id}
+                      className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Badge variant="outline">
+                          <GeneratedText id="m_1dc5fc53bbcb19" />
+                        </Badge>
+                        <span className="truncate text-slate-900 dark:text-slate-100">
+                          <GeneratedValue value={o?.label ?? id} />
+                        </span>
+                      </span>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => remove(id)}>
+                        <Trash2 size={14} className="text-red-500" />
+                      </Button>
+                    </li>
+                  )
+                })}
+              />
+            </ul>
+          )
+        }
+      />
 
       <div className="flex justify-end">
         <Button type="button" disabled={pending} onClick={save}>
-          {pending ? 'Saving…' : 'Save action items'}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_106811f2aac664" />
+              ) : (
+                <GeneratedText id="m_05f53c79d46994" />
+              )
+            }
+          />
         </Button>
       </div>
     </div>

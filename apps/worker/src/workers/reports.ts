@@ -26,6 +26,7 @@ import {
 } from '@beaconhs/db/schema'
 import { assertReportRunJobData, enqueueEmail, type ReportRunJobData } from '@beaconhs/jobs'
 import { resolveLocalePreferences } from '@beaconhs/i18n'
+import { createSystemTranslator } from '@beaconhs/i18n/messages'
 import {
   computeRangeFor,
   refineEntityMapForDocuments,
@@ -125,15 +126,16 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
     let artifact = await loadArtifact(tenantId, ctx.run.pdfAttachmentId, ctx.run.rowCount)
 
     if (!artifact) {
-      const { groups, summary, rowCount } = await withTenant(db, tenantId, async (tx) => {
-        const entityMap = await resolveScheduledEntityMap(tx, tenantId, snapshot)
-        return runReport(tx, {
+      const { groups, summary, rowCount, locale } = await withTenant(db, tenantId, async (tx) => {
+        const { entityMap, locale } = await resolveScheduledEntityMap(tx, tenantId, snapshot)
+        const result = await runReport(tx, {
           queryKind: snapshot.definition.queryKind,
           filters: snapshot.filters,
           range,
           customQuery: (snapshot.definition.customQuery as ReportCustomQuery | null) ?? null,
           entityMap,
         })
+        return { ...result, locale }
       })
       const pdf = await renderReportPdf({
         tenantName: ctx.tenant.name,
@@ -147,6 +149,7 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
         generatedAt: new Date(),
         summary,
         groups,
+        translate: createSystemTranslator(locale),
         layout: resolveReportLayout(snapshot.definition.layout),
       })
       if (pdf.length === 0 || pdf.length > MAX_REPORT_PDF_BYTES) {
@@ -527,7 +530,12 @@ async function resolveScheduledEntityMap(
   const accessibleApps = templates
     .filter((template) => canAccessTemplate(requestCtx, template, roleKeys, 'operate'))
     .map(({ id, name }) => ({ id, name }))
-  return refineEntityMapForDocuments(await discoverEntityMapWithScopedApps(tx, accessibleApps))
+  return {
+    entityMap: refineEntityMapForDocuments(
+      await discoverEntityMapWithScopedApps(tx, accessibleApps),
+    ),
+    locale: localePolicy.locale,
+  }
 }
 
 // --- Recipients ----------------------------------------------------------

@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useUiText } from './text-context'
 import { cn } from './utils'
 
 // Z-INDEX SCALE (single source of truth)
@@ -55,6 +56,7 @@ export function Drawer({
    *  Pass e.g. "overflow-hidden" for a child that manages its own layout/scroll. */
   bodyClassName?: string
 }) {
+  const t = useUiText()
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
@@ -168,18 +170,20 @@ export function Drawer({
                 <div className="min-w-0 space-y-0.5">
                   {title ? (
                     <h2 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
-                      {title}
+                      {typeof title === 'string' ? t(title) : title}
                     </h2>
                   ) : null}
                   {description ? (
-                    <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      {typeof description === 'string' ? t(description) : description}
+                    </p>
                   ) : null}
                 </div>
                 <button
                   type="button"
                   onClick={onClose}
                   className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                  aria-label="Close"
+                  aria-label={t('Close')}
                 >
                   <svg
                     width="18"

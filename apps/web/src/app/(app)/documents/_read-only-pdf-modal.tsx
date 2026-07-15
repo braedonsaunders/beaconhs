@@ -1,5 +1,9 @@
 'use client'
 
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
+import { useGeneratedTranslations } from '@/i18n/generated'
+
 // Shared read-only PDF modal — opens a document's or book's PDF in an <iframe>
 // on a URL resolved on demand. Used by both the documents and books read-only
 // card grids. `resolve(id)` returns either a ready URL, a "still generating"
@@ -80,6 +84,8 @@ export function ReadOnlyPdfModal({
   resolve: PdfResolve
   onClose: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [resource, setResource] = useState<PdfResource>({
     id,
     status: 'loading',
@@ -150,51 +156,61 @@ export function ReadOnlyPdfModal({
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
           <span className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-            {title}
+            <GeneratedValue value={title} />
           </span>
           <div className="flex shrink-0 items-center gap-1.5">
-            {status === 'ready' && url ? (
-              <>
-                <a href={url} download className={linkCls}>
-                  <Download size={13} /> Download
-                </a>
-                <a href={url} target="_blank" rel="noreferrer" className={linkCls}>
-                  <ExternalLink size={13} /> New tab
-                </a>
-              </>
-            ) : null}
+            <GeneratedValue
+              value={
+                status === 'ready' && url ? (
+                  <>
+                    <a href={url} download className={linkCls}>
+                      <Download size={13} /> <GeneratedText id="m_0fcb9c63d263d1" />
+                    </a>
+                    <a href={url} target="_blank" rel="noreferrer" className={linkCls}>
+                      <ExternalLink size={13} /> <GeneratedText id="m_10b8b9a1a3c87b" />
+                    </a>
+                  </>
+                ) : null
+              }
+            />
             <button
               type="button"
               onClick={onClose}
               className="grid h-8 w-8 place-items-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              aria-label="Close"
+              aria-label={tGenerated('m_19ab80ae228d44')}
             >
               <X size={16} />
             </button>
           </div>
         </div>
         <div className="min-h-0 flex-1 bg-slate-100 dark:bg-slate-950">
-          {status === 'ready' && url ? (
-            <iframe src={url} title={title} className="h-full w-full" />
-          ) : status === 'generating' ? (
-            <Centered>
-              <Loader2 size={20} className="animate-spin text-teal-600" />
-              <p className="text-sm text-slate-600 dark:text-slate-300">
-                Generating the PDF — this can take a few seconds.
-              </p>
-            </Centered>
-          ) : status === 'error' ? (
-            <Centered>
-              <p className="text-sm text-rose-600">{error ?? 'Could not load the PDF.'}</p>
-              <Button variant="outline" onClick={retry}>
-                <RefreshCw size={14} /> Retry
-              </Button>
-            </Centered>
-          ) : (
-            <Centered>
-              <Loader2 size={20} className="animate-spin text-slate-400" />
-            </Centered>
-          )}
+          <GeneratedValue
+            value={
+              status === 'ready' && url ? (
+                <iframe src={url} title={tGeneratedValue(title)} className="h-full w-full" />
+              ) : status === 'generating' ? (
+                <Centered>
+                  <Loader2 size={20} className="animate-spin text-teal-600" />
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    <GeneratedText id="m_1f9d74d7e4e09e" />
+                  </p>
+                </Centered>
+              ) : status === 'error' ? (
+                <Centered>
+                  <p className="text-sm text-rose-600">
+                    <GeneratedValue value={error ?? <GeneratedText id="m_18d93ca1591807" />} />
+                  </p>
+                  <Button variant="outline" onClick={retry}>
+                    <RefreshCw size={14} /> <GeneratedText id="m_060f1ed88b3989" />
+                  </Button>
+                </Centered>
+              ) : (
+                <Centered>
+                  <Loader2 size={20} className="animate-spin text-slate-400" />
+                </Centered>
+              )
+            }
+          />
         </div>
       </div>
     </div>
@@ -204,7 +220,7 @@ export function ReadOnlyPdfModal({
 function Centered({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }

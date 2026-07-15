@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -95,8 +99,9 @@ function hasAnyRole(roleKeys: ReadonlySet<string>, allowed: string[] | null | un
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Form response · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_0c7bbc8397f253', { value0: id.slice(0, 8) }) }
 }
 
 // ---------- Server actions ----------
@@ -163,6 +168,8 @@ export default async function FormResponsePage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -754,8 +761,11 @@ export default async function FormResponsePage({
             href: `/apps/templates/${template.id}/records`,
             label: `Back to ${template.name}`,
           }}
-          title={template.name}
-          subtitle={`${id.slice(0, 8)} · v${version.version}`}
+          title={tGeneratedValue(template.name)}
+          subtitle={tGenerated('m_14c3dfbc8a08e9', {
+            value0: id.slice(0, 8),
+            value1: version.version,
+          })}
           badge={
             <div className="flex flex-wrap items-center gap-2">
               <Badge
@@ -769,73 +779,103 @@ export default async function FormResponsePage({
                         : 'warning'
                 }
               >
-                {response.status.replace('_', ' ')}
+                <GeneratedValue value={response.status.replace('_', ' ')} />
               </Badge>
-              {reviewEnabled ? (
-                <ComplianceBadge status={complianceStatus} score={complianceScore} />
-              ) : null}
+              <GeneratedValue
+                value={
+                  reviewEnabled ? (
+                    <ComplianceBadge status={complianceStatus} score={complianceScore} />
+                  ) : null
+                }
+              />
             </div>
           }
           actions={
             <>
-              {canCreateCorrectiveAction ? (
-                <Link
-                  href={`${basePath}?drawer=spawn-ca${active === 'response' ? '' : `&tab=${active}`}`}
-                >
-                  <Button variant={complianceStatus === 'non_compliant' ? 'default' : 'outline'}>
-                    <Plus size={14} /> Create CAPA
-                  </Button>
-                </Link>
-              ) : null}
-              {canCreateIncident ? (
-                <Link
-                  href={`${basePath}?drawer=spawn-incident${active === 'response' ? '' : `&tab=${active}`}`}
-                >
-                  <Button variant="outline">
-                    <ShieldAlert size={14} /> Create incident
-                  </Button>
-                </Link>
-              ) : null}
-              <RecordActionBar responseId={id} buttons={manualButtons} />
-              {!locked ? (
-                <>
-                  {canEditRecord &&
-                  (response.status === 'draft' || response.status === 'in_progress') ? (
-                    <form action={finalizeResponse} className="inline">
-                      <input type="hidden" name="responseId" value={id} />
-                      <Button type="submit" variant="default">
-                        <CheckCircle2 size={14} /> Finalize
+              <GeneratedValue
+                value={
+                  canCreateCorrectiveAction ? (
+                    <Link
+                      href={`${basePath}?drawer=spawn-ca${active === 'response' ? '' : `&tab=${active}`}`}
+                    >
+                      <Button
+                        variant={complianceStatus === 'non_compliant' ? 'default' : 'outline'}
+                      >
+                        <Plus size={14} /> <GeneratedText id="m_07b71156553d0b" />
                       </Button>
-                    </form>
-                  ) : null}
-                  {canLockRecord ? (
-                    <form action={lockResponse} className="inline">
+                    </Link>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  canCreateIncident ? (
+                    <Link
+                      href={`${basePath}?drawer=spawn-incident${active === 'response' ? '' : `&tab=${active}`}`}
+                    >
+                      <Button variant="outline">
+                        <ShieldAlert size={14} /> <GeneratedText id="m_0b7f374a64e552" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
+              <RecordActionBar responseId={id} buttons={manualButtons} />
+              <GeneratedValue
+                value={
+                  !locked ? (
+                    <>
+                      <GeneratedValue
+                        value={
+                          canEditRecord &&
+                          (response.status === 'draft' || response.status === 'in_progress') ? (
+                            <form action={finalizeResponse} className="inline">
+                              <input type="hidden" name="responseId" value={id} />
+                              <Button type="submit" variant="default">
+                                <CheckCircle2 size={14} /> <GeneratedText id="m_0263993096fef0" />
+                              </Button>
+                            </form>
+                          ) : null
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          canLockRecord ? (
+                            <form action={lockResponse} className="inline">
+                              <input type="hidden" name="responseId" value={id} />
+                              <Button type="submit" variant="outline">
+                                <Lock size={14} /> <GeneratedText id="m_19f2c846c5777a" />
+                              </Button>
+                            </form>
+                          ) : null
+                        }
+                      />
+                    </>
+                  ) : canUnlockRecord ? (
+                    <form action={unlockResponse} className="inline">
                       <input type="hidden" name="responseId" value={id} />
                       <Button type="submit" variant="outline">
-                        <Lock size={14} /> Lock
+                        <LockOpen size={14} /> <GeneratedText id="m_0ca830c9381fd6" />
                       </Button>
                     </form>
-                  ) : null}
-                </>
-              ) : canUnlockRecord ? (
-                <form action={unlockResponse} className="inline">
-                  <input type="hidden" name="responseId" value={id} />
-                  <Button type="submit" variant="outline">
-                    <LockOpen size={14} /> Unlock
-                  </Button>
-                </form>
-              ) : null}
-              {supportsReopen && canUnlockRecord ? (
-                <form action={reopenResponse} className="inline">
-                  <input type="hidden" name="responseId" value={id} />
-                  <Button type="submit" variant="outline">
-                    <Undo2 size={14} /> Reopen
-                  </Button>
-                </form>
-              ) : null}
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  supportsReopen && canUnlockRecord ? (
+                    <form action={reopenResponse} className="inline">
+                      <input type="hidden" name="responseId" value={id} />
+                      <Button type="submit" variant="outline">
+                        <Undo2 size={14} /> <GeneratedText id="m_0341d048ec832d" />
+                      </Button>
+                    </form>
+                  ) : null
+                }
+              />
               <Link href={`/apps/responses/${id}/pdf`}>
                 <Button variant="outline">
-                  <FileText size={14} /> PDF
+                  <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
                 </Button>
               </Link>
             </>
@@ -848,46 +888,95 @@ export default async function FormResponsePage({
         locked ||
         !canEditRecord ? (
           <div className="space-y-3">
-            {finalizeErrorCount > 0 ? (
-              <Alert variant="destructive">
-                <AlertTitle>Record not finalized</AlertTitle>
-                <AlertDescription>
-                  {finalizeErrorCount} field{finalizeErrorCount === 1 ? ' is' : 's are'} incomplete
-                  or invalid. Complete the required fields, then finalize again.
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            {reviewEnabled && complianceStatus === 'non_compliant' ? (
-              <Alert variant="destructive">
-                <AlertTitle>Non-compliant response</AlertTitle>
-                <AlertDescription>
-                  Score {complianceScore.toFixed(1)} · {failedFieldKeys.length} failed check
-                  {failedFieldKeys.length === 1 ? '' : 's'}. Spawn a corrective action to address
-                  each failure.
-                </AlertDescription>
-              </Alert>
-            ) : reviewEnabled && flagsFollowup ? (
-              <Alert variant="warning">
-                <AlertTitle>Follow-up required</AlertTitle>
-                <AlertDescription>
-                  This response has {failCount} failing item{failCount === 1 ? '' : 's'} and the
-                  template is configured to require a corrective action.
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            {locked ? (
-              <Alert variant="warning">
-                <AlertTitle>This entry is locked</AlertTitle>
-                <AlertDescription>Unlock this entry before making field changes.</AlertDescription>
-              </Alert>
-            ) : !canEditRecord ? (
-              <Alert variant="warning">
-                <AlertTitle>View only</AlertTitle>
-                <AlertDescription>
-                  You can view this entry, but your current role cannot edit its fields.
-                </AlertDescription>
-              </Alert>
-            ) : null}
+            <GeneratedValue
+              value={
+                finalizeErrorCount > 0 ? (
+                  <Alert variant="destructive">
+                    <AlertTitle>
+                      <GeneratedText id="m_1877a2cd4c7963" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedValue value={finalizeErrorCount} />{' '}
+                      <GeneratedText id="m_1d6aa8702d3fac" />
+                      <GeneratedValue
+                        value={
+                          finalizeErrorCount === 1 ? (
+                            <GeneratedText id="m_12f668c7352caf" />
+                          ) : (
+                            <GeneratedText id="m_156505465b1f33" />
+                          )
+                        }
+                      />{' '}
+                      <GeneratedText id="m_1f960ee1f594ac" />
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                reviewEnabled && complianceStatus === 'non_compliant' ? (
+                  <Alert variant="destructive">
+                    <AlertTitle>
+                      <GeneratedText id="m_0d41602b36f385" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedText id="m_1469688270fa41" />{' '}
+                      <GeneratedValue value={complianceScore.toFixed(1)} /> ·{' '}
+                      <GeneratedValue value={failedFieldKeys.length} />{' '}
+                      <GeneratedText id="m_1d8bc417edc4a2" />
+                      <GeneratedValue
+                        value={
+                          failedFieldKeys.length === 1 ? (
+                            ''
+                          ) : (
+                            <GeneratedText id="m_00ded356f0f424" />
+                          )
+                        }
+                      />
+                      <GeneratedText id="m_0ed7a8c1dd855d" />
+                    </AlertDescription>
+                  </Alert>
+                ) : reviewEnabled && flagsFollowup ? (
+                  <Alert variant="warning">
+                    <AlertTitle>
+                      <GeneratedText id="m_12caee20e6a339" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedText id="m_10df82d7ff45d3" /> <GeneratedValue value={failCount} />{' '}
+                      <GeneratedText id="m_197c5828079212" />
+                      <GeneratedValue
+                        value={failCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+                      />{' '}
+                      <GeneratedText id="m_14b08ce3cf96d3" />
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                locked ? (
+                  <Alert variant="warning">
+                    <AlertTitle>
+                      <GeneratedText id="m_11f71ec9a1cf5b" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedText id="m_0803a334cce8bf" />
+                    </AlertDescription>
+                  </Alert>
+                ) : !canEditRecord ? (
+                  <Alert variant="warning">
+                    <AlertTitle>
+                      <GeneratedText id="m_0cd6abb2df6fc8" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedText id="m_1f28e5133b4b0e" />
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            />
           </div>
         ) : null
       }
@@ -907,237 +996,308 @@ export default async function FormResponsePage({
       }
     >
       <div className="space-y-5">
-        {active === 'response' ? (
-          <>
-            {response.monitorStatus ? (
-              <MonitorPanel
-                responseId={response.id}
-                monitorStatus={response.monitorStatus as MonitorStatus}
-                nextCheckinDueAt={
-                  response.nextCheckinDueAt ? response.nextCheckinDueAt.toISOString() : null
-                }
-                intervalMinutes={response.checkinIntervalMinutes}
-                requireGeo={response.monitorRequireGeo ?? false}
-                readOnly={!canOperateApp}
-                history={
-                  <CheckinHistory
-                    basePath={basePath}
-                    currentParams={sp}
-                    params={listState.checkins}
-                    data={checkins}
-                    timeZone={ctx.timezone}
-                    locale={ctx.locale}
-                  />
-                }
-              />
-            ) : null}
-            {reviewEnabled && failedFieldKeys.length > 0 ? (
-              <Section
-                title={`Failed checks (${failedFieldKeys.length})`}
-                subtitle="Each can be turned into its own corrective action."
-              >
-                <ul className="space-y-2 text-sm">
-                  {failedFieldKeys.map((key) => {
-                    const label = labelForField(version.schema, key, ctx.locale, ctx.defaultLocale)
-                    const displayValue = displayValueForField(
-                      version.schema,
-                      recordValues,
-                      key,
-                      ctx.locale,
-                      ctx.defaultLocale,
-                    )
-                    return (
-                      <li
-                        key={key}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rose-200 bg-rose-50/60 px-3 py-2 dark:border-rose-900 dark:bg-rose-950/40"
-                      >
-                        <div className="min-w-0">
-                          <div className="font-medium text-rose-900 dark:text-rose-200">
-                            {label}
-                          </div>
-                          <div className="text-xs text-rose-700 dark:text-rose-300">
-                            Answer: <strong>{displayValue}</strong>
-                          </div>
-                        </div>
-                        {canCreateCorrectiveAction ? (
-                          <Link
-                            href={`${basePath}?drawer=spawn-ca&failedField=${encodeURIComponent(key)}${active === 'response' ? '' : `&tab=${active}`}`}
-                          >
-                            <Button size="sm" variant="outline">
-                              <Plus size={12} /> Create CAPA
-                            </Button>
-                          </Link>
-                        ) : null}
-                      </li>
-                    )
-                  })}
-                </ul>
-              </Section>
-            ) : null}
-
-            <SpawnedRecordsSection
-              basePath={basePath}
-              currentParams={sp}
-              correctiveActionParams={listState.correctiveActions}
-              correctiveActionData={spawnedCorrectiveActions}
-              incidentParams={listState.incidents}
-              incidentData={spawnedIncidents}
-            />
-
-            {reviewEnabled && scoreRows.length > 0 ? (
-              <Section title="Compliance scoring">
-                <div className="flex flex-wrap items-center gap-3 text-sm">
-                  <Badge variant="success">{passCount} pass</Badge>
-                  <Badge variant="destructive">{failCount} fail</Badge>
-                  <Badge variant="secondary">
-                    {scoreRows.length - passCount - failCount} n/a or rating
-                  </Badge>
-                  <span className="text-slate-500">{scoreRows.length} scored items total</span>
-                </div>
-              </Section>
-            ) : null}
-
-            {(() => {
-              const initialRows: Record<string, Array<Record<string, unknown>>> = {}
-              for (const sec of version.schema.sections) {
-                const rows = recordValues[sec.id]
-                if (sec.repeating && Array.isArray(rows)) {
-                  initialRows[sec.id] = rows as Array<Record<string, unknown>>
-                }
-              }
-              return (
-                <FormRenderer
-                  inlineAutosave
-                  readOnly={!canEditRecord}
-                  templateId={template.id}
-                  templateName={template.name}
-                  version={version.version}
-                  schema={version.schema}
-                  sites={sites}
-                  people={allPeople}
-                  entitiesByField={entitiesByField}
-                  currentUser={{
-                    personId: currentPerson?.id ?? null,
-                    name: currentPerson
-                      ? `${currentPerson.firstName} ${currentPerson.lastName}`
-                      : (ctx.membership?.displayName ?? null),
-                  }}
-                  initialResponseId={id}
-                  initialValues={recordValues}
-                  initialRows={initialRows}
-                  initialStepIndex={0}
-                  isResumed={false}
-                  returnTo={null}
-                  responseStatus={response.status}
+        <GeneratedValue
+          value={
+            active === 'response' ? (
+              <>
+                <GeneratedValue
+                  value={
+                    response.monitorStatus ? (
+                      <MonitorPanel
+                        responseId={response.id}
+                        monitorStatus={response.monitorStatus as MonitorStatus}
+                        nextCheckinDueAt={
+                          response.nextCheckinDueAt ? response.nextCheckinDueAt.toISOString() : null
+                        }
+                        intervalMinutes={response.checkinIntervalMinutes}
+                        requireGeo={response.monitorRequireGeo ?? false}
+                        readOnly={!canOperateApp}
+                        history={
+                          <CheckinHistory
+                            basePath={basePath}
+                            currentParams={sp}
+                            params={listState.checkins}
+                            data={checkins}
+                            timeZone={ctx.timezone}
+                            locale={ctx.locale}
+                          />
+                        }
+                      />
+                    ) : null
+                  }
                 />
-              )
-            })()}
+                <GeneratedValue
+                  value={
+                    reviewEnabled && failedFieldKeys.length > 0 ? (
+                      <Section
+                        title={tGenerated('m_04bf39d2ddc5a9', { value0: failedFieldKeys.length })}
+                        subtitle={tGenerated('m_07bbef94ea1b18')}
+                      >
+                        <ul className="space-y-2 text-sm">
+                          <GeneratedValue
+                            value={failedFieldKeys.map((key) => {
+                              const label = labelForField(
+                                version.schema,
+                                key,
+                                ctx.locale,
+                                ctx.defaultLocale,
+                              )
+                              const displayValue = displayValueForField(
+                                version.schema,
+                                recordValues,
+                                key,
+                                ctx.locale,
+                                ctx.defaultLocale,
+                              )
+                              return (
+                                <li
+                                  key={key}
+                                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rose-200 bg-rose-50/60 px-3 py-2 dark:border-rose-900 dark:bg-rose-950/40"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="font-medium text-rose-900 dark:text-rose-200">
+                                      <GeneratedValue value={label} />
+                                    </div>
+                                    <div className="text-xs text-rose-700 dark:text-rose-300">
+                                      <GeneratedText id="m_0d06009e41469d" />{' '}
+                                      <strong>
+                                        <GeneratedValue value={displayValue} />
+                                      </strong>
+                                    </div>
+                                  </div>
+                                  <GeneratedValue
+                                    value={
+                                      canCreateCorrectiveAction ? (
+                                        <Link
+                                          href={`${basePath}?drawer=spawn-ca&failedField=${encodeURIComponent(key)}${active === 'response' ? '' : `&tab=${active}`}`}
+                                        >
+                                          <Button size="sm" variant="outline">
+                                            <Plus size={12} />{' '}
+                                            <GeneratedText id="m_07b71156553d0b" />
+                                          </Button>
+                                        </Link>
+                                      ) : null
+                                    }
+                                  />
+                                </li>
+                              )
+                            })}
+                          />
+                        </ul>
+                      </Section>
+                    ) : null
+                  }
+                />
 
-            {canOperateApp && pendingFlowGates.length > 0 ? (
-              <FlowApprovals gates={pendingFlowGates} />
-            ) : null}
+                <SpawnedRecordsSection
+                  basePath={basePath}
+                  currentParams={sp}
+                  correctiveActionParams={listState.correctiveActions}
+                  correctiveActionData={spawnedCorrectiveActions}
+                  incidentParams={listState.incidents}
+                  incidentData={spawnedIncidents}
+                />
 
-            {reviewEnabled ? (
-              <Section
-                title={`Workflow steps (${workflowStepProps.length})`}
-                defaultOpen={workflowStepProps.length > 0}
-              >
-                {workflowStepProps.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    No workflow steps configured on this template.
-                  </p>
-                ) : (
-                  <WorkflowPanel
-                    responseId={id}
-                    steps={workflowStepProps}
-                    currentStepKey={response.currentStep ?? null}
-                    responseStatus={response.status}
-                    // canAct = a user is signed in to this tenant. The panel itself
-                    // disables interaction when the response is in a terminal
-                    // (closed/rejected) state. Super-admin viewing-as has
-                    // membership=null but ctx-level permissions; we still allow
-                    // them to interact for cross-tenant debugging.
-                    canAct={canOperateApp}
-                  />
-                )}
-              </Section>
-            ) : null}
-          </>
-        ) : null}
+                <GeneratedValue
+                  value={
+                    reviewEnabled && scoreRows.length > 0 ? (
+                      <Section title={tGenerated('m_061d0ca018c188')}>
+                        <div className="flex flex-wrap items-center gap-3 text-sm">
+                          <Badge variant="success">
+                            <GeneratedValue value={passCount} />{' '}
+                            <GeneratedText id="m_11c8b183d5b8e9" />
+                          </Badge>
+                          <Badge variant="destructive">
+                            <GeneratedValue value={failCount} />{' '}
+                            <GeneratedText id="m_14803909da5dbb" />
+                          </Badge>
+                          <Badge variant="secondary">
+                            <GeneratedValue value={scoreRows.length - passCount - failCount} />{' '}
+                            <GeneratedText id="m_0be3e9c2265465" />
+                          </Badge>
+                          <span className="text-slate-500">
+                            <GeneratedValue value={scoreRows.length} />{' '}
+                            <GeneratedText id="m_0e2f8b178f556a" />
+                          </span>
+                        </div>
+                      </Section>
+                    ) : null
+                  }
+                />
 
-        {active === 'comments' && commentsEnabled ? (
-          <div className="space-y-4">
-            <CommentsPanel
-              basePath={basePath}
-              currentParams={sp}
-              params={listState.comments}
-              data={comments}
-              timeZone={ctx.timezone}
-              locale={ctx.locale}
-            />
-            {canOperateApp ? (
-              <Section title="Add a comment">
-                <form action={addComment} className="space-y-3">
-                  <input type="hidden" name="responseId" value={id} />
-                  <Textarea
-                    name="body"
-                    rows={3}
-                    required
-                    maxLength={10_000}
-                    placeholder="Type a comment…"
-                  />
-                  <div className="flex justify-end">
-                    <Button type="submit">
-                      <Send size={14} /> Post comment
-                    </Button>
-                  </div>
-                </form>
-              </Section>
-            ) : null}
-          </div>
-        ) : null}
+                <GeneratedValue
+                  value={(() => {
+                    const initialRows: Record<string, Array<Record<string, unknown>>> = {}
+                    for (const sec of version.schema.sections) {
+                      const rows = recordValues[sec.id]
+                      if (sec.repeating && Array.isArray(rows)) {
+                        initialRows[sec.id] = rows as Array<Record<string, unknown>>
+                      }
+                    }
+                    return (
+                      <FormRenderer
+                        inlineAutosave
+                        readOnly={!canEditRecord}
+                        templateId={template.id}
+                        templateName={template.name}
+                        version={version.version}
+                        schema={version.schema}
+                        sites={sites}
+                        people={allPeople}
+                        entitiesByField={entitiesByField}
+                        currentUser={{
+                          personId: currentPerson?.id ?? null,
+                          name: currentPerson
+                            ? `${currentPerson.firstName} ${currentPerson.lastName}`
+                            : (ctx.membership?.displayName ?? null),
+                        }}
+                        initialResponseId={id}
+                        initialValues={recordValues}
+                        initialRows={initialRows}
+                        initialStepIndex={0}
+                        isResumed={false}
+                        returnTo={null}
+                        responseStatus={response.status}
+                      />
+                    )
+                  })()}
+                />
 
-        {active === 'audit' && auditEnabled ? (
-          <AuditTrailPanel
-            basePath={basePath}
-            currentParams={sp}
-            params={listState.activity}
-            data={activityData}
-            timeZone={ctx.timezone}
-            locale={ctx.locale}
-          />
-        ) : null}
+                <GeneratedValue
+                  value={
+                    canOperateApp && pendingFlowGates.length > 0 ? (
+                      <FlowApprovals gates={pendingFlowGates} />
+                    ) : null
+                  }
+                />
+
+                <GeneratedValue
+                  value={
+                    reviewEnabled ? (
+                      <Section
+                        title={tGenerated('m_0297c8dcc879bc', { value0: workflowStepProps.length })}
+                        defaultOpen={workflowStepProps.length > 0}
+                      >
+                        <GeneratedValue
+                          value={
+                            workflowStepProps.length === 0 ? (
+                              <p className="text-sm text-slate-500">
+                                <GeneratedText id="m_09ac0f9976f5a5" />
+                              </p>
+                            ) : (
+                              <WorkflowPanel
+                                responseId={id}
+                                steps={workflowStepProps}
+                                currentStepKey={response.currentStep ?? null}
+                                responseStatus={response.status}
+                                // canAct = a user is signed in to this tenant. The panel itself
+                                // disables interaction when the response is in a terminal
+                                // (closed/rejected) state. Super-admin viewing-as has
+                                // membership=null but ctx-level permissions; we still allow
+                                // them to interact for cross-tenant debugging.
+                                canAct={canOperateApp}
+                              />
+                            )
+                          }
+                        />
+                      </Section>
+                    ) : null
+                  }
+                />
+              </>
+            ) : null
+          }
+        />
+
+        <GeneratedValue
+          value={
+            active === 'comments' && commentsEnabled ? (
+              <div className="space-y-4">
+                <CommentsPanel
+                  basePath={basePath}
+                  currentParams={sp}
+                  params={listState.comments}
+                  data={comments}
+                  timeZone={ctx.timezone}
+                  locale={ctx.locale}
+                />
+                <GeneratedValue
+                  value={
+                    canOperateApp ? (
+                      <Section title={tGenerated('m_0ad531739f9284')}>
+                        <form action={addComment} className="space-y-3">
+                          <input type="hidden" name="responseId" value={id} />
+                          <Textarea
+                            name="body"
+                            rows={3}
+                            required
+                            maxLength={10_000}
+                            placeholder={tGenerated('m_0e027bf8f97672')}
+                          />
+                          <div className="flex justify-end">
+                            <Button type="submit">
+                              <Send size={14} /> <GeneratedText id="m_1491b04b6d4240" />
+                            </Button>
+                          </div>
+                        </form>
+                      </Section>
+                    ) : null
+                  }
+                />
+              </div>
+            ) : null
+          }
+        />
+
+        <GeneratedValue
+          value={
+            active === 'audit' && auditEnabled ? (
+              <AuditTrailPanel
+                basePath={basePath}
+                currentParams={sp}
+                params={listState.activity}
+                data={activityData}
+                timeZone={ctx.timezone}
+                locale={ctx.locale}
+              />
+            ) : null
+          }
+        />
       </div>
 
-      {canCreateCorrectiveAction || canCreateIncident ? (
-        <SpawnDrawers
-          responseId={id}
-          openDrawer={openDrawer}
-          closeHref={closeHref}
-          prefill={
-            // Per-field CAPA spawn — recompute prefill scoped to the single
-            // failed field referenced in `?failedField=`. Cheap; runs once
-            // per render.
-            (() => {
-              const single = pickString(sp.failedField)
-              if (!single || !failedFieldKeys.includes(single)) return spawnPrefill
-              return buildSpawnPrefill({
-                templateName: template.name,
-                reference: referenceShort,
-                score: complianceScore,
-                schema: version.schema,
-                values: recordValues,
-                failedFieldKeys,
-                singleFailedFieldKey: single,
-                locale: ctx.locale,
-                defaultLocale: ctx.defaultLocale,
-              })
-            })()
-          }
-          spawnCa={createCorrectiveActionFromResponse}
-          spawnIncident={createIncidentFromResponse}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          canCreateCorrectiveAction || canCreateIncident ? (
+            <SpawnDrawers
+              responseId={id}
+              openDrawer={openDrawer}
+              closeHref={closeHref}
+              prefill={
+                // Per-field CAPA spawn — recompute prefill scoped to the single
+                // failed field referenced in `?failedField=`. Cheap; runs once
+                // per render.
+                (() => {
+                  const single = pickString(sp.failedField)
+                  if (!single || !failedFieldKeys.includes(single)) return spawnPrefill
+                  return buildSpawnPrefill({
+                    templateName: template.name,
+                    reference: referenceShort,
+                    score: complianceScore,
+                    schema: version.schema,
+                    values: recordValues,
+                    failedFieldKeys,
+                    singleFailedFieldKey: single,
+                    locale: ctx.locale,
+                    defaultLocale: ctx.defaultLocale,
+                  })
+                })()
+              }
+              spawnCa={createCorrectiveActionFromResponse}
+              spawnIncident={createIncidentFromResponse}
+            />
+          ) : null
+        }
+      />
     </DetailPageLayout>
   )
 }
@@ -1154,20 +1314,22 @@ function ComplianceBadge({
   if (status === 'compliant') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900">
-        <CheckCircle2 size={12} /> Compliant · {score.toFixed(0)}%
+        <CheckCircle2 size={12} /> <GeneratedText id="m_1ec447c1ea1bd2" />{' '}
+        <GeneratedValue value={score.toFixed(0)} />%
       </span>
     )
   }
   if (status === 'non_compliant') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-800 ring-1 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900">
-        <AlertTriangle size={12} /> Non-compliant · {score.toFixed(0)}%
+        <AlertTriangle size={12} /> <GeneratedText id="m_0e1fbb8b9fe5df" />{' '}
+        <GeneratedValue value={score.toFixed(0)} />%
       </span>
     )
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
-      <Clock size={12} /> Pending review
+      <Clock size={12} /> <GeneratedText id="m_08b7d8b7086dea" />
     </span>
   )
 }

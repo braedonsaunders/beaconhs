@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // /locations/units — the flat, searchable org-unit admin table across every
 // level (customer / project / site / area) in one list, with a create flyout and
 // soft-delete. Complements the Locations records view (which is customer-rooted
@@ -34,7 +37,10 @@ import { LocationsSubNav } from '@/components/locations-sub-nav'
 import { OrgUnitDrawer } from './_drawers'
 import { addOrgUnit, deleteOrgUnit } from '../_actions/units'
 
-export const metadata = { title: 'Locations — Org units' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0ae516ba386169') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/locations/units'
@@ -46,6 +52,8 @@ export default async function OrgUnitsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const ctx = await requireModuleManage('locations')
   const params = parseListParams(sp, {
@@ -150,28 +158,32 @@ export default async function OrgUnitsPage({
         <>
           <LocationsSubNav active="units" />
           <PageHeader
-            title="Org units"
-            description="The full customer / project / site / area tree in one flat, searchable list. Edit a unit's details from its location page."
+            title={tGenerated('m_13ba3f5fafdada')}
+            description={tGenerated('m_05cd0fbb913bf1')}
             actions={
               <Link href={newHref as never} scroll={false}>
                 <Button>
-                  <Plus size={14} /> Add org unit
+                  <Plus size={14} /> <GeneratedText id="m_1959406a59d28f" />
                 </Button>
               </Link>
             }
           />
-          {errorMsg ? (
-            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-              {errorMsg}
-            </p>
-          ) : null}
+          <GeneratedValue
+            value={
+              errorMsg ? (
+                <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+                  <GeneratedValue value={errorMsg} />
+                </p>
+              ) : null
+            }
+          />
           <div className="flex flex-wrap items-center gap-3">
-            <SearchInput placeholder="Search by name or code" />
+            <SearchInput placeholder={tGenerated('m_1b2c753f4c06fa')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               defaultValue="active"
               options={[
                 { value: 'active', label: 'Active', count: activeCount },
@@ -182,7 +194,7 @@ export default async function OrgUnitsPage({
               basePath={BASE}
               currentParams={sp}
               paramKey="level"
-              label="Level"
+              label={tGenerated('m_1cc321f2024ad6')}
               allLabel="All levels"
               options={LEVELS.map((l) => ({
                 value: l,
@@ -194,123 +206,174 @@ export default async function OrgUnitsPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          title={params.q ? `No org units match "${params.q}"` : 'No org units'}
-          description="Add a customer, project, site or area to build your hierarchy."
-          action={
-            params.q ? undefined : (
-              <Link href={newHref as never} scroll={false}>
-                <Button>Add org unit</Button>
-              </Link>
-            )
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                  Name
-                </SortableTh>
-                <SortableTh {...sortProps} column="level" active={params.sort === 'level'}>
-                  Level
-                </SortableTh>
-                <TableHead>Parent</TableHead>
-                <SortableTh {...sortProps} column="code" active={params.sort === 'code'}>
-                  Code
-                </SortableTh>
-                <TableHead>Source</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((u) => {
-                const origin = syncOrigins.get(u.id)
-                return (
-                  <TableRow key={u.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/locations/${u.id}`}
-                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                        >
-                          {u.name}
-                        </Link>
-                        {u.deletedAt ? <Badge variant="warning">Archived</Badge> : null}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{levelLabel(u.level)}</Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">
-                      {u.parentName ? (
-                        <span>
-                          <span className="text-xs text-slate-400 dark:text-slate-500">
-                            {levelLabel(u.parentLevel!)}:{' '}
-                          </span>
-                          {u.parentName}
-                        </span>
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
-                      {u.code ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      {origin ? (
-                        <Badge variant="secondary" title={`Synced from ${origin.connectionName}`}>
-                          <Lock size={11} /> {origin.sourceSystem}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-slate-400 dark:text-slate-500">Manual</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {u.deletedAt ? (
-                        <Link
-                          href={`/locations/${u.id}`}
-                          className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                        >
-                          Restore
-                        </Link>
-                      ) : origin ? (
-                        <span
-                          className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500"
-                          title={`Synced from ${origin.connectionName} — disable the connection to edit`}
-                        >
-                          <Lock size={11} /> Synced
-                        </span>
-                      ) : (
-                        <form action={deleteOrgUnit} className="inline">
-                          <input type="hidden" name="id" value={u.id} />
-                          <ConfirmButton
-                            message={`Archive "${u.name}"? It disappears from pickers and this list; restore it from its location page.`}
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-500 hover:text-red-700 dark:hover:text-red-400"
-                          >
-                            <Trash2 size={12} />
-                          </ConfirmButton>
-                        </form>
-                      )}
-                    </TableCell>
-                  </TableRow>
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              title={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_1ee48b9acc50cd', { value0: params.q })
+                  : tGenerated('m_167430ea9f7c05'),
+              )}
+              description={tGenerated('m_0a8e97f0fd9b27')}
+              action={
+                params.q ? undefined : (
+                  <Link href={newHref as never} scroll={false}>
+                    <Button>
+                      <GeneratedText id="m_1959406a59d28f" />
+                    </Button>
+                  </Link>
                 )
-              })}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath={BASE}
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="level" active={params.sort === 'level'}>
+                      <GeneratedText id="m_1cc321f2024ad6" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_14583b7cc6c6f9" />
+                    </TableHead>
+                    <SortableTh {...sortProps} column="code" active={params.sort === 'code'}>
+                      <GeneratedText id="m_0570e24c85cf95" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_1d05fa7a091a9b" />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <GeneratedText id="m_0a7f1858f2ec46" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((u) => {
+                      const origin = syncOrigins.get(u.id)
+                      return (
+                        <TableRow key={u.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Link
+                                href={`/locations/${u.id}`}
+                                className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                              >
+                                <GeneratedValue value={u.name} />
+                              </Link>
+                              <GeneratedValue
+                                value={
+                                  u.deletedAt ? (
+                                    <Badge variant="warning">
+                                      <GeneratedText id="m_12a687134482ba" />
+                                    </Badge>
+                                  ) : null
+                                }
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              <GeneratedValue value={levelLabel(u.level)} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            <GeneratedValue
+                              value={
+                                u.parentName ? (
+                                  <span>
+                                    <span className="text-xs text-slate-400 dark:text-slate-500">
+                                      <GeneratedValue value={levelLabel(u.parentLevel!)} />:
+                                      <GeneratedValue value={' '} />
+                                    </span>
+                                    <GeneratedValue value={u.parentName} />
+                                  </span>
+                                ) : (
+                                  '—'
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                            <GeneratedValue value={u.code ?? '—'} />
+                          </TableCell>
+                          <TableCell>
+                            <GeneratedValue
+                              value={
+                                origin ? (
+                                  <Badge
+                                    variant="secondary"
+                                    title={tGenerated('m_04da7e7459a402', {
+                                      value0: origin.connectionName,
+                                    })}
+                                  >
+                                    <Lock size={11} />{' '}
+                                    <GeneratedValue value={origin.sourceSystem} />
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                                    <GeneratedText id="m_132166f2d04b7c" />
+                                  </span>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <GeneratedValue
+                              value={
+                                u.deletedAt ? (
+                                  <Link
+                                    href={`/locations/${u.id}`}
+                                    className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                  >
+                                    <GeneratedText id="m_19500e41842c99" />
+                                  </Link>
+                                ) : origin ? (
+                                  <span
+                                    className="inline-flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500"
+                                    title={tGenerated('m_0a77e7f2617548', {
+                                      value0: origin.connectionName,
+                                    })}
+                                  >
+                                    <Lock size={11} /> <GeneratedText id="m_07ba2e86a6e153" />
+                                  </span>
+                                ) : (
+                                  <form action={deleteOrgUnit} className="inline">
+                                    <input type="hidden" name="id" value={u.id} />
+                                    <ConfirmButton
+                                      message={tGenerated('m_1dcdeed8176c88', { value0: u.name })}
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                                    >
+                                      <Trash2 size={12} />
+                                    </ConfirmButton>
+                                  </form>
+                                )
+                              }
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath={BASE}
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
 
       <OrgUnitDrawer
         open={pickString(sp.drawer) === 'new'}

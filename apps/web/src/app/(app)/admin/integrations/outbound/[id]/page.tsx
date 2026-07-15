@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // /admin/integrations/outbound/[id] — build one outbound automation: pick a
 // trigger + destination, configure + map, test, enable. Gated by
 // admin.integrations.manage.
@@ -18,7 +20,10 @@ import { deleteOutbound } from '../_actions'
 import { DeleteIntegrationButton } from '../../_delete-integration-button'
 import { IntegrationBuilder, type DestLite } from './_builder.client'
 
-export const metadata = { title: 'Outbound automation' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0e2cf7bcf1a80f') }
+}
 export const dynamic = 'force-dynamic'
 
 const STATUS_PILL: Record<string, string> = {
@@ -37,6 +42,7 @@ export default async function OutboundIntegrationPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -76,13 +82,15 @@ export default async function OutboundIntegrationPage({
           href="/admin/integrations"
           className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
         >
-          <ArrowLeft size={14} /> Back to integrations
+          <ArrowLeft size={14} /> <GeneratedText id="m_1c8ed3217c8450" />
         </Link>
 
         <header className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              {row.name || trigger?.label || 'New automation'}
+              <GeneratedValue
+                value={row.name || trigger?.label || <GeneratedText id="m_0fbcdc0def03aa" />}
+              />
             </h1>
             <span
               className={cn(
@@ -90,16 +98,25 @@ export default async function OutboundIntegrationPage({
                 STATUS_PILL[status] ?? STATUS_PILL.draft,
               )}
             >
-              {status}
+              <GeneratedValue value={status} />
             </span>
           </div>
-          {row.lastError ? (
-            <p className="text-xs text-red-600 dark:text-red-400">Last error: {row.lastError}</p>
-          ) : row.lastRunAt ? (
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              Last run {formatDateTime(new Date(row.lastRunAt), ctx.timezone, ctx.locale)}
-            </p>
-          ) : null}
+          <GeneratedValue
+            value={
+              row.lastError ? (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  <GeneratedText id="m_0e157303f3a90f" /> <GeneratedValue value={row.lastError} />
+                </p>
+              ) : row.lastRunAt ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">
+                  <GeneratedText id="m_1236782a321d73" />{' '}
+                  <GeneratedValue
+                    value={formatDateTime(new Date(row.lastRunAt), ctx.timezone, ctx.locale)}
+                  />
+                </p>
+              ) : null
+            }
+          />
         </header>
 
         <Card>
@@ -127,7 +144,7 @@ export default async function OutboundIntegrationPage({
           name={row.name || trigger?.label || 'this automation'}
           kind="automation"
           iconOnly={false}
-          label="Remove automation"
+          label={tGenerated('m_1a68ace74e02ea')}
           deleteAction={deleteOutbound}
         />
       </div>

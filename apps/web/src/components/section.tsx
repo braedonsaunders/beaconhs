@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedValue } from '@/i18n/generated'
+
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
@@ -42,18 +44,38 @@ export function Section({
                   open ? '' : '-rotate-90',
                 )}
               />
-              {title}
+              <GeneratedValue value={title} />
             </div>
-            {subtitle ? (
-              <div className="ml-6 text-xs text-slate-500 dark:text-slate-400">{subtitle}</div>
-            ) : null}
+            <GeneratedValue
+              value={
+                subtitle ? (
+                  <div className="ml-6 text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={subtitle} />
+                  </div>
+                ) : null
+              }
+            />
           </div>
         </button>
-        {actions ? <div className="shrink-0">{actions}</div> : null}
+        <GeneratedValue
+          value={
+            actions ? (
+              <div className="shrink-0">
+                <GeneratedValue value={actions} />
+              </div>
+            ) : null
+          }
+        />
       </div>
-      {open ? (
-        <div className="border-t border-slate-100 px-5 py-4 dark:border-slate-800">{children}</div>
-      ) : null}
+      <GeneratedValue
+        value={
+          open ? (
+            <div className="border-t border-slate-100 px-5 py-4 dark:border-slate-800">
+              <GeneratedValue value={children} />
+            </div>
+          ) : null
+        }
+      />
     </section>
   )
 }

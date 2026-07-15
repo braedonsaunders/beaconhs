@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Create / edit flyout for an equipment type. URL-driven (?drawer=new | <id>),
 // one UrlDrawer + form handling both modes — mirrors /people/departments.
 
@@ -35,6 +42,8 @@ export function EquipmentTypeDrawer({
   categories: { id: string; name: string }[]
   saveAction: SaveAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   function close() {
     router.push(closeHref)
@@ -44,8 +53,10 @@ export function EquipmentTypeDrawer({
     <UrlDrawer
       open={mode !== null}
       closeHref={closeHref}
-      title={mode === 'edit' ? 'Edit equipment type' : 'New equipment type'}
-      description="The make/model catalogue every asset is classified against. Inspection cadences live on each unit's schedules; templates default their own interval."
+      title={tGeneratedValue(
+        mode === 'edit' ? tGenerated('m_1cfe717d2103ec') : tGenerated('m_0a11a9b7f3edc8'),
+      )}
+      description={tGenerated('m_0f3f98d9b6074b')}
       size="md"
     >
       <TypeForm
@@ -70,6 +81,8 @@ function TypeForm({
   saveAction: SaveAction
   onDone: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [name, setName] = useState(editing?.name ?? '')
   const [categoryId, setCategoryId] = useState(editing?.categoryId ?? '')
   const [description, setDescription] = useState(editing?.description ?? '')
@@ -77,10 +90,10 @@ function TypeForm({
   const [pending, start] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     const trimmed = name.trim()
     if (!trimmed) {
-      setError('Name is required.')
+      setError(tGenerated('m_1c66cb30434189'))
       return
     }
     start(async () => {
@@ -91,7 +104,7 @@ function TypeForm({
         categoryId: categoryId || null,
       })
       if (res.ok) onDone()
-      else setError(res.error)
+      else setError(tGeneratedValue(res.error))
     })
   }
 
@@ -104,33 +117,43 @@ function TypeForm({
       className="space-y-4"
     >
       <div className="space-y-1.5">
-        <Label htmlFor="et-name">Name *</Label>
+        <Label htmlFor="et-name">
+          <GeneratedText id="m_1a9978900838e6" />
+        </Label>
         <Input
           id="et-name"
           autoFocus
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="e.g. Pickup truck"
+          placeholder={tGenerated('m_1b46f7fbe24fbd')}
           required
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="et-category">Category</Label>
+        <Label htmlFor="et-category">
+          <GeneratedText id="m_108b41637f364f" />
+        </Label>
         <Select
           id="et-category"
           value={categoryId}
           onChange={(e) => setCategoryId(e.currentTarget.value)}
         >
-          <option value="">— None —</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
+          <option value="">
+            <GeneratedText id="m_0dd5f8a31ce3e1" />
+          </option>
+          <GeneratedValue
+            value={categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                <GeneratedValue value={c.name} />
+              </option>
+            ))}
+          />
         </Select>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="et-description">Description</Label>
+        <Label htmlFor="et-description">
+          <GeneratedText id="m_14d923495cf14c" />
+        </Label>
         <Textarea
           id="et-description"
           value={description}
@@ -138,18 +161,32 @@ function TypeForm({
           rows={2}
         />
       </div>
-      {error ? (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-          {error}
-        </p>
-      ) : null}
+      <GeneratedValue
+        value={
+          error ? (
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+              <GeneratedValue value={error} />
+            </p>
+          ) : null
+        }
+      />
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="outline" onClick={onDone} disabled={pending}>
-          Cancel
+          <GeneratedText id="m_112e2e8ecda428" />
         </Button>
         <Button type="submit" disabled={pending}>
-          {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-          {editing ? 'Save changes' : 'Create type'}
+          <GeneratedValue
+            value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+          />
+          <GeneratedValue
+            value={
+              editing ? (
+                <GeneratedText id="m_1ab9025ed1067c" />
+              ) : (
+                <GeneratedText id="m_043fe9fe859dff" />
+              )
+            }
+          />
         </Button>
       </div>
     </form>

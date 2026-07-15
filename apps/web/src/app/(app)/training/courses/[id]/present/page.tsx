@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound, redirect } from 'next/navigation'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -9,8 +10,9 @@ import { isUuid } from '@/lib/list-params'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Present · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_0d68f1d78bb9cf', { value0: id.slice(0, 8) }) }
 }
 
 // Only internal app paths are honoured as a return target — never an absolute

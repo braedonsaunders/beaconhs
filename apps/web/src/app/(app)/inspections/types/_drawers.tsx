@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Sub-entity drawer for the inspection types list page:
 //   • new-type → create a new inspection type shell
 //
@@ -68,6 +75,8 @@ function NewTypeDrawer({
   closeHref: string
   action: CreateTypeAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -81,10 +90,10 @@ function NewTypeDrawer({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     const trimmed = name.trim()
     if (!trimmed) {
-      setError('Name is required.')
+      setError(tGenerated('m_1c66cb30434189'))
       return
     }
     startTransition(async () => {
@@ -102,7 +111,7 @@ function NewTypeDrawer({
         router.push(`/inspections/types/${res.id}`)
         router.refresh()
       } else {
-        setError(res.error || 'Failed to create inspection type')
+        setError(tGeneratedValue(res.error || tGenerated('m_0ac365dcdc6dbd')))
       }
     })
   }
@@ -111,8 +120,8 @@ function NewTypeDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title="New inspection type"
-      description="Name it here, then build its criteria in the type builder that opens after save."
+      title={tGenerated('m_13f748eec4ec4b')}
+      description={tGenerated('m_00e94e5fcfa412')}
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
@@ -122,90 +131,109 @@ function NewTypeDrawer({
             onClick={() => router.push(closeHref)}
             disabled={pending}
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            Create type
+            <GeneratedValue
+              value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            />
+            <GeneratedText id="m_043fe9fe859dff" />
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <Alert variant="info">
-          <AlertTitle>Next: build the checklist</AlertTitle>
+          <AlertTitle>
+            <GeneratedText id="m_187e0786ff1cc0" />
+          </AlertTitle>
           <AlertDescription>
-            After saving you'll land in the type builder, where you add questions and sections — or
-            import a saved bank.
+            <GeneratedText id="m_08c58ad46027b9" />
           </AlertDescription>
         </Alert>
 
         <div className="space-y-1.5">
-          <Label htmlFor="it-name">Name *</Label>
+          <Label htmlFor="it-name">
+            <GeneratedText id="m_1a9978900838e6" />
+          </Label>
           <Input
             id="it-name"
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
-            placeholder="e.g. Site Daily Walk-Through"
+            placeholder={tGenerated('m_00a9c925dbf230')}
             required
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="it-description">Description</Label>
+          <Label htmlFor="it-description">
+            <GeneratedText id="m_14d923495cf14c" />
+          </Label>
           <Textarea
             id="it-description"
             value={description}
             onChange={(e) => setDescription(e.currentTarget.value)}
             rows={3}
-            placeholder="When to use this type, who it's for"
+            placeholder={tGenerated('m_16b40b1c30abd7')}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="it-cadence">Default cadence (hint for assignments)</Label>
+            <Label htmlFor="it-cadence">
+              <GeneratedText id="m_058321201dc72d" />
+            </Label>
             <Select
               id="it-cadence"
               value={defaultCadence}
               onChange={(e) => setDefaultCadence(e.currentTarget.value)}
             >
-              {CADENCES.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
+              <GeneratedValue
+                value={CADENCES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    <GeneratedValue value={c.label} />
+                  </option>
+                ))}
+              />
             </Select>
           </div>
           <div className="space-y-2 pt-7 text-sm">
             <Toggle
               checked={requiresForeman}
               onChange={setRequiresForeman}
-              label="Requires foreman"
+              label={tGenerated('m_009aa82c778013')}
             />
             <Toggle
               checked={requiresCustomerSignature}
               onChange={setRequiresCustomerSignature}
-              label="Requires customer signature"
+              label={tGenerated('m_07085f507bc4a0')}
             />
             <Toggle
               checked={enableCorrectiveActions}
               onChange={setEnableCorrectiveActions}
-              label="Auto-spawn corrective actions on fail (severity >= high)"
+              label={tGenerated('m_116e6aa3546258')}
             />
             <Toggle
               checked={allowCompliantNotes}
               onChange={setAllowCompliantNotes}
-              label="Allow compliant notes (per-criterion comments)"
+              label={tGenerated('m_00fd79d0912a73')}
             />
-            <Toggle checked={isPublished} onChange={setIsPublished} label="Publish immediately" />
+            <Toggle
+              checked={isPublished}
+              onChange={setIsPublished}
+              label={tGenerated('m_0c88300e407074')}
+            />
           </div>
         </div>
 
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )
@@ -228,7 +256,9 @@ function Toggle({
         onChange={(e) => onChange(e.currentTarget.checked)}
         className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
       />
-      <span>{label}</span>
+      <span>
+        <GeneratedValue value={label} />
+      </span>
     </label>
   )
 }

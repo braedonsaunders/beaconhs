@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import { useMemo, useState, useTransition, type ReactNode } from 'react'
 import {
   ArrowLeft,
@@ -126,6 +133,8 @@ export function CredentialDesignStudio({
   initialOutputs: CredentialOutput[]
   onSave: (outputs: CredentialOutput[]) => Promise<SaveCredentialOutputsResult>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const initial = initialOutputs.length ? initialOutputs : DEFAULT_CREDENTIAL_OUTPUTS
   const [outputs, setOutputs] = useState<CredentialOutput[]>(
     initial.map((output) => ensureDocument(output)),
@@ -219,7 +228,7 @@ export function CredentialDesignStudio({
 
   function addOutput(format: CredentialFormat) {
     if (outputs.length >= CREDENTIAL_OUTPUT_LIMITS.maxOutputs) {
-      toast.error(`Card studio supports up to ${CREDENTIAL_OUTPUT_LIMITS.maxOutputs} designs.`)
+      toast.error(tGenerated('m_17803edea9830d', { value0: CREDENTIAL_OUTPUT_LIMITS.maxOutputs }))
       return
     }
     const fallback =
@@ -250,7 +259,7 @@ export function CredentialDesignStudio({
   function duplicateActive() {
     if (!activeOutput || !activeDocument) return
     if (outputs.length >= CREDENTIAL_OUTPUT_LIMITS.maxOutputs) {
-      toast.error(`Card studio supports up to ${CREDENTIAL_OUTPUT_LIMITS.maxOutputs} designs.`)
+      toast.error(tGenerated('m_17803edea9830d', { value0: CREDENTIAL_OUTPUT_LIMITS.maxOutputs }))
       return
     }
     const name = uniqueOutputName(`${activeOutput.name} copy`, outputs)
@@ -307,7 +316,7 @@ export function CredentialDesignStudio({
     if (!activeArtboard) return
     if (activeArtboard.elements.length >= DESIGN_DOCUMENT_LIMITS.maxElementsPerArtboard) {
       toast.error(
-        `An artboard can contain up to ${DESIGN_DOCUMENT_LIMITS.maxElementsPerArtboard} elements.`,
+        tGenerated('m_10456650c91674', { value0: DESIGN_DOCUMENT_LIMITS.maxElementsPerArtboard }),
       )
       return
     }
@@ -372,7 +381,9 @@ export function CredentialDesignStudio({
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (err) {
       win?.close()
-      toast.error(err instanceof Error ? err.message : 'Preview failed')
+      toast.error(
+        tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_15c4f4f3f704bc')),
+      )
     } finally {
       setPreviewing(false)
     }
@@ -383,7 +394,7 @@ export function CredentialDesignStudio({
       try {
         const result = await onSave(outputs.map((output) => ensureDocument(output)))
         if (!result.ok) {
-          toast.error(result.error)
+          toast.error(tGeneratedValue(result.error))
           return
         }
         const saved = result.outputs
@@ -396,7 +407,7 @@ export function CredentialDesignStudio({
         setSavedAt(new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))
       } catch (error) {
         console.error('[credential-designs] save request failed', error)
-        toast.error('Credential designs could not be saved. Please try again.')
+        toast.error(tGenerated('m_01e59cb935b111'))
       }
     })
   }
@@ -412,223 +423,289 @@ export function CredentialDesignStudio({
     >
       <aside className="flex min-h-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="shrink-0 border-b border-slate-200 p-3 dark:border-slate-800">
-          {!activeOutput ? (
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <Layers3 size={16} className="shrink-0 text-teal-700 dark:text-teal-300" />
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Card studio
+          <GeneratedValue
+            value={
+              !activeOutput ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Layers3 size={16} className="shrink-0 text-teal-700 dark:text-teal-300" />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        <GeneratedText id="m_048e076a639a29" />
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedValue value={outputs.filter((output) => output.enabled).length} />{' '}
+                        <GeneratedText id="m_146496486c4e80" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    {outputs.filter((output) => output.enabled).length} active designs
-                  </div>
+                  <Badge variant="secondary">
+                    <GeneratedValue value={outputs.length} />
+                  </Badge>
                 </div>
-              </div>
-              <Badge variant="secondary">{outputs.length}</Badge>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveId(null)}
-                  title="All designs"
-                  aria-label="Back to all designs"
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                >
-                  <ArrowLeft size={15} />
-                </button>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {activeOutput.name}
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveId(null)}
+                      title={tGenerated('m_04bb96e91740d8')}
+                      aria-label={tGenerated('m_090d299b42404e')}
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                    >
+                      <ArrowLeft size={15} />
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        <GeneratedValue value={activeOutput.name} />
+                      </div>
+                      <div className="truncate text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedValue value={formatLabel(activeOutput.format)} />
+                      </div>
+                    </div>
+                    <Badge variant={activeOutput.enabled ? 'success' : 'secondary'}>
+                      <GeneratedValue
+                        value={
+                          activeOutput.enabled ? (
+                            <GeneratedText id="m_1e1b1fdb7dd78e" />
+                          ) : (
+                            <GeneratedText id="m_01cb6961ee0ba3" />
+                          )
+                        }
+                      />
+                    </Badge>
                   </div>
-                  <div className="truncate text-xs text-slate-500 dark:text-slate-400">
-                    {formatLabel(activeOutput.format)}
+                  <div className="mt-3 grid grid-cols-6 gap-1">
+                    <RailTabButton
+                      active={tab === 'list'}
+                      label={tGenerated('m_042c5534355321')}
+                      onClick={() => setTab('list')}
+                      icon={<Layers3 size={14} />}
+                    />
+                    <RailTabButton
+                      active={tab === 'design'}
+                      label={tGenerated('m_0006b9b63f781f')}
+                      onClick={() => setTab('design')}
+                      icon={<Settings2 size={14} />}
+                    />
+                    <RailTabButton
+                      active={tab === 'insert'}
+                      label={tGenerated('m_028b340e5141ab')}
+                      onClick={() => setTab('insert')}
+                      icon={<Sparkles size={14} />}
+                    />
+                    <RailTabButton
+                      active={tab === 'layers'}
+                      label={tGenerated('m_1065741cf2a494')}
+                      onClick={() => setTab('layers')}
+                      icon={<Layers3 size={14} />}
+                    />
+                    <RailTabButton
+                      active={tab === 'inspector'}
+                      label={tGenerated('m_03cf3a97d03fef')}
+                      onClick={() => setTab('inspector')}
+                      icon={<MousePointer2 size={14} />}
+                    />
+                    <RailTabButton
+                      active={tab === 'print'}
+                      label={tGenerated('m_124553ef26fbe5')}
+                      onClick={() => setTab('print')}
+                      icon={<Printer size={14} />}
+                    />
                   </div>
-                </div>
-                <Badge variant={activeOutput.enabled ? 'success' : 'secondary'}>
-                  {activeOutput.enabled ? 'Active' : 'Hidden'}
-                </Badge>
-              </div>
-              <div className="mt-3 grid grid-cols-6 gap-1">
-                <RailTabButton
-                  active={tab === 'list'}
-                  label="Designs"
-                  onClick={() => setTab('list')}
-                  icon={<Layers3 size={14} />}
-                />
-                <RailTabButton
-                  active={tab === 'design'}
-                  label="Design"
-                  onClick={() => setTab('design')}
-                  icon={<Settings2 size={14} />}
-                />
-                <RailTabButton
-                  active={tab === 'insert'}
-                  label="Insert"
-                  onClick={() => setTab('insert')}
-                  icon={<Sparkles size={14} />}
-                />
-                <RailTabButton
-                  active={tab === 'layers'}
-                  label="Layers"
-                  onClick={() => setTab('layers')}
-                  icon={<Layers3 size={14} />}
-                />
-                <RailTabButton
-                  active={tab === 'inspector'}
-                  label="Style"
-                  onClick={() => setTab('inspector')}
-                  icon={<MousePointer2 size={14} />}
-                />
-                <RailTabButton
-                  active={tab === 'print'}
-                  label="Print"
-                  onClick={() => setTab('print')}
-                  icon={<Printer size={14} />}
-                />
-              </div>
-            </>
-          )}
+                </>
+              )
+            }
+          />
         </div>
 
         <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
-          {!activeOutput || !activeDocument || !activeArtboard || tab === 'list' ? (
-            <DesignListPanel
-              outputs={outputs}
-              activeId={activeId}
-              onOpen={openDesign}
-              onAddOutput={addOutput}
-            />
-          ) : (
-            <>
-              {tab === 'design' ? (
-                <DesignSettingsPanel
+          <GeneratedValue
+            value={
+              !activeOutput || !activeDocument || !activeArtboard || tab === 'list' ? (
+                <DesignListPanel
                   outputs={outputs}
-                  activeOutput={activeOutput}
-                  activeDocument={activeDocument}
-                  activeArtboard={activeArtboard}
-                  onPatchOutput={updateActive}
-                  onDuplicate={duplicateActive}
-                  onRemove={removeActive}
-                  onReplaceFormat={replaceFormat}
-                  onSelectArtboard={(id) => setActiveArtboardId(id)}
+                  activeId={activeId}
+                  onOpen={openDesign}
+                  onAddOutput={addOutput}
                 />
-              ) : null}
-              {tab === 'insert' ? <InsertPanel onAdd={addElement} /> : null}
-              {tab === 'layers' ? (
-                <LayersPanel
-                  artboard={activeArtboard}
-                  selectedElementId={selectedElementId}
-                  onSelect={(id) => {
-                    setSelectedElementId(id)
-                    setTab('inspector')
-                  }}
-                  onDuplicate={duplicateSelected}
-                  onDelete={deleteSelected}
-                  onFront={() => moveSelected('front')}
-                  onBack={() => moveSelected('back')}
-                />
-              ) : null}
-              {tab === 'inspector' ? (
-                <InspectorPanel
-                  artboard={activeArtboard}
-                  selectedElement={selectedElement}
-                  catalog={CREDENTIAL_CATALOG}
-                  onPatchArtboard={updateArtboard}
-                  onPatchElement={(patch) =>
-                    selectedElement && updateElement(selectedElement.id, patch)
-                  }
-                  onDelete={deleteSelected}
-                />
-              ) : null}
-              {tab === 'print' ? (
-                <PrintPanel artboard={activeArtboard} onPatchArtboard={updateArtboard} />
-              ) : null}
-            </>
-          )}
+              ) : (
+                <>
+                  <GeneratedValue
+                    value={
+                      tab === 'design' ? (
+                        <DesignSettingsPanel
+                          outputs={outputs}
+                          activeOutput={activeOutput}
+                          activeDocument={activeDocument}
+                          activeArtboard={activeArtboard}
+                          onPatchOutput={updateActive}
+                          onDuplicate={duplicateActive}
+                          onRemove={removeActive}
+                          onReplaceFormat={replaceFormat}
+                          onSelectArtboard={(id) => setActiveArtboardId(id)}
+                        />
+                      ) : null
+                    }
+                  />
+                  <GeneratedValue
+                    value={tab === 'insert' ? <InsertPanel onAdd={addElement} /> : null}
+                  />
+                  <GeneratedValue
+                    value={
+                      tab === 'layers' ? (
+                        <LayersPanel
+                          artboard={activeArtboard}
+                          selectedElementId={selectedElementId}
+                          onSelect={(id) => {
+                            setSelectedElementId(id)
+                            setTab('inspector')
+                          }}
+                          onDuplicate={duplicateSelected}
+                          onDelete={deleteSelected}
+                          onFront={() => moveSelected('front')}
+                          onBack={() => moveSelected('back')}
+                        />
+                      ) : null
+                    }
+                  />
+                  <GeneratedValue
+                    value={
+                      tab === 'inspector' ? (
+                        <InspectorPanel
+                          artboard={activeArtboard}
+                          selectedElement={selectedElement}
+                          catalog={CREDENTIAL_CATALOG}
+                          onPatchArtboard={updateArtboard}
+                          onPatchElement={(patch) =>
+                            selectedElement && updateElement(selectedElement.id, patch)
+                          }
+                          onDelete={deleteSelected}
+                        />
+                      ) : null
+                    }
+                  />
+                  <GeneratedValue
+                    value={
+                      tab === 'print' ? (
+                        <PrintPanel artboard={activeArtboard} onPatchArtboard={updateArtboard} />
+                      ) : null
+                    }
+                  />
+                </>
+              )
+            }
+          />
         </div>
 
         <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-2">
             <Button type="button" className="flex-1" onClick={saveDraft} disabled={pending}>
               <Save size={14} />
-              {pending ? 'Saving' : 'Save designs'}
+              <GeneratedValue
+                value={
+                  pending ? (
+                    <GeneratedText id="m_049969c97f8439" />
+                  ) : (
+                    <GeneratedText id="m_0f460bcd876d0f" />
+                  )
+                }
+              />
             </Button>
-            {savedAt ? (
-              <span className="text-xs text-slate-500 dark:text-slate-400">Saved {savedAt}</span>
-            ) : null}
+            <GeneratedValue
+              value={
+                savedAt ? (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedText id="m_0a0569b726b225" /> <GeneratedValue value={savedAt} />
+                  </span>
+                ) : null
+              }
+            />
           </div>
         </div>
       </aside>
 
-      {!activeOutput || !activeArtboard ? (
-        <section className="grid min-h-0 min-w-0 place-items-center bg-slate-100 p-8 dark:bg-slate-950">
-          <div className="max-w-sm text-center">
-            <CreditCard size={28} className="mx-auto text-slate-300 dark:text-slate-600" />
-            <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Choose a design
-            </p>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Open a design from the list to edit it on the canvas, or create a new one.
-            </p>
-          </div>
-        </section>
-      ) : (
-        <section className="flex min-h-0 min-w-0 flex-col bg-slate-100 dark:bg-slate-950">
-          <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {activeOutput.name}
+      <GeneratedValue
+        value={
+          !activeOutput || !activeArtboard ? (
+            <section className="grid min-h-0 min-w-0 place-items-center bg-slate-100 p-8 dark:bg-slate-950">
+              <div className="max-w-sm text-center">
+                <CreditCard size={28} className="mx-auto text-slate-300 dark:text-slate-600" />
+                <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  <GeneratedText id="m_0a02d5b12c694f" />
+                </p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  <GeneratedText id="m_0e1709a4ac7411" />
+                </p>
               </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                {activeArtboard.name} · {activeArtboard.width}" × {activeArtboard.height}"
+            </section>
+          ) : (
+            <section className="flex min-h-0 min-w-0 flex-col bg-slate-100 dark:bg-slate-950">
+              <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <GeneratedValue value={activeOutput.name} />
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={activeArtboard.name} /> ·{' '}
+                    <GeneratedValue value={activeArtboard.width} />
+                    <GeneratedText id="m_1e070f91ed4371" />{' '}
+                    <GeneratedValue value={activeArtboard.height} />"
+                  </div>
+                </div>
+                <div className="ml-auto flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={previewPdf}
+                    disabled={previewing}
+                    title={tGenerated('m_04b4feacf32dc7')}
+                  >
+                    <GeneratedValue
+                      value={
+                        previewing ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Eye size={14} />
+                        )
+                      }
+                    />
+                    <GeneratedText id="m_005bbd8337aa26" />
+                  </Button>
+                  <span className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setTab('insert')}>
+                    <Sparkles size={14} /> <GeneratedText id="m_028b340e5141ab" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setTab('print')}>
+                    <Printer size={14} /> <GeneratedText id="m_097167d66e7b73" />
+                  </Button>
+                  <span className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
+                  <CanvasZoomControls zoom={zoom} {...zoomControls} />
+                </div>
               </div>
-            </div>
-            <div className="ml-auto flex items-center gap-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={previewPdf}
-                disabled={previewing}
-                title="Render this design as a PDF with sample data"
-              >
-                {previewing ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
-                Preview PDF
-              </Button>
-              <span className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
-              <Button type="button" variant="ghost" size="sm" onClick={() => setTab('insert')}>
-                <Sparkles size={14} /> Insert
-              </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setTab('print')}>
-                <Printer size={14} /> Print setup
-              </Button>
-              <span className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
-              <CanvasZoomControls zoom={zoom} {...zoomControls} />
-            </div>
-          </div>
 
-          <div ref={viewportRef} className="app-scroll min-h-0 flex-1 overflow-auto p-5">
-            <div className="flex min-h-full min-w-fit items-center justify-center">
-              <ArtboardCanvas
-                key={`${activeOutput.id}:${activeArtboard.id}`}
-                artboard={activeArtboard}
-                zoom={zoom}
-                sample={CREDENTIAL_CATALOG.sample}
-                selectedElementId={selectedElementId}
-                onSelect={(id, userInitiated) => {
-                  setSelectedElementId(id)
-                  // Clicking an element jumps straight to its properties.
-                  if (id && userInitiated) setTab('inspector')
-                }}
-                onModify={(id, patch) => updateElement(id, patch)}
-              />
-            </div>
-          </div>
-        </section>
-      )}
+              <div ref={viewportRef} className="app-scroll min-h-0 flex-1 overflow-auto p-5">
+                <div className="flex min-h-full min-w-fit items-center justify-center">
+                  <ArtboardCanvas
+                    key={`${activeOutput.id}:${activeArtboard.id}`}
+                    artboard={activeArtboard}
+                    zoom={zoom}
+                    sample={CREDENTIAL_CATALOG.sample}
+                    selectedElementId={selectedElementId}
+                    onSelect={(id, userInitiated) => {
+                      setSelectedElementId(id)
+                      // Clicking an element jumps straight to its properties.
+                      if (id && userInitiated) setTab('inspector')
+                    }}
+                    onModify={(id, patch) => updateElement(id, patch)}
+                  />
+                </div>
+              </div>
+            </section>
+          )
+        }
+      />
     </div>
   )
 }
@@ -645,99 +722,122 @@ function DesignListPanel({
   onOpen: (id: string) => void
   onAddOutput: (format: CredentialFormat) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="space-y-4">
       <section className="space-y-2">
         <div className="flex items-center justify-between">
-          <RailLabel label={`Designs · ${outputs.length}`} icon={<Layers3 size={14} />} />
+          <RailLabel
+            label={tGenerated('m_1f8c2bfd9795e5', { value0: outputs.length })}
+            icon={<Layers3 size={14} />}
+          />
         </div>
         <div className="space-y-1.5">
-          {outputs.map((output) => {
-            const backdrop = firstBackdropUrl(output)
-            return (
-              <button
-                key={output.id}
-                type="button"
-                onClick={() => onOpen(output.id)}
-                aria-current={output.id === activeId}
-                className={cn(
-                  'flex w-full items-center gap-2.5 rounded-md border p-2.5 text-left transition-colors',
-                  output.id === activeId
-                    ? 'border-teal-600 bg-teal-50/60 dark:border-teal-500 dark:bg-teal-950/40'
-                    : 'border-slate-200 bg-white hover:border-teal-600 hover:bg-teal-50/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-500 dark:hover:bg-teal-950/30',
-                )}
-              >
-                <span
-                  className="relative grid h-10 w-14 shrink-0 place-items-center overflow-hidden rounded border"
-                  style={
-                    backdrop
-                      ? { borderColor: output.accent }
-                      : {
-                          borderColor: output.accent,
-                          color: output.primary,
-                          backgroundColor: output.paper,
-                        }
-                  }
-                >
-                  {backdrop ? (
-                    <RawImage
-                      src={backdrop}
-                      alt=""
-                      optimizationReason="design-surface"
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                  ) : output.format === 'wallet' ? (
-                    <CreditCard size={16} />
-                  ) : (
-                    <FileText size={16} />
-                  )}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    {output.name}
-                  </span>
-                  <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
-                    {formatLabel(output.format)}
-                  </span>
-                </span>
-                <span
+          <GeneratedValue
+            value={outputs.map((output) => {
+              const backdrop = firstBackdropUrl(output)
+              return (
+                <button
+                  key={output.id}
+                  type="button"
+                  onClick={() => onOpen(output.id)}
+                  aria-current={output.id === activeId}
                   className={cn(
-                    'h-2.5 w-2.5 shrink-0 rounded-full',
-                    output.enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-800',
+                    'flex w-full items-center gap-2.5 rounded-md border p-2.5 text-left transition-colors',
+                    output.id === activeId
+                      ? 'border-teal-600 bg-teal-50/60 dark:border-teal-500 dark:bg-teal-950/40'
+                      : 'border-slate-200 bg-white hover:border-teal-600 hover:bg-teal-50/40 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-500 dark:hover:bg-teal-950/30',
                   )}
-                  title={output.enabled ? 'Available from records' : 'Hidden'}
-                />
-                <ChevronRight size={15} className="shrink-0 text-slate-400 dark:text-slate-500" />
-              </button>
-            )
-          })}
-          {outputs.length === 0 ? (
-            <p className="rounded-md border border-dashed border-slate-300 p-3 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
-              No designs yet — create one below.
-            </p>
-          ) : null}
+                >
+                  <span
+                    className="relative grid h-10 w-14 shrink-0 place-items-center overflow-hidden rounded border"
+                    style={
+                      backdrop
+                        ? { borderColor: output.accent }
+                        : {
+                            borderColor: output.accent,
+                            color: output.primary,
+                            backgroundColor: output.paper,
+                          }
+                    }
+                  >
+                    <GeneratedValue
+                      value={
+                        backdrop ? (
+                          <RawImage
+                            src={backdrop}
+                            alt=""
+                            optimizationReason="design-surface"
+                            className="absolute inset-0 h-full w-full object-cover"
+                          />
+                        ) : output.format === 'wallet' ? (
+                          <CreditCard size={16} />
+                        ) : (
+                          <FileText size={16} />
+                        )
+                      }
+                    />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      <GeneratedValue value={output.name} />
+                    </span>
+                    <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedValue value={formatLabel(output.format)} />
+                    </span>
+                  </span>
+                  <span
+                    className={cn(
+                      'h-2.5 w-2.5 shrink-0 rounded-full',
+                      output.enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-800',
+                    )}
+                    title={tGeneratedValue(
+                      output.enabled
+                        ? tGenerated('m_1d9c0ad38beec0')
+                        : tGenerated('m_01cb6961ee0ba3'),
+                    )}
+                  />
+                  <ChevronRight size={15} className="shrink-0 text-slate-400 dark:text-slate-500" />
+                </button>
+              )
+            })}
+          />
+          <GeneratedValue
+            value={
+              outputs.length === 0 ? (
+                <p className="rounded-md border border-dashed border-slate-300 p-3 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                  <GeneratedText id="m_0339f5c56b836f" />
+                </p>
+              ) : null
+            }
+          />
         </div>
       </section>
 
       <section className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-        <RailLabel label="Add a design" icon={<Sparkles size={14} />} />
+        <RailLabel label={tGenerated('m_1e3cf018d991cf')} icon={<Sparkles size={14} />} />
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Pick a size to start a new one. Card studio supports up to{' '}
-          {CREDENTIAL_OUTPUT_LIMITS.maxOutputs} designs.
+          <GeneratedText id="m_1d956f27b9ae55" />
+          <GeneratedValue value={' '} />
+          <GeneratedValue value={CREDENTIAL_OUTPUT_LIMITS.maxOutputs} />{' '}
+          <GeneratedText id="m_0d00c9bb5c53ed" />
         </p>
         <div className="grid grid-cols-3 gap-1.5">
-          {FORMATS.map((format) => (
-            <button
-              key={format.value}
-              type="button"
-              onClick={() => onAddOutput(format.value)}
-              disabled={outputs.length >= CREDENTIAL_OUTPUT_LIMITS.maxOutputs}
-              className="flex h-14 flex-col items-center justify-center gap-1 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              {format.icon}
-              {format.label}
-            </button>
-          ))}
+          <GeneratedValue
+            value={FORMATS.map((format) => (
+              <button
+                key={format.value}
+                type="button"
+                onClick={() => onAddOutput(format.value)}
+                disabled={outputs.length >= CREDENTIAL_OUTPUT_LIMITS.maxOutputs}
+                className="flex h-14 flex-col items-center justify-center gap-1 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                <GeneratedValue value={format.icon} />
+                <GeneratedValue value={format.label} />
+              </button>
+            ))}
+          />
         </div>
       </section>
     </div>
@@ -766,18 +866,19 @@ function DesignSettingsPanel({
   onReplaceFormat: (format: CredentialFormat) => void
   onSelectArtboard: (id: string) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="space-y-4">
       <section className="space-y-3">
-        <RailLabel label="Design" icon={<BadgeCheck size={14} />} />
-        <Field label="Name">
+        <RailLabel label={tGenerated('m_0006b9b63f781f')} icon={<BadgeCheck size={14} />} />
+        <Field label={tGenerated('m_02b18d5c7f6f2d')}>
           <Input
             value={activeOutput.name}
             maxLength={CREDENTIAL_OUTPUT_LIMITS.nameLength}
             onChange={(e) => onPatchOutput({ name: e.currentTarget.value })}
           />
         </Field>
-        <Field label="Description">
+        <Field label={tGenerated('m_14d923495cf14c')}>
           <Input
             value={activeOutput.description}
             maxLength={CREDENTIAL_OUTPUT_LIMITS.descriptionLength}
@@ -786,12 +887,12 @@ function DesignSettingsPanel({
         </Field>
         <LayerToggle
           checked={activeOutput.enabled}
-          label="Available from records"
+          label={tGenerated('m_1d9c0ad38beec0')}
           onChange={(enabled) => onPatchOutput({ enabled })}
         />
         <div className="grid grid-cols-2 gap-1.5">
           <Button type="button" variant="outline" size="sm" onClick={onDuplicate}>
-            <Copy size={14} /> Duplicate
+            <Copy size={14} /> <GeneratedText id="m_13fa26360f0fe9" />
           </Button>
           <Button
             type="button"
@@ -800,54 +901,65 @@ function DesignSettingsPanel({
             onClick={onRemove}
             disabled={outputs.length <= 1}
           >
-            <Trash2 size={14} /> Remove
+            <Trash2 size={14} /> <GeneratedText id="m_1a9d8d971b1edb" />
           </Button>
         </div>
       </section>
 
       <section className="space-y-2">
-        <RailLabel label="Artboards" icon={<Grid3X3 size={14} />} />
+        <RailLabel label={tGenerated('m_17d501a9652916')} icon={<Grid3X3 size={14} />} />
         <div className="grid grid-cols-2 gap-1.5">
-          {activeDocument.artboards.map((artboard) => (
-            <button
-              key={artboard.id}
-              type="button"
-              onClick={() => onSelectArtboard(artboard.id)}
-              className={cn(
-                'rounded-md border px-2 py-2 text-left text-xs',
-                artboard.id === activeArtboard.id
-                  ? 'border-teal-700 bg-teal-50 text-teal-900 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-200'
-                  : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
-              )}
-            >
-              <div className="font-semibold">{artboard.name}</div>
-              <div className="text-[11px]">
-                {artboard.width}" × {artboard.height}"
-              </div>
-            </button>
-          ))}
+          <GeneratedValue
+            value={activeDocument.artboards.map((artboard) => (
+              <button
+                key={artboard.id}
+                type="button"
+                onClick={() => onSelectArtboard(artboard.id)}
+                className={cn(
+                  'rounded-md border px-2 py-2 text-left text-xs',
+                  artboard.id === activeArtboard.id
+                    ? 'border-teal-700 bg-teal-50 text-teal-900 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-200'
+                    : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
+                )}
+              >
+                <div className="font-semibold">
+                  <GeneratedValue value={artboard.name} />
+                </div>
+                <div className="text-[11px]">
+                  <GeneratedValue value={artboard.width} />
+                  <GeneratedText id="m_1e070f91ed4371" /> <GeneratedValue value={artboard.height} />
+                  "
+                </div>
+              </button>
+            ))}
+          />
         </div>
       </section>
 
       <section className="space-y-2">
-        <RailLabel label="Rebuild as" icon={<RectangleHorizontal size={14} />} />
+        <RailLabel
+          label={tGenerated('m_013bc6d93890e2')}
+          icon={<RectangleHorizontal size={14} />}
+        />
         <div className="grid grid-cols-3 gap-1.5">
-          {FORMATS.map((format) => (
-            <button
-              key={format.value}
-              type="button"
-              onClick={() => onReplaceFormat(format.value)}
-              className={cn(
-                'flex h-14 flex-col items-center justify-center gap-1 rounded-md border text-xs font-medium',
-                activeOutput.format === format.value
-                  ? 'border-teal-700 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
-                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800',
-              )}
-            >
-              {format.icon}
-              {format.label}
-            </button>
-          ))}
+          <GeneratedValue
+            value={FORMATS.map((format) => (
+              <button
+                key={format.value}
+                type="button"
+                onClick={() => onReplaceFormat(format.value)}
+                className={cn(
+                  'flex h-14 flex-col items-center justify-center gap-1 rounded-md border text-xs font-medium',
+                  activeOutput.format === format.value
+                    ? 'border-teal-700 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800',
+                )}
+              >
+                <GeneratedValue value={format.icon} />
+                <GeneratedValue value={format.label} />
+              </button>
+            ))}
+          />
         </div>
       </section>
     </div>

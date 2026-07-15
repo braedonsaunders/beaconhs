@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { and, asc, desc, eq, notInArray } from 'drizzle-orm'
@@ -54,7 +57,10 @@ import {
   updateRolePermissions,
 } from '../_actions'
 
-export const metadata = { title: 'Role' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1099c1fe8b6614') }
+}
 export const dynamic = 'force-dynamic'
 
 const ROLE_TABS = ['details', 'permissions', 'members', 'dashboard'] as const
@@ -66,6 +72,8 @@ export default async function AdminRoleEditPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -216,16 +224,35 @@ export default async function AdminRoleEditPage({
       header={
         <DetailHeader
           back={{ href: '/admin/roles', label: 'Back to roles' }}
-          title={role.name}
-          subtitle={`${role.isBuiltIn ? 'Built-in role' : 'Custom role'} · ${ROLE_TIER_LABELS[roleTier]} dashboard tier`}
+          title={tGeneratedValue(role.name)}
+          subtitle={tGenerated('m_063d989c0e8d10', {
+            value0: role.isBuiltIn ? 'Built-in role' : 'Custom role',
+            value1: ROLE_TIER_LABELS[roleTier],
+          })}
           badge={
             <div className="flex items-center gap-2">
-              {role.isBuiltIn ? <Badge variant="secondary">Built-in</Badge> : null}
-              {dashboard ? (
-                <Badge variant="secondary">Dashboard configured</Badge>
-              ) : (
-                <Badge variant="outline">Shipped dashboard</Badge>
-              )}
+              <GeneratedValue
+                value={
+                  role.isBuiltIn ? (
+                    <Badge variant="secondary">
+                      <GeneratedText id="m_09bfd82959f8d2" />
+                    </Badge>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  dashboard ? (
+                    <Badge variant="secondary">
+                      <GeneratedText id="m_0e6d62ae0fc9a7" />
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline">
+                      <GeneratedText id="m_06d5f52c28bdfb" />
+                    </Badge>
+                  )
+                }
+              />
             </div>
           }
           actions={
@@ -233,21 +260,25 @@ export default async function AdminRoleEditPage({
               <form action={duplicateRole}>
                 <input type="hidden" name="id" value={id} />
                 <Button type="submit" variant="outline">
-                  Duplicate
+                  <GeneratedText id="m_13fa26360f0fe9" />
                 </Button>
               </form>
-              {!role.isBuiltIn ? (
-                <form action={deleteRole}>
-                  <input type="hidden" name="id" value={id} />
-                  <ConfirmButton
-                    type="submit"
-                    variant="destructive"
-                    message={`Delete the role "${role.name}"? This can't be undone.`}
-                  >
-                    Delete
-                  </ConfirmButton>
-                </form>
-              ) : null}
+              <GeneratedValue
+                value={
+                  !role.isBuiltIn ? (
+                    <form action={deleteRole}>
+                      <input type="hidden" name="id" value={id} />
+                      <ConfirmButton
+                        type="submit"
+                        variant="destructive"
+                        message={tGenerated('m_12972a838ce313', { value0: role.name })}
+                      >
+                        <GeneratedText id="m_11773f3c3f7558" />
+                      </ConfirmButton>
+                    </form>
+                  ) : null
+                }
+              />
             </div>
           }
         />
@@ -255,7 +286,7 @@ export default async function AdminRoleEditPage({
       alerts={
         error ? (
           <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            {error}
+            <GeneratedValue value={error} />
           </div>
         ) : null
       }
@@ -291,142 +322,188 @@ export default async function AdminRoleEditPage({
       className={active === 'dashboard' ? 'max-w-none' : undefined}
     >
       <TabContent tabKey={active}>
-        {active === 'details' ? (
-          <form action={updateRoleDetails} className="space-y-5">
-            <input type="hidden" name="id" value={id} />
-            <Card>
-              <CardHeader>
-                <CardTitle>Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="name">
-                      Name<span className="text-red-600"> *</span>
-                    </Label>
-                    <Input id="name" name="name" required defaultValue={role.name} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="key">Key</Label>
-                    <Input id="key" value={role.key} disabled />
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Identifier used in code — can&apos;t be changed.
-                    </p>
-                  </div>
+        <GeneratedValue
+          value={
+            active === 'details' ? (
+              <form action={updateRoleDetails} className="space-y-5">
+                <input type="hidden" name="id" value={id} />
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      <GeneratedText id="m_1560d4e2a09d09" />
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="name">
+                          <GeneratedText id="m_02b18d5c7f6f2d" />
+                          <span className="text-red-600"> *</span>
+                        </Label>
+                        <Input id="name" name="name" required defaultValue={role.name} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="key">
+                          <GeneratedText id="m_169ff65a3cfc14" />
+                        </Label>
+                        <Input id="key" value={role.key} disabled />
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          <GeneratedText id="m_1885d8d1e67afb" />
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="description">
+                        <GeneratedText id="m_14d923495cf14c" />
+                      </Label>
+                      <Textarea
+                        id="description"
+                        name="description"
+                        rows={2}
+                        defaultValue={role.description ?? ''}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+                <div className="flex justify-end">
+                  <Button type="submit">
+                    <GeneratedText id="m_03c77ed2bf4459" />
+                  </Button>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    name="description"
-                    rows={2}
-                    defaultValue={role.description ?? ''}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-            <div className="flex justify-end">
-              <Button type="submit">Save details</Button>
-            </div>
-          </form>
-        ) : null}
+              </form>
+            ) : null
+          }
+        />
 
-        {active === 'permissions' ? (
-          locksTenantAdminPermissions ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Permissions</CardTitle>
-                <CardDescription>
-                  Tenant Admin always has the full permission catalogue and cannot be reduced.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <PermissionMatrix defaultSelected={effectiveRolePermissions} readOnly />
-              </CardContent>
-            </Card>
-          ) : (
-            <form action={updateRolePermissions} className="space-y-5">
-              <input type="hidden" name="id" value={id} />
+        <GeneratedValue
+          value={
+            active === 'permissions' ? (
+              locksTenantAdminPermissions ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      <GeneratedText id="m_0f16ebbc2ed672" />
+                    </CardTitle>
+                    <CardDescription>
+                      <GeneratedText id="m_15741fccaada2a" />
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <PermissionMatrix defaultSelected={effectiveRolePermissions} readOnly />
+                  </CardContent>
+                </Card>
+              ) : (
+                <form action={updateRolePermissions} className="space-y-5">
+                  <input type="hidden" name="id" value={id} />
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>
+                        <GeneratedText id="m_0f16ebbc2ed672" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <PermissionMatrix
+                        key={permissionMatrixKey}
+                        defaultSelected={effectiveRolePermissions}
+                      />
+                    </CardContent>
+                  </Card>
+                  <div className="flex justify-end">
+                    <Button type="submit">
+                      <GeneratedText id="m_0c6ec36e1e33c4" />
+                    </Button>
+                  </div>
+                </form>
+              )
+            ) : null
+          }
+        />
+
+        <GeneratedValue
+          value={
+            active === 'members' ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>Permissions</CardTitle>
+                  <CardTitle>
+                    <GeneratedText id="m_10e5dad96f8f1d" />
+                    <GeneratedValue value={members.length} />)
+                  </CardTitle>
+                  <CardDescription>
+                    <GeneratedValue
+                      value={
+                        canManageMembers ? (
+                          <GeneratedText id="m_04e851339e098c" />
+                        ) : (
+                          <GeneratedText id="m_048c7152589b89" />
+                        )
+                      }
+                    />
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <PermissionMatrix
-                    key={permissionMatrixKey}
-                    defaultSelected={effectiveRolePermissions}
+                  <GeneratedValue
+                    value={
+                      canManageMembers && scopeOptions ? (
+                        <RoleMembersManager
+                          key={membersKey}
+                          roleId={id}
+                          members={memberRows}
+                          candidates={memberCandidates}
+                          scopeOptions={scopeOptions}
+                        />
+                      ) : members.length === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          <GeneratedText id="m_00c40b713d7073" />
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          <GeneratedValue
+                            value={members.map((m) => (
+                              <Link
+                                key={m.membershipId}
+                                href={`/admin/users/${m.membershipId}` as any}
+                                className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800/60"
+                              >
+                                <GeneratedValue value={m.displayName ?? m.name} />
+                              </Link>
+                            ))}
+                          />
+                        </div>
+                      )
+                    }
                   />
                 </CardContent>
               </Card>
-              <div className="flex justify-end">
-                <Button type="submit">Save permissions</Button>
-              </div>
-            </form>
-          )
-        ) : null}
+            ) : null
+          }
+        />
 
-        {active === 'members' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Members with this role ({members.length})</CardTitle>
-              <CardDescription>
-                {canManageMembers
-                  ? 'Add or remove members and set the data each one can see through this role.'
-                  : 'Members who currently hold this role.'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {canManageMembers && scopeOptions ? (
-                <RoleMembersManager
-                  key={membersKey}
-                  roleId={id}
-                  members={memberRows}
-                  candidates={memberCandidates}
-                  scopeOptions={scopeOptions}
-                />
-              ) : members.length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  No members hold this role yet.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {members.map((m) => (
-                    <Link
-                      key={m.membershipId}
-                      href={`/admin/users/${m.membershipId}` as any}
-                      className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800/60"
-                    >
-                      {m.displayName ?? m.name}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {active === 'dashboard' && dashboardCanvas ? (
-          <DashboardGrid
-            key={`${role.id}:${JSON.stringify(dashboardLayout.widgets)}:${JSON.stringify(
-              dashboardLayout.quickActions ?? null,
-            )}`}
-            initialLayout={dashboardLayout}
-            nodes={dashboardCanvas.nodes}
-            role={roleTier}
-            mode="edit"
-            libraryCards={dashboardCanvas.libraryCards}
-            allowedWidgetIds={allowedWidgetIds}
-            saveLayoutAction={saveLayout}
-            resetLayoutAction={resetLayout}
-            saveRedirectHref={`${basePath}?tab=dashboard`}
-            toolbarLabel={`Editing ${role.name} default`}
-            resetConfirmMessage={`Reset ${role.name}'s default dashboard to the shipped ${ROLE_TIER_LABELS[roleTier]} layout?`}
-            saveSuccessMessage="Role default dashboard saved"
-            resetSuccessMessage="Role default dashboard reset"
-            quickActionsSaveAction={saveQuickActions}
-            quickActionsSaveSuccessMessage="Role default quick actions saved"
-          />
-        ) : null}
+        <GeneratedValue
+          value={
+            active === 'dashboard' && dashboardCanvas ? (
+              <DashboardGrid
+                key={`${role.id}:${JSON.stringify(dashboardLayout.widgets)}:${JSON.stringify(
+                  dashboardLayout.quickActions ?? null,
+                )}`}
+                initialLayout={dashboardLayout}
+                nodes={dashboardCanvas.nodes}
+                role={roleTier}
+                mode="edit"
+                libraryCards={dashboardCanvas.libraryCards}
+                allowedWidgetIds={allowedWidgetIds}
+                saveLayoutAction={saveLayout}
+                resetLayoutAction={resetLayout}
+                saveRedirectHref={`${basePath}?tab=dashboard`}
+                toolbarLabel={`Editing ${role.name} default`}
+                resetConfirmMessage={`Reset ${role.name}'s default dashboard to the shipped ${ROLE_TIER_LABELS[roleTier]} layout?`}
+                saveSuccessMessage="Role default dashboard saved"
+                resetSuccessMessage="Role default dashboard reset"
+                quickActionsSaveAction={saveQuickActions}
+                quickActionsSaveSuccessMessage="Role default quick actions saved"
+              />
+            ) : null
+          }
+        />
       </TabContent>
     </DetailPageLayout>
   )

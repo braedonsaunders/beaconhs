@@ -1,3 +1,9 @@
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+import { GeneratedText } from '@/i18n/generated'
 // Bespoke lesson-content renderer — native to training, shared by the Studio
 // preview and the learner Player. Dependency-free and XSS-safe: rich text is
 // markdown-lite that is HTML-escaped FIRST, so only the tags we emit survive.
@@ -68,149 +74,161 @@ export function LessonBlocksView({
   blocks: LessonBlock[]
   attachmentUrls?: Record<string, string | null | undefined>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   if (!blocks || blocks.length === 0) {
-    return <p className="text-sm text-slate-400 dark:text-slate-500">No content.</p>
+    return (
+      <p className="text-sm text-slate-400 dark:text-slate-500">
+        <GeneratedText id="m_124b250629473d" />
+      </p>
+    )
   }
   return (
     <div className="space-y-4">
-      {blocks.map((b) => {
-        switch (b.type) {
-          case 'heading': {
-            const cls =
-              b.level === 1
-                ? 'text-2xl font-bold text-slate-900 dark:text-slate-100'
-                : b.level === 2
-                  ? 'text-xl font-semibold text-slate-900 dark:text-slate-100'
-                  : 'text-lg font-semibold text-slate-800 dark:text-slate-200'
-            return (
-              <p key={b.id} className={cls}>
-                {b.text}
-              </p>
-            )
-          }
-          case 'text':
-            return (
-              <div
-                key={b.id}
-                className="space-y-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300"
-                dangerouslySetInnerHTML={{ __html: renderMd(b.md) }}
-              />
-            )
-          case 'callout': {
-            const tone =
-              b.tone === 'warning'
-                ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200'
-                : b.tone === 'success'
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-200'
-                  : b.tone === 'danger'
-                    ? 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-200'
-                    : 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-200'
-            return (
-              <div
-                key={b.id}
-                className={`space-y-2 rounded-lg border px-4 py-3 text-sm ${tone}`}
-                dangerouslySetInnerHTML={{ __html: renderMd(b.md) }}
-              />
-            )
-          }
-          case 'image': {
-            const url = attachmentUrls[b.attachmentId]
-            return url ? (
-              <figure key={b.id} className="space-y-1">
-                <RawImage
-                  src={url}
-                  alt={b.alt ?? ''}
-                  optimizationReason="authenticated"
-                  className="max-w-full rounded-lg border border-slate-200 dark:border-slate-800"
-                />
-                {b.caption ? (
-                  <figcaption className="text-xs text-slate-500 dark:text-slate-400">
-                    {b.caption}
-                  </figcaption>
-                ) : null}
-              </figure>
-            ) : (
-              <div key={b.id} className={UNAVAILABLE}>
-                Image unavailable
-              </div>
-            )
-          }
-          case 'video': {
-            const external = safeTrainingExternalUrl(b.url)
-            const url = external?.url ?? (b.attachmentId ? attachmentUrls[b.attachmentId] : null)
-            if (!url)
+      <GeneratedValue
+        value={blocks.map((b) => {
+          switch (b.type) {
+            case 'heading': {
+              const cls =
+                b.level === 1
+                  ? 'text-2xl font-bold text-slate-900 dark:text-slate-100'
+                  : b.level === 2
+                    ? 'text-xl font-semibold text-slate-900 dark:text-slate-100'
+                    : 'text-lg font-semibold text-slate-800 dark:text-slate-200'
               return (
-                <div key={b.id} className={UNAVAILABLE}>
-                  Video unavailable
-                </div>
+                <p key={b.id} className={cls}>
+                  <GeneratedValue value={b.text} />
+                </p>
               )
-            return external?.provider ? (
-              <div
-                key={b.id}
-                className="aspect-video overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800"
-              >
-                <iframe
-                  src={url}
-                  className="h-full w-full"
-                  sandbox={trainingFrameSandbox(external.provider)}
-                  allowFullScreen
-                  title={b.caption ?? 'Video'}
-                />
-              </div>
-            ) : (
-              <video
-                key={b.id}
-                src={url}
-                controls
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-800"
-              />
-            )
-          }
-          case 'file': {
-            const url = attachmentUrls[b.attachmentId]
-            return (
-              <a
-                key={b.id}
-                href={url ?? '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-800 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:text-slate-200 dark:hover:border-teal-700 dark:hover:text-teal-300"
-              >
-                <span aria-hidden>📎</span>
-                {b.label ?? 'Download file'}
-              </a>
-            )
-          }
-          case 'embed': {
-            const external = safeTrainingExternalUrl(b.url)
-            if (!external) {
+            }
+            case 'text':
               return (
+                <div
+                  key={b.id}
+                  className="space-y-2 text-sm leading-relaxed text-slate-700 dark:text-slate-300"
+                  dangerouslySetInnerHTML={{ __html: renderMd(b.md) }}
+                />
+              )
+            case 'callout': {
+              const tone =
+                b.tone === 'warning'
+                  ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200'
+                  : b.tone === 'success'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-200'
+                    : b.tone === 'danger'
+                      ? 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-200'
+                      : 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-200'
+              return (
+                <div
+                  key={b.id}
+                  className={`space-y-2 rounded-lg border px-4 py-3 text-sm ${tone}`}
+                  dangerouslySetInnerHTML={{ __html: renderMd(b.md) }}
+                />
+              )
+            }
+            case 'image': {
+              const url = attachmentUrls[b.attachmentId]
+              return url ? (
+                <figure key={b.id} className="space-y-1">
+                  <RawImage
+                    src={url}
+                    alt={tGeneratedValue(b.alt ?? '')}
+                    optimizationReason="authenticated"
+                    className="max-w-full rounded-lg border border-slate-200 dark:border-slate-800"
+                  />
+                  <GeneratedValue
+                    value={
+                      b.caption ? (
+                        <figcaption className="text-xs text-slate-500 dark:text-slate-400">
+                          <GeneratedValue value={b.caption} />
+                        </figcaption>
+                      ) : null
+                    }
+                  />
+                </figure>
+              ) : (
                 <div key={b.id} className={UNAVAILABLE}>
-                  Embedded content unavailable
+                  <GeneratedText id="m_084ed553acb3b2" />
                 </div>
               )
             }
-            return (
-              <div
-                key={b.id}
-                className="aspect-video overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800"
-              >
-                <iframe
-                  src={external.url}
-                  className="h-full w-full"
-                  sandbox={trainingFrameSandbox(external.provider)}
-                  allowFullScreen
-                  title={b.caption ?? 'Embedded content'}
+            case 'video': {
+              const external = safeTrainingExternalUrl(b.url)
+              const url = external?.url ?? (b.attachmentId ? attachmentUrls[b.attachmentId] : null)
+              if (!url)
+                return (
+                  <div key={b.id} className={UNAVAILABLE}>
+                    <GeneratedText id="m_0b38916416dfb6" />
+                  </div>
+                )
+              return external?.provider ? (
+                <div
+                  key={b.id}
+                  className="aspect-video overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800"
+                >
+                  <iframe
+                    src={url}
+                    className="h-full w-full"
+                    sandbox={trainingFrameSandbox(external.provider)}
+                    allowFullScreen
+                    title={tGeneratedValue(b.caption ?? tGenerated('m_0813322ae97045'))}
+                  />
+                </div>
+              ) : (
+                <video
+                  key={b.id}
+                  src={url}
+                  controls
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-800"
                 />
-              </div>
-            )
+              )
+            }
+            case 'file': {
+              const url = attachmentUrls[b.attachmentId]
+              return (
+                <a
+                  key={b.id}
+                  href={url ?? '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-800 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:text-slate-200 dark:hover:border-teal-700 dark:hover:text-teal-300"
+                >
+                  <span aria-hidden>📎</span>
+                  <GeneratedValue value={b.label ?? <GeneratedText id="m_1c8a49b196c5b8" />} />
+                </a>
+              )
+            }
+            case 'embed': {
+              const external = safeTrainingExternalUrl(b.url)
+              if (!external) {
+                return (
+                  <div key={b.id} className={UNAVAILABLE}>
+                    <GeneratedText id="m_1adf22d9aafc95" />
+                  </div>
+                )
+              }
+              return (
+                <div
+                  key={b.id}
+                  className="aspect-video overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800"
+                >
+                  <iframe
+                    src={external.url}
+                    className="h-full w-full"
+                    sandbox={trainingFrameSandbox(external.provider)}
+                    allowFullScreen
+                    title={tGeneratedValue(b.caption ?? tGenerated('m_160d7c58311c0e'))}
+                  />
+                </div>
+              )
+            }
+            case 'divider':
+              return <hr key={b.id} className="border-slate-200 dark:border-slate-800" />
+            default:
+              return null
           }
-          case 'divider':
-            return <hr key={b.id} className="border-slate-200 dark:border-slate-800" />
-          default:
-            return null
-        }
-      })}
+        })}
+      />
     </div>
   )
 }

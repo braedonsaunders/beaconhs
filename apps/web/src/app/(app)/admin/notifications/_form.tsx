@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The notifications cockpit. A tenant-wide routing policy (unified detection,
 // digest, quiet hours) plus per-category rules: enable, recipient roles +
 // people, channels, reminder cadence, and an escalation ladder. State is held
@@ -62,12 +69,13 @@ function Toggle({
   onChange: (next: boolean) => void
   label: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      aria-label={label}
+      aria-label={tGeneratedValue(label)}
       onClick={() => onChange(!checked)}
       className={cn(
         'relative h-6 w-11 shrink-0 rounded-full transition-colors',
@@ -94,24 +102,30 @@ function RoleChips({
   onChange: (next: string[]) => void
 }) {
   if (roles.length === 0) {
-    return <p className="text-xs text-slate-400 dark:text-slate-500">No roles defined yet.</p>
+    return (
+      <p className="text-xs text-slate-400 dark:text-slate-500">
+        <GeneratedText id="m_0d3aaa3bb9c390" />
+      </p>
+    )
   }
   return (
     <div className="flex flex-wrap gap-1.5">
-      {roles.map((r) => {
-        const on = value.includes(r.key)
-        return (
-          <button
-            key={r.key}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onChange(on ? value.filter((k) => k !== r.key) : [...value, r.key])}
-            className={cn(chipBase, on ? chipOn : chipOff)}
-          >
-            {r.name}
-          </button>
-        )
-      })}
+      <GeneratedValue
+        value={roles.map((r) => {
+          const on = value.includes(r.key)
+          return (
+            <button
+              key={r.key}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange(on ? value.filter((k) => k !== r.key) : [...value, r.key])}
+              className={cn(chipBase, on ? chipOn : chipOff)}
+            >
+              <GeneratedValue value={r.name} />
+            </button>
+          )
+        })}
+      />
     </div>
   )
 }
@@ -125,43 +139,57 @@ function ChannelChips({
   onChange: (next: string[]) => void
   availability: Record<string, ChannelAvailability>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="flex flex-wrap gap-1.5">
-      {CHANNELS.map((c) => {
-        const on = c.locked || value.includes(c.key)
-        const status = availability[c.key] ?? 'ready'
-        const unavailable = status !== 'ready'
-        const statusCopy = status === 'disabled' ? 'disabled by platform' : 'not set up'
-        return (
-          <button
-            key={c.key}
-            type="button"
-            disabled={c.locked}
-            aria-pressed={on}
-            title={
-              status === 'unconfigured'
-                ? `${c.label} isn't set up yet — configure it in the ${c.label} tab`
-                : status === 'disabled'
-                  ? `${c.label} is disabled by platform policy`
-                  : undefined
-            }
-            onClick={() =>
-              c.locked
-                ? undefined
-                : onChange(on ? value.filter((k) => k !== c.key) : [...value, c.key])
-            }
-            className={cn(
-              chipBase,
-              on ? chipOn : chipOff,
-              unavailable &&
-                'border-amber-400 text-amber-700 dark:border-amber-600 dark:text-amber-300',
-            )}
-          >
-            {c.label}
-            {c.locked ? ' · always' : unavailable ? ` · ${statusCopy}` : ''}
-          </button>
-        )
-      })}
+      <GeneratedValue
+        value={CHANNELS.map((c) => {
+          const on = c.locked || value.includes(c.key)
+          const status = availability[c.key] ?? 'ready'
+          const unavailable = status !== 'ready'
+          const statusCopy = status === 'disabled' ? 'disabled by platform' : 'not set up'
+          return (
+            <button
+              key={c.key}
+              type="button"
+              disabled={c.locked}
+              aria-pressed={on}
+              title={tGeneratedValue(
+                status === 'unconfigured'
+                  ? tGenerated('m_084a35bd061810', { value0: c.label, value1: c.label })
+                  : status === 'disabled'
+                    ? tGenerated('m_0d1667d84af32f', { value0: c.label })
+                    : undefined,
+              )}
+              onClick={() =>
+                c.locked
+                  ? undefined
+                  : onChange(on ? value.filter((k) => k !== c.key) : [...value, c.key])
+              }
+              className={cn(
+                chipBase,
+                on ? chipOn : chipOff,
+                unavailable &&
+                  'border-amber-400 text-amber-700 dark:border-amber-600 dark:text-amber-300',
+              )}
+            >
+              <GeneratedValue value={c.label} />
+              <GeneratedValue
+                value={
+                  c.locked ? (
+                    <GeneratedText id="m_032924a417d4d9" />
+                  ) : unavailable ? (
+                    ` · ${statusCopy}`
+                  ) : (
+                    ''
+                  )
+                }
+              />
+            </button>
+          )
+        })}
+      />
     </div>
   )
 }
@@ -185,14 +213,14 @@ function ChannelStatus({
           ready ? 'text-slate-600 dark:text-slate-300' : 'text-amber-700 dark:text-amber-400'
         }
       >
-        {label}
-        {ready ? '' : ` — ${statusCopy}`}
+        <GeneratedValue value={label} />
+        <GeneratedValue value={ready ? '' : ` — ${statusCopy}`} />
       </span>
     </span>
   )
   return status === 'unconfigured' && href ? (
     <Link href={href as never} className="hover:underline">
-      {content}
+      <GeneratedValue value={content} />
     </Link>
   ) : (
     content
@@ -216,12 +244,18 @@ function PeoplePicker({
   sheetTitle?: string
   emptyHint?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const available = useMemo(() => options.filter((o) => !value.includes(o.value)), [options, value])
   const chosen = value
     .map((v) => options.find((o) => o.value === v))
     .filter((o): o is MemberOpt => Boolean(o))
   if (options.length === 0 && emptyHint) {
-    return <p className="text-xs text-slate-400 dark:text-slate-500">{emptyHint}</p>
+    return (
+      <p className="text-xs text-slate-400 dark:text-slate-500">
+        <GeneratedValue value={emptyHint} />
+      </p>
+    )
   }
   return (
     <div className="space-y-2">
@@ -229,30 +263,36 @@ function PeoplePicker({
         value=""
         onChange={(v) => v && onChange([...value, v])}
         options={available}
-        placeholder={placeholder}
-        searchPlaceholder={searchPlaceholder}
+        placeholder={tGeneratedValue(placeholder)}
+        searchPlaceholder={tGeneratedValue(searchPlaceholder)}
         sheetTitle={sheetTitle}
       />
-      {chosen.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {chosen.map((o) => (
-            <span
-              key={o.value}
-              className="inline-flex items-center gap-1 rounded-full bg-teal-50 py-1 pr-1 pl-2.5 text-xs font-medium text-teal-800 dark:bg-teal-950/50 dark:text-teal-300"
-            >
-              {o.label}
-              <button
-                type="button"
-                aria-label={`Remove ${o.label}`}
-                onClick={() => onChange(value.filter((v) => v !== o.value))}
-                className="rounded-full p-0.5 text-teal-600 hover:bg-teal-100 dark:hover:bg-teal-900"
-              >
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          chosen.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              <GeneratedValue
+                value={chosen.map((o) => (
+                  <span
+                    key={o.value}
+                    className="inline-flex items-center gap-1 rounded-full bg-teal-50 py-1 pr-1 pl-2.5 text-xs font-medium text-teal-800 dark:bg-teal-950/50 dark:text-teal-300"
+                  >
+                    <GeneratedValue value={o.label} />
+                    <button
+                      type="button"
+                      aria-label={tGenerated('m_101f98a70352fa', { value0: o.label })}
+                      onClick={() => onChange(value.filter((v) => v !== o.value))}
+                      className="rounded-full p-0.5 text-teal-600 hover:bg-teal-100 dark:hover:bg-teal-900"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -269,52 +309,63 @@ function EscalationEditor({
   value: EscalationStep[]
   onChange: (next: EscalationStep[]) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const patchStep = (i: number, next: Partial<EscalationStep>) =>
     onChange(value.map((s, idx) => (idx === i ? { ...s, ...next } : s)))
   return (
     <div className="space-y-2">
-      {value.length === 0 ? (
-        <p className="text-xs text-slate-400 dark:text-slate-500">
-          No escalation — only the recipients above are alerted.
-        </p>
-      ) : null}
-      {value.map((s, i) => (
-        <div key={i} className="rounded-lg border border-slate-200 p-2.5 dark:border-slate-800">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <span>After</span>
-            <input
-              type="number"
-              min={1}
-              max={365}
-              value={s.afterDays}
-              onChange={(e) => patchStep(i, { afterDays: Number(e.target.value) || 1 })}
-              className={numInput}
-            />
-            <span>days overdue, also alert</span>
-            <button
-              type="button"
-              aria-label="Remove step"
-              onClick={() => onChange(value.filter((_, idx) => idx !== i))}
-              className="ml-auto rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
-            >
-              <X size={14} />
-            </button>
+      <GeneratedValue
+        value={
+          value.length === 0 ? (
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              <GeneratedText id="m_1d98c9c8eb4678" />
+            </p>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={value.map((s, i) => (
+          <div key={i} className="rounded-lg border border-slate-200 p-2.5 dark:border-slate-800">
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span>
+                <GeneratedText id="m_17d87be3a289c9" />
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={365}
+                value={s.afterDays}
+                onChange={(e) => patchStep(i, { afterDays: Number(e.target.value) || 1 })}
+                className={numInput}
+              />
+              <span>
+                <GeneratedText id="m_0966413a739b72" />
+              </span>
+              <button
+                type="button"
+                aria-label={tGenerated('m_0d04f0ad8eba98')}
+                onClick={() => onChange(value.filter((_, idx) => idx !== i))}
+                className="ml-auto rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="mt-2">
+              <RoleChips
+                roles={roles}
+                value={s.roleKeys}
+                onChange={(v) => patchStep(i, { roleKeys: v })}
+              />
+            </div>
           </div>
-          <div className="mt-2">
-            <RoleChips
-              roles={roles}
-              value={s.roleKeys}
-              onChange={(v) => patchStep(i, { roleKeys: v })}
-            />
-          </div>
-        </div>
-      ))}
+        ))}
+      />
       <button
         type="button"
         onClick={() => onChange([...value, { afterDays: 3, roleKeys: [] }])}
         className="inline-flex items-center gap-1 rounded-md px-1 py-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
       >
-        <Plus size={13} /> Add escalation step
+        <Plus size={13} /> <GeneratedText id="m_09f1357f2b4a1f" />
       </button>
     </div>
   )
@@ -339,6 +390,8 @@ export function NotificationSettingsForm({
   emailAvailability: ChannelAvailability
   smsAvailability: ChannelAvailability
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const channelAvailability: Record<string, ChannelAvailability> = {
     in_app: 'ready',
     email: emailAvailability,
@@ -404,7 +457,9 @@ export function NotificationSettingsForm({
         await saveNotificationConfiguration(items, pol)
         window.location.reload()
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not save settings.')
+        toast.error(
+          tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_1b8a56cc7a479e')),
+        )
       }
     })
   }
@@ -413,115 +468,150 @@ export function NotificationSettingsForm({
     <div className="space-y-3">
       {/* Channel availability — what actually delivers right now. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900/40">
-        <span className="font-medium text-slate-600 dark:text-slate-300">Channels</span>
-        <ChannelStatus label="In-app" status="ready" />
-        <ChannelStatus label="Email" status={emailAvailability} href="/admin/email" />
-        <ChannelStatus label="SMS" status={smsAvailability} href="/admin/sms" />
-        <ChannelStatus label="Push" status="ready" />
+        <span className="font-medium text-slate-600 dark:text-slate-300">
+          <GeneratedText id="m_010d889813e53e" />
+        </span>
+        <ChannelStatus label={tGenerated('m_15185e5e20e3c2')} status="ready" />
+        <ChannelStatus
+          label={tGenerated('m_00a0ba9938bdff')}
+          status={emailAvailability}
+          href="/admin/email"
+        />
+        <ChannelStatus
+          label={tGenerated('m_090cf61ef27662')}
+          status={smsAvailability}
+          href="/admin/sms"
+        />
+        <ChannelStatus label={tGenerated('m_07c0298f965dc6')} status="ready" />
       </div>
 
       {/* Tenant-wide routing policy */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Routing policy
+            <GeneratedText id="m_107b4fcf5cad63" />
           </h3>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            Tenant-wide defaults for how alerts are detected and delivered.
+            <GeneratedText id="m_14de8c9242067c" />
           </p>
         </div>
         <div className="space-y-4 px-4 py-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>Digest</Label>
+              <Label>
+                <GeneratedText id="m_094aaec898740b" />
+              </Label>
               <Select
                 value={pol.digestMode}
                 onChange={(e) =>
                   patchPol({ digestMode: e.target.value as PolicyInput['digestMode'] })
                 }
               >
-                <option value="off">Off — send immediately</option>
-                <option value="daily">Daily summary</option>
-                <option value="weekly">Weekly summary</option>
+                <option value="off">
+                  <GeneratedText id="m_0f64f3574b60ab" />
+                </option>
+                <option value="daily">
+                  <GeneratedText id="m_0af2ab44356504" />
+                </option>
+                <option value="weekly">
+                  <GeneratedText id="m_1b72e8564923f7" />
+                </option>
               </Select>
-              {pol.digestMode !== 'off' ? (
-                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <span>Send at</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={23}
-                    value={pol.digestHourUtc}
-                    onChange={(e) => patchPol({ digestHourUtc: Number(e.target.value) || 0 })}
-                    className={numInput}
-                  />
-                  <span>:00 UTC</span>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 dark:text-slate-500">
-                  Batch non-urgent alerts into one email instead of many.
-                </p>
-              )}
+              <GeneratedValue
+                value={
+                  pol.digestMode !== 'off' ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <span>
+                        <GeneratedText id="m_0973fa55191a8a" />
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={23}
+                        value={pol.digestHourUtc}
+                        onChange={(e) => patchPol({ digestHourUtc: Number(e.target.value) || 0 })}
+                        className={numInput}
+                      />
+                      <span>
+                        <GeneratedText id="m_04b8cc0e683c51" />
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                      <GeneratedText id="m_0bee6e7e6dd5ac" />
+                    </p>
+                  )
+                }
+              />
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label>Quiet hours</Label>
+                <Label>
+                  <GeneratedText id="m_19472ba0dedea3" />
+                </Label>
                 <Toggle
                   checked={!!pol.quietHours}
                   onChange={(v) => patchPol({ quietHours: v ? { start: 22, end: 6 } : null })}
-                  label="Quiet hours"
+                  label={tGenerated('m_19472ba0dedea3')}
                 />
               </div>
-              {pol.quietHours ? (
-                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <input
-                    type="number"
-                    min={0}
-                    max={23}
-                    value={pol.quietHours.start}
-                    onChange={(e) =>
-                      patchPol({
-                        quietHours: {
-                          start: Number(e.target.value) || 0,
-                          end: pol.quietHours!.end,
-                        },
-                      })
-                    }
-                    className={numInput}
-                  />
-                  <span>→</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={23}
-                    value={pol.quietHours.end}
-                    onChange={(e) =>
-                      patchPol({
-                        quietHours: {
-                          start: pol.quietHours!.start,
-                          end: Number(e.target.value) || 0,
-                        },
-                      })
-                    }
-                    className={numInput}
-                  />
-                  <span>UTC</span>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 dark:text-slate-500">
-                  Hold non-critical email + push overnight. Critical alerts always go through.
-                </p>
-              )}
+              <GeneratedValue
+                value={
+                  pol.quietHours ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <input
+                        type="number"
+                        min={0}
+                        max={23}
+                        value={pol.quietHours.start}
+                        onChange={(e) =>
+                          patchPol({
+                            quietHours: {
+                              start: Number(e.target.value) || 0,
+                              end: pol.quietHours!.end,
+                            },
+                          })
+                        }
+                        className={numInput}
+                      />
+                      <span>→</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={23}
+                        value={pol.quietHours.end}
+                        onChange={(e) =>
+                          patchPol({
+                            quietHours: {
+                              start: pol.quietHours!.start,
+                              end: Number(e.target.value) || 0,
+                            },
+                          })
+                        }
+                        className={numInput}
+                      />
+                      <span>
+                        <GeneratedText id="m_160fbb6c66f34e" />
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                      <GeneratedText id="m_09859d56350190" />
+                    </p>
+                  )
+                }
+              />
             </div>
           </div>
 
           {/* Per-tenant compliance detection schedule (evaluated in its timezone). */}
           <div className="space-y-1.5 border-t border-slate-100 pt-4 dark:border-slate-800">
-            <Label>Compliance detection schedule</Label>
+            <Label>
+              <GeneratedText id="m_1af34f7e5bf545" />
+            </Label>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              How often overdue and expiring items are re-checked and alerted. Untouched tenants run
-              once a day at 06:00 UTC.
+              <GeneratedText id="m_178b7c2d54db58" />
             </p>
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <Select
@@ -529,175 +619,237 @@ export function NotificationSettingsForm({
                 onChange={(e) => updateSched({ preset: e.target.value as SchedulePreset })}
                 className="w-40"
               >
-                {SCHEDULE_PRESETS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </Select>
-
-              {sched.preset === 'daily' ||
-              sched.preset === 'twice_daily' ||
-              sched.preset === 'weekly' ? (
-                <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                  <span>at</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={23}
-                    value={sched.hour}
-                    onChange={(e) => updateSched({ hour: Number(e.target.value) || 0 })}
-                    className={numInput}
-                  />
-                  <span>:00</span>
-                </div>
-              ) : null}
-
-              {sched.preset === 'weekly' ? (
-                <Select
-                  value={String(sched.weekday)}
-                  onChange={(e) => updateSched({ weekday: Number(e.target.value) })}
-                  className="w-36"
-                >
-                  {WEEKDAYS.map((d) => (
-                    <option key={d.value} value={d.value}>
-                      {d.label}
+                <GeneratedValue
+                  value={SCHEDULE_PRESETS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      <GeneratedValue value={p.label} />
                     </option>
                   ))}
-                </Select>
-              ) : null}
-
-              {sched.preset === 'custom' ? (
-                <input
-                  type="text"
-                  spellCheck={false}
-                  value={sched.custom}
-                  onChange={(e) => updateSched({ custom: e.target.value })}
-                  placeholder="m h dom mon dow"
-                  className="h-7 w-40 rounded-md border border-slate-200 bg-white px-2 font-mono text-sm text-slate-900 outline-none focus:border-teal-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 />
-              ) : null}
+              </Select>
 
-              <span className="text-xs text-slate-400 dark:text-slate-500">in</span>
+              <GeneratedValue
+                value={
+                  sched.preset === 'daily' ||
+                  sched.preset === 'twice_daily' ||
+                  sched.preset === 'weekly' ? (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                      <span>
+                        <GeneratedText id="m_11779192030c81" />
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={23}
+                        value={sched.hour}
+                        onChange={(e) => updateSched({ hour: Number(e.target.value) || 0 })}
+                        className={numInput}
+                      />
+                      <span>:00</span>
+                    </div>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  sched.preset === 'weekly' ? (
+                    <Select
+                      value={String(sched.weekday)}
+                      onChange={(e) => updateSched({ weekday: Number(e.target.value) })}
+                      className="w-36"
+                    >
+                      <GeneratedValue
+                        value={WEEKDAYS.map((d) => (
+                          <option key={d.value} value={d.value}>
+                            <GeneratedValue value={d.label} />
+                          </option>
+                        ))}
+                      />
+                    </Select>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  sched.preset === 'custom' ? (
+                    <input
+                      type="text"
+                      spellCheck={false}
+                      value={sched.custom}
+                      onChange={(e) => updateSched({ custom: e.target.value })}
+                      placeholder={tGenerated('m_1768852c7aa00e')}
+                      className="h-7 w-40 rounded-md border border-slate-200 bg-white px-2 font-mono text-sm text-slate-900 outline-none focus:border-teal-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    />
+                  ) : null
+                }
+              />
+
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_0e2bad4d6e8bd2" />
+              </span>
               <Select
                 value={pol.scanTimezone}
                 onChange={(e) => patchPol({ scanTimezone: e.target.value })}
                 className="w-56"
               >
-                {tzList.map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz}
-                  </option>
-                ))}
+                <GeneratedValue
+                  value={tzList.map((tz) => (
+                    <option key={tz} value={tz}>
+                      <GeneratedValue value={tz} />
+                    </option>
+                  ))}
+                />
               </Select>
             </div>
-            {sched.preset === 'custom' && !isValidCron(sched.custom) ? (
-              <p className="text-xs text-red-600 dark:text-red-400">
-                Enter a valid 5-field cron (e.g. <code>0 6 * * *</code>).
-              </p>
-            ) : null}
+            <GeneratedValue
+              value={
+                sched.preset === 'custom' && !isValidCron(sched.custom) ? (
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    <GeneratedText id="m_032afdfec85876" /> <code>0 6 * * *</code>).
+                  </p>
+                ) : null
+              }
+            />
           </div>
         </div>
       </div>
 
       {/* Per-category rules */}
-      {categories.map((cat) => {
-        const cfg = config[cat.key]!
-        const noRecipients =
-          cfg.roleKeys.length === 0 && cfg.userIds.length === 0 && cfg.groupIds.length === 0
-        return (
-          <div
-            key={cat.key}
-            className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
-          >
-            <div className="flex items-start justify-between gap-3 p-4">
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {cat.label}
-                </h3>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  {cat.description}
-                </p>
+      <GeneratedValue
+        value={categories.map((cat) => {
+          const cfg = config[cat.key]!
+          const noRecipients =
+            cfg.roleKeys.length === 0 && cfg.userIds.length === 0 && cfg.groupIds.length === 0
+          return (
+            <div
+              key={cat.key}
+              className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
+            >
+              <div className="flex items-start justify-between gap-3 p-4">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <GeneratedValue value={cat.label} />
+                  </h3>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={cat.description} />
+                  </p>
+                </div>
+                <Toggle
+                  checked={cfg.enabled}
+                  onChange={(v) => patch(cat.key, { enabled: v })}
+                  label={tGenerated('m_0fad28753c32c3', { value0: cat.label })}
+                />
               </div>
-              <Toggle
-                checked={cfg.enabled}
-                onChange={(v) => patch(cat.key, { enabled: v })}
-                label={`Enable ${cat.label} notifications`}
+
+              <GeneratedValue
+                value={
+                  cfg.enabled ? (
+                    <div className="space-y-4 border-t border-slate-100 px-4 py-4 dark:border-slate-800">
+                      <div className="space-y-1.5">
+                        <Label>
+                          <GeneratedText id="m_0574d0e16628ff" />
+                        </Label>
+                        <RoleChips
+                          roles={roles}
+                          value={cfg.roleKeys}
+                          onChange={(v) => patch(cat.key, { roleKeys: v })}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>
+                          <GeneratedText id="m_167a9e18d14401" />
+                        </Label>
+                        <PeoplePicker
+                          options={members}
+                          value={cfg.userIds}
+                          onChange={(v) => patch(cat.key, { userIds: v })}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>
+                          <GeneratedText id="m_086aa4f81b9be9" />
+                        </Label>
+                        <PeoplePicker
+                          options={groups}
+                          value={cfg.groupIds}
+                          onChange={(v) => patch(cat.key, { groupIds: v })}
+                          placeholder={tGenerated('m_059b16f0ac25bf')}
+                          searchPlaceholder={tGenerated('m_15c4d2ca7e95f7')}
+                          sheetTitle="Select notification groups"
+                          emptyHint="No notification groups yet — create one from the Notification groups page."
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>
+                          <GeneratedText id="m_010d889813e53e" />
+                        </Label>
+                        <ChannelChips
+                          value={cfg.channels}
+                          onChange={(v) => patch(cat.key, { channels: v })}
+                          availability={channelAvailability}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>
+                          <GeneratedText id="m_1b8f85dba7b244" />
+                        </Label>
+                        <EscalationEditor
+                          roles={roles}
+                          value={cfg.escalation}
+                          onChange={(v) => patch(cat.key, { escalation: v })}
+                        />
+                      </div>
+
+                      <GeneratedValue
+                        value={
+                          noRecipients ? (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              <GeneratedText id="m_0bd3978b6f56a2" />
+                            </p>
+                          ) : null
+                        }
+                      />
+                    </div>
+                  ) : (
+                    <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                      <GeneratedText id="m_09600a2c12261c" />
+                    </div>
+                  )
+                }
               />
             </div>
-
-            {cfg.enabled ? (
-              <div className="space-y-4 border-t border-slate-100 px-4 py-4 dark:border-slate-800">
-                <div className="space-y-1.5">
-                  <Label>Notify these roles</Label>
-                  <RoleChips
-                    roles={roles}
-                    value={cfg.roleKeys}
-                    onChange={(v) => patch(cat.key, { roleKeys: v })}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Also notify specific people</Label>
-                  <PeoplePicker
-                    options={members}
-                    value={cfg.userIds}
-                    onChange={(v) => patch(cat.key, { userIds: v })}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Notification groups</Label>
-                  <PeoplePicker
-                    options={groups}
-                    value={cfg.groupIds}
-                    onChange={(v) => patch(cat.key, { groupIds: v })}
-                    placeholder="Add a group…"
-                    searchPlaceholder="Search groups…"
-                    sheetTitle="Select notification groups"
-                    emptyHint="No notification groups yet — create one from the Notification groups page."
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Channels</Label>
-                  <ChannelChips
-                    value={cfg.channels}
-                    onChange={(v) => patch(cat.key, { channels: v })}
-                    availability={channelAvailability}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Escalation ladder</Label>
-                  <EscalationEditor
-                    roles={roles}
-                    value={cfg.escalation}
-                    onChange={(v) => patch(cat.key, { escalation: v })}
-                  />
-                </div>
-
-                {noRecipients ? (
-                  <p className="text-xs text-amber-600 dark:text-amber-400">
-                    No recipients selected — nobody will be notified for this category.
-                  </p>
-                ) : null}
-              </div>
-            ) : (
-              <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                Muted — no automatic alerts are sent for this category.
-              </div>
-            )}
-          </div>
-        )
-      })}
+          )
+        })}
+      />
 
       <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-between gap-3 border-t border-slate-200 bg-white/90 px-1 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {dirty ? 'Unsaved changes' : 'All changes saved'}
+          <GeneratedValue
+            value={
+              dirty ? (
+                <GeneratedText id="m_1175a27a9b33f7" />
+              ) : (
+                <GeneratedText id="m_0ad43d07863768" />
+              )
+            }
+          />
         </p>
         <Button onClick={save} disabled={pending || !dirty}>
-          {pending ? 'Saving…' : 'Save changes'}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_106811f2aac664" />
+              ) : (
+                <GeneratedText id="m_1ab9025ed1067c" />
+              )
+            }
+          />
         </Button>
       </div>
     </div>

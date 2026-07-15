@@ -1,3 +1,5 @@
+import { GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // "My wallet" — an Apple-Wallet-style view of the signed-in user's credentials.
 //
 // Every training record and granted skill is rendered through the SAME design
@@ -45,7 +47,10 @@ import { resolveCourseCredentialOutput, resolveCredentialOutput } from '@/lib/cr
 import { WorkspaceNoIdentity } from '../_no-identity'
 import { WalletStack, type WalletCard, type WalletDesign } from './_wallet-stack'
 
-export const metadata = { title: 'My wallet' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_14fb403fa3928d') }
+}
 export const dynamic = 'force-dynamic'
 
 const EXPIRING_DAYS = 60
@@ -81,6 +86,7 @@ export default async function MyWalletPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const listParams = parseListParams(sp, {
     sort: 'urgency',
@@ -307,8 +313,8 @@ export default async function MyWalletPage({
         header={
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title="My wallet"
-            description="Your certificates and credential cards."
+            title={tGenerated('m_14fb403fa3928d')}
+            description={tGenerated('m_10ba2420b194f5')}
           />
         }
       >
@@ -454,23 +460,23 @@ export default async function MyWalletPage({
         <>
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title="My wallet"
-            description="Your certificates and credential cards. Tap a card to flip it, or download the print-ready pass."
+            title={tGenerated('m_14fb403fa3928d')}
+            description={tGenerated('m_0579dc3619719f')}
           />
           <TableToolbar>
-            <SearchInput placeholder="Search credentials…" />
+            <SearchInput placeholder={tGenerated('m_0e8d4dc1f8f4c0')} />
             <FilterChips
               basePath="/my/wallet"
               currentParams={sp}
               paramKey="kind"
-              label="Type"
+              label={tGenerated('m_074ba2f160c506')}
               options={[...KIND_OPTIONS]}
             />
             <FilterChips
               basePath="/my/wallet"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={[...STATUS_OPTIONS]}
             />
           </TableToolbar>
@@ -478,28 +484,36 @@ export default async function MyWalletPage({
       }
     >
       <>
-        {cards.length === 0 ? (
-          <WalletStack
-            cards={cards}
-            design={design}
-            filtered={Boolean(listParams.q || kind || status)}
-          />
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <div className="p-4">
-              <WalletStack cards={cards} design={design} />
-            </div>
-          </div>
-        )}
-        {credentialTotal > 0 ? (
-          <Pagination
-            basePath="/my/wallet"
-            currentParams={sp}
-            total={credentialTotal}
-            page={listParams.page}
-            perPage={listParams.perPage}
-          />
-        ) : null}
+        <GeneratedValue
+          value={
+            cards.length === 0 ? (
+              <WalletStack
+                cards={cards}
+                design={design}
+                filtered={Boolean(listParams.q || kind || status)}
+              />
+            ) : (
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <div className="p-4">
+                  <WalletStack cards={cards} design={design} />
+                </div>
+              </div>
+            )
+          }
+        />
+        <GeneratedValue
+          value={
+            credentialTotal > 0 ? (
+              <Pagination
+                basePath="/my/wallet"
+                currentParams={sp}
+                total={credentialTotal}
+                page={listParams.page}
+                perPage={listParams.perPage}
+              />
+            ) : null
+          }
+        />
       </>
     </ListPageLayout>
   )

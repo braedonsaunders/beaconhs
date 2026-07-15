@@ -1,3 +1,5 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // /admin/pdf-templates — tenant admins author paper-size PDF DOCUMENTS in a
 // drag-and-drop builder with a Paged.js page preview. Flows ATTACH these from
 // the send_email action (separate from the email body). Gated admin.settings.manage.
@@ -22,7 +24,10 @@ import { DeletePdfTemplateButton } from './_delete-button'
 import { ModuleDefaultsPanel } from './_module-defaults.client'
 import { NewPdfTemplateFlyout } from './_new-template-flyout.client'
 
-export const metadata = { title: 'PDF templates' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_001d37986649e1') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function PdfTemplatesPage({
@@ -30,6 +35,7 @@ export default async function PdfTemplatesPage({
 }: {
   searchParams: Promise<{ tab?: string }>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, 'admin.settings.manage')) redirect('/admin')
 
@@ -69,17 +75,21 @@ export default async function PdfTemplatesPage({
             <div className="flex items-center gap-2">
               <FileText size={22} className="text-teal-600" />
               <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-                PDF templates
+                <GeneratedText id="m_001d37986649e1" />
               </h1>
             </div>
             <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-              Paper-size documents built with a drag-and-drop editor and a live page preview. Flows
-              attach these as a PDF from the <strong>Send email</strong> action, and modules can use
-              one as their default print layout. Use{' '}
+              <GeneratedText id="m_0c7c4daa4241c4" />{' '}
+              <strong>
+                <GeneratedText id="m_09dfca28fc95ba" />
+              </strong>{' '}
+              <GeneratedText id="m_0319d7f1ec2a7e" />
+              <GeneratedValue value={' '} />
               <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] dark:bg-slate-800">
                 {'{{token}}'}
-              </code>{' '}
-              placeholders + record tables that fill in per record.
+              </code>
+              <GeneratedValue value={' '} />
+              <GeneratedText id="m_1d6211b01a3274" />
             </p>
           </div>
           <NewPdfTemplateFlyout modules={moduleOptions} apps={subjects.apps} />
@@ -87,80 +97,103 @@ export default async function PdfTemplatesPage({
 
         <nav className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
           <TabLink href="/admin/pdf-templates" active={tab === 'templates'}>
-            Templates
+            <GeneratedText id="m_0a19e6387037d4" />
           </TabLink>
           <TabLink href="/admin/pdf-templates?tab=defaults" active={tab === 'defaults'}>
-            Module print defaults
+            <GeneratedText id="m_133a1989717bc4" />
           </TabLink>
         </nav>
 
-        {tab === 'defaults' ? (
-          <div className="space-y-10">
-            <section className="space-y-4">
-              <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                Choose which template each module&apos;s print/PDF button renders. Leave a module on{' '}
-                <strong>Field summary</strong> to print a plain key/value document. Only templates
-                whose record type matches the module are listed.
-              </p>
-              <ModuleDefaultsPanel rows={moduleDefaults} />
-            </section>
-            <section className="space-y-4">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                Builder apps
-              </h2>
-              <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                Each published app can print its records with its own template. Publishing an app
-                generates one automatically; use <strong>Generate default template</strong> for apps
-                published before this existed or after their template was deleted.
-              </p>
-              <AppTemplatesPanel rows={appTemplates} />
-            </section>
-          </div>
-        ) : templates.length === 0 ? (
-          <EmptyState
-            icon={<FileText size={32} />}
-            title="No PDF templates"
-            description="Create your first paper-size document, then attach it from any flow's Send email action or set it as a module's default print layout."
-          />
-        ) : (
-          <ul className="space-y-3">
-            {templates.map((t) => (
-              <li
-                key={t.id}
-                className="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <Link href={`/admin/pdf-templates/${t.id}`} className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-slate-900 dark:text-slate-100">
-                        {t.name}
-                      </span>
-                      <Badge variant="outline">
-                        {t.paperSize.toUpperCase()} · {t.orientation}
-                      </Badge>
-                      {!t.isActive ? <Badge variant="secondary">Inactive</Badge> : null}
-                      <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                        {t.key}
-                      </code>
-                    </div>
-                    <p className="mt-1.5 flex items-center gap-3 text-xs text-slate-400">
-                      <span>
-                        Updated {formatDate(new Date(t.updatedAt), ctx.timezone, ctx.locale)}
-                      </span>
-                      <span className="inline-flex items-center gap-0.5 text-teal-600 opacity-0 transition group-hover:opacity-100">
-                        Edit <ArrowUpRight size={12} />
-                      </span>
-                    </p>
-                  </Link>
-                  <form action={deletePdfTemplate}>
-                    <input type="hidden" name="id" value={t.id} />
-                    <DeletePdfTemplateButton name={t.name} />
-                  </form>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <GeneratedValue
+          value={
+            tab === 'defaults' ? (
+              <div className="space-y-10">
+                <section className="space-y-4">
+                  <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+                    <GeneratedText id="m_0badf3a2a64b2a" />
+                    <GeneratedValue value={' '} />
+                    <strong>
+                      <GeneratedText id="m_0da45f0a471815" />
+                    </strong>{' '}
+                    <GeneratedText id="m_05f00c4517f4e8" />
+                  </p>
+                  <ModuleDefaultsPanel rows={moduleDefaults} />
+                </section>
+                <section className="space-y-4">
+                  <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                    <GeneratedText id="m_0c770d55914bfa" />
+                  </h2>
+                  <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+                    <GeneratedText id="m_092bfe75dec92c" />{' '}
+                    <strong>
+                      <GeneratedText id="m_0020b9ba899cbe" />
+                    </strong>{' '}
+                    <GeneratedText id="m_016e9bb200d2da" />
+                  </p>
+                  <AppTemplatesPanel rows={appTemplates} />
+                </section>
+              </div>
+            ) : templates.length === 0 ? (
+              <EmptyState
+                icon={<FileText size={32} />}
+                title={tGenerated('m_0e4d5ce3f41988')}
+                description={tGenerated('m_1e15f0de95d3b0')}
+              />
+            ) : (
+              <ul className="space-y-3">
+                <GeneratedValue
+                  value={templates.map((t) => (
+                    <li
+                      key={t.id}
+                      className="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <Link href={`/admin/pdf-templates/${t.id}`} className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-slate-900 dark:text-slate-100">
+                              <GeneratedValue value={t.name} />
+                            </span>
+                            <Badge variant="outline">
+                              <GeneratedValue value={t.paperSize.toUpperCase()} /> ·{' '}
+                              <GeneratedValue value={t.orientation} />
+                            </Badge>
+                            <GeneratedValue
+                              value={
+                                !t.isActive ? (
+                                  <Badge variant="secondary">
+                                    <GeneratedText id="m_0f47ea07c99dba" />
+                                  </Badge>
+                                ) : null
+                              }
+                            />
+                            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                              {t.key}
+                            </code>
+                          </div>
+                          <p className="mt-1.5 flex items-center gap-3 text-xs text-slate-400">
+                            <span>
+                              <GeneratedText id="m_014ca61c68ab13" />{' '}
+                              <GeneratedValue
+                                value={formatDate(new Date(t.updatedAt), ctx.timezone, ctx.locale)}
+                              />
+                            </span>
+                            <span className="inline-flex items-center gap-0.5 text-teal-600 opacity-0 transition group-hover:opacity-100">
+                              <GeneratedText id="m_03a66f9d34ac7b" /> <ArrowUpRight size={12} />
+                            </span>
+                          </p>
+                        </Link>
+                        <form action={deletePdfTemplate}>
+                          <input type="hidden" name="id" value={t.id} />
+                          <DeletePdfTemplateButton name={t.name} />
+                        </form>
+                      </div>
+                    </li>
+                  ))}
+                />
+              </ul>
+            )
+          }
+        />
       </div>
     </PageContainer>
   )
@@ -185,7 +218,7 @@ function TabLink({
           : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
       )}
     >
-      {children}
+      <GeneratedValue value={children} />
     </Link>
   )
 }

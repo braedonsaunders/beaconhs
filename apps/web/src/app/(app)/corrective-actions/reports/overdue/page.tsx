@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { AlertTriangle, Clock } from 'lucide-react'
 import { and, asc, eq, inArray, isNull, lt } from 'drizzle-orm'
@@ -14,7 +17,10 @@ import { SortTh } from '@/components/sortable-th'
 import { TableToolbar } from '@/components/table-toolbar'
 import { parseListParams, pickString } from '@/lib/list-params'
 
-export const metadata = { title: 'Overdue corrective actions' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_03032d85571ba1') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/corrective-actions/reports/overdue'
@@ -45,6 +51,8 @@ export default async function OverdueReport({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'days',
@@ -185,23 +193,26 @@ export default async function OverdueReport({
         <>
           <CorrectiveActionsSubNav active="overdue" />
           <PageHeader
-            title="Overdue corrective actions"
-            description="Open work past its due date, with the responsible owner visible on every row."
+            title={tGenerated('m_03032d85571ba1')}
+            description={tGenerated('m_03ba4f1cffe4d3')}
             back={{ href: '/corrective-actions', label: 'Back to records' }}
           />
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="destructive">
-              <AlertTriangle size={10} className="mr-1" /> {totalCount} overdue
+              <AlertTriangle size={10} className="mr-1" /> <GeneratedValue value={totalCount} />{' '}
+              <GeneratedText id="m_06e3b632d95096" />
             </Badge>
-            <Badge variant="secondary">{groups.length} owners affected</Badge>
+            <Badge variant="secondary">
+              <GeneratedValue value={groups.length} /> <GeneratedText id="m_13a7ee13a5e81e" />
+            </Badge>
           </div>
           <TableToolbar>
-            <SearchInput placeholder="Search ref, title, owner, or site…" />
+            <SearchInput placeholder={tGenerated('m_049dd9970ac051')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="severity"
-              label="Severity"
+              label={tGenerated('m_168b365cc671bf')}
               options={['low', 'medium', 'high', 'critical'].map((severity) => ({
                 value: severity,
                 label: severity,
@@ -212,7 +223,7 @@ export default async function OverdueReport({
               basePath={BASE}
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={['open', 'in_progress', 'pending_verification'].map((status) => ({
                 value: status,
                 label: status.replace('_', ' '),
@@ -223,7 +234,7 @@ export default async function OverdueReport({
               basePath={BASE}
               currentParams={sp}
               paramKey="assignment"
-              label="Owner"
+              label={tGenerated('m_09e0cae12d3f44')}
               options={[
                 {
                   value: 'assigned',
@@ -241,144 +252,167 @@ export default async function OverdueReport({
         </>
       }
     >
-      {pageRows.length === 0 ? (
-        <EmptyState
-          icon={<Clock size={32} />}
-          title={totalCount === 0 ? 'Nothing overdue' : 'No matching overdue actions'}
-          description={
-            totalCount === 0
-              ? 'Every open corrective action is still inside its due window. Nice.'
-              : 'Adjust the search or filters.'
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="reference"
-                >
-                  Ref
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="title"
-                >
-                  Title
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="severity"
-                >
-                  Severity
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="status"
-                >
-                  Status
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="owner"
-                >
-                  Owner
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="due"
-                >
-                  Due
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="days"
-                >
-                  Days overdue
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="site"
-                >
-                  Site
-                </SortTh>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {pageRows.map((r) => (
-                <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
-                  <td className="px-4 py-2 font-mono text-xs">
-                    <Link href={`/corrective-actions/${r.id}` as any} className="hover:underline">
-                      {r.reference}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2">
-                    <Link
-                      href={`/corrective-actions/${r.id}` as any}
-                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+      <GeneratedValue
+        value={
+          pageRows.length === 0 ? (
+            <EmptyState
+              icon={<Clock size={32} />}
+              title={tGeneratedValue(
+                totalCount === 0 ? tGenerated('m_1e8affb8534b33') : tGenerated('m_0543a28e83917d'),
+              )}
+              description={tGeneratedValue(
+                totalCount === 0 ? tGenerated('m_1b3426e5d88945') : tGenerated('m_0c29363c482f01'),
+              )}
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="reference"
                     >
-                      {r.title}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2">
-                    <Badge
-                      variant={
-                        r.severity === 'critical' || r.severity === 'high'
-                          ? 'destructive'
-                          : r.severity === 'medium'
-                            ? 'warning'
-                            : 'secondary'
-                      }
+                      <GeneratedText id="m_036b564bb88dfe" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="title"
                     >
-                      {r.severity}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2">
-                    <Badge variant="warning">{r.status.replace('_', ' ')}</Badge>
-                  </td>
-                  <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
-                    <div>{r.ownerName}</div>
-                    {r.ownerEmail ? <div className="text-xs">{r.ownerEmail}</div> : null}
-                  </td>
-                  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.dueOn ?? '—'}</td>
-                  <td className="px-4 py-2 font-medium text-red-700 dark:text-red-400">
-                    {r.daysOverdue}
-                  </td>
-                  <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
-                    {r.siteName ?? '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      <GeneratedText id="m_0decefd558c355" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="severity"
+                    >
+                      <GeneratedText id="m_168b365cc671bf" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="status"
+                    >
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="owner"
+                    >
+                      <GeneratedText id="m_09e0cae12d3f44" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="due"
+                    >
+                      <GeneratedText id="m_0c2eb92551e08b" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="days"
+                    >
+                      <GeneratedText id="m_076fbdbd211c95" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="site"
+                    >
+                      <GeneratedText id="m_020146dd3d3d5a" />
+                    </SortTh>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <GeneratedValue
+                    value={pageRows.map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
+                        <td className="px-4 py-2 font-mono text-xs">
+                          <Link
+                            href={`/corrective-actions/${r.id}` as any}
+                            className="hover:underline"
+                          >
+                            <GeneratedValue value={r.reference} />
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2">
+                          <Link
+                            href={`/corrective-actions/${r.id}` as any}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                          >
+                            <GeneratedValue value={r.title} />
+                          </Link>
+                        </td>
+                        <td className="px-4 py-2">
+                          <Badge
+                            variant={
+                              r.severity === 'critical' || r.severity === 'high'
+                                ? 'destructive'
+                                : r.severity === 'medium'
+                                  ? 'warning'
+                                  : 'secondary'
+                            }
+                          >
+                            <GeneratedValue value={r.severity} />
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2">
+                          <Badge variant="warning">
+                            <GeneratedValue value={r.status.replace('_', ' ')} />
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                          <div>
+                            <GeneratedValue value={r.ownerName} />
+                          </div>
+                          <GeneratedValue
+                            value={
+                              r.ownerEmail ? (
+                                <div className="text-xs">
+                                  <GeneratedValue value={r.ownerEmail} />
+                                </div>
+                              ) : null
+                            }
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
+                          <GeneratedValue value={r.dueOn ?? '—'} />
+                        </td>
+                        <td className="px-4 py-2 font-medium text-red-700 dark:text-red-400">
+                          <GeneratedValue value={r.daysOverdue} />
+                        </td>
+                        <td className="px-4 py-2 text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={r.siteName ?? '—'} />
+                        </td>
+                      </tr>
+                    ))}
+                  />
+                </tbody>
+              </table>
+            </div>
+          )
+        }
+      />
       <Pagination
         basePath={BASE}
         currentParams={sp}

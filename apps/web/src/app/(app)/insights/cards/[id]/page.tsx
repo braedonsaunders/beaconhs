@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { Download, Pencil } from 'lucide-react'
@@ -17,6 +20,7 @@ import { isUuid } from '@/lib/list-params'
 export const dynamic = 'force-dynamic'
 
 export default async function CardPage({ params }: { params: Promise<{ id: string }> }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -46,8 +50,8 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="space-y-4 p-4 lg:p-6">
       <PageHeader
-        title={card.name}
-        description={card.description ?? undefined}
+        title={tGeneratedValue(card.name)}
+        description={tGeneratedValue(card.description ?? undefined)}
         back={{ href: '/insights/library', label: 'Library' }}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -59,49 +63,66 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
                   : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
               )}
             >
-              {card.status === 'published' ? 'Published' : 'Draft'}
+              <GeneratedValue
+                value={
+                  card.status === 'published' ? (
+                    <GeneratedText id="m_0a65097103ae1b" />
+                  ) : (
+                    <GeneratedText id="m_13f3db1d0ca2fe" />
+                  )
+                }
+              />
             </span>
             {/* Plain <a>, NOT <Link>: the export is a route handler and Link
                 prefetch would fire real (audited) exports on every page view. */}
             <a href={`/insights/cards/${card.id}/export`}>
               <Button type="button" variant="outline" className="h-9 text-xs">
-                <Download size={13} className="mr-1" /> CSV
+                <Download size={13} className="mr-1" /> <GeneratedText id="m_13bc18467bfb44" />
               </Button>
             </a>
-            {canEdit ? (
-              <>
-                <Link href={`/insights/cards/${card.id}/edit`}>
-                  <Button type="button" variant="outline" className="h-9 text-xs">
-                    <Pencil size={13} className="mr-1" /> Edit
-                  </Button>
-                </Link>
-                <CardToolbar
-                  id={card.id}
-                  status={card.status}
-                  canPublish={canPublish}
-                  roles={roleOptions}
-                  allowedRoles={card.allowedRoles}
-                />
-              </>
-            ) : null}
+            <GeneratedValue
+              value={
+                canEdit ? (
+                  <>
+                    <Link href={`/insights/cards/${card.id}/edit`}>
+                      <Button type="button" variant="outline" className="h-9 text-xs">
+                        <Pencil size={13} className="mr-1" />{' '}
+                        <GeneratedText id="m_03a66f9d34ac7b" />
+                      </Button>
+                    </Link>
+                    <CardToolbar
+                      id={card.id}
+                      status={card.status}
+                      canPublish={canPublish}
+                      roles={roleOptions}
+                      allowedRoles={card.allowedRoles}
+                    />
+                  </>
+                ) : null
+              }
+            />
           </div>
         }
       />
       <div className="h-[72vh] rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-        {isAi ? (
-          <AiCardView cardId={card.id} prompt={aiPrompt} />
-        ) : error ? (
-          <div className="grid h-full place-items-center rounded-lg border border-dashed border-rose-300 bg-rose-50/40 px-4 text-center text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/5 dark:text-rose-400">
-            {error}
-          </div>
-        ) : result ? (
-          <VizRenderer
-            vizType={card.vizType}
-            result={result}
-            settings={card.vizSettings}
-            label={card.name}
-          />
-        ) : null}
+        <GeneratedValue
+          value={
+            isAi ? (
+              <AiCardView cardId={card.id} prompt={tGeneratedValue(aiPrompt)} />
+            ) : error ? (
+              <div className="grid h-full place-items-center rounded-lg border border-dashed border-rose-300 bg-rose-50/40 px-4 text-center text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/5 dark:text-rose-400">
+                <GeneratedValue value={error} />
+              </div>
+            ) : result ? (
+              <VizRenderer
+                vizType={card.vizType}
+                result={result}
+                settings={card.vizSettings}
+                label={tGeneratedValue(card.name)}
+              />
+            ) : null
+          }
+        />
       </div>
     </div>
   )

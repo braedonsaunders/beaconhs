@@ -1,3 +1,8 @@
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
 /**
  * Tiny inline-SVG sparkline. Server-rendered so we don't ship a charting lib
  * for what amounts to a 60x20 polyline.
@@ -26,6 +31,8 @@ export function Sparkline({
   ariaLabel?: string
   showArea?: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   // Collect non-null values for the min/max envelope.
   const real = data.filter((v): v is number => v !== null && Number.isFinite(v))
   if (real.length === 0) {
@@ -35,7 +42,7 @@ export function Sparkline({
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label={ariaLabel ?? 'no data'}
+        aria-label={tGeneratedValue(ariaLabel ?? tGenerated('m_1961e3a4876c6d'))}
       >
         <line
           x1={0}
@@ -91,9 +98,13 @@ export function Sparkline({
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       role="img"
-      aria-label={ariaLabel ?? 'trend sparkline'}
+      aria-label={tGeneratedValue(ariaLabel ?? tGenerated('m_15511a6af8703b'))}
     >
-      {showArea ? <path d={areaPath} fill={stroke} fillOpacity={0.18} stroke="none" /> : null}
+      <GeneratedValue
+        value={
+          showArea ? <path d={areaPath} fill={stroke} fillOpacity={0.18} stroke="none" /> : null
+        }
+      />
       <polyline
         points={linePoints}
         fill={fill}

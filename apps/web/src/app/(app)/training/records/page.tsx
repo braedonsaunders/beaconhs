@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Dedicated /training/records list page. The /training landing page is the
 // rolled-up dashboard; this is the flat, paginated, bulk-actionable list of
 // every training_record row scoped to the tenant.
@@ -42,7 +45,10 @@ import { TrainingSubNav } from '../_components/training-sub-nav'
 import { startTrainingRecord } from './_actions'
 import { TrainingRecordsTable, type TrainingRecordsTableRow } from './_records-table'
 
-export const metadata = { title: 'Certificates' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0a14bf1b44e910') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['completed_on', 'expires_on', 'source', 'employee', 'course'] as const
@@ -65,6 +71,8 @@ export default async function TrainingRecordsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'completed_on',
@@ -267,51 +275,61 @@ export default async function TrainingRecordsPage({
       header={
         <>
           <PageHeader
-            title="Certificates"
-            description="Training records with completion dates and expiry tracking."
+            title={tGenerated('m_0a14bf1b44e910')}
+            description={tGenerated('m_14c4285df5033b')}
             actions={
               canManage ? (
                 <form action={startTrainingRecord}>
-                  <Button type="submit">New certificate</Button>
+                  <Button type="submit">
+                    <GeneratedText id="m_0889fafbafcb00" />
+                  </Button>
                 </form>
               ) : undefined
             }
           />
           <TrainingSubNav active="records" />
           <TableToolbar>
-            <SearchInput placeholder="Search employee, employee #, course…" />
-            {peopleList.length > 0 ? (
-              <SearchFilter
-                basePath="/training/records"
-                currentParams={sp}
-                paramKey="person"
-                placeholder="All people"
-                searchPlaceholder="Search people…"
-                options={peopleList.map((p) => ({
-                  value: p.id,
-                  label: `${p.lastName}, ${p.firstName}`,
-                  hint: p.employeeNo ?? undefined,
-                }))}
-              />
-            ) : null}
-            {coursesList.length > 0 ? (
-              <SearchFilter
-                basePath="/training/records"
-                currentParams={sp}
-                paramKey="course"
-                placeholder="All courses"
-                searchPlaceholder="Search courses…"
-                options={coursesList.map((c) => ({
-                  value: c.id,
-                  label: c.code ? `${c.code} · ${c.name}` : c.name,
-                }))}
-              />
-            ) : null}
+            <SearchInput placeholder={tGenerated('m_13cc8f5d50e7ff')} />
+            <GeneratedValue
+              value={
+                peopleList.length > 0 ? (
+                  <SearchFilter
+                    basePath="/training/records"
+                    currentParams={sp}
+                    paramKey="person"
+                    placeholder={tGenerated('m_0110de6e7a2824')}
+                    searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
+                    options={peopleList.map((p) => ({
+                      value: p.id,
+                      label: `${p.lastName}, ${p.firstName}`,
+                      hint: p.employeeNo ?? undefined,
+                    }))}
+                  />
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                coursesList.length > 0 ? (
+                  <SearchFilter
+                    basePath="/training/records"
+                    currentParams={sp}
+                    paramKey="course"
+                    placeholder={tGenerated('m_1eff369e8cceb6')}
+                    searchPlaceholder={tGenerated('m_030db64e0bf790')}
+                    options={coursesList.map((c) => ({
+                      value: c.id,
+                      label: c.code ? `${c.code} · ${c.name}` : c.name,
+                    }))}
+                  />
+                ) : null
+              }
+            />
             <FilterChips
               basePath="/training/records"
               currentParams={sp}
               paramKey="source"
-              label="Source"
+              label={tGenerated('m_1d05fa7a091a9b')}
               options={SOURCE_OPTIONS.map((o) => ({
                 ...o,
                 count: sourceCounts[o.value],
@@ -321,7 +339,7 @@ export default async function TrainingRecordsPage({
               basePath="/training/records"
               currentParams={sp}
               paramKey="expiry"
-              label="Expiry"
+              label={tGenerated('m_0fe9bb2ac8cee6')}
               defaultValue="current"
               options={EXPIRY_OPTIONS.map((o) => ({
                 ...o,
@@ -332,43 +350,49 @@ export default async function TrainingRecordsPage({
         </>
       }
     >
-      {tableRows.length === 0 ? (
-        <EmptyState
-          icon={<Award size={32} />}
-          title={
-            params.q || sourceFilter || expiryFilter || personFilter || courseFilter
-              ? 'No matching records'
-              : 'No training records'
-          }
-          description="Issue a certificate, complete a class, or upload an external record."
-          action={
-            canManage ? (
-              <form action={startTrainingRecord}>
-                <Button type="submit">New certificate</Button>
-              </form>
-            ) : undefined
-          }
-        />
-      ) : (
-        <>
-          <TrainingRecordsTable
-            rows={tableRows}
-            basePath="/training/records"
-            currentParams={sp}
-            sort={params.sort}
-            dir={params.dir}
-            canManage={canManage}
-            canExport={canExport}
-          />
-          <Pagination
-            basePath="/training/records"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          tableRows.length === 0 ? (
+            <EmptyState
+              icon={<Award size={32} />}
+              title={tGeneratedValue(
+                params.q || sourceFilter || expiryFilter || personFilter || courseFilter
+                  ? tGenerated('m_147d4483853536')
+                  : tGenerated('m_049950ab11f977'),
+              )}
+              description={tGenerated('m_089ad5abb00e33')}
+              action={
+                canManage ? (
+                  <form action={startTrainingRecord}>
+                    <Button type="submit">
+                      <GeneratedText id="m_0889fafbafcb00" />
+                    </Button>
+                  </form>
+                ) : undefined
+              }
+            />
+          ) : (
+            <>
+              <TrainingRecordsTable
+                rows={tableRows}
+                basePath="/training/records"
+                currentParams={sp}
+                sort={params.sort}
+                dir={params.dir}
+                canManage={canManage}
+                canExport={canExport}
+              />
+              <Pagination
+                basePath="/training/records"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

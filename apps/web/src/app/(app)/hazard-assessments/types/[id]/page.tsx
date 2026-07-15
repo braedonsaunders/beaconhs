@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import { Badge, DetailHeader } from '@beaconhs/ui'
@@ -26,6 +29,7 @@ export default async function AssessmentTypeDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -99,12 +103,30 @@ export default async function AssessmentTypeDetailPage({
       header={
         <DetailHeader
           back={{ href: '/hazard-assessments/types', label: 'Back' }}
-          title={type.name}
+          title={tGeneratedValue(type.name)}
           badge={
             <div className="flex flex-wrap items-center gap-1">
-              <Badge variant="secondary">{styleLabel(type.style)}</Badge>
-              {type.hasPPE ? <Badge variant="secondary">PPE</Badge> : null}
-              {type.hasQuestions ? <Badge variant="secondary">Q&amp;A</Badge> : null}
+              <Badge variant="secondary">
+                <GeneratedValue value={styleLabel(type.style)} />
+              </Badge>
+              <GeneratedValue
+                value={
+                  type.hasPPE ? (
+                    <Badge variant="secondary">
+                      <GeneratedText id="m_18391e161b9ed6" />
+                    </Badge>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  type.hasQuestions ? (
+                    <Badge variant="secondary">
+                      <GeneratedText id="m_0ef5343512ffa9" />
+                    </Badge>
+                  ) : null
+                }
+              />
             </div>
           }
         />

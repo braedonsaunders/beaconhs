@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Schedules tab — every recurring subscription on this tenant, with status
 // filtering and inline pause/resume.
 
@@ -30,7 +33,10 @@ import { formatCadence } from '../_format'
 import { formatDateTime } from '@/lib/datetime'
 import { setActive } from './[id]/actions'
 
-export const metadata = { title: 'Report schedules' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1a3a0b97daa2bd') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/reports/schedules'
@@ -41,6 +47,8 @@ export default async function SchedulesListPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   const sp = await searchParams
   const statusParam = pickString(sp.status)
@@ -110,12 +118,14 @@ export default async function SchedulesListPage({
       header={
         <>
           <PageHeader
-            title="Schedules"
-            description="Recurring PDF report deliveries."
+            title={tGenerated('m_1da27732d46566')}
+            description={tGenerated('m_05188197d6c558')}
             actions={
               canSchedule ? (
                 <Link href="/reports/schedules/new">
-                  <Button>New schedule</Button>
+                  <Button>
+                    <GeneratedText id="m_0f2dd0043302a1" />
+                  </Button>
                 </Link>
               ) : undefined
             }
@@ -123,12 +133,12 @@ export default async function SchedulesListPage({
           <div className="flex flex-wrap items-center gap-2">
             <ReportsSubNav active="schedules" />
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <SearchInput placeholder="Search schedules and reports…" />
+              <SearchInput placeholder={tGenerated('m_0a882d6ebb0bf4')} />
               <FilterChips
                 basePath={BASE}
                 currentParams={sp}
                 paramKey="status"
-                label="Status"
+                label={tGenerated('m_0b9da892d6faf0')}
                 options={[
                   { value: 'active', label: 'Active', count: activeCount },
                   { value: 'paused', label: 'Paused', count: pausedCount },
@@ -139,151 +149,212 @@ export default async function SchedulesListPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<CalendarClock size={28} />}
-          title={
-            !params.q && !statusFilter && total === 0 ? 'No schedules' : 'No matching schedules'
-          }
-          description={
-            !params.q && !statusFilter && total === 0
-              ? 'Subscribe to a report to schedule recurring email delivery.'
-              : 'Adjust the search or status filter.'
-          }
-          action={
-            !params.q && !statusFilter && total === 0 ? (
-              <Link href="/reports">
-                <Button variant="outline">Browse reports</Button>
-              </Link>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="name"
-                  active={params.sort === 'name'}
-                >
-                  Name
-                </SortableTh>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="report"
-                  active={params.sort === 'report'}
-                >
-                  Report
-                </SortableTh>
-                <TableHead>Cadence</TableHead>
-                <TableHead>Recipients</TableHead>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="nextRun"
-                  active={params.sort === 'nextRun'}
-                >
-                  Next run
-                </SortableTh>
-                <TableHead>Last run</TableHead>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="status"
-                  active={params.sort === 'status'}
-                >
-                  Status
-                </SortableTh>
-                <TableHead className="w-24" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ schedule, definition }) => {
-                const toggleBound = setActive.bind(null, schedule.id, !schedule.active)
-                const recipientCount =
-                  (schedule.recipientUserIds?.length ?? 0) + (schedule.recipientEmails?.length ?? 0)
-                return (
-                  <TableRow key={schedule.id}>
-                    <TableCell>
-                      <Link
-                        href={`/reports/schedules/${schedule.id}`}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {schedule.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      <Link
-                        href={`/reports/definitions/${definition.id}`}
-                        className="hover:underline"
-                      >
-                        {definition.name}
-                      </Link>
-                      {definition.kind === 'custom' ? (
-                        <Badge variant="outline" className="ml-2">
-                          custom
-                        </Badge>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {formatCadence(
-                        schedule.cadence,
-                        schedule.dayOfWeek,
-                        schedule.dayOfMonth,
-                        schedule.hour,
-                        schedule.minute,
-                        schedule.timezone,
-                      )}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {recipientCount || '—'}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {schedule.nextRunAt && schedule.active
-                        ? formatDateTime(new Date(schedule.nextRunAt), ctx.timezone, ctx.locale)
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {schedule.lastRunAt
-                        ? formatDateTime(new Date(schedule.lastRunAt), ctx.timezone, ctx.locale)
-                        : 'never'}
-                    </TableCell>
-                    <TableCell>
-                      {schedule.active ? (
-                        <Badge variant="success">active</Badge>
-                      ) : (
-                        <Badge variant="secondary">paused</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {canSchedule ? (
-                        <form action={toggleBound}>
-                          <Button
-                            type="submit"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={schedule.active ? 'Pause schedule' : 'Resume schedule'}
-                          >
-                            {schedule.active ? <Pause size={14} /> : <Play size={14} />}
-                          </Button>
-                        </form>
-                      ) : null}
-                    </TableCell>
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<CalendarClock size={28} />}
+              title={tGeneratedValue(
+                !params.q && !statusFilter && total === 0
+                  ? tGenerated('m_128e4fb23de822')
+                  : tGenerated('m_0be2fe2e4f2864'),
+              )}
+              description={tGeneratedValue(
+                !params.q && !statusFilter && total === 0
+                  ? tGenerated('m_1af456805c3509')
+                  : tGenerated('m_04e165953b7462'),
+              )}
+              action={
+                !params.q && !statusFilter && total === 0 ? (
+                  <Link href="/reports">
+                    <Button variant="outline">
+                      <GeneratedText id="m_180106a8c3ff04" />
+                    </Button>
+                  </Link>
+                ) : undefined
+              }
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="name"
+                      active={params.sort === 'name'}
+                    >
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="report"
+                      active={params.sort === 'report'}
+                    >
+                      <GeneratedText id="m_0ab5a972fc80fd" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_1151ed0308b6d1" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0d99b2b56f8b5d" />
+                    </TableHead>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="nextRun"
+                      active={params.sort === 'nextRun'}
+                    >
+                      <GeneratedText id="m_05e650592b7158" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_1236782a321d73" />
+                    </TableHead>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="status"
+                      active={params.sort === 'status'}
+                    >
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortableTh>
+                    <TableHead className="w-24" />
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ schedule, definition }) => {
+                      const toggleBound = setActive.bind(null, schedule.id, !schedule.active)
+                      const recipientCount =
+                        (schedule.recipientUserIds?.length ?? 0) +
+                        (schedule.recipientEmails?.length ?? 0)
+                      return (
+                        <TableRow key={schedule.id}>
+                          <TableCell>
+                            <Link
+                              href={`/reports/schedules/${schedule.id}`}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={schedule.name} />
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <Link
+                              href={`/reports/definitions/${definition.id}`}
+                              className="hover:underline"
+                            >
+                              <GeneratedValue value={definition.name} />
+                            </Link>
+                            <GeneratedValue
+                              value={
+                                definition.kind === 'custom' ? (
+                                  <Badge variant="outline" className="ml-2">
+                                    <GeneratedText id="m_0abce084240d5f" />
+                                  </Badge>
+                                ) : null
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue
+                              value={formatCadence(
+                                schedule.cadence,
+                                schedule.dayOfWeek,
+                                schedule.dayOfMonth,
+                                schedule.hour,
+                                schedule.minute,
+                                schedule.timezone,
+                              )}
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue value={recipientCount || '—'} />
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue
+                              value={
+                                schedule.nextRunAt && schedule.active
+                                  ? formatDateTime(
+                                      new Date(schedule.nextRunAt),
+                                      ctx.timezone,
+                                      ctx.locale,
+                                    )
+                                  : '—'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue
+                              value={
+                                schedule.lastRunAt ? (
+                                  formatDateTime(
+                                    new Date(schedule.lastRunAt),
+                                    ctx.timezone,
+                                    ctx.locale,
+                                  )
+                                ) : (
+                                  <GeneratedText id="m_069a3d1a5f8ba4" />
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <GeneratedValue
+                              value={
+                                schedule.active ? (
+                                  <Badge variant="success">
+                                    <GeneratedText id="m_0af64d5dc843c0" />
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary">
+                                    <GeneratedText id="m_18a9844f041430" />
+                                  </Badge>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <GeneratedValue
+                              value={
+                                canSchedule ? (
+                                  <form action={toggleBound}>
+                                    <Button
+                                      type="submit"
+                                      variant="ghost"
+                                      size="sm"
+                                      aria-label={tGeneratedValue(
+                                        schedule.active
+                                          ? tGenerated('m_15f68d81e0bf4a')
+                                          : tGenerated('m_1fd7f9ce965029'),
+                                      )}
+                                    >
+                                      <GeneratedValue
+                                        value={
+                                          schedule.active ? <Pause size={14} /> : <Play size={14} />
+                                        }
+                                      />
+                                    </Button>
+                                  </form>
+                                ) : null
+                              }
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+            </div>
+          )
+        }
+      />
       <Pagination
         basePath={BASE}
         currentParams={sp}

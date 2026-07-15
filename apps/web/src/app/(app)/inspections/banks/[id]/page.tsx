@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import { asc, eq } from 'drizzle-orm'
 import { Badge, DetailHeader } from '@beaconhs/ui'
@@ -12,8 +15,9 @@ import { InspectionBankBuilder } from './_bank-builder'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Bank · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_10ce03c64bd970', { value0: id.slice(0, 8) }) }
 }
 
 export default async function InspectionBankDetailPage({
@@ -21,6 +25,7 @@ export default async function InspectionBankDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -58,11 +63,19 @@ export default async function InspectionBankDetailPage({
       header={
         <DetailHeader
           back={{ href: '/inspections/banks', label: 'Back to banks' }}
-          title={bank.name}
-          subtitle={bank.category ? bank.category.replace(/_/g, ' ') : undefined}
+          title={tGeneratedValue(bank.name)}
+          subtitle={tGeneratedValue(bank.category ? bank.category.replace(/_/g, ' ') : undefined)}
           badge={
             <Badge variant={bank.isPublished ? 'success' : 'secondary'}>
-              {bank.isPublished ? 'Published' : 'Draft'}
+              <GeneratedValue
+                value={
+                  bank.isPublished ? (
+                    <GeneratedText id="m_0a65097103ae1b" />
+                  ) : (
+                    <GeneratedText id="m_13f3db1d0ca2fe" />
+                  )
+                }
+              />
             </Badge>
           }
         />

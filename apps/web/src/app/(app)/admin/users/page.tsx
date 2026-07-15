@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { and, asc, count, desc, eq, exists, ilike, inArray, or, type SQL } from 'drizzle-orm'
@@ -14,7 +17,10 @@ import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
 import { parseListParams, pickString } from '@/lib/list-params'
 
-export const metadata = { title: 'Users & roles' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0b997ac753c571') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'email', 'status', 'joined'] as const
@@ -45,6 +51,8 @@ export default async function AdminUsersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!can(ctx, 'admin.users.manage')) redirect('/admin')
 
@@ -151,27 +159,34 @@ export default async function AdminUsersPage({
       <div className="space-y-5">
         <DetailHeader
           back={{ href: '/admin', label: 'Back to admin' }}
-          title="Users & roles"
-          subtitle={`${activeCount} active member${activeCount === 1 ? '' : 's'}`}
+          title={tGenerated('m_0b997ac753c571')}
+          subtitle={tGenerated('m_006fc632d9258e', {
+            value0: activeCount,
+            value1: activeCount === 1 ? '' : 's',
+          })}
           actions={
             <div className="flex items-center gap-2">
               <Link href="/admin/roles">
-                <Button variant="outline">Manage roles</Button>
+                <Button variant="outline">
+                  <GeneratedText id="m_18b48af6197383" />
+                </Button>
               </Link>
               <Link href="/admin/users/invite">
-                <Button>Invite user</Button>
+                <Button>
+                  <GeneratedText id="m_05b8de370e95a9" />
+                </Button>
               </Link>
             </div>
           }
         />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <SearchInput placeholder="Search name, email, or role…" />
+          <SearchInput placeholder={tGenerated('m_1de877d73563c5')} />
           <FilterChips
             basePath={basePath}
             currentParams={sp}
             paramKey="status"
-            label="Status"
+            label={tGenerated('m_0b9da892d6faf0')}
             defaultValue="active"
             options={STATUS_FILTERS.filter((filter) => filter.value !== 'all').map((filter) => ({
               value: filter.value,
@@ -181,119 +196,151 @@ export default async function AdminUsersPage({
           />
         </div>
 
-        {rows.length === 0 ? (
-          <EmptyState
-            title="No members match"
-            description={
-              listParams.q
-                ? 'No members match your search. Try a different term or status filter.'
-                : 'Try a different status filter, or invite someone.'
-            }
-          />
-        ) : (
-          <>
-            {/* Phones: tappable cards. */}
-            <MobileCardList>
-              {rows.map((r) => (
-                <ListCard
-                  key={r.membershipId}
-                  href={`/admin/users/${r.membershipId}`}
-                  avatarName={r.displayName ?? r.name}
-                  title={
-                    <span className="flex items-center gap-1.5">
-                      {r.displayName ?? r.name}
-                      {r.isSuperAdmin ? (
-                        <Badge variant="warning" className="text-[10px]">
-                          super-admin
-                        </Badge>
-                      ) : null}
-                    </span>
-                  }
-                  status={<Badge variant={statusVariant(r.status)}>{r.status}</Badge>}
-                  meta={r.email}
-                  footer={
-                    r.roleNames.length === 0 ? (
-                      <span className="text-xs text-slate-400">No roles</span>
-                    ) : (
-                      r.roleNames.map((n) => (
-                        <Badge key={n} variant="outline" className="text-[10px]">
-                          {n}
-                        </Badge>
-                      ))
-                    )
-                  }
-                />
-              ))}
-            </MobileCardList>
-
-            {/* Tablet/desktop: sortable table. */}
-            <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white sm:block dark:border-slate-800 dark:bg-slate-900">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
-                    <SortTh column="name" {...sortProps}>
-                      Name
-                    </SortTh>
-                    <SortTh column="email" {...sortProps}>
-                      Email
-                    </SortTh>
-                    <SortTh column="status" {...sortProps}>
-                      Status
-                    </SortTh>
-                    <th className="px-3 py-2">Roles</th>
-                    <SortTh column="joined" {...sortProps}>
-                      Joined
-                    </SortTh>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {rows.map((r) => (
-                    <tr
-                      key={r.membershipId}
-                      className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60"
-                    >
-                      <td className="px-3 py-2">
-                        <Link
-                          href={`/admin/users/${r.membershipId}` as any}
-                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                        >
-                          {r.displayName ?? r.name}
-                        </Link>
-                        {r.isSuperAdmin ? (
-                          <Badge variant="warning" className="ml-2 text-[10px]">
-                            super-admin
+        <GeneratedValue
+          value={
+            rows.length === 0 ? (
+              <EmptyState
+                title={tGenerated('m_15b2e8f526882e')}
+                description={tGeneratedValue(
+                  listParams.q ? tGenerated('m_08826a6325e2f7') : tGenerated('m_1dd8d30789c461'),
+                )}
+              />
+            ) : (
+              <>
+                {/* Phones: tappable cards. */}
+                <MobileCardList>
+                  <GeneratedValue
+                    value={rows.map((r) => (
+                      <ListCard
+                        key={r.membershipId}
+                        href={`/admin/users/${r.membershipId}`}
+                        avatarName={r.displayName ?? r.name}
+                        title={tGeneratedValue(
+                          <span className="flex items-center gap-1.5">
+                            {r.displayName ?? r.name}
+                            {r.isSuperAdmin ? (
+                              <Badge variant="warning" className="text-[10px]">
+                                super-admin
+                              </Badge>
+                            ) : null}
+                          </span>,
+                        )}
+                        status={
+                          <Badge variant={statusVariant(r.status)}>
+                            <GeneratedValue value={r.status} />
                           </Badge>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{r.email}</td>
-                      <td className="px-3 py-2">
-                        <Badge variant={statusVariant(r.status)}>{r.status}</Badge>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex flex-wrap gap-1">
-                          {r.roleNames.length === 0 ? (
-                            <span className="text-xs text-slate-400">No roles</span>
+                        }
+                        meta={r.email}
+                        footer={
+                          r.roleNames.length === 0 ? (
+                            <span className="text-xs text-slate-400">
+                              <GeneratedText id="m_0f1763e8701d84" />
+                            </span>
                           ) : (
                             r.roleNames.map((n) => (
-                              <Badge key={n} variant="outline">
-                                {n}
+                              <Badge key={n} variant="outline" className="text-[10px]">
+                                <GeneratedValue value={n} />
                               </Badge>
                             ))
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                        {r.joinedAt
-                          ? formatDate(new Date(r.joinedAt), ctx.timezone, ctx.locale)
-                          : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+                          )
+                        }
+                      />
+                    ))}
+                  />
+                </MobileCardList>
+
+                {/* Tablet/desktop: sortable table. */}
+                <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white sm:block dark:border-slate-800 dark:bg-slate-900">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
+                        <SortTh column="name" {...sortProps}>
+                          <GeneratedText id="m_02b18d5c7f6f2d" />
+                        </SortTh>
+                        <SortTh column="email" {...sortProps}>
+                          <GeneratedText id="m_00a0ba9938bdff" />
+                        </SortTh>
+                        <SortTh column="status" {...sortProps}>
+                          <GeneratedText id="m_0b9da892d6faf0" />
+                        </SortTh>
+                        <th className="px-3 py-2">
+                          <GeneratedText id="m_1ed71c1e30c002" />
+                        </th>
+                        <SortTh column="joined" {...sortProps}>
+                          <GeneratedText id="m_00b9a2f359be11" />
+                        </SortTh>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      <GeneratedValue
+                        value={rows.map((r) => (
+                          <tr
+                            key={r.membershipId}
+                            className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60"
+                          >
+                            <td className="px-3 py-2">
+                              <Link
+                                href={`/admin/users/${r.membershipId}` as any}
+                                className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                              >
+                                <GeneratedValue value={r.displayName ?? r.name} />
+                              </Link>
+                              <GeneratedValue
+                                value={
+                                  r.isSuperAdmin ? (
+                                    <Badge variant="warning" className="ml-2 text-[10px]">
+                                      <GeneratedText id="m_1ee09be62a0f9f" />
+                                    </Badge>
+                                  ) : null
+                                }
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                              <GeneratedValue value={r.email} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <Badge variant={statusVariant(r.status)}>
+                                <GeneratedValue value={r.status} />
+                              </Badge>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex flex-wrap gap-1">
+                                <GeneratedValue
+                                  value={
+                                    r.roleNames.length === 0 ? (
+                                      <span className="text-xs text-slate-400">
+                                        <GeneratedText id="m_0f1763e8701d84" />
+                                      </span>
+                                    ) : (
+                                      r.roleNames.map((n) => (
+                                        <Badge key={n} variant="outline">
+                                          <GeneratedValue value={n} />
+                                        </Badge>
+                                      ))
+                                    )
+                                  }
+                                />
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                              <GeneratedValue
+                                value={
+                                  r.joinedAt
+                                    ? formatDate(new Date(r.joinedAt), ctx.timezone, ctx.locale)
+                                    : '—'
+                                }
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      />
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )
+          }
+        />
         <Pagination
           basePath={basePath}
           currentParams={sp}

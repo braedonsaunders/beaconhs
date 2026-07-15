@@ -26,6 +26,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Button } from './button'
+import { useUiText } from './text-context'
 import { cn } from './utils'
 
 export type SignaturePadProps = {
@@ -58,8 +59,10 @@ export function SignaturePad({
   disabled = false,
   height = 160,
   className,
-  ariaLabel = 'Signature',
+  ariaLabel,
 }: SignaturePadProps) {
+  const t = useUiText()
+  const localizedAriaLabel = t(ariaLabel ?? 'Signature')
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const labelId = useId()
@@ -414,7 +417,7 @@ export function SignaturePad({
           // generated data URL, which a server-side image optimizer cannot load.
           <img
             src={value}
-            alt={ariaLabel}
+            alt={localizedAriaLabel}
             className="h-full w-full object-contain"
             draggable={false}
           />
@@ -423,7 +426,7 @@ export function SignaturePad({
             <canvas
               ref={canvasRef}
               role="img"
-              aria-label={ariaLabel}
+              aria-label={localizedAriaLabel}
               aria-describedby={labelId}
               className={cn(
                 'block h-full w-full',
@@ -439,7 +442,7 @@ export function SignaturePad({
                   style={{ top: `${(2 / 3) * 100}%` }}
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xs text-slate-400">Sign here</span>
+                  <span className="text-xs text-slate-400">{t('Sign here')}</span>
                 </div>
               </div>
             ) : null}
@@ -447,14 +450,16 @@ export function SignaturePad({
         )}
         {/* Visually-hidden status for screen readers. */}
         <span id={labelId} className="sr-only">
-          {hasInk ? `${ariaLabel} provided.` : `${ariaLabel} empty.`}
+          {hasInk
+            ? t('{value0} provided.', { value0: localizedAriaLabel })
+            : t('{value0} empty.', { value0: localizedAriaLabel })}
         </span>
       </div>
 
       {!disabled ? (
         <div className="mt-2 flex items-center justify-between">
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            {hasInk ? ' ' : 'Sign above with your finger, stylus, or mouse.'}
+            {hasInk ? ' ' : t('Sign above with your finger, stylus, or mouse.')}
           </span>
           <Button
             type="button"
@@ -462,9 +467,9 @@ export function SignaturePad({
             size="sm"
             onClick={handleClear}
             disabled={!hasInk}
-            aria-label="Clear signature"
+            aria-label={t('Clear signature')}
           >
-            Clear
+            {t('Clear')}
           </Button>
         </div>
       ) : null}

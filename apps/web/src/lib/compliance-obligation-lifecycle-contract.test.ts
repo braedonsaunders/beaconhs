@@ -95,6 +95,6 @@ describe('compliance obligation lifecycle contract', () => {
   it('surfaces enable and delete failures instead of silently refreshing', () => {
     expect(detailActions).toContain('if (!result.ok)')
     expect(detailActions.match(/toast\.error\(/gu)).toHaveLength(4)
-    expect(detailActions).toContain('toast.error(result.error)')
+    expect(detailActions).toContain('toast.error(tGeneratedValue(result.error))')
   })
 })

@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 // The desktop nav rail. Collapses to an icon-only strip; the choice is persisted
 // in a cookie so the server can render the correct width on the next load (no
 // width flash). Hosts the brand, the nav, the theme switcher, and the version tag.
@@ -22,6 +24,7 @@ export function AppSidebar({
   groups: SidebarNavGroup[]
   defaultCollapsed?: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [collapsed, setCollapsed] = useState(defaultCollapsed)
   const t = useTranslations('Shell')
   const navGroups = useNavGroups(groups)
@@ -52,39 +55,47 @@ export function AppSidebar({
           collapsed ? 'justify-center' : 'gap-2',
         )}
       >
-        {collapsed ? null : <Logo className="h-7 w-auto" />}
+        <GeneratedValue value={collapsed ? null : <Logo className="h-7 w-auto" />} />
         <button
           type="button"
           onClick={toggle}
-          aria-label={collapsed ? t('expandSidebar') : t('collapseSidebar')}
-          title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
+          aria-label={tGeneratedValue(collapsed ? t('expandSidebar') : t('collapseSidebar'))}
+          title={tGeneratedValue(collapsed ? t('expandSidebar') : t('collapseSidebar'))}
           className={cn(
             'grid h-8 w-8 place-items-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200',
             collapsed ? '' : 'ml-auto',
           )}
         >
-          {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          <GeneratedValue
+            value={collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          />
         </button>
       </div>
 
       <SidebarNav groups={navGroups} collapsed={collapsed} />
 
       <div className="border-t border-slate-200 p-3 dark:border-slate-800">
-        {collapsed ? (
-          <div className="flex justify-center">
-            <ThemeToggle collapsed />
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <ThemeToggle />
-            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-              <span>v0.1.0</span>
-              <Badge variant="secondary" className="font-mono text-[10px]">
-                dev
-              </Badge>
-            </div>
-          </div>
-        )}
+        <GeneratedValue
+          value={
+            collapsed ? (
+              <div className="flex justify-center">
+                <ThemeToggle collapsed />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <ThemeToggle />
+                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                  <span>
+                    <GeneratedText id="m_0c85098694b405" />
+                  </span>
+                  <Badge variant="secondary" className="font-mono text-[10px]">
+                    <GeneratedText id="m_155b48f51ba2b4" />
+                  </Badge>
+                </div>
+              </div>
+            )
+          }
+        />
       </div>
     </aside>
   )

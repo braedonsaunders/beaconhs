@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Label, Textarea } from '@beaconhs/ui'
@@ -26,6 +28,7 @@ export function OverviewEditor({
   initial: Initial
   members: { id: string; label: string }[]
 }) {
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [title, setTitle] = useState(initial.title)
@@ -52,15 +55,19 @@ export function OverviewEditor({
   }
 
   return (
-    <Section title="Edit review">
+    <Section title={tGenerated('m_1c267da9085447')}>
       <div className="space-y-4 text-sm">
         <div className="space-y-1.5">
-          <Label>Title</Label>
+          <Label>
+            <GeneratedText id="m_0decefd558c355" />
+          </Label>
           <Input value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
-            <Label>Period start</Label>
+            <Label>
+              <GeneratedText id="m_13b07f79ffcc5e" />
+            </Label>
             <Input
               type="date"
               value={periodStart}
@@ -68,11 +75,15 @@ export function OverviewEditor({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Period end</Label>
+            <Label>
+              <GeneratedText id="m_1a5fe1aab6fc42" />
+            </Label>
             <Input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>Next review on</Label>
+            <Label>
+              <GeneratedText id="m_0f6a9235679934" />
+            </Label>
             <Input
               type="date"
               value={nextReviewOn}
@@ -84,7 +95,9 @@ export function OverviewEditor({
         <ParticipantsEditor members={members} value={participants} onChange={setParticipants} />
 
         <div className="space-y-1.5">
-          <Label>Discussion notes</Label>
+          <Label>
+            <GeneratedText id="m_03daa461b09c21" />
+          </Label>
           <Textarea
             rows={5}
             value={discussionNotes}
@@ -92,13 +105,23 @@ export function OverviewEditor({
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Decisions / outcomes</Label>
+          <Label>
+            <GeneratedText id="m_1c33c753a806d2" />
+          </Label>
           <Textarea rows={4} value={decisions} onChange={(e) => setDecisions(e.target.value)} />
         </div>
 
         <div className="flex justify-end">
           <Button type="button" disabled={pending} onClick={save}>
-            {pending ? 'Saving…' : 'Save review'}
+            <GeneratedValue
+              value={
+                pending ? (
+                  <GeneratedText id="m_106811f2aac664" />
+                ) : (
+                  <GeneratedText id="m_197d94e8e1ad78" />
+                )
+              }
+            />
           </Button>
         </div>
       </div>

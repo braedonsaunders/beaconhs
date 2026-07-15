@@ -1,3 +1,4 @@
+import { GeneratedValue } from '@/i18n/generated'
 import { Fragment } from 'react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
@@ -127,7 +128,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <RiskMatrixProvider matrix={tenant.riskMatrix}>
             <BackNavProviders>
               <Fragment key={`${ctx.tenantId}:${ctx.userId}:${ctx.activeRoleId ?? 'all'}`}>
-                {children}
+                <GeneratedValue value={children} />
               </Fragment>
             </BackNavProviders>
           </RiskMatrixProvider>

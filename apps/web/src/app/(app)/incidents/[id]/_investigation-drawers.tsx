@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Investigation sub-entity drawers for the incident detail page. All four
 // open via `?drawer=…&editId=…` so they survive page refreshes and are
 // link-shareable. Server actions are passed in from the RSC page.
@@ -41,6 +48,8 @@ export function EventDrawer({
   action: EventAction
   mode: 'create' | 'edit'
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [occurredAt, setOccurredAt] = useState(defaults?.occurredAt ?? defaultNow())
   const [description, setDescription] = useState(defaults?.description ?? '')
@@ -48,13 +57,13 @@ export function EventDrawer({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     if (!description.trim()) {
-      setError('Description is required.')
+      setError(tGenerated('m_05953832b2f327'))
       return
     }
     if (!occurredAt.trim()) {
-      setError('Timestamp is required.')
+      setError(tGenerated('m_114dabd38fd7b8'))
       return
     }
     startTransition(async () => {
@@ -68,7 +77,7 @@ export function EventDrawer({
         router.push(closeHref)
         router.refresh()
       } else {
-        setError(res.error ?? 'Failed to save event.')
+        setError(tGeneratedValue(res.error ?? tGenerated('m_1871e41f127326')))
       }
     })
   }
@@ -77,8 +86,10 @@ export function EventDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title={mode === 'create' ? 'Add timeline event' : 'Edit timeline event'}
-      description="Chronological log of what happened, in the order it happened."
+      title={tGeneratedValue(
+        mode === 'create' ? tGenerated('m_03f3f48d8120d5') : tGenerated('m_03d74c6def030a'),
+      )}
+      description={tGenerated('m_1a787a4e3059c7')}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -88,11 +99,21 @@ export function EventDrawer({
             onClick={() => router.push(closeHref)}
             disabled={pending}
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            {mode === 'create' ? 'Add event' : 'Save changes'}
+            <GeneratedValue
+              value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            />
+            <GeneratedValue
+              value={
+                mode === 'create' ? (
+                  <GeneratedText id="m_09cd8e0f2553a4" />
+                ) : (
+                  <GeneratedText id="m_1ab9025ed1067c" />
+                )
+              }
+            />
           </Button>
         </div>
       }
@@ -100,7 +121,7 @@ export function EventDrawer({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="ev-occurred">
-            When <span className="text-red-600">*</span>
+            <GeneratedText id="m_13cc128f69897c" /> <span className="text-red-600">*</span>
           </Label>
           <Input
             id="ev-occurred"
@@ -111,21 +132,25 @@ export function EventDrawer({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ev-desc">
-            What happened <span className="text-red-600">*</span>
+            <GeneratedText id="m_0682629500df7e" /> <span className="text-red-600">*</span>
           </Label>
           <Textarea
             id="ev-desc"
             value={description}
             onChange={(e) => setDescription(e.currentTarget.value)}
             rows={5}
-            placeholder="e.g. 14:32 — Operator radioed in that the conveyor had stopped."
+            placeholder={tGenerated('m_1106a438b98045')}
           />
         </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )
@@ -167,6 +192,8 @@ export function FactorDrawer({
   action: FactorAction
   mode: 'create' | 'edit'
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [category, setCategory] = useState<FactorCategory>(defaults?.category ?? 'equipment')
   const [description, setDescription] = useState(defaults?.description ?? '')
@@ -174,9 +201,9 @@ export function FactorDrawer({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     if (!description.trim()) {
-      setError('Description is required.')
+      setError(tGenerated('m_05953832b2f327'))
       return
     }
     startTransition(async () => {
@@ -190,7 +217,7 @@ export function FactorDrawer({
         router.push(closeHref)
         router.refresh()
       } else {
-        setError(res.error ?? 'Failed to save factor.')
+        setError(tGeneratedValue(res.error ?? tGenerated('m_1581f28d2461d8')))
       }
     })
   }
@@ -199,8 +226,10 @@ export function FactorDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title={mode === 'create' ? 'Add contributing factor' : 'Edit contributing factor'}
-      description="Immediate causes / contributing factors, grouped by category."
+      title={tGeneratedValue(
+        mode === 'create' ? tGenerated('m_088bd62f7760fd') : tGenerated('m_1ac5fed5058b19'),
+      )}
+      description={tGenerated('m_08166597f4cae4')}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -210,11 +239,21 @@ export function FactorDrawer({
             onClick={() => router.push(closeHref)}
             disabled={pending}
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            {mode === 'create' ? 'Add factor' : 'Save changes'}
+            <GeneratedValue
+              value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            />
+            <GeneratedValue
+              value={
+                mode === 'create' ? (
+                  <GeneratedText id="m_04e475dcb7d6d7" />
+                ) : (
+                  <GeneratedText id="m_1ab9025ed1067c" />
+                )
+              }
+            />
           </Button>
         </div>
       }
@@ -222,37 +261,43 @@ export function FactorDrawer({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="fac-cat">
-            Category <span className="text-red-600">*</span>
+            <GeneratedText id="m_108b41637f364f" /> <span className="text-red-600">*</span>
           </Label>
           <Select
             id="fac-cat"
             value={category}
             onChange={(e) => setCategory(e.currentTarget.value as FactorCategory)}
           >
-            {FACTOR_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c.charAt(0).toUpperCase() + c.slice(1)}
-              </option>
-            ))}
+            <GeneratedValue
+              value={FACTOR_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  <GeneratedValue value={c.charAt(0).toUpperCase() + c.slice(1)} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="fac-desc">
-            Description <span className="text-red-600">*</span>
+            <GeneratedText id="m_14d923495cf14c" /> <span className="text-red-600">*</span>
           </Label>
           <Textarea
             id="fac-desc"
             value={description}
             onChange={(e) => setDescription(e.currentTarget.value)}
             rows={4}
-            placeholder="e.g. Worn brake pads not flagged in the last pre-trip inspection."
+            placeholder={tGenerated('m_1d48fe717ffb31')}
           />
         </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )
@@ -286,6 +331,8 @@ export function WhyDrawer({
   mode: 'create' | 'edit'
   nextOrdinal: number
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [ordinal, setOrdinal] = useState<number>(defaults?.ordinal ?? nextOrdinal)
   const [whyText, setWhyText] = useState(defaults?.whyText ?? '')
@@ -293,13 +340,13 @@ export function WhyDrawer({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     if (!whyText.trim()) {
-      setError('Why text is required.')
+      setError(tGenerated('m_127ea8e2a73a79'))
       return
     }
     if (ordinal < 1 || ordinal > 5) {
-      setError('Ordinal must be between 1 and 5.')
+      setError(tGenerated('m_0376e889804701'))
       return
     }
     startTransition(async () => {
@@ -313,7 +360,7 @@ export function WhyDrawer({
         router.push(closeHref)
         router.refresh()
       } else {
-        setError(res.error ?? 'Failed to save why step.')
+        setError(tGeneratedValue(res.error ?? tGenerated('m_0b66bc0fcc2633')))
       }
     })
   }
@@ -322,8 +369,10 @@ export function WhyDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title={mode === 'create' ? 'Add "why" step' : 'Edit "why" step'}
-      description={`5-whys helper: keep asking "why" until the root cause emerges. Limit 5 steps.`}
+      title={tGeneratedValue(
+        mode === 'create' ? tGenerated('m_069fb2eb0f96c6') : tGenerated('m_1f1cd05a67737c'),
+      )}
+      description={tGenerated('m_1fd1d2b4191606')}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -333,11 +382,21 @@ export function WhyDrawer({
             onClick={() => router.push(closeHref)}
             disabled={pending}
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            {mode === 'create' ? 'Add step' : 'Save changes'}
+            <GeneratedValue
+              value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            />
+            <GeneratedValue
+              value={
+                mode === 'create' ? (
+                  <GeneratedText id="m_0ce705b8fa979c" />
+                ) : (
+                  <GeneratedText id="m_1ab9025ed1067c" />
+                )
+              }
+            />
           </Button>
         </div>
       }
@@ -345,37 +404,44 @@ export function WhyDrawer({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="why-ord">
-            Step # <span className="text-red-600">*</span>
+            <GeneratedText id="m_05eca417480224" /> <span className="text-red-600">*</span>
           </Label>
           <Select
             id="why-ord"
             value={String(ordinal)}
             onChange={(e) => setOrdinal(Number(e.currentTarget.value))}
           >
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>
-                Why #{n}
-              </option>
-            ))}
+            <GeneratedValue
+              value={[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  <GeneratedText id="m_11ba5ccd975250" />
+                  <GeneratedValue value={n} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="why-text">
-            Why? <span className="text-red-600">*</span>
+            <GeneratedText id="m_1f88065a87f4df" /> <span className="text-red-600">*</span>
           </Label>
           <Textarea
             id="why-text"
             value={whyText}
             onChange={(e) => setWhyText(e.currentTarget.value)}
             rows={3}
-            placeholder="Answer the next 'why' in the chain."
+            placeholder={tGenerated('m_15167cbd8d8a5d')}
           />
         </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )
@@ -418,6 +484,8 @@ export function PrevStepDrawer({
   action: PrevStepAction
   mode: 'create' | 'edit'
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [description, setDescription] = useState(defaults?.description ?? '')
   const [ownerPersonId, setOwnerPersonId] = useState(defaults?.ownerPersonId ?? '')
@@ -427,9 +495,9 @@ export function PrevStepDrawer({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     if (!description.trim()) {
-      setError('Description is required.')
+      setError(tGenerated('m_05953832b2f327'))
       return
     }
     startTransition(async () => {
@@ -445,7 +513,7 @@ export function PrevStepDrawer({
         router.push(closeHref)
         router.refresh()
       } else {
-        setError(res.error ?? 'Failed to save preventative step.')
+        setError(tGeneratedValue(res.error ?? tGenerated('m_0436c0c2558fa3')))
       }
     })
   }
@@ -454,8 +522,10 @@ export function PrevStepDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title={mode === 'create' ? 'Add preventative step' : 'Edit preventative step'}
-      description="Capture what will be done so this doesn't happen again. Promote to a full CAPA later if needed."
+      title={tGeneratedValue(
+        mode === 'create' ? tGenerated('m_15bb1510df3395') : tGenerated('m_1ff9133918f285'),
+      )}
+      description={tGenerated('m_16e61e5cbb4598')}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -465,11 +535,21 @@ export function PrevStepDrawer({
             onClick={() => router.push(closeHref)}
             disabled={pending}
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            {mode === 'create' ? 'Add step' : 'Save changes'}
+            <GeneratedValue
+              value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            />
+            <GeneratedValue
+              value={
+                mode === 'create' ? (
+                  <GeneratedText id="m_0ce705b8fa979c" />
+                ) : (
+                  <GeneratedText id="m_1ab9025ed1067c" />
+                )
+              }
+            />
           </Button>
         </div>
       }
@@ -477,33 +557,37 @@ export function PrevStepDrawer({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="ps-desc">
-            Description <span className="text-red-600">*</span>
+            <GeneratedText id="m_14d923495cf14c" /> <span className="text-red-600">*</span>
           </Label>
           <Textarea
             id="ps-desc"
             value={description}
             onChange={(e) => setDescription(e.currentTarget.value)}
             rows={4}
-            placeholder="e.g. Add quarterly conveyor-motor inspection to the PM schedule."
+            placeholder={tGenerated('m_033045403e59dd')}
           />
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="ps-owner">Owner</Label>
+            <Label htmlFor="ps-owner">
+              <GeneratedText id="m_09e0cae12d3f44" />
+            </Label>
             <RemoteSearchSelect
               lookup="incident-people"
               value={ownerPersonId}
               onChange={(val) => setOwnerPersonId(val)}
-              placeholder="Select a person…"
-              searchPlaceholder="Search people…"
+              placeholder={tGenerated('m_0be39d3a196b5b')}
+              searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
               sheetTitle="Select a person"
               ariaLabel="Owner"
               clearable
-              emptyLabel="— Unassigned —"
+              emptyLabel={tGenerated('m_1ba9b3d94af564')}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ps-due">Target date</Label>
+            <Label htmlFor="ps-due">
+              <GeneratedText id="m_17d68c4d547fb5" />
+            </Label>
             <Input
               id="ps-due"
               type="date"
@@ -513,26 +597,32 @@ export function PrevStepDrawer({
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="ps-status">
-              Status <span className="text-red-600">*</span>
+              <GeneratedText id="m_0b9da892d6faf0" /> <span className="text-red-600">*</span>
             </Label>
             <Select
               id="ps-status"
               value={status}
               onChange={(e) => setStatus(e.currentTarget.value as PrevStepStatus)}
             >
-              {PREV_STEP_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s.replace(/_/g, ' ')}
-                </option>
-              ))}
+              <GeneratedValue
+                value={PREV_STEP_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    <GeneratedValue value={s.replace(/_/g, ' ')} />
+                  </option>
+                ))}
+              />
             </Select>
           </div>
         </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )

@@ -1,3 +1,4 @@
+import { useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 // BeaconHS brand logo — hand-drawn SVG recreation of the lighthouse lockup.
 // All ink strokes use `currentColor` (navy in light mode, near-white in dark);
 // the beacon rays and "HS" stay brand amber in both themes. Every shape is a
@@ -53,11 +54,15 @@ function MarkArt({ mode }: { mode: Mode }) {
   const strokeCls = draw ? 'brand-stroke-draw' : animated ? 'brand-stroke-loop' : undefined
   return (
     <>
-      {animated ? (
-        <filter id="bhs-glow" x="-150%" y="-150%" width="400%" height="400%">
-          <feGaussianBlur stdDeviation="3" />
-        </filter>
-      ) : null}
+      <GeneratedValue
+        value={
+          animated ? (
+            <filter id="bhs-glow" x="-150%" y="-150%" width="400%" height="400%">
+              <feGaussianBlur stdDeviation="3" />
+            </filter>
+          ) : null
+        }
+      />
       <g
         fill="none"
         stroke="currentColor"
@@ -65,29 +70,35 @@ function MarkArt({ mode }: { mode: Mode }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        {MARK_STRUCTURE.map((d, i) => (
-          <path
-            key={d}
-            d={d}
-            {...(animated
-              ? { pathLength: 1, className: strokeCls, style: delay(0.05 + i * 0.06) }
-              : {})}
-          />
-        ))}
+        <GeneratedValue
+          value={MARK_STRUCTURE.map((d, i) => (
+            <path
+              key={d}
+              d={d}
+              {...(animated
+                ? { pathLength: 1, className: strokeCls, style: delay(0.05 + i * 0.06) }
+                : {})}
+            />
+          ))}
+        />
       </g>
       {/* lamp — faithful ink in the static logo, lit amber when animated */}
-      {animated ? (
-        <circle
-          cx={24}
-          cy={45.75}
-          r={6}
-          fill={BRAND_AMBER}
-          opacity={0.45}
-          filter="url(#bhs-glow)"
-          className={draw ? 'brand-glow-draw' : 'brand-glow-loop'}
-          style={delay(0.85)}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          animated ? (
+            <circle
+              cx={24}
+              cy={45.75}
+              r={6}
+              fill={BRAND_AMBER}
+              opacity={0.45}
+              filter="url(#bhs-glow)"
+              className={draw ? 'brand-glow-draw' : 'brand-glow-loop'}
+              style={delay(0.85)}
+            />
+          ) : null
+        }
+      />
       <rect
         x={20.5}
         y={42.5}
@@ -101,19 +112,21 @@ function MarkArt({ mode }: { mode: Mode }) {
       />
       {/* rays beam outward from the lamp (paths run inner → outer) */}
       <g fill="none" stroke={BRAND_AMBER} strokeWidth={5} strokeLinecap="round">
-        {MARK_RAYS.map((d, i) => (
-          <path
-            key={d}
-            d={d}
-            {...(animated
-              ? {
-                  pathLength: 1,
-                  className: draw ? 'brand-ray-draw' : 'brand-ray-loop',
-                  style: rayDelay(1.0 + i * 0.07, i * 0.16),
-                }
-              : {})}
-          />
-        ))}
+        <GeneratedValue
+          value={MARK_RAYS.map((d, i) => (
+            <path
+              key={d}
+              d={d}
+              {...(animated
+                ? {
+                    pathLength: 1,
+                    className: draw ? 'brand-ray-draw' : 'brand-ray-loop',
+                    style: rayDelay(1.0 + i * 0.07, i * 0.16),
+                  }
+                : {})}
+            />
+          ))}
+        />
       </g>
     </>
   )
@@ -168,24 +181,28 @@ function WordmarkArt({ mode }: { mode: Mode }) {
       strokeLinecap="butt"
       strokeLinejoin="round"
     >
-      {GLYPHS.map((g, i) => (
-        <g
-          key={g.x}
-          transform={`translate(${g.x} 0)`}
-          stroke={g.amber ? BRAND_AMBER : 'currentColor'}
-        >
-          {g.strokes.map((s, j) => {
-            const anim = animated
-              ? { pathLength: 1, className: strokeCls, style: delay(0.3 + i * 0.06) }
-              : {}
-            return 'd' in s ? (
-              <path key={j} d={s.d} {...anim} />
-            ) : (
-              <circle key={j} cx={s.cx} cy={s.cy} r={s.r} {...anim} />
-            )
-          })}
-        </g>
-      ))}
+      <GeneratedValue
+        value={GLYPHS.map((g, i) => (
+          <g
+            key={g.x}
+            transform={`translate(${g.x} 0)`}
+            stroke={g.amber ? BRAND_AMBER : 'currentColor'}
+          >
+            <GeneratedValue
+              value={g.strokes.map((s, j) => {
+                const anim = animated
+                  ? { pathLength: 1, className: strokeCls, style: delay(0.3 + i * 0.06) }
+                  : {}
+                return 'd' in s ? (
+                  <path key={j} d={s.d} {...anim} />
+                ) : (
+                  <circle key={j} cx={s.cx} cy={s.cy} r={s.r} {...anim} />
+                )
+              })}
+            />
+          </g>
+        ))}
+      />
     </g>
   )
 }
@@ -200,12 +217,13 @@ type LogoProps = SVGProps<SVGSVGElement> & {
 }
 
 export function LogoMark({ animated, draw, className, ...rest }: LogoProps) {
+  const tGenerated = useGeneratedTranslations()
   const mode: Mode = draw ? 'draw' : animated ? 'loop' : 'static'
   return (
     <svg
       viewBox="0 0 48 106"
       role="img"
-      aria-label="BeaconHS"
+      aria-label={tGenerated('m_1721f79d9a7f66')}
       className={cn('h-8 w-auto', INK_CLASS, className)}
       {...rest}
     >
@@ -215,12 +233,13 @@ export function LogoMark({ animated, draw, className, ...rest }: LogoProps) {
 }
 
 export function Logo({ animated, draw, className, ...rest }: LogoProps) {
+  const tGenerated = useGeneratedTranslations()
   const mode: Mode = draw ? 'draw' : animated ? 'loop' : 'static'
   return (
     <svg
       viewBox={`0 0 ${LOCKUP_W} 116`}
       role="img"
-      aria-label="BeaconHS"
+      aria-label={tGenerated('m_1721f79d9a7f66')}
       className={cn('h-8 w-auto', INK_CLASS, className)}
       {...rest}
     >

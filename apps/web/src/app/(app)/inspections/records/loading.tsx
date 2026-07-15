@@ -1,3 +1,4 @@
+import { useGeneratedTranslations } from '@/i18n/generated'
 import { PageHeader, Skeleton } from '@beaconhs/ui'
 import { ListPageLayout } from '@/components/page-layout'
 import { RecordsSkeleton } from '@/components/records-skeleton'
@@ -9,13 +10,14 @@ import { RecordsSkeleton } from '@/components/records-skeleton'
  * table shimmer never leaks onto them.
  */
 export default function Loading() {
+  const tGenerated = useGeneratedTranslations()
   return (
     <ListPageLayout
       header={
         <>
           <PageHeader
-            title="Inspections"
-            description="Completed inspections with results, signatures, and follow-up actions."
+            title={tGenerated('m_189bb91aaf5565')}
+            description={tGenerated('m_074b0b12b5f20c')}
             actions={<Skeleton className="h-9 w-44" />}
           />
           <div className="flex flex-wrap items-center gap-3">

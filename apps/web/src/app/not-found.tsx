@@ -1,3 +1,4 @@
+import { GeneratedText } from '@/i18n/generated'
 import Link from 'next/link'
 import { SearchX } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
@@ -10,17 +11,21 @@ export default function NotFound() {
           <SearchX aria-hidden="true" size={24} />
         </span>
         <h1 className="mt-4 text-xl font-semibold text-slate-950 dark:text-white">
-          Page not found
+          <GeneratedText id="m_1e22c2e76193a6" />
         </h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          The link may be old, or you may not have access to this record in the current workspace.
+          <GeneratedText id="m_056f3df5f50ed4" />
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <Button asChild>
-            <Link href="/dashboard">Go to dashboard</Link>
+            <Link href="/dashboard">
+              <GeneratedText id="m_132d746a8ad9a0" />
+            </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/help">Open help</Link>
+            <Link href="/help">
+              <GeneratedText id="m_05243213c79f67" />
+            </Link>
           </Button>
         </div>
       </section>

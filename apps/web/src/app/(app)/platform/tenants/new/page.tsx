@@ -1,3 +1,6 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { redirect } from 'next/navigation'
@@ -10,7 +13,10 @@ import { seedLiftPlanTemplate } from '@beaconhs/db/seed/lift-plan-template'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 
-export const metadata = { title: 'New tenant' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0329d412717ff5') }
+}
 
 function slugify(s: string): string {
   return s
@@ -89,18 +95,19 @@ async function createTenant(formData: FormData): Promise<void> {
 }
 
 export default function NewTenantPage() {
+  const tGenerated = useGeneratedTranslations()
   return (
     <PageContainer>
       <div className="mx-auto max-w-2xl">
         <div>
           <SmartBackLink
             href="/platform/tenants"
-            label="Back to tenants"
+            label={tGenerated('m_1ae3d6b35d64a6')}
             className="text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-400"
           />
           <PageHeader
-            title="New tenant"
-            description="Super-admin only. Creates an empty tenant. Add an admin user from the Users page afterwards."
+            title={tGenerated('m_0329d412717ff5')}
+            description={tGenerated('m_0ad2bbb609cc0c')}
           />
         </div>
         <form
@@ -108,62 +115,88 @@ export default function NewTenantPage() {
           className="mt-6 space-y-5 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"
         >
           <div className="space-y-1.5">
-            <Label htmlFor="name">Tenant name *</Label>
-            <Input id="name" name="name" required placeholder="e.g. Acme Industrial" />
+            <Label htmlFor="name">
+              <GeneratedText id="m_0b7f7c16f0c806" />
+            </Label>
+            <Input id="name" name="name" required placeholder={tGenerated('m_127addcaff7e59')} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="slug">Slug (optional)</Label>
-            <Input id="slug" name="slug" placeholder="auto-generated from name if blank" />
+            <Label htmlFor="slug">
+              <GeneratedText id="m_0d17f36ba21be7" />
+            </Label>
+            <Input id="slug" name="slug" placeholder={tGenerated('m_17cc2d73812072')} />
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Used in URLs and as a stable identifier. Lowercase, numbers, dashes only.
+              <GeneratedText id="m_1352e02279ae39" />
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="region">Region</Label>
+              <Label htmlFor="region">
+                <GeneratedText id="m_1de0752c52bdd4" />
+              </Label>
               <Select id="region" name="region" defaultValue="ca-central-1">
-                <option value="ca-central-1">Canada (Central)</option>
-                <option value="us-east-1">US East</option>
-                <option value="eu-west-1">EU West</option>
+                <option value="ca-central-1">
+                  <GeneratedText id="m_194555df64ff87" />
+                </option>
+                <option value="us-east-1">
+                  <GeneratedText id="m_1afc542df9533e" />
+                </option>
+                <option value="eu-west-1">
+                  <GeneratedText id="m_1daf75e812613a" />
+                </option>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="defaultLanguage">Default language</Label>
+              <Label htmlFor="defaultLanguage">
+                <GeneratedText id="m_1a07c774d6ca11" />
+              </Label>
               <Select id="defaultLanguage" name="defaultLanguage" defaultValue="en">
-                <option value="en">English</option>
-                <option value="fr">French</option>
-                <option value="es">Spanish</option>
+                <option value="en">
+                  <GeneratedText id="m_1df218952faf1d" />
+                </option>
+                <option value="fr">
+                  <GeneratedText id="m_1fe7761ebf753b" />
+                </option>
+                <option value="es">
+                  <GeneratedText id="m_1d48a7f948f062" />
+                </option>
               </Select>
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Enabled languages</Label>
+            <Label>
+              <GeneratedText id="m_17a2a72456120f" />
+            </Label>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {LOCALE_OPTIONS.map((language) => (
-                <label
-                  key={language.value}
-                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"
-                >
-                  <input
-                    type="checkbox"
-                    name={`language_${language.value}`}
-                    defaultChecked={language.value === 'en'}
-                  />
-                  {language.nativeLabel}
-                </label>
-              ))}
+              <GeneratedValue
+                value={LOCALE_OPTIONS.map((language) => (
+                  <label
+                    key={language.value}
+                    className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"
+                  >
+                    <input
+                      type="checkbox"
+                      name={`language_${language.value}`}
+                      defaultChecked={language.value === 'en'}
+                    />
+                    <GeneratedValue value={language.nativeLabel} />
+                  </label>
+                ))}
+              />
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              The default language is always enabled automatically.
+              <GeneratedText id="m_12aeed58b6e570" />
             </p>
           </div>
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
             <Link href="/platform/tenants">
               <Button type="button" variant="outline">
-                Cancel
+                <GeneratedText id="m_112e2e8ecda428" />
               </Button>
             </Link>
-            <Button type="submit">Create tenant</Button>
+            <Button type="submit">
+              <GeneratedText id="m_015fd318e46524" />
+            </Button>
           </div>
         </form>
       </div>

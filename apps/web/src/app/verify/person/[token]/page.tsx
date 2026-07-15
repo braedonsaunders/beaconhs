@@ -1,3 +1,4 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Public person-badge verification page — the live training transcript behind
 // the QR on a printed ID badge. Resolved purely from the badge token; no auth.
 // Mobile-first: the common reader is a supervisor scanning a card at the gate.
@@ -134,10 +135,11 @@ export default async function VerifyPersonPage({ params }: { params: Promise<{ t
     return (
       <main className="grid min-h-screen place-items-center bg-slate-100 p-6">
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-          <h1 className="text-lg font-semibold text-red-700">Badge not recognized</h1>
+          <h1 className="text-lg font-semibold text-red-700">
+            <GeneratedText id="m_063993120a3d54" />
+          </h1>
           <p className="mt-1 text-sm text-slate-600">
-            This badge token is unknown or invalid. Ask the badge holder&apos;s employer to verify
-            their training directly.
+            <GeneratedText id="m_0aecbf978560b4" />
           </p>
         </div>
       </main>
@@ -179,34 +181,56 @@ export default async function VerifyPersonPage({ params }: { params: Promise<{ t
         <div className="mx-auto max-w-md">
           <div className="flex items-center justify-between gap-3">
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-slate-200">
-              LIVE TRAINING RECORD
+              <GeneratedText id="m_1dab33d6429c73" />
             </span>
-            <span className="text-[11px] text-slate-400">As of {formatDay(todayIso)}</span>
+            <span className="text-[11px] text-slate-400">
+              <GeneratedText id="m_0167c7275331b2" /> <GeneratedValue value={formatDay(todayIso)} />
+            </span>
           </div>
           <div className="mt-5 flex items-center gap-4">
-            {result.photoUrl ? (
-              <RawImage
-                src={result.photoUrl}
-                alt=""
-                optimizationReason="ephemeral"
-                className="h-20 w-20 shrink-0 rounded-2xl border-2 border-white/20 object-cover"
-              />
-            ) : (
-              <div className="grid h-20 w-20 shrink-0 place-items-center rounded-2xl border-2 border-white/20 bg-white/10 text-2xl font-bold">
-                {result.personName
-                  .split(/\s+/)
-                  .map((w) => w[0])
-                  .slice(0, 2)
-                  .join('')}
-              </div>
-            )}
+            <GeneratedValue
+              value={
+                result.photoUrl ? (
+                  <RawImage
+                    src={result.photoUrl}
+                    alt=""
+                    optimizationReason="ephemeral"
+                    className="h-20 w-20 shrink-0 rounded-2xl border-2 border-white/20 object-cover"
+                  />
+                ) : (
+                  <div className="grid h-20 w-20 shrink-0 place-items-center rounded-2xl border-2 border-white/20 bg-white/10 text-2xl font-bold">
+                    <GeneratedValue
+                      value={result.personName
+                        .split(/\s+/)
+                        .map((w) => w[0])
+                        .slice(0, 2)
+                        .join('')}
+                    />
+                  </div>
+                )
+              }
+            />
             <div className="min-w-0">
-              <h1 className="truncate text-xl font-bold">{result.personName}</h1>
+              <h1 className="truncate text-xl font-bold">
+                <GeneratedValue value={result.personName} />
+              </h1>
               <div className="mt-0.5 truncate text-sm text-slate-300">
-                {[result.jobTitle, result.departmentName].filter(Boolean).join(' · ') || '—'}
+                <GeneratedValue
+                  value={
+                    [result.jobTitle, result.departmentName].filter(Boolean).join(' · ') || '—'
+                  }
+                />
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                {result.employeeNo ? <span className="font-mono">#{result.employeeNo}</span> : null}
+                <GeneratedValue
+                  value={
+                    result.employeeNo ? (
+                      <span className="font-mono">
+                        #<GeneratedValue value={result.employeeNo} />
+                      </span>
+                    ) : null
+                  }
+                />
                 <span
                   className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                     result.personActive
@@ -214,21 +238,35 @@ export default async function VerifyPersonPage({ params }: { params: Promise<{ t
                       : 'bg-red-500/15 text-red-300'
                   }`}
                 >
-                  {result.personActive ? 'Active employee' : 'Not active'}
+                  <GeneratedValue
+                    value={
+                      result.personActive ? (
+                        <GeneratedText id="m_1d15bf8a5a470e" />
+                      ) : (
+                        <GeneratedText id="m_022d99d12be272" />
+                      )
+                    }
+                  />
                 </span>
               </div>
             </div>
           </div>
           <div className="mt-4 flex items-center gap-2 text-xs text-slate-400">
-            {result.tenantLogoUrl ? (
-              <RawImage
-                src={result.tenantLogoUrl}
-                alt=""
-                optimizationReason="tenant-origin"
-                className="h-6 max-w-28 rounded bg-white object-contain px-1 py-0.5"
-              />
-            ) : null}
-            <span>Issued by {result.tenantName}</span>
+            <GeneratedValue
+              value={
+                result.tenantLogoUrl ? (
+                  <RawImage
+                    src={result.tenantLogoUrl}
+                    alt=""
+                    optimizationReason="tenant-origin"
+                    className="h-6 max-w-28 rounded bg-white object-contain px-1 py-0.5"
+                  />
+                ) : null
+              }
+            />
+            <span>
+              <GeneratedText id="m_113cf4908ce58e" /> <GeneratedValue value={result.tenantName} />
+            </span>
           </div>
         </div>
       </header>
@@ -237,24 +275,38 @@ export default async function VerifyPersonPage({ params }: { params: Promise<{ t
         {/* Standing summary */}
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm">
-            <div className="text-xl font-bold text-emerald-600">{validCount}</div>
-            <div className="text-[11px] font-medium text-slate-500">Valid</div>
+            <div className="text-xl font-bold text-emerald-600">
+              <GeneratedValue value={validCount} />
+            </div>
+            <div className="text-[11px] font-medium text-slate-500">
+              <GeneratedText id="m_1e418d0475450c" />
+            </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm">
-            <div className="text-xl font-bold text-amber-600">{expiringCount}</div>
-            <div className="text-[11px] font-medium text-slate-500">Expiring soon</div>
+            <div className="text-xl font-bold text-amber-600">
+              <GeneratedValue value={expiringCount} />
+            </div>
+            <div className="text-[11px] font-medium text-slate-500">
+              <GeneratedText id="m_07f7dccfd917d5" />
+            </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm">
-            <div className="text-xl font-bold text-red-600">{expiredCount}</div>
-            <div className="text-[11px] font-medium text-slate-500">Expired</div>
+            <div className="text-xl font-bold text-red-600">
+              <GeneratedValue value={expiredCount} />
+            </div>
+            <div className="text-[11px] font-medium text-slate-500">
+              <GeneratedText id="m_13f7150c94b182" />
+            </div>
           </div>
         </div>
 
         <TranscriptList items={items} />
 
         <p className="px-1 text-center text-[11px] leading-relaxed text-slate-400">
-          This page shows the live training standing for the badge holder as recorded by{' '}
-          {result.tenantName}. It updates automatically — no printed copy required.
+          <GeneratedText id="m_1ae623e918b603" />
+          <GeneratedValue value={' '} />
+          <GeneratedValue value={result.tenantName} />
+          <GeneratedText id="m_09fbd9c7322039" />
         </p>
       </div>
     </main>

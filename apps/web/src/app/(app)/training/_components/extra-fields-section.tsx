@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // "Additional fields" section + URL-drawer used by the skill-type, authority,
 // and skill detail pages. Renders the existing rows in a small
 // table and exposes an inline delete + a "?drawer=add-extra-field" drawer
@@ -83,6 +90,8 @@ export function ExtraFieldsSection({
   addAction: AddExtraFieldAction
   deleteAction: DeleteExtraFieldAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const countLabel =
     list.filteredTotal === list.total
       ? list.total.toLocaleString()
@@ -93,47 +102,56 @@ export function ExtraFieldsSection({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Additional fields ({countLabel})</CardTitle>
+          <CardTitle>
+            <GeneratedText id="m_0a59518790316d" />
+            <GeneratedValue value={countLabel} />)
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <TableToolbar className="mb-3">
             <SearchInput
-              placeholder="Search field name or value…"
+              placeholder={tGenerated('m_133107cb3fa0f2')}
               paramKey={list.queryParamKey}
               pageParamKey={list.pageParamKey}
             />
           </TableToolbar>
-          {rows.length === 0 ? (
-            <EmptyState
-              icon={<Plus size={24} />}
-              title={
-                isOutOfRange
-                  ? 'No fields on this page'
-                  : list.query
-                    ? 'No fields match your search'
-                    : 'No custom fields'
-              }
-              description={
-                isOutOfRange
-                  ? 'Use the pagination control to return to the last page.'
-                  : list.query
-                    ? 'Clear the search to see other additional fields.'
-                    : "Capture extra fields that don't fit the built-in columns — e.g. issuing union local, reference number."
-              }
-            />
-          ) : (
-            <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-              {rows.map((r) => (
-                <FieldRow
-                  key={r.id}
-                  row={r}
-                  ownerType={ownerType}
-                  ownerId={ownerId}
-                  deleteAction={deleteAction}
+          <GeneratedValue
+            value={
+              rows.length === 0 ? (
+                <EmptyState
+                  icon={<Plus size={24} />}
+                  title={tGeneratedValue(
+                    isOutOfRange
+                      ? tGenerated('m_1809de9b332366')
+                      : list.query
+                        ? tGenerated('m_03f12d3fa3ac0a')
+                        : tGenerated('m_1f711a4298a522'),
+                  )}
+                  description={tGeneratedValue(
+                    isOutOfRange
+                      ? tGenerated('m_0020f3aabbf2d3')
+                      : list.query
+                        ? tGenerated('m_19cceddbc95efe')
+                        : tGenerated('m_0bf2f08757030d'),
+                  )}
                 />
-              ))}
-            </ul>
-          )}
+              ) : (
+                <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                  <GeneratedValue
+                    value={rows.map((r) => (
+                      <FieldRow
+                        key={r.id}
+                        row={r}
+                        ownerType={ownerType}
+                        ownerId={ownerId}
+                        deleteAction={deleteAction}
+                      />
+                    ))}
+                  />
+                </ul>
+              )
+            }
+          />
           <Pagination
             basePath={list.basePath}
             currentParams={list.currentParams}
@@ -147,7 +165,7 @@ export function ExtraFieldsSection({
       <div className="mt-3 flex justify-end">
         <Link href={addHref}>
           <Button type="button">
-            <Plus size={14} /> Add field
+            <Plus size={14} /> <GeneratedText id="m_05fec91665feb4" />
           </Button>
         </Link>
       </div>
@@ -173,6 +191,8 @@ function FieldRow({
   ownerId: string
   deleteAction: DeleteExtraFieldAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
@@ -180,10 +200,10 @@ function FieldRow({
     startTransition(async () => {
       const res = await deleteAction({ id: row.id, ownerType, ownerId })
       if (res.ok) {
-        toast.success('Field removed')
+        toast.success(tGenerated('m_1ca393d7995071'))
         router.refresh()
       } else {
-        toast.error(res.error ?? 'Failed to remove field')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_03e9d2c82888d0')))
       }
     })
   }
@@ -192,25 +212,31 @@ function FieldRow({
     <li className="flex items-start justify-between gap-3 py-2">
       <div className="min-w-0 flex-1">
         <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          {row.fieldKey}
+          <GeneratedValue value={row.fieldKey} />
         </div>
         <div className="mt-0.5 text-sm break-words text-slate-800 dark:text-slate-200">
-          {row.fieldValue && row.fieldValue.length > 0 ? row.fieldValue : '—'}
+          <GeneratedValue
+            value={row.fieldValue && row.fieldValue.length > 0 ? row.fieldValue : '—'}
+          />
         </div>
       </div>
       <Button
         type="button"
         variant="ghost"
         size="sm"
-        aria-label="Remove field"
+        aria-label={tGenerated('m_0e251e5060fc02')}
         onClick={remove}
         disabled={pending}
       >
-        {pending ? (
-          <Loader2 size={14} className="animate-spin text-slate-400" />
-        ) : (
-          <Trash2 size={14} className="text-red-500" />
-        )}
+        <GeneratedValue
+          value={
+            pending ? (
+              <Loader2 size={14} className="animate-spin text-slate-400" />
+            ) : (
+              <Trash2 size={14} className="text-red-500" />
+            )
+          }
+        />
       </Button>
     </li>
   )
@@ -229,6 +255,8 @@ function AddExtraFieldDrawer({
   ownerId: string
   action: AddExtraFieldAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [fieldKey, setFieldKey] = useState('')
   const [fieldValue, setFieldValue] = useState('')
@@ -236,10 +264,10 @@ function AddExtraFieldDrawer({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     const key = fieldKey.trim()
     if (!key) {
-      setError('Field name is required.')
+      setError(tGenerated('m_0afe2d535ec39f'))
       return
     }
     startTransition(async () => {
@@ -250,15 +278,15 @@ function AddExtraFieldDrawer({
         fieldValue: fieldValue.trim() || null,
       })
       if (res.ok) {
-        toast.success('Field added')
+        toast.success(tGenerated('m_17da1c493490d8'))
         setFieldKey('')
         setFieldValue('')
         router.push(closeHref)
         router.refresh()
       } else {
         const message = res.error ?? 'Failed to add field'
-        setError(message)
-        toast.error(message)
+        setError(tGeneratedValue(message))
+        toast.error(tGeneratedValue(message))
       }
     })
   }
@@ -267,8 +295,8 @@ function AddExtraFieldDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title="Add additional field"
-      description="Free-form key/value pair shown alongside the built-in columns on this record."
+      title={tGenerated('m_05cddf1531d157')}
+      description={tGenerated('m_165444375089b7')}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -278,11 +306,13 @@ function AddExtraFieldDrawer({
             onClick={() => router.push(closeHref)}
             disabled={pending}
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending}>
-            {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-            Add field
+            <GeneratedValue
+              value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+            />
+            <GeneratedText id="m_05fec91665feb4" />
           </Button>
         </div>
       }
@@ -290,31 +320,38 @@ function AddExtraFieldDrawer({
       <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="fieldKey">
-            Field name <span className="text-red-600 dark:text-red-400">*</span>
+            <GeneratedText id="m_0a50e9d91572df" />{' '}
+            <span className="text-red-600 dark:text-red-400">*</span>
           </Label>
           <Input
             id="fieldKey"
             value={fieldKey}
             onChange={(e) => setFieldKey(e.currentTarget.value)}
-            placeholder="e.g. Local, Reference number, Renewal contact"
+            placeholder={tGenerated('m_17b02dc5448b92')}
             maxLength={TRAINING_EXTRA_FIELD_KEY_MAX}
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="fieldValue">Value</Label>
+          <Label htmlFor="fieldValue">
+            <GeneratedText id="m_1cc0e5e7b5f442" />
+          </Label>
           <Input
             id="fieldValue"
             value={fieldValue}
             onChange={(e) => setFieldValue(e.currentTarget.value)}
-            placeholder="Leave blank if not applicable"
+            placeholder={tGenerated('m_171e5b15012339')}
             maxLength={TRAINING_EXTRA_FIELD_VALUE_MAX}
           />
         </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )

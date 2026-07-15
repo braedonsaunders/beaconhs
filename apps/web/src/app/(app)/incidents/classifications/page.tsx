@@ -1,3 +1,11 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
 // /incidents/classifications — tenant admin defines the hierarchical taxonomy
 // used to bucket incidents. Depth-2 in practice; the `recordable` flag drives
 // every TRIR/DART rollup downstream.
@@ -37,7 +45,10 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { IncidentsSubNav } from '../_sub-nav'
 import { ClassificationDrawer, type ClassificationEditing } from './_drawers'
 
-export const metadata = { title: 'Incident classifications' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_01ac1d8290d0a4') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/incidents/classifications'
@@ -288,6 +299,8 @@ export default async function ClassificationsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'taxonomy',
@@ -395,24 +408,24 @@ export default async function ClassificationsPage({
       header={
         <>
           <PageHeader
-            title="Incident classifications"
-            description="Incident taxonomy; recordable nodes feed TRIR and DART. Codes appear on the OSHA-300 log and CSV exports."
+            title={tGenerated('m_01ac1d8290d0a4')}
+            description={tGenerated('m_1b03f1af1622ea')}
             actions={
               <Link href={newHref as any} scroll={false}>
                 <Button>
-                  <Plus size={14} /> New classification
+                  <Plus size={14} /> <GeneratedText id="m_1bab4688751c07" />
                 </Button>
               </Link>
             }
           />
           <IncidentsSubNav active="classifications" />
           <TableToolbar>
-            <SearchInput placeholder="Search name, code, or parent…" />
+            <SearchInput placeholder={tGenerated('m_1e8a3f7b06afc4')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={[
                 { value: 'active', label: 'Active' },
                 { value: 'archived', label: 'Archived' },
@@ -422,53 +435,73 @@ export default async function ClassificationsPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Plus size={32} />}
-          title={
-            params.q || statusFilter
-              ? 'No classifications match your filters'
-              : 'No classifications'
-          }
-          description={
-            params.q || statusFilter
-              ? 'Clear the search or status filter to see other classifications.'
-              : 'Add a top-level classification. Child categories can be nested underneath.'
-          }
-          action={
-            <Link href={newHref as any} scroll={false}>
-              <Button>New classification</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Code</TableHead>
-              <TableHead>Recordable</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Used</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((node) => (
-              <ClassificationRow
-                key={node.id}
-                node={node}
-                depth={node.parentId ? 1 : 0}
-                usage={usageById[node.id] ?? 0}
-                childCount={childCountById[node.id] ?? 0}
-                sp={sp}
-                toggleArchive={toggleArchive}
-                deleteClassification={deleteClassification}
-              />
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Plus size={32} />}
+              title={tGeneratedValue(
+                params.q || statusFilter
+                  ? tGenerated('m_01918377e907c2')
+                  : tGenerated('m_0367f1278e6bbb'),
+              )}
+              description={tGeneratedValue(
+                params.q || statusFilter
+                  ? tGenerated('m_0ec63db9674d6a')
+                  : tGenerated('m_0feb80fa77cb4a'),
+              )}
+              action={
+                <Link href={newHref as any} scroll={false}>
+                  <Button>
+                    <GeneratedText id="m_1bab4688751c07" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <GeneratedText id="m_02b18d5c7f6f2d" />
+                  </TableHead>
+                  <TableHead>
+                    <GeneratedText id="m_0570e24c85cf95" />
+                  </TableHead>
+                  <TableHead>
+                    <GeneratedText id="m_0ddb1a14aec473" />
+                  </TableHead>
+                  <TableHead>
+                    <GeneratedText id="m_0b9da892d6faf0" />
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <GeneratedText id="m_1667b6eab4ed93" />
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <GeneratedText id="m_0a7f1858f2ec46" />
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <GeneratedValue
+                  value={rows.map((node) => (
+                    <ClassificationRow
+                      key={node.id}
+                      node={node}
+                      depth={node.parentId ? 1 : 0}
+                      usage={usageById[node.id] ?? 0}
+                      childCount={childCountById[node.id] ?? 0}
+                      sp={sp}
+                      toggleArchive={toggleArchive}
+                      deleteClassification={deleteClassification}
+                    />
+                  ))}
+                />
+              </TableBody>
+            </Table>
+          )
+        }
+      />
 
       <Pagination
         basePath={BASE}
@@ -506,56 +539,80 @@ function ClassificationRow({
   toggleArchive: (formData: FormData) => Promise<void>
   deleteClassification: (formData: FormData) => Promise<void>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const editHref = mergeHref(BASE, sp, { drawer: node.id, parent: undefined })
   const childHref = mergeHref(BASE, sp, { drawer: 'new', parent: node.id })
   return (
     <TableRow className={node.isActive ? undefined : 'opacity-70'}>
       <TableCell>
         <div className={depth > 0 ? 'flex items-center gap-2 pl-6' : 'flex items-center gap-2'}>
-          {depth > 0 ? <span className="text-slate-300 dark:text-slate-600">└</span> : null}
+          <GeneratedValue
+            value={depth > 0 ? <span className="text-slate-300 dark:text-slate-600">└</span> : null}
+          />
           <Link
             href={editHref as any}
             scroll={false}
             className="font-medium text-slate-900 hover:underline dark:text-slate-100"
           >
-            {node.name}
+            <GeneratedValue value={node.name} />
           </Link>
         </div>
-        {node.description ? (
-          <div
-            className={`mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400 ${depth > 0 ? 'pl-12' : ''}`}
-          >
-            {node.description}
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            node.description ? (
+              <div
+                className={`mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400 ${depth > 0 ? 'pl-12' : ''}`}
+              >
+                <GeneratedValue value={node.description} />
+              </div>
+            ) : null
+          }
+        />
       </TableCell>
       <TableCell>
-        {node.code ? (
-          <Badge variant="outline" className="font-mono text-xs">
-            {node.code}
-          </Badge>
-        ) : (
-          <span className="text-xs text-slate-400">—</span>
-        )}
+        <GeneratedValue
+          value={
+            node.code ? (
+              <Badge variant="outline" className="font-mono text-xs">
+                <GeneratedValue value={node.code} />
+              </Badge>
+            ) : (
+              <span className="text-xs text-slate-400">—</span>
+            )
+          }
+        />
       </TableCell>
       <TableCell>
-        {node.isRecordable ? (
-          <Badge variant="secondary">Recordable</Badge>
-        ) : (
-          <span className="text-xs text-slate-400">—</span>
-        )}
+        <GeneratedValue
+          value={
+            node.isRecordable ? (
+              <Badge variant="secondary">
+                <GeneratedText id="m_0ddb1a14aec473" />
+              </Badge>
+            ) : (
+              <span className="text-xs text-slate-400">—</span>
+            )
+          }
+        />
       </TableCell>
       <TableCell>
-        {node.isActive ? (
-          <Badge variant="success">Active</Badge>
-        ) : (
-          <Badge variant="outline" className="border-amber-300 text-amber-800">
-            Archived
-          </Badge>
-        )}
+        <GeneratedValue
+          value={
+            node.isActive ? (
+              <Badge variant="success">
+                <GeneratedText id="m_1e1b1fdb7dd78e" />
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="border-amber-300 text-amber-800">
+                <GeneratedText id="m_12a687134482ba" />
+              </Badge>
+            )
+          }
+        />
       </TableCell>
       <TableCell className="text-right text-slate-600 tabular-nums dark:text-slate-400">
-        {usage}
+        <GeneratedValue value={usage} />
       </TableCell>
       <TableCell className="text-right">
         <div className="inline-flex items-center gap-1">
@@ -564,26 +621,34 @@ function ClassificationRow({
             scroll={false}
             className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
           >
-            Edit
+            <GeneratedText id="m_03a66f9d34ac7b" />
           </Link>
-          {depth === 0 && node.isActive ? (
-            <Link
-              href={childHref as any}
-              scroll={false}
-              className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
-            >
-              + Child
-            </Link>
-          ) : null}
+          <GeneratedValue
+            value={
+              depth === 0 && node.isActive ? (
+                <Link
+                  href={childHref as any}
+                  scroll={false}
+                  className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
+                >
+                  <GeneratedText id="m_1268fd1cbf5ef6" />
+                </Link>
+              ) : null
+            }
+          />
           <form action={toggleArchive} className="inline">
             <input type="hidden" name="id" value={node.id} />
             <input type="hidden" name="isActive" value={node.isActive ? 'false' : 'true'} />
             <button
               type="submit"
               className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-              title={node.isActive ? 'Archive' : 'Restore'}
+              title={tGeneratedValue(
+                node.isActive ? tGenerated('m_019c0a64030688') : tGenerated('m_19500e41842c99'),
+              )}
             >
-              {node.isActive ? <Archive size={14} /> : <ArchiveRestore size={14} />}
+              <GeneratedValue
+                value={node.isActive ? <Archive size={14} /> : <ArchiveRestore size={14} />}
+              />
             </button>
           </form>
           <form action={deleteClassification} className="inline">
@@ -591,13 +656,16 @@ function ClassificationRow({
             <button
               type="submit"
               className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-              title={
+              title={tGeneratedValue(
                 usage > 0
-                  ? `${usage} incidents — will archive instead`
+                  ? tGenerated('m_0b37ebf0b36498', { value0: usage })
                   : childCount > 0
-                    ? `Delete (includes ${childCount} child categor${childCount === 1 ? 'y' : 'ies'})`
-                    : 'Delete'
-              }
+                    ? tGenerated('m_13e67a1d2f2946', {
+                        value0: childCount,
+                        value1: childCount === 1 ? 'y' : 'ies',
+                      })
+                    : tGenerated('m_11773f3c3f7558'),
+              )}
             >
               <Trash2 size={14} />
             </button>

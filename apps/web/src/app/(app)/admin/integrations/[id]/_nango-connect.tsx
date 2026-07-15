@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Nango self-serve connect. Mints a Connect session server-side, then opens
 // Nango's hosted Connect UI (loaded from a version-pinned CDN asset) so the customer authorises their
 // own account. Falls back to pasting a Connection ID if the UI can't load.
@@ -44,6 +51,8 @@ export function NangoConnect({
   entities: string[]
   initialModels: Record<string, string>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [manualId, setManualId] = useState('')
   const [models, setModels] = useState<Record<string, string>>(() => ({ ...initialModels }))
@@ -54,22 +63,22 @@ export function NangoConnect({
     startTransition(async () => {
       const res = await finishNangoConnect(connectionId, connId)
       if (res.ok) {
-        toast.success('Source linked.')
+        toast.success(tGenerated('m_14694415556680'))
         router.refresh()
-      } else toast.error(res.error ?? 'Link failed.')
+      } else toast.error(tGeneratedValue(res.error ?? tGenerated('m_16425027ace064')))
     })
   }
 
   async function connect() {
     if (!integrationId) {
-      toast.error('Set a Nango integration ID and save settings first.')
+      toast.error(tGenerated('m_14372ffec764d1'))
       return
     }
     setBusy(true)
     try {
       const res = await startNangoConnect(connectionId)
       if (!res.ok || !res.sessionToken) {
-        toast.error(res.error ?? 'Could not start Nango connect.')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_075d1e1c691ee0')))
         return
       }
       const mod = (await import(
@@ -85,7 +94,7 @@ export function NangoConnect({
         },
       })
     } catch {
-      toast.error('Could not load the Nango Connect UI. Paste a Connection ID below instead.')
+      toast.error(tGenerated('m_00ebc312a21e95'))
     } finally {
       setBusy(false)
     }
@@ -94,33 +103,54 @@ export function NangoConnect({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Source connection</CardTitle>
+        <CardTitle>
+          <GeneratedText id="m_107c39f5727c74" />
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
-          {connected ? (
-            <span className="text-emerald-700 dark:text-emerald-300">
-              Connected · {nangoConnectionId}
-            </span>
-          ) : (
-            <span className="text-slate-500 dark:text-slate-400">Not connected yet.</span>
-          )}
+          <GeneratedValue
+            value={
+              connected ? (
+                <span className="text-emerald-700 dark:text-emerald-300">
+                  <GeneratedText id="m_117ad39e228e60" />{' '}
+                  <GeneratedValue value={nangoConnectionId} />
+                </span>
+              ) : (
+                <span className="text-slate-500 dark:text-slate-400">
+                  <GeneratedText id="m_03e799a28eee9e" />
+                </span>
+              )
+            }
+          />
         </div>
 
         <div>
           <Button type="button" onClick={connect} disabled={busy}>
-            {busy ? 'Opening…' : connected ? 'Reconnect a source' : 'Connect a source'}
+            <GeneratedValue
+              value={
+                busy ? (
+                  <GeneratedText id="m_01944fa32440a0" />
+                ) : connected ? (
+                  <GeneratedText id="m_0db75283ded38f" />
+                ) : (
+                  <GeneratedText id="m_1cc1cf21d8c316" />
+                )
+              }
+            />
           </Button>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="manualId">Or paste a Connection ID</Label>
+          <Label htmlFor="manualId">
+            <GeneratedText id="m_159cc3c3357e4d" />
+          </Label>
           <div className="flex gap-2">
             <Input
               id="manualId"
               value={manualId}
               onChange={(e) => setManualId(e.target.value)}
-              placeholder="connection id from your Nango dashboard"
+              placeholder={tGenerated('m_04006b7d348c62')}
             />
             <Button
               type="button"
@@ -128,25 +158,29 @@ export function NangoConnect({
               onClick={() => manualId.trim() && link(manualId.trim())}
               disabled={pending}
             >
-              Link
+              <GeneratedText id="m_197fef09772e0d" />
             </Button>
           </div>
         </div>
 
         <div className="space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-          <Label>Map entities to Nango models</Label>
-          {entities.map((e) => (
-            <div key={e} className="flex items-center gap-2">
-              <span className="w-40 shrink-0 text-sm text-slate-600 dark:text-slate-300">
-                {ENTITY_LABELS[e] ?? e}
-              </span>
-              <Input
-                value={models[e] ?? ''}
-                onChange={(ev) => setModels((m) => ({ ...m, [e]: ev.target.value }))}
-                placeholder="e.g. Employee"
-              />
-            </div>
-          ))}
+          <Label>
+            <GeneratedText id="m_087380447dc002" />
+          </Label>
+          <GeneratedValue
+            value={entities.map((e) => (
+              <div key={e} className="flex items-center gap-2">
+                <span className="w-40 shrink-0 text-sm text-slate-600 dark:text-slate-300">
+                  <GeneratedValue value={ENTITY_LABELS[e] ?? e} />
+                </span>
+                <Input
+                  value={models[e] ?? ''}
+                  onChange={(ev) => setModels((m) => ({ ...m, [e]: ev.target.value }))}
+                  placeholder={tGenerated('m_10214959323aaf')}
+                />
+              </div>
+            ))}
+          />
           <div className="flex justify-end">
             <Button
               type="button"
@@ -156,14 +190,14 @@ export function NangoConnect({
                 startTransition(async () => {
                   const res = await saveNangoModels(connectionId, models)
                   if (res.ok) {
-                    toast.success('Models saved.')
+                    toast.success(tGenerated('m_0d5d7577132662'))
                     router.refresh()
-                  } else toast.error(res.error ?? 'Save failed.')
+                  } else toast.error(tGeneratedValue(res.error ?? tGenerated('m_0824d7cd907294')))
                 })
               }
               disabled={pending}
             >
-              Save models
+              <GeneratedText id="m_1fc4c6e3e32ea6" />
             </Button>
           </div>
         </div>

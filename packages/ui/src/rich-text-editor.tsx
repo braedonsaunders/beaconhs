@@ -12,6 +12,7 @@ import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/r
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
+import { useUiText } from './text-context'
 import { cn } from './utils'
 
 export type RichTextEditorProps = {
@@ -39,13 +40,14 @@ export function RichTextEditor({
   defaultValue = '',
   onChange,
   name,
-  placeholder = 'Start typing…',
+  placeholder,
   disabled = false,
   className,
   minHeight = '160px',
   normalizeLink,
   onInvalidLink,
 }: RichTextEditorProps) {
+  const t = useUiText()
   // TipTap v3 does not re-render the host component on transactions
   // (`shouldRerenderOnTransaction` defaults to false), so the latest HTML is
   // mirrored into React state from `onUpdate` to keep the hidden form input
@@ -61,7 +63,7 @@ export function RichTextEditor({
         openOnClick: false,
         HTMLAttributes: { class: 'text-teal-700 underline underline-offset-2 dark:text-teal-300' },
       }),
-      Placeholder.configure({ placeholder }),
+      Placeholder.configure({ placeholder: t(placeholder ?? 'Start typing…') }),
     ],
     content: defaultValue,
     editable: !disabled,
@@ -135,6 +137,7 @@ function Toolbar({
   normalizeLink: (value: string) => string | null
   onInvalidLink?: () => void
 }) {
+  const t = useUiText()
   // TipTap v3 doesn't re-render on transactions, so subscribe to the slices of
   // editor state the toolbar needs (active marks/nodes + undo/redo ability).
   const state = useEditorState({
@@ -161,57 +164,57 @@ function Toolbar({
         active={state.bold}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleBold().run()}
-        label="Bold"
+        label={t('Bold')}
       >
-        <b>B</b>
+        <b aria-hidden="true">B</b>
       </Btn>
       <Btn
         active={state.italic}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleItalic().run()}
-        label="Italic"
+        label={t('Italic')}
       >
-        <i>I</i>
+        <i aria-hidden="true">I</i>
       </Btn>
       <Btn
         active={state.strike}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleStrike().run()}
-        label="Strikethrough"
+        label={t('Strikethrough')}
       >
-        <s>S</s>
+        <s aria-hidden="true">S</s>
       </Btn>
       <Sep />
       <Btn
         active={state.h1}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        label="Heading 1"
+        label={t('Heading 1')}
       >
-        H1
+        <span aria-hidden="true">H1</span>
       </Btn>
       <Btn
         active={state.h2}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        label="Heading 2"
+        label={t('Heading 2')}
       >
-        H2
+        <span aria-hidden="true">H2</span>
       </Btn>
       <Btn
         active={state.h3}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        label="Heading 3"
+        label={t('Heading 3')}
       >
-        H3
+        <span aria-hidden="true">H3</span>
       </Btn>
       <Sep />
       <Btn
         active={state.bulletList}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
-        label="Bullet list"
+        label={t('Bullet list')}
       >
         •
       </Btn>
@@ -219,7 +222,7 @@ function Toolbar({
         active={state.orderedList}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        label="Numbered list"
+        label={t('Numbered list')}
       >
         1.
       </Btn>
@@ -227,7 +230,7 @@ function Toolbar({
         active={state.blockquote}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        label="Quote"
+        label={t('Quote')}
       >
         “”
       </Btn>
@@ -235,7 +238,7 @@ function Toolbar({
         active={state.codeBlock}
         disabled={disabled}
         onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-        label="Code"
+        label={t('Code')}
       >
         {'</>'}
       </Btn>
@@ -245,7 +248,7 @@ function Toolbar({
         disabled={disabled}
         onClick={() => {
           const existing = editor.getAttributes('link').href as string | undefined
-          const url = window.prompt('Link URL', existing ?? 'https://')
+          const url = window.prompt(t('Link URL'), existing ?? 'https://')
           if (url === null) return
           if (url === '') {
             editor.chain().focus().extendMarkRange('link').unsetLink().run()
@@ -258,7 +261,7 @@ function Toolbar({
           }
           editor.chain().focus().extendMarkRange('link').setLink({ href: normalized }).run()
         }}
-        label="Link"
+        label={t('Link')}
       >
         🔗
       </Btn>
@@ -266,14 +269,14 @@ function Toolbar({
         <Btn
           disabled={disabled || !state.canUndo}
           onClick={() => editor.chain().focus().undo().run()}
-          label="Undo"
+          label={t('Undo')}
         >
           ↶
         </Btn>
         <Btn
           disabled={disabled || !state.canRedo}
           onClick={() => editor.chain().focus().redo().run()}
-          label="Redo"
+          label={t('Redo')}
         >
           ↷
         </Btn>
@@ -295,13 +298,14 @@ function Btn({
   onClick: () => void
   label: string
 }) {
+  const t = useUiText()
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      title={label}
-      aria-label={label}
+      title={t(label)}
+      aria-label={t(label)}
       className={cn(
         'inline-flex h-7 min-w-[28px] items-center justify-center rounded px-2 text-xs font-medium transition-colors',
         active

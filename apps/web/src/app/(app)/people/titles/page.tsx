@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { BadgeCheck, FileText, IdCard } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm'
@@ -23,7 +26,10 @@ import { SortableTh } from '@/components/sortable-th'
 import { FilterChips } from '@/components/filter-bar'
 import { PeopleSubNav } from '../_components/people-sub-nav'
 
-export const metadata = { title: 'People — Titles' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_06695bd361585b') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/people/titles'
@@ -34,6 +40,8 @@ export default async function TitlesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const status =
@@ -114,21 +122,23 @@ export default async function TitlesPage({
         <>
           <PeopleSubNav active="titles" />
           <PageHeader
-            title="Job titles"
-            description="Formal title catalogue with structured Job Description fields, per-title task lists, and per-person sign-offs."
+            title={tGenerated('m_05624b55a0531d')}
+            description={tGenerated('m_1e813b0e14cf1f')}
             actions={
               <Link href="/people/titles/new">
-                <Button>Add title</Button>
+                <Button>
+                  <GeneratedText id="m_0cfe08e095e151" />
+                </Button>
               </Link>
             }
           />
           <div className="flex flex-wrap items-center gap-3">
-            <SearchInput placeholder="Search by title or scope" />
+            <SearchInput placeholder={tGenerated('m_16ad092d045e11')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               defaultValue="active"
               options={[
                 { value: 'active', label: 'Active' },
@@ -140,134 +150,166 @@ export default async function TitlesPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<IdCard size={32} />}
-          title={params.q ? `No titles match "${params.q}"` : 'No titles'}
-          description={
-            params.q
-              ? 'Try a different search.'
-              : status === 'archived'
-                ? 'Archived titles stay available for audit and can be restored.'
-                : 'Define the formal job titles used in Job Description PDFs.'
-          }
-          action={
-            params.q ? undefined : (
-              <Link href="/people/titles/new">
-                <Button>New title</Button>
-              </Link>
-            )
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  column="name"
-                  active={params.sort === 'name'}
-                  dir={params.dir}
-                >
-                  Title
-                </SortableTh>
-                <TableHead>Scope</TableHead>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  column="people"
-                  active={params.sort === 'people'}
-                  dir={params.dir}
-                >
-                  People
-                </SortableTh>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  column="tasks"
-                  active={params.sort === 'tasks'}
-                  dir={params.dir}
-                >
-                  Tasks
-                </SortableTh>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell>
-                    <Link
-                      href={`/people/titles/${t.id}`}
-                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<IdCard size={32} />}
+              title={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_148ba986bc851b', { value0: params.q })
+                  : tGenerated('m_0c1ecab91ffd6d'),
+              )}
+              description={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_11f3c16abb0f07')
+                  : status === 'archived'
+                    ? tGenerated('m_0fc52916e8f450')
+                    : tGenerated('m_1415fce8439d04'),
+              )}
+              action={
+                params.q ? undefined : (
+                  <Link href="/people/titles/new">
+                    <Button>
+                      <GeneratedText id="m_126ad07f6b414e" />
+                    </Button>
+                  </Link>
+                )
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      column="name"
+                      active={params.sort === 'name'}
+                      dir={params.dir}
                     >
-                      {t.name}
-                    </Link>
-                    {t.deletedAt ? (
-                      <Badge variant="secondary" className="ml-2">
-                        Archived
-                      </Badge>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-300">
-                    {t.description ? <span className="line-clamp-2">{t.description}</span> : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
-                      <BadgeCheck size={10} />
-                      {t.assignedCount}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
-                      <FileText size={10} />
-                      {t.taskCount}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2 text-xs">
-                      {t.deletedAt ? null : (
-                        <>
+                      <GeneratedText id="m_0decefd558c355" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_1f10a46fc1db73" />
+                    </TableHead>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      column="people"
+                      active={params.sort === 'people'}
+                      dir={params.dir}
+                    >
+                      <GeneratedText id="m_1e9ca6c7397706" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      column="tasks"
+                      active={params.sort === 'tasks'}
+                      dir={params.dir}
+                    >
+                      <GeneratedText id="m_188947cc3ae6ae" />
+                    </SortableTh>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((t) => (
+                      <TableRow key={t.id}>
+                        <TableCell>
                           <Link
-                            href={`/people/titles/${t.id}/tasks`}
-                            className="text-teal-700 hover:underline dark:text-teal-400"
+                            href={`/people/titles/${t.id}`}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                           >
-                            Tasks
+                            <GeneratedValue value={t.name} />
                           </Link>
-                          <span className="text-slate-300 dark:text-slate-600">·</span>
-                          <Link
-                            href={`/people/titles/${t.id}/pdf`}
-                            className="text-teal-700 hover:underline dark:text-teal-400"
-                            target="_blank"
-                          >
-                            PDF
-                          </Link>
-                          <span className="text-slate-300 dark:text-slate-600">·</span>
-                        </>
-                      )}
-                      <Link
-                        href={`/people/titles/${t.id}`}
-                        className="text-teal-700 hover:underline dark:text-teal-400"
-                      >
-                        View →
-                      </Link>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath={BASE}
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                          <GeneratedValue
+                            value={
+                              t.deletedAt ? (
+                                <Badge variant="secondary" className="ml-2">
+                                  <GeneratedText id="m_12a687134482ba" />
+                                </Badge>
+                              ) : null
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-300">
+                          <GeneratedValue
+                            value={
+                              t.description ? (
+                                <span className="line-clamp-2">
+                                  <GeneratedValue value={t.description} />
+                                </span>
+                              ) : (
+                                '—'
+                              )
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            <BadgeCheck size={10} />
+                            <GeneratedValue value={t.assignedCount} />
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            <FileText size={10} />
+                            <GeneratedValue value={t.taskCount} />
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2 text-xs">
+                            <GeneratedValue
+                              value={
+                                t.deletedAt ? null : (
+                                  <>
+                                    <Link
+                                      href={`/people/titles/${t.id}/tasks`}
+                                      className="text-teal-700 hover:underline dark:text-teal-400"
+                                    >
+                                      <GeneratedText id="m_188947cc3ae6ae" />
+                                    </Link>
+                                    <span className="text-slate-300 dark:text-slate-600">·</span>
+                                    <Link
+                                      href={`/people/titles/${t.id}/pdf`}
+                                      className="text-teal-700 hover:underline dark:text-teal-400"
+                                      target="_blank"
+                                    >
+                                      <GeneratedText id="m_1a2b2ed6729166" />
+                                    </Link>
+                                    <span className="text-slate-300 dark:text-slate-600">·</span>
+                                  </>
+                                )
+                              }
+                            />
+                            <Link
+                              href={`/people/titles/${t.id}`}
+                              className="text-teal-700 hover:underline dark:text-teal-400"
+                            >
+                              <GeneratedText id="m_1be345fc118df8" />
+                            </Link>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath={BASE}
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

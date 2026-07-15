@@ -1,5 +1,9 @@
 'use client'
 
+import { useGeneratedTranslations, useGeneratedValueTranslations } from '@/i18n/generated'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { Camera, FileUp, Loader2, Trash2 } from 'lucide-react'
 import { Button, uploadReservedFile } from '@beaconhs/ui'
@@ -39,6 +43,8 @@ export function FileUpload({
   onUploadingChange?: (uploading: boolean) => void
   variant?: 'photo' | 'file' | 'video' | 'audio'
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const inputRef = useRef<HTMLInputElement>(null)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -68,19 +74,21 @@ export function FileUpload({
       sizeBytes: file.size,
     })
     if (!req.ok) {
-      setError(req.error)
+      setError(tGeneratedValue(req.error))
       return null
     }
     let finalizeInput
     try {
       finalizeInput = await uploadReservedFile(req, file)
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Upload failed')
+      setError(
+        tGeneratedValue(error instanceof Error ? error.message : tGenerated('m_0d520cff4c0719')),
+      )
       return null
     }
     const fin = await finalizeUpload(finalizeInput)
     if (!fin.ok) {
-      setError(fin.error)
+      setError(tGeneratedValue(fin.error))
       return null
     }
     return {
@@ -95,10 +103,10 @@ export function FileUpload({
     if (!files || files.length === 0) return
     const remaining = maxFiles === undefined ? files.length : Math.max(0, maxFiles - value.length)
     if (remaining === 0) {
-      setError(`You can attach up to ${maxFiles} files`)
+      setError(tGenerated('m_07fc9a5de7d865', { value0: maxFiles }))
       return
     }
-    setError(null)
+    setError(tGeneratedValue(null))
     start(async () => {
       const next: AttachedFile[] = []
       for (const f of Array.from(files).slice(0, remaining)) {
@@ -137,62 +145,94 @@ export function FileUpload({
         disabled={pending || (maxFiles !== undefined && value.length >= maxFiles)}
         className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-sm text-slate-600 hover:border-teal-500 hover:bg-teal-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-teal-950/40"
       >
-        {pending ? (
-          <Loader2 size={16} className="animate-spin" />
-        ) : variant === 'photo' ? (
-          <Camera size={16} />
-        ) : (
-          <FileUp size={16} />
-        )}
-        {maxFiles !== undefined && value.length >= maxFiles
-          ? `Maximum ${maxFiles} files attached`
-          : pending
-            ? 'Uploading…'
-            : variant === 'photo'
-              ? 'Take photo or upload'
-              : variant === 'video'
-                ? 'Record or upload video'
-                : variant === 'audio'
-                  ? 'Record or upload audio'
-                  : 'Upload file'}
+        <GeneratedValue
+          value={
+            pending ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : variant === 'photo' ? (
+              <Camera size={16} />
+            ) : (
+              <FileUp size={16} />
+            )
+          }
+        />
+        <GeneratedValue
+          value={
+            maxFiles !== undefined && value.length >= maxFiles ? (
+              <GeneratedText id="m_1ea401c45e4d0f" values={{ value0: maxFiles }} />
+            ) : pending ? (
+              <GeneratedText id="m_0871bf014c29a2" />
+            ) : variant === 'photo' ? (
+              <GeneratedText id="m_1b437cd8414470" />
+            ) : variant === 'video' ? (
+              <GeneratedText id="m_1e024e615e8603" />
+            ) : variant === 'audio' ? (
+              <GeneratedText id="m_086fd0ba77e17c" />
+            ) : (
+              <GeneratedText id="m_06dc5804d9c769" />
+            )
+          }
+        />
       </button>
 
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      <GeneratedValue
+        value={
+          error ? (
+            <p className="text-xs text-red-600">
+              <GeneratedValue value={error} />
+            </p>
+          ) : null
+        }
+      />
 
-      {value.length > 0 ? (
-        <ul className="space-y-1.5">
-          {value.map((f) => (
-            <li
-              key={f.attachmentId}
-              className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-800 dark:bg-slate-900"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                {f.contentType.startsWith('image/') ? (
-                  <RawImage
-                    src={f.url}
-                    alt=""
-                    optimizationReason="authenticated"
-                    className="h-10 w-10 shrink-0 rounded object-cover"
-                  />
-                ) : (
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                    <FileUp size={14} />
-                  </span>
-                )}
-                <span className="truncate font-medium">{f.filename}</span>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => onChange(value.filter((x) => x.attachmentId !== f.attachmentId))}
-              >
-                <Trash2 size={12} className="text-red-500" />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <GeneratedValue
+        value={
+          value.length > 0 ? (
+            <ul className="space-y-1.5">
+              <GeneratedValue
+                value={value.map((f) => (
+                  <li
+                    key={f.attachmentId}
+                    className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <GeneratedValue
+                        value={
+                          f.contentType.startsWith('image/') ? (
+                            <RawImage
+                              src={f.url}
+                              alt=""
+                              optimizationReason="authenticated"
+                              className="h-10 w-10 shrink-0 rounded object-cover"
+                            />
+                          ) : (
+                            <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                              <FileUp size={14} />
+                            </span>
+                          )
+                        }
+                      />
+                      <span className="truncate font-medium">
+                        <GeneratedValue value={f.filename} />
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        onChange(value.filter((x) => x.attachmentId !== f.attachmentId))
+                      }
+                    >
+                      <Trash2 size={12} className="text-red-500" />
+                    </Button>
+                  </li>
+                ))}
+              />
+            </ul>
+          ) : null
+        }
+      />
     </div>
   )
 }

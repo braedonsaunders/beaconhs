@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // /incidents/manage — the Incidents administration hub. Tiles for the module's
 // taxonomies (classifications, injury types, hours), driven by the module-admin
 // registry. Gated to managers; everyone else lands on the incident log.
@@ -9,7 +10,10 @@ import { moduleAdminByKey } from '@/lib/module-admin/registry'
 import { ModuleManageHub } from '@/components/module-admin/module-manage-hub'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Incidents administration' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_045a7310d678db') }
+}
 
 export default async function IncidentsManagePage() {
   const ctx = await requireRequestContext()

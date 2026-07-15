@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Form designer.
 //
 // Three-pane layout:
@@ -327,6 +334,8 @@ export function FormDesigner({
   defaultLocale: AppLocale
   enabledLocales: readonly AppLocale[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const languages = useTranslations('Languages')
   const [schema, setSchema] = useState<FormSchemaV1>(initialSchema)
@@ -640,7 +649,7 @@ export function FormDesigner({
   }
 
   function publish() {
-    setError(null)
+    setError(tGeneratedValue(null))
     start(async () => {
       const result = await publishNewVersion({
         templateId,
@@ -648,11 +657,11 @@ export function FormDesigner({
         changelog: changelog.trim(),
       })
       if (!result.ok) {
-        setError(result.error ?? 'Failed to publish')
-        toast.error(result.error ?? 'Failed to publish')
+        setError(tGeneratedValue(result.error ?? tGenerated('m_16c73b6230c543')))
+        toast.error(tGeneratedValue(result.error ?? tGenerated('m_16c73b6230c543')))
         return
       }
-      toast.success(`Published v${result.version}`)
+      toast.success(tGenerated('m_165fbf2bc8254b', { value0: result.version }))
       setShowPublish(false)
       router.push(`/apps/templates/${templateId}`)
     })
@@ -668,21 +677,28 @@ export function FormDesigner({
         <div className="flex min-w-0 items-center gap-3">
           <SmartBackLink
             href="/apps"
-            label="Builder"
+            label={tGenerated('m_07f039d1ce81ec')}
             className="shrink-0 text-sm text-teal-700 hover:underline"
           />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="truncate text-sm font-semibold">{appName}</span>
+              <span className="truncate text-sm font-semibold">
+                <GeneratedValue value={appName} />
+              </span>
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${KIND_META[templateKind].cls}`}
               >
-                {KIND_META[templateKind].label}
+                <GeneratedValue value={KIND_META[templateKind].label} />
               </span>
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400">
-              Draft · published v{currentVersion} · {schema.sections.length} section
-              {schema.sections.length === 1 ? '' : 's'}
+              <GeneratedText id="m_1d76a1713fe585" />
+              <GeneratedValue value={currentVersion} /> ·{' '}
+              <GeneratedValue value={schema.sections.length} />{' '}
+              <GeneratedText id="m_02f67a0e8ba5ce" />
+              <GeneratedValue
+                value={schema.sections.length === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+              />
             </div>
           </div>
         </div>
@@ -693,27 +709,33 @@ export function FormDesigner({
               value={contentLocale}
               onChange={(event) => setContentLocale(event.target.value as AppLocale)}
               className="h-8 min-w-28 text-xs"
-              aria-label="Content language"
+              aria-label={tGenerated('m_104e7b02f49d5e')}
             >
-              {enabledLocales.map((enabledLocale) => (
-                <option key={enabledLocale} value={enabledLocale}>
-                  {languages(enabledLocale)}
-                </option>
-              ))}
+              <GeneratedValue
+                value={enabledLocales.map((enabledLocale) => (
+                  <option key={enabledLocale} value={enabledLocale}>
+                    <GeneratedValue value={languages(enabledLocale)} />
+                  </option>
+                ))}
+              />
             </Select>
           </label>
-          {canGenerate ? (
-            <Button
-              size="sm"
-              onClick={() => setShowAiAssistant(true)}
-              className="bg-violet-600 text-white hover:bg-violet-700"
-            >
-              <Sparkles size={14} /> AI
-            </Button>
-          ) : null}
+          <GeneratedValue
+            value={
+              canGenerate ? (
+                <Button
+                  size="sm"
+                  onClick={() => setShowAiAssistant(true)}
+                  className="bg-violet-600 text-white hover:bg-violet-700"
+                >
+                  <Sparkles size={14} /> <GeneratedText id="m_1e0a86199c09df" />
+                </Button>
+              ) : null
+            }
+          />
           <Link href={`/apps/templates/${templateId}/records`}>
             <Button variant="outline" size="sm">
-              <ClipboardCheck size={14} /> Entries
+              <ClipboardCheck size={14} /> <GeneratedText id="m_0d06d42b0344eb" />
             </Button>
           </Link>
           <Button
@@ -722,11 +744,12 @@ export function FormDesigner({
             onClick={() => setRightPanel((p) => (p === 'preview' ? 'none' : 'preview'))}
           >
             <Eye size={14} />
-            Preview
+            <GeneratedText id="m_11d37007232de5" />
           </Button>
           <Button size="sm" onClick={() => setShowPublish(true)} disabled={pending}>
             <Save size={14} />
-            Publish v{currentVersion + 1}
+            <GeneratedText id="m_01b66d9dba6889" />
+            <GeneratedValue value={currentVersion + 1} />
           </Button>
         </div>
       </header>
@@ -739,104 +762,119 @@ export function FormDesigner({
               active={leftTab === 'overview'}
               onClick={() => setLeftTab('overview')}
               icon={<Info size={16} />}
-              label="Overview"
+              label={tGenerated('m_102c6abe56e4d5')}
             />
             <LeftTab
               active={leftTab === 'build'}
               onClick={() => setLeftTab('build')}
               icon={<PanelLeft size={16} />}
-              label="Build"
+              label={tGenerated('m_0adae4a94c7be3')}
             />
             <LeftTab
               active={leftTab === 'record'}
               onClick={() => setLeftTab('record')}
               icon={<SlidersHorizontal size={16} />}
-              label="Record behaviour"
+              label={tGenerated('m_1c1250c8c10a42')}
             />
             <LeftTab
               active={leftTab === 'list'}
               onClick={() => setLeftTab('list')}
               icon={<Table2 size={16} />}
-              label="Records list"
+              label={tGenerated('m_02ec964c87acae')}
             />
             <LeftTab
               active={leftTab === 'actions'}
               onClick={() => setLeftTab('actions')}
               icon={<MousePointerClick size={16} />}
-              label="Record actions"
+              label={tGenerated('m_13f79ee70f138d')}
             />
             <LeftTab
               active={leftTab === 'assignments'}
               onClick={() => setLeftTab('assignments')}
               icon={<Send size={16} />}
-              label="Assign"
+              label={tGenerated('m_0444d7da46d928')}
             />
             <LeftTab
               active={leftTab === 'permissions'}
               onClick={() => setLeftTab('permissions')}
               icon={<ShieldCheck size={16} />}
-              label="Access"
+              label={tGenerated('m_128e83250b7fc0')}
             />
           </div>
           <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
-            {leftTab === 'overview' ? (
-              <OverviewPanel
-                templateId={templateId}
-                name={appName}
-                overview={overview}
-                onSaved={setAppName}
-                canPin={canPin}
-                pinned={pinned}
-              />
-            ) : leftTab === 'record' ? (
-              <RecordBehaviorPanel templateId={templateId} initial={recordConfig} roles={roles} />
-            ) : leftTab === 'list' ? (
-              <RecordListPanel templateId={templateId} initial={listConfig} fields={listFields} />
-            ) : leftTab === 'actions' ? (
-              <RecordActionsPanel templateId={templateId} flows={flows} />
-            ) : leftTab === 'assignments' ? (
-              <AssignmentsPanel templateId={templateId} />
-            ) : leftTab === 'permissions' ? (
-              <PermissionsPanel templateId={templateId} roles={roles} initial={allowedRoles} />
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={openWorkflow}
-                  title="Sequential human stages on this form — different from Flows (automation)"
-                  className={`mb-3 block w-full rounded px-2 py-1 text-left text-xs font-semibold ${
-                    selection.kind === 'workflow'
-                      ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/40 dark:text-teal-200'
-                      : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  Sign-off steps ({stepsCount})
-                </button>
-
-                <h3 className="mb-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-                  Add an element
-                </h3>
-                <p className="mb-2 text-[10px] text-slate-500 dark:text-slate-400">
-                  Drag onto the canvas, or click to add to the selected section.
-                </p>
-                {[...PALETTE_PRIMARY, ...PALETTE_MORE].map((group) => (
-                  <FieldPaletteGroup
-                    key={group.label}
-                    group={group}
-                    onDragType={(t) => {
-                      dragElementRef.current = t
-                    }}
-                    onAdd={(t) => {
-                      const targetSection =
-                        selection.kind === 'section' || selection.kind === 'field'
-                          ? selection.sectionId
-                          : schema.sections[schema.sections.length - 1]?.id
-                      if (targetSection) addField(targetSection, t)
-                    }}
+            <GeneratedValue
+              value={
+                leftTab === 'overview' ? (
+                  <OverviewPanel
+                    templateId={templateId}
+                    name={appName}
+                    overview={overview}
+                    onSaved={setAppName}
+                    canPin={canPin}
+                    pinned={pinned}
                   />
-                ))}
-              </>
-            )}
+                ) : leftTab === 'record' ? (
+                  <RecordBehaviorPanel
+                    templateId={templateId}
+                    initial={recordConfig}
+                    roles={roles}
+                  />
+                ) : leftTab === 'list' ? (
+                  <RecordListPanel
+                    templateId={templateId}
+                    initial={listConfig}
+                    fields={listFields}
+                  />
+                ) : leftTab === 'actions' ? (
+                  <RecordActionsPanel templateId={templateId} flows={flows} />
+                ) : leftTab === 'assignments' ? (
+                  <AssignmentsPanel templateId={templateId} />
+                ) : leftTab === 'permissions' ? (
+                  <PermissionsPanel templateId={templateId} roles={roles} initial={allowedRoles} />
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={openWorkflow}
+                      title={tGenerated('m_037b62ee03b335')}
+                      className={`mb-3 block w-full rounded px-2 py-1 text-left text-xs font-semibold ${
+                        selection.kind === 'workflow'
+                          ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/40 dark:text-teal-200'
+                          : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <GeneratedText id="m_001f1bfc6e0cd8" />
+                      <GeneratedValue value={stepsCount} />)
+                    </button>
+
+                    <h3 className="mb-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+                      <GeneratedText id="m_1a19ebd22b2247" />
+                    </h3>
+                    <p className="mb-2 text-[10px] text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_02043182fe57f9" />
+                    </p>
+                    <GeneratedValue
+                      value={[...PALETTE_PRIMARY, ...PALETTE_MORE].map((group) => (
+                        <FieldPaletteGroup
+                          key={group.label}
+                          group={group}
+                          onDragType={(t) => {
+                            dragElementRef.current = t
+                          }}
+                          onAdd={(t) => {
+                            const targetSection =
+                              selection.kind === 'section' || selection.kind === 'field'
+                                ? selection.sectionId
+                                : schema.sections[schema.sections.length - 1]?.id
+                            if (targetSection) addField(targetSection, t)
+                          }}
+                        />
+                      ))}
+                    />
+                  </>
+                )
+              }
+            />
           </div>
         </aside>
 
@@ -847,242 +885,318 @@ export function FormDesigner({
               active={surface === 'build'}
               onClick={() => setSurface('build')}
               icon={<LayoutGrid size={13} />}
-              label="Build surface"
+              label={tGenerated('m_0b120bda8434d5')}
             />
             <SurfaceTab
               active={surface === 'flows'}
               onClick={() => setSurface('flows')}
               icon={<WorkflowIcon size={13} />}
-              label="Flows"
+              label={tGenerated('m_1a4786daa752b1')}
             />
-            {surface === 'build' ? (
-              <div className="ml-auto flex items-center gap-2">
-                <span
-                  className="hidden text-[10px] font-semibold tracking-wider text-slate-400 uppercase sm:block dark:text-slate-500"
-                  title="Advanced layout — position widgets freely on a grid (Appsmith / WordPress style)"
-                >
-                  Advanced layout
-                </span>
-                <div className="flex items-center rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => setAllCanvas(false)}
-                    className={`rounded px-2 py-0.5 text-xs font-medium transition ${
-                      !canvasMode
-                        ? 'bg-slate-900 text-white dark:bg-slate-700'
-                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    Stacked
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAllCanvas(true)}
-                    className={`flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition ${
-                      canvasMode
-                        ? 'bg-violet-600 text-white'
-                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <LayoutGrid size={12} /> Canvas
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-          {surface === 'flows' ? (
-            <div className="min-h-0 flex-1">
-              <FlowsCanvas
-                profile={flowProfile}
-                emailTemplates={emailTemplates}
-                pdfTemplates={pdfTemplates}
-                targetApps={targetApps}
-                recipientOptions={recipientOptions}
-                flows={flows}
-                canEdit
-                canGenerate={canGenerate}
-                embedded
-              />
-            </div>
-          ) : (
-            <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
-              <div className="w-full">
-                <div className="space-y-3">
-                  {selection.kind === 'workflow' ? (
-                    <WorkflowEditor
-                      schema={schema}
-                      locale={contentLocale}
-                      defaultLocale={defaultLocale}
-                      onChange={(steps) => setSchema((s) => ({ ...s, workflow: { steps } }))}
-                    />
-                  ) : null}
-
-                  {/* Tabs — presentational pages for the fill experience. */}
-                  <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1.5 dark:border-slate-800 dark:bg-slate-900">
-                    {appTabs.map((t) => (
+            <GeneratedValue
+              value={
+                surface === 'build' ? (
+                  <div className="ml-auto flex items-center gap-2">
+                    <span
+                      className="hidden text-[10px] font-semibold tracking-wider text-slate-400 uppercase sm:block dark:text-slate-500"
+                      title={tGenerated('m_0342c212db3a34')}
+                    >
+                      <GeneratedText id="m_174bcc6db92052" />
+                    </span>
+                    <div className="flex items-center rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
                       <button
-                        key={t.id}
                         type="button"
-                        onClick={() => setDesignerTab(t.id)}
-                        onDoubleClick={() => {
-                          const next = window.prompt(
-                            'Rename tab',
-                            localizeText(t.title, contentLocale, '', defaultLocale),
-                          )
-                          if (next != null) renameTab(t.id, next.trim() || 'Tab')
-                        }}
-                        title="Open · double-click to rename"
-                        className={`group flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium transition ${
-                          designerTab === t.id
-                            ? 'bg-teal-600 text-white'
+                        onClick={() => setAllCanvas(false)}
+                        className={`rounded px-2 py-0.5 text-xs font-medium transition ${
+                          !canvasMode
+                            ? 'bg-slate-900 text-white dark:bg-slate-700'
                             : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
                         }`}
                       >
-                        {localizeText(t.title, contentLocale, 'Tab', defaultLocale)}
-                        {appTabs.length > 1 ? (
-                          <Trash2
-                            size={11}
-                            className={
-                              designerTab === t.id
-                                ? 'text-white/70 hover:text-white'
-                                : 'text-slate-300 hover:text-rose-500'
-                            }
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              deleteTab(t.id)
-                            }}
-                          />
-                        ) : null}
+                        <GeneratedText id="m_1e888eaf9e8eed" />
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={addTab}
-                      className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-950/40"
-                      title={appTabs.length === 0 ? 'Split this app into tabs' : 'Add a tab'}
-                    >
-                      <Plus size={12} /> {appTabs.length === 0 ? 'Add tabs' : 'Tab'}
-                    </button>
-                  </div>
-
-                  {visibleSections.map((sec, i) => {
-                    const active = selection.kind === 'section' && selection.sectionId === sec.id
-                    return (
-                      <Card
-                        key={sec.id}
-                        className={`border ${active ? 'border-teal-500 ring-1 ring-teal-500' : 'border-slate-200 dark:border-slate-800'}`}
+                      <button
+                        type="button"
+                        onClick={() => setAllCanvas(true)}
+                        className={`flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition ${
+                          canvasMode
+                            ? 'bg-violet-600 text-white'
+                            : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                        }`}
                       >
-                        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                          <button
-                            type="button"
-                            onClick={() => selectSection(sec.id)}
-                            className="flex-1 text-left"
-                          >
-                            <CardTitle className="text-base">
-                              {localizeText(
-                                sec.title,
-                                contentLocale,
-                                'Untitled section',
-                                defaultLocale,
-                              )}{' '}
-                              {sec.repeating ? <Badge variant="secondary">repeating</Badge> : null}
-                              {sec.showIf ? (
-                                <Badge variant="outline" className="text-[10px]">
-                                  conditional
-                                </Badge>
-                              ) : null}
-                              {sec.step ? (
-                                <Badge variant="outline" className="text-[10px]">
-                                  step · {stepLabel(schema, sec.step, contentLocale, defaultLocale)}
-                                </Badge>
-                              ) : null}
-                            </CardTitle>
-                          </button>
-                          <div className="flex items-center gap-1">
-                            <IconButton
-                              title="Move up"
-                              onClick={() => moveSection(sec.id, -1)}
-                              disabled={i === 0}
-                            >
-                              <ArrowUp size={14} />
-                            </IconButton>
-                            <IconButton
-                              title="Move down"
-                              onClick={() => moveSection(sec.id, 1)}
-                              disabled={i === visibleSections.length - 1}
-                            >
-                              <ArrowDown size={14} />
-                            </IconButton>
-                            <IconButton
-                              title="Delete section"
-                              onClick={() => deleteSection(sec.id)}
-                            >
-                              <Trash2 size={14} className="text-red-500" />
-                            </IconButton>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="pt-0">
-                          {sec.canvas ? (
-                            <CanvasEditor
-                              section={sec}
+                        <LayoutGrid size={12} /> <GeneratedText id="m_0627e4bbe74939" />
+                      </button>
+                    </div>
+                  </div>
+                ) : null
+              }
+            />
+          </div>
+          <GeneratedValue
+            value={
+              surface === 'flows' ? (
+                <div className="min-h-0 flex-1">
+                  <FlowsCanvas
+                    profile={flowProfile}
+                    emailTemplates={emailTemplates}
+                    pdfTemplates={pdfTemplates}
+                    targetApps={targetApps}
+                    recipientOptions={recipientOptions}
+                    flows={flows}
+                    canEdit
+                    canGenerate={canGenerate}
+                    embedded
+                  />
+                </div>
+              ) : (
+                <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
+                  <div className="w-full">
+                    <div className="space-y-3">
+                      <GeneratedValue
+                        value={
+                          selection.kind === 'workflow' ? (
+                            <WorkflowEditor
+                              schema={schema}
                               locale={contentLocale}
                               defaultLocale={defaultLocale}
-                              selectedFieldId={
-                                selection.kind === 'field' && selection.sectionId === sec.id
-                                  ? selection.fieldId
-                                  : null
+                              onChange={(steps) =>
+                                setSchema((s) => ({ ...s, workflow: { steps } }))
                               }
-                              dragTypeRef={dragElementRef}
-                              onLayout={(items) => setCanvasItems(sec.id, items)}
-                              onAddWidget={(type, box) => addWidgetToCanvas(sec.id, type, box)}
-                              onSelect={(fieldId) => selectField(sec.id, fieldId)}
-                              onDelete={(fieldId) => deleteField(sec.id, fieldId)}
                             />
-                          ) : sec.fields.length === 0 ? (
-                            <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                              No elements. Drag one from the left panel, or select an element to add
-                              it here.
-                            </div>
-                          ) : (
-                            <Reorder.Group
-                              axis="y"
-                              values={sec.fields}
-                              onReorder={(fields) => reorderFields(sec.id, fields as FormField[])}
-                              as="ul"
-                              className="divide-y divide-slate-100 dark:divide-slate-800"
+                          ) : null
+                        }
+                      />
+
+                      {/* Tabs — presentational pages for the fill experience. */}
+                      <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1.5 dark:border-slate-800 dark:bg-slate-900">
+                        <GeneratedValue
+                          value={appTabs.map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => setDesignerTab(t.id)}
+                              onDoubleClick={() => {
+                                const next = window.prompt(
+                                  'Rename tab',
+                                  localizeText(t.title, contentLocale, '', defaultLocale),
+                                )
+                                if (next != null) renameTab(t.id, next.trim() || 'Tab')
+                              }}
+                              title={tGenerated('m_0d31ecacb5b2ee')}
+                              className={`group flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium transition ${
+                                designerTab === t.id
+                                  ? 'bg-teal-600 text-white'
+                                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                              }`}
                             >
-                              {sec.fields.map((f, j) => (
-                                <FieldRow
-                                  key={f.id}
-                                  field={f}
-                                  locale={contentLocale}
-                                  defaultLocale={defaultLocale}
-                                  isSelected={
-                                    selection.kind === 'field' && selection.fieldId === f.id
-                                  }
-                                  typeLabel={FIELD_TYPES[f.type]?.label ?? f.type}
-                                  onSelect={() => selectField(sec.id, f.id)}
-                                  onMoveUp={() => moveField(sec.id, f.id, -1)}
-                                  onMoveDown={() => moveField(sec.id, f.id, 1)}
-                                  onDelete={() => deleteField(sec.id, f.id)}
-                                  canUp={j > 0}
-                                  canDown={j < sec.fields.length - 1}
-                                />
-                              ))}
-                            </Reorder.Group>
+                              <GeneratedValue
+                                value={localizeText(t.title, contentLocale, 'Tab', defaultLocale)}
+                              />
+                              <GeneratedValue
+                                value={
+                                  appTabs.length > 1 ? (
+                                    <Trash2
+                                      size={11}
+                                      className={
+                                        designerTab === t.id
+                                          ? 'text-white/70 hover:text-white'
+                                          : 'text-slate-300 hover:text-rose-500'
+                                      }
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        deleteTab(t.id)
+                                      }}
+                                    />
+                                  ) : null
+                                }
+                              />
+                            </button>
+                          ))}
+                        />
+                        <button
+                          type="button"
+                          onClick={addTab}
+                          className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-950/40"
+                          title={tGeneratedValue(
+                            appTabs.length === 0
+                              ? tGenerated('m_1b7cb35c4f57dd')
+                              : tGenerated('m_1e7fd6a7c790fe'),
                           )}
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                  <Button variant="outline" onClick={addSection} className="w-full">
-                    <Plus size={14} />
-                    Add section
-                  </Button>
+                        >
+                          <Plus size={12} />{' '}
+                          <GeneratedValue
+                            value={
+                              appTabs.length === 0 ? (
+                                <GeneratedText id="m_0cfeced513f8d1" />
+                              ) : (
+                                <GeneratedText id="m_1457c1cce0b63c" />
+                              )
+                            }
+                          />
+                        </button>
+                      </div>
+
+                      <GeneratedValue
+                        value={visibleSections.map((sec, i) => {
+                          const active =
+                            selection.kind === 'section' && selection.sectionId === sec.id
+                          return (
+                            <Card
+                              key={sec.id}
+                              className={`border ${active ? 'border-teal-500 ring-1 ring-teal-500' : 'border-slate-200 dark:border-slate-800'}`}
+                            >
+                              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                                <button
+                                  type="button"
+                                  onClick={() => selectSection(sec.id)}
+                                  className="flex-1 text-left"
+                                >
+                                  <CardTitle className="text-base">
+                                    <GeneratedValue
+                                      value={localizeText(
+                                        sec.title,
+                                        contentLocale,
+                                        'Untitled section',
+                                        defaultLocale,
+                                      )}
+                                    />
+                                    <GeneratedValue value={' '} />
+                                    <GeneratedValue
+                                      value={
+                                        sec.repeating ? (
+                                          <Badge variant="secondary">
+                                            <GeneratedText id="m_06e1ca227aca9b" />
+                                          </Badge>
+                                        ) : null
+                                      }
+                                    />
+                                    <GeneratedValue
+                                      value={
+                                        sec.showIf ? (
+                                          <Badge variant="outline" className="text-[10px]">
+                                            <GeneratedText id="m_02529c1532db7a" />
+                                          </Badge>
+                                        ) : null
+                                      }
+                                    />
+                                    <GeneratedValue
+                                      value={
+                                        sec.step ? (
+                                          <Badge variant="outline" className="text-[10px]">
+                                            <GeneratedText id="m_11933adf482cac" />{' '}
+                                            <GeneratedValue
+                                              value={stepLabel(
+                                                schema,
+                                                sec.step,
+                                                contentLocale,
+                                                defaultLocale,
+                                              )}
+                                            />
+                                          </Badge>
+                                        ) : null
+                                      }
+                                    />
+                                  </CardTitle>
+                                </button>
+                                <div className="flex items-center gap-1">
+                                  <IconButton
+                                    title={tGenerated('m_1ec1460770eaa0')}
+                                    onClick={() => moveSection(sec.id, -1)}
+                                    disabled={i === 0}
+                                  >
+                                    <ArrowUp size={14} />
+                                  </IconButton>
+                                  <IconButton
+                                    title={tGenerated('m_14ab8cefda3cf9')}
+                                    onClick={() => moveSection(sec.id, 1)}
+                                    disabled={i === visibleSections.length - 1}
+                                  >
+                                    <ArrowDown size={14} />
+                                  </IconButton>
+                                  <IconButton
+                                    title={tGenerated('m_1e97527af4024b')}
+                                    onClick={() => deleteSection(sec.id)}
+                                  >
+                                    <Trash2 size={14} className="text-red-500" />
+                                  </IconButton>
+                                </div>
+                              </CardHeader>
+                              <CardContent className="pt-0">
+                                <GeneratedValue
+                                  value={
+                                    sec.canvas ? (
+                                      <CanvasEditor
+                                        section={sec}
+                                        locale={contentLocale}
+                                        defaultLocale={defaultLocale}
+                                        selectedFieldId={
+                                          selection.kind === 'field' &&
+                                          selection.sectionId === sec.id
+                                            ? selection.fieldId
+                                            : null
+                                        }
+                                        dragTypeRef={dragElementRef}
+                                        onLayout={(items) => setCanvasItems(sec.id, items)}
+                                        onAddWidget={(type, box) =>
+                                          addWidgetToCanvas(sec.id, type, box)
+                                        }
+                                        onSelect={(fieldId) => selectField(sec.id, fieldId)}
+                                        onDelete={(fieldId) => deleteField(sec.id, fieldId)}
+                                      />
+                                    ) : sec.fields.length === 0 ? (
+                                      <div className="rounded-md border border-dashed border-slate-300 p-4 text-center text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                                        <GeneratedText id="m_0d6735f83b77a3" />
+                                      </div>
+                                    ) : (
+                                      <Reorder.Group
+                                        axis="y"
+                                        values={sec.fields}
+                                        onReorder={(fields) =>
+                                          reorderFields(sec.id, fields as FormField[])
+                                        }
+                                        as="ul"
+                                        className="divide-y divide-slate-100 dark:divide-slate-800"
+                                      >
+                                        <GeneratedValue
+                                          value={sec.fields.map((f, j) => (
+                                            <FieldRow
+                                              key={f.id}
+                                              field={f}
+                                              locale={contentLocale}
+                                              defaultLocale={defaultLocale}
+                                              isSelected={
+                                                selection.kind === 'field' &&
+                                                selection.fieldId === f.id
+                                              }
+                                              typeLabel={FIELD_TYPES[f.type]?.label ?? f.type}
+                                              onSelect={() => selectField(sec.id, f.id)}
+                                              onMoveUp={() => moveField(sec.id, f.id, -1)}
+                                              onMoveDown={() => moveField(sec.id, f.id, 1)}
+                                              onDelete={() => deleteField(sec.id, f.id)}
+                                              canUp={j > 0}
+                                              canDown={j < sec.fields.length - 1}
+                                            />
+                                          ))}
+                                        />
+                                      </Reorder.Group>
+                                    )
+                                  }
+                                />
+                              </CardContent>
+                            </Card>
+                          )
+                        })}
+                      />
+                      <Button variant="outline" onClick={addSection} className="w-full">
+                        <Plus size={14} />
+                        <GeneratedText id="m_0cfd5e4e441158" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              )
+            }
+          />
         </div>
       </div>
 
@@ -1090,39 +1204,47 @@ export function FormDesigner({
       <Drawer
         open={rightPanel === 'props'}
         onClose={() => setRightPanel('none')}
-        title={selection.kind === 'field' ? 'Element properties' : 'Section'}
+        title={tGeneratedValue(
+          selection.kind === 'field'
+            ? tGenerated('m_0478595ea3a2da')
+            : tGenerated('m_0d513924d97753'),
+        )}
         size="sm"
       >
-        {selection.kind === 'field' && selectedField ? (
-          <FieldProperties
-            key={selectedField.field.id}
-            sectionId={selectedField.section.id}
-            field={selectedField.field}
-            schema={schema}
-            locale={contentLocale}
-            defaultLocale={defaultLocale}
-            onChange={(patch) =>
-              updateField(selectedField.section.id, selectedField.field.id, patch)
-            }
-          />
-        ) : selection.kind === 'section' && selectedSection ? (
-          <SectionProperties
-            key={selectedSection.id}
-            section={selectedSection}
-            schema={schema}
-            locale={contentLocale}
-            defaultLocale={defaultLocale}
-            onChange={(patch) => updateSection(selectedSection.id, patch)}
-          />
-        ) : null}
+        <GeneratedValue
+          value={
+            selection.kind === 'field' && selectedField ? (
+              <FieldProperties
+                key={selectedField.field.id}
+                sectionId={selectedField.section.id}
+                field={selectedField.field}
+                schema={schema}
+                locale={contentLocale}
+                defaultLocale={defaultLocale}
+                onChange={(patch) =>
+                  updateField(selectedField.section.id, selectedField.field.id, patch)
+                }
+              />
+            ) : selection.kind === 'section' && selectedSection ? (
+              <SectionProperties
+                key={selectedSection.id}
+                section={selectedSection}
+                schema={schema}
+                locale={contentLocale}
+                defaultLocale={defaultLocale}
+                onChange={(patch) => updateSection(selectedSection.id, patch)}
+              />
+            ) : null
+          }
+        />
       </Drawer>
 
       {/* Preview flyout — live render of the filler experience. */}
       <Drawer
         open={rightPanel === 'preview'}
         onClose={() => setRightPanel('none')}
-        title="Preview"
-        description="How the filler will see this form."
+        title={tGenerated('m_11d37007232de5')}
+        description={tGenerated('m_1e28aaa8e490af')}
         size="lg"
       >
         <Preview schema={schema} locale={contentLocale} defaultLocale={defaultLocale} />
@@ -1131,42 +1253,61 @@ export function FormDesigner({
       <Drawer
         open={showPublish}
         onClose={() => setShowPublish(false)}
-        title={`Publish v${currentVersion + 1}`}
-        description="Snapshot the current schema as a new immutable version."
+        title={tGenerated('m_04073463647168', { value0: currentVersion + 1 })}
+        description={tGenerated('m_0eced645981830')}
         footer={
           <>
             <Button variant="outline" onClick={() => setShowPublish(false)}>
-              Cancel
+              <GeneratedText id="m_112e2e8ecda428" />
             </Button>
             <Button onClick={publish} disabled={pending}>
               <Check size={14} />
-              {pending ? 'Publishing…' : 'Publish'}
+              <GeneratedValue
+                value={
+                  pending ? (
+                    <GeneratedText id="m_12b32266eec3e2" />
+                  ) : (
+                    <GeneratedText id="m_0c072fb8baf115" />
+                  )
+                }
+              />
             </Button>
           </>
         }
       >
         <div className="space-y-3">
           <Alert variant="info">
-            <AlertTitle>Immutable version</AlertTitle>
+            <AlertTitle>
+              <GeneratedText id="m_1c2ad488291a89" />
+            </AlertTitle>
             <AlertDescription>
-              This snapshots the current schema as v{currentVersion + 1}. Existing responses still
-              render against the version they were submitted under.
+              <GeneratedText id="m_16d04782fa275d" />
+              <GeneratedValue value={currentVersion + 1} />
+              <GeneratedText id="m_025b2e6dff2c41" />
             </AlertDescription>
           </Alert>
           <div className="space-y-1">
-            <Label>Changelog</Label>
+            <Label>
+              <GeneratedText id="m_155fd3bdb6e009" />
+            </Label>
             <Textarea
               rows={3}
               value={changelog}
-              placeholder="Short description of what changed"
+              placeholder={tGenerated('m_061739b5f07deb')}
               onChange={(e) => setChangelog(e.target.value)}
             />
           </div>
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
+          <GeneratedValue
+            value={
+              error ? (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    <GeneratedValue value={error} />
+                  </AlertDescription>
+                </Alert>
+              ) : null
+            }
+          />
         </div>
       </Drawer>
 
@@ -1176,9 +1317,9 @@ export function FormDesigner({
         onClose={() => setShowAiAssistant(false)}
         scope="builder.app"
         scopeRefId={templateId}
-        title="App builder AI"
-        description="Build or edit this app by chatting. Review, then Apply."
-        placeholder="e.g. Add a section for PPE checks with yes/no items, or build a daily vehicle inspection"
+        title={tGenerated('m_0d811bc45a51cf')}
+        description={tGenerated('m_12a6f6cc386ad2')}
+        placeholder={tGenerated('m_0c27a1a2207a17')}
         applyLabel="Apply to builder"
         suggestions={[
           'Add a photo upload and a signature at the end',
@@ -1199,7 +1340,7 @@ export function FormDesigner({
           if (!next) return
           setSchema(next)
           if (next.tabs?.length) setDesignerTab(next.tabs[0]!.id)
-          toast.success('Applied — review and Publish when ready')
+          toast.success(tGenerated('m_180fea01504577'))
         }}
       />
     </div>
@@ -1226,33 +1367,36 @@ function FieldPaletteGroup({
   // Set when a palette item starts dragging, so the canvas drop knows the type.
   onDragType?: (t: FieldType) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="mb-3">
       <div className="px-1 pb-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-        {group.label}
+        <GeneratedValue value={group.label} />
       </div>
       <div className="grid grid-cols-1 gap-1">
-        {group.types.map((t) => {
-          const Icon = FIELD_ICONS[t] ?? Type
-          return (
-            <button
-              key={t}
-              type="button"
-              draggable
-              onDragStart={(e) => {
-                onDragType?.(t)
-                e.dataTransfer.setData('text/plain', t)
-                e.dataTransfer.effectAllowed = 'copy'
-              }}
-              onClick={() => onAdd(t)}
-              className="flex cursor-grab items-center gap-2 rounded border border-slate-200 px-2 py-1 text-left text-xs hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing dark:border-slate-700 dark:hover:border-teal-600 dark:hover:bg-teal-950/40"
-              title="Drag onto the canvas — or click to add to the selected section"
-            >
-              <Icon size={12} />
-              {FIELD_TYPES[t].label}
-            </button>
-          )
-        })}
+        <GeneratedValue
+          value={group.types.map((t) => {
+            const Icon = FIELD_ICONS[t] ?? Type
+            return (
+              <button
+                key={t}
+                type="button"
+                draggable
+                onDragStart={(e) => {
+                  onDragType?.(t)
+                  e.dataTransfer.setData('text/plain', t)
+                  e.dataTransfer.effectAllowed = 'copy'
+                }}
+                onClick={() => onAdd(t)}
+                className="flex cursor-grab items-center gap-2 rounded border border-slate-200 px-2 py-1 text-left text-xs hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing dark:border-slate-700 dark:hover:border-teal-600 dark:hover:bg-teal-950/40"
+                title={tGenerated('m_1b1fa20684f949')}
+              >
+                <Icon size={12} />
+                <GeneratedValue value={FIELD_TYPES[t].label} />
+              </button>
+            )
+          })}
+        />
       </div>
     </div>
   )
@@ -1269,15 +1413,16 @@ function IconButton({
   disabled?: boolean
   children: React.ReactNode
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <button
       type="button"
-      title={title}
+      title={tGeneratedValue(title)}
       onClick={onClick}
       disabled={disabled}
       className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
     >
-      {children}
+      <GeneratedValue value={children} />
     </button>
   )
 }
@@ -1310,6 +1455,7 @@ function FieldRow({
   canUp: boolean
   canDown: boolean
 }) {
+  const tGenerated = useGeneratedTranslations()
   const controls = useDragControls()
   const Icon = FIELD_ICONS[field.type] ?? Type
   return (
@@ -1324,7 +1470,7 @@ function FieldRow({
     >
       <button
         type="button"
-        aria-label="Drag to reorder"
+        aria-label={tGenerated('m_0b04b904ce4f9a')}
         onPointerDown={(e) => controls.start(e)}
         className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
       >
@@ -1333,33 +1479,45 @@ function FieldRow({
       <button type="button" onClick={onSelect} className="flex flex-1 items-center gap-2 text-left">
         <Icon size={14} />
         <span className="w-24 truncate text-xs text-slate-400 dark:text-slate-500">
-          {typeLabel}
+          <GeneratedValue value={typeLabel} />
         </span>
         <span className="text-sm font-medium">
-          {localizeText(field.label, locale, field.id, defaultLocale)}
-          {field.required || field.validation?.required ? (
-            <span className="text-red-600"> *</span>
-          ) : null}
+          <GeneratedValue value={localizeText(field.label, locale, field.id, defaultLocale)} />
+          <GeneratedValue
+            value={
+              field.required || field.validation?.required ? (
+                <span className="text-red-600"> *</span>
+              ) : null
+            }
+          />
         </span>
-        {field.showIf ? (
-          <Badge variant="secondary" className="text-[10px]">
-            conditional
-          </Badge>
-        ) : null}
-        {field.formula ? (
-          <Badge variant="secondary" className="text-[10px]">
-            formula
-          </Badge>
-        ) : null}
+        <GeneratedValue
+          value={
+            field.showIf ? (
+              <Badge variant="secondary" className="text-[10px]">
+                <GeneratedText id="m_02529c1532db7a" />
+              </Badge>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            field.formula ? (
+              <Badge variant="secondary" className="text-[10px]">
+                <GeneratedText id="m_194bb13d821775" />
+              </Badge>
+            ) : null
+          }
+        />
       </button>
       <div className="flex items-center gap-1">
-        <IconButton title="Move up" onClick={onMoveUp} disabled={!canUp}>
+        <IconButton title={tGenerated('m_1ec1460770eaa0')} onClick={onMoveUp} disabled={!canUp}>
           <ArrowUp size={12} />
         </IconButton>
-        <IconButton title="Move down" onClick={onMoveDown} disabled={!canDown}>
+        <IconButton title={tGenerated('m_14ab8cefda3cf9')} onClick={onMoveDown} disabled={!canDown}>
           <ArrowDown size={12} />
         </IconButton>
-        <IconButton title="Delete" onClick={onDelete}>
+        <IconButton title={tGenerated('m_11773f3c3f7558')} onClick={onDelete}>
           <Trash2 size={12} className="text-red-500" />
         </IconButton>
       </div>
@@ -1382,6 +1540,8 @@ function WorkflowEditor({
   defaultLocale: AppLocale
   onChange: (steps: FormWorkflowStep[]) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const steps = schema.workflow.steps
 
   function setStep(i: number, patch: Partial<FormWorkflowStep>) {
@@ -1405,124 +1565,165 @@ function WorkflowEditor({
   return (
     <Card className="border-2 border-teal-500/40">
       <CardHeader>
-        <CardTitle className="text-base">Sign-off steps</CardTitle>
+        <CardTitle className="text-base">
+          <GeneratedText id="m_1c75ba367ef317" />
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Sequential human stages of this form — e.g. <em>Worker fills</em> →{' '}
-          <em>Supervisor signs</em> → <em>Manager reviews</em>. Each step is assigned to a person
-          and can require a signature; bind a section to a step in its properties. This is{' '}
-          <strong>not</strong> automation — to send notifications, raise CAPAs, or branch on
-          answers, use the <strong>Flows</strong> tab.
+          <GeneratedText id="m_1a11f78c7d99d8" />{' '}
+          <em>
+            <GeneratedText id="m_02b0a83932da4a" />
+          </em>{' '}
+          →<GeneratedValue value={' '} />
+          <em>
+            <GeneratedText id="m_14efdd0bff7d70" />
+          </em>{' '}
+          →{' '}
+          <em>
+            <GeneratedText id="m_1cc0241831296d" />
+          </em>
+          <GeneratedText id="m_17833f54b99d38" />
+          <GeneratedValue value={' '} />
+          <strong>
+            <GeneratedText id="m_1c8658eb9347b4" />
+          </strong>{' '}
+          <GeneratedText id="m_0bf548b271dbc1" />{' '}
+          <strong>
+            <GeneratedText id="m_1a4786daa752b1" />
+          </strong>{' '}
+          <GeneratedText id="m_003ae75549476b" />
         </p>
         <ul className="space-y-2">
-          {steps.map((s, i) => (
-            <li
-              key={s.key}
-              className="rounded-md border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900"
-            >
-              <div className="flex items-start gap-2">
-                <span className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-100 text-xs font-semibold text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
-                  {i + 1}
-                </span>
-                <div className="flex-1 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-[10px]">Title</Label>
-                      <Input
-                        className="h-7 text-xs"
-                        value={s.title?.[locale] ?? ''}
-                        placeholder={localizeText(s.title, locale, s.key, defaultLocale)}
-                        onChange={(e) =>
-                          setStep(i, {
-                            title: { ...(s.title ?? {}), [locale]: e.target.value },
-                          })
-                        }
+          <GeneratedValue
+            value={steps.map((s, i) => (
+              <li
+                key={s.key}
+                className="rounded-md border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <div className="flex items-start gap-2">
+                  <span className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-100 text-xs font-semibold text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
+                    <GeneratedValue value={i + 1} />
+                  </span>
+                  <div className="flex-1 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-[10px]">
+                          <GeneratedText id="m_0decefd558c355" />
+                        </Label>
+                        <Input
+                          className="h-7 text-xs"
+                          value={s.title?.[locale] ?? ''}
+                          placeholder={tGeneratedValue(
+                            localizeText(s.title, locale, s.key, defaultLocale),
+                          )}
+                          onChange={(e) =>
+                            setStep(i, {
+                              title: { ...(s.title ?? {}), [locale]: e.target.value },
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px]">
+                          <GeneratedText id="m_147b61c2aef29b" />
+                        </Label>
+                        <Input className="h-7 font-mono text-xs" value={s.key} disabled />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-[10px]">
+                          <GeneratedText id="m_160787e531bffd" />
+                        </Label>
+                        <Select
+                          className="h-7 text-xs"
+                          value={s.assignee.type}
+                          onChange={(e) => {
+                            const t = e.target.value as 'literal' | 'role' | 'expression'
+                            const assignee =
+                              t === 'literal'
+                                ? { type: 'literal' as const, userId: '' }
+                                : t === 'role'
+                                  ? { type: 'role' as const, role: '' }
+                                  : { type: 'expression' as const, expr: '$submitter' }
+                            setStep(i, { assignee })
+                          }}
+                        >
+                          <option value="expression">
+                            <GeneratedText id="m_121285db1a68ad" />
+                          </option>
+                          <option value="role">
+                            <GeneratedText id="m_1099c1fe8b6614" />
+                          </option>
+                          <option value="literal">
+                            <GeneratedText id="m_14d20bc3fdb3de" />
+                          </option>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-[10px]">
+                          <GeneratedText id="m_078d7e637546f9" />
+                        </Label>
+                        <Input
+                          className="h-7 text-xs"
+                          value={
+                            s.assignee.type === 'literal'
+                              ? s.assignee.userId
+                              : s.assignee.type === 'role'
+                                ? s.assignee.role
+                                : s.assignee.expr
+                          }
+                          onChange={(e) => {
+                            const v = e.target.value
+                            if (s.assignee.type === 'literal')
+                              setStep(i, { assignee: { type: 'literal', userId: v } })
+                            else if (s.assignee.type === 'role')
+                              setStep(i, { assignee: { type: 'role', role: v } })
+                            else setStep(i, { assignee: { type: 'expression', expr: v } })
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={s.signatureRequired ?? false}
+                        onChange={(e) => setStep(i, { signatureRequired: e.target.checked })}
                       />
-                    </div>
-                    <div>
-                      <Label className="text-[10px]">Key (immutable id)</Label>
-                      <Input className="h-7 font-mono text-xs" value={s.key} disabled />
-                    </div>
+                      <GeneratedText id="m_02ffe91f500dc8" />
+                    </label>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-[10px]">Assignee kind</Label>
-                      <Select
-                        className="h-7 text-xs"
-                        value={s.assignee.type}
-                        onChange={(e) => {
-                          const t = e.target.value as 'literal' | 'role' | 'expression'
-                          const assignee =
-                            t === 'literal'
-                              ? { type: 'literal' as const, userId: '' }
-                              : t === 'role'
-                                ? { type: 'role' as const, role: '' }
-                                : { type: 'expression' as const, expr: '$submitter' }
-                          setStep(i, { assignee })
-                        }}
-                      >
-                        <option value="expression">Expression</option>
-                        <option value="role">Role</option>
-                        <option value="literal">Specific user</option>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-[10px]">Assignee value</Label>
-                      <Input
-                        className="h-7 text-xs"
-                        value={
-                          s.assignee.type === 'literal'
-                            ? s.assignee.userId
-                            : s.assignee.type === 'role'
-                              ? s.assignee.role
-                              : s.assignee.expr
-                        }
-                        onChange={(e) => {
-                          const v = e.target.value
-                          if (s.assignee.type === 'literal')
-                            setStep(i, { assignee: { type: 'literal', userId: v } })
-                          else if (s.assignee.type === 'role')
-                            setStep(i, { assignee: { type: 'role', role: v } })
-                          else setStep(i, { assignee: { type: 'expression', expr: v } })
-                        }}
-                      />
-                    </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <IconButton
+                      title={tGenerated('m_1ec1460770eaa0')}
+                      onClick={() => move(i, -1)}
+                      disabled={i === 0}
+                    >
+                      <ArrowUp size={12} />
+                    </IconButton>
+                    <IconButton
+                      title={tGenerated('m_14ab8cefda3cf9')}
+                      onClick={() => move(i, 1)}
+                      disabled={i === steps.length - 1}
+                    >
+                      <ArrowDown size={12} />
+                    </IconButton>
+                    <IconButton
+                      title={tGenerated('m_09aebdb43a47c7')}
+                      onClick={() => remove(i)}
+                      disabled={steps.length === 1}
+                    >
+                      <Trash2 size={12} className="text-red-500" />
+                    </IconButton>
                   </div>
-                  <label className="flex items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={s.signatureRequired ?? false}
-                      onChange={(e) => setStep(i, { signatureRequired: e.target.checked })}
-                    />
-                    Signature required
-                  </label>
                 </div>
-                <div className="flex flex-col items-center gap-1">
-                  <IconButton title="Move up" onClick={() => move(i, -1)} disabled={i === 0}>
-                    <ArrowUp size={12} />
-                  </IconButton>
-                  <IconButton
-                    title="Move down"
-                    onClick={() => move(i, 1)}
-                    disabled={i === steps.length - 1}
-                  >
-                    <ArrowDown size={12} />
-                  </IconButton>
-                  <IconButton
-                    title="Delete (must keep at least one)"
-                    onClick={() => remove(i)}
-                    disabled={steps.length === 1}
-                  >
-                    <Trash2 size={12} className="text-red-500" />
-                  </IconButton>
-                </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            ))}
+          />
         </ul>
         <Button variant="outline" onClick={add} className="w-full">
-          <Plus size={14} /> Add step
+          <Plus size={14} /> <GeneratedText id="m_0ce705b8fa979c" />
         </Button>
       </CardContent>
     </Card>
@@ -1602,71 +1803,98 @@ function FieldProperties({
   return (
     <div className="space-y-3 text-sm">
       <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-        Field — {FIELD_TYPES[field.type]?.label ?? field.type}
+        <GeneratedText id="m_0bff3b64e15427" />{' '}
+        <GeneratedValue value={FIELD_TYPES[field.type]?.label ?? field.type} />
       </h3>
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
-        {tabs
-          .filter((t) => t.show)
-          .map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => setTab(t.value)}
-              className={`-mb-px border-b-2 px-2 py-1 text-xs ${
-                tab === t.value
-                  ? 'border-teal-600 font-semibold text-teal-700 dark:text-teal-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <GeneratedValue
+          value={tabs
+            .filter((t) => t.show)
+            .map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setTab(t.value)}
+                className={`-mb-px border-b-2 px-2 py-1 text-xs ${
+                  tab === t.value
+                    ? 'border-teal-600 font-semibold text-teal-700 dark:text-teal-400'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+              >
+                <GeneratedValue value={t.label} />
+              </button>
+            ))}
+        />
       </div>
 
-      {tab === 'basic' ? (
-        <FieldBasicTab
-          sectionId={sectionId}
-          field={field}
-          schema={schema}
-          locale={locale}
-          defaultLocale={defaultLocale}
-          onChange={onChange}
-        />
-      ) : null}
-      {tab === 'validation' && storesValue ? (
-        <FieldValidationTab field={field} onChange={onChange} />
-      ) : null}
-      {tab === 'logic' ? (
-        <div className="space-y-1">
-          <Label className="text-xs">Show when (showIf)</Label>
-          <p className="text-[10px] text-slate-500">
-            Field is rendered only when all/any clauses match.
-          </p>
-          <LogicBuilder
-            rule={field.showIf}
-            availableFields={otherFields}
-            onChange={(rule) => onChange({ showIf: rule })}
-          />
-        </div>
-      ) : null}
-      {tab === 'default' && storesValue ? (
-        <FieldDefaultTab field={field} onChange={onChange} />
-      ) : null}
-      {tab === 'formula' && isCalcField ? (
-        <div className="space-y-1">
-          <Label className="text-xs">Formula</Label>
-          <p className="text-[10px] text-slate-500">
-            Computed read-only value. Recomputes on every dependency change.
-          </p>
-          <FormulaBuilder
-            value={field.formula as FormulaExpression | undefined}
-            allFields={otherFields}
-            repeatingSections={repeatingSections}
-            pickerFields={pickerFields}
-            onChange={(next) => onChange({ formula: next })}
-          />
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          tab === 'basic' ? (
+            <FieldBasicTab
+              sectionId={sectionId}
+              field={field}
+              schema={schema}
+              locale={locale}
+              defaultLocale={defaultLocale}
+              onChange={onChange}
+            />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          tab === 'validation' && storesValue ? (
+            <FieldValidationTab field={field} onChange={onChange} />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          tab === 'logic' ? (
+            <div className="space-y-1">
+              <Label className="text-xs">
+                <GeneratedText id="m_024d5ac76425dc" />
+              </Label>
+              <p className="text-[10px] text-slate-500">
+                <GeneratedText id="m_0db2c879ad4429" />
+              </p>
+              <LogicBuilder
+                rule={field.showIf}
+                availableFields={otherFields}
+                onChange={(rule) => onChange({ showIf: rule })}
+              />
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          tab === 'default' && storesValue ? (
+            <FieldDefaultTab field={field} onChange={onChange} />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          tab === 'formula' && isCalcField ? (
+            <div className="space-y-1">
+              <Label className="text-xs">
+                <GeneratedText id="m_1f15a1cd1a64c4" />
+              </Label>
+              <p className="text-[10px] text-slate-500">
+                <GeneratedText id="m_0cd91fbbd3fca0" />
+              </p>
+              <FormulaBuilder
+                value={field.formula as FormulaExpression | undefined}
+                allFields={otherFields}
+                repeatingSections={repeatingSections}
+                pickerFields={pickerFields}
+                onChange={(next) => onChange({ formula: next })}
+              />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -1686,6 +1914,7 @@ function FieldBasicTab({
   defaultLocale: AppLocale
   onChange: (patch: Partial<FormField>) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   // Other fields in the app — targets for cascade filters + lookup auto-fill.
   const ownerSection = schema.sections.find((section) => section.id === sectionId)
   const otherFields = schema.sections
@@ -1709,23 +1938,30 @@ function FieldBasicTab({
   return (
     <div className="space-y-3">
       <div className="space-y-1">
-        <Label className="text-xs">Element ID (immutable)</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_13d7101bd1f531" />
+        </Label>
         <Input value={field.id} disabled className="font-mono text-xs" />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Label ({locale.toUpperCase()})</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_1d4f77715c6f3d" />
+          <GeneratedValue value={locale.toUpperCase()} />)
+        </Label>
         <Input
           value={field.label?.[locale] ?? ''}
-          placeholder={localizeText(field.label, locale, field.id, defaultLocale)}
+          placeholder={tGeneratedValue(localizeText(field.label, locale, field.id, defaultLocale))}
           onChange={(e) => onChange({ label: { ...field.label, [locale]: e.target.value } })}
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Help text</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_0d04877b1a742b" />
+        </Label>
         <Textarea
           rows={2}
           value={field.helpText?.[locale] ?? ''}
-          placeholder={localizeText(field.helpText, locale, '', defaultLocale)}
+          placeholder={tGeneratedValue(localizeText(field.helpText, locale, '', defaultLocale))}
           onChange={(e) => {
             const helpText = { ...(field.helpText ?? {}) }
             if (e.target.value) helpText[locale] = e.target.value
@@ -1734,18 +1970,24 @@ function FieldBasicTab({
           }}
         />
       </div>
-      {storesResponseValue(field) ? (
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={field.required ?? false}
-            onChange={(e) => onChange({ required: e.target.checked })}
-          />
-          Required
-        </label>
-      ) : null}
+      <GeneratedValue
+        value={
+          storesResponseValue(field) ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={field.required ?? false}
+                onChange={(e) => onChange({ required: e.target.checked })}
+              />
+              <GeneratedText id="m_12fe2fe7a9ddad" />
+            </label>
+          ) : null
+        }
+      />
       <div className="space-y-1">
-        <Label className="text-xs">Width (columns)</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_14ea5fb193bdaf" />
+        </Label>
         <Select
           className="h-8 text-xs"
           value={String(field.colSpan ?? '')}
@@ -1753,32 +1995,64 @@ function FieldBasicTab({
             onChange({ colSpan: e.target.value ? Number(e.target.value) : undefined })
           }
         >
-          <option value="">Full width</option>
-          <option value="1">1 column</option>
-          <option value="2">2 columns</option>
-          <option value="3">3 columns</option>
-          <option value="4">4 columns</option>
+          <option value="">
+            <GeneratedText id="m_084616b190b17a" />
+          </option>
+          <option value="1">
+            <GeneratedText id="m_1e52a2a939d98d" />
+          </option>
+          <option value="2">
+            <GeneratedText id="m_1bea64a273a741" />
+          </option>
+          <option value="3">
+            <GeneratedText id="m_187f2e9f6a7e22" />
+          </option>
+          <option value="4">
+            <GeneratedText id="m_05625c3d86cd0c" />
+          </option>
         </Select>
-        <p className="text-[10px] text-slate-500">Applies when the section has multiple columns.</p>
+        <p className="text-[10px] text-slate-500">
+          <GeneratedText id="m_0f334abe43e80f" />
+        </p>
       </div>
-      {field.type === 'select' ||
-      field.type === 'radio' ||
-      field.type === 'multi_select' ||
-      field.type === 'checkbox_group' ||
-      field.type === 'ranking' ? (
-        <ChoiceOptionsEditor field={field} locale={locale} onChange={onChange} />
-      ) : null}
-      {field.type === 'table' ? <TableConfigEditor field={field} onChange={onChange} /> : null}
-      {field.type === 'slider' ? <SliderConfigEditor field={field} onChange={onChange} /> : null}
-      {field.type === 'matrix' ? <MatrixConfigEditor field={field} onChange={onChange} /> : null}
-      {field.type === 'lookup' || field.type === 'data_table' || field.type === 'metric' ? (
-        <DataBindingEditor
-          field={field}
-          otherFields={otherFields}
-          autofillFields={autofillFields}
-          onChange={onChange}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          field.type === 'select' ||
+          field.type === 'radio' ||
+          field.type === 'multi_select' ||
+          field.type === 'checkbox_group' ||
+          field.type === 'ranking' ? (
+            <ChoiceOptionsEditor field={field} locale={locale} onChange={onChange} />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          field.type === 'table' ? <TableConfigEditor field={field} onChange={onChange} /> : null
+        }
+      />
+      <GeneratedValue
+        value={
+          field.type === 'slider' ? <SliderConfigEditor field={field} onChange={onChange} /> : null
+        }
+      />
+      <GeneratedValue
+        value={
+          field.type === 'matrix' ? <MatrixConfigEditor field={field} onChange={onChange} /> : null
+        }
+      />
+      <GeneratedValue
+        value={
+          field.type === 'lookup' || field.type === 'data_table' || field.type === 'metric' ? (
+            <DataBindingEditor
+              field={field}
+              otherFields={otherFields}
+              autofillFields={autofillFields}
+              onChange={onChange}
+            />
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -1790,14 +2064,19 @@ function SliderConfigEditor({
   field: FormField
   onChange: (patch: Partial<FormField>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const c = (field.config ?? {}) as { min?: number; max?: number; step?: number; unit?: string }
   const set = (patch: Partial<typeof c>) => onChange({ config: { ...field.config, ...patch } })
   return (
     <div className="space-y-2 rounded-md border border-slate-200 p-2">
-      <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">Range</div>
+      <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+        <GeneratedText id="m_03363edf51ed99" />
+      </div>
       <div className="grid grid-cols-3 gap-2">
         <div className="space-y-1">
-          <Label className="text-xs">Min</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_100639ca393959" />
+          </Label>
           <Input
             type="number"
             value={c.min ?? 0}
@@ -1805,7 +2084,9 @@ function SliderConfigEditor({
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Max</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_1929e34b445f83" />
+          </Label>
           <Input
             type="number"
             value={c.max ?? 10}
@@ -1813,7 +2094,9 @@ function SliderConfigEditor({
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Step</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_0cff7e37da2b3f" />
+          </Label>
           <Input
             type="number"
             value={c.step ?? 1}
@@ -1822,10 +2105,12 @@ function SliderConfigEditor({
         </div>
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Unit (optional)</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_19241615edae92" />
+        </Label>
         <Input
           value={c.unit ?? ''}
-          placeholder="e.g. %, m, °C"
+          placeholder={tGenerated('m_075f330b972a3b')}
           onChange={(e) => set({ unit: e.target.value })}
         />
       </div>
@@ -1840,6 +2125,7 @@ function MatrixConfigEditor({
   field: FormField
   onChange: (patch: Partial<FormField>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const c = (field.config ?? {}) as {
     rows?: { key: string; label: string }[]
     scale?: { value: string; label: string }[]
@@ -1853,7 +2139,7 @@ function MatrixConfigEditor({
       <div>
         <div className="mb-1 flex items-center justify-between">
           <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-            Rows
+            <GeneratedText id="m_03be2202673df4" />
           </span>
           <button
             type="button"
@@ -1862,32 +2148,34 @@ function MatrixConfigEditor({
               setRows([...rows, { key: newId('row'), label: `Row ${rows.length + 1}` }])
             }
           >
-            + Row
+            <GeneratedText id="m_0d067cf371aad1" />
           </button>
         </div>
         <div className="space-y-1">
-          {rows.map((r, i) => (
-            <div key={r.key} className="flex items-center gap-1">
-              <Input
-                value={r.label}
-                onChange={(e) =>
-                  setRows(rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
-                }
-              />
-              <IconButton
-                title="Remove row"
-                onClick={() => setRows(rows.filter((_, j) => j !== i))}
-              >
-                <Trash2 size={13} className="text-red-500" />
-              </IconButton>
-            </div>
-          ))}
+          <GeneratedValue
+            value={rows.map((r, i) => (
+              <div key={r.key} className="flex items-center gap-1">
+                <Input
+                  value={r.label}
+                  onChange={(e) =>
+                    setRows(rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
+                  }
+                />
+                <IconButton
+                  title={tGenerated('m_12b310a027b08a')}
+                  onClick={() => setRows(rows.filter((_, j) => j !== i))}
+                >
+                  <Trash2 size={13} className="text-red-500" />
+                </IconButton>
+              </div>
+            ))}
+          />
         </div>
       </div>
       <div>
         <div className="mb-1 flex items-center justify-between">
           <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-            Scale
+            <GeneratedText id="m_1bd1bb813826dc" />
           </span>
           <button
             type="button"
@@ -1899,33 +2187,35 @@ function MatrixConfigEditor({
               ])
             }
           >
-            + Point
+            <GeneratedText id="m_0f92f0f3b0d515" />
           </button>
         </div>
         <div className="space-y-1">
-          {scale.map((s, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <Input
-                className="w-16 font-mono text-xs"
-                value={s.value}
-                onChange={(e) =>
-                  setScale(scale.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
-                }
-              />
-              <Input
-                value={s.label}
-                onChange={(e) =>
-                  setScale(scale.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
-                }
-              />
-              <IconButton
-                title="Remove point"
-                onClick={() => setScale(scale.filter((_, j) => j !== i))}
-              >
-                <Trash2 size={13} className="text-red-500" />
-              </IconButton>
-            </div>
-          ))}
+          <GeneratedValue
+            value={scale.map((s, i) => (
+              <div key={i} className="flex items-center gap-1">
+                <Input
+                  className="w-16 font-mono text-xs"
+                  value={s.value}
+                  onChange={(e) =>
+                    setScale(scale.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
+                  }
+                />
+                <Input
+                  value={s.label}
+                  onChange={(e) =>
+                    setScale(scale.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
+                  }
+                />
+                <IconButton
+                  title={tGenerated('m_095b70fae90c39')}
+                  onClick={() => setScale(scale.filter((_, j) => j !== i))}
+                >
+                  <Trash2 size={13} className="text-red-500" />
+                </IconButton>
+              </div>
+            ))}
+          />
         </div>
       </div>
     </div>
@@ -2017,7 +2307,7 @@ function DataBindingEditor({
     <div className="space-y-2.5 rounded-md border border-violet-200 bg-violet-50/30 p-2">
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-semibold tracking-wider text-violet-500 uppercase">
-          Data binding
+          <GeneratedText id="m_0d523c82eb812b" />
         </span>
         <a
           href="/admin/data-sources"
@@ -2025,7 +2315,7 @@ function DataBindingEditor({
           rel="noreferrer"
           className="text-[11px] text-violet-700 hover:underline"
         >
-          Manage sources ↗
+          <GeneratedText id="m_1154a02825ffe0" />
         </a>
         <button
           type="button"
@@ -2033,12 +2323,14 @@ function DataBindingEditor({
           className="inline-flex items-center gap-1 text-[11px] text-violet-700 hover:underline"
         >
           <RefreshCw size={11} />
-          Refresh
+          <GeneratedText id="m_16f11d7bc7b7b4" />
         </button>
       </div>
 
       <div className="space-y-1">
-        <Label className="text-xs">Data source</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_1e51e17fccd721" />
+        </Label>
         <Select
           className="h-8 text-xs"
           value={b?.sourceKey ?? ''}
@@ -2051,39 +2343,81 @@ function DataBindingEditor({
             })
           }
         >
-          <option value="">{loading ? 'Loading…' : '— pick a data source —'}</option>
-          {sources.map((s) => (
-            <option key={s.id} value={s.key}>
-              {s.name}
-            </option>
-          ))}
+          <option value="">
+            <GeneratedValue
+              value={
+                loading ? (
+                  <GeneratedText id="m_0e65697ec32c03" />
+                ) : (
+                  <GeneratedText id="m_133fd2d79eb20b" />
+                )
+              }
+            />
+          </option>
+          <GeneratedValue
+            value={sources.map((s) => (
+              <option key={s.id} value={s.key}>
+                <GeneratedValue value={s.name} />
+              </option>
+            ))}
+          />
         </Select>
-        {!loading && sources.length === 0 ? (
-          <p className="text-[10px] text-slate-500">
-            No data sources. Create one in Admin → Data sources.
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            !loading && sources.length === 0 ? (
+              <p className="text-[10px] text-slate-500">
+                <GeneratedText id="m_19589d12bcbbf9" />
+              </p>
+            ) : null
+          }
+        />
       </div>
 
-      {source ? (
-        <>
-          {field.type === 'lookup' ? (
-            <LookupBindingFields
-              b={b}
-              cols={cols}
-              otherFields={otherFields}
-              autofillFields={autofillFields}
-              patch={patch}
-            />
-          ) : null}
-          {field.type === 'data_table' ? (
-            <DataTableBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
-          ) : null}
-          {field.type === 'metric' ? (
-            <MetricBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
-          ) : null}
-        </>
-      ) : null}
+      <GeneratedValue
+        value={
+          source ? (
+            <>
+              <GeneratedValue
+                value={
+                  field.type === 'lookup' ? (
+                    <LookupBindingFields
+                      b={b}
+                      cols={cols}
+                      otherFields={otherFields}
+                      autofillFields={autofillFields}
+                      patch={patch}
+                    />
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  field.type === 'data_table' ? (
+                    <DataTableBindingFields
+                      b={b}
+                      cols={cols}
+                      otherFields={otherFields}
+                      patch={patch}
+                    />
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  field.type === 'metric' ? (
+                    <MetricBindingFields
+                      b={b}
+                      cols={cols}
+                      otherFields={otherFields}
+                      patch={patch}
+                    />
+                  ) : null
+                }
+              />
+            </>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -2101,38 +2435,51 @@ function LookupBindingFields({
   autofillFields: { id: string; label: string }[]
   patch: (p: Partial<DataBinding>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const autofill = b?.autofill ?? []
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <Label className="text-xs">Show (label)</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_16ba74a70fdc2f" />
+          </Label>
           <Select
             className="h-8 text-xs"
             value={b?.labelColumn ?? ''}
             onChange={(e) => patch({ labelColumn: e.target.value || undefined })}
           >
-            <option value="">First column</option>
-            {cols.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.label}
-              </option>
-            ))}
+            <option value="">
+              <GeneratedText id="m_05f3fa04f45bf8" />
+            </option>
+            <GeneratedValue
+              value={cols.map((c) => (
+                <option key={c.key} value={c.key}>
+                  <GeneratedValue value={c.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Store (value)</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_01c681f83ca98e" />
+          </Label>
           <Select
             className="h-8 text-xs"
             value={b?.valueColumn ?? ''}
             onChange={(e) => patch({ valueColumn: e.target.value || undefined })}
           >
-            <option value="">Row id</option>
-            {cols.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.label}
-              </option>
-            ))}
+            <option value="">
+              <GeneratedText id="m_09b1bf9aa5d2cc" />
+            </option>
+            <GeneratedValue
+              value={cols.map((c) => (
+                <option key={c.key} value={c.key}>
+                  <GeneratedValue value={c.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
       </div>
@@ -2140,7 +2487,9 @@ function LookupBindingFields({
       <CascadeBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
 
       <div className="space-y-1">
-        <Label className="text-xs">Results per search</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_0d55cb5819a8ab" />
+        </Label>
         <Input
           type="number"
           min={1}
@@ -2151,14 +2500,14 @@ function LookupBindingFields({
           onChange={(e) => patch({ limit: e.target.value ? Number(e.target.value) : undefined })}
         />
         <p className="text-[10px] text-slate-500">
-          The lookup searches the full source remotely and returns this many matches at a time.
+          <GeneratedText id="m_1c39dfb38ad051" />
         </p>
       </div>
 
       <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-            Auto-fill on select
+            <GeneratedText id="m_1aa941e2f78dc5" />
           </span>
           <button
             type="button"
@@ -2172,60 +2521,68 @@ function LookupBindingFields({
               })
             }
           >
-            + Mapping
+            <GeneratedText id="m_0e2a97913eb84b" />
           </button>
         </div>
-        {autofill.length === 0 ? (
-          <p className="text-[10px] text-slate-500">
-            Copy a column from the picked row into another field.
-          </p>
-        ) : (
-          autofill.map((m, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <Select
-                className="h-8 text-xs"
-                value={m.column}
-                onChange={(e) =>
-                  patch({
-                    autofill: autofill.map((x, j) =>
-                      j === i ? { ...x, column: e.target.value } : x,
-                    ),
-                  })
-                }
-              >
-                {cols.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {c.label}
-                  </option>
-                ))}
-              </Select>
-              <span className="text-slate-400">→</span>
-              <Select
-                className="h-8 text-xs"
-                value={m.targetFieldId}
-                onChange={(e) =>
-                  patch({
-                    autofill: autofill.map((x, j) =>
-                      j === i ? { ...x, targetFieldId: e.target.value } : x,
-                    ),
-                  })
-                }
-              >
-                {autofillFields.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.label}
-                  </option>
-                ))}
-              </Select>
-              <IconButton
-                title="Remove mapping"
-                onClick={() => patch({ autofill: autofill.filter((_, j) => j !== i) })}
-              >
-                <Trash2 size={13} className="text-red-500" />
-              </IconButton>
-            </div>
-          ))
-        )}
+        <GeneratedValue
+          value={
+            autofill.length === 0 ? (
+              <p className="text-[10px] text-slate-500">
+                <GeneratedText id="m_125586069a681f" />
+              </p>
+            ) : (
+              autofill.map((m, i) => (
+                <div key={i} className="flex items-center gap-1">
+                  <Select
+                    className="h-8 text-xs"
+                    value={m.column}
+                    onChange={(e) =>
+                      patch({
+                        autofill: autofill.map((x, j) =>
+                          j === i ? { ...x, column: e.target.value } : x,
+                        ),
+                      })
+                    }
+                  >
+                    <GeneratedValue
+                      value={cols.map((c) => (
+                        <option key={c.key} value={c.key}>
+                          <GeneratedValue value={c.label} />
+                        </option>
+                      ))}
+                    />
+                  </Select>
+                  <span className="text-slate-400">→</span>
+                  <Select
+                    className="h-8 text-xs"
+                    value={m.targetFieldId}
+                    onChange={(e) =>
+                      patch({
+                        autofill: autofill.map((x, j) =>
+                          j === i ? { ...x, targetFieldId: e.target.value } : x,
+                        ),
+                      })
+                    }
+                  >
+                    <GeneratedValue
+                      value={autofillFields.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          <GeneratedValue value={f.label} />
+                        </option>
+                      ))}
+                    />
+                  </Select>
+                  <IconButton
+                    title={tGenerated('m_1d82f43c88df4c')}
+                    onClick={() => patch({ autofill: autofill.filter((_, j) => j !== i) })}
+                  >
+                    <Trash2 size={13} className="text-red-500" />
+                  </IconButton>
+                </div>
+              ))
+            )
+          }
+        />
       </div>
     </div>
   )
@@ -2245,11 +2602,13 @@ function CascadeBindingFields({
   return (
     <div className="space-y-1.5 rounded border border-slate-200 bg-white p-2">
       <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-        Cascade (optional)
+        <GeneratedText id="m_171519729cccb4" />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <Label className="text-xs">Filter by field</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_0bb347c23433ea" />
+          </Label>
           <Select
             className="h-8 text-xs"
             value={b?.filterByField ?? ''}
@@ -2261,16 +2620,22 @@ function CascadeBindingFields({
               )
             }
           >
-            <option value="">— none —</option>
-            {otherFields.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.label}
-              </option>
-            ))}
+            <option value="">
+              <GeneratedText id="m_0206c945814606" />
+            </option>
+            <GeneratedValue
+              value={otherFields.map((f) => (
+                <option key={f.id} value={f.id}>
+                  <GeneratedValue value={f.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Matched on column</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_0fdf1d8380c89b" />
+          </Label>
           <Select
             className="h-8 text-xs"
             value={b?.filterColumn ?? ''}
@@ -2278,17 +2643,18 @@ function CascadeBindingFields({
             onChange={(e) => patch({ filterColumn: e.target.value || undefined })}
           >
             <option value="">—</option>
-            {cols.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.label}
-              </option>
-            ))}
+            <GeneratedValue
+              value={cols.map((c) => (
+                <option key={c.key} value={c.key}>
+                  <GeneratedValue value={c.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
       </div>
       <p className="text-[10px] text-slate-500">
-        Only show rows whose column matches the parent field&apos;s value — e.g. Area filtered by
-        the chosen Site.
+        <GeneratedText id="m_03f068cc4e9384" />
       </p>
     </div>
   )
@@ -2316,40 +2682,54 @@ function DataTableBindingFields({
     <div className="space-y-2">
       <CascadeBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
       <div className="space-y-1">
-        <Label className="text-xs">Columns shown</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_16f13907f8a65a" />
+        </Label>
         <div className="flex flex-wrap gap-1.5 rounded border border-slate-200 bg-white p-1.5">
-          {cols.map((c) => {
-            const on = allShown || shown.includes(c.key)
-            return (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => toggle(c.key)}
-                className={`rounded px-1.5 py-0.5 text-[11px] ${
-                  on ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-400 line-through'
-                }`}
-              >
-                {c.label}
-              </button>
-            )
-          })}
+          <GeneratedValue
+            value={cols.map((c) => {
+              const on = allShown || shown.includes(c.key)
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => toggle(c.key)}
+                  className={`rounded px-1.5 py-0.5 text-[11px] ${
+                    on ? 'bg-teal-100 text-teal-800' : 'bg-slate-100 text-slate-400 line-through'
+                  }`}
+                >
+                  <GeneratedValue value={c.label} />
+                </button>
+              )
+            })}
+          />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <Label className="text-xs">Selection</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_14b18c80af7bd4" />
+          </Label>
           <Select
             className="h-8 text-xs"
             value={b?.selectable ?? 'none'}
             onChange={(e) => patch({ selectable: e.target.value as DataBinding['selectable'] })}
           >
-            <option value="none">Display only</option>
-            <option value="single">Pick one row</option>
-            <option value="multi">Pick many rows</option>
+            <option value="none">
+              <GeneratedText id="m_081e61fc5c2c75" />
+            </option>
+            <option value="single">
+              <GeneratedText id="m_13fad263e7e722" />
+            </option>
+            <option value="multi">
+              <GeneratedText id="m_084985ef288213" />
+            </option>
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Rows per page</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_1ab6807a4e8f9e" />
+          </Label>
           <Input
             type="number"
             min={1}
@@ -2376,6 +2756,7 @@ function MetricBindingFields({
   otherFields: { id: string; label: string }[]
   patch: (p: Partial<DataBinding>) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const agg = b?.aggregate ?? { fn: 'count' as const }
   const setAgg = (p: Partial<NonNullable<DataBinding['aggregate']>>) =>
     patch({ aggregate: { ...agg, ...p } })
@@ -2385,7 +2766,9 @@ function MetricBindingFields({
       <CascadeBindingFields b={b} cols={cols} otherFields={otherFields} patch={patch} />
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <Label className="text-xs">Aggregate</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_102bef82722058" />
+          </Label>
           <Select
             className="h-8 text-xs"
             value={agg.fn}
@@ -2394,33 +2777,59 @@ function MetricBindingFields({
               setAgg(fn === 'count' ? { fn, column: undefined } : { fn })
             }}
           >
-            <option value="count">Count</option>
-            <option value="sum">Sum</option>
-            <option value="avg">Average</option>
-            <option value="min">Min</option>
-            <option value="max">Max</option>
+            <option value="count">
+              <GeneratedText id="m_1842bc939bfcba" />
+            </option>
+            <option value="sum">
+              <GeneratedText id="m_00e3dc04ba481d" />
+            </option>
+            <option value="avg">
+              <GeneratedText id="m_1a72c3bcdfab4a" />
+            </option>
+            <option value="min">
+              <GeneratedText id="m_100639ca393959" />
+            </option>
+            <option value="max">
+              <GeneratedText id="m_1929e34b445f83" />
+            </option>
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Of column</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_166da8c01a8107" />
+          </Label>
           <Select
             className="h-8 text-xs"
             value={agg.column ?? ''}
             disabled={!needsColumn}
             onChange={(e) => setAgg({ column: e.target.value || undefined })}
           >
-            <option value="">{needsColumn ? '— pick —' : 'n/a'}</option>
-            {cols.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.label}
-              </option>
-            ))}
+            <option value="">
+              <GeneratedValue
+                value={
+                  needsColumn ? (
+                    <GeneratedText id="m_1e9cb0f49f978f" />
+                  ) : (
+                    <GeneratedText id="m_0e9b9d196d5362" />
+                  )
+                }
+              />
+            </option>
+            <GeneratedValue
+              value={cols.map((c) => (
+                <option key={c.key} value={c.key}>
+                  <GeneratedValue value={c.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <Label className="text-xs">Group by</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_175ee59112fb66" />
+          </Label>
           <Select
             className="h-8 text-xs"
             value={agg.groupBy ?? ''}
@@ -2432,52 +2841,76 @@ function MetricBindingFields({
               })
             }}
           >
-            <option value="">— no grouping —</option>
-            {cols.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.label}
-              </option>
-            ))}
+            <option value="">
+              <GeneratedText id="m_07bdb943825673" />
+            </option>
+            <GeneratedValue
+              value={cols.map((c) => (
+                <option key={c.key} value={c.key}>
+                  <GeneratedValue value={c.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Display</Label>
+          <Label className="text-xs">
+            <GeneratedText id="m_06b9949f5fa1bc" />
+          </Label>
           <Select
             className="h-8 text-xs"
             value={b?.display ?? (agg.groupBy ? 'bar' : 'number')}
             onChange={(e) => patch({ display: e.target.value as DataBinding['display'] })}
           >
-            {agg.groupBy ? (
-              <>
-                <option value="bar">Bar chart</option>
-                <option value="pie">Pie chart</option>
-              </>
-            ) : (
-              <option value="number">Number</option>
-            )}
+            <GeneratedValue
+              value={
+                agg.groupBy ? (
+                  <>
+                    <option value="bar">
+                      <GeneratedText id="m_1f31687fbad36d" />
+                    </option>
+                    <option value="pie">
+                      <GeneratedText id="m_17150fa51c44cf" />
+                    </option>
+                  </>
+                ) : (
+                  <option value="number">
+                    <GeneratedText id="m_0eb8e31d1f4abb" />
+                  </option>
+                )
+              }
+            />
           </Select>
         </div>
       </div>
       <p className="text-[10px] text-slate-500">
-        Group by a column to render a chart; leave it blank for a single KPI number.
+        <GeneratedText id="m_067480a82419f2" />
       </p>
-      {agg.groupBy ? (
-        <div className="space-y-1">
-          <Label className="text-xs">Groups shown</Label>
-          <Input
-            type="number"
-            min={1}
-            max={1000}
-            className="h-8 text-xs"
-            value={b?.limit ?? ''}
-            placeholder={b?.display === 'pie' ? '8' : '12'}
-            onChange={(e) => patch({ limit: e.target.value ? Number(e.target.value) : undefined })}
-          />
-          <p className="text-[10px] text-slate-500">
-            Limits displayed groups only. The aggregate still uses every matching record.
-          </p>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          agg.groupBy ? (
+            <div className="space-y-1">
+              <Label className="text-xs">
+                <GeneratedText id="m_147c46b5f494d3" />
+              </Label>
+              <Input
+                type="number"
+                min={1}
+                max={1000}
+                className="h-8 text-xs"
+                value={b?.limit ?? ''}
+                placeholder={tGeneratedValue(b?.display === 'pie' ? '8' : '12')}
+                onChange={(e) =>
+                  patch({ limit: e.target.value ? Number(e.target.value) : undefined })
+                }
+              />
+              <p className="text-[10px] text-slate-500">
+                <GeneratedText id="m_018f962bfee661" />
+              </p>
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -2489,6 +2922,7 @@ function FieldValidationTab({
   field: FormField
   onChange: (patch: Partial<FormField>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const v = field.validation ?? {}
   function set(patch: Partial<typeof v>) {
     const next = { ...v, ...patch }
@@ -2514,76 +2948,101 @@ function FieldValidationTab({
           checked={v.required ?? field.required ?? false}
           onChange={(e) => set({ required: e.target.checked })}
         />
-        Required (validated)
+        <GeneratedText id="m_0316664a18ded7" />
       </label>
-      {isNumeric ? (
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label className="text-xs">Min</Label>
-            <Input
-              type="number"
-              value={v.min ?? ''}
-              onChange={(e) =>
-                set({ min: e.target.value === '' ? undefined : Number(e.target.value) })
-              }
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Max</Label>
-            <Input
-              type="number"
-              value={v.max ?? ''}
-              onChange={(e) =>
-                set({ max: e.target.value === '' ? undefined : Number(e.target.value) })
-              }
-            />
-          </div>
-        </div>
-      ) : null}
-      {isText ? (
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label className="text-xs">Min length</Label>
-            <Input
-              type="number"
-              value={v.minLength ?? ''}
-              onChange={(e) =>
-                set({ minLength: e.target.value === '' ? undefined : Number(e.target.value) })
-              }
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Max length</Label>
-            <Input
-              type="number"
-              value={v.maxLength ?? ''}
-              onChange={(e) =>
-                set({ maxLength: e.target.value === '' ? undefined : Number(e.target.value) })
-              }
-            />
-          </div>
-        </div>
-      ) : null}
-      {isText ? (
-        <div className="space-y-1">
-          <Label className="text-xs">Fixed-format pattern</Label>
-          <Input
-            value={v.pattern ?? ''}
-            onChange={(e) => set({ pattern: e.target.value || undefined })}
-            placeholder="e.g. ^[A-Z]{2}-[0-9]{4}$"
-          />
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            Start with ^, end with $, and use exact {'{n}'} repeats. Variable repeats and alternate
-            branches are not accepted.
-          </p>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          isNumeric ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  <GeneratedText id="m_100639ca393959" />
+                </Label>
+                <Input
+                  type="number"
+                  value={v.min ?? ''}
+                  onChange={(e) =>
+                    set({ min: e.target.value === '' ? undefined : Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  <GeneratedText id="m_1929e34b445f83" />
+                </Label>
+                <Input
+                  type="number"
+                  value={v.max ?? ''}
+                  onChange={(e) =>
+                    set({ max: e.target.value === '' ? undefined : Number(e.target.value) })
+                  }
+                />
+              </div>
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          isText ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  <GeneratedText id="m_141aeed76d15ff" />
+                </Label>
+                <Input
+                  type="number"
+                  value={v.minLength ?? ''}
+                  onChange={(e) =>
+                    set({ minLength: e.target.value === '' ? undefined : Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  <GeneratedText id="m_0806911c39f2f6" />
+                </Label>
+                <Input
+                  type="number"
+                  value={v.maxLength ?? ''}
+                  onChange={(e) =>
+                    set({ maxLength: e.target.value === '' ? undefined : Number(e.target.value) })
+                  }
+                />
+              </div>
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          isText ? (
+            <div className="space-y-1">
+              <Label className="text-xs">
+                <GeneratedText id="m_1357113b889d93" />
+              </Label>
+              <Input
+                value={v.pattern ?? ''}
+                onChange={(e) => set({ pattern: e.target.value || undefined })}
+                placeholder={tGenerated('m_16907e8a555a15')}
+              />
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                <GeneratedText id="m_1653ad0a199171" />{' '}
+                <GeneratedValue value={<GeneratedText id="m_1a3262f89c2c42" />} />{' '}
+                <GeneratedText id="m_00b3d8649525da" />
+              </p>
+            </div>
+          ) : null
+        }
+      />
       <div className="space-y-1">
-        <Label className="text-xs">Custom error message</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_1a014cc338576c" />
+        </Label>
         <Input
           value={v.message ?? ''}
           onChange={(e) => set({ message: e.target.value || undefined })}
-          placeholder="Overrides the default validator message"
+          placeholder={tGenerated('m_1737e921e5c6c6')}
         />
       </div>
     </div>
@@ -2597,6 +3056,7 @@ function FieldDefaultTab({
   field: FormField
   onChange: (patch: Partial<FormField>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const d = field.defaultValue as DefaultValueExpression | undefined
   const kind = d?.kind ?? ''
   function setKind(next: string) {
@@ -2621,22 +3081,42 @@ function FieldDefaultTab({
   }
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-500">Applied on first render when this field is empty.</p>
+      <p className="text-xs text-slate-500">
+        <GeneratedText id="m_0de21bd4fd99e9" />
+      </p>
       <Select className="h-8 text-xs" value={kind} onChange={(e) => setKind(e.target.value)}>
-        <option value="">— No default —</option>
-        <option value="literal">Literal value</option>
-        <option value="today">Today's date</option>
-        <option value="now">Right now</option>
-        <option value="current_user_person_id">Current user's person id</option>
-        <option value="current_user_name">Current user's name</option>
+        <option value="">
+          <GeneratedText id="m_19cb3d08d7cf8b" />
+        </option>
+        <option value="literal">
+          <GeneratedText id="m_072c403a2888cc" />
+        </option>
+        <option value="today">
+          <GeneratedText id="m_07a34c5793fae3" />
+        </option>
+        <option value="now">
+          <GeneratedText id="m_056ab11e3f02b7" />
+        </option>
+        <option value="current_user_person_id">
+          <GeneratedText id="m_16cbc26a617eaa" />
+        </option>
+        <option value="current_user_name">
+          <GeneratedText id="m_0e286f91bad985" />
+        </option>
       </Select>
-      {d?.kind === 'literal' ? (
-        <Input
-          value={String(d.value ?? '')}
-          onChange={(e) => onChange({ defaultValue: { kind: 'literal', value: e.target.value } })}
-          placeholder="Literal default value"
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          d?.kind === 'literal' ? (
+            <Input
+              value={String(d.value ?? '')}
+              onChange={(e) =>
+                onChange({ defaultValue: { kind: 'literal', value: e.target.value } })
+              }
+              placeholder={tGenerated('m_0776e7f56fd55a')}
+            />
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -2650,51 +3130,62 @@ function ChoiceOptionsEditor({
   locale: AppLocale
   onChange: (patch: Partial<FormField>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const options = field.validation?.options ?? []
   const update = (next: typeof options) =>
     onChange({ validation: { ...field.validation, options: next } })
   return (
     <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50/50 p-2">
-      <div className="text-xs font-semibold text-slate-600">Options</div>
-      {options.length === 0 ? (
-        <p className="text-xs text-slate-500">No options.</p>
-      ) : (
-        <ul className="space-y-1">
-          {options.map((opt, i) => (
-            <li key={i} className="flex items-center gap-1">
-              <Input
-                className="h-8 flex-1 text-xs"
-                value={opt.value}
-                placeholder="value"
-                onChange={(e) => {
-                  const next = [...options]
-                  next[i] = { ...opt, value: e.target.value }
-                  update(next)
-                }}
+      <div className="text-xs font-semibold text-slate-600">
+        <GeneratedText id="m_0e69ebb67d27c2" />
+      </div>
+      <GeneratedValue
+        value={
+          options.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              <GeneratedText id="m_06a6b6820d522d" />
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              <GeneratedValue
+                value={options.map((opt, i) => (
+                  <li key={i} className="flex items-center gap-1">
+                    <Input
+                      className="h-8 flex-1 text-xs"
+                      value={opt.value}
+                      placeholder={tGenerated('m_1ed2cc27e05841')}
+                      onChange={(e) => {
+                        const next = [...options]
+                        next[i] = { ...opt, value: e.target.value }
+                        update(next)
+                      }}
+                    />
+                    <Input
+                      className="h-8 flex-1 text-xs"
+                      value={opt.label?.[locale] ?? ''}
+                      placeholder={tGenerated('m_02a6c587f3d3fb')}
+                      onChange={(e) => {
+                        const next = [...options]
+                        next[i] = {
+                          ...opt,
+                          label: { ...(opt.label ?? {}), [locale]: e.target.value },
+                        }
+                        update(next)
+                      }}
+                    />
+                    <button
+                      onClick={() => update(options.filter((_, j) => j !== i))}
+                      className="text-slate-400 hover:text-red-500"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </li>
+                ))}
               />
-              <Input
-                className="h-8 flex-1 text-xs"
-                value={opt.label?.[locale] ?? ''}
-                placeholder="label"
-                onChange={(e) => {
-                  const next = [...options]
-                  next[i] = {
-                    ...opt,
-                    label: { ...(opt.label ?? {}), [locale]: e.target.value },
-                  }
-                  update(next)
-                }}
-              />
-              <button
-                onClick={() => update(options.filter((_, j) => j !== i))}
-                className="text-slate-400 hover:text-red-500"
-              >
-                <Trash2 size={12} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+            </ul>
+          )
+        }
+      />
       <Button
         size="sm"
         variant="outline"
@@ -2709,7 +3200,7 @@ function ChoiceOptionsEditor({
         }
       >
         <Plus size={12} />
-        Add option
+        <GeneratedText id="m_157bc1fc2157b9" />
       </Button>
     </div>
   )
@@ -2724,6 +3215,7 @@ function TableConfigEditor({
   field: FormField
   onChange: (patch: Partial<FormField>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const config = (field.config ?? {}) as Partial<TableConfig>
   const columns = (config.columns ?? []) as TableColumn[]
   const rowMode = config.rowMode === 'fixed' ? 'fixed' : 'addable'
@@ -2737,10 +3229,14 @@ function TableConfigEditor({
 
   return (
     <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50/50 p-2">
-      <div className="text-xs font-semibold text-slate-600">Table setup</div>
+      <div className="text-xs font-semibold text-slate-600">
+        <GeneratedText id="m_0d25e53152dc0a" />
+      </div>
 
       <div className="space-y-1">
-        <Label className="text-xs">Rows</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_03be2202673df4" />
+        </Label>
         <Select
           className="h-8 text-xs"
           value={rowMode}
@@ -2753,116 +3249,160 @@ function TableConfigEditor({
             )
           }}
         >
-          <option value="addable">Addable — user adds / removes rows</option>
-          <option value="fixed">Predefined — fixed list of rows</option>
+          <option value="addable">
+            <GeneratedText id="m_1dfcc576efac56" />
+          </option>
+          <option value="fixed">
+            <GeneratedText id="m_01db033c04b030" />
+          </option>
         </Select>
       </div>
 
-      {rowMode === 'addable' ? (
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <Label className="text-xs">Min rows</Label>
-            <Input
-              type="number"
-              className="h-8 text-xs"
-              value={config.minRows ?? ''}
-              onChange={(e) =>
-                setConfig({ minRows: e.target.value === '' ? undefined : Number(e.target.value) })
-              }
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Max rows</Label>
-            <Input
-              type="number"
-              className="h-8 text-xs"
-              value={config.maxRows ?? ''}
-              onChange={(e) =>
-                setConfig({ maxRows: e.target.value === '' ? undefined : Number(e.target.value) })
-              }
-            />
-          </div>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          rowMode === 'addable' ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  <GeneratedText id="m_00c5b5a40a72f6" />
+                </Label>
+                <Input
+                  type="number"
+                  className="h-8 text-xs"
+                  value={config.minRows ?? ''}
+                  onChange={(e) =>
+                    setConfig({
+                      minRows: e.target.value === '' ? undefined : Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  <GeneratedText id="m_199de632ae64e0" />
+                </Label>
+                <Input
+                  type="number"
+                  className="h-8 text-xs"
+                  value={config.maxRows ?? ''}
+                  onChange={(e) =>
+                    setConfig({
+                      maxRows: e.target.value === '' ? undefined : Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+            </div>
+          ) : null
+        }
+      />
 
       <div className="space-y-2">
         <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-          Columns
+          <GeneratedText id="m_04eacfda3069db" />
         </div>
-        {columns.length === 0 ? (
-          <p className="text-xs text-slate-500">No columns.</p>
-        ) : (
-          <ul className="space-y-2">
-            {columns.map((c, i) => (
-              <li key={i} className="space-y-1 rounded border border-slate-200 bg-white p-2">
-                <div className="flex items-center gap-1">
-                  <Input
-                    className="h-7 flex-1 text-xs"
-                    value={c.label}
-                    placeholder="Column label"
-                    onChange={(e) =>
-                      setColumns(
-                        columns.map((x, idx) => (idx === i ? { ...x, label: e.target.value } : x)),
-                      )
-                    }
-                  />
-                  <Select
-                    className="h-7 w-24 text-xs"
-                    value={c.type}
-                    onChange={(e) => {
-                      const type = e.target.value as TableColumn['type']
-                      setColumns(
-                        columns.map((x, idx) =>
-                          idx === i
-                            ? {
-                                ...x,
-                                type,
-                                options: type === 'select' ? (x.options ?? []) : undefined,
+        <GeneratedValue
+          value={
+            columns.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                <GeneratedText id="m_09750de58b1490" />
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                <GeneratedValue
+                  value={columns.map((c, i) => (
+                    <li key={i} className="space-y-1 rounded border border-slate-200 bg-white p-2">
+                      <div className="flex items-center gap-1">
+                        <Input
+                          className="h-7 flex-1 text-xs"
+                          value={c.label}
+                          placeholder={tGenerated('m_1e2be77312c5b8')}
+                          onChange={(e) =>
+                            setColumns(
+                              columns.map((x, idx) =>
+                                idx === i ? { ...x, label: e.target.value } : x,
+                              ),
+                            )
+                          }
+                        />
+                        <Select
+                          className="h-7 w-24 text-xs"
+                          value={c.type}
+                          onChange={(e) => {
+                            const type = e.target.value as TableColumn['type']
+                            setColumns(
+                              columns.map((x, idx) =>
+                                idx === i
+                                  ? {
+                                      ...x,
+                                      type,
+                                      options: type === 'select' ? (x.options ?? []) : undefined,
+                                    }
+                                  : x,
+                              ),
+                            )
+                          }}
+                        >
+                          <option value="text">
+                            <GeneratedText id="m_1ca9a0811729da" />
+                          </option>
+                          <option value="number">
+                            <GeneratedText id="m_0eb8e31d1f4abb" />
+                          </option>
+                          <option value="select">
+                            <GeneratedText id="m_0e0590c996818d" />
+                          </option>
+                          <option value="checkbox">
+                            <GeneratedText id="m_18a52c9dc00328" />
+                          </option>
+                          <option value="date">
+                            <GeneratedText id="m_0285c38761c540" />
+                          </option>
+                        </Select>
+                        <button
+                          type="button"
+                          onClick={() => setColumns(columns.filter((_, idx) => idx !== i))}
+                          className="rounded p-1 text-slate-400 hover:text-red-500"
+                          title={tGenerated('m_0605fd789eea1e')}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                      <Input
+                        className="h-7 font-mono text-[11px]"
+                        value={c.key}
+                        placeholder={tGenerated('m_1d19a02fd2872f')}
+                        onChange={(e) =>
+                          setColumns(
+                            columns.map((x, idx) =>
+                              idx === i ? { ...x, key: e.target.value.replace(/\s+/g, '_') } : x,
+                            ),
+                          )
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          c.type === 'select' ? (
+                            <TableColumnOptions
+                              options={c.options ?? []}
+                              onChange={(opts) =>
+                                setColumns(
+                                  columns.map((x, idx) =>
+                                    idx === i ? { ...x, options: opts } : x,
+                                  ),
+                                )
                               }
-                            : x,
-                        ),
-                      )
-                    }}
-                  >
-                    <option value="text">Text</option>
-                    <option value="number">Number</option>
-                    <option value="select">Dropdown</option>
-                    <option value="checkbox">Checkbox</option>
-                    <option value="date">Date</option>
-                  </Select>
-                  <button
-                    type="button"
-                    onClick={() => setColumns(columns.filter((_, idx) => idx !== i))}
-                    className="rounded p-1 text-slate-400 hover:text-red-500"
-                    title="Remove column"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-                <Input
-                  className="h-7 font-mono text-[11px]"
-                  value={c.key}
-                  placeholder="key"
-                  onChange={(e) =>
-                    setColumns(
-                      columns.map((x, idx) =>
-                        idx === i ? { ...x, key: e.target.value.replace(/\s+/g, '_') } : x,
-                      ),
-                    )
-                  }
+                            />
+                          ) : null
+                        }
+                      />
+                    </li>
+                  ))}
                 />
-                {c.type === 'select' ? (
-                  <TableColumnOptions
-                    options={c.options ?? []}
-                    onChange={(opts) =>
-                      setColumns(columns.map((x, idx) => (idx === i ? { ...x, options: opts } : x)))
-                    }
-                  />
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
+              </ul>
+            )
+          }
+        />
         <Button
           size="sm"
           variant="outline"
@@ -2871,52 +3411,66 @@ function TableConfigEditor({
             setColumns([...columns, { key: `col_${n}`, label: `Column ${n}`, type: 'text' }])
           }}
         >
-          <Plus size={12} /> Add column
+          <Plus size={12} /> <GeneratedText id="m_059cd549852b55" />
         </Button>
       </div>
 
-      {rowMode === 'fixed' ? (
-        <div className="space-y-2">
-          <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-            Predefined rows
-          </div>
-          {fixedRows.length === 0 ? (
-            <p className="text-xs text-slate-500">No rows.</p>
-          ) : (
-            <ul className="space-y-1">
-              {fixedRows.map((r, i) => (
-                <li key={i} className="flex items-center gap-1">
-                  <Input
-                    className="h-7 flex-1 text-xs"
-                    value={r.label}
-                    placeholder="Row label"
-                    onChange={(e) =>
-                      setRows(
-                        fixedRows.map((x, idx) => (idx === i ? { label: e.target.value } : x)),
-                      )
-                    }
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setRows(fixedRows.filter((_, idx) => idx !== i))}
-                    className="rounded p-1 text-slate-400 hover:text-red-500"
-                    title="Remove row"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setRows([...fixedRows, { label: `Row ${fixedRows.length + 1}` }])}
-          >
-            <Plus size={12} /> Add row
-          </Button>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          rowMode === 'fixed' ? (
+            <div className="space-y-2">
+              <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                <GeneratedText id="m_159e1e93b7e19d" />
+              </div>
+              <GeneratedValue
+                value={
+                  fixedRows.length === 0 ? (
+                    <p className="text-xs text-slate-500">
+                      <GeneratedText id="m_126f736e7419f7" />
+                    </p>
+                  ) : (
+                    <ul className="space-y-1">
+                      <GeneratedValue
+                        value={fixedRows.map((r, i) => (
+                          <li key={i} className="flex items-center gap-1">
+                            <Input
+                              className="h-7 flex-1 text-xs"
+                              value={r.label}
+                              placeholder={tGenerated('m_0f24da1a05270a')}
+                              onChange={(e) =>
+                                setRows(
+                                  fixedRows.map((x, idx) =>
+                                    idx === i ? { label: e.target.value } : x,
+                                  ),
+                                )
+                              }
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setRows(fixedRows.filter((_, idx) => idx !== i))}
+                              className="rounded p-1 text-slate-400 hover:text-red-500"
+                              title={tGenerated('m_12b310a027b08a')}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </li>
+                        ))}
+                      />
+                    </ul>
+                  )
+                }
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setRows([...fixedRows, { label: `Row ${fixedRows.length + 1}` }])}
+              >
+                <Plus size={12} /> <GeneratedText id="m_1eabd71bbc0199" />
+              </Button>
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -2928,39 +3482,42 @@ function TableColumnOptions({
   options: { value: string; label: string }[]
   onChange: (opts: { value: string; label: string }[]) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="space-y-1 rounded border border-slate-100 bg-slate-50 p-1.5">
       <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-        Options
+        <GeneratedText id="m_0e69ebb67d27c2" />
       </div>
-      {options.map((o, i) => (
-        <div key={i} className="flex items-center gap-1">
-          <Input
-            className="h-6 flex-1 text-[11px]"
-            value={o.label}
-            placeholder="Option label"
-            onChange={(e) =>
-              onChange(
-                options.map((x, idx) =>
-                  idx === i
-                    ? {
-                        value: x.value || e.target.value.toLowerCase().replace(/\s+/g, '_'),
-                        label: e.target.value,
-                      }
-                    : x,
-                ),
-              )
-            }
-          />
-          <button
-            type="button"
-            onClick={() => onChange(options.filter((_, idx) => idx !== i))}
-            className="rounded p-0.5 text-slate-400 hover:text-red-500"
-          >
-            <Trash2 size={11} />
-          </button>
-        </div>
-      ))}
+      <GeneratedValue
+        value={options.map((o, i) => (
+          <div key={i} className="flex items-center gap-1">
+            <Input
+              className="h-6 flex-1 text-[11px]"
+              value={o.label}
+              placeholder={tGenerated('m_044a5abd7d3ad4')}
+              onChange={(e) =>
+                onChange(
+                  options.map((x, idx) =>
+                    idx === i
+                      ? {
+                          value: x.value || e.target.value.toLowerCase().replace(/\s+/g, '_'),
+                          label: e.target.value,
+                        }
+                      : x,
+                  ),
+                )
+              }
+            />
+            <button
+              type="button"
+              onClick={() => onChange(options.filter((_, idx) => idx !== i))}
+              className="rounded p-0.5 text-slate-400 hover:text-red-500"
+            >
+              <Trash2 size={11} />
+            </button>
+          </div>
+        ))}
+      />
       <Button
         size="sm"
         variant="outline"
@@ -2971,7 +3528,7 @@ function TableColumnOptions({
           ])
         }
       >
-        <Plus size={11} /> Option
+        <Plus size={11} /> <GeneratedText id="m_00f78a864ff266" />
       </Button>
     </div>
   )
@@ -2992,6 +3549,8 @@ function SectionProperties({
   defaultLocale: AppLocale
   onChange: (patch: Partial<FormSection>) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const allFields = schema.sections
     .filter((candidate) => !candidate.repeating)
     .flatMap((candidate) => candidate.fields)
@@ -3002,42 +3561,63 @@ function SectionProperties({
     }))
   return (
     <div className="space-y-3 text-sm">
-      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Section</h3>
+      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+        <GeneratedText id="m_0d513924d97753" />
+      </h3>
       <div className="space-y-1">
-        <Label className="text-xs">Section ID (immutable)</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_089e71eb771aca" />
+        </Label>
         <Input value={section.id} disabled className="font-mono text-xs" />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Title ({locale.toUpperCase()})</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_1ea646f0dcd3d5" />
+          <GeneratedValue value={locale.toUpperCase()} />)
+        </Label>
         <Input
           value={section.title?.[locale] ?? ''}
-          placeholder={localizeText(section.title, locale, section.id, defaultLocale)}
+          placeholder={tGeneratedValue(
+            localizeText(section.title, locale, section.id, defaultLocale),
+          )}
           onChange={(e) =>
             onChange({ title: { ...(section.title ?? {}), [locale]: e.target.value } })
           }
         />
       </div>
-      {schema.tabs?.length ? (
-        <div className="space-y-1">
-          <Label className="text-xs">Tab</Label>
-          <Select
-            value={section.tabId ?? schema.tabs[0]!.id}
-            onChange={(e) => onChange({ tabId: e.target.value })}
-          >
-            {schema.tabs.map((t) => (
-              <option key={t.id} value={t.id}>
-                {localizeText(t.title, locale, t.id, defaultLocale)}
-              </option>
-            ))}
-          </Select>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          schema.tabs?.length ? (
+            <div className="space-y-1">
+              <Label className="text-xs">
+                <GeneratedText id="m_1457c1cce0b63c" />
+              </Label>
+              <Select
+                value={section.tabId ?? schema.tabs[0]!.id}
+                onChange={(e) => onChange({ tabId: e.target.value })}
+              >
+                <GeneratedValue
+                  value={schema.tabs.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      <GeneratedValue value={localizeText(t.title, locale, t.id, defaultLocale)} />
+                    </option>
+                  ))}
+                />
+              </Select>
+            </div>
+          ) : null
+        }
+      />
       <div className="space-y-1">
-        <Label className="text-xs">Description</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_14d923495cf14c" />
+        </Label>
         <Textarea
           rows={2}
           value={section.description?.[locale] ?? ''}
-          placeholder={localizeText(section.description, locale, '', defaultLocale)}
+          placeholder={tGeneratedValue(
+            localizeText(section.description, locale, '', defaultLocale),
+          )}
           onChange={(e) => {
             const description = { ...(section.description ?? {}) }
             if (e.target.value) description[locale] = e.target.value
@@ -3049,22 +3629,30 @@ function SectionProperties({
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Workflow step (page)</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_0664f38791aed8" />
+        </Label>
         <Select
           className="h-8 text-xs"
           value={section.step ?? ''}
           onChange={(e) => onChange({ step: e.target.value || undefined })}
         >
-          <option value="">— first step (default) —</option>
-          {schema.workflow.steps.map((s) => (
-            <option key={s.key} value={s.key}>
-              {localizeText(s.title, locale, s.key, defaultLocale)}
-            </option>
-          ))}
+          <option value="">
+            <GeneratedText id="m_0701b322765356" />
+          </option>
+          <GeneratedValue
+            value={schema.workflow.steps.map((s) => (
+              <option key={s.key} value={s.key}>
+                <GeneratedValue value={localizeText(s.title, locale, s.key, defaultLocale)} />
+              </option>
+            ))}
+          />
         </Select>
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Columns (layout)</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_1ee65e14915cf1" />
+        </Label>
         <Select
           className="h-8 text-xs"
           value={String(section.layout?.columns ?? 1)}
@@ -3073,13 +3661,21 @@ function SectionProperties({
             onChange({ layout: n > 1 ? { columns: n, gap: section.layout?.gap } : undefined })
           }}
         >
-          <option value="1">1 column</option>
-          <option value="2">2 columns</option>
-          <option value="3">3 columns</option>
-          <option value="4">4 columns</option>
+          <option value="1">
+            <GeneratedText id="m_1e52a2a939d98d" />
+          </option>
+          <option value="2">
+            <GeneratedText id="m_1bea64a273a741" />
+          </option>
+          <option value="3">
+            <GeneratedText id="m_187f2e9f6a7e22" />
+          </option>
+          <option value="4">
+            <GeneratedText id="m_05625c3d86cd0c" />
+          </option>
         </Select>
         <p className="text-[10px] text-slate-500">
-          Elements flow left→right; set each element&apos;s width in its Basic tab.
+          <GeneratedText id="m_1e0a540071af99" />
         </p>
       </div>
       <label className="flex items-center gap-2">
@@ -3088,48 +3684,68 @@ function SectionProperties({
           checked={section.repeating ?? false}
           onChange={(e) => onChange({ repeating: e.target.checked })}
         />
-        Repeating section (user adds N rows)
+        <GeneratedText id="m_10a741ad57253f" />
       </label>
-      {section.repeating ? (
-        <div className="space-y-2 rounded border border-slate-200 bg-slate-50/50 p-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label className="text-xs">Min rows</Label>
-              <Input
-                type="number"
-                value={section.minRows ?? ''}
-                onChange={(e) =>
-                  onChange({ minRows: e.target.value === '' ? undefined : Number(e.target.value) })
-                }
-              />
+      <GeneratedValue
+        value={
+          section.repeating ? (
+            <div className="space-y-2 rounded border border-slate-200 bg-slate-50/50 p-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">
+                    <GeneratedText id="m_00c5b5a40a72f6" />
+                  </Label>
+                  <Input
+                    type="number"
+                    value={section.minRows ?? ''}
+                    onChange={(e) =>
+                      onChange({
+                        minRows: e.target.value === '' ? undefined : Number(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">
+                    <GeneratedText id="m_199de632ae64e0" />
+                  </Label>
+                  <Input
+                    type="number"
+                    value={section.maxRows ?? ''}
+                    onChange={(e) =>
+                      onChange({
+                        maxRows: e.target.value === '' ? undefined : Number(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">
+                  <GeneratedText id="m_1c4a359175c7fa" />
+                </Label>
+                <Input
+                  value={section.rowLabelTemplate ?? ''}
+                  placeholder={tGenerated('m_02890419bf69c5')}
+                  onChange={(e) => onChange({ rowLabelTemplate: e.target.value || undefined })}
+                />
+                <p className="text-[10px] text-slate-500">
+                  <GeneratedText id="m_0ea6ba70f4dcd9" />{' '}
+                  <GeneratedValue value={<GeneratedText id="m_126c7eab8ac9fd" />} />,{' '}
+                  <GeneratedValue value={<GeneratedText id="m_1ed8de977a458a" />} />
+                  <GeneratedText id="m_1e018b65c95ffd" />{' '}
+                  <GeneratedValue value={<GeneratedText id="m_1fad56c24b22ed" />} />{' '}
+                  <GeneratedText id="m_02193054995990" />
+                </p>
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Max rows</Label>
-              <Input
-                type="number"
-                value={section.maxRows ?? ''}
-                onChange={(e) =>
-                  onChange({ maxRows: e.target.value === '' ? undefined : Number(e.target.value) })
-                }
-              />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Row label template</Label>
-            <Input
-              value={section.rowLabelTemplate ?? ''}
-              placeholder="e.g. Load #{index+1}"
-              onChange={(e) => onChange({ rowLabelTemplate: e.target.value || undefined })}
-            />
-            <p className="text-[10px] text-slate-500">
-              Supports {`{index}`}, {`{index+1}`}, and {`{<fieldKey>}`} interpolation from the row's
-              values.
-            </p>
-          </div>
-        </div>
-      ) : null}
+          ) : null
+        }
+      />
       <div className="space-y-1 pt-2">
-        <Label className="text-xs">Show when (showIf)</Label>
+        <Label className="text-xs">
+          <GeneratedText id="m_024d5ac76425dc" />
+        </Label>
         <LogicBuilder
           rule={section.showIf}
           availableFields={allFields}
@@ -3168,74 +3784,108 @@ function Preview({
     <Card className="border-2 border-dashed border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
       <CardHeader>
         <CardTitle className="text-base">
-          Preview · {localizeText(schema.title, locale, 'Form', defaultLocale)}
+          <GeneratedText id="m_07c67e89962d16" />{' '}
+          <GeneratedValue value={localizeText(schema.title, locale, 'Form', defaultLocale)} />
         </CardTitle>
         <p className="text-xs text-slate-500">
-          Live render of how the filler will see the form. Conditional logic is shown as chips; live
-          filler runtime resolves them dynamically.
+          <GeneratedText id="m_045d47c21e1cdf" />
         </p>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
-        {schema.workflow.steps.map((step) => {
-          const stepSections = groupedByStep.get(step.key) ?? []
-          if (stepSections.length === 0) return null
-          return (
-            <div
-              key={step.key}
-              className="rounded-md border border-slate-200 dark:border-slate-800"
-            >
-              <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-300">
-                Step · {localizeText(step.title, locale, step.key, defaultLocale)}
-              </div>
-              <div className="space-y-3 p-3">
-                {stepSections.map((sec) => (
-                  <div key={sec.id}>
-                    <h3 className="mb-1 text-sm font-semibold text-slate-700">
-                      {localizeText(sec.title, locale, sec.id, defaultLocale)}{' '}
-                      {sec.repeating ? (
-                        <Badge variant="secondary" className="text-[10px]">
-                          repeating
-                        </Badge>
-                      ) : null}
-                    </h3>
-                    {localizeText(sec.description, locale, '', defaultLocale) ? (
-                      <p className="mb-1 text-xs text-slate-500">
-                        {localizeText(sec.description, locale, '', defaultLocale)}
-                      </p>
-                    ) : null}
-                    <div className="space-y-2">
-                      {sec.fields.map((f) => (
-                        <div key={f.id}>
-                          <label className="block text-xs font-medium text-slate-600">
-                            {localizeText(f.label, locale, f.id, defaultLocale)}{' '}
-                            {f.required || f.validation?.required ? (
-                              <span className="text-red-600">*</span>
-                            ) : null}
-                            {f.showIf ? (
-                              <Badge variant="outline" className="ml-1 text-[10px]">
-                                conditional
-                              </Badge>
-                            ) : null}
-                          </label>
-                          <PreviewField type={f.type} />
+        <GeneratedValue
+          value={schema.workflow.steps.map((step) => {
+            const stepSections = groupedByStep.get(step.key) ?? []
+            if (stepSections.length === 0) return null
+            return (
+              <div
+                key={step.key}
+                className="rounded-md border border-slate-200 dark:border-slate-800"
+              >
+                <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-300">
+                  <GeneratedText id="m_1acffe9b7aa3dd" />{' '}
+                  <GeneratedValue
+                    value={localizeText(step.title, locale, step.key, defaultLocale)}
+                  />
+                </div>
+                <div className="space-y-3 p-3">
+                  <GeneratedValue
+                    value={stepSections.map((sec) => (
+                      <div key={sec.id}>
+                        <h3 className="mb-1 text-sm font-semibold text-slate-700">
+                          <GeneratedValue
+                            value={localizeText(sec.title, locale, sec.id, defaultLocale)}
+                          />
+                          <GeneratedValue value={' '} />
+                          <GeneratedValue
+                            value={
+                              sec.repeating ? (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  <GeneratedText id="m_06e1ca227aca9b" />
+                                </Badge>
+                              ) : null
+                            }
+                          />
+                        </h3>
+                        <GeneratedValue
+                          value={
+                            localizeText(sec.description, locale, '', defaultLocale) ? (
+                              <p className="mb-1 text-xs text-slate-500">
+                                <GeneratedValue
+                                  value={localizeText(sec.description, locale, '', defaultLocale)}
+                                />
+                              </p>
+                            ) : null
+                          }
+                        />
+                        <div className="space-y-2">
+                          <GeneratedValue
+                            value={sec.fields.map((f) => (
+                              <div key={f.id}>
+                                <label className="block text-xs font-medium text-slate-600">
+                                  <GeneratedValue
+                                    value={localizeText(f.label, locale, f.id, defaultLocale)}
+                                  />
+                                  <GeneratedValue value={' '} />
+                                  <GeneratedValue
+                                    value={
+                                      f.required || f.validation?.required ? (
+                                        <span className="text-red-600">*</span>
+                                      ) : null
+                                    }
+                                  />
+                                  <GeneratedValue
+                                    value={
+                                      f.showIf ? (
+                                        <Badge variant="outline" className="ml-1 text-[10px]">
+                                          <GeneratedText id="m_02529c1532db7a" />
+                                        </Badge>
+                                      ) : null
+                                    }
+                                  />
+                                </label>
+                                <PreviewField type={f.type} />
+                              </div>
+                            ))}
+                          />
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                      </div>
+                    ))}
+                  />
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        />
       </CardContent>
     </Card>
   )
 }
 
 function PreviewField({ type }: { type: FieldType }) {
+  const tGenerated = useGeneratedTranslations()
   switch (type) {
     case 'long_text':
-      return <Textarea rows={2} disabled placeholder="Preview" />
+      return <Textarea rows={2} disabled placeholder={tGenerated('m_11d37007232de5')} />
     case 'select':
     case 'radio':
       return (
@@ -3245,7 +3895,11 @@ function PreviewField({ type }: { type: FieldType }) {
       )
     case 'checkbox_group':
     case 'multi_select':
-      return <p className="text-xs text-slate-400">[options will appear here]</p>
+      return (
+        <p className="text-xs text-slate-400">
+          <GeneratedText id="m_0a31fefe8144a2" />
+        </p>
+      )
     case 'signature':
       return <div className="h-16 rounded border border-dashed border-slate-300 bg-slate-50" />
     case 'photo':
@@ -3255,13 +3909,21 @@ function PreviewField({ type }: { type: FieldType }) {
     case 'audio':
       return (
         <div className="rounded border border-dashed border-slate-300 p-3 text-center text-xs text-slate-400">
-          click to upload
+          <GeneratedText id="m_1411910c3561c0" />
         </div>
       )
     case 'heading':
-      return <h4 className="text-base font-semibold">[heading]</h4>
+      return (
+        <h4 className="text-base font-semibold">
+          <GeneratedText id="m_0f8b37ea44adb6" />
+        </h4>
+      )
     case 'paragraph':
-      return <p className="text-xs text-slate-500">[paragraph]</p>
+      return (
+        <p className="text-xs text-slate-500">
+          <GeneratedText id="m_0131c1cfaf2d5c" />
+        </p>
+      )
     case 'divider':
       return <hr className="border-slate-200" />
     case 'formula':
@@ -3269,33 +3931,37 @@ function PreviewField({ type }: { type: FieldType }) {
     case 'pass_fail_na':
       return (
         <div className="flex gap-1">
-          {['PASS', 'FAIL', 'N/A'].map((v) => (
-            <span key={v} className="rounded border border-slate-200 px-2 py-1 text-[10px]">
-              {v}
-            </span>
-          ))}
+          <GeneratedValue
+            value={['PASS', 'FAIL', 'N/A'].map((v) => (
+              <span key={v} className="rounded border border-slate-200 px-2 py-1 text-[10px]">
+                <GeneratedValue value={v} />
+              </span>
+            ))}
+          />
         </div>
       )
     case 'traffic_light':
       return (
         <div className="flex gap-1">
-          {[
-            ['bg-emerald-500', 'Green'],
-            ['bg-amber-400', 'Yellow'],
-            ['bg-red-500', 'Red'],
-          ].map(([tone, label]) => (
-            <span
-              key={label as string}
-              className="flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[10px]"
-            >
-              <span className={`inline-block h-2 w-2 rounded-full ${tone}`} />
-              {label}
-            </span>
-          ))}
+          <GeneratedValue
+            value={[
+              ['bg-emerald-500', 'Green'],
+              ['bg-amber-400', 'Yellow'],
+              ['bg-red-500', 'Red'],
+            ].map(([tone, label]) => (
+              <span
+                key={label as string}
+                className="flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-[10px]"
+              >
+                <span className={`inline-block h-2 w-2 rounded-full ${tone}`} />
+                <GeneratedValue value={label} />
+              </span>
+            ))}
+          />
         </div>
       )
     default:
-      return <Input disabled placeholder="Preview" />
+      return <Input disabled placeholder={tGenerated('m_11d37007232de5')} />
   }
 }
 
@@ -3304,8 +3970,10 @@ function PreviewField({ type }: { type: FieldType }) {
 function LabeledField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
-      {children}
+      <Label className="text-xs">
+        <GeneratedValue value={label} />
+      </Label>
+      <GeneratedValue value={children} />
     </div>
   )
 }
@@ -3321,19 +3989,20 @@ function LeftTab({
   icon: React.ReactNode
   label: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <button
       type="button"
       onClick={onClick}
-      title={label}
-      aria-label={label}
+      title={tGeneratedValue(label)}
+      aria-label={tGeneratedValue(label)}
       className={`flex flex-1 items-center justify-center rounded-md px-1.5 py-2 transition ${
         active
           ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300'
           : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
       }`}
     >
-      {icon}
+      <GeneratedValue value={icon} />
     </button>
   )
 }
@@ -3359,7 +4028,7 @@ function SurfaceTab({
           : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
       }`}
     >
-      {icon} {label}
+      <GeneratedValue value={icon} /> <GeneratedValue value={label} />
     </button>
   )
 }
@@ -3379,13 +4048,15 @@ function OverviewPanel({
   canPin?: boolean
   pinned?: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [n, setN] = useState(name)
   const [description, setDescription] = useState(overview?.description ?? '')
   const [surfaceAsTool, setSurfaceAsTool] = useState(overview?.surfaceAsTool ?? false)
   const [pending, start] = useTransition()
   const save = () => {
     if (n.trim().length < 2) {
-      toast.error('Give your app a name')
+      toast.error(tGenerated('m_0aa48682b14c95'))
       return
     }
     start(async () => {
@@ -3396,26 +4067,26 @@ function OverviewPanel({
         surfaceAsTool,
       })
       if (!res.ok) {
-        toast.error(res.error ?? 'Could not save')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0af1983403d12e')))
         return
       }
       onSaved(n.trim())
-      toast.success('Overview saved')
+      toast.success(tGenerated('m_0964f6e2cc4375'))
     })
   }
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-500">
-        The basics shown across the app — its name and what it&apos;s for.
+        <GeneratedText id="m_08114bb9803f7d" />
       </p>
-      <LabeledField label="App name">
+      <LabeledField label={tGenerated('m_18a30dc84d2a64')}>
         <Input value={n} onChange={(e) => setN(e.target.value)} />
       </LabeledField>
-      <LabeledField label="Description">
+      <LabeledField label={tGenerated('m_14d923495cf14c')}>
         <Textarea
           rows={4}
           value={description}
-          placeholder="Purpose and audience"
+          placeholder={tGenerated('m_074251897a5932')}
           onChange={(e) => setDescription(e.target.value)}
         />
       </LabeledField>
@@ -3428,27 +4099,43 @@ function OverviewPanel({
         />
         <span>
           <span className="font-medium text-slate-800 dark:text-slate-200">
-            Show in the Tools catalogue
+            <GeneratedText id="m_1f008c56f09179" />
           </span>
           <span className="block text-xs text-slate-500 dark:text-slate-400">
-            Lists this app under <span className="font-mono">/tools</span> as a calculator or
-            utility. Takes effect once the app is published.
+            <GeneratedText id="m_160f2c28b65229" />{' '}
+            <span className="font-mono">
+              <GeneratedText id="m_1ddad1532de2e3" />
+            </span>{' '}
+            <GeneratedText id="m_186d665b9052f3" />
           </span>
         </span>
       </label>
       <Button onClick={save} disabled={pending} className="w-full">
-        {pending ? 'Saving…' : 'Save overview'}
+        <GeneratedValue
+          value={
+            pending ? (
+              <GeneratedText id="m_106811f2aac664" />
+            ) : (
+              <GeneratedText id="m_16f4ae27da8dbb" />
+            )
+          }
+        />
       </Button>
-      {canPin ? (
-        <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-700">
-          <div className="text-sm font-medium text-slate-800 dark:text-slate-200">Sidebar</div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Pin this app to the left sidebar for everyone in the workspace. Takes effect once the
-            app is published.
-          </p>
-          <PinFormButton templateId={templateId} pinned={pinned} />
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          canPin ? (
+            <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+              <div className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                <GeneratedText id="m_0cc4443595b87e" />
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <GeneratedText id="m_1dadff0d2c2898" />
+              </p>
+              <PinFormButton templateId={templateId} pinned={pinned} />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -3457,24 +4144,27 @@ function AssignmentsPanel({ templateId }: { templateId: string }) {
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-500">
-        Requiring people to fill this app — who, on what schedule, and tracking completion — is
-        handled by the <span className="font-medium text-slate-700">Compliance</span> engine.
+        <GeneratedText id="m_0976c514f311fb" />{' '}
+        <span className="font-medium text-slate-700">
+          <GeneratedText id="m_096d47f60747b3" />
+        </span>{' '}
+        <GeneratedText id="m_1bac81ba078d96" />
       </p>
       <Link
         href={`/compliance/obligations/new?kind=form&formTemplateId=${templateId}`}
         className="block"
       >
         <Button className="w-full">
-          <Send size={14} /> Create an assignment
+          <Send size={14} /> <GeneratedText id="m_0b60657b166b0e" />
         </Button>
       </Link>
       <Link href="/compliance/obligations" className="block">
         <Button variant="outline" className="w-full">
-          View all obligations
+          <GeneratedText id="m_0c528a939be441" />
         </Button>
       </Link>
       <p className="text-[11px] text-slate-400">
-        Anyone with access can also open and fill this app directly from the gallery.
+        <GeneratedText id="m_0ad38d3d51d13e" />
       </p>
     </div>
   )
@@ -3489,6 +4179,8 @@ function PermissionsPanel({
   roles: { key: string; name: string }[]
   initial: string[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [sel, setSel] = useState<Set<string>>(new Set(initial))
   const [pending, start] = useTransition()
   const toggle = (key: string) =>
@@ -3502,17 +4194,16 @@ function PermissionsPanel({
     start(async () => {
       const res = await updateAppPermissions({ templateId, allowedRoles: Array.from(sel) })
       if (!res.ok) {
-        toast.error(res.error ?? 'Could not save')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0af1983403d12e')))
         return
       }
-      toast.success('Access saved')
+      toast.success(tGenerated('m_1e42ea374d7063'))
     })
   const restricted = sel.size > 0
   return (
     <div className="space-y-3">
       <p className="text-xs text-slate-500">
-        Choose which roles can see and fill this app. Leave all unchecked to allow everyone. Admins
-        always have access.
+        <GeneratedText id="m_14c557ff352d60" />
       </p>
       <div
         className={`rounded-md border px-3 py-2 text-xs ${
@@ -3521,27 +4212,60 @@ function PermissionsPanel({
             : 'border-emerald-200 bg-emerald-50 text-emerald-800'
         }`}
       >
-        {restricted
-          ? `Restricted to ${sel.size} role${sel.size === 1 ? '' : 's'}`
-          : 'Visible to everyone'}
+        <GeneratedValue
+          value={
+            restricted ? (
+              <GeneratedText
+                id="m_1f688129a274f7"
+                values={{ value0: sel.size, value1: sel.size === 1 ? '' : 's' }}
+              />
+            ) : (
+              <GeneratedText id="m_1452f24ba8370a" />
+            )
+          }
+        />
       </div>
-      {roles.length === 0 ? (
-        <p className="text-xs text-slate-400">No roles defined for this tenant.</p>
-      ) : (
-        <ul className="space-y-1">
-          {roles.map((r) => (
-            <li key={r.key}>
-              <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50">
-                <input type="checkbox" checked={sel.has(r.key)} onChange={() => toggle(r.key)} />
-                <span className="flex-1">{r.name}</span>
-                <span className="text-[10px] text-slate-400">{r.key}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      )}
+      <GeneratedValue
+        value={
+          roles.length === 0 ? (
+            <p className="text-xs text-slate-400">
+              <GeneratedText id="m_008f5a3d7812ab" />
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              <GeneratedValue
+                value={roles.map((r) => (
+                  <li key={r.key}>
+                    <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={sel.has(r.key)}
+                        onChange={() => toggle(r.key)}
+                      />
+                      <span className="flex-1">
+                        <GeneratedValue value={r.name} />
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        <GeneratedValue value={r.key} />
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              />
+            </ul>
+          )
+        }
+      />
       <Button onClick={save} disabled={pending} className="w-full">
-        {pending ? 'Saving…' : 'Save access'}
+        <GeneratedValue
+          value={
+            pending ? (
+              <GeneratedText id="m_106811f2aac664" />
+            ) : (
+              <GeneratedText id="m_044b4d57bb99ce" />
+            )
+          }
+        />
       </Button>
     </div>
   )

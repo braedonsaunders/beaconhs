@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // "My incidents" — incidents reported by the current user.
 //
 // Filter is hard-pinned to reportedByTenantUserId = ctx.membership.id. All
@@ -31,7 +34,10 @@ import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { WorkspaceNoIdentity } from '../_no-identity'
 
-export const metadata = { title: 'My incidents' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1c1da2222b5316') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['reference', 'occurred_at', 'severity', 'status', 'type'] as const
@@ -58,6 +64,8 @@ export default async function MyIncidentsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'occurred_at',
@@ -85,11 +93,13 @@ export default async function MyIncidentsPage({
         header={
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title="My incidents"
-            description="Incidents you reported."
+            title={tGenerated('m_1c1da2222b5316')}
+            description={tGenerated('m_1ac33e2abbdd1f')}
             actions={
               <Link href="/incidents">
-                <Button variant="outline">All incidents</Button>
+                <Button variant="outline">
+                  <GeneratedText id="m_17e7d54f75218e" />
+                </Button>
               </Link>
             }
           />
@@ -175,126 +185,156 @@ export default async function MyIncidentsPage({
         <>
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title="My incidents"
-            description="Incidents you reported."
+            title={tGenerated('m_1c1da2222b5316')}
+            description={tGenerated('m_1ac33e2abbdd1f')}
             actions={
               <div className="flex items-center gap-2">
                 <Link href="/incidents">
-                  <Button variant="outline">All incidents</Button>
+                  <Button variant="outline">
+                    <GeneratedText id="m_17e7d54f75218e" />
+                  </Button>
                 </Link>
                 <Link href="/incidents/new">
-                  <Button>Report incident</Button>
+                  <Button>
+                    <GeneratedText id="m_0f2b150c1cc651" />
+                  </Button>
                 </Link>
               </div>
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search your reports…" />
+            <SearchInput placeholder={tGenerated('m_0334d18b63b0b5')} />
             <FilterChips
               basePath="/my/incidents"
               currentParams={sp}
               paramKey="type"
-              label="Type"
+              label={tGenerated('m_074ba2f160c506')}
               options={TYPE_OPTIONS.map((o) => ({ ...o, count: typeCounts[o.value] }))}
             />
             <FilterChips
               basePath="/my/incidents"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<AlertTriangle size={32} />}
-          title={
-            params.q || typeFilter || statusFilter
-              ? 'No incidents match these filters'
-              : 'No reported incidents'
-          }
-          description="Incidents you report appear here, with progress through investigation and close-out."
-          action={
-            <Link href="/incidents/new">
-              <Button>Report an incident</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
-                  Ref
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="occurred_at"
-                  active={params.sort === 'occurred_at'}
-                >
-                  Occurred
-                </SortableTh>
-                <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
-                  Type
-                </SortableTh>
-                <SortableTh {...sortProps} column="severity" active={params.sort === 'severity'}>
-                  Severity
-                </SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                  Status
-                </SortableTh>
-                <TableHead>Title</TableHead>
-                <TableHead>Site</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ incident, site }) => (
-                <TableRow key={incident.id}>
-                  <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
-                    <Link href={`/incidents/${incident.id}`} className="hover:underline">
-                      {incident.reference}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {formatDate(new Date(incident.occurredAt), ctx.timezone, ctx.locale)}
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {incident.type.replace('_', ' ')}
-                  </TableCell>
-                  <TableCell>
-                    <SeverityBadge severity={incident.severity} />
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={incident.status} />
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/incidents/${incident.id}`}
-                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<AlertTriangle size={32} />}
+              title={tGeneratedValue(
+                params.q || typeFilter || statusFilter
+                  ? tGenerated('m_0f2f6d26003080')
+                  : tGenerated('m_0d2f583d2bd480'),
+              )}
+              description={tGenerated('m_0c0af94fc675d9')}
+              action={
+                <Link href="/incidents/new">
+                  <Button>
+                    <GeneratedText id="m_0f672c0489dd6d" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      {...sortProps}
+                      column="reference"
+                      active={params.sort === 'reference'}
                     >
-                      {incident.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {site?.name ?? '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/my/incidents"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                      <GeneratedText id="m_036b564bb88dfe" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="occurred_at"
+                      active={params.sort === 'occurred_at'}
+                    >
+                      <GeneratedText id="m_14a5e97535a15a" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
+                      <GeneratedText id="m_074ba2f160c506" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="severity"
+                      active={params.sort === 'severity'}
+                    >
+                      <GeneratedText id="m_168b365cc671bf" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_0decefd558c355" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_020146dd3d3d5a" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ incident, site }) => (
+                      <TableRow key={incident.id}>
+                        <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                          <Link href={`/incidents/${incident.id}`} className="hover:underline">
+                            <GeneratedValue value={incident.reference} />
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue
+                            value={formatDate(
+                              new Date(incident.occurredAt),
+                              ctx.timezone,
+                              ctx.locale,
+                            )}
+                          />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={incident.type.replace('_', ' ')} />
+                        </TableCell>
+                        <TableCell>
+                          <SeverityBadge severity={incident.severity} />
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={incident.status} />
+                        </TableCell>
+                        <TableCell>
+                          <Link
+                            href={`/incidents/${incident.id}`}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                          >
+                            <GeneratedValue value={incident.title} />
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={site?.name ?? '—'} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/my/incidents"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

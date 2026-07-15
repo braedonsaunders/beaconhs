@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { EMAIL_PROVIDER_SPECS } from '@beaconhs/emails'
 import { Card, CardContent, DetailHeader } from '@beaconhs/ui'
 import { getPlatformEmailSettings } from '@/lib/email-config'
@@ -10,10 +12,14 @@ import {
 } from '@/components/email-settings/settings-form'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Platform email' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0cf5298bd5ae73') }
+}
 
 // Authorization is enforced once by /platform/layout.tsx (super-admin only).
 export default async function PlatformEmailPage() {
+  const tGenerated = await getGeneratedTranslations()
   const specs: EmailProviderSpecLite[] = EMAIL_PROVIDER_SPECS.map((p) => ({
     value: p.value,
     label: p.label,
@@ -32,19 +38,18 @@ export default async function PlatformEmailPage() {
       <div className="max-w-2xl space-y-4">
         <DetailHeader
           back={{ href: '/platform', label: 'Back to platform' }}
-          title="Platform email"
-          subtitle="The deployment-wide default email provider plus the policy that governs whether tenants may use their own — including the global kill switch."
+          title={tGenerated('m_0cf5298bd5ae73')}
+          subtitle={tGenerated('m_0f378ad8e2b24e')}
         />
 
         <Card>
           <CardContent className="space-y-6 pt-6">
             <div>
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                Platform default — all tenants
+                <GeneratedText id="m_066667acd671a3" />
               </h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                The fallback provider used when a tenant has none, and the policy that governs
-                tenant overrides and the global kill switch.
+                <GeneratedText id="m_13275506e08cf4" />
               </p>
             </div>
             <EmailSettingsForm
@@ -55,14 +60,18 @@ export default async function PlatformEmailPage() {
             />
             <div className="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
               <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                Send a test through the platform provider
+                <GeneratedText id="m_1894e8eb600feb" />
               </p>
               <EmailTestButton scope="platform" disabled={platform.mode === 'disabled'} />
-              {platform.mode === 'disabled' ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  The global kill switch blocks test messages. Save a live policy before testing.
-                </p>
-              ) : null}
+              <GeneratedValue
+                value={
+                  platform.mode === 'disabled' ? (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_186b423443dd47" />
+                    </p>
+                  ) : null
+                }
+              />
             </div>
           </CardContent>
         </Card>

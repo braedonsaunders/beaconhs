@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Check, ChevronDown, Search, X } from 'lucide-react'
+import { useUiText } from './text-context'
 import { cn } from './utils'
 
 export type SelectOption = {
@@ -29,8 +30,8 @@ export function SearchSelect({
   value,
   onChange,
   options,
-  placeholder = 'Select…',
-  searchPlaceholder = 'Search…',
+  placeholder,
+  searchPlaceholder,
   disabled = false,
   clearable = false,
   emptyLabel,
@@ -79,6 +80,7 @@ export function SearchSelect({
   invalid?: boolean
   id?: string
 }) {
+  const t = useUiText()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)
@@ -96,13 +98,31 @@ export function SearchSelect({
     return () => mq.removeEventListener('change', update)
   }, [])
 
-  const allOptions = useMemo(
-    () => (clearable ? [{ value: '', label: emptyLabel ?? 'None' }, ...options] : options),
-    [clearable, emptyLabel, options],
+  const localizedOptions = useMemo(
+    () =>
+      options.map((option) => ({
+        ...option,
+        label: t(option.label),
+        hint: option.hint ? t(option.hint) : undefined,
+        group: option.group ? t(option.group) : undefined,
+      })),
+    [options, t],
   )
-  const selected = options.find((o) => o.value === value)
+  const localizedEmptyLabel = emptyLabel ? t(emptyLabel) : t('None')
+  const localizedPlaceholder = t(placeholder ?? 'Select…')
+  const localizedSearchPlaceholder = t(searchPlaceholder ?? 'Search…')
+  const localizedSheetTitle = sheetTitle ? t(sheetTitle) : undefined
+  const localizedStatusMessage = statusMessage ? t(statusMessage) : undefined
+  const allOptions = useMemo(
+    () =>
+      clearable
+        ? [{ value: '', label: localizedEmptyLabel }, ...localizedOptions]
+        : localizedOptions,
+    [clearable, localizedEmptyLabel, localizedOptions],
+  )
+  const selected = localizedOptions.find((o) => o.value === value)
   const showEmpty = clearable && value === '' && !!emptyLabel
-  const display = selected?.label ?? (showEmpty ? emptyLabel : placeholder)
+  const display = selected?.label ?? (showEmpty ? localizedEmptyLabel : localizedPlaceholder)
   const isPlaceholder = !selected && !showEmpty
 
   const showSearch = searchable ?? (allOptions.length > 7 || allOptions.some((o) => o.group))
@@ -202,7 +222,7 @@ export function SearchSelect({
             aria-disabled="true"
             className="px-3 py-8 text-center text-sm text-slate-400 dark:text-slate-500"
           >
-            No matches
+            {t('No matches')}
           </li>
         ) : null}
         {filtered.map((o, i) => {
@@ -250,7 +270,7 @@ export function SearchSelect({
           )
         })}
       </ul>
-      {loading || statusMessage ? (
+      {loading || localizedStatusMessage ? (
         <div
           role={statusTone === 'error' ? 'alert' : 'status'}
           className={cn(
@@ -260,7 +280,7 @@ export function SearchSelect({
               : 'text-slate-500 dark:text-slate-400',
           )}
         >
-          {loading ? 'Searching…' : statusMessage}
+          {loading ? t('Searching…') : localizedStatusMessage}
         </div>
       ) : null}
     </>
@@ -281,8 +301,8 @@ export function SearchSelect({
           onSearchChange?.(next)
           setHighlight(0)
         }}
-        placeholder={searchPlaceholder}
-        aria-label={searchPlaceholder}
+        placeholder={localizedSearchPlaceholder}
+        aria-label={localizedSearchPlaceholder}
         aria-busy={loading || undefined}
         className={cn(
           'w-full rounded-lg border border-slate-200 bg-slate-50 pr-3 pl-9 transition outline-none focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20 dark:border-slate-800 dark:bg-slate-900 dark:focus:bg-slate-900',
@@ -366,12 +386,12 @@ export function SearchSelect({
                     </div>
                     <div className="flex items-center justify-between px-4 pt-2 pb-1">
                       <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                        {sheetTitle ?? 'Select'}
+                        {localizedSheetTitle ?? t('Select')}
                       </span>
                       <button
                         type="button"
                         onClick={() => setOpen(false)}
-                        aria-label="Close"
+                        aria-label={t('Close')}
                         className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                       >
                         <X size={18} />

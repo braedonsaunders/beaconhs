@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Create / edit a department in a right-side flyout. Opened via the URL
 // (?drawer=new | ?drawer=<id>) so it survives refresh and is link-shareable.
 // The save server action is passed in from the RSC page.
@@ -34,6 +41,8 @@ export function DepartmentDrawer({
   closeHref: string
   saveAction: SaveAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   function close() {
     router.push(closeHref)
@@ -43,12 +52,12 @@ export function DepartmentDrawer({
     <UrlDrawer
       open={mode !== null}
       closeHref={closeHref}
-      title={mode === 'edit' ? 'Edit department' : 'New department'}
-      description={
-        mode === 'edit'
-          ? 'Rename or recode this department.'
-          : 'Add a department. Each person belongs to one.'
-      }
+      title={tGeneratedValue(
+        mode === 'edit' ? tGenerated('m_0024c28fc5da0d') : tGenerated('m_17321c09f75114'),
+      )}
+      description={tGeneratedValue(
+        mode === 'edit' ? tGenerated('m_10dcb2b5fbd6c7') : tGenerated('m_16c81cf02633de'),
+      )}
       size="md"
     >
       <DepartmentForm
@@ -70,6 +79,8 @@ function DepartmentForm({
   saveAction: SaveAction
   onDone: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [name, setName] = useState(editing?.name ?? '')
   const [code, setCode] = useState(editing?.code ?? '')
   const [description, setDescription] = useState(editing?.description ?? '')
@@ -77,10 +88,10 @@ function DepartmentForm({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     const trimmed = name.trim()
     if (!trimmed) {
-      setError('Name is required.')
+      setError(tGenerated('m_1c66cb30434189'))
       return
     }
     startTransition(async () => {
@@ -91,7 +102,7 @@ function DepartmentForm({
         description: description.trim() || null,
       })
       if (res.ok) onDone()
-      else setError(res.error)
+      else setError(tGeneratedValue(res.error))
     })
   }
 
@@ -104,52 +115,72 @@ function DepartmentForm({
       className="space-y-4"
     >
       <div className="space-y-1.5">
-        <Label htmlFor="dept-name">Name *</Label>
+        <Label htmlFor="dept-name">
+          <GeneratedText id="m_1a9978900838e6" />
+        </Label>
         <Input
           id="dept-name"
           autoFocus
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="e.g. Field Operations"
+          placeholder={tGenerated('m_19310698008f78')}
           required
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="dept-code">Code</Label>
+        <Label htmlFor="dept-code">
+          <GeneratedText id="m_0570e24c85cf95" />
+        </Label>
         <Input
           id="dept-code"
           value={code}
           onChange={(e) => setCode(e.currentTarget.value)}
-          placeholder="OPS"
+          placeholder={tGenerated('m_006a8df4fbdb47')}
           maxLength={16}
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="dept-description">Description</Label>
+        <Label htmlFor="dept-description">
+          <GeneratedText id="m_14d923495cf14c" />
+        </Label>
         <Textarea
           id="dept-description"
           value={description}
           onChange={(e) => setDescription(e.currentTarget.value)}
           rows={3}
-          placeholder="Optional notes"
+          placeholder={tGenerated('m_1db68018f67929')}
         />
       </div>
 
-      {error ? (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-          {error}
-        </p>
-      ) : null}
+      <GeneratedValue
+        value={
+          error ? (
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+              <GeneratedValue value={error} />
+            </p>
+          ) : null
+        }
+      />
 
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="outline" onClick={onDone} disabled={pending}>
-          Cancel
+          <GeneratedText id="m_112e2e8ecda428" />
         </Button>
         <Button type="submit" disabled={pending}>
-          {pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-          {editing ? 'Save changes' : 'Create department'}
+          <GeneratedValue
+            value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+          />
+          <GeneratedValue
+            value={
+              editing ? (
+                <GeneratedText id="m_1ab9025ed1067c" />
+              ) : (
+                <GeneratedText id="m_088208652fd6d2" />
+              )
+            }
+          />
         </Button>
       </div>
     </form>

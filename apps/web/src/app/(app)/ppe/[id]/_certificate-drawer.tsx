@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Add-certificate flyout for the PPE record page.
 //
 // "Certificates" are the third-party recertification records (e.g. an annual
@@ -44,6 +51,8 @@ export function CertificateDrawer({
   todayIso: string
   saveAction: (input: CertificateInput) => Promise<{ ok: true } | { ok: false; error: string }>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [inspectedOn, setInspectedOn] = useState(todayIso)
   const [result, setResult] = useState<'pass' | 'fail' | 'remediated'>('pass')
@@ -63,7 +72,7 @@ export function CertificateDrawer({
     setInspectorCompany('')
     setUploaded(null)
     setNotes('')
-    setError(null)
+    setError(tGeneratedValue(null))
   }
 
   function close() {
@@ -72,9 +81,9 @@ export function CertificateDrawer({
   }
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     if (!inspectedOn) {
-      setError('Inspection date is required.')
+      setError(tGenerated('m_1d4baa182c6601'))
       return
     }
     start(async () => {
@@ -89,13 +98,13 @@ export function CertificateDrawer({
         notes: notes.trim() || null,
       })
       if (res.ok) {
-        toast.success('Certificate saved')
+        toast.success(tGenerated('m_1d67aec605c8f7'))
         reset()
         router.push(closeHref)
         router.refresh()
       } else {
-        setError(res.error)
-        toast.error(res.error)
+        setError(tGeneratedValue(res.error))
+        toast.error(tGeneratedValue(res.error))
       }
     })
   }
@@ -114,21 +123,25 @@ export function CertificateDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title="Add certificate"
-      description="Record a third-party recertification and upload the signed certificate. The item's next-due date updates automatically."
+      title={tGenerated('m_101f8f6eb72ed9')}
+      description={tGenerated('m_056e88c4b3ac3b')}
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={close} disabled={pending}>
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending}>
-            {pending ? (
-              <Loader2 size={14} className="mr-1.5 animate-spin" />
-            ) : (
-              <Plus size={14} className="mr-1.5" />
-            )}
-            Save certificate
+            <GeneratedValue
+              value={
+                pending ? (
+                  <Loader2 size={14} className="mr-1.5 animate-spin" />
+                ) : (
+                  <Plus size={14} className="mr-1.5" />
+                )
+              }
+            />
+            <GeneratedText id="m_15434e7d1c42ad" />
           </Button>
         </div>
       }
@@ -136,91 +149,123 @@ export function CertificateDrawer({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>
-            Inspected on <span className="text-red-600">*</span>
+            <GeneratedText id="m_007365b39103b4" /> <span className="text-red-600">*</span>
           </Label>
           <Input type="date" value={inspectedOn} onChange={(e) => setInspectedOn(e.target.value)} />
-          {nextDue ? <p className="text-xs text-slate-500">Next due {nextDue}</p> : null}
+          <GeneratedValue
+            value={
+              nextDue ? (
+                <p className="text-xs text-slate-500">
+                  <GeneratedText id="m_11af411751990f" /> <GeneratedValue value={nextDue} />
+                </p>
+              ) : null
+            }
+          />
         </div>
         <div className="space-y-1.5">
           <Label>
-            Result <span className="text-red-600">*</span>
+            <GeneratedText id="m_100e41041dbe51" /> <span className="text-red-600">*</span>
           </Label>
           <Select
             value={result}
             onChange={(e) => setResult(e.target.value as 'pass' | 'fail' | 'remediated')}
           >
-            <option value="pass">Pass</option>
-            <option value="fail">Fail</option>
-            <option value="remediated">Pass after remediation</option>
+            <option value="pass">
+              <GeneratedText id="m_0e4b19568a01bf" />
+            </option>
+            <option value="fail">
+              <GeneratedText id="m_169669494a86f8" />
+            </option>
+            <option value="remediated">
+              <GeneratedText id="m_14efba56076015" />
+            </option>
           </Select>
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <Label>Inspected by (internal person)</Label>
+          <Label>
+            <GeneratedText id="m_0c04f05d754a3b" />
+          </Label>
           <RemoteSearchSelect
             lookup="ppe-active-people"
             value={personId}
             onChange={setPersonId}
-            placeholder="Select a person…"
-            searchPlaceholder="Search active people…"
+            placeholder={tGenerated('m_0be39d3a196b5b')}
+            searchPlaceholder={tGenerated('m_06c2338b990aea')}
             ariaLabel="Inspected by"
             clearable
-            emptyLabel="— External inspector —"
+            emptyLabel={tGenerated('m_00d3e387f5f082')}
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Inspector name (external)</Label>
+          <Label>
+            <GeneratedText id="m_1915423f92697f" />
+          </Label>
           <Input
             value={inspectorName}
             onChange={(e) => setInspectorName(e.target.value)}
-            placeholder="e.g. Joe Rigger"
+            placeholder={tGenerated('m_01f1e39c149b2b')}
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Inspector company</Label>
+          <Label>
+            <GeneratedText id="m_03cbfec3b8280c" />
+          </Label>
           <Input
             value={inspectorCompany}
             onChange={(e) => setInspectorCompany(e.target.value)}
-            placeholder="e.g. Acme Riggers Ltd"
+            placeholder={tGenerated('m_02aa1c77766763')}
           />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <Label>Certificate</Label>
-          {uploaded ? (
-            <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm dark:border-emerald-900 dark:bg-emerald-950/40">
-              <span className="font-medium text-emerald-900 dark:text-emerald-200">
-                {uploaded.filename}
-              </span>
-              <button
-                type="button"
-                onClick={() => setUploaded(null)}
-                className="text-xs font-medium text-emerald-800 hover:underline dark:text-emerald-300"
-              >
-                Replace
-              </button>
-            </div>
-          ) : (
-            <FileUploader
-              requestUploadAction={requestUpload}
-              finalizeUploadAction={finalizeUpload}
-              kind="document"
-              accept=".pdf,.png,.jpg,.jpeg,.heic,.webp,.doc,.docx"
-              onUploaded={(f) =>
-                setUploaded({ attachmentId: f.attachmentId, filename: f.filename })
-              }
-              label="Drop certificate or click to choose"
-              hint="PDF or image, up to 50 MB."
-            />
-          )}
+          <Label>
+            <GeneratedText id="m_162675e3afbec7" />
+          </Label>
+          <GeneratedValue
+            value={
+              uploaded ? (
+                <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm dark:border-emerald-900 dark:bg-emerald-950/40">
+                  <span className="font-medium text-emerald-900 dark:text-emerald-200">
+                    <GeneratedValue value={uploaded.filename} />
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setUploaded(null)}
+                    className="text-xs font-medium text-emerald-800 hover:underline dark:text-emerald-300"
+                  >
+                    <GeneratedText id="m_05b540acc16fd1" />
+                  </button>
+                </div>
+              ) : (
+                <FileUploader
+                  requestUploadAction={requestUpload}
+                  finalizeUploadAction={finalizeUpload}
+                  kind="document"
+                  accept=".pdf,.png,.jpg,.jpeg,.heic,.webp,.doc,.docx"
+                  onUploaded={(f) =>
+                    setUploaded({ attachmentId: f.attachmentId, filename: f.filename })
+                  }
+                  label={tGenerated('m_143d35a4f51fa2')}
+                  hint={tGenerated('m_1bedcc36cc7c5f')}
+                />
+              )
+            }
+          />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <Label>Notes</Label>
+          <Label>
+            <GeneratedText id="m_0b8dadcb78cd08" />
+          </Label>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
         </div>
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 sm:col-span-2 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 sm:col-span-2 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )

@@ -1,3 +1,5 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
+import { GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import { requireRequestContext } from '@/lib/auth'
 import { getEntry, getWorkspaceData, listEntries } from '../_data'
@@ -8,7 +10,10 @@ import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Journal entry' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0bcbd007dbc0d9') }
+}
 
 export default async function JournalEntryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -40,7 +45,9 @@ export default async function JournalEntryPage({ params }: { params: Promise<{ i
       <div className="border-b border-slate-200 p-3 dark:border-slate-800">
         <FlowApprovals gates={pendingGates} />
       </div>
-      <div className="min-h-0 flex-1">{workspace}</div>
+      <div className="min-h-0 flex-1">
+        <GeneratedValue value={workspace} />
+      </div>
     </div>
   )
 }

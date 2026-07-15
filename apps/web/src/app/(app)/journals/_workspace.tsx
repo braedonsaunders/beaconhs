@@ -1,5 +1,9 @@
 'use client'
 
+import { useGeneratedTranslations, useGeneratedValueTranslations } from '@/i18n/generated'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // The Journals workspace shell: a responsive 2-pane app (tree · editor). On
 // desktop the tree sits beside the editor; on mobile the tree is a slide-over
 // drawer and the editor is full-screen.
@@ -42,6 +46,8 @@ export function JournalWorkspace({
    *  affordances are hidden. Omitted for the personal /journals workspace. */
   author?: AuthorRef | null
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [data, setData] = useState(initialData)
   const [entry, setEntry] = useState(initialEntry)
   const [groupBy, setGroupBy] = useState<GroupBy>(initialGroupBy)
@@ -102,7 +108,7 @@ export function JournalWorkspace({
       setEntry(detail)
       setUrl(id)
     } else {
-      toast.error('That entry could not be opened.')
+      toast.error(tGenerated('m_0065fba0031114'))
     }
   }
 
@@ -160,7 +166,7 @@ export function JournalWorkspace({
     startNav(async () => {
       const r = await createTodayEntry()
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
       await openCreated(r.id)
@@ -172,7 +178,7 @@ export function JournalWorkspace({
     startNav(async () => {
       const r = await createEntryForDate(dateISO)
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
       await openCreated(r.id)
@@ -226,55 +232,63 @@ export function JournalWorkspace({
     <div className="flex h-full min-h-0 overflow-hidden bg-slate-50/40 dark:bg-slate-950">
       {/* Tree — desktop column */}
       <aside className="hidden w-72 shrink-0 border-r border-slate-200 lg:block dark:border-slate-800">
-        {sidebar}
+        <GeneratedValue value={sidebar} />
       </aside>
 
       {/* Tree — mobile Browse flyout: right-side, animated (matches app drawers) */}
       <AnimatePresence>
-        {treeOpen ? (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
-              onClick={() => setTreeOpen(false)}
-            />
-            <motion.aside
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
-              className="absolute top-0 right-0 h-full w-[88%] max-w-xs border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
-            >
-              {sidebar}
-            </motion.aside>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            treeOpen ? (
+              <div className="fixed inset-0 z-50 lg:hidden">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+                  onClick={() => setTreeOpen(false)}
+                />
+                <motion.aside
+                  initial={{ x: '100%' }}
+                  animate={{ x: 0 }}
+                  exit={{ x: '100%' }}
+                  transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.8 }}
+                  className="absolute top-0 right-0 h-full w-[88%] max-w-xs border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+                >
+                  <GeneratedValue value={sidebar} />
+                </motion.aside>
+              </div>
+            ) : null
+          }
+        />
       </AnimatePresence>
 
       {/* Editor */}
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="min-h-0 flex-1">
-          {entry ? (
-            <EditorPane
-              key={entry.id}
-              entry={entry}
-              tagSuggestions={data.tagSuggestions}
-              aiEnabled={data.aiEnabled}
-              onMutated={onMutated}
-              onDeleted={onDeleted}
-              onLocalPatch={onLocalPatch}
-              onBrowse={() => setTreeOpen(true)}
-            />
-          ) : (
-            <EmptyEditor
-              aiEnabled={data.aiEnabled}
-              onNew={newEntry}
-              onBrowse={() => setTreeOpen(true)}
-            />
-          )}
+          <GeneratedValue
+            value={
+              entry ? (
+                <EditorPane
+                  key={entry.id}
+                  entry={entry}
+                  tagSuggestions={data.tagSuggestions}
+                  aiEnabled={data.aiEnabled}
+                  onMutated={onMutated}
+                  onDeleted={onDeleted}
+                  onLocalPatch={onLocalPatch}
+                  onBrowse={() => setTreeOpen(true)}
+                />
+              ) : (
+                <EmptyEditor
+                  aiEnabled={data.aiEnabled}
+                  onNew={newEntry}
+                  onBrowse={() => setTreeOpen(true)}
+                />
+              )
+            }
+          />
         </div>
       </main>
     </div>
@@ -296,11 +310,11 @@ function EmptyEditor({
         <NotebookPen size={30} />
       </div>
       <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-        Start today’s journal
+        <GeneratedText id="m_12f6be73518266" />
       </h2>
       <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">
-        Capture what you worked on, hazards you spotted, and what got done. Add photos, dictate by
-        voice{aiEnabled ? ', and let AI tidy it up, tag it, and flag safety concerns.' : '.'}
+        <GeneratedText id="m_0ae4eeb19b1bad" />
+        <GeneratedValue value={aiEnabled ? <GeneratedText id="m_1003c0990a5a33" /> : '.'} />
       </p>
       <div className="mt-5 flex items-center gap-2">
         <button
@@ -310,21 +324,26 @@ function EmptyEditor({
           data-walkthrough="journals-new"
           className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal-800"
         >
-          <Plus size={16} /> New entry
+          <Plus size={16} /> <GeneratedText id="m_0036397741744c" />
         </button>
         <button
           type="button"
           onClick={onBrowse}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 lg:hidden dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
         >
-          <NotebookPen size={16} /> Browse
+          <NotebookPen size={16} /> <GeneratedText id="m_12c9bcb4cba5b7" />
         </button>
       </div>
-      {aiEnabled ? (
-        <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-          <Sparkles size={12} className="text-teal-500" /> AI assist is on
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          aiEnabled ? (
+            <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+              <Sparkles size={12} className="text-teal-500" />{' '}
+              <GeneratedText id="m_1cd0c39d0e9e4d" />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }

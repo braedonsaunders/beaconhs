@@ -1,5 +1,7 @@
 'use client'
 
+import { useGeneratedValueTranslations } from '@/i18n/generated'
+
 import { useEffect, useMemo, useState, type ComponentProps } from 'react'
 import { useRouter } from 'next/navigation'
 import { SearchSelect, type SelectOption } from '@beaconhs/ui'
@@ -61,6 +63,7 @@ export function RemoteSearchSelect({
   className?: string
   triggerClassName?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [query, setQuery] = useState('')
   const [remoteOptions, setRemoteOptions] = useState<PickerOption[]>([])
   const [loading, setLoading] = useState(!disabled)
@@ -97,7 +100,7 @@ export function RemoteSearchSelect({
         if (!isPickerOptionsResponse(payload)) {
           throw new Error('Picker lookup returned an invalid response')
         }
-        setError(false)
+        setError(tGeneratedValue(false))
         setRemoteOptions(payload.options)
         setHasMore(payload.hasMore)
       } catch (lookupError) {
@@ -106,7 +109,7 @@ export function RemoteSearchSelect({
           lookup: lookup ?? 'action-backed',
           lookupError,
         })
-        setError(true)
+        setError(tGeneratedValue(true))
         setHasMore(false)
       } finally {
         if (!controller.signal.aborted) setLoading(false)
@@ -117,7 +120,7 @@ export function RemoteSearchSelect({
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [contextId, disabled, loadOptions, lookup, query, value])
+  }, [contextId, disabled, loadOptions, lookup, query, tGeneratedValue, value])
 
   const options = useMemo(() => {
     const excluded = new Set(excludedValues)
@@ -146,12 +149,12 @@ export function RemoteSearchSelect({
         onOptionChange?.(options.find((option) => option.value === next))
       }}
       options={options}
-      placeholder={placeholder}
-      searchPlaceholder={searchPlaceholder}
+      placeholder={tGeneratedValue(placeholder)}
+      searchPlaceholder={tGeneratedValue(searchPlaceholder)}
       sheetTitle={sheetTitle}
       ariaLabel={ariaLabel ?? placeholder}
       clearable={clearable}
-      emptyLabel={emptyLabel}
+      emptyLabel={tGeneratedValue(emptyLabel)}
       disabled={disabled}
       invalid={invalid}
       className={className}
@@ -164,7 +167,7 @@ export function RemoteSearchSelect({
       onSearchChange={(next) => {
         setQuery(next.slice(0, 100))
         setLoading(true)
-        setError(false)
+        setError(tGeneratedValue(false))
         // Never present stale rows as matches while the debounced request runs.
         setRemoteOptions((current) => current.filter((option) => option.value === value))
         setHasMore(false)
@@ -229,6 +232,7 @@ export function RemoteSearchFilter({
   className?: string
   pageParamKey?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const router = useRouter()
   const value =
     typeof currentParams[paramKey] === 'string' ? (currentParams[paramKey] as string) : ''
@@ -247,12 +251,12 @@ export function RemoteSearchFilter({
         )
       }
       initialOption={initialOption}
-      placeholder={placeholder}
-      searchPlaceholder={searchPlaceholder ?? placeholder}
+      placeholder={tGeneratedValue(placeholder)}
+      searchPlaceholder={tGeneratedValue(searchPlaceholder ?? placeholder)}
       ariaLabel={ariaLabel ?? placeholder}
       sheetTitle={placeholder}
       clearable
-      emptyLabel={allLabel ?? placeholder}
+      emptyLabel={tGeneratedValue(allLabel ?? placeholder)}
       className={className}
       triggerClassName="h-8 text-sm"
     />

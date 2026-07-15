@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { and, asc, count, desc, eq, ilike, isNull, or } from 'drizzle-orm'
 import { PageHeader } from '@beaconhs/ui'
 import { equipmentStationSettings, orgUnits, tenants } from '@beaconhs/db/schema'
@@ -9,7 +10,10 @@ import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { StationBaseLocationsManager } from './_base-locations'
 import { StationSettingsForm } from './_form'
 
-export const metadata = { title: 'Station settings' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1474b36d8e0cff') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function StationSettingsPage({
@@ -17,6 +21,7 @@ export default async function StationSettingsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireModuleManage('equipment')
   const sp = await searchParams
   const baseParams = parsePrefixedListParams(sp, 'base', {
@@ -105,8 +110,8 @@ export default async function StationSettingsPage({
       header={
         <>
           <PageHeader
-            title="Check-in / out station settings"
-            description="Configure the home location, what counts as checked in, scan behaviour, and the mounted-tablet kiosk."
+            title={tGenerated('m_156081752ae7ad')}
+            description={tGenerated('m_1daa2ece59b68c')}
           />
           <EquipmentSubNav active="station-settings" />
         </>

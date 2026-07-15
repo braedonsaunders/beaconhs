@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // A single user-guide article. Permission-aware: unknown slugs and articles
 // the user isn't allowed to see both 404. Articles with a matching guided tour
 // offer a "Show me" launch button.
@@ -29,6 +32,7 @@ const ARTICLE_TOURS: Record<string, string> = {
 }
 
 export default async function HelpArticlePage({ params }: { params: Promise<{ slug: string }> }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
   const ctx = await requireRequestContext()
   const { slug } = await params
   const article = manualArticleForUser(ctx, slug)
@@ -54,15 +58,15 @@ export default async function HelpArticlePage({ params }: { params: Promise<{ sl
       <div className="mx-auto max-w-3xl space-y-6">
         <PageHeader
           back={{ href: '/help', label: 'User Guide' }}
-          title={article.title}
-          description={article.summary}
+          title={tGeneratedValue(article.title)}
+          description={tGeneratedValue(article.summary)}
           actions={
             tour ? (
               <Link
                 href={`${tour.startPath}?walkthrough=${tour.id}` as never}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-sm font-medium text-teal-800 transition-colors hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-200 dark:hover:bg-teal-950"
               >
-                <PlayCircle size={15} /> Show me
+                <PlayCircle size={15} /> <GeneratedText id="m_1ae02d764a25ee" />
               </Link>
             ) : undefined
           }
@@ -74,6 +78,7 @@ export default async function HelpArticlePage({ params }: { params: Promise<{ sl
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { slug } = await params
-  return { title: `Help · ${slug.replace(/-/g, ' ')}` }
+  return { title: tGenerated('m_141b9ae9ba712a', { value0: slug.replace(/-/g, ' ') }) }
 }

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { ClipboardList } from 'lucide-react'
 import {
@@ -55,7 +58,10 @@ import { parseDateFilter } from '../_datetime'
 import { NewInspectionDrawer, type NewInspectionType } from './_new-drawer'
 import { startInspection } from './_actions'
 
-export const metadata = { title: 'Inspections' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_189bb91aaf5565') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['occurred_at', 'reference', 'type', 'status'] as const
@@ -72,6 +78,8 @@ export default async function InspectionRecordsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'occurred_at',
@@ -241,39 +249,49 @@ export default async function InspectionRecordsPage({
         header={
           <>
             <PageHeader
-              title="Inspections"
-              description="Completed inspections with results, signatures, and follow-up actions."
+              title={tGenerated('m_189bb91aaf5565')}
+              description={tGenerated('m_074b0b12b5f20c')}
               actions={
                 <div className="flex items-center gap-2">
-                  {canExport ? (
-                    <a href={buildExportHref('/inspections/export.csv', sp)}>
-                      <Button variant="outline">Export CSV</Button>
-                    </a>
-                  ) : null}
+                  <GeneratedValue
+                    value={
+                      canExport ? (
+                        <a href={buildExportHref('/inspections/export.csv', sp)}>
+                          <Button variant="outline">
+                            <GeneratedText id="m_14c6440eca1edc" />
+                          </Button>
+                        </a>
+                      ) : null
+                    }
+                  />
                   <Link href="/inspections/records?drawer=new">
-                    <Button>New inspection</Button>
+                    <Button>
+                      <GeneratedText id="m_0f060bce7a52ef" />
+                    </Button>
                   </Link>
                 </div>
               }
             />
             <InspectionsSubNav active="records" />
             <TableToolbar>
-              <SearchInput placeholder="Search by reference / type / foreman" />
+              <SearchInput placeholder={tGenerated('m_10b8312c247f22')} />
               <form className="flex items-center gap-1 text-xs">
                 {/* Carry every other active filter/sort so applying a date range
                     doesn't wipe the rest of the URL state. */}
-                {Object.entries(sp)
-                  .filter(
-                    ([k, v]) =>
-                      !['dateFrom', 'dateTo', 'page'].includes(k) &&
-                      typeof v === 'string' &&
-                      v !== '',
-                  )
-                  .map(([k, v]) => (
-                    <input key={k} type="hidden" name={k} value={v as string} />
-                  ))}
+                <GeneratedValue
+                  value={Object.entries(sp)
+                    .filter(
+                      ([k, v]) =>
+                        !['dateFrom', 'dateTo', 'page'].includes(k) &&
+                        typeof v === 'string' &&
+                        v !== '',
+                    )
+                    .map(([k, v]) => (
+                      <input key={k} type="hidden" name={k} value={v as string} />
+                    ))}
+                />
                 <label className="flex items-center gap-1 text-slate-500">
-                  Occurred from
+                  <GeneratedText id="m_1fae4b277c5b55" />
                   <input
                     type="date"
                     name="dateFrom"
@@ -282,7 +300,7 @@ export default async function InspectionRecordsPage({
                   />
                 </label>
                 <label className="flex items-center gap-1 text-slate-500">
-                  to
+                  <GeneratedText id="m_02d4f83ff8f11c" />
                   <input
                     type="date"
                     name="dateTo"
@@ -294,14 +312,14 @@ export default async function InspectionRecordsPage({
                   type="submit"
                   className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
-                  Apply
+                  <GeneratedText id="m_01185cdc1c20a5" />
                 </button>
               </form>
               <FilterChips
                 basePath="/inspections/records"
                 currentParams={sp}
                 paramKey="status"
-                label="Status"
+                label={tGenerated('m_0b9da892d6faf0')}
                 options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
               />
               <RemoteSearchFilter
@@ -309,33 +327,33 @@ export default async function InspectionRecordsPage({
                 basePath="/inspections/records"
                 currentParams={sp}
                 paramKey="type"
-                placeholder="All inspection types"
+                placeholder={tGenerated('m_1611fa8f360b83')}
                 allLabel="All inspection types"
-                searchPlaceholder="Search visible inspection types…"
+                searchPlaceholder={tGenerated('m_0cfac222b97518')}
               />
               <RemoteSearchFilter
                 lookup="inspection-record-filter-sites"
                 basePath="/inspections/records"
                 currentParams={sp}
                 paramKey="site"
-                placeholder="All sites"
+                placeholder={tGenerated('m_1f5ad6ec6b5d2a')}
                 allLabel="All sites"
-                searchPlaceholder="Search visible sites…"
+                searchPlaceholder={tGenerated('m_027b30a61c22c4')}
               />
               <RemoteSearchFilter
                 lookup="inspection-record-filter-inspectors"
                 basePath="/inspections/records"
                 currentParams={sp}
                 paramKey="inspector"
-                placeholder="All inspectors"
+                placeholder={tGenerated('m_1b8e5ee2723809')}
                 allLabel="All inspectors"
-                searchPlaceholder="Search visible inspectors…"
+                searchPlaceholder={tGenerated('m_13bf3655817e8d')}
               />
               <FilterChips
                 basePath="/inspections/records"
                 currentParams={sp}
                 paramKey="signed"
-                label="Customer signed"
+                label={tGenerated('m_011c62a541c44d')}
                 options={[
                   { value: 'yes', label: 'Signed' },
                   { value: 'no', label: 'Unsigned' },
@@ -345,237 +363,314 @@ export default async function InspectionRecordsPage({
           </>
         }
       >
-        {rows.length === 0 ? (
-          <EmptyState
-            icon={<ClipboardList size={32} />}
-            title={
-              params.q ||
-              statusFilter ||
-              typeFilter ||
-              siteFilter ||
-              inspectorFilter ||
-              signedFilter ||
-              dateFrom ||
-              dateTo
-                ? 'No inspection records match these filters'
-                : 'No inspection records'
-            }
-            description="Select an inspection type to start one."
-            action={
-              <Link href="/inspections/records?drawer=new">
-                <Button>New inspection</Button>
-              </Link>
-            }
-          />
-        ) : (
-          <>
-            {/* Phones: tappable cards. */}
-            <MobileCardList>
-              {rows.map((r) => {
-                const total = Number(r.totalCount ?? 0)
-                const pass = Number(r.passCount ?? 0)
-                const fail = Number(r.failCount ?? 0)
-                const na = Number(r.naCount ?? 0)
-                const passPct = total > 0 ? Math.round((pass / total) * 100) : null
-                return (
-                  <ListCard
-                    key={r.record.id}
-                    href={`/inspections/records/${r.record.id}`}
-                    reference={r.record.reference}
-                    title={r.type.name}
-                    status={
-                      <Badge
-                        variant={
-                          r.record.status === 'closed' || r.record.status === 'submitted'
-                            ? 'success'
-                            : r.record.status === 'in_progress'
-                              ? 'warning'
-                              : 'secondary'
-                        }
-                      >
-                        {r.record.status.replace(/_/g, ' ')}
-                      </Badge>
-                    }
-                    person={r.inspectorName}
-                    meta={`${formatDate(new Date(r.record.occurredAt), ctx.timezone, ctx.locale)}${
-                      r.site?.name ? ` · ${r.site.name}` : ''
-                    }`}
-                    footer={
-                      <>
-                        {passPct != null ? (
-                          <Badge
-                            variant={
-                              passPct >= 90 ? 'success' : passPct >= 60 ? 'warning' : 'destructive'
-                            }
-                            className="text-[10px]"
-                          >
-                            {passPct}% · {pass}/{fail}/{na}
-                          </Badge>
-                        ) : null}
-                        <Badge
-                          variant={r.record.customerSignedAt ? 'success' : 'outline'}
-                          className="text-[10px]"
-                        >
-                          {r.record.customerSignedAt ? 'Signed' : 'Unsigned'}
-                        </Badge>
-                      </>
-                    }
-                  />
-                )
-              })}
-            </MobileCardList>
-
-            {/* Tablet/desktop: full sortable table. */}
-            <div className="hidden sm:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <SortableTh
-                      {...sortProps}
-                      column="reference"
-                      active={params.sort === 'reference'}
-                    >
-                      Reference
-                    </SortableTh>
-                    <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
-                      Type
-                    </SortableTh>
-                    <SortableTh
-                      {...sortProps}
-                      column="occurred_at"
-                      active={params.sort === 'occurred_at'}
-                    >
-                      Occurred
-                    </SortableTh>
-                    <TableHead>Site</TableHead>
-                    <TableHead>Inspector</TableHead>
-                    <TableHead>Foreman</TableHead>
-                    <TableHead>Pass / Fail / N-A</TableHead>
-                    <TableHead className="w-20">Signed</TableHead>
-                    <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                      Status
-                    </SortableTh>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((r) => {
-                    const total = Number(r.totalCount ?? 0)
-                    const pass = Number(r.passCount ?? 0)
-                    const fail = Number(r.failCount ?? 0)
-                    const na = Number(r.naCount ?? 0)
-                    const passPct = total > 0 ? Math.round((pass / total) * 100) : null
-                    return (
-                      <TableRow key={r.record.id}>
-                        <TableCell className="font-mono text-xs">
-                          <Link
-                            href={`/inspections/records/${r.record.id}`}
-                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                          >
-                            {r.record.reference}
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <Link
-                            href={`/inspections/records/${r.record.id}`}
-                            className="hover:underline"
-                          >
-                            {r.type.name}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
-                          {formatDate(new Date(r.record.occurredAt), ctx.timezone, ctx.locale)}
-                        </TableCell>
-                        <TableCell className="text-slate-600 dark:text-slate-400">
-                          {r.site?.name ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-slate-600 dark:text-slate-400">
-                          {r.inspectorName ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                          {r.record.foremanText ? (
-                            <span>{r.record.foremanText}</span>
-                          ) : r.record.foremanPersonIds.length > 0 ? (
-                            <Badge variant="secondary">
-                              {r.record.foremanPersonIds.length} assigned
+        <GeneratedValue
+          value={
+            rows.length === 0 ? (
+              <EmptyState
+                icon={<ClipboardList size={32} />}
+                title={tGeneratedValue(
+                  params.q ||
+                    statusFilter ||
+                    typeFilter ||
+                    siteFilter ||
+                    inspectorFilter ||
+                    signedFilter ||
+                    dateFrom ||
+                    dateTo
+                    ? tGenerated('m_081cf74f9e61fd')
+                    : tGenerated('m_1c4b99ad9e67f8'),
+                )}
+                description={tGenerated('m_1682c6a90ba66b')}
+                action={
+                  <Link href="/inspections/records?drawer=new">
+                    <Button>
+                      <GeneratedText id="m_0f060bce7a52ef" />
+                    </Button>
+                  </Link>
+                }
+              />
+            ) : (
+              <>
+                {/* Phones: tappable cards. */}
+                <MobileCardList>
+                  <GeneratedValue
+                    value={rows.map((r) => {
+                      const total = Number(r.totalCount ?? 0)
+                      const pass = Number(r.passCount ?? 0)
+                      const fail = Number(r.failCount ?? 0)
+                      const na = Number(r.naCount ?? 0)
+                      const passPct = total > 0 ? Math.round((pass / total) * 100) : null
+                      return (
+                        <ListCard
+                          key={r.record.id}
+                          href={`/inspections/records/${r.record.id}`}
+                          reference={r.record.reference}
+                          title={tGeneratedValue(r.type.name)}
+                          status={
+                            <Badge
+                              variant={
+                                r.record.status === 'closed' || r.record.status === 'submitted'
+                                  ? 'success'
+                                  : r.record.status === 'in_progress'
+                                    ? 'warning'
+                                    : 'secondary'
+                              }
+                            >
+                              <GeneratedValue value={r.record.status.replace(/_/g, ' ')} />
                             </Badge>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs tabular-nums">
-                          {total === 0 ? (
-                            <span className="text-slate-400">—</span>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span>
-                                <span className="text-emerald-700">{pass}</span> /{' '}
-                                <span className="text-red-700">{fail}</span> /{' '}
-                                <span className="text-slate-500">{na}</span>
-                                <span className="ml-1 text-slate-400">({total})</span>
-                              </span>
-                              {passPct != null ? (
+                          }
+                          person={r.inspectorName}
+                          meta={`${formatDate(new Date(r.record.occurredAt), ctx.timezone, ctx.locale)}${
+                            r.site?.name ? ` · ${r.site.name}` : ''
+                          }`}
+                          footer={
+                            <>
+                              <GeneratedValue
+                                value={
+                                  passPct != null ? (
+                                    <Badge
+                                      variant={
+                                        passPct >= 90
+                                          ? 'success'
+                                          : passPct >= 60
+                                            ? 'warning'
+                                            : 'destructive'
+                                      }
+                                      className="text-[10px]"
+                                    >
+                                      <GeneratedValue value={passPct} />% ·{' '}
+                                      <GeneratedValue value={pass} />/
+                                      <GeneratedValue value={fail} />/<GeneratedValue value={na} />
+                                    </Badge>
+                                  ) : null
+                                }
+                              />
+                              <Badge
+                                variant={r.record.customerSignedAt ? 'success' : 'outline'}
+                                className="text-[10px]"
+                              >
+                                <GeneratedValue
+                                  value={
+                                    r.record.customerSignedAt ? (
+                                      <GeneratedText id="m_142c80b0b4c3f4" />
+                                    ) : (
+                                      <GeneratedText id="m_0eced23f75962c" />
+                                    )
+                                  }
+                                />
+                              </Badge>
+                            </>
+                          }
+                        />
+                      )
+                    })}
+                  />
+                </MobileCardList>
+
+                {/* Tablet/desktop: full sortable table. */}
+                <div className="hidden sm:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <SortableTh
+                          {...sortProps}
+                          column="reference"
+                          active={params.sort === 'reference'}
+                        >
+                          <GeneratedText id="m_17dc61a19b605c" />
+                        </SortableTh>
+                        <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
+                          <GeneratedText id="m_074ba2f160c506" />
+                        </SortableTh>
+                        <SortableTh
+                          {...sortProps}
+                          column="occurred_at"
+                          active={params.sort === 'occurred_at'}
+                        >
+                          <GeneratedText id="m_14a5e97535a15a" />
+                        </SortableTh>
+                        <TableHead>
+                          <GeneratedText id="m_020146dd3d3d5a" />
+                        </TableHead>
+                        <TableHead>
+                          <GeneratedText id="m_08412ea75fe5da" />
+                        </TableHead>
+                        <TableHead>
+                          <GeneratedText id="m_184fa8d9234543" />
+                        </TableHead>
+                        <TableHead>
+                          <GeneratedText id="m_1f787fe77f7e09" />
+                        </TableHead>
+                        <TableHead className="w-20">
+                          <GeneratedText id="m_142c80b0b4c3f4" />
+                        </TableHead>
+                        <SortableTh
+                          {...sortProps}
+                          column="status"
+                          active={params.sort === 'status'}
+                        >
+                          <GeneratedText id="m_0b9da892d6faf0" />
+                        </SortableTh>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <GeneratedValue
+                        value={rows.map((r) => {
+                          const total = Number(r.totalCount ?? 0)
+                          const pass = Number(r.passCount ?? 0)
+                          const fail = Number(r.failCount ?? 0)
+                          const na = Number(r.naCount ?? 0)
+                          const passPct = total > 0 ? Math.round((pass / total) * 100) : null
+                          return (
+                            <TableRow key={r.record.id}>
+                              <TableCell className="font-mono text-xs">
+                                <Link
+                                  href={`/inspections/records/${r.record.id}`}
+                                  className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                                >
+                                  <GeneratedValue value={r.record.reference} />
+                                </Link>
+                              </TableCell>
+                              <TableCell>
+                                <Link
+                                  href={`/inspections/records/${r.record.id}`}
+                                  className="hover:underline"
+                                >
+                                  <GeneratedValue value={r.type.name} />
+                                </Link>
+                              </TableCell>
+                              <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-400">
+                                <GeneratedValue
+                                  value={formatDate(
+                                    new Date(r.record.occurredAt),
+                                    ctx.timezone,
+                                    ctx.locale,
+                                  )}
+                                />
+                              </TableCell>
+                              <TableCell className="text-slate-600 dark:text-slate-400">
+                                <GeneratedValue value={r.site?.name ?? '—'} />
+                              </TableCell>
+                              <TableCell className="text-slate-600 dark:text-slate-400">
+                                <GeneratedValue value={r.inspectorName ?? '—'} />
+                              </TableCell>
+                              <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                                <GeneratedValue
+                                  value={
+                                    r.record.foremanText ? (
+                                      <span>
+                                        <GeneratedValue value={r.record.foremanText} />
+                                      </span>
+                                    ) : r.record.foremanPersonIds.length > 0 ? (
+                                      <Badge variant="secondary">
+                                        <GeneratedValue value={r.record.foremanPersonIds.length} />{' '}
+                                        <GeneratedText id="m_1ad9a6529af849" />
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-slate-400">—</span>
+                                    )
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="text-xs tabular-nums">
+                                <GeneratedValue
+                                  value={
+                                    total === 0 ? (
+                                      <span className="text-slate-400">—</span>
+                                    ) : (
+                                      <div className="flex items-center gap-2">
+                                        <span>
+                                          <span className="text-emerald-700">
+                                            <GeneratedValue value={pass} />
+                                          </span>{' '}
+                                          /<GeneratedValue value={' '} />
+                                          <span className="text-red-700">
+                                            <GeneratedValue value={fail} />
+                                          </span>{' '}
+                                          /<GeneratedValue value={' '} />
+                                          <span className="text-slate-500">
+                                            <GeneratedValue value={na} />
+                                          </span>
+                                          <span className="ml-1 text-slate-400">
+                                            (<GeneratedValue value={total} />)
+                                          </span>
+                                        </span>
+                                        <GeneratedValue
+                                          value={
+                                            passPct != null ? (
+                                              <Badge
+                                                variant={
+                                                  passPct >= 90
+                                                    ? 'success'
+                                                    : passPct >= 60
+                                                      ? 'warning'
+                                                      : 'destructive'
+                                                }
+                                                className="text-[10px]"
+                                              >
+                                                {passPct}%
+                                              </Badge>
+                                            ) : null
+                                          }
+                                        />
+                                      </div>
+                                    )
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <GeneratedValue
+                                  value={
+                                    r.record.customerSignedAt ? (
+                                      <Badge variant="success" className="text-[10px]">
+                                        <GeneratedText id="m_142c80b0b4c3f4" />
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-[10px]">
+                                        <GeneratedText id="m_0eced23f75962c" />
+                                      </Badge>
+                                    )
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>
                                 <Badge
                                   variant={
-                                    passPct >= 90
+                                    r.record.status === 'closed' || r.record.status === 'submitted'
                                       ? 'success'
-                                      : passPct >= 60
+                                      : r.record.status === 'in_progress'
                                         ? 'warning'
-                                        : 'destructive'
+                                        : 'secondary'
                                   }
-                                  className="text-[10px]"
                                 >
-                                  {passPct}%
+                                  <GeneratedValue value={r.record.status.replace(/_/g, ' ')} />
                                 </Badge>
-                              ) : null}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {r.record.customerSignedAt ? (
-                            <Badge variant="success" className="text-[10px]">
-                              Signed
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px]">
-                              Unsigned
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              r.record.status === 'closed' || r.record.status === 'submitted'
-                                ? 'success'
-                                : r.record.status === 'in_progress'
-                                  ? 'warning'
-                                  : 'secondary'
-                            }
-                          >
-                            {r.record.status.replace(/_/g, ' ')}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-            <Pagination
-              basePath="/inspections/records"
-              currentParams={sp}
-              total={total}
-              page={params.page}
-              perPage={params.perPage}
-            />
-          </>
-        )}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      />
+                    </TableBody>
+                  </Table>
+                </div>
+                <Pagination
+                  basePath="/inspections/records"
+                  currentParams={sp}
+                  total={total}
+                  page={params.page}
+                  perPage={params.perPage}
+                />
+              </>
+            )
+          }
+        />
       </ListPageLayout>
 
       <UrlDrawer
         open={drawerKey === 'new'}
         closeHref="/inspections/records"
-        title="Start an inspection"
-        description="Pick a type to begin — date, site, foreman and notes are captured on the record."
+        title={tGenerated('m_1edf2b8e0e3013')}
+        description={tGenerated('m_165636f76180c4')}
         size="md"
       >
         <NewInspectionDrawer types={newTypes} startAction={startInspection} />

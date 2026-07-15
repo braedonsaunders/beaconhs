@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Timer } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from 'drizzle-orm'
@@ -31,7 +34,10 @@ import { templateAccessWhere } from '../_lib/access'
 // empty state. A session's live monitor lives on its response page. See
 // docs/monitored-sessions-design.md.
 
-export const metadata = { title: 'Monitored sessions' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_163e07fa713535') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['live', 'worker', 'app', 'status', 'started', 'next_checkin'] as const
@@ -56,6 +62,8 @@ export default async function MonitoredSessionsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'live',
@@ -167,110 +175,127 @@ export default async function MonitoredSessionsPage({
       header={
         <>
           <PageHeader
-            title="Monitored sessions"
-            description="Live timed sessions across every monitored app — recurring check-ins with automatic overdue escalation."
+            title={tGenerated('m_163e07fa713535')}
+            description={tGenerated('m_19025d4e1b4e6a')}
           />
           <TableToolbar>
-            <SearchInput placeholder="Search worker, app, or status…" />
+            <SearchInput placeholder={tGenerated('m_023d0b7942cdc9')} />
             <FilterChips
               basePath="/apps/sessions"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={STATUS_OPTIONS}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Timer size={32} />}
-          title={
-            searchQuery || statusFilter
-              ? 'No sessions match these filters'
-              : 'No monitored sessions'
-          }
-          description={
-            searchQuery || statusFilter
-              ? 'Clear or change the current search and status filter.'
-              : 'When a worker starts a session on a monitored app, it appears here — they check in on an interval and a missed check-in escalates to supervisors automatically.'
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="worker" active={params.sort === 'worker'}>
-                  Worker
-                </SortableTh>
-                <SortableTh {...sortProps} column="app" active={params.sort === 'app'}>
-                  App
-                </SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                  Status
-                </SortableTh>
-                <SortableTh {...sortProps} column="started" active={params.sort === 'started'}>
-                  Started
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="next_checkin"
-                  active={params.sort === 'next_checkin'}
-                >
-                  Next check-in
-                </SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => {
-                const badge = STATUS_BADGE[r.monitorStatus ?? ''] ?? {
-                  label: r.monitorStatus ?? '—',
-                  variant: 'outline' as const,
-                }
-                return (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <Link
-                        href={`/apps/responses/${r.id}`}
-                        className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-                      >
-                        {r.worker ?? r.workerAccount ?? 'Session'}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">
-                      {r.appName ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={badge.variant}>{badge.label}</Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
-                      {r.submittedAt ? fmt(new Date(r.submittedAt)) : '—'}
-                    </TableCell>
-                    <TableCell
-                      className={
-                        r.isOverdue
-                          ? 'font-medium text-red-600 tabular-nums dark:text-red-400'
-                          : 'text-slate-600 tabular-nums dark:text-slate-400'
-                      }
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Timer size={32} />}
+              title={tGeneratedValue(
+                searchQuery || statusFilter
+                  ? tGenerated('m_10e82b704b17f6')
+                  : tGenerated('m_0f92b65ae14b64'),
+              )}
+              description={tGeneratedValue(
+                searchQuery || statusFilter
+                  ? tGenerated('m_1f90cb0675ecc6')
+                  : tGenerated('m_17612db37fa5fe'),
+              )}
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="worker" active={params.sort === 'worker'}>
+                      <GeneratedText id="m_02e7a537a70bfc" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="app" active={params.sort === 'app'}>
+                      <GeneratedText id="m_0c7a3810288c4a" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="started" active={params.sort === 'started'}>
+                      <GeneratedText id="m_1922c581498469" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="next_checkin"
+                      active={params.sort === 'next_checkin'}
                     >
-                      {r.nextCheckinDueAt ? fmt(new Date(r.nextCheckinDueAt)) : '—'}
-                    </TableCell>
+                      <GeneratedText id="m_1f958712ebcf6f" />
+                    </SortableTh>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/apps/sessions"
-            currentParams={sp}
-            total={total}
-            page={page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((r) => {
+                      const badge = STATUS_BADGE[r.monitorStatus ?? ''] ?? {
+                        label: r.monitorStatus ?? '—',
+                        variant: 'outline' as const,
+                      }
+                      return (
+                        <TableRow key={r.id}>
+                          <TableCell>
+                            <Link
+                              href={`/apps/responses/${r.id}`}
+                              className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+                            >
+                              <GeneratedValue
+                                value={
+                                  r.worker ??
+                                  r.workerAccount ?? <GeneratedText id="m_038b42e83ddc12" />
+                                }
+                              />
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            <GeneratedValue value={r.appName ?? '—'} />
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={badge.variant}>
+                              <GeneratedValue value={badge.label} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
+                            <GeneratedValue
+                              value={r.submittedAt ? fmt(new Date(r.submittedAt)) : '—'}
+                            />
+                          </TableCell>
+                          <TableCell
+                            className={
+                              r.isOverdue
+                                ? 'font-medium text-red-600 tabular-nums dark:text-red-400'
+                                : 'text-slate-600 tabular-nums dark:text-slate-400'
+                            }
+                          >
+                            <GeneratedValue
+                              value={r.nextCheckinDueAt ? fmt(new Date(r.nextCheckinDueAt)) : '—'}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/apps/sessions"
+                currentParams={sp}
+                total={total}
+                page={page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

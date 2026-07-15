@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { notFound } from 'next/navigation'
@@ -101,8 +105,9 @@ function dateIsoInTz(d: Date, timeZone: string): string {
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Document · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_081723366ddedf', { value0: id.slice(0, 8) }) }
 }
 
 // ---------- Server actions ----------
@@ -352,6 +357,8 @@ export default async function DocumentDetailPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -766,72 +773,104 @@ export default async function DocumentDetailPage({
       <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
         <SmartBackLink
           href="/documents"
-          label="Documents"
+          label={tGenerated('m_05caa6a53f9b7f')}
           className="shrink-0 text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
         />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {doc.title}
+              <GeneratedValue value={doc.title} />
             </span>
             <Badge variant={doc.status === 'published' ? 'success' : 'secondary'}>
-              {doc.status}
+              <GeneratedValue value={doc.status} />
             </Badge>
-            {currentVersion ? <Badge variant="outline">v{currentVersion.version}</Badge> : null}
-            {isOverdue ? <Badge variant="destructive">Review overdue</Badge> : null}
+            <GeneratedValue
+              value={
+                currentVersion ? (
+                  <Badge variant="outline">
+                    <GeneratedText id="m_1c693e59d64fb2" />
+                    <GeneratedValue value={currentVersion.version} />
+                  </Badge>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                isOverdue ? (
+                  <Badge variant="destructive">
+                    <GeneratedText id="m_00a1f1b8ed0f00" />
+                  </Badge>
+                ) : null
+              }
+            />
           </div>
           <div className="truncate text-xs text-slate-500 dark:text-slate-400">
-            {categoryName ?? 'document'} · <span className="font-mono">{doc.key}</span>
+            <GeneratedValue value={categoryName ?? <GeneratedText id="m_08927559ee23e3" />} /> ·{' '}
+            <span className="font-mono">
+              <GeneratedValue value={doc.key} />
+            </span>
           </div>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {canManage ? (
-            <>
-              {canEmailPublishedVersion ? (
-                <Link
-                  href={
-                    `/documents/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
-                  }
-                  scroll={false}
-                >
-                  <Button variant="outline">
-                    <Mail size={14} /> Send email
-                  </Button>
-                </Link>
-              ) : doc.status === 'published' && publishedVersion ? (
-                <Button variant="outline" disabled title="The published PDF is still rendering">
-                  <Mail size={14} /> Preparing PDF…
-                </Button>
-              ) : null}
-              {doc.status === 'published' ? (
-                <form action={unpublish} className="inline">
-                  <input type="hidden" name="id" value={id} />
-                  <Button type="submit" variant="outline">
-                    Unpublish
-                  </Button>
-                </form>
-              ) : isFileDoc ? (
-                // Authored documents publish from the Write toolbar (with a
-                // changelog) — only file-only PDFs publish from here.
-                <form action={publishFileDocument} className="inline">
-                  <input type="hidden" name="id" value={id} />
-                  <Button type="submit">
-                    <Check size={14} /> Publish
-                  </Button>
-                </form>
-              ) : null}
-              <form action={deleteDocument} className="inline">
-                <input type="hidden" name="id" value={id} />
-                <ConfirmButton
-                  message="Delete this document? Readers lose access, it is removed from books, and it disappears from every list. Version history is kept for audit."
-                  size="md"
-                  className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
-                >
-                  <Trash2 size={14} /> Delete
-                </ConfirmButton>
-              </form>
-            </>
-          ) : null}
+          <GeneratedValue
+            value={
+              canManage ? (
+                <>
+                  <GeneratedValue
+                    value={
+                      canEmailPublishedVersion ? (
+                        <Link
+                          href={
+                            `/documents/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any
+                          }
+                          scroll={false}
+                        >
+                          <Button variant="outline">
+                            <Mail size={14} /> <GeneratedText id="m_09dfca28fc95ba" />
+                          </Button>
+                        </Link>
+                      ) : doc.status === 'published' && publishedVersion ? (
+                        <Button variant="outline" disabled title={tGenerated('m_10c935c4eaa746')}>
+                          <Mail size={14} /> <GeneratedText id="m_114d1ab8539fc8" />
+                        </Button>
+                      ) : null
+                    }
+                  />
+                  <GeneratedValue
+                    value={
+                      doc.status === 'published' ? (
+                        <form action={unpublish} className="inline">
+                          <input type="hidden" name="id" value={id} />
+                          <Button type="submit" variant="outline">
+                            <GeneratedText id="m_0d6976fc2d60c8" />
+                          </Button>
+                        </form>
+                      ) : isFileDoc ? (
+                        // Authored documents publish from the Write toolbar (with a
+                        // changelog) — only file-only PDFs publish from here.
+                        <form action={publishFileDocument} className="inline">
+                          <input type="hidden" name="id" value={id} />
+                          <Button type="submit">
+                            <Check size={14} /> <GeneratedText id="m_0c072fb8baf115" />
+                          </Button>
+                        </form>
+                      ) : null
+                    }
+                  />
+                  <form action={deleteDocument} className="inline">
+                    <input type="hidden" name="id" value={id} />
+                    <ConfirmButton
+                      message={tGenerated('m_1c8dd92ce3b2c4')}
+                      size="md"
+                      className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                    >
+                      <Trash2 size={14} /> <GeneratedText id="m_11773f3c3f7558" />
+                    </ConfirmButton>
+                  </form>
+                </>
+              ) : null
+            }
+          />
         </div>
       </div>
 
@@ -870,409 +909,566 @@ export default async function DocumentDetailPage({
             />
           </div>
           <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-4">
-            {isOverdue ? (
-              <Alert variant="warning" className="mb-4">
-                <AlertTitle>Periodic review overdue</AlertTitle>
-                <AlertDescription>
-                  Due on {doc.nextReviewOn}.
-                  {canRecordReview ? (
-                    <>
-                      {' '}
-                      <Link
-                        href={`${basePath}?tab=reviews&drawer=record-review`}
-                        className="font-medium underline-offset-2 hover:underline"
-                      >
-                        Record a review →
-                      </Link>
-                    </>
-                  ) : null}
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            {active === 'overview' ? (
-              canManage ? (
-                <DocumentOverview
-                  documentId={id}
-                  categories={categories}
-                  types={types}
-                  initialMeta={{
-                    title: doc.title,
-                    key: doc.key,
-                    categoryId: doc.categoryId ?? '',
-                    typeId: doc.typeId ?? '',
-                    description: doc.description ?? '',
-                    reviewFrequencyMonths:
-                      doc.reviewFrequencyMonths != null ? String(doc.reviewFrequencyMonths) : '',
-                    nextReviewOn: doc.nextReviewOn ?? '',
-                  }}
-                />
-              ) : (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Document details</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <DetailGrid
-                      rows={[
-                        { label: 'Title', value: doc.title },
-                        { label: 'Key', value: doc.key },
-                        {
-                          label: 'Category',
-                          value: categoryName ?? '—',
-                        },
-                        {
-                          label: 'Type',
-                          value:
-                            (doc.typeId ? types.find((t) => t.id === doc.typeId)?.name : null) ??
-                            '—',
-                        },
-                        { label: 'Description', value: doc.description ?? '—' },
-                        { label: 'Next review', value: doc.nextReviewOn ?? '—' },
-                      ]}
-                    />
-                  </CardContent>
-                </Card>
-              )
-            ) : null}
-
-            {active === 'versions' ? (
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Version history ({versionTotal})</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <TableToolbar className="mb-3">
-                      <SearchInput
-                        placeholder="Search versions or changes…"
-                        paramKey="versionQ"
-                        pageParamKey="versionPage"
-                      />
-                      <FilterChips
-                        basePath={basePath}
-                        currentParams={sp}
-                        paramKey="versionStatus"
-                        pageParamKey="versionPage"
-                        label="Status"
-                        options={[
-                          { value: 'published', label: 'Published' },
-                          { value: 'draft', label: 'Draft' },
-                        ]}
-                      />
-                      <FilterChips
-                        basePath={basePath}
-                        currentParams={sp}
-                        paramKey="versionSort"
-                        pageParamKey="versionPage"
-                        label="Order"
-                        defaultValue="recent"
-                        hideAll
-                        options={[
-                          { value: 'recent', label: 'Newest first' },
-                          { value: 'oldest', label: 'Oldest first' },
-                        ]}
-                      />
-                    </TableToolbar>
-                    {versions.length === 0 ? (
-                      <EmptyState
-                        icon={<FileText size={24} />}
-                        title={versionTotal === 0 ? 'No versions' : 'No matching versions'}
-                        description={
-                          versionTotal === 0
-                            ? 'Add a draft version, then publish the document.'
-                            : 'Change the search or filters to see other versions.'
+            <GeneratedValue
+              value={
+                isOverdue ? (
+                  <Alert variant="warning" className="mb-4">
+                    <AlertTitle>
+                      <GeneratedText id="m_111449cf34e9af" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedText id="m_04bfc1eaee3a4b" />{' '}
+                      <GeneratedValue value={doc.nextReviewOn} />.
+                      <GeneratedValue
+                        value={
+                          canRecordReview ? (
+                            <>
+                              <GeneratedValue value={' '} />
+                              <Link
+                                href={`${basePath}?tab=reviews&drawer=record-review`}
+                                className="font-medium underline-offset-2 hover:underline"
+                              >
+                                <GeneratedText id="m_0804c5d753d279" />
+                              </Link>
+                            </>
+                          ) : null
                         }
                       />
-                    ) : (
-                      <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                        {versions.map((v) => (
-                          <li key={v.id} className="py-3">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">Version {v.version}</span>
-                                {v.publishedAt ? (
-                                  <Badge variant="success">published</Badge>
-                                ) : (
-                                  <Badge variant="secondary">draft</Badge>
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            />
+
+            <GeneratedValue
+              value={
+                active === 'overview' ? (
+                  canManage ? (
+                    <DocumentOverview
+                      documentId={id}
+                      categories={categories}
+                      types={types}
+                      initialMeta={{
+                        title: doc.title,
+                        key: doc.key,
+                        categoryId: doc.categoryId ?? '',
+                        typeId: doc.typeId ?? '',
+                        description: doc.description ?? '',
+                        reviewFrequencyMonths:
+                          doc.reviewFrequencyMonths != null
+                            ? String(doc.reviewFrequencyMonths)
+                            : '',
+                        nextReviewOn: doc.nextReviewOn ?? '',
+                      }}
+                    />
+                  ) : (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>
+                          <GeneratedText id="m_11c253e21845f3" />
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <DetailGrid
+                          rows={[
+                            { label: 'Title', value: doc.title },
+                            { label: 'Key', value: doc.key },
+                            {
+                              label: 'Category',
+                              value: categoryName ?? '—',
+                            },
+                            {
+                              label: 'Type',
+                              value:
+                                (doc.typeId
+                                  ? types.find((t) => t.id === doc.typeId)?.name
+                                  : null) ?? '—',
+                            },
+                            { label: 'Description', value: doc.description ?? '—' },
+                            { label: 'Next review', value: doc.nextReviewOn ?? '—' },
+                          ]}
+                        />
+                      </CardContent>
+                    </Card>
+                  )
+                ) : null
+              }
+            />
+
+            <GeneratedValue
+              value={
+                active === 'versions' ? (
+                  <div className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>
+                          <GeneratedText id="m_12984e1a49d6e9" />
+                          <GeneratedValue value={versionTotal} />)
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <TableToolbar className="mb-3">
+                          <SearchInput
+                            placeholder={tGenerated('m_137dd4dfca48c0')}
+                            paramKey="versionQ"
+                            pageParamKey="versionPage"
+                          />
+                          <FilterChips
+                            basePath={basePath}
+                            currentParams={sp}
+                            paramKey="versionStatus"
+                            pageParamKey="versionPage"
+                            label={tGenerated('m_0b9da892d6faf0')}
+                            options={[
+                              { value: 'published', label: 'Published' },
+                              { value: 'draft', label: 'Draft' },
+                            ]}
+                          />
+                          <FilterChips
+                            basePath={basePath}
+                            currentParams={sp}
+                            paramKey="versionSort"
+                            pageParamKey="versionPage"
+                            label={tGenerated('m_126e942baf656b')}
+                            defaultValue="recent"
+                            hideAll
+                            options={[
+                              { value: 'recent', label: 'Newest first' },
+                              { value: 'oldest', label: 'Oldest first' },
+                            ]}
+                          />
+                        </TableToolbar>
+                        <GeneratedValue
+                          value={
+                            versions.length === 0 ? (
+                              <EmptyState
+                                icon={<FileText size={24} />}
+                                title={tGeneratedValue(
+                                  versionTotal === 0
+                                    ? tGenerated('m_1240d16e7a09e0')
+                                    : tGenerated('m_14b62c222c86cf'),
                                 )}
-                              </div>
-                              <span className="text-xs text-slate-500 dark:text-slate-400">
-                                {v.publishedAt
-                                  ? `published ${formatDate(new Date(v.publishedAt), ctx.timezone, ctx.locale)}`
-                                  : `created ${formatDate(new Date(v.createdAt), ctx.timezone, ctx.locale)}`}
-                              </span>
-                            </div>
-                            {v.changelog ? (
-                              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                                {v.changelog}
-                              </p>
-                            ) : null}
-                            <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
-                              {v.pdfAttachmentId || v.contentAttachmentId ? (
-                                <a
-                                  href={`${basePath}/versions/${v.id}/download`}
-                                  className="text-teal-700 hover:underline dark:text-teal-300"
-                                >
-                                  PDF
-                                </a>
-                              ) : v.renderStatus === 'pending' ||
-                                v.renderStatus === 'processing' ? (
-                                <span className="text-slate-400 dark:text-slate-500">
-                                  PDF rendering…
-                                </span>
-                              ) : v.renderStatus === 'failed' ? (
-                                <span
-                                  className="text-rose-600 dark:text-rose-400"
-                                  title={v.renderError ?? undefined}
-                                >
-                                  PDF render failed
-                                </span>
-                              ) : null}
-                              {v.docxAttachmentId ? (
-                                <>
-                                  <a
-                                    href={`${basePath}/versions/${v.id}/download?kind=docx`}
-                                    className="text-teal-700 hover:underline dark:text-teal-300"
-                                  >
-                                    DOCX
-                                  </a>
-                                  {canManage ? (
-                                    <Link
-                                      href={`${basePath}/editor?version=${v.id}`}
-                                      className="text-teal-700 hover:underline dark:text-teal-300"
-                                    >
-                                      Open read-only
-                                    </Link>
-                                  ) : null}
-                                </>
-                              ) : null}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <Pagination
-                      basePath={basePath}
-                      currentParams={sp}
-                      total={versionFilteredTotal}
-                      page={versionParams.page}
-                      perPage={versionParams.perPage}
-                      pageParamKey="versionPage"
-                    />
-                  </CardContent>
-                </Card>
-              </div>
-            ) : null}
-
-            {active === 'acknowledgments' ? (
-              <AcknowledgmentsPanel
-                documentId={id}
-                versionId={publishedVersion?.id ?? null}
-                signOffHref={`${basePath}/sign-off`}
-                acks={ackRows}
-                total={ackTotal}
-                filteredTotal={ackFilteredTotal}
-                page={ackParams.page}
-                perPage={ackParams.perPage}
-                currentParams={sp}
-                selfStatus={selfStatus}
-                selfAckedAt={selfAckedAt}
-                canManageSignOff={canManage}
-              />
-            ) : null}
-
-            {active === 'compliance' ? (
-              <DocumentCompliancePanel
-                documentId={id}
-                obligations={complianceData.rows}
-                total={complianceData.total}
-                filteredTotal={complianceData.filteredTotal}
-                page={complianceParams.page}
-                perPage={complianceParams.perPage}
-                currentParams={sp}
-                canAssign={canAssign}
-              />
-            ) : null}
-
-            {active === 'reviews' ? (
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Review history ({reviewTotal})</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <TableToolbar className="mb-3">
-                      <SearchInput
-                        placeholder="Search reviewers or notes…"
-                        paramKey="reviewQ"
-                        pageParamKey="reviewPage"
-                      />
-                      <FilterChips
-                        basePath={basePath}
-                        currentParams={sp}
-                        paramKey="reviewOutcome"
-                        pageParamKey="reviewPage"
-                        label="Outcome"
-                        options={[
-                          { value: 'approved_no_change', label: 'Approved, no change' },
-                          { value: 'updated', label: 'Updated' },
-                          { value: 'retired', label: 'Retired' },
-                          { value: 'not_recorded', label: 'Outcome not recorded' },
-                        ]}
-                      />
-                      <FilterChips
-                        basePath={basePath}
-                        currentParams={sp}
-                        paramKey="reviewStatus"
-                        pageParamKey="reviewPage"
-                        label="Status"
-                        options={[
-                          { value: 'completed', label: 'Completed' },
-                          { value: 'in_progress', label: 'In progress' },
-                        ]}
-                      />
-                      <FilterChips
-                        basePath={basePath}
-                        currentParams={sp}
-                        paramKey="reviewSort"
-                        pageParamKey="reviewPage"
-                        label="Order"
-                        defaultValue="recent"
-                        hideAll
-                        options={[
-                          { value: 'recent', label: 'Newest first' },
-                          { value: 'oldest', label: 'Oldest first' },
-                        ]}
-                      />
-                    </TableToolbar>
-                    {reviews.length === 0 ? (
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        {reviewTotal === 0
-                          ? 'No reviews recorded.'
-                          : 'No reviews match these filters.'}
-                      </p>
-                    ) : (
-                      <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                        {reviews.map((row) => (
-                          <li key={row.review.id} className="py-3">
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium">
-                                {row.account?.name ?? row.member?.displayName ?? 'Reviewer'}
-                              </span>
-                              <Badge
-                                variant={
-                                  row.review.outcome === 'approved_no_change'
-                                    ? 'success'
-                                    : row.review.outcome === 'updated'
-                                      ? 'warning'
-                                      : row.review.outcome === 'retired'
-                                        ? 'destructive'
-                                        : 'secondary'
-                                }
-                              >
-                                {row.review.outcome
-                                  ? row.review.outcome.replace(/_/g, ' ')
-                                  : 'outcome not recorded'}
-                              </Badge>
-                            </div>
-                            <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                              v{row.documentVersion} ·{' '}
-                              {formatDate(
-                                new Date(row.review.reviewedAt),
-                                ctx.timezone,
-                                ctx.locale,
-                              )}{' '}
-                              · {row.review.status.replace(/_/g, ' ')}
-                              {row.review.nextReviewOn ? ` · next ${row.review.nextReviewOn}` : ''}
-                            </div>
-                            {row.review.notes ? (
-                              <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
-                                {row.review.notes}
-                              </p>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <Pagination
-                      basePath={basePath}
-                      currentParams={sp}
-                      total={reviewFilteredTotal}
-                      page={reviewParams.page}
-                      perPage={reviewParams.perPage}
-                      pageParamKey="reviewPage"
-                    />
-                  </CardContent>
-                </Card>
-                {canRecordReview ? (
-                  <div className="flex justify-end">
-                    <Link href={`${basePath}?tab=reviews&drawer=record-review`}>
-                      <Button type="button">
-                        <Check size={14} /> Record review
-                      </Button>
-                    </Link>
+                                description={tGeneratedValue(
+                                  versionTotal === 0
+                                    ? tGenerated('m_193f02f1eb5212')
+                                    : tGenerated('m_0815c60c9d0476'),
+                                )}
+                              />
+                            ) : (
+                              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                                <GeneratedValue
+                                  value={versions.map((v) => (
+                                    <li key={v.id} className="py-3">
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-medium">
+                                            <GeneratedText id="m_0e5e42c9af5dbe" />{' '}
+                                            <GeneratedValue value={v.version} />
+                                          </span>
+                                          <GeneratedValue
+                                            value={
+                                              v.publishedAt ? (
+                                                <Badge variant="success">
+                                                  <GeneratedText id="m_17f8c524f67082" />
+                                                </Badge>
+                                              ) : (
+                                                <Badge variant="secondary">
+                                                  <GeneratedText id="m_138f9da1a581b0" />
+                                                </Badge>
+                                              )
+                                            }
+                                          />
+                                        </div>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                                          <GeneratedValue
+                                            value={
+                                              v.publishedAt ? (
+                                                <GeneratedText
+                                                  id="m_0b178c0d92c81d"
+                                                  values={{
+                                                    value0: formatDate(
+                                                      new Date(v.publishedAt),
+                                                      ctx.timezone,
+                                                      ctx.locale,
+                                                    ),
+                                                  }}
+                                                />
+                                              ) : (
+                                                <GeneratedText
+                                                  id="m_159638c62de126"
+                                                  values={{
+                                                    value0: formatDate(
+                                                      new Date(v.createdAt),
+                                                      ctx.timezone,
+                                                      ctx.locale,
+                                                    ),
+                                                  }}
+                                                />
+                                              )
+                                            }
+                                          />
+                                        </span>
+                                      </div>
+                                      <GeneratedValue
+                                        value={
+                                          v.changelog ? (
+                                            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                                              {v.changelog}
+                                            </p>
+                                          ) : null
+                                        }
+                                      />
+                                      <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs">
+                                        <GeneratedValue
+                                          value={
+                                            v.pdfAttachmentId || v.contentAttachmentId ? (
+                                              <a
+                                                href={`${basePath}/versions/${v.id}/download`}
+                                                className="text-teal-700 hover:underline dark:text-teal-300"
+                                              >
+                                                <GeneratedText id="m_1a2b2ed6729166" />
+                                              </a>
+                                            ) : v.renderStatus === 'pending' ||
+                                              v.renderStatus === 'processing' ? (
+                                              <span className="text-slate-400 dark:text-slate-500">
+                                                <GeneratedText id="m_1c9ea41f32bb8f" />
+                                              </span>
+                                            ) : v.renderStatus === 'failed' ? (
+                                              <span
+                                                className="text-rose-600 dark:text-rose-400"
+                                                title={v.renderError ?? undefined}
+                                              >
+                                                <GeneratedText id="m_0872eae4a8ab9b" />
+                                              </span>
+                                            ) : null
+                                          }
+                                        />
+                                        <GeneratedValue
+                                          value={
+                                            v.docxAttachmentId ? (
+                                              <>
+                                                <a
+                                                  href={`${basePath}/versions/${v.id}/download?kind=docx`}
+                                                  className="text-teal-700 hover:underline dark:text-teal-300"
+                                                >
+                                                  <GeneratedText id="m_18c2e68821b0cd" />
+                                                </a>
+                                                {canManage ? (
+                                                  <Link
+                                                    href={`${basePath}/editor?version=${v.id}`}
+                                                    className="text-teal-700 hover:underline dark:text-teal-300"
+                                                  >
+                                                    <GeneratedText id="m_0dd89c337db248" />
+                                                  </Link>
+                                                ) : null}
+                                              </>
+                                            ) : null
+                                          }
+                                        />
+                                      </div>
+                                    </li>
+                                  ))}
+                                />
+                              </ul>
+                            )
+                          }
+                        />
+                        <Pagination
+                          basePath={basePath}
+                          currentParams={sp}
+                          total={versionFilteredTotal}
+                          page={versionParams.page}
+                          perPage={versionParams.perPage}
+                          pageParamKey="versionPage"
+                        />
+                      </CardContent>
+                    </Card>
                   </div>
-                ) : null}
-              </div>
-            ) : null}
+                ) : null
+              }
+            />
 
-            {active === 'activity' ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Activity ({activityData.total})</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <TableToolbar className="mb-3">
-                    <SearchInput
-                      placeholder="Search activity…"
-                      paramKey="activityQ"
-                      pageParamKey="activityPage"
-                    />
-                    <FilterChips
-                      basePath={basePath}
-                      currentParams={sp}
-                      paramKey="activityAction"
-                      pageParamKey="activityPage"
-                      label="Action"
-                      options={activityData.actions.map((row) => ({
-                        value: row.action,
-                        label: row.action
-                          .replace(/_/g, ' ')
-                          .replace(/\b\w/g, (character) => character.toUpperCase()),
-                        count: row.count,
-                      }))}
-                    />
-                    <FilterChips
-                      basePath={basePath}
-                      currentParams={sp}
-                      paramKey="activitySort"
-                      pageParamKey="activityPage"
-                      label="Order"
-                      defaultValue="recent"
-                      hideAll
-                      options={[
-                        { value: 'recent', label: 'Newest first' },
-                        { value: 'oldest', label: 'Oldest first' },
-                      ]}
-                    />
-                  </TableToolbar>
-                  <ActivityFeed
-                    entries={activityData.rows}
-                    timeZone={ctx.timezone}
-                    locale={ctx.locale}
-                  />
-                  <Pagination
-                    basePath={basePath}
+            <GeneratedValue
+              value={
+                active === 'acknowledgments' ? (
+                  <AcknowledgmentsPanel
+                    documentId={id}
+                    versionId={publishedVersion?.id ?? null}
+                    signOffHref={`${basePath}/sign-off`}
+                    acks={ackRows}
+                    total={ackTotal}
+                    filteredTotal={ackFilteredTotal}
+                    page={ackParams.page}
+                    perPage={ackParams.perPage}
                     currentParams={sp}
-                    total={activityData.filteredTotal}
-                    page={activityParams.page}
-                    perPage={activityParams.perPage}
-                    pageParamKey="activityPage"
+                    selfStatus={selfStatus}
+                    selfAckedAt={selfAckedAt}
+                    canManageSignOff={canManage}
                   />
-                </CardContent>
-              </Card>
-            ) : null}
+                ) : null
+              }
+            />
+
+            <GeneratedValue
+              value={
+                active === 'compliance' ? (
+                  <DocumentCompliancePanel
+                    documentId={id}
+                    obligations={complianceData.rows}
+                    total={complianceData.total}
+                    filteredTotal={complianceData.filteredTotal}
+                    page={complianceParams.page}
+                    perPage={complianceParams.perPage}
+                    currentParams={sp}
+                    canAssign={canAssign}
+                  />
+                ) : null
+              }
+            />
+
+            <GeneratedValue
+              value={
+                active === 'reviews' ? (
+                  <div className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>
+                          <GeneratedText id="m_1619cc77cdf77a" />
+                          <GeneratedValue value={reviewTotal} />)
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <TableToolbar className="mb-3">
+                          <SearchInput
+                            placeholder={tGenerated('m_0553a00e7b18b9')}
+                            paramKey="reviewQ"
+                            pageParamKey="reviewPage"
+                          />
+                          <FilterChips
+                            basePath={basePath}
+                            currentParams={sp}
+                            paramKey="reviewOutcome"
+                            pageParamKey="reviewPage"
+                            label={tGenerated('m_00da71f1bd869e')}
+                            options={[
+                              { value: 'approved_no_change', label: 'Approved, no change' },
+                              { value: 'updated', label: 'Updated' },
+                              { value: 'retired', label: 'Retired' },
+                              { value: 'not_recorded', label: 'Outcome not recorded' },
+                            ]}
+                          />
+                          <FilterChips
+                            basePath={basePath}
+                            currentParams={sp}
+                            paramKey="reviewStatus"
+                            pageParamKey="reviewPage"
+                            label={tGenerated('m_0b9da892d6faf0')}
+                            options={[
+                              { value: 'completed', label: 'Completed' },
+                              { value: 'in_progress', label: 'In progress' },
+                            ]}
+                          />
+                          <FilterChips
+                            basePath={basePath}
+                            currentParams={sp}
+                            paramKey="reviewSort"
+                            pageParamKey="reviewPage"
+                            label={tGenerated('m_126e942baf656b')}
+                            defaultValue="recent"
+                            hideAll
+                            options={[
+                              { value: 'recent', label: 'Newest first' },
+                              { value: 'oldest', label: 'Oldest first' },
+                            ]}
+                          />
+                        </TableToolbar>
+                        <GeneratedValue
+                          value={
+                            reviews.length === 0 ? (
+                              <p className="text-sm text-slate-500 dark:text-slate-400">
+                                <GeneratedValue
+                                  value={
+                                    reviewTotal === 0 ? (
+                                      <GeneratedText id="m_136397e6a0330b" />
+                                    ) : (
+                                      <GeneratedText id="m_08c6e827a3055e" />
+                                    )
+                                  }
+                                />
+                              </p>
+                            ) : (
+                              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
+                                <GeneratedValue
+                                  value={reviews.map((row) => (
+                                    <li key={row.review.id} className="py-3">
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-medium">
+                                          <GeneratedValue
+                                            value={
+                                              row.account?.name ??
+                                              row.member?.displayName ?? (
+                                                <GeneratedText id="m_0437e976e882d8" />
+                                              )
+                                            }
+                                          />
+                                        </span>
+                                        <Badge
+                                          variant={
+                                            row.review.outcome === 'approved_no_change'
+                                              ? 'success'
+                                              : row.review.outcome === 'updated'
+                                                ? 'warning'
+                                                : row.review.outcome === 'retired'
+                                                  ? 'destructive'
+                                                  : 'secondary'
+                                          }
+                                        >
+                                          <GeneratedValue
+                                            value={
+                                              row.review.outcome ? (
+                                                row.review.outcome.replace(/_/g, ' ')
+                                              ) : (
+                                                <GeneratedText id="m_065f07a677dff5" />
+                                              )
+                                            }
+                                          />
+                                        </Badge>
+                                      </div>
+                                      <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                        <GeneratedText id="m_1c693e59d64fb2" />
+                                        <GeneratedValue value={row.documentVersion} /> ·
+                                        <GeneratedValue value={' '} />
+                                        <GeneratedValue
+                                          value={formatDate(
+                                            new Date(row.review.reviewedAt),
+                                            ctx.timezone,
+                                            ctx.locale,
+                                          )}
+                                        />
+                                        <GeneratedValue value={' '} />·{' '}
+                                        <GeneratedValue
+                                          value={row.review.status.replace(/_/g, ' ')}
+                                        />
+                                        <GeneratedValue
+                                          value={
+                                            row.review.nextReviewOn ? (
+                                              <GeneratedText
+                                                id="m_058efd4b3e5a33"
+                                                values={{ value0: row.review.nextReviewOn }}
+                                              />
+                                            ) : (
+                                              ''
+                                            )
+                                          }
+                                        />
+                                      </div>
+                                      <GeneratedValue
+                                        value={
+                                          row.review.notes ? (
+                                            <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
+                                              {row.review.notes}
+                                            </p>
+                                          ) : null
+                                        }
+                                      />
+                                    </li>
+                                  ))}
+                                />
+                              </ul>
+                            )
+                          }
+                        />
+                        <Pagination
+                          basePath={basePath}
+                          currentParams={sp}
+                          total={reviewFilteredTotal}
+                          page={reviewParams.page}
+                          perPage={reviewParams.perPage}
+                          pageParamKey="reviewPage"
+                        />
+                      </CardContent>
+                    </Card>
+                    <GeneratedValue
+                      value={
+                        canRecordReview ? (
+                          <div className="flex justify-end">
+                            <Link href={`${basePath}?tab=reviews&drawer=record-review`}>
+                              <Button type="button">
+                                <Check size={14} /> <GeneratedText id="m_018804ef31e286" />
+                              </Button>
+                            </Link>
+                          </div>
+                        ) : null
+                      }
+                    />
+                  </div>
+                ) : null
+              }
+            />
+
+            <GeneratedValue
+              value={
+                active === 'activity' ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>
+                        <GeneratedText id="m_19eb6234e1c976" />
+                        <GeneratedValue value={activityData.total} />)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <TableToolbar className="mb-3">
+                        <SearchInput
+                          placeholder={tGenerated('m_1b028fe99601a3')}
+                          paramKey="activityQ"
+                          pageParamKey="activityPage"
+                        />
+                        <FilterChips
+                          basePath={basePath}
+                          currentParams={sp}
+                          paramKey="activityAction"
+                          pageParamKey="activityPage"
+                          label={tGenerated('m_0bad495a7046e9')}
+                          options={activityData.actions.map((row) => ({
+                            value: row.action,
+                            label: row.action
+                              .replace(/_/g, ' ')
+                              .replace(/\b\w/g, (character) => character.toUpperCase()),
+                            count: row.count,
+                          }))}
+                        />
+                        <FilterChips
+                          basePath={basePath}
+                          currentParams={sp}
+                          paramKey="activitySort"
+                          pageParamKey="activityPage"
+                          label={tGenerated('m_126e942baf656b')}
+                          defaultValue="recent"
+                          hideAll
+                          options={[
+                            { value: 'recent', label: 'Newest first' },
+                            { value: 'oldest', label: 'Oldest first' },
+                          ]}
+                        />
+                      </TableToolbar>
+                      <ActivityFeed
+                        entries={activityData.rows}
+                        timeZone={ctx.timezone}
+                        locale={ctx.locale}
+                      />
+                      <Pagination
+                        basePath={basePath}
+                        currentParams={sp}
+                        total={activityData.filteredTotal}
+                        page={activityParams.page}
+                        perPage={activityParams.perPage}
+                        pageParamKey="activityPage"
+                      />
+                    </CardContent>
+                  </Card>
+                ) : null
+              }
+            />
           </div>
         </aside>
 
@@ -1301,29 +1497,37 @@ export default async function DocumentDetailPage({
         </div>
       </div>
 
-      {canManage && canEmailPublishedVersion ? (
-        <GenericSendEmailDialog
-          open={pickString(sp.send) === '1'}
-          title="Send document"
-          description="Sends the document content and a link to the in-app view to the recipients you enter below."
-          reference={doc.key}
-          defaultSubjectPrefix="FYI"
-          sendAction={async (fd) => {
-            'use server'
-            fd.set('id', id)
-            await sendEmailAction(fd)
-          }}
-        />
-      ) : null}
-      {canRecordReview ? (
-        <DocumentDrawers
-          documentId={id}
-          openDrawer={pickString(sp.drawer) === 'record-review' ? 'record-review' : null}
-          closeHref={`${basePath}${active === 'overview' ? '' : `?tab=${active}`}`}
-          defaultNextReviewOn={doc.nextReviewOn ?? null}
-          recordReviewAction={recordReviewAction}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          canManage && canEmailPublishedVersion ? (
+            <GenericSendEmailDialog
+              open={pickString(sp.send) === '1'}
+              title={tGenerated('m_0f6a8e55c3ba4a')}
+              description={tGenerated('m_0d51e102b2d695')}
+              reference={doc.key}
+              defaultSubjectPrefix="FYI"
+              sendAction={async (fd) => {
+                'use server'
+                fd.set('id', id)
+                await sendEmailAction(fd)
+              }}
+            />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          canRecordReview ? (
+            <DocumentDrawers
+              documentId={id}
+              openDrawer={pickString(sp.drawer) === 'record-review' ? 'record-review' : null}
+              closeHref={`${basePath}${active === 'overview' ? '' : `?tab=${active}`}`}
+              defaultNextReviewOn={doc.nextReviewOn ?? null}
+              recordReviewAction={recordReviewAction}
+            />
+          ) : null
+        }
+      />
     </div>
   )
 }

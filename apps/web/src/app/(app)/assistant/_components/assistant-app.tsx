@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The assistant experience: multi-conversation sidebar + streaming thread with
 // tool-use cards + composer. Streams via the UI-message protocol (readUIMessageStream)
 // so the SAME parts[] renderer serves live tokens and reloaded transcripts.
@@ -123,6 +130,8 @@ export function AssistantApp({
   initialPrompt?: string
   defaultSidebarCollapsed?: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [olderCursor, setOlderCursor] = useState(initialOlderCursor)
@@ -209,7 +218,7 @@ export function AssistantApp({
       if (!text || abortRef.current || !canSend) return
       if (text.length > MAX_ASSISTANT_PROMPT_CHARS) {
         setError(
-          `Messages must be ${MAX_ASSISTANT_PROMPT_CHARS.toLocaleString()} characters or fewer.`,
+          tGenerated('m_15d27b24cf9391', { value0: MAX_ASSISTANT_PROMPT_CHARS.toLocaleString() }),
         )
         return
       }
@@ -218,7 +227,7 @@ export function AssistantApp({
       let resolvedConversationId = conversationId
       const ac = new AbortController()
       abortRef.current = ac
-      setError(null)
+      setError(tGeneratedValue(null))
       setInput('')
       setSidebarOpen(false)
       const stamp = Date.now()
@@ -246,11 +255,13 @@ export function AssistantApp({
         }
         if (!res.ok || !res.body) {
           setError(
-            res.status === 503
-              ? "The assistant isn't configured for this workspace yet. An admin can enable it under Admin → AI."
-              : res.status === 403
-                ? 'You can only continue conversations you own.'
-                : 'The assistant could not respond. Please try again.',
+            tGeneratedValue(
+              res.status === 503
+                ? tGenerated('m_09f669a3f27139')
+                : res.status === 403
+                  ? tGenerated('m_01d6881a1aca4a')
+                  : tGenerated('m_000ecdd0f0625c'),
+            ),
           )
           return
         }
@@ -272,7 +283,7 @@ export function AssistantApp({
         }
       } catch (e) {
         if ((e as Error)?.name !== 'AbortError') {
-          setError('The assistant could not respond. Please try again.')
+          setError(tGenerated('m_000ecdd0f0625c'))
         }
       } finally {
         if ((ac.signal.aborted || !resolvedConversationId) && !resolvedConversationId) {
@@ -298,7 +309,11 @@ export function AssistantApp({
             })
           } catch {
             setMessages((prev) => prev.filter((message) => message.id !== `a-${stamp}`))
-            setError((current) => current ?? 'The saved conversation could not be refreshed.')
+            setError(
+              tGeneratedValue(
+                (current) => current ?? 'The saved conversation could not be refreshed.',
+              ),
+            )
           }
         }
         setStreaming(false)
@@ -310,7 +325,7 @@ export function AssistantApp({
         }
       }
     },
-    [canSend, currentId, reconcileMessages, router, scrollToBottom],
+    [canSend, currentId, reconcileMessages, router, scrollToBottom, tGenerated, tGeneratedValue],
   )
 
   // Auto-send a prompt passed via ?q= (from the ⌘K launcher) once per distinct
@@ -351,7 +366,7 @@ export function AssistantApp({
         if (scroller) scroller.scrollTop = previousTop + scroller.scrollHeight - previousHeight
       })
     } catch {
-      toast.error('Older messages could not be loaded.')
+      toast.error(tGenerated('m_1780e24a91ed30'))
     } finally {
       setLoadingOlder(false)
     }
@@ -423,7 +438,7 @@ export function AssistantApp({
       }))
       startTransition(() => router.refresh())
     } catch {
-      toast.error(`Chat titles must be ${AI_CONVERSATION_TITLE_MAX_CHARS} characters or fewer.`)
+      toast.error(tGenerated('m_12d1df9b290bc5', { value0: AI_CONVERSATION_TITLE_MAX_CHARS }))
     }
   }
 
@@ -451,14 +466,14 @@ export function AssistantApp({
         <Link href="/assistant" className="min-w-0 flex-1">
           <Button variant="outline" className="w-full justify-start gap-2">
             <Plus className="h-4 w-4" />
-            New chat
+            <GeneratedText id="m_0408aaa6f123da" />
           </Button>
         </Link>
         <button
           type="button"
           onClick={toggleSidebar}
-          title="Collapse sidebar"
-          aria-label="Collapse sidebar"
+          title={tGenerated('m_01486ae23b01ee')}
+          aria-label={tGenerated('m_01486ae23b01ee')}
           className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 lg:flex dark:hover:bg-slate-800 dark:hover:text-slate-300"
         >
           <PanelLeftClose className="h-4 w-4" />
@@ -466,29 +481,39 @@ export function AssistantApp({
       </div>
       <div className="px-3 pb-2">
         <label className="relative block">
-          <span className="sr-only">Search chats</span>
+          <span className="sr-only">
+            <GeneratedText id="m_03cecc785a74e2" />
+          </span>
           <Search className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
           <input
             type="search"
             value={chatQuery}
             maxLength={AI_CONVERSATION_SEARCH_MAX_CHARS}
             onChange={(event) => setChatQuery(event.target.value)}
-            placeholder="Search chats"
+            placeholder={tGenerated('m_03cecc785a74e2')}
             className="h-9 w-full rounded-md border border-slate-200 bg-white pr-8 pl-8 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
           />
-          {searchingChats ? (
-            <Loader2 className="absolute top-1/2 right-2.5 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-slate-400" />
-          ) : null}
+          <GeneratedValue
+            value={
+              searchingChats ? (
+                <Loader2 className="absolute top-1/2 right-2.5 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-slate-400" />
+              ) : null
+            }
+          />
         </label>
       </div>
       <div className="app-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-2 pb-3">
-        {sidebarError ? (
-          <p role="alert" className="px-2 text-xs text-red-600 dark:text-red-400">
-            {sidebarError}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            sidebarError ? (
+              <p role="alert" className="px-2 text-xs text-red-600 dark:text-red-400">
+                <GeneratedValue value={sidebarError} />
+              </p>
+            ) : null
+          }
+        />
         <ConvoSection
-          label="Your chats"
+          label={tGenerated('m_0efe45bf7d665d')}
           convos={ownPage.items}
           currentId={currentId}
           menuFor={menuFor}
@@ -504,19 +529,25 @@ export function AssistantApp({
           hasMore={ownPage.nextCursor !== null}
           loadingMore={loadingOwn}
           onLoadMore={() => void loadMoreConversations('own')}
-          emptyLabel={chatQuery ? 'No matching chats.' : 'No conversations yet.'}
+          emptyLabel={tGeneratedValue(
+            chatQuery ? tGenerated('m_1ed771f392f7ed') : tGenerated('m_1914b58d9036a9'),
+          )}
         />
-        {sharedPage.items.length > 0 ? (
-          <ConvoSection
-            label="Shared with you"
-            convos={sharedPage.items}
-            currentId={currentId}
-            shared
-            hasMore={sharedPage.nextCursor !== null}
-            loadingMore={loadingShared}
-            onLoadMore={() => void loadMoreConversations('shared')}
-          />
-        ) : null}
+        <GeneratedValue
+          value={
+            sharedPage.items.length > 0 ? (
+              <ConvoSection
+                label={tGenerated('m_185e70d18ef884')}
+                convos={sharedPage.items}
+                currentId={currentId}
+                shared
+                hasMore={sharedPage.nextCursor !== null}
+                loadingMore={loadingShared}
+                onLoadMore={() => void loadMoreConversations('shared')}
+              />
+            ) : null
+          }
+        />
       </div>
     </div>
   )
@@ -525,44 +556,52 @@ export function AssistantApp({
     <DocumentReaderProvider>
       <div className="flex h-full min-h-0">
         {/* Desktop sidebar — collapses to a thin icon rail */}
-        {sidebarCollapsed ? (
-          <aside className="hidden w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-white py-3 lg:flex dark:border-slate-800 dark:bg-slate-900">
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              title="Expand sidebar"
-              aria-label="Expand sidebar"
-              className="flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-            >
-              <PanelLeftOpen className="h-4 w-4" />
-            </button>
-            <Link
-              href="/assistant"
-              title="New chat"
-              aria-label="New chat"
-              className="flex h-9 w-9 items-center justify-center rounded-md text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40"
-            >
-              <Plus className="h-4 w-4" />
-            </Link>
-          </aside>
-        ) : (
-          <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col dark:border-slate-800 dark:bg-slate-900">
-            {sidebar}
-          </aside>
-        )}
+        <GeneratedValue
+          value={
+            sidebarCollapsed ? (
+              <aside className="hidden w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-white py-3 lg:flex dark:border-slate-800 dark:bg-slate-900">
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  title={tGenerated('m_0ee7fb62939462')}
+                  aria-label={tGenerated('m_0ee7fb62939462')}
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                </button>
+                <Link
+                  href="/assistant"
+                  title={tGenerated('m_0408aaa6f123da')}
+                  aria-label={tGenerated('m_0408aaa6f123da')}
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/40"
+                >
+                  <Plus className="h-4 w-4" />
+                </Link>
+              </aside>
+            ) : (
+              <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col dark:border-slate-800 dark:bg-slate-900">
+                <GeneratedValue value={sidebar} />
+              </aside>
+            )
+          }
+        />
 
         {/* Mobile sidebar drawer */}
-        {sidebarOpen ? (
-          <div className="fixed inset-0 z-40 lg:hidden">
-            <div
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
-              onClick={() => setSidebarOpen(false)}
-            />
-            <div className="absolute inset-y-0 left-0 w-72 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-              {sidebar}
-            </div>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            sidebarOpen ? (
+              <div className="fixed inset-0 z-40 lg:hidden">
+                <div
+                  className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
+                  onClick={() => setSidebarOpen(false)}
+                />
+                <div className="absolute inset-y-0 left-0 w-72 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                  <GeneratedValue value={sidebar} />
+                </div>
+              </div>
+            ) : null
+          }
+        />
 
         {/* Thread pane */}
         <div className="flex min-w-0 flex-1 flex-col">
@@ -571,65 +610,91 @@ export function AssistantApp({
               type="button"
               onClick={() => setSidebarOpen(true)}
               className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800"
-              aria-label="Conversations"
+              aria-label={tGenerated('m_10e79f46fb5744')}
             >
               <MoreHorizontal className="h-5 w-5" />
             </button>
             <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
               <Sparkles className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-              Assistant
+              <GeneratedText id="m_059a7511ae6fbd" />
             </div>
-            {readOnly ? (
-              <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                Shared · read-only
-              </span>
-            ) : currentId ? (
-              <button
-                type="button"
-                onClick={() => setShareFor(currentId)}
-                className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-              >
-                <Share2 className="h-3.5 w-3.5" />
-                Share
-              </button>
-            ) : null}
+            <GeneratedValue
+              value={
+                readOnly ? (
+                  <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    <GeneratedText id="m_1d2245738b5569" />
+                  </span>
+                ) : currentId ? (
+                  <button
+                    type="button"
+                    onClick={() => setShareFor(currentId)}
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                    <GeneratedText id="m_1595bc8cd3bb88" />
+                  </button>
+                ) : null
+              }
+            />
           </header>
 
           <div ref={threadRef} className="app-scroll min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl px-4 py-6">
-              {olderCursor && messages.length > 0 ? (
-                <div className="mb-5 flex justify-center">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={loadingOlder}
-                    onClick={() => void loadOlderMessages()}
-                  >
-                    {loadingOlder ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                    Load older messages
-                  </Button>
-                </div>
-              ) : null}
-              {messages.length === 0 ? (
-                <Welcome onPick={(t) => setInput(t)} canSend={canSend} />
-              ) : (
-                <div className="space-y-6">
-                  {messages.map((m) =>
-                    m.role === 'system' ? null : (
-                      <MessageRow key={m.id} message={m} streaming={streaming} />
-                    ),
-                  )}
-                </div>
-              )}
-              {error ? (
-                <div
-                  role="alert"
-                  className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
-                >
-                  {error}
-                </div>
-              ) : null}
+              <GeneratedValue
+                value={
+                  olderCursor && messages.length > 0 ? (
+                    <div className="mb-5 flex justify-center">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={loadingOlder}
+                        onClick={() => void loadOlderMessages()}
+                      >
+                        <GeneratedValue
+                          value={
+                            loadingOlder ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null
+                          }
+                        />
+                        <GeneratedText id="m_1c5fba7c33a55a" />
+                      </Button>
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  messages.length === 0 ? (
+                    <Welcome onPick={(t) => setInput(t)} canSend={canSend} />
+                  ) : (
+                    <div className="space-y-6">
+                      <GeneratedValue
+                        value={messages.map((m) =>
+                          m.role === 'system' ? null : (
+                            <MessageRow
+                              key={m.id}
+                              message={tGeneratedValue(m)}
+                              streaming={streaming}
+                            />
+                          ),
+                        )}
+                      />
+                    </div>
+                  )
+                }
+              />
+              <GeneratedValue
+                value={
+                  error ? (
+                    <div
+                      role="alert"
+                      className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300"
+                    >
+                      <GeneratedValue value={error} />
+                    </div>
+                  ) : null
+                }
+              />
               <div ref={bottomRef} />
             </div>
           </div>
@@ -637,55 +702,65 @@ export function AssistantApp({
           {/* Composer */}
           <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
             <div className="mx-auto w-full max-w-3xl">
-              {readOnly ? (
-                <p className="py-2 text-center text-sm text-slate-500 dark:text-slate-400">
-                  This conversation was shared with you. Only the owner can continue it.
-                </p>
-              ) : !aiEnabled ? (
-                <p className="py-2 text-center text-sm text-slate-500 dark:text-slate-400">
-                  The assistant isn’t configured for this workspace yet. An admin can enable it
-                  under Admin → AI.
-                </p>
-              ) : (
-                <div className="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950">
-                  <textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={onComposerKey}
-                    maxLength={MAX_ASSISTANT_PROMPT_CHARS}
-                    rows={1}
-                    placeholder="Ask about incidents, corrective actions, training, documents…"
-                    className="max-h-40 flex-1 resize-none appearance-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 text-base text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0 focus:outline-none sm:text-sm dark:text-slate-100"
-                  />
-                  {streaming ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={stop}
-                      aria-label="Stop"
-                    >
-                      <Square className="h-4 w-4" />
-                    </Button>
+              <GeneratedValue
+                value={
+                  readOnly ? (
+                    <p className="py-2 text-center text-sm text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_0486a6b468d2ad" />
+                    </p>
+                  ) : !aiEnabled ? (
+                    <p className="py-2 text-center text-sm text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_1a10d38acdc473" />
+                    </p>
                   ) : (
-                    <Button
-                      type="button"
-                      size="icon"
-                      onClick={() => void send(input)}
-                      disabled={!input.trim()}
-                      aria-label="Send"
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              )}
-              {canWrite && !readOnly ? (
-                <p className="mt-1.5 text-center text-[11px] text-slate-400 dark:text-slate-500">
-                  The assistant drafts changes for your approval — nothing is created until you
-                  confirm.
-                </p>
-              ) : null}
+                    <div className="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950">
+                      <textarea
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={onComposerKey}
+                        maxLength={MAX_ASSISTANT_PROMPT_CHARS}
+                        rows={1}
+                        placeholder={tGenerated('m_1194e732d92f7f')}
+                        className="max-h-40 flex-1 resize-none appearance-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 text-base text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0 focus:outline-none sm:text-sm dark:text-slate-100"
+                      />
+                      <GeneratedValue
+                        value={
+                          streaming ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={stop}
+                              aria-label={tGenerated('m_0889ad146e26ca')}
+                            >
+                              <Square className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="icon"
+                              onClick={() => void send(input)}
+                              disabled={!input.trim()}
+                              aria-label={tGenerated('m_16b55d7868e000')}
+                            >
+                              <Send className="h-4 w-4" />
+                            </Button>
+                          )
+                        }
+                      />
+                    </div>
+                  )
+                }
+              />
+              <GeneratedValue
+                value={
+                  canWrite && !readOnly ? (
+                    <p className="mt-1.5 text-center text-[11px] text-slate-400 dark:text-slate-500">
+                      <GeneratedText id="m_0637d338bc7015" />
+                    </p>
+                  ) : null
+                }
+              />
             </div>
           </div>
         </div>
@@ -709,7 +784,7 @@ function MessageRow({ message, streaming }: { message: ChatMessage; streaming: b
     return (
       <div className="flex justify-end">
         <div className="max-w-[85%] rounded-2xl rounded-br-md bg-teal-700 px-4 py-2 text-sm whitespace-pre-wrap text-white">
-          {text}
+          <GeneratedValue value={text} />
         </div>
       </div>
     )
@@ -721,7 +796,9 @@ function MessageRow({ message, streaming }: { message: ChatMessage; streaming: b
         <Sparkles className="h-4 w-4" />
       </span>
       <div className="min-w-0 flex-1 pt-0.5">
-        {empty && streaming ? <ThinkingDots /> : <MessageParts parts={message.parts} />}
+        <GeneratedValue
+          value={empty && streaming ? <ThinkingDots /> : <MessageParts parts={message.parts} />}
+        />
       </div>
     </div>
   )
@@ -730,13 +807,15 @@ function MessageRow({ message, streaming }: { message: ChatMessage; streaming: b
 function ThinkingDots() {
   return (
     <div className="flex items-center gap-1 py-1.5 text-slate-400">
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400"
-          style={{ animationDelay: `${i * 0.15}s` }}
-        />
-      ))}
+      <GeneratedValue
+        value={[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400"
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      />
     </div>
   )
 }
@@ -749,27 +828,34 @@ const SUGGESTIONS = [
 ]
 
 function Welcome({ onPick, canSend }: { onPick: (t: string) => void; canSend: boolean }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="pt-10">
       <EmptyState
         icon={<Sparkles />}
-        title="Ask the Assistant"
-        description="Find and understand your safety data — incidents, corrective actions, training, documents and more. Answers are scoped to what you’re allowed to see."
+        title={tGenerated('m_0156b81c9009a5')}
+        description={tGenerated('m_1c6f5f45e61ff4')}
       />
-      {canSend ? (
-        <div className="mx-auto mt-6 grid max-w-2xl gap-2 sm:grid-cols-2">
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => onPick(s)}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-600 shadow-sm transition-colors hover:border-teal-300 hover:bg-teal-50/40 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950/30 dark:hover:text-slate-100"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          canSend ? (
+            <div className="mx-auto mt-6 grid max-w-2xl gap-2 sm:grid-cols-2">
+              <GeneratedValue
+                value={SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => onPick(s)}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-600 shadow-sm transition-colors hover:border-teal-300 hover:bg-teal-50/40 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-teal-800 dark:hover:bg-teal-950/30 dark:hover:text-slate-100"
+                  >
+                    <GeneratedValue value={s} />
+                  </button>
+                ))}
+              />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -807,107 +893,136 @@ function ConvoSection({
   onLoadMore?: () => void
   emptyLabel?: string
 }) {
+  const tGenerated = useGeneratedTranslations()
   if (convos.length === 0 && !shared) {
     return (
       <div>
-        <SectionLabel>{label}</SectionLabel>
-        <p className="px-2 py-1 text-xs text-slate-400 dark:text-slate-500">{emptyLabel}</p>
+        <SectionLabel>
+          <GeneratedValue value={label} />
+        </SectionLabel>
+        <p className="px-2 py-1 text-xs text-slate-400 dark:text-slate-500">
+          <GeneratedValue value={emptyLabel} />
+        </p>
       </div>
     )
   }
   return (
     <div>
-      <SectionLabel>{label}</SectionLabel>
+      <SectionLabel>
+        <GeneratedValue value={label} />
+      </SectionLabel>
       <ul className="space-y-0.5">
-        {convos.map((c) => {
-          const active = c.id === currentId
-          if (renamingId === c.id) {
+        <GeneratedValue
+          value={convos.map((c) => {
+            const active = c.id === currentId
+            if (renamingId === c.id) {
+              return (
+                <li key={c.id} className="px-1">
+                  <input
+                    autoFocus
+                    defaultValue={c.title}
+                    maxLength={AI_CONVERSATION_TITLE_MAX_CHARS}
+                    onBlur={(e) => onRename?.(c.id, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') onRename?.(c.id, (e.target as HTMLInputElement).value)
+                      if (e.key === 'Escape') setRenamingId?.(null)
+                    }}
+                    className="w-full rounded-md border border-teal-400 bg-white px-2 py-1.5 text-sm text-slate-900 focus:outline-none dark:bg-slate-950 dark:text-slate-100"
+                  />
+                </li>
+              )
+            }
             return (
-              <li key={c.id} className="px-1">
-                <input
-                  autoFocus
-                  defaultValue={c.title}
-                  maxLength={AI_CONVERSATION_TITLE_MAX_CHARS}
-                  onBlur={(e) => onRename?.(c.id, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') onRename?.(c.id, (e.target as HTMLInputElement).value)
-                    if (e.key === 'Escape') setRenamingId?.(null)
-                  }}
-                  className="w-full rounded-md border border-teal-400 bg-white px-2 py-1.5 text-sm text-slate-900 focus:outline-none dark:bg-slate-950 dark:text-slate-100"
+              <li key={c.id} className="group relative">
+                <Link
+                  href={`/assistant/${c.id}`}
+                  className={cn(
+                    'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+                    active
+                      ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100'
+                      : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+                  )}
+                >
+                  <GeneratedValue
+                    value={
+                      shared ? <Users className="h-3.5 w-3.5 shrink-0 text-slate-400" /> : null
+                    }
+                  />
+                  <span className="min-w-0 flex-1 truncate">
+                    <GeneratedValue value={c.title} />
+                  </span>
+                </Link>
+                <GeneratedValue
+                  value={
+                    !shared ? (
+                      <button
+                        type="button"
+                        onClick={() => setMenuFor?.(menuFor === c.id ? null : c.id)}
+                        className="absolute top-1/2 right-1 -translate-y-1/2 rounded p-1 text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700"
+                        aria-label={tGenerated('m_067b9b1ade85f8')}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    menuFor === c.id ? (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setMenuFor?.(null)} />
+                        <div className="absolute top-9 right-1 z-20 w-36 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                          <MenuItem
+                            icon={<Pencil className="h-3.5 w-3.5" />}
+                            onClick={() => {
+                              setMenuFor?.(null)
+                              setRenamingId?.(c.id)
+                            }}
+                          >
+                            <GeneratedText id="m_19a03337702a01" />
+                          </MenuItem>
+                          <MenuItem
+                            icon={<Share2 className="h-3.5 w-3.5" />}
+                            onClick={() => onShare?.(c.id)}
+                          >
+                            <GeneratedText id="m_1595bc8cd3bb88" />
+                          </MenuItem>
+                          <MenuItem
+                            icon={<Trash2 className="h-3.5 w-3.5" />}
+                            destructive
+                            onClick={() => onDelete?.(c.id)}
+                          >
+                            <GeneratedText id="m_11773f3c3f7558" />
+                          </MenuItem>
+                        </div>
+                      </>
+                    ) : null
+                  }
                 />
               </li>
             )
-          }
-          return (
-            <li key={c.id} className="group relative">
-              <Link
-                href={`/assistant/${c.id}`}
-                className={cn(
-                  'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
-                  active
-                    ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100'
-                    : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-                )}
-              >
-                {shared ? <Users className="h-3.5 w-3.5 shrink-0 text-slate-400" /> : null}
-                <span className="min-w-0 flex-1 truncate">{c.title}</span>
-              </Link>
-              {!shared ? (
-                <button
-                  type="button"
-                  onClick={() => setMenuFor?.(menuFor === c.id ? null : c.id)}
-                  className="absolute top-1/2 right-1 -translate-y-1/2 rounded p-1 text-slate-400 opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700"
-                  aria-label="Conversation actions"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-              ) : null}
-              {menuFor === c.id ? (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenuFor?.(null)} />
-                  <div className="absolute top-9 right-1 z-20 w-36 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                    <MenuItem
-                      icon={<Pencil className="h-3.5 w-3.5" />}
-                      onClick={() => {
-                        setMenuFor?.(null)
-                        setRenamingId?.(c.id)
-                      }}
-                    >
-                      Rename
-                    </MenuItem>
-                    <MenuItem
-                      icon={<Share2 className="h-3.5 w-3.5" />}
-                      onClick={() => onShare?.(c.id)}
-                    >
-                      Share
-                    </MenuItem>
-                    <MenuItem
-                      icon={<Trash2 className="h-3.5 w-3.5" />}
-                      destructive
-                      onClick={() => onDelete?.(c.id)}
-                    >
-                      Delete
-                    </MenuItem>
-                  </div>
-                </>
-              ) : null}
-            </li>
-          )
-        })}
+          })}
+        />
       </ul>
-      {hasMore ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="mt-1 w-full justify-center text-xs"
-          disabled={loadingMore}
-          onClick={onLoadMore}
-        >
-          {loadingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-          Load more
-        </Button>
-      ) : null}
+      <GeneratedValue
+        value={
+          hasMore ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-1 w-full justify-center text-xs"
+              disabled={loadingMore}
+              onClick={onLoadMore}
+            >
+              <GeneratedValue
+                value={loadingMore ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              />
+              <GeneratedText id="m_03a4af1de2ae17" />
+            </Button>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -915,7 +1030,7 @@ function ConvoSection({
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="px-2 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }
@@ -942,8 +1057,8 @@ function MenuItem({
           : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800',
       )}
     >
-      {icon}
-      {children}
+      <GeneratedValue value={icon} />
+      <GeneratedValue value={children} />
     </button>
   )
 }

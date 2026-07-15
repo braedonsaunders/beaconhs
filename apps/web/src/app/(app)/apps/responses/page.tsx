@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ClipboardCheck } from 'lucide-react'
@@ -38,7 +41,10 @@ import { formCategoryLabel } from '../_lib/category-label'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { templateAccessWhere } from '../_lib/access'
 
-export const metadata = { title: 'Form responses' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0382c9544c1241') }
+}
 
 const SORTS = ['submitted_at', 'created_at', 'status'] as const
 
@@ -57,6 +63,8 @@ export default async function FormResponsesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'submitted_at',
@@ -177,23 +185,25 @@ export default async function FormResponsesPage({
       header={
         <>
           <PageHeader
-            title="Form responses"
-            description="Every app submission. Use the App filter to focus on one."
+            title={tGenerated('m_0382c9544c1241')}
+            description={tGenerated('m_0f87656e2eefc7')}
             actions={
               canExport ? (
                 <Link href={buildExportHref('/apps/responses/export.csv', sp)}>
-                  <Button variant="outline">Export CSV</Button>
+                  <Button variant="outline">
+                    <GeneratedText id="m_14c6440eca1edc" />
+                  </Button>
                 </Link>
               ) : null
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search app name…" />
+            <SearchInput placeholder={tGenerated('m_0e87ecf4ecace2')} />
             <FilterChips
               basePath="/apps/responses"
               currentParams={sp}
               paramKey="template"
-              label="App"
+              label={tGenerated('m_0c7a3810288c4a')}
               allLabel="All apps"
               options={templateOptions}
             />
@@ -201,171 +211,257 @@ export default async function FormResponsesPage({
               basePath="/apps/responses"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardCheck size={32} />}
-          title={
-            statusFilter || params.q || categoryFilter || templateFilter
-              ? 'No responses match these filters'
-              : 'No responses'
-          }
-          description={
-            categoryFilter
-              ? `No ${formCategoryLabel(categoryFilter)} responses. Fill out a template to log one.`
-              : 'Select a template to fill out a new form.'
-          }
-          action={
-            <Link href="/apps">
-              <Button>Browse templates</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Template</TableHead>
-                <TableHead>Version</TableHead>
-                <TableHead>Subject</TableHead>
-                <TableHead>Site</TableHead>
-                <TableHead>Step</TableHead>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                  Status
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="created_at"
-                  active={params.sort === 'created_at'}
-                >
-                  Started
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="submitted_at"
-                  active={params.sort === 'submitted_at'}
-                >
-                  Submitted
-                </SortableTh>
-                <TableHead>By</TableHead>
-                <TableHead>Closed</TableHead>
-                <TableHead className="w-16">PDF</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(
-                ({
-                  response,
-                  template,
-                  site,
-                  version,
-                  submittedByName,
-                  subjectFirst,
-                  subjectLast,
-                }) => {
-                  const subject =
-                    subjectFirst || subjectLast
-                      ? `${subjectLast ?? ''}${subjectLast ? ', ' : ''}${subjectFirst ?? ''}`.trim()
-                      : null
-                  return (
-                    <TableRow key={response.id}>
-                      <TableCell className="font-mono text-xs">
-                        <Link href={`/apps/responses/${response.id}`} className="hover:underline">
-                          {response.id.slice(0, 8)}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/apps/responses/${response.id}`}
-                          className="font-medium text-slate-900 hover:underline"
-                        >
-                          {template.name}
-                        </Link>
-                        {template.category ? (
-                          <div className="text-xs text-slate-500">
-                            {formCategoryLabel(template.category)}
-                          </div>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-500 tabular-nums">
-                        {version ? `v${version.version}` : '—'}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600">
-                        {subject || <span className="text-slate-400">—</span>}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600">{site?.name ?? '—'}</TableCell>
-                      <TableCell className="text-xs text-slate-600">
-                        {response.currentStep ? (
-                          <Badge variant="outline" className="text-[10px]">
-                            {response.currentStep}
-                          </Badge>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            response.status === 'non_compliant' || response.status === 'rejected'
-                              ? 'destructive'
-                              : response.status === 'closed' || response.status === 'submitted'
-                                ? 'success'
-                                : 'warning'
-                          }
-                        >
-                          {response.status.replace('_', ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600 tabular-nums">
-                        {response.createdAt
-                          ? formatDate(new Date(response.createdAt), ctx.timezone, ctx.locale)
-                          : '—'}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600 tabular-nums">
-                        {response.submittedAt
-                          ? formatDate(new Date(response.submittedAt), ctx.timezone, ctx.locale)
-                          : '—'}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600">
-                        {submittedByName ?? <span className="text-slate-400">—</span>}
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600 tabular-nums">
-                        {response.closedAt
-                          ? formatDate(new Date(response.closedAt), ctx.timezone, ctx.locale)
-                          : '—'}
-                      </TableCell>
-                      <TableCell>
-                        {response.pdfAttachmentId ? (
-                          <Badge variant="success" className="text-[10px]">
-                            PDF
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )
-                },
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<ClipboardCheck size={32} />}
+              title={tGeneratedValue(
+                statusFilter || params.q || categoryFilter || templateFilter
+                  ? tGenerated('m_1be15566f9e43e')
+                  : tGenerated('m_1bac232173e044'),
               )}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/apps/responses"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+              description={tGeneratedValue(
+                categoryFilter
+                  ? tGenerated('m_0be3dc3cd39801', { value0: formCategoryLabel(categoryFilter) })
+                  : tGenerated('m_07f0c55a8223a6'),
+              )}
+              action={
+                <Link href="/apps">
+                  <Button>
+                    <GeneratedText id="m_0a798a868ef61f" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <GeneratedText id="m_1746970aea87ff" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_13704e4d90cde4" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0e5e42c9af5dbe" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_1928431de4aaf1" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_020146dd3d3d5a" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0cff7e37da2b3f" />
+                    </TableHead>
+                    <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="created_at"
+                      active={params.sort === 'created_at'}
+                    >
+                      <GeneratedText id="m_1922c581498469" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="submitted_at"
+                      active={params.sort === 'submitted_at'}
+                    >
+                      <GeneratedText id="m_0c823c3949ebd6" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_11e5c7ade0c0ab" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_003ea77d773d2d" />
+                    </TableHead>
+                    <TableHead className="w-16">
+                      <GeneratedText id="m_1a2b2ed6729166" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(
+                      ({
+                        response,
+                        template,
+                        site,
+                        version,
+                        submittedByName,
+                        subjectFirst,
+                        subjectLast,
+                      }) => {
+                        const subject =
+                          subjectFirst || subjectLast
+                            ? `${subjectLast ?? ''}${subjectLast ? ', ' : ''}${subjectFirst ?? ''}`.trim()
+                            : null
+                        return (
+                          <TableRow key={response.id}>
+                            <TableCell className="font-mono text-xs">
+                              <Link
+                                href={`/apps/responses/${response.id}`}
+                                className="hover:underline"
+                              >
+                                <GeneratedValue value={response.id.slice(0, 8)} />
+                              </Link>
+                            </TableCell>
+                            <TableCell>
+                              <Link
+                                href={`/apps/responses/${response.id}`}
+                                className="font-medium text-slate-900 hover:underline"
+                              >
+                                <GeneratedValue value={template.name} />
+                              </Link>
+                              <GeneratedValue
+                                value={
+                                  template.category ? (
+                                    <div className="text-xs text-slate-500">
+                                      <GeneratedValue
+                                        value={formCategoryLabel(template.category)}
+                                      />
+                                    </div>
+                                  ) : null
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-500 tabular-nums">
+                              <GeneratedValue
+                                value={
+                                  version ? (
+                                    <GeneratedText
+                                      id="m_1480a378beafd1"
+                                      values={{ value0: version.version }}
+                                    />
+                                  ) : (
+                                    '—'
+                                  )
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-600">
+                              <GeneratedValue
+                                value={subject || <span className="text-slate-400">—</span>}
+                              />
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-600">
+                              <GeneratedValue value={site?.name ?? '—'} />
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-600">
+                              <GeneratedValue
+                                value={
+                                  response.currentStep ? (
+                                    <Badge variant="outline" className="text-[10px]">
+                                      <GeneratedValue value={response.currentStep} />
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  response.status === 'non_compliant' ||
+                                  response.status === 'rejected'
+                                    ? 'destructive'
+                                    : response.status === 'closed' ||
+                                        response.status === 'submitted'
+                                      ? 'success'
+                                      : 'warning'
+                                }
+                              >
+                                <GeneratedValue value={response.status.replace('_', ' ')} />
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-600 tabular-nums">
+                              <GeneratedValue
+                                value={
+                                  response.createdAt
+                                    ? formatDate(
+                                        new Date(response.createdAt),
+                                        ctx.timezone,
+                                        ctx.locale,
+                                      )
+                                    : '—'
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-600 tabular-nums">
+                              <GeneratedValue
+                                value={
+                                  response.submittedAt
+                                    ? formatDate(
+                                        new Date(response.submittedAt),
+                                        ctx.timezone,
+                                        ctx.locale,
+                                      )
+                                    : '—'
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-600">
+                              <GeneratedValue
+                                value={submittedByName ?? <span className="text-slate-400">—</span>}
+                              />
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-600 tabular-nums">
+                              <GeneratedValue
+                                value={
+                                  response.closedAt
+                                    ? formatDate(
+                                        new Date(response.closedAt),
+                                        ctx.timezone,
+                                        ctx.locale,
+                                      )
+                                    : '—'
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <GeneratedValue
+                                value={
+                                  response.pdfAttachmentId ? (
+                                    <Badge variant="success" className="text-[10px]">
+                                      <GeneratedText id="m_1a2b2ed6729166" />
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-xs text-slate-400">—</span>
+                                  )
+                                }
+                              />
+                            </TableCell>
+                          </TableRow>
+                        )
+                      },
+                    )}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/apps/responses"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

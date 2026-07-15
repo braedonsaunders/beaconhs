@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { requireRequestContext } from '@/lib/auth'
 import { getTranslations } from 'next-intl/server'
 import { PageContainer } from '@/components/page-layout'
@@ -14,7 +15,10 @@ import { ensureSystemCards } from '../insights/_system-cards'
 import { CardCell } from '../insights/_viz/card-cell.client'
 import { isUuid } from '@/lib/list-params'
 
-export const metadata = { title: 'Dashboard' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0948bd8dc78958') }
+}
 export const dynamic = 'force-dynamic'
 
 /**

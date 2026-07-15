@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { ChevronRight, Gauge, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -19,7 +21,10 @@ import { canUseSafeDistance, SAFE_DISTANCE_PERMISSION } from '@/lib/safe-distanc
 import { PageContainer } from '@/components/page-layout'
 import { templateAccessWhere } from '../apps/_lib/access'
 
-export const metadata = { title: 'Tools' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0026cfb826b558') }
+}
 export const dynamic = 'force-dynamic'
 
 // Tools landing — a registry-driven catalogue. NATIVE tools are coded modules
@@ -50,6 +55,7 @@ const NATIVE_TOOLS: ToolCard[] = [
 ]
 
 export default async function ToolsLandingPage() {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   const effectiveRoleKeys = await getEffectiveRoleKeys(ctx)
 
@@ -89,41 +95,51 @@ export default async function ToolsLandingPage() {
     <PageContainer>
       <div className="space-y-6">
         <PageHeader
-          title="Tools"
-          description="Standalone calculators and utilities that span the whole tenant."
+          title={tGenerated('m_0026cfb826b558')}
+          description={tGenerated('m_00c2b5f0b831ae')}
         />
         <div className="grid gap-4 sm:grid-cols-2">
-          {tools.map((t) => {
-            const Icon = t.icon
-            return (
-              <Link key={t.href} href={t.href as any} className="group block focus:outline-none">
-                <Card className="h-full transition-shadow group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-teal-600">
-                  <CardHeader>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300">
-                          <Icon size={20} />
-                        </span>
-                        <CardTitle>{t.title}</CardTitle>
-                        {t.custom ? (
-                          <Badge variant="secondary" className="ml-1">
-                            Custom
-                          </Badge>
-                        ) : null}
+          <GeneratedValue
+            value={tools.map((t) => {
+              const Icon = t.icon
+              return (
+                <Link key={t.href} href={t.href as any} className="group block focus:outline-none">
+                  <Card className="h-full transition-shadow group-hover:shadow-md group-focus-visible:ring-2 group-focus-visible:ring-teal-600">
+                    <CardHeader>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300">
+                            <Icon size={20} />
+                          </span>
+                          <CardTitle>
+                            <GeneratedValue value={t.title} />
+                          </CardTitle>
+                          <GeneratedValue
+                            value={
+                              t.custom ? (
+                                <Badge variant="secondary" className="ml-1">
+                                  <GeneratedText id="m_1721ac81d2a5c0" />
+                                </Badge>
+                              ) : null
+                            }
+                          />
+                        </div>
+                        <ChevronRight
+                          size={18}
+                          className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-teal-700"
+                        />
                       </div>
-                      <ChevronRight
-                        size={18}
-                        className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-teal-700"
-                      />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription>{t.description}</CardDescription>
-                  </CardContent>
-                </Card>
-              </Link>
-            )
-          })}
+                    </CardHeader>
+                    <CardContent>
+                      <CardDescription>
+                        <GeneratedValue value={t.description} />
+                      </CardDescription>
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+          />
         </div>
       </div>
     </PageContainer>

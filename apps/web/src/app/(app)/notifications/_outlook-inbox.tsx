@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Outlook-style inbox. Three regions — a folder/tag rail, the message list, and
 // a reading pane. On desktop all three sit side by side; on mobile the list is
 // full-width and the rail + reading pane become slide-in flyouts. All mutations
@@ -131,7 +138,7 @@ function CountPill({ value, active }: { value: number; active?: boolean }) {
           : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200',
       )}
     >
-      {value > 99 ? '99+' : value}
+      <GeneratedValue value={value > 99 ? '99+' : value} />
     </span>
   )
 }
@@ -164,9 +171,11 @@ function FolderButton({
       <span
         className={cn('shrink-0', active ? 'text-teal-600 dark:text-teal-300' : 'text-slate-400')}
       >
-        {icon}
+        <GeneratedValue value={icon} />
       </span>
-      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-left">
+        <GeneratedValue value={label} />
+      </span>
       <CountPill value={count} active={active} />
     </button>
   )
@@ -185,6 +194,8 @@ function FolderRail({
   variant: 'rail' | 'flyout'
   className?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const active = filterKey(filter)
   const categories = useMemo(
     () =>
@@ -199,56 +210,62 @@ function FolderRail({
       <div className="space-y-0.5">
         <FolderButton
           icon={<Inbox size={16} />}
-          label="All"
+          label={tGenerated('m_17201516610431')}
           count={folders.unread}
           active={active === 'all'}
           onClick={() => onSelect({ kind: 'all' })}
         />
         <FolderButton
           icon={<Mail size={16} />}
-          label="Unread"
+          label={tGenerated('m_1f52bb2f5303fe')}
           count={folders.unread}
           active={active === 'unread'}
           onClick={() => onSelect({ kind: 'unread' })}
         />
         <FolderButton
           icon={<Flag size={16} />}
-          label="Critical"
+          label={tGenerated('m_18d7cb789a27d6')}
           count={folders.criticalUnread}
           active={active === 'critical'}
           onClick={() => onSelect({ kind: 'critical' })}
         />
         <FolderButton
           icon={<ListChecks size={16} />}
-          label="To-dos"
+          label={tGenerated('m_0a8edcde15b7f6')}
           count={folders.todos}
           active={active === 'todos'}
           onClick={() => onSelect({ kind: 'todos' })}
         />
       </div>
 
-      {categories.length > 0 ? (
-        <>
-          <p className="px-2.5 pt-4 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
-            Categories
-          </p>
-          <div className="space-y-0.5">
-            {categories.map((c) => {
-              const Icon = c.meta.Icon
-              return (
-                <FolderButton
-                  key={c.category}
-                  icon={<Icon size={16} />}
-                  label={c.meta.label}
-                  count={c.unread}
-                  active={active === `cat:${c.category}`}
-                  onClick={() => onSelect({ kind: 'category', category: c.category })}
+      <GeneratedValue
+        value={
+          categories.length > 0 ? (
+            <>
+              <p className="px-2.5 pt-4 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                <GeneratedText id="m_079987edbcc20f" />
+              </p>
+              <div className="space-y-0.5">
+                <GeneratedValue
+                  value={categories.map((c) => {
+                    const Icon = c.meta.Icon
+                    return (
+                      <FolderButton
+                        key={c.category}
+                        icon={<Icon size={16} />}
+                        label={tGeneratedValue(c.meta.label)}
+                        count={c.unread}
+                        active={active === `cat:${c.category}`}
+                        onClick={() => onSelect({ kind: 'category', category: c.category })}
+                      />
+                    )
+                  })}
                 />
-              )
-            })}
-          </div>
-        </>
-      ) : null}
+              </div>
+            </>
+          ) : null
+        }
+      />
     </>
   )
 
@@ -258,16 +275,18 @@ function FolderRail({
       className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/70"
     >
       <Settings size={16} className="shrink-0 text-slate-400" />
-      Notification settings
+      <GeneratedText id="m_1aaac13822c572" />
     </Link>
   )
 
   if (variant === 'flyout') {
     return (
       <div className="flex h-full flex-col">
-        <div className="min-h-0 flex-1 overflow-y-auto">{nav}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <GeneratedValue value={nav} />
+        </div>
         <div className="mt-2 border-t border-slate-200 pt-2 dark:border-slate-800">
-          {preferences}
+          <GeneratedValue value={preferences} />
         </div>
       </div>
     )
@@ -282,10 +301,16 @@ function FolderRail({
     >
       <div className="flex h-14 shrink-0 items-center gap-2 px-4">
         <Bell size={18} className="text-teal-600 dark:text-teal-400" />
-        <span className="text-base font-semibold text-slate-900 dark:text-slate-100">Inbox</span>
+        <span className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          <GeneratedText id="m_13b9d8a678398c" />
+        </span>
       </div>
-      <nav className="app-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-2">{nav}</nav>
-      <div className="border-t border-slate-200 p-2 dark:border-slate-800">{preferences}</div>
+      <nav className="app-scroll min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        <GeneratedValue value={nav} />
+      </nav>
+      <div className="border-t border-slate-200 p-2 dark:border-slate-800">
+        <GeneratedValue value={preferences} />
+      </div>
     </aside>
   )
 }
@@ -305,6 +330,8 @@ function MessageRow({
   onToggleRead: () => void
   onDelete: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const meta = categoryMeta(item.category)
   const Icon = meta.Icon
   return (
@@ -325,9 +352,13 @@ function MessageRow({
           : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
       )}
     >
-      {!item.read ? (
-        <span className="absolute top-0 left-0 h-full w-[3px] bg-teal-500" aria-hidden />
-      ) : null}
+      <GeneratedValue
+        value={
+          !item.read ? (
+            <span className="absolute top-0 left-0 h-full w-[3px] bg-teal-500" aria-hidden />
+          ) : null
+        }
+      />
 
       <span
         className={cn(
@@ -348,13 +379,13 @@ function MessageRow({
                 : 'font-semibold text-slate-700 dark:text-slate-200',
             )}
           >
-            {meta.label}
+            <GeneratedValue value={meta.label} />
           </span>
           <time
             suppressHydrationWarning
             className="ml-auto shrink-0 text-[11px] whitespace-nowrap text-slate-400 group-hover:opacity-0 dark:text-slate-500"
           >
-            {relativeTime(item.occurredAt)}
+            <GeneratedValue value={relativeTime(item.occurredAt)} />
           </time>
         </div>
         <p
@@ -365,16 +396,26 @@ function MessageRow({
               : 'font-semibold text-slate-900 dark:text-slate-100',
           )}
         >
-          {item.title}
+          <GeneratedValue value={item.title} />
         </p>
-        {item.body ? (
-          <p className="truncate text-xs text-slate-400 dark:text-slate-500">{item.body}</p>
-        ) : null}
-        {item.isCritical ? (
-          <Badge variant="destructive" className="mt-1 h-4 px-1.5 text-[10px]">
-            Critical
-          </Badge>
-        ) : null}
+        <GeneratedValue
+          value={
+            item.body ? (
+              <p className="truncate text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedValue value={item.body} />
+              </p>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            item.isCritical ? (
+              <Badge variant="destructive" className="mt-1 h-4 px-1.5 text-[10px]">
+                <GeneratedText id="m_18d7cb789a27d6" />
+              </Badge>
+            ) : null
+          }
+        />
       </div>
 
       {/* Hover actions (desktop) */}
@@ -385,11 +426,15 @@ function MessageRow({
             e.stopPropagation()
             onToggleRead()
           }}
-          title={item.read ? 'Mark as unread' : 'Mark as read'}
-          aria-label={item.read ? 'Mark as unread' : 'Mark as read'}
+          title={tGeneratedValue(
+            item.read ? tGenerated('m_1116fcfd202b02') : tGenerated('m_0d382ecc3e9f1b'),
+          )}
+          aria-label={tGeneratedValue(
+            item.read ? tGenerated('m_1116fcfd202b02') : tGenerated('m_0d382ecc3e9f1b'),
+          )}
           className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
         >
-          {item.read ? <Mail size={14} /> : <MailOpen size={14} />}
+          <GeneratedValue value={item.read ? <Mail size={14} /> : <MailOpen size={14} />} />
         </button>
         <button
           type="button"
@@ -397,8 +442,8 @@ function MessageRow({
             e.stopPropagation()
             onDelete()
           }}
-          title="Delete"
-          aria-label="Delete"
+          title={tGenerated('m_11773f3c3f7558')}
+          aria-label={tGenerated('m_11773f3c3f7558')}
           className="rounded p-1 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-rose-950/40 dark:hover:text-rose-300"
         >
           <Trash2 size={14} />
@@ -446,27 +491,35 @@ function TodoRow({ todo, onOpen }: { todo: TodoItem; onOpen: () => void }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="min-w-0 truncate text-xs text-slate-500 dark:text-slate-400">
-            {meta.label}
+            <GeneratedValue value={meta.label} />
           </span>
-          {todo.dueOn ? (
-            <span
-              className={cn(
-                'ml-auto shrink-0 text-[11px] whitespace-nowrap',
-                overdue ? 'font-medium text-rose-600 dark:text-rose-400' : 'text-slate-400',
-              )}
-            >
-              due {todo.dueOn}
-            </span>
-          ) : null}
+          <GeneratedValue
+            value={
+              todo.dueOn ? (
+                <span
+                  className={cn(
+                    'ml-auto shrink-0 text-[11px] whitespace-nowrap',
+                    overdue ? 'font-medium text-rose-600 dark:text-rose-400' : 'text-slate-400',
+                  )}
+                >
+                  <GeneratedText id="m_0fed2a204aff5a" /> <GeneratedValue value={todo.dueOn} />
+                </span>
+              ) : null
+            }
+          />
         </div>
         <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-          {todo.title}
+          <GeneratedValue value={todo.title} />
         </p>
-        {todo.subtitle ? (
-          <p className="truncate text-xs text-slate-400 capitalize dark:text-slate-500">
-            {todo.subtitle}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            todo.subtitle ? (
+              <p className="truncate text-xs text-slate-400 capitalize dark:text-slate-500">
+                <GeneratedValue value={todo.subtitle} />
+              </p>
+            ) : null
+          }
+        />
       </div>
       <ArrowUpRight
         size={15}
@@ -491,6 +544,7 @@ function ReadingPane({
   onSnooze: (item: InboxItem) => void
   onClose?: () => void // present only in the mobile flyout
 }) {
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
 
   if (!item) {
@@ -500,10 +554,10 @@ function ReadingPane({
           <Mail size={28} className="text-slate-400" />
         </div>
         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-          Select an item to read
+          <GeneratedText id="m_12c5fc48d95616" />
         </p>
         <p className="max-w-xs text-xs text-slate-400 dark:text-slate-500">
-          Choose a notification from the list to see its full details here.
+          <GeneratedText id="m_198ee41103e4a8" />
         </p>
       </div>
     )
@@ -514,22 +568,39 @@ function ReadingPane({
 
   const toolbar = (
     <div className="flex items-center gap-1.5">
-      {onClose ? (
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Back"
-          className="mr-1 -ml-1 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-        >
-          <ChevronLeft size={20} />
-        </button>
-      ) : null}
+      <GeneratedValue
+        value={
+          onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={tGenerated('m_1a7cefe5a9894e')}
+              className="mr-1 -ml-1 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            >
+              <ChevronLeft size={20} />
+            </button>
+          ) : null
+        }
+      />
       <Button variant="outline" size="sm" onClick={() => onToggleRead(item)}>
-        {item.read ? <Mail size={14} /> : <MailOpen size={14} />}
-        {item.read ? 'Mark unread' : 'Mark read'}
+        <GeneratedValue value={item.read ? <Mail size={14} /> : <MailOpen size={14} />} />
+        <GeneratedValue
+          value={
+            item.read ? (
+              <GeneratedText id="m_106986e659fec9" />
+            ) : (
+              <GeneratedText id="m_1047814afe8a87" />
+            )
+          }
+        />
       </Button>
-      <Button variant="outline" size="sm" onClick={() => onSnooze(item)} title="Snooze for 1 day">
-        <Clock size={14} /> Snooze
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onSnooze(item)}
+        title={tGenerated('m_10f058b0058005')}
+      >
+        <Clock size={14} /> <GeneratedText id="m_0eb79fc842a7bf" />
       </Button>
       <Button
         variant="outline"
@@ -537,13 +608,21 @@ function ReadingPane({
         onClick={() => onDelete(item)}
         className="text-rose-600 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/40"
       >
-        <Trash2 size={14} /> Delete
+        <Trash2 size={14} /> <GeneratedText id="m_11773f3c3f7558" />
       </Button>
-      {item.linkPath ? (
-        <Button size="sm" className="ml-auto" onClick={() => router.push(item.linkPath as never)}>
-          Open <ArrowUpRight size={14} />
-        </Button>
-      ) : null}
+      <GeneratedValue
+        value={
+          item.linkPath ? (
+            <Button
+              size="sm"
+              className="ml-auto"
+              onClick={() => router.push(item.linkPath as never)}
+            >
+              <GeneratedText id="m_107ab58c3c38bc" /> <ArrowUpRight size={14} />
+            </Button>
+          ) : null
+        }
+      />
     </div>
   )
 
@@ -560,14 +639,24 @@ function ReadingPane({
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="text-lg leading-snug font-semibold text-slate-900 dark:text-slate-100">
-            {item.title}
+            <GeneratedValue value={item.title} />
           </h2>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <Badge variant="secondary" className="font-normal">
-              {meta.label}
+              <GeneratedValue value={meta.label} />
             </Badge>
-            {item.isCritical ? <Badge variant="destructive">Critical</Badge> : null}
-            <span suppressHydrationWarning>{fullDate(item.occurredAt)}</span>
+            <GeneratedValue
+              value={
+                item.isCritical ? (
+                  <Badge variant="destructive">
+                    <GeneratedText id="m_18d7cb789a27d6" />
+                  </Badge>
+                ) : null
+              }
+            />
+            <span suppressHydrationWarning>
+              <GeneratedValue value={fullDate(item.occurredAt)} />
+            </span>
           </div>
         </div>
       </div>
@@ -576,20 +665,30 @@ function ReadingPane({
 
   const body = (
     <div className="space-y-5">
-      {item.body ? (
-        <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-700 dark:text-slate-200">
-          {item.body}
-        </p>
-      ) : (
-        <p className="text-sm text-slate-400 dark:text-slate-500">No additional details.</p>
-      )}
-      {item.linkPath ? (
-        <div>
-          <Button onClick={() => router.push(item.linkPath as never)}>
-            Open <ArrowUpRight size={16} />
-          </Button>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          item.body ? (
+            <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-700 dark:text-slate-200">
+              <GeneratedValue value={item.body} />
+            </p>
+          ) : (
+            <p className="text-sm text-slate-400 dark:text-slate-500">
+              <GeneratedText id="m_07ea5d88d36795" />
+            </p>
+          )
+        }
+      />
+      <GeneratedValue
+        value={
+          item.linkPath ? (
+            <div>
+              <Button onClick={() => router.push(item.linkPath as never)}>
+                <GeneratedText id="m_107ab58c3c38bc" /> <ArrowUpRight size={16} />
+              </Button>
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 
@@ -597,9 +696,11 @@ function ReadingPane({
   if (onClose) {
     return (
       <div className="space-y-4">
-        {toolbar}
-        <div className="border-b border-slate-200 pb-4 dark:border-slate-800">{header}</div>
-        {body}
+        <GeneratedValue value={toolbar} />
+        <div className="border-b border-slate-200 pb-4 dark:border-slate-800">
+          <GeneratedValue value={header} />
+        </div>
+        <GeneratedValue value={body} />
       </div>
     )
   }
@@ -608,10 +709,12 @@ function ReadingPane({
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 space-y-4 border-b border-slate-200 px-6 py-4 dark:border-slate-800">
-        {toolbar}
-        {header}
+        <GeneratedValue value={toolbar} />
+        <GeneratedValue value={header} />
       </div>
-      <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-6 py-5">{body}</div>
+      <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        <GeneratedValue value={body} />
+      </div>
     </div>
   )
 }
@@ -627,6 +730,7 @@ export function OutlookInbox({
   initialHasMore: boolean
   initialFolders: InboxFolders
 }) {
+  const tGenerated = useGeneratedTranslations()
   const isDesktop = useIsDesktop()
   const router = useRouter()
   const [folders, setFolders] = useState(initialFolders)
@@ -792,16 +896,20 @@ export function OutlookInbox({
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
           <ListChecks size={26} className="text-slate-400" />
         </div>
-        <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">Nothing to do</p>
+        <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">
+          <GeneratedText id="m_1bea8555b065cf" />
+        </p>
         <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-          No tasks are assigned to you right now.
+          <GeneratedText id="m_1bc62895a924d6" />
         </p>
       </div>
     ) : (
       <>
-        {todos.map((t) => (
-          <TodoRow key={t.id} todo={t} onOpen={() => router.push(t.linkPath as never)} />
-        ))}
+        <GeneratedValue
+          value={todos.map((t) => (
+            <TodoRow key={t.id} todo={t} onOpen={() => router.push(t.linkPath as never)} />
+          ))}
+        />
       </>
     )
 
@@ -812,33 +920,55 @@ export function OutlookInbox({
           <Inbox size={26} className="text-slate-400" />
         </div>
         <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">
-          {search.trim() ? 'No matches' : 'Nothing here'}
+          <GeneratedValue
+            value={
+              search.trim() ? (
+                <GeneratedText id="m_19a9b602cdcf05" />
+              ) : (
+                <GeneratedText id="m_1472b28843b169" />
+              )
+            }
+          />
         </p>
         <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-          {search.trim() ? 'Try a different search term.' : "You're all caught up in this folder."}
+          <GeneratedValue
+            value={
+              search.trim() ? (
+                <GeneratedText id="m_0dcfd55260344b" />
+              ) : (
+                <GeneratedText id="m_0b1549498e610c" />
+              )
+            }
+          />
         </p>
       </div>
     ) : (
       <>
-        {items.map((n) => (
-          <MessageRow
-            key={n.id}
-            item={n}
-            selected={n.id === selectedId}
-            onOpen={() => open(n)}
-            onToggleRead={() => setRead(n, !n.read)}
-            onDelete={() => remove(n)}
-          />
-        ))}
-        {hasMore ? (
-          <div ref={sentinelRef} className="flex items-center justify-center py-6">
-            <Loader2 size={18} className="animate-spin text-slate-400" />
-          </div>
-        ) : (
-          <p className="py-6 text-center text-xs text-slate-400 dark:text-slate-500">
-            You&rsquo;re all caught up.
-          </p>
-        )}
+        <GeneratedValue
+          value={items.map((n) => (
+            <MessageRow
+              key={n.id}
+              item={n}
+              selected={n.id === selectedId}
+              onOpen={() => open(n)}
+              onToggleRead={() => setRead(n, !n.read)}
+              onDelete={() => remove(n)}
+            />
+          ))}
+        />
+        <GeneratedValue
+          value={
+            hasMore ? (
+              <div ref={sentinelRef} className="flex items-center justify-center py-6">
+                <Loader2 size={18} className="animate-spin text-slate-400" />
+              </div>
+            ) : (
+              <p className="py-6 text-center text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_00355779fd1925" />
+              </p>
+            )
+          }
+        />
       </>
     )
 
@@ -860,34 +990,55 @@ export function OutlookInbox({
             <button
               type="button"
               onClick={() => setFoldersOpen(true)}
-              aria-label="Folders"
+              aria-label={tGenerated('m_1f749e388d1d74')}
               className="-ml-1 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
             >
               <Menu size={20} />
             </button>
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {active.label}
+                <GeneratedValue value={active.label} />
               </h1>
               <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                {active.total} {active.total === 1 ? 'item' : 'items'}
-                {active.unread > 0 ? ` · ${active.unread} unread` : ''}
+                <GeneratedValue value={active.total} />{' '}
+                <GeneratedValue
+                  value={
+                    active.total === 1 ? (
+                      <GeneratedText id="m_089f2b1abdb347" />
+                    ) : (
+                      <GeneratedText id="m_1b8b2c7ab2238f" />
+                    )
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    active.unread > 0 ? (
+                      <GeneratedText id="m_19ee13d7ebc483" values={{ value0: active.unread }} />
+                    ) : (
+                      ''
+                    )
+                  }
+                />
               </p>
             </div>
-            {active.unread > 0 ? (
-              <button
-                type="button"
-                onClick={() => void markAll()}
-                title="Mark all as read"
-                aria-label="Mark all as read"
-                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-              >
-                <CheckCheck size={18} />
-              </button>
-            ) : null}
+            <GeneratedValue
+              value={
+                active.unread > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => void markAll()}
+                    title={tGenerated('m_1b1b65b65130bf')}
+                    aria-label={tGenerated('m_1b1b65b65130bf')}
+                    className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                  >
+                    <CheckCheck size={18} />
+                  </button>
+                ) : null
+              }
+            />
             <Link
               href="/notifications/preferences"
-              aria-label="Notification settings"
+              aria-label={tGenerated('m_1aaac13822c572')}
               className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
             >
               <Settings size={18} />
@@ -903,30 +1054,38 @@ export function OutlookInbox({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search inbox"
+                placeholder={tGenerated('m_1802352368be09')}
                 className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pr-8 pl-8 text-base text-slate-900 transition-colors outline-none placeholder:text-slate-400 focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-500/20 sm:text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:bg-slate-800"
               />
-              {search ? (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  aria-label="Clear search"
-                  className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                >
-                  <X size={14} />
-                </button>
-              ) : null}
+              <GeneratedValue
+                value={
+                  search ? (
+                    <button
+                      type="button"
+                      onClick={() => setSearch('')}
+                      aria-label={tGenerated('m_0465aaf099e62c')}
+                      className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    >
+                      <X size={14} />
+                    </button>
+                  ) : null
+                }
+              />
             </div>
           </div>
         </header>
 
         <div className="app-scroll relative min-h-0 flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="absolute inset-x-0 top-0 z-10 flex justify-center py-3">
-              <Loader2 size={16} className="animate-spin text-slate-400" />
-            </div>
-          ) : null}
-          {mode === 'todos' ? todosBody : alertsBody}
+          <GeneratedValue
+            value={
+              loading ? (
+                <div className="absolute inset-x-0 top-0 z-10 flex justify-center py-3">
+                  <Loader2 size={16} className="animate-spin text-slate-400" />
+                </div>
+              ) : null
+            }
+          />
+          <GeneratedValue value={mode === 'todos' ? todosBody : alertsBody} />
         </div>
       </section>
 
@@ -943,40 +1102,44 @@ export function OutlookInbox({
       </section>
 
       {/* Mobile flyouts (portal-based; mount only below lg) */}
-      {!isDesktop ? (
-        <>
-          <Drawer
-            open={foldersOpen}
-            onClose={() => setFoldersOpen(false)}
-            side="left"
-            size="sm"
-            title="Folders"
-          >
-            <FolderRail
-              variant="flyout"
-              folders={folders}
-              filter={filter}
-              onSelect={selectFolder}
-            />
-          </Drawer>
+      <GeneratedValue
+        value={
+          !isDesktop ? (
+            <>
+              <Drawer
+                open={foldersOpen}
+                onClose={() => setFoldersOpen(false)}
+                side="left"
+                size="sm"
+                title={tGenerated('m_1f749e388d1d74')}
+              >
+                <FolderRail
+                  variant="flyout"
+                  folders={folders}
+                  filter={filter}
+                  onSelect={selectFolder}
+                />
+              </Drawer>
 
-          <Drawer open={!!selectedId} onClose={() => setSelectedId(null)} size="lg">
-            <ReadingPane
-              item={selected}
-              onToggleRead={(i) => setRead(i, !i.read)}
-              onDelete={(i) => {
-                remove(i)
-                setSelectedId(null)
-              }}
-              onSnooze={(i) => {
-                snooze(i)
-                setSelectedId(null)
-              }}
-              onClose={() => setSelectedId(null)}
-            />
-          </Drawer>
-        </>
-      ) : null}
+              <Drawer open={!!selectedId} onClose={() => setSelectedId(null)} size="lg">
+                <ReadingPane
+                  item={selected}
+                  onToggleRead={(i) => setRead(i, !i.read)}
+                  onDelete={(i) => {
+                    remove(i)
+                    setSelectedId(null)
+                  }}
+                  onSnooze={(i) => {
+                    snooze(i)
+                    setSelectedId(null)
+                  }}
+                  onClose={() => setSelectedId(null)}
+                />
+              </Drawer>
+            </>
+          ) : null
+        }
+      />
     </div>
   )
 }

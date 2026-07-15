@@ -1,5 +1,13 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
+import { GeneratedText } from '@/i18n/generated'
+
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { Button, Input, Label, SearchSelect, type SelectOption } from '@beaconhs/ui'
@@ -57,6 +65,8 @@ export function AiSettingsForm({
   initial: AiFormInitial
   scope: 'tenant' | 'platform'
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [provider, setProvider] = useState(initial.provider)
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState(initial.baseUrl)
@@ -156,34 +166,43 @@ export function AiSettingsForm({
     return (
       <div className="space-y-1.5">
         <Label>
-          {opts.label}{' '}
-          <span className="font-normal text-slate-400 dark:text-slate-500">({opts.hint})</span>
+          <GeneratedValue value={opts.label} />
+          <GeneratedValue value={' '} />
+          <span className="font-normal text-slate-400 dark:text-slate-500">
+            (<GeneratedValue value={opts.hint} />)
+          </span>
         </Label>
-        {manual ? (
-          <Input
-            name={opts.name}
-            value={opts.value}
-            onChange={(e) => opts.setValue(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder={opts.placeholder}
-          />
-        ) : (
-          <>
-            <input type="hidden" name={opts.name} value={opts.value} />
-            <SearchSelect
-              value={opts.value}
-              onChange={opts.setValue}
-              options={modelOptions(opts.value)}
-              disabled={!models.length && !opts.value}
-              clearable
-              emptyLabel="Provider default"
-              placeholder={models.length ? 'Choose a model' : 'Load models to choose'}
-              sheetTitle={opts.label}
-              ariaLabel={opts.label}
-            />
-          </>
-        )}
+        <GeneratedValue
+          value={
+            manual ? (
+              <Input
+                name={opts.name}
+                value={opts.value}
+                onChange={(e) => opts.setValue(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={tGeneratedValue(opts.placeholder)}
+              />
+            ) : (
+              <>
+                <input type="hidden" name={opts.name} value={opts.value} />
+                <SearchSelect
+                  value={opts.value}
+                  onChange={opts.setValue}
+                  options={modelOptions(opts.value)}
+                  disabled={!models.length && !opts.value}
+                  clearable
+                  emptyLabel={tGenerated('m_0f5935102b1557')}
+                  placeholder={tGeneratedValue(
+                    models.length ? tGenerated('m_1b12223f2489f8') : tGenerated('m_1210a7c1d86404'),
+                  )}
+                  sheetTitle={opts.label}
+                  ariaLabel={opts.label}
+                />
+              </>
+            )
+          }
+        />
       </div>
     )
   }
@@ -198,29 +217,45 @@ export function AiSettingsForm({
           className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
         />
         <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
-          {scope === 'platform'
-            ? 'Enable the platform default provider'
-            : 'Enable AI features for this tenant'}
+          <GeneratedValue
+            value={
+              scope === 'platform' ? (
+                <GeneratedText id="m_1d70faa3e3f8d7" />
+              ) : (
+                <GeneratedText id="m_1a28808a0e935a" />
+              )
+            }
+          />
         </span>
       </label>
 
-      {scope === 'platform' ? (
-        <div className="space-y-1.5">
-          <Label>Policy</Label>
-          <input type="hidden" name="mode" value={mode} />
-          <SearchSelect
-            value={mode}
-            onChange={setMode}
-            options={MODE_OPTIONS}
-            sheetTitle="AI policy"
-            ariaLabel="AI policy"
-          />
-          <p className="text-xs text-slate-400 dark:text-slate-500">{MODE_HELP[mode]}</p>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          scope === 'platform' ? (
+            <div className="space-y-1.5">
+              <Label>
+                <GeneratedText id="m_08099822651b95" />
+              </Label>
+              <input type="hidden" name="mode" value={mode} />
+              <SearchSelect
+                value={mode}
+                onChange={setMode}
+                options={MODE_OPTIONS}
+                sheetTitle="AI policy"
+                ariaLabel="AI policy"
+              />
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedValue value={MODE_HELP[mode]} />
+              </p>
+            </div>
+          ) : null
+        }
+      />
 
       <div className="space-y-1.5">
-        <Label>Provider</Label>
+        <Label>
+          <GeneratedText id="m_1c4d663fc7d77f" />
+        </Label>
         <input type="hidden" name="provider" value={provider} />
         <SearchSelect
           value={provider}
@@ -231,42 +266,61 @@ export function AiSettingsForm({
         />
       </div>
 
-      {showBaseUrl ? (
-        <div className="space-y-1.5">
-          <Label>
-            Base URL{' '}
-            <span className="font-normal text-slate-400 dark:text-slate-500">
-              {spec.requiresBaseUrl ? '(required)' : '(optional override)'}
-            </span>
-          </Label>
-          <Input
-            name="baseUrl"
-            value={baseUrl}
-            onChange={(e) => {
-              invalidateModels()
-              setBaseUrl(e.target.value)
-            }}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder={spec.baseUrl ?? 'https://your-endpoint/v1'}
-          />
-          {spec.baseUrl ? (
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              Leave blank to use {spec.baseUrl}
-            </p>
+      <GeneratedValue
+        value={
+          showBaseUrl ? (
+            <div className="space-y-1.5">
+              <Label>
+                <GeneratedText id="m_07585a641ed71e" />
+                <GeneratedValue value={' '} />
+                <span className="font-normal text-slate-400 dark:text-slate-500">
+                  <GeneratedValue
+                    value={
+                      spec.requiresBaseUrl ? (
+                        <GeneratedText id="m_10e150ecbb7cd1" />
+                      ) : (
+                        <GeneratedText id="m_1c91a7c43f1f5d" />
+                      )
+                    }
+                  />
+                </span>
+              </Label>
+              <Input
+                name="baseUrl"
+                value={baseUrl}
+                onChange={(e) => {
+                  invalidateModels()
+                  setBaseUrl(e.target.value)
+                }}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={tGeneratedValue(spec.baseUrl ?? 'https://your-endpoint/v1')}
+              />
+              <GeneratedValue
+                value={
+                  spec.baseUrl ? (
+                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                      <GeneratedText id="m_0889454d3fecc6" />{' '}
+                      <GeneratedValue value={spec.baseUrl} />
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                      <GeneratedText id="m_1cb94938c5c3bb" />
+                    </p>
+                  )
+                }
+              />
+            </div>
           ) : (
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              Use a public HTTPS endpoint with a valid certificate. Private and local network
-              addresses are blocked.
-            </p>
-          )}
-        </div>
-      ) : (
-        <input type="hidden" name="baseUrl" value="" />
-      )}
+            <input type="hidden" name="baseUrl" value="" />
+          )
+        }
+      />
 
       <div className="space-y-1.5">
-        <Label>API key</Label>
+        <Label>
+          <GeneratedText id="m_04689ff1b29440" />
+        </Label>
         <Input
           type="password"
           name="apiKey"
@@ -276,25 +330,41 @@ export function AiSettingsForm({
             setApiKey(e.target.value)
           }}
           autoComplete="off"
-          placeholder={keyPlaceholder}
+          placeholder={tGeneratedValue(keyPlaceholder)}
         />
         <p className="text-xs text-slate-400 dark:text-slate-500">
-          {initial.hasKey && savedProvider
-            ? 'A key is stored, encrypted (AES-256-GCM). Leave blank to keep the existing one.'
-            : 'Stored encrypted with a key derived from the app secret — never written to env or shown again.'}
+          <GeneratedValue
+            value={
+              initial.hasKey && savedProvider ? (
+                <GeneratedText id="m_0a7e9f655c3e2c" />
+              ) : (
+                <GeneratedText id="m_0ae8c197586ac1" />
+              )
+            }
+          />
         </p>
       </div>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label>Models</Label>
+          <Label>
+            <GeneratedText id="m_0dd2fff8805856" />
+          </Label>
           <div className="flex items-center gap-3 text-xs">
             <button
               type="button"
               onClick={() => setManual((m) => !m)}
               className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
             >
-              {manual ? 'Choose from list' : 'Enter manually'}
+              <GeneratedValue
+                value={
+                  manual ? (
+                    <GeneratedText id="m_131965c9346832" />
+                  ) : (
+                    <GeneratedText id="m_01a2ee1bbf5c87" />
+                  )
+                }
+              />
             </button>
             <button
               type="button"
@@ -302,70 +372,105 @@ export function AiSettingsForm({
               disabled={loading}
               className="inline-flex items-center gap-1 font-medium text-teal-600 hover:text-teal-700 disabled:opacity-50"
             >
-              {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              {loading ? 'Loading…' : models.length ? 'Reload' : 'Load models'}
+              <GeneratedValue
+                value={
+                  loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />
+                }
+              />
+              <GeneratedValue
+                value={
+                  loading ? (
+                    <GeneratedText id="m_0e65697ec32c03" />
+                  ) : models.length ? (
+                    <GeneratedText id="m_19e1952e7364a8" />
+                  ) : (
+                    <GeneratedText id="m_08abcaeca1ff27" />
+                  )
+                }
+              />
             </button>
           </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {modelField({
-            name: 'modelFast',
-            label: 'Fast model',
-            hint: 'tagging, writing',
-            value: modelFast,
-            setValue: setModelFast,
-            placeholder: spec.fast || 'model id',
-          })}
-          {modelField({
-            name: 'modelSmart',
-            label: 'Smart model',
-            hint: 'vision, digests',
-            value: modelSmart,
-            setValue: setModelSmart,
-            placeholder: spec.smart || 'model id',
-          })}
+          <GeneratedValue
+            value={modelField({
+              name: 'modelFast',
+              label: 'Fast model',
+              hint: 'tagging, writing',
+              value: modelFast,
+              setValue: setModelFast,
+              placeholder: spec.fast || 'model id',
+            })}
+          />
+          <GeneratedValue
+            value={modelField({
+              name: 'modelSmart',
+              label: 'Smart model',
+              hint: 'vision, digests',
+              value: modelSmart,
+              setValue: setModelSmart,
+              placeholder: spec.smart || 'model id',
+            })}
+          />
         </div>
-        {modelsError ? (
-          <p className="text-xs text-amber-600">{modelsError}</p>
-        ) : models.length ? (
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            {models.length} models available. Leave a field on “Provider default” to use the
-            built-in default. The smart model handles photo captions — pick a vision-capable one.
-          </p>
-        ) : (
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            {spec.modelHint ?? 'Load this provider’s models from its API, or enter ids manually.'}
-          </p>
-        )}
+        <GeneratedValue
+          value={
+            modelsError ? (
+              <p className="text-xs text-amber-600">
+                <GeneratedValue value={modelsError} />
+              </p>
+            ) : models.length ? (
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedValue value={models.length} /> <GeneratedText id="m_119eaa2a4434bd" />
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedValue value={spec.modelHint ?? <GeneratedText id="m_1e41de6281bb81" />} />
+              </p>
+            )
+          }
+        />
       </div>
 
-      {scope === 'tenant' ? (
-        <div className="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-          <Label>Automation</Label>
-          <label className="flex items-start gap-2.5">
-            <input
-              type="checkbox"
-              name="autoJournalAi"
-              defaultChecked={initial.autoJournalAi}
-              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
-            />
-            <span className="text-sm">
-              <span className="font-medium text-slate-800 dark:text-slate-100">
-                Auto-summarise &amp; tag journals
-              </span>
-              <span className="mt-0.5 block text-xs text-slate-400 dark:text-slate-500">
-                When a journal is submitted, generate a short summary and suggested tags in the
-                background. Keeps logs categorised without workers doing it themselves. Requires a
-                key.
-              </span>
-            </span>
-          </label>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          scope === 'tenant' ? (
+            <div className="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+              <Label>
+                <GeneratedText id="m_120a984c132bbd" />
+              </Label>
+              <label className="flex items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  name="autoJournalAi"
+                  defaultChecked={initial.autoJournalAi}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
+                />
+                <span className="text-sm">
+                  <span className="font-medium text-slate-800 dark:text-slate-100">
+                    <GeneratedText id="m_1886e2abfd0fe4" />
+                  </span>
+                  <span className="mt-0.5 block text-xs text-slate-400 dark:text-slate-500">
+                    <GeneratedText id="m_072ae7317f8bd3" />
+                  </span>
+                </span>
+              </label>
+            </div>
+          ) : null
+        }
+      />
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
         <Button type="submit">
-          {scope === 'platform' ? 'Save platform AI' : 'Save AI settings'}
+          <GeneratedValue
+            value={
+              scope === 'platform' ? (
+                <GeneratedText id="m_0a4c30207453ef" />
+              ) : (
+                <GeneratedText id="m_1706a5daf4809d" />
+              )
+            }
+          />
         </Button>
       </div>
     </form>

@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 // Renders an assistant turn's ordered parts — markdown text + tool-use cards +
 // (M5) proposal cards. The SAME renderer serves live streaming and DB reload.
@@ -14,9 +15,11 @@ export function MessageParts({ parts }: { parts: unknown[] }) {
   const list = Array.isArray(parts) ? (parts as AnyPart[]) : []
   return (
     <div className="space-y-2.5">
-      {list.map((part, i) => (
-        <PartView key={i} part={part} />
-      ))}
+      <GeneratedValue
+        value={list.map((part, i) => (
+          <PartView key={i} part={part} />
+        ))}
+      />
     </div>
   )
 }
@@ -41,8 +44,10 @@ function PartView({ part }: { part: AnyPart }) {
       <div className="space-y-2">
         <ToolUseCard name={name} state={state} input={part.input} output={part.output} />
         {/* Search and read tool results render as interactive, deep-linked cards. */}
-        {proposal ? null : <ToolResultView name={name} output={part.output} />}
-        {proposal ? <ProposalCard proposal={proposal} /> : null}
+        <GeneratedValue
+          value={proposal ? null : <ToolResultView name={name} output={part.output} />}
+        />
+        <GeneratedValue value={proposal ? <ProposalCard proposal={proposal} /> : null} />
       </div>
     )
   }

@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import {
@@ -24,7 +26,10 @@ import { PageContainer } from '@/components/page-layout'
 import { RemoteSelectField } from '@/components/remote-search-select'
 import { OccurredAtField } from './_occurred-at-field'
 
-export const metadata = { title: 'Report incident' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0f2b150c1cc651') }
+}
 
 const TYPES = [
   'injury',
@@ -124,86 +129,90 @@ async function reportIncident(formData: FormData) {
 }
 
 export default async function NewIncidentPage() {
+  const tGenerated = await getGeneratedTranslations()
   await requireRequestContext()
   return (
     <PageContainer>
       <div className="max-w-3xl space-y-6">
         <DetailHeader
           back={{ href: '/incidents', label: 'Back to incidents' }}
-          title="Report incident"
+          title={tGenerated('m_0f2b150c1cc651')}
         />
         <Alert variant="info">
-          <AlertTitle>Quick report</AlertTitle>
+          <AlertTitle>
+            <GeneratedText id="m_100301e41d60fb" />
+          </AlertTitle>
           <AlertDescription>
-            Use this form to capture the essentials. Photos, witness statements, and the full
-            investigation form happen on the incident's detail page after submission.
+            <GeneratedText id="m_13bb38dc4c7071" />
           </AlertDescription>
         </Alert>
         <Card>
           <CardContent className="pt-6">
             <form action={reportIncident} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Type" required>
+                <Field label={tGenerated('m_074ba2f160c506')} required>
                   <Select name="type" defaultValue="injury">
-                    {TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t.replace(/_/g, ' ')}
-                      </option>
-                    ))}
+                    <GeneratedValue
+                      value={TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          <GeneratedValue value={t.replace(/_/g, ' ')} />
+                        </option>
+                      ))}
+                    />
                   </Select>
                 </Field>
-                <Field label="Severity" required>
+                <Field label={tGenerated('m_168b365cc671bf')} required>
                   <Select name="severity" defaultValue="no_injury">
-                    {SEVERITIES.map((s) => (
-                      <option key={s} value={s}>
-                        {s.replace(/_/g, ' ')}
-                      </option>
-                    ))}
+                    <GeneratedValue
+                      value={SEVERITIES.map((s) => (
+                        <option key={s} value={s}>
+                          <GeneratedValue value={s.replace(/_/g, ' ')} />
+                        </option>
+                      ))}
+                    />
                   </Select>
                 </Field>
-                <Field label="Occurred at" required className="sm:col-span-1">
+                <Field label={tGenerated('m_03f174df92cf82')} required className="sm:col-span-1">
                   <OccurredAtField name="occurredAt" />
                 </Field>
-                <Field label="Site">
+                <Field label={tGenerated('m_020146dd3d3d5a')}>
                   <RemoteSelectField
                     lookup="incident-sites"
                     name="siteOrgUnitId"
-                    placeholder="Select a site…"
-                    searchPlaceholder="Search sites…"
+                    placeholder={tGenerated('m_015c668f21e7b9')}
+                    searchPlaceholder={tGenerated('m_1931aa93098220')}
                     sheetTitle="Select a site"
                     emptyLabel="—"
                   />
                 </Field>
-                <Field label="Title" required className="sm:col-span-2">
-                  <Input
-                    name="title"
-                    required
-                    placeholder="Short summary, e.g. ‘Slip on wet floor near pump 3’"
-                  />
+                <Field label={tGenerated('m_0decefd558c355')} required className="sm:col-span-2">
+                  <Input name="title" required placeholder={tGenerated('m_07b6683aca592d')} />
                 </Field>
-                <Field label="Description" className="sm:col-span-2">
+                <Field label={tGenerated('m_14d923495cf14c')} className="sm:col-span-2">
                   <Textarea
                     name="description"
                     rows={4}
-                    placeholder="What happened? Witnesses? Equipment involved?"
+                    placeholder={tGenerated('m_1d61db803523a6')}
                   />
                 </Field>
-                <Field label="Specific location">
-                  <Input name="location" placeholder="Building / area / coordinates" />
+                <Field label={tGenerated('m_0352b4ecd48a3a')}>
+                  <Input name="location" placeholder={tGenerated('m_01b3e003b5a98b')} />
                 </Field>
-                <Field label="Weather">
-                  <Input name="weather" placeholder="Optional" />
+                <Field label={tGenerated('m_0ac9b805dc5093')}>
+                  <Input name="weather" placeholder={tGenerated('m_0cadbe8ae1ae4e')} />
                 </Field>
-                <Field label="Immediate action taken" className="sm:col-span-2">
+                <Field label={tGenerated('m_1ea890e56aa6ae')} className="sm:col-span-2">
                   <Textarea
                     name="immediateActionTaken"
                     rows={3}
-                    placeholder="First aid given, area barricaded, equipment locked out, etc."
+                    placeholder={tGenerated('m_08cccd47bcda61')}
                   />
                 </Field>
               </div>
               <div className="flex items-center justify-end gap-2">
-                <Button type="submit">Submit report</Button>
+                <Button type="submit">
+                  <GeneratedText id="m_09349052137c88" />
+                </Button>
               </div>
             </form>
           </CardContent>
@@ -227,10 +236,10 @@ function Field({
   return (
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label>
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        <GeneratedValue value={label} />
+        <GeneratedValue value={required ? <span className="text-red-600"> *</span> : null} />
       </Label>
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }

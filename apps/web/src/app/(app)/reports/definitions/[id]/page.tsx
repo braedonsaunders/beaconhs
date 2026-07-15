@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 // Report viewer — a true print preview. Runs the definition in-app (same
 // engine and same document template as scheduled PDFs) and paginates it into
 // real paper pages with Paged.js, so the screen matches the exported PDF
@@ -64,7 +67,10 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { runOnceFromDefinition, deleteDefinition } from './actions'
 
-export const metadata = { title: 'Report' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0ab5a972fc80fd') }
+}
 export const dynamic = 'force-dynamic'
 
 const TABS = ['document', 'activity'] as const
@@ -88,6 +94,7 @@ export default async function ReportViewerPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -226,8 +233,8 @@ export default async function ReportViewerPage({
         <FadeInHeader className="mx-auto max-w-screen-2xl px-3 pt-3 sm:px-6 sm:pt-5">
           <DetailHeader
             back={{ href: '/reports', label: 'Back to reports' }}
-            title={definition.name}
-            subtitle={definition.description ?? undefined}
+            title={tGeneratedValue(definition.name)}
+            subtitle={tGeneratedValue(definition.description ?? undefined)}
             badge={
               <div className="flex items-center gap-1.5">
                 <KindBadge kind={definition.kind} />
@@ -236,30 +243,42 @@ export default async function ReportViewerPage({
             }
             actions={
               <>
-                {canSchedule ? (
-                  <form action={runBound}>
-                    <Button type="submit" variant="outline" size="sm">
-                      <Mail size={14} className="mr-1.5" />
-                      Email PDF
-                    </Button>
-                  </form>
-                ) : null}
-                {canBuild ? (
-                  <Link href={editHref as never}>
-                    <Button variant="outline" size="sm">
-                      <Pencil size={14} className="mr-1.5" />
-                      Edit
-                    </Button>
-                  </Link>
-                ) : null}
-                {canSchedule ? (
-                  <Link href={`/reports/schedules/new?definitionId=${definition.id}`}>
-                    <Button size="sm">
-                      <Calendar size={14} className="mr-1.5" />
-                      Subscribe
-                    </Button>
-                  </Link>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    canSchedule ? (
+                      <form action={runBound}>
+                        <Button type="submit" variant="outline" size="sm">
+                          <Mail size={14} className="mr-1.5" />
+                          <GeneratedText id="m_172e986a84c411" />
+                        </Button>
+                      </form>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    canBuild ? (
+                      <Link href={editHref as never}>
+                        <Button variant="outline" size="sm">
+                          <Pencil size={14} className="mr-1.5" />
+                          <GeneratedText id="m_03a66f9d34ac7b" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    canSchedule ? (
+                      <Link href={`/reports/schedules/new?definitionId=${definition.id}`}>
+                        <Button size="sm">
+                          <Calendar size={14} className="mr-1.5" />
+                          <GeneratedText id="m_13104884fca730" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
               </>
             }
           />
@@ -280,24 +299,28 @@ export default async function ReportViewerPage({
         </FadeInHeader>
       </div>
 
-      {tab === 'document' ? (
-        <DocumentTab ctx={ctx} definition={definition} daysParam={daysParam} sp={sp} />
-      ) : (
-        <ActivityTab
-          definition={definition}
-          activityData={activityData}
-          scheduleParams={scheduleParams}
-          runParams={runParams}
-          currentParams={sp}
-          canSchedule={canSchedule}
-          canBuild={canBuild}
-          isCustom={isCustom}
-          editHref={editHref}
-          deleteBound={deleteBound}
-          timeZone={ctx.timezone}
-          locale={ctx.locale}
-        />
-      )}
+      <GeneratedValue
+        value={
+          tab === 'document' ? (
+            <DocumentTab ctx={ctx} definition={definition} daysParam={daysParam} sp={sp} />
+          ) : (
+            <ActivityTab
+              definition={definition}
+              activityData={activityData}
+              scheduleParams={scheduleParams}
+              runParams={runParams}
+              currentParams={sp}
+              canSchedule={canSchedule}
+              canBuild={canBuild}
+              isCustom={isCustom}
+              editHref={editHref}
+              deleteBound={deleteBound}
+              timeZone={ctx.timezone}
+              locale={ctx.locale}
+            />
+          )
+        }
+      />
     </div>
   )
 }
@@ -315,6 +338,8 @@ async function DocumentTab({
   daysParam: number | null
   sp: Record<string, string | string[] | undefined>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const [run, branding] = await Promise.all([
     runReportForViewer(ctx, definition, { days: daysParam }),
     loadTenantBranding(ctx),
@@ -330,6 +355,7 @@ async function DocumentTab({
     generatedAt: new Date(),
     summary: layout.showSummary ? run.result.summary : undefined,
     groups: run.result.groups,
+    translate: tGeneratedValue,
   })
   const css =
     buildReportPageCss(layout, {
@@ -344,55 +370,75 @@ async function DocumentTab({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-slate-200 bg-white px-3 py-2 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
         <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-2">
-          {run.rangeMode === 'as_of' ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{run.rangeLabel}</p>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                {run.rangeMode === 'lookahead' ? 'Next' : 'Last'}
-              </span>
-              {VIEWER_RANGE_CHOICES.map((d) => {
-                const active =
-                  (run.days ?? null) === d || (!run.days && isDefaultChoice(d, run.rangeLabel))
-                return (
-                  <Link
-                    key={d}
-                    href={
-                      `/reports/definitions/${definition.id}?days=${d}${typeof sp.tab === 'string' ? `&tab=${sp.tab}` : ''}` as never
-                    }
-                    className={cn(
-                      'inline-flex items-center rounded-full border px-2.5 py-1 text-xs transition-colors',
-                      active
-                        ? 'border-teal-700 bg-teal-700 text-white'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60',
-                    )}
-                  >
-                    {d} days
-                  </Link>
-                )
-              })}
-            </div>
-          )}
+          <GeneratedValue
+            value={
+              run.rangeMode === 'as_of' ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  <GeneratedValue value={run.rangeLabel} />
+                </p>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                    <GeneratedValue
+                      value={
+                        run.rangeMode === 'lookahead' ? (
+                          <GeneratedText id="m_08b5fa148b2af7" />
+                        ) : (
+                          <GeneratedText id="m_071a21cf92e7e2" />
+                        )
+                      }
+                    />
+                  </span>
+                  <GeneratedValue
+                    value={VIEWER_RANGE_CHOICES.map((d) => {
+                      const active =
+                        (run.days ?? null) === d ||
+                        (!run.days && isDefaultChoice(d, run.rangeLabel))
+                      return (
+                        <Link
+                          key={d}
+                          href={
+                            `/reports/definitions/${definition.id}?days=${d}${typeof sp.tab === 'string' ? `&tab=${sp.tab}` : ''}` as never
+                          }
+                          className={cn(
+                            'inline-flex items-center rounded-full border px-2.5 py-1 text-xs transition-colors',
+                            active
+                              ? 'border-teal-700 bg-teal-700 text-white'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60',
+                          )}
+                        >
+                          <GeneratedValue value={d} /> <GeneratedText id="m_169a4282447292" />
+                        </Link>
+                      )
+                    })}
+                  />
+                </div>
+              )
+            }
+          />
           <div className="flex items-center gap-2">
             <p className="text-xs text-slate-400">
-              {run.result.rowCount} row{run.result.rowCount === 1 ? '' : 's'}
+              <GeneratedValue value={run.result.rowCount} /> <GeneratedText id="m_18c766569d99e9" />
+              <GeneratedValue
+                value={run.result.rowCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+              />
             </p>
             <a href={`${exportBase}${exportJoin}format=csv`}>
               <Button variant="outline" size="sm">
                 <Download size={14} className="mr-1.5" />
-                CSV
+                <GeneratedText id="m_13bc18467bfb44" />
               </Button>
             </a>
             <a href={`${exportBase}${exportJoin}format=xlsx`}>
               <Button variant="outline" size="sm">
                 <FileSpreadsheet size={14} className="mr-1.5" />
-                Excel
+                <GeneratedText id="m_0c81eece17490f" />
               </Button>
             </a>
             <a href={`${exportBase}${exportJoin}format=pdf`}>
               <Button variant="outline" size="sm">
                 <FileText size={14} className="mr-1.5" />
-                PDF
+                <GeneratedText id="m_1a2b2ed6729166" />
               </Button>
             </a>
           </div>
@@ -400,24 +446,32 @@ async function DocumentTab({
       </div>
 
       <div className="min-h-0 flex-1">
-        {run.error ? (
-          <div className="mx-auto max-w-screen-2xl p-3 sm:p-6">
-            <Alert variant="destructive">
-              <AlertTitle>This report failed to run</AlertTitle>
-              <AlertDescription>{run.error}</AlertDescription>
-            </Alert>
-          </div>
-        ) : (
-          <ReportPagedPreview
-            bodyHtml={bodyHtml}
-            css={css}
-            caption={
-              truncated
-                ? `Preview truncated at ${DOCUMENT_PREVIEW_MAX_ROWS} rows — export PDF for the complete document.`
-                : null
-            }
-          />
-        )}
+        <GeneratedValue
+          value={
+            run.error ? (
+              <div className="mx-auto max-w-screen-2xl p-3 sm:p-6">
+                <Alert variant="destructive">
+                  <AlertTitle>
+                    <GeneratedText id="m_1cb092500d5ac1" />
+                  </AlertTitle>
+                  <AlertDescription>
+                    <GeneratedValue value={run.error} />
+                  </AlertDescription>
+                </Alert>
+              </div>
+            ) : (
+              <ReportPagedPreview
+                bodyHtml={bodyHtml}
+                css={css}
+                caption={tGeneratedValue(
+                  truncated
+                    ? tGenerated('m_12918bef45dd52', { value0: DOCUMENT_PREVIEW_MAX_ROWS })
+                    : null,
+                )}
+              />
+            )
+          }
+        />
       </div>
     </div>
   )
@@ -471,6 +525,7 @@ function ActivityTab({
   timeZone: string
   locale: Awaited<ReturnType<typeof requireRequestContext>>['locale']
 }) {
+  const tGenerated = useGeneratedTranslations()
   const {
     scheduleRows,
     scheduleTotal,
@@ -486,12 +541,15 @@ function ActivityTab({
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Subscriptions ({scheduleTotal})</CardTitle>
+              <CardTitle className="text-sm">
+                <GeneratedText id="m_132834dfa8b616" />
+                <GeneratedValue value={scheduleTotal} />)
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <TableToolbar className="mb-3">
                 <SearchInput
-                  placeholder="Search schedules…"
+                  placeholder={tGenerated('m_1f73404a759f2f')}
                   paramKey="scheduleQ"
                   pageParamKey="schedulePage"
                 />
@@ -500,235 +558,346 @@ function ActivityTab({
                   currentParams={currentParams}
                   paramKey="scheduleStatus"
                   pageParamKey="schedulePage"
-                  label="Status"
+                  label={tGenerated('m_0b9da892d6faf0')}
                   options={[...SCHEDULE_STATUS_OPTIONS]}
                 />
               </TableToolbar>
-              {scheduleRows.length === 0 ? (
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {scheduleParams.q || scheduleStatusFromParams(currentParams)
-                      ? 'No schedules match these filters.'
-                      : 'No schedules for this report.'}
-                    {canSchedule ? (
-                      <>
-                        {' '}
-                        <Link
-                          href={`/reports/schedules/new?definitionId=${definition.id}`}
-                          className="text-teal-700 hover:underline dark:text-teal-300"
-                        >
-                          Create schedule
-                        </Link>
-                      </>
-                    ) : null}
-                  </p>
-                  {filteredScheduleTotal > 0 ? (
-                    <Pagination
-                      basePath={basePath}
-                      currentParams={currentParams}
-                      total={filteredScheduleTotal}
-                      page={scheduleParams.page}
-                      perPage={scheduleParams.perPage}
-                      pageParamKey="schedulePage"
-                    />
-                  ) : null}
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Schedule</TableHead>
-                        <TableHead>Cadence</TableHead>
-                        <TableHead>Next run</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {scheduleRows.map((s) => (
-                        <TableRow key={s.id}>
-                          <TableCell>
-                            <Link
-                              href={`/reports/schedules/${s.id}`}
-                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                            >
-                              {s.name}
-                            </Link>
-                          </TableCell>
-                          <TableCell className="text-slate-600 dark:text-slate-300">
-                            {formatCadence(
-                              s.cadence,
-                              s.dayOfWeek,
-                              s.dayOfMonth,
-                              s.hour,
-                              s.minute,
-                              s.timezone,
-                            )}
-                          </TableCell>
-                          <TableCell className="text-slate-600 dark:text-slate-300">
-                            {s.nextRunAt
-                              ? formatDateTime(new Date(s.nextRunAt), timeZone, locale)
-                              : '—'}
-                          </TableCell>
-                          <TableCell>
-                            {s.active ? (
-                              <Badge variant="success">active</Badge>
+              <GeneratedValue
+                value={
+                  scheduleRows.length === 0 ? (
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        <GeneratedValue
+                          value={
+                            scheduleParams.q || scheduleStatusFromParams(currentParams) ? (
+                              <GeneratedText id="m_19447dbf0896a3" />
                             ) : (
-                              <Badge variant="secondary">paused</Badge>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <Pagination
-                    basePath={basePath}
-                    currentParams={currentParams}
-                    total={filteredScheduleTotal}
-                    page={scheduleParams.page}
-                    perPage={scheduleParams.perPage}
-                    pageParamKey="schedulePage"
-                  />
-                </div>
-              )}
+                              <GeneratedText id="m_145ac584dfa96b" />
+                            )
+                          }
+                        />
+                        <GeneratedValue
+                          value={
+                            canSchedule ? (
+                              <>
+                                <GeneratedValue value={' '} />
+                                <Link
+                                  href={`/reports/schedules/new?definitionId=${definition.id}`}
+                                  className="text-teal-700 hover:underline dark:text-teal-300"
+                                >
+                                  <GeneratedText id="m_1c516d834dca35" />
+                                </Link>
+                              </>
+                            ) : null
+                          }
+                        />
+                      </p>
+                      <GeneratedValue
+                        value={
+                          filteredScheduleTotal > 0 ? (
+                            <Pagination
+                              basePath={basePath}
+                              currentParams={currentParams}
+                              total={filteredScheduleTotal}
+                              page={scheduleParams.page}
+                              perPage={scheduleParams.perPage}
+                              pageParamKey="schedulePage"
+                            />
+                          ) : null
+                        }
+                      />
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>
+                              <GeneratedText id="m_16faf7a86922c4" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_1151ed0308b6d1" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_05e650592b7158" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_0b9da892d6faf0" />
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          <GeneratedValue
+                            value={scheduleRows.map((s) => (
+                              <TableRow key={s.id}>
+                                <TableCell>
+                                  <Link
+                                    href={`/reports/schedules/${s.id}`}
+                                    className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                                  >
+                                    <GeneratedValue value={s.name} />
+                                  </Link>
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-300">
+                                  <GeneratedValue
+                                    value={formatCadence(
+                                      s.cadence,
+                                      s.dayOfWeek,
+                                      s.dayOfMonth,
+                                      s.hour,
+                                      s.minute,
+                                      s.timezone,
+                                    )}
+                                  />
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-300">
+                                  <GeneratedValue
+                                    value={
+                                      s.nextRunAt
+                                        ? formatDateTime(new Date(s.nextRunAt), timeZone, locale)
+                                        : '—'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <GeneratedValue
+                                    value={
+                                      s.active ? (
+                                        <Badge variant="success">
+                                          <GeneratedText id="m_0af64d5dc843c0" />
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="secondary">
+                                          <GeneratedText id="m_18a9844f041430" />
+                                        </Badge>
+                                      )
+                                    }
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          />
+                        </TableBody>
+                      </Table>
+                      <Pagination
+                        basePath={basePath}
+                        currentParams={currentParams}
+                        total={filteredScheduleTotal}
+                        page={scheduleParams.page}
+                        perPage={scheduleParams.perPage}
+                        pageParamKey="schedulePage"
+                      />
+                    </div>
+                  )
+                }
+              />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Runs ({runTotal})</CardTitle>
+              <CardTitle className="text-sm">
+                <GeneratedText id="m_171b06e0afee3f" />
+                <GeneratedValue value={runTotal} />)
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <TableToolbar className="mb-3">
-                <SearchInput placeholder="Search runs…" paramKey="runQ" pageParamKey="runPage" />
+                <SearchInput
+                  placeholder={tGenerated('m_17c7a03117af61')}
+                  paramKey="runQ"
+                  pageParamKey="runPage"
+                />
                 <FilterChips
                   basePath={basePath}
                   currentParams={currentParams}
                   paramKey="runStatus"
                   pageParamKey="runPage"
-                  label="Status"
+                  label={tGenerated('m_0b9da892d6faf0')}
                   options={[...RUN_STATUS_OPTIONS]}
                 />
               </TableToolbar>
-              {runRows.length === 0 ? (
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {runParams.q || pickString(currentParams.runStatus)
-                      ? 'No runs match these filters.'
-                      : 'No runs yet.'}
-                  </p>
-                  {filteredRunTotal > 0 ? (
-                    <Pagination
-                      basePath={basePath}
-                      currentParams={currentParams}
-                      total={filteredRunTotal}
-                      page={runParams.page}
-                      perPage={runParams.perPage}
-                      pageParamKey="runPage"
-                    />
-                  ) : null}
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Started</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Rows</TableHead>
-                        <TableHead>PDF</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {runRows.map(({ run: r }) => (
-                        <TableRow key={r.id}>
-                          <TableCell>
-                            <Link
-                              href={`/reports/schedules/${r.scheduleId}/runs/${r.id}`}
-                              className="text-slate-700 hover:underline dark:text-slate-200"
-                            >
-                              {formatDateTime(new Date(r.startedAt), timeZone, locale)}
-                            </Link>
-                          </TableCell>
-                          <TableCell>
-                            <StatusBadge status={r.status} />
-                          </TableCell>
-                          <TableCell className="text-slate-600 dark:text-slate-300">
-                            {r.rowCount ?? '—'}
-                          </TableCell>
-                          <TableCell>
-                            {r.pdfAttachmentId ? (
-                              <a
-                                href={`/reports/schedules/${r.scheduleId}/runs/${r.id}/pdf`}
-                                className="text-teal-700 hover:underline dark:text-teal-300"
-                              >
-                                Download
-                              </a>
+              <GeneratedValue
+                value={
+                  runRows.length === 0 ? (
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        <GeneratedValue
+                          value={
+                            runParams.q || pickString(currentParams.runStatus) ? (
+                              <GeneratedText id="m_0df40b8e9c9440" />
                             ) : (
-                              <span className="text-slate-300 dark:text-slate-600">—</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <Pagination
-                    basePath={basePath}
-                    currentParams={currentParams}
-                    total={filteredRunTotal}
-                    page={runParams.page}
-                    perPage={runParams.perPage}
-                    pageParamKey="runPage"
-                  />
-                </div>
-              )}
+                              <GeneratedText id="m_18b1072d8a0cd7" />
+                            )
+                          }
+                        />
+                      </p>
+                      <GeneratedValue
+                        value={
+                          filteredRunTotal > 0 ? (
+                            <Pagination
+                              basePath={basePath}
+                              currentParams={currentParams}
+                              total={filteredRunTotal}
+                              page={runParams.page}
+                              perPage={runParams.perPage}
+                              pageParamKey="runPage"
+                            />
+                          ) : null
+                        }
+                      />
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>
+                              <GeneratedText id="m_1922c581498469" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_0b9da892d6faf0" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_03be2202673df4" />
+                            </TableHead>
+                            <TableHead>
+                              <GeneratedText id="m_1a2b2ed6729166" />
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          <GeneratedValue
+                            value={runRows.map(({ run: r }) => (
+                              <TableRow key={r.id}>
+                                <TableCell>
+                                  <Link
+                                    href={`/reports/schedules/${r.scheduleId}/runs/${r.id}`}
+                                    className="text-slate-700 hover:underline dark:text-slate-200"
+                                  >
+                                    <GeneratedValue
+                                      value={formatDateTime(
+                                        new Date(r.startedAt),
+                                        timeZone,
+                                        locale,
+                                      )}
+                                    />
+                                  </Link>
+                                </TableCell>
+                                <TableCell>
+                                  <StatusBadge status={r.status} />
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-300">
+                                  <GeneratedValue value={r.rowCount ?? '—'} />
+                                </TableCell>
+                                <TableCell>
+                                  <GeneratedValue
+                                    value={
+                                      r.pdfAttachmentId ? (
+                                        <a
+                                          href={`/reports/schedules/${r.scheduleId}/runs/${r.id}/pdf`}
+                                          className="text-teal-700 hover:underline dark:text-teal-300"
+                                        >
+                                          <GeneratedText id="m_0fcb9c63d263d1" />
+                                        </a>
+                                      ) : (
+                                        <span className="text-slate-300 dark:text-slate-600">
+                                          —
+                                        </span>
+                                      )
+                                    }
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          />
+                        </TableBody>
+                      </Table>
+                      <Pagination
+                        basePath={basePath}
+                        currentParams={currentParams}
+                        total={filteredRunTotal}
+                        page={runParams.page}
+                        perPage={runParams.perPage}
+                        pageParamKey="runPage"
+                      />
+                    </div>
+                  )
+                }
+              />
             </CardContent>
           </Card>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">About this report</CardTitle>
+            <CardTitle className="text-sm">
+              <GeneratedText id="m_0805e8582f3931" />
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-4">
-              <MetaItem label="Slug">
-                <span className="font-mono text-xs">{definition.slug}</span>
+              <MetaItem label={tGenerated('m_0c70a274b9df45')}>
+                <span className="font-mono text-xs">
+                  <GeneratedValue value={definition.slug} />
+                </span>
               </MetaItem>
-              <MetaItem label="Query kind">
-                <span className="font-mono text-xs">{definition.queryKind}</span>
+              <MetaItem label={tGenerated('m_0de2b4cbb409e6')}>
+                <span className="font-mono text-xs">
+                  <GeneratedValue value={definition.queryKind} />
+                </span>
               </MetaItem>
-              <MetaItem label="Created">
-                {formatDateTime(new Date(definition.createdAt), timeZone, locale)}
+              <MetaItem label={tGenerated('m_10cbe051fb5e05')}>
+                <GeneratedValue
+                  value={formatDateTime(new Date(definition.createdAt), timeZone, locale)}
+                />
               </MetaItem>
-              <MetaItem label="Updated">
-                {formatDateTime(new Date(definition.updatedAt), timeZone, locale)}
+              <MetaItem label={tGenerated('m_014ca61c68ab13')}>
+                <GeneratedValue
+                  value={formatDateTime(new Date(definition.updatedAt), timeZone, locale)}
+                />
               </MetaItem>
             </dl>
-            {canBuild ? (
-              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-                <Link href={editHref as never}>
-                  <Button variant="outline" size="sm">
-                    <Pencil size={14} className="mr-1.5" />
-                    {isCustom ? 'Edit report' : 'Edit a copy'}
-                  </Button>
-                </Link>
-                <Link href={`/reports/definitions/new?from=${definition.id}` as never}>
-                  <Button variant="outline" size="sm">
-                    <Copy size={14} className="mr-1.5" />
-                    Duplicate
-                  </Button>
-                </Link>
-                {isCustom ? (
-                  <form action={deleteBound}>
-                    <Button type="submit" variant="destructive" size="sm">
-                      <Trash2 size={14} className="mr-1.5" />
-                      Delete
-                    </Button>
-                  </form>
-                ) : null}
-              </div>
-            ) : null}
+            <GeneratedValue
+              value={
+                canBuild ? (
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+                    <Link href={editHref as never}>
+                      <Button variant="outline" size="sm">
+                        <Pencil size={14} className="mr-1.5" />
+                        <GeneratedValue
+                          value={
+                            isCustom ? (
+                              <GeneratedText id="m_186e85e2d4fd61" />
+                            ) : (
+                              <GeneratedText id="m_0fde1ff7b7eaf9" />
+                            )
+                          }
+                        />
+                      </Button>
+                    </Link>
+                    <Link href={`/reports/definitions/new?from=${definition.id}` as never}>
+                      <Button variant="outline" size="sm">
+                        <Copy size={14} className="mr-1.5" />
+                        <GeneratedText id="m_13fa26360f0fe9" />
+                      </Button>
+                    </Link>
+                    <GeneratedValue
+                      value={
+                        isCustom ? (
+                          <form action={deleteBound}>
+                            <Button type="submit" variant="destructive" size="sm">
+                              <Trash2 size={14} className="mr-1.5" />
+                              <GeneratedText id="m_11773f3c3f7558" />
+                            </Button>
+                          </form>
+                        ) : null
+                      }
+                    />
+                  </div>
+                ) : null
+              }
+            />
           </CardContent>
         </Card>
       </div>
@@ -747,9 +916,11 @@ function MetaItem({ label, children }: { label: string; children: React.ReactNod
   return (
     <div>
       <dt className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        {label}
+        <GeneratedValue value={label} />
       </dt>
-      <dd className="mt-0.5 text-slate-900 dark:text-slate-100">{children}</dd>
+      <dd className="mt-0.5 text-slate-900 dark:text-slate-100">
+        <GeneratedValue value={children} />
+      </dd>
     </div>
   )
 }

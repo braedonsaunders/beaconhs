@@ -1,6 +1,10 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { AssessmentsListPage } from './_list'
 
-export const metadata = { title: 'Hazard assessments' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_12db47b4ac8e02') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function HazardAssessmentsListRoute({

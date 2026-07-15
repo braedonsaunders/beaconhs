@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // Premium collapsible section card for single-page detail forms. Shared
 // primitive — used by the hazard-assessment and incident detail pages.
 
@@ -51,16 +53,20 @@ export function PremiumSection({
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center gap-3 p-4 sm:gap-4 sm:p-5">
-        {icon ? (
-          <span
-            className={cn(
-              'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
-              TONE[tone],
-            )}
-          >
-            {icon}
-          </span>
-        ) : null}
+        <GeneratedValue
+          value={
+            icon ? (
+              <span
+                className={cn(
+                  'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
+                  TONE[tone],
+                )}
+              >
+                <GeneratedValue value={icon} />
+              </span>
+            ) : null
+          }
+        />
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -70,24 +76,36 @@ export function PremiumSection({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="truncate text-base font-semibold text-slate-900 sm:text-[17px] dark:text-slate-100">
-                {title}
+                <GeneratedValue value={title} />
               </h2>
-              {typeof count === 'number' ? (
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  {count}
-                </span>
-              ) : null}
-              {done ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
-                  <Check size={11} /> Done
-                </span>
-              ) : null}
+              <GeneratedValue
+                value={
+                  typeof count === 'number' ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      <GeneratedValue value={count} />
+                    </span>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  done ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                      <Check size={11} /> <GeneratedText id="m_00609f822e0571" />
+                    </span>
+                  ) : null
+                }
+              />
             </div>
-            {subtitle ? (
-              <p className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
-                {subtitle}
-              </p>
-            ) : null}
+            <GeneratedValue
+              value={
+                subtitle ? (
+                  <p className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={subtitle} />
+                  </p>
+                ) : null
+              }
+            />
           </div>
           <ChevronDown
             size={18}
@@ -97,11 +115,25 @@ export function PremiumSection({
             )}
           />
         </button>
-        {actions ? <div className="shrink-0">{actions}</div> : null}
+        <GeneratedValue
+          value={
+            actions ? (
+              <div className="shrink-0">
+                <GeneratedValue value={actions} />
+              </div>
+            ) : null
+          }
+        />
       </div>
-      {open ? (
-        <div className="border-t border-slate-100 p-4 sm:p-5 dark:border-slate-800">{children}</div>
-      ) : null}
+      <GeneratedValue
+        value={
+          open ? (
+            <div className="border-t border-slate-100 p-4 sm:p-5 dark:border-slate-800">
+              <GeneratedValue value={children} />
+            </div>
+          ) : null
+        }
+      />
     </section>
   )
 }

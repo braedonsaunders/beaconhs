@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 // Plain-HTML GrapesJS email builder in a 1/3–2/3 layout (like the document
 // editor). Runs in HTML mode (NO MJML) so every element — including the record

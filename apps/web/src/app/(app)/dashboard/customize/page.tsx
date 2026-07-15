@@ -1,3 +1,6 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { requireRequestContext } from '@/lib/auth'
@@ -10,7 +13,10 @@ import { canSeeWidget } from '../_widget-access'
 import { canViewInsights } from '../../insights/_access'
 import { loadDashboardEditCanvas } from '../_edit-canvas'
 
-export const metadata = { title: 'Customise Dashboard' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_17e6fb8b7201b5') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function CustomiseDashboardPage() {
@@ -42,14 +48,15 @@ export default async function CustomiseDashboardPage() {
               className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
             >
               <ArrowLeft size={12} />
-              Back to dashboard
+              <GeneratedText id="m_0d79c2d48751f6" />
             </Link>
             <h1 className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">
-              Customise your dashboard
+              <GeneratedText id="m_0eca9b6b2350eb" />
             </h1>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              Tailored to your role: {ROLE_TIER_LABELS[role]}. Drag tiles, resize from any corner,
-              add widgets or your saved Insights cards from the palette, or reset to the default.
+              <GeneratedText id="m_0d3aa1474d9b46" />{' '}
+              <GeneratedValue value={ROLE_TIER_LABELS[role]} />
+              <GeneratedText id="m_1608d542b6d6bd" />
             </p>
           </div>
         </div>

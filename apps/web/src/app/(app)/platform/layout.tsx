@@ -1,3 +1,4 @@
+import { GeneratedValue } from '@/i18n/generated'
 import { redirect } from 'next/navigation'
 import { requireRequestContext } from '@/lib/auth'
 
@@ -7,5 +8,9 @@ import { requireRequestContext } from '@/lib/auth'
 export default async function PlatformLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin) redirect('/admin')
-  return <>{children}</>
+  return (
+    <>
+      <GeneratedValue value={children} />
+    </>
+  )
 }

@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The outbound automation builder: name it, pick a TRIGGER, pick a DESTINATION,
 // configure the connection + secrets, map the data (per-destination editor with
 // click-to-insert {{tokens}} from the trigger), test live, and save. Uncontrolled
@@ -58,6 +65,8 @@ export function IntegrationBuilder({
   triggers: TriggerDef[]
   destinations: DestLite[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const formRef = useRef<HTMLFormElement>(null)
   const activeEl = useRef<ActiveEl>(null)
   const [triggerKey, setTriggerKey] = useState(initial.triggerKey)
@@ -106,40 +115,54 @@ export function IntegrationBuilder({
       <input type="hidden" name="destinationKey" value={destinationKey} />
 
       {/* 1 — Name */}
-      <Field label="Name">
+      <Field label={tGenerated('m_02b18d5c7f6f2d')}>
         <Input
           name="name"
           defaultValue={initial.name}
-          placeholder="e.g. Post incidents to Slack"
+          placeholder={tGenerated('m_06131a0939f135')}
           onFocus={register}
         />
       </Field>
 
       {/* 2 — Trigger */}
-      <Section step={1} title="When this happens" subtitle="The event that fires the automation.">
+      <Section
+        step={1}
+        title={tGenerated('m_034d6120666473')}
+        subtitle={tGenerated('m_08abf3218a25bc')}
+      >
         <Select
           name="triggerKey"
           value={triggerKey}
           onChange={(e) => setTriggerKey(e.target.value)}
-          aria-label="Trigger"
+          aria-label={tGenerated('m_1db1e5c9ca41ce')}
         >
-          <option value="">Select a trigger…</option>
-          {triggers.map((t) => (
-            <option key={t.key} value={t.key}>
-              {t.label}
-            </option>
-          ))}
+          <option value="">
+            <GeneratedText id="m_0e5bd7914a50ac" />
+          </option>
+          <GeneratedValue
+            value={triggers.map((t) => (
+              <option key={t.key} value={t.key}>
+                <GeneratedValue value={t.label} />
+              </option>
+            ))}
+          />
         </Select>
-        {trigger ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400">{trigger.description}</p>
-        ) : null}
+        <GeneratedValue
+          value={
+            trigger ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <GeneratedValue value={trigger.description} />
+              </p>
+            ) : null
+          }
+        />
       </Section>
 
       {/* 3 — Destination */}
       <Section
         step={2}
-        title="Send it here"
-        subtitle="The external service that receives the data."
+        title={tGenerated('m_18dc0aaa91045d')}
+        subtitle={tGenerated('m_1925b60e0984ae')}
       >
         <Select
           value={destinationKey}
@@ -147,106 +170,181 @@ export function IntegrationBuilder({
             setDestinationKey(e.target.value)
             setResult(null)
           }}
-          aria-label="Destination"
+          aria-label={tGenerated('m_0354efc998fbe0')}
         >
-          <option value="">Select a destination…</option>
-          {destinations.map((d) => (
-            <option key={d.key} value={d.key}>
-              {d.name}
-            </option>
-          ))}
+          <option value="">
+            <GeneratedText id="m_10cfae412ca9bf" />
+          </option>
+          <GeneratedValue
+            value={destinations.map((d) => (
+              <option key={d.key} value={d.key}>
+                <GeneratedValue value={d.name} />
+              </option>
+            ))}
+          />
         </Select>
-        {dest ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400">{dest.description}</p>
-        ) : null}
+        <GeneratedValue
+          value={
+            dest ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <GeneratedValue value={dest.description} />
+              </p>
+            ) : null
+          }
+        />
       </Section>
 
       {/* 4 + 5 — Connection + mapping, side-by-side with the token panel */}
-      {dest ? (
-        <Section
-          step={3}
-          title="Configure & map"
-          subtitle="Connect the service, then map your data."
-        >
-          <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
-            <div className="space-y-4">
-              {dest.configFields.length > 0 ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {dest.configFields.map((f) => (
-                    <FieldInput
-                      key={f.key}
-                      field={f}
-                      value={initial.config[f.key]}
-                      onFocus={register}
-                    />
-                  ))}
+      <GeneratedValue
+        value={
+          dest ? (
+            <Section
+              step={3}
+              title={tGenerated('m_0c3627ec1bf266')}
+              subtitle={tGenerated('m_0ca0a1f4dff1b8')}
+            >
+              <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
+                <div className="space-y-4">
+                  <GeneratedValue
+                    value={
+                      dest.configFields.length > 0 ? (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <GeneratedValue
+                            value={dest.configFields.map((f) => (
+                              <FieldInput
+                                key={f.key}
+                                field={f}
+                                value={initial.config[f.key]}
+                                onFocus={register}
+                              />
+                            ))}
+                          />
+                        </div>
+                      ) : null
+                    }
+                  />
+
+                  <GeneratedValue
+                    value={
+                      dest.secretFields.length > 0 ? (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <GeneratedValue
+                            value={dest.secretFields.map((s) => (
+                              <Field
+                                key={s.key}
+                                label={tGeneratedValue(s.label)}
+                                required={s.required}
+                                help={s.help}
+                              >
+                                <Input
+                                  name={s.key}
+                                  type="password"
+                                  autoComplete="new-password"
+                                  placeholder={tGeneratedValue(
+                                    initial.secretsPresent[s.key]
+                                      ? tGenerated('m_1f4710cef5d8ac')
+                                      : '',
+                                  )}
+                                />
+                              </Field>
+                            ))}
+                          />
+                        </div>
+                      ) : null
+                    }
+                  />
+
+                  <MappingEditor dest={dest} mapping={initial.mapping} register={register} />
                 </div>
-              ) : null}
 
-              {dest.secretFields.length > 0 ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {dest.secretFields.map((s) => (
-                    <Field key={s.key} label={s.label} required={s.required} help={s.help}>
-                      <Input
-                        name={s.key}
-                        type="password"
-                        autoComplete="new-password"
-                        placeholder={initial.secretsPresent[s.key] ? '•••••••• (unchanged)' : ''}
-                      />
-                    </Field>
-                  ))}
-                </div>
-              ) : null}
-
-              <MappingEditor dest={dest} mapping={initial.mapping} register={register} />
-            </div>
-
-            <TokenPanel trigger={trigger} onInsert={insertToken} />
-          </div>
-        </Section>
-      ) : null}
+                <TokenPanel trigger={trigger} onInsert={insertToken} />
+              </div>
+            </Section>
+          ) : null
+        }
+      />
 
       {/* options + result + actions */}
       <div className="space-y-3 border-t border-slate-100 pt-4 dark:border-slate-800">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          <Check name="enabled" defaultChecked={initial.enabled} label="Enabled" />
-          {dest && !dest.reversible ? (
-            <Check
-              name="oncePerRecord"
-              defaultChecked={initial.oncePerRecord}
-              label="Only send once per record"
-            />
-          ) : null}
+          <Check
+            name="enabled"
+            defaultChecked={initial.enabled}
+            label={tGenerated('m_0dd399c5304eb6')}
+          />
+          <GeneratedValue
+            value={
+              dest && !dest.reversible ? (
+                <Check
+                  name="oncePerRecord"
+                  defaultChecked={initial.oncePerRecord}
+                  label={tGenerated('m_0171ea72d4e222')}
+                />
+              ) : null
+            }
+          />
         </div>
 
-        {result ? (
-          <div
-            className={cn(
-              'flex items-start gap-2 rounded-lg border px-3 py-2 text-sm',
-              result.ok
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
-                : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300',
-            )}
-            role="status"
-          >
-            {result.ok ? (
-              <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
-            ) : (
-              <AlertCircle size={15} className="mt-0.5 shrink-0" />
-            )}
-            <span className="break-words">{result.message}</span>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            result ? (
+              <div
+                className={cn(
+                  'flex items-start gap-2 rounded-lg border px-3 py-2 text-sm',
+                  result.ok
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
+                    : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300',
+                )}
+                role="status"
+              >
+                <GeneratedValue
+                  value={
+                    result.ok ? (
+                      <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
+                    ) : (
+                      <AlertCircle size={15} className="mt-0.5 shrink-0" />
+                    )
+                  }
+                />
+                <span className="break-words">
+                  <GeneratedValue value={result.message} />
+                </span>
+              </div>
+            ) : null
+          }
+        />
 
         <div className="flex items-center justify-end gap-2">
-          {dest ? (
-            <Button type="button" variant="outline" size="sm" onClick={runTest} disabled={testing}>
-              {testing ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              {testing ? 'Testing…' : 'Test connection'}
-            </Button>
-          ) : null}
+          <GeneratedValue
+            value={
+              dest ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={runTest}
+                  disabled={testing}
+                >
+                  <GeneratedValue
+                    value={
+                      testing ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />
+                    }
+                  />
+                  <GeneratedValue
+                    value={
+                      testing ? (
+                        <GeneratedText id="m_100301b70a8468" />
+                      ) : (
+                        <GeneratedText id="m_0b41b4284dc188" />
+                      )
+                    }
+                  />
+                </Button>
+              ) : null
+            }
+          />
           <Button type="submit">
-            <Zap size={14} /> Save automation
+            <Zap size={14} /> <GeneratedText id="m_07872cbc52eacc" />
           </Button>
         </div>
       </div>
@@ -265,23 +363,27 @@ function MappingEditor({
   mapping: Record<string, unknown>
   register: (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   if (dest.mappingKind === 'sql') return <SqlMapping mapping={mapping} register={register} />
   if (dest.mappingKind === 'http') return <HttpMapping mapping={mapping} register={register} />
   if (dest.mappingKind === 'sheets') return <SheetsMapping mapping={mapping} register={register} />
   if (dest.mappingKind === 'slack')
     return (
       <div className="space-y-3">
-        <Field label="Message" help="The Slack/Teams message. Insert {{tokens}} from the panel.">
+        <Field
+          label={tGenerated('m_0e4ff640f8e7d6')}
+          help="The Slack/Teams message. Insert {{tokens}} from the panel."
+        >
           <Textarea
             name="map-text"
             rows={4}
             defaultValue={String(mapping.text ?? '')}
             onFocus={register}
-            placeholder="🚨 New {{type}} — {{title}} ({{reference}})\n{{url}}"
+            placeholder={tGenerated('m_101359827e2563')}
           />
         </Field>
         <Field
-          label="Blocks JSON (Slack, optional)"
+          label={tGenerated('m_00b9166bff564b')}
           help="Slack Block Kit array. Overrides the plain message; one rich message per item. Leave blank for plain text."
         >
           <Textarea
@@ -290,7 +392,7 @@ function MappingEditor({
             className="font-mono text-xs"
             defaultValue={String(mapping.blocks ?? '')}
             onFocus={register}
-            placeholder={'[{"type":"section","text":{"type":"mrkdwn","text":"*{{title}}*"}}]'}
+            placeholder={tGenerated('m_0f2f601ad1de47')}
           />
         </Field>
       </div>
@@ -298,7 +400,7 @@ function MappingEditor({
   // email
   return (
     <Field
-      label="Email body (HTML)"
+      label={tGenerated('m_112e161087a1d9')}
       help="Insert {{tokens}} from the panel. Basic HTML is supported."
     >
       <Textarea
@@ -307,7 +409,7 @@ function MappingEditor({
         className="font-mono text-xs"
         defaultValue={String(mapping.body ?? '')}
         onFocus={register}
-        placeholder="<p>A new {{type}} was reported: <b>{{title}}</b></p>\n<p>{{url}}</p>"
+        placeholder={tGenerated('m_0842d827470824')}
       />
     </Field>
   )
@@ -320,6 +422,7 @@ function SqlMapping({
   mapping: Record<string, unknown>
   register: (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const cols0 = Object.entries((mapping.columns as Record<string, unknown>) ?? {}).map(
     ([k, v]) => ({
       id: nextId(),
@@ -332,45 +435,49 @@ function SqlMapping({
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Target table" required>
+        <Field label={tGenerated('m_1068a9c4cc2f75')} required>
           <Input
             name="map-table"
             defaultValue={String(mapping.table ?? '')}
-            placeholder="timesheet"
+            placeholder={tGenerated('m_1b2a1b054bbbde')}
           />
         </Field>
         <Field
-          label="Identity column"
+          label={tGenerated('m_11161e26747a7a')}
           help="Required. BeaconHS records returned IDs so a partial retry can remove completed inserts before trying again."
           required
         >
           <Input
             name="map-idColumn"
             defaultValue={String(mapping.idColumn ?? '')}
-            placeholder="id"
+            placeholder={tGenerated('m_1405ee220a2f7a')}
           />
         </Field>
-        <Field label="Row granularity">
+        <Field label={tGenerated('m_10f5226beae784')}>
           <Select name="map-mode" defaultValue={mapping.mode === 'weekly' ? 'weekly' : 'row'}>
-            <option value="row">One row per item</option>
-            <option value="weekly">One row per item per ISO week (day1–7 hours)</option>
+            <option value="row">
+              <GeneratedText id="m_1d381825d8275d" />
+            </option>
+            <option value="weekly">
+              <GeneratedText id="m_17ca94a16b4e02" />
+            </option>
           </Select>
         </Field>
         <Field
-          label="Require token (skip if empty)"
+          label={tGenerated('m_00897c77bfe378')}
           help="e.g. externalEmployeeId — items missing it are skipped."
         >
           <Input
             name="map-requireField"
             defaultValue={String(mapping.requireField ?? '')}
-            placeholder="externalEmployeeId"
+            placeholder={tGenerated('m_04b4cae0b6ae0e')}
             onFocus={register}
           />
         </Field>
       </div>
 
       <Field
-        label="Department map"
+        label={tGenerated('m_1c737d8b35e103')}
         help='One per line: "Department name = external id". Resolves {{department}}.'
       >
         <Textarea
@@ -378,14 +485,17 @@ function SqlMapping({
           rows={2}
           className="font-mono text-xs"
           defaultValue={String(mapping.departmentMap ?? '')}
-          placeholder={'Field Ops = 1\nOffice = 2'}
+          placeholder={tGenerated('m_1041f60bc9e153')}
         />
       </Field>
 
       <div className="space-y-2">
-        <Label>Column mapping</Label>
+        <Label>
+          <GeneratedText id="m_1e6336f2c22840" />
+        </Label>
         <p className="text-xs text-slate-400 dark:text-slate-500">
-          External column ← value. Use a literal (2551, null) or insert a {'{{token}}'}.
+          <GeneratedText id="m_0b27b7e8397181" />{' '}
+          <GeneratedValue value={<GeneratedText id="m_1c4eb4fa7c2f7b" />} />.
         </p>
         <RowList
           rows={rows}
@@ -395,13 +505,13 @@ function SqlMapping({
               <Input
                 name="col-name"
                 defaultValue={r.name}
-                placeholder="column"
+                placeholder={tGenerated('m_0fce539f330993')}
                 className="sm:w-40"
               />
               <Input
                 name="col-val"
                 defaultValue={r.val}
-                placeholder="value or {{token}}"
+                placeholder={tGenerated('m_1454dd1744f30b')}
                 onFocus={register}
                 className="flex-1"
               />
@@ -421,6 +531,7 @@ function HttpMapping({
   mapping: Record<string, unknown>
   register: (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const h0 = Object.entries((mapping.headers as Record<string, string>) ?? {}).map(([k, v]) => ({
     id: nextId(),
     name: k,
@@ -431,7 +542,9 @@ function HttpMapping({
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        <Label>Extra headers</Label>
+        <Label>
+          <GeneratedText id="m_06c131e0e0c029" />
+        </Label>
         <RowList
           rows={rows}
           setRows={setRows}
@@ -440,13 +553,13 @@ function HttpMapping({
               <Input
                 name="hdr-key"
                 defaultValue={r.name}
-                placeholder="X-Header"
+                placeholder={tGenerated('m_167a3c84ec8cf4')}
                 className="sm:w-44"
               />
               <Input
                 name="hdr-val"
                 defaultValue={r.val}
-                placeholder="value or {{token}}"
+                placeholder={tGenerated('m_1454dd1744f30b')}
                 onFocus={register}
                 className="flex-1"
               />
@@ -455,14 +568,17 @@ function HttpMapping({
           addLabel="Add header"
         />
       </div>
-      <Field label="Request body" help="The body sent per item. Insert {{tokens}}.">
+      <Field
+        label={tGenerated('m_1952c22638bdb3')}
+        help="The body sent per item. Insert {{tokens}}."
+      >
         <Textarea
           name="map-body"
           rows={7}
           className="font-mono text-xs"
           defaultValue={String(mapping.body ?? '')}
           onFocus={register}
-          placeholder={'{\n  "title": "{{title}}",\n  "reference": "{{reference}}"\n}'}
+          placeholder={tGenerated('m_0652360472ea6e')}
         />
       </Field>
     </div>
@@ -476,6 +592,7 @@ function SheetsMapping({
   mapping: Record<string, unknown>
   register: (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const v0 = (Array.isArray(mapping.values) ? (mapping.values as unknown[]) : []).map((v) => ({
     id: nextId(),
     name: '',
@@ -484,9 +601,12 @@ function SheetsMapping({
   const [rows, setRows] = useState(v0.length ? v0 : [{ id: nextId(), name: '', val: '' }])
   return (
     <div className="space-y-2">
-      <Label>Row cells (left → right)</Label>
+      <Label>
+        <GeneratedText id="m_1a3928b6193a81" />
+      </Label>
       <p className="text-xs text-slate-400 dark:text-slate-500">
-        Each entry is one cell, in order. Literal or {'{{token}}'}.
+        <GeneratedText id="m_10b8c399f605d2" />{' '}
+        <GeneratedValue value={<GeneratedText id="m_1c4eb4fa7c2f7b" />} />.
       </p>
       <RowList
         rows={rows}
@@ -495,7 +615,7 @@ function SheetsMapping({
           <Input
             name="val-expr"
             defaultValue={r.val}
-            placeholder="value or {{token}}"
+            placeholder={tGenerated('m_1454dd1744f30b')}
             onFocus={register}
             className="flex-1"
           />
@@ -521,27 +641,30 @@ function RowList({
   render: (r: Row) => ReactNode
   addLabel: string
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="space-y-2">
-      {rows.map((r) => (
-        <div key={r.id} className="flex items-center gap-2">
-          {render(r)}
-          <button
-            type="button"
-            onClick={() => setRows((prev) => prev.filter((x) => x.id !== r.id))}
-            className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
-            title="Remove"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-      ))}
+      <GeneratedValue
+        value={rows.map((r) => (
+          <div key={r.id} className="flex items-center gap-2">
+            <GeneratedValue value={render(r)} />
+            <button
+              type="button"
+              onClick={() => setRows((prev) => prev.filter((x) => x.id !== r.id))}
+              className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+              title={tGenerated('m_1a9d8d971b1edb')}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      />
       <button
         type="button"
         onClick={() => setRows((prev) => [...prev, { id: nextId(), name: '', val: '' }])}
         className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:text-teal-800 dark:text-teal-400"
       >
-        <Plus size={14} /> {addLabel}
+        <Plus size={14} /> <GeneratedValue value={addLabel} />
       </button>
     </div>
   )
@@ -554,37 +677,47 @@ function TokenPanel({
   trigger?: TriggerDef
   onInsert: (t: string) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   if (!trigger) {
     return (
       <aside className="rounded-lg border border-dashed border-slate-200 p-3 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-        Pick a trigger to see the fields you can insert.
+        <GeneratedText id="m_12c527bea62bca" />
       </aside>
     )
   }
   return (
     <aside className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40">
-      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Insert a field</p>
+      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+        <GeneratedText id="m_1b12658f0d45ce" />
+      </p>
       <p className="text-[11px] text-slate-400 dark:text-slate-500">
-        Click into a value, then a field to insert its {'{{token}}'}.
+        <GeneratedText id="m_03352d77a115d2" />{' '}
+        <GeneratedValue value={<GeneratedText id="m_1c4eb4fa7c2f7b" />} />.
       </p>
       <div className="flex flex-wrap gap-1.5">
-        {trigger.fields.map((fd: FieldDef) => (
-          <button
-            key={fd.key}
-            type="button"
-            onClick={() => onInsert(fd.key)}
-            title={`{{${fd.key}}}`}
-            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-teal-600"
-          >
-            {fd.label}
-          </button>
-        ))}
+        <GeneratedValue
+          value={trigger.fields.map((fd: FieldDef) => (
+            <button
+              key={fd.key}
+              type="button"
+              onClick={() => onInsert(fd.key)}
+              title={tGeneratedValue(`{{${fd.key}}}`)}
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-teal-600"
+            >
+              <GeneratedValue value={fd.label} />
+            </button>
+          ))}
+        />
       </div>
-      {trigger.dynamicFieldsNote ? (
-        <p className="text-[11px] text-slate-400 dark:text-slate-500">
-          {trigger.dynamicFieldsNote}
-        </p>
-      ) : null}
+      <GeneratedValue
+        value={
+          trigger.dynamicFieldsNote ? (
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">
+              <GeneratedValue value={trigger.dynamicFieldsNote} />
+            </p>
+          ) : null
+        }
+      />
     </aside>
   )
 }
@@ -604,14 +737,20 @@ function Section({
     <section className="space-y-3">
       <div className="flex items-center gap-2">
         <span className="grid h-6 w-6 place-items-center rounded-full bg-teal-600 text-xs font-semibold text-white">
-          {step}
+          <GeneratedValue value={step} />
         </span>
         <div>
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</h3>
-          <p className="text-xs text-slate-400 dark:text-slate-500">{subtitle}</p>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            <GeneratedValue value={title} />
+          </h3>
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            <GeneratedValue value={subtitle} />
+          </p>
         </div>
       </div>
-      <div className="pl-8">{children}</div>
+      <div className="pl-8">
+        <GeneratedValue value={children} />
+      </div>
     </section>
   )
 }
@@ -630,11 +769,19 @@ function Field({
   return (
     <div className="space-y-1.5">
       <Label>
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        <GeneratedValue value={label} />
+        <GeneratedValue value={required ? <span className="text-red-600"> *</span> : null} />
       </Label>
-      {children}
-      {help ? <p className="text-xs text-slate-400 dark:text-slate-500">{help}</p> : null}
+      <GeneratedValue value={children} />
+      <GeneratedValue
+        value={
+          help ? (
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              <GeneratedValue value={help} />
+            </p>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -648,53 +795,66 @@ function FieldInput({
   value: unknown
   onFocus: (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const v = value == null ? '' : String(value)
   return (
     <div className={cn('space-y-1.5', field.type === 'textarea' && 'sm:col-span-2')}>
       <Label htmlFor={field.key}>
-        {field.label}
-        {field.required ? <span className="text-red-600"> *</span> : null}
+        <GeneratedValue value={field.label} />
+        <GeneratedValue value={field.required ? <span className="text-red-600"> *</span> : null} />
       </Label>
-      {field.type === 'textarea' ? (
-        <Textarea
-          id={field.key}
-          name={field.key}
-          rows={4}
-          defaultValue={v}
-          placeholder={field.placeholder}
-          className="font-mono text-xs"
-          onFocus={onFocus}
-        />
-      ) : field.type === 'select' ? (
-        <Select id={field.key} name={field.key} defaultValue={v}>
-          {(field.options ?? []).map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </Select>
-      ) : field.type === 'boolean' ? (
-        <div className="pt-1">
-          <input
-            type="checkbox"
-            name={field.key}
-            defaultChecked={value === true || value === 'true'}
-            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-          />
-        </div>
-      ) : (
-        <Input
-          id={field.key}
-          name={field.key}
-          type={field.type === 'number' ? 'number' : 'text'}
-          defaultValue={v}
-          placeholder={field.placeholder}
-          onFocus={onFocus}
-        />
-      )}
-      {field.help ? (
-        <p className="text-xs text-slate-400 dark:text-slate-500">{field.help}</p>
-      ) : null}
+      <GeneratedValue
+        value={
+          field.type === 'textarea' ? (
+            <Textarea
+              id={field.key}
+              name={field.key}
+              rows={4}
+              defaultValue={v}
+              placeholder={tGeneratedValue(field.placeholder)}
+              className="font-mono text-xs"
+              onFocus={onFocus}
+            />
+          ) : field.type === 'select' ? (
+            <Select id={field.key} name={field.key} defaultValue={v}>
+              <GeneratedValue
+                value={(field.options ?? []).map((o) => (
+                  <option key={o.value} value={o.value}>
+                    <GeneratedValue value={o.label} />
+                  </option>
+                ))}
+              />
+            </Select>
+          ) : field.type === 'boolean' ? (
+            <div className="pt-1">
+              <input
+                type="checkbox"
+                name={field.key}
+                defaultChecked={value === true || value === 'true'}
+                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+              />
+            </div>
+          ) : (
+            <Input
+              id={field.key}
+              name={field.key}
+              type={field.type === 'number' ? 'number' : 'text'}
+              defaultValue={v}
+              placeholder={tGeneratedValue(field.placeholder)}
+              onFocus={onFocus}
+            />
+          )
+        }
+      />
+      <GeneratedValue
+        value={
+          field.help ? (
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              <GeneratedValue value={field.help} />
+            </p>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -716,7 +876,9 @@ function Check({
         defaultChecked={defaultChecked}
         className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
       />
-      <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{label}</span>
+      <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+        <GeneratedValue value={label} />
+      </span>
     </label>
   )
 }

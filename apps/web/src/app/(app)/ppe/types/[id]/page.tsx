@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // /ppe/types/[id] — PPE type detail, hosting the 1/3-2/3 builder.
 //
 // Mirrors the inspections type builder: a settings rail + a build surface with
@@ -27,11 +31,14 @@ import { PpeTypeBuilder } from './_type-builder'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `PPE type · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_069c9d9caa04a7', { value0: id.slice(0, 8) }) }
 }
 
 export default async function PpeTypeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -100,23 +107,48 @@ export default async function PpeTypeDetailPage({ params }: { params: Promise<{ 
       header={
         <DetailHeader
           back={{ href: '/ppe/types', label: 'Back to PPE types' }}
-          title={type.name}
-          subtitle={type.category ? `Category: ${type.category.replace(/_/g, ' ')}` : 'No category'}
+          title={tGeneratedValue(type.name)}
+          subtitle={tGeneratedValue(
+            type.category
+              ? tGenerated('m_069c3b200e2976', { value0: type.category.replace(/_/g, ' ') })
+              : tGenerated('m_05116005c3a097'),
+          )}
           badge={
             <div className="flex items-center gap-2">
-              {type.isInspectable ? (
-                <Badge variant="success">Inspectable</Badge>
-              ) : (
-                <Badge variant="secondary">Not inspectable</Badge>
-              )}
+              <GeneratedValue
+                value={
+                  type.isInspectable ? (
+                    <Badge variant="success">
+                      <GeneratedText id="m_17f3fef7e62178" />
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">
+                      <GeneratedText id="m_026e887ee8379c" />
+                    </Badge>
+                  )
+                }
+              />
               <Badge variant="secondary">
-                {itemCount} item{itemCount === 1 ? '' : 's'}
+                <GeneratedValue value={itemCount} /> <GeneratedText id="m_089f2b1abdb347" />
+                <GeneratedValue
+                  value={itemCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+                />
               </Badge>
-              {customFieldCount > 0 ? (
-                <Badge variant="secondary">
-                  {customFieldCount} custom field{customFieldCount === 1 ? '' : 's'}
-                </Badge>
-              ) : null}
+              <GeneratedValue
+                value={
+                  customFieldCount > 0 ? (
+                    <Badge variant="secondary">
+                      <GeneratedValue value={customFieldCount} />{' '}
+                      <GeneratedText id="m_19e5b5bd99a2c5" />
+                      <GeneratedValue
+                        value={
+                          customFieldCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />
+                        }
+                      />
+                    </Badge>
+                  ) : null
+                }
+              />
             </div>
           }
         />

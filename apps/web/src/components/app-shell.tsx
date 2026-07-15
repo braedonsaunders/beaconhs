@@ -1,3 +1,4 @@
+import { GeneratedValue } from '@/i18n/generated'
 import { ShieldAlert } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { AccountMenu } from './account-menu'
@@ -64,21 +65,32 @@ export function AppShell({
 
       <MobileNavProvider>
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden [padding-top:env(safe-area-inset-top)]">
-          {impersonation ? (
-            <ImpersonationBanner
-              actorName={impersonation.actorName}
-              targetName={impersonation.targetName}
-              expiresAtMs={impersonation.expiresAtMs}
-            />
-          ) : null}
-          {ctx.isSuperAdmin ? (
-            <div className="flex shrink-0 items-center gap-2 border-b border-amber-300 bg-amber-50 px-4 py-1 text-xs text-amber-900 sm:px-6 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
-              <ShieldAlert size={14} className="shrink-0" />
-              <span className="truncate">
-                {t('superAdminScopedTo')} <strong>{ctx.tenantName}</strong>
-              </span>
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              impersonation ? (
+                <ImpersonationBanner
+                  actorName={impersonation.actorName}
+                  targetName={impersonation.targetName}
+                  expiresAtMs={impersonation.expiresAtMs}
+                />
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              ctx.isSuperAdmin ? (
+                <div className="flex shrink-0 items-center gap-2 border-b border-amber-300 bg-amber-50 px-4 py-1 text-xs text-amber-900 sm:px-6 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
+                  <ShieldAlert size={14} className="shrink-0" />
+                  <span className="truncate">
+                    <GeneratedValue value={t('superAdminScopedTo')} />{' '}
+                    <strong>
+                      <GeneratedValue value={ctx.tenantName} />
+                    </strong>
+                  </span>
+                </div>
+              ) : null
+            }
+          />
 
           <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
             <MobileNavToggle groups={groups} />
@@ -88,12 +100,12 @@ export function AppShell({
               isSuperAdmin={ctx.isSuperAdmin}
             />
             <RoleSwitcher current={activeRole} available={availableRoles} />
-            {ctx.isSuperAdmin ? <PlatformMenu /> : null}
+            <GeneratedValue value={ctx.isSuperAdmin ? <PlatformMenu /> : null} />
             <div className="hidden flex-1 justify-center md:flex">
               <GlobalSearch />
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1.5 text-sm sm:gap-3 md:ml-0">
-              {canUseAssistant ? <AssistantLauncher /> : null}
+              <GeneratedValue value={canUseAssistant ? <AssistantLauncher /> : null} />
               <NotificationsBell unread={unreadCount} />
               <AccountMenu
                 name={account.name}
@@ -104,7 +116,7 @@ export function AppShell({
           </header>
 
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
-            {children}
+            <GeneratedValue value={children} />
           </main>
 
           <MobileTabBar groups={groups} />

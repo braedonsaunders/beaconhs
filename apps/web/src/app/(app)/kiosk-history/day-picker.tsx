@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText } from '@/i18n/generated'
+
 import { useRouter, useSearchParams } from 'next/navigation'
 
 export function DayPicker({ value }: { value: string }) {
@@ -7,7 +9,9 @@ export function DayPicker({ value }: { value: string }) {
   const sp = useSearchParams()
   return (
     <span className="inline-flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-      <label htmlFor="day">Day:</label>
+      <label htmlFor="day">
+        <GeneratedText id="m_1d7567bfe658ed" />
+      </label>
       <input
         type="date"
         id="day"

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Users } from 'lucide-react'
@@ -22,7 +25,10 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { listTranscriptPeople } from '../_lib/participants'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Form transcripts' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1511890758f272') }
+}
 
 const SORTS = ['count', 'name'] as const
 
@@ -31,6 +37,8 @@ export default async function FormTranscriptsIndexPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'count',
@@ -57,71 +65,79 @@ export default async function FormTranscriptsIndexPage({
       header={
         <>
           <PageHeader
-            title="Form transcripts"
-            description="Per-person history: every form a person was a participant in or signed."
+            title={tGenerated('m_1511890758f272')}
+            description={tGenerated('m_1dfcd0a31b8026')}
           />
           <TableToolbar>
-            <SearchInput placeholder="Search by name…" />
+            <SearchInput placeholder={tGenerated('m_1dc5c4814dcbf4')} />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Users size={32} />}
-          title={params.q ? 'No participants match this search' : 'No participants'}
-          description={
-            params.q
-              ? 'Clear or change the current name search.'
-              : 'Submit a form with an attendees section or a person field to build transcripts.'
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                  Person
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="count"
-                  active={params.sort === 'count'}
-                  align="right"
-                  className="text-right"
-                >
-                  Forms participated in
-                </SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={r.personId}>
-                  <TableCell>
-                    <Link
-                      href={`/apps/transcripts/${r.personId}`}
-                      className="font-medium hover:underline"
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Users size={32} />}
+              title={tGeneratedValue(
+                params.q ? tGenerated('m_0ea3b72e73dcee') : tGenerated('m_14368fc8801c5b'),
+              )}
+              description={tGeneratedValue(
+                params.q ? tGenerated('m_01af17e02658c6') : tGenerated('m_008edc7bbeab62'),
+              )}
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                      <GeneratedText id="m_12e926c9216094" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="count"
+                      active={params.sort === 'count'}
+                      align="right"
+                      className="text-right"
                     >
-                      {r.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant="secondary">{r.count}</Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/apps/transcripts"
-            currentParams={sp}
-            total={total}
-            page={Math.min(params.page, Math.max(1, Math.ceil(total / params.perPage)))}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                      <GeneratedText id="m_110d914ff13ded" />
+                    </SortableTh>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((r) => (
+                      <TableRow key={r.personId}>
+                        <TableCell>
+                          <Link
+                            href={`/apps/transcripts/${r.personId}`}
+                            className="font-medium hover:underline"
+                          >
+                            <GeneratedValue value={r.name} />
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="secondary">
+                            <GeneratedValue value={r.count} />
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/apps/transcripts"
+                currentParams={sp}
+                total={total}
+                page={Math.min(params.page, Math.max(1, Math.ceil(total / params.perPage)))}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

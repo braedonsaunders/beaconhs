@@ -1,3 +1,4 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import { eq } from 'drizzle-orm'
 import {
@@ -72,51 +73,80 @@ export default async function AssessmentCertificatePage({
       <div className="mx-auto max-w-3xl px-12 py-16">
         <div className="mb-8 flex items-center justify-between">
           <p className="text-xs tracking-widest text-slate-500 uppercase">
-            Certificate of completion
+            <GeneratedText id="m_10c5148a38f5cd" />
           </p>
-          <p className="text-xs text-slate-500">ID: {attempt.id.slice(0, 8)}</p>
+          <p className="text-xs text-slate-500">
+            <GeneratedText id="m_168a0278477786" />{' '}
+            <GeneratedValue value={attempt.id.slice(0, 8)} />
+          </p>
         </div>
-        <h1 className="text-3xl font-semibold text-slate-900">{type?.name ?? 'Assessment'}</h1>
-        {course ? (
-          <p className="mt-1 text-sm text-slate-500">
-            {course.code} · {course.name}
-          </p>
-        ) : null}
+        <h1 className="text-3xl font-semibold text-slate-900">
+          <GeneratedValue value={type?.name ?? <GeneratedText id="m_1df1ba1205cf9e" />} />
+        </h1>
+        <GeneratedValue
+          value={
+            course ? (
+              <p className="mt-1 text-sm text-slate-500">
+                <GeneratedValue value={course.code} /> · <GeneratedValue value={course.name} />
+              </p>
+            ) : null
+          }
+        />
 
         <div className="my-10 border-y border-slate-200 py-10 text-center">
-          <p className="text-xs tracking-widest text-slate-500 uppercase">Awarded to</p>
+          <p className="text-xs tracking-widest text-slate-500 uppercase">
+            <GeneratedText id="m_1db7c9459fcca3" />
+          </p>
           <p className="mt-3 text-4xl font-semibold text-slate-900">
-            {person?.firstName} {person?.lastName}
+            <GeneratedValue value={person?.firstName} /> <GeneratedValue value={person?.lastName} />
           </p>
           <p className="mt-2 text-sm text-slate-500">
-            on {completed ? formatDate(completed, ctx.timezone, ctx.locale) : '—'}
+            <GeneratedText id="m_17414f59d8f567" />{' '}
+            <GeneratedValue
+              value={completed ? formatDate(completed, ctx.timezone, ctx.locale) : '—'}
+            />
           </p>
         </div>
 
         <dl className="grid grid-cols-2 gap-x-12 gap-y-3 text-sm">
           <div>
-            <dt className="text-xs tracking-wide text-slate-500 uppercase">Score</dt>
-            <dd className="font-semibold text-slate-900">{attempt.score}%</dd>
-          </div>
-          <div>
-            <dt className="text-xs tracking-wide text-slate-500 uppercase">Passing score</dt>
-            <dd className="text-slate-900">{attempt.passingScore}%</dd>
-          </div>
-          <div>
-            <dt className="text-xs tracking-wide text-slate-500 uppercase">Points</dt>
-            <dd className="text-slate-900">
-              {attempt.pointsAwarded} / {attempt.pointsPossible}
+            <dt className="text-xs tracking-wide text-slate-500 uppercase">
+              <GeneratedText id="m_1469688270fa41" />
+            </dt>
+            <dd className="font-semibold text-slate-900">
+              <GeneratedValue value={attempt.score} />%
             </dd>
           </div>
           <div>
-            <dt className="text-xs tracking-wide text-slate-500 uppercase">Status</dt>
-            <dd className="font-semibold text-green-700">Passed</dd>
+            <dt className="text-xs tracking-wide text-slate-500 uppercase">
+              <GeneratedText id="m_0983c76465bdb2" />
+            </dt>
+            <dd className="text-slate-900">
+              <GeneratedValue value={attempt.passingScore} />%
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs tracking-wide text-slate-500 uppercase">
+              <GeneratedText id="m_08e7a76c4ab77f" />
+            </dt>
+            <dd className="text-slate-900">
+              <GeneratedValue value={attempt.pointsAwarded} /> /{' '}
+              <GeneratedValue value={attempt.pointsPossible} />
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs tracking-wide text-slate-500 uppercase">
+              <GeneratedText id="m_0b9da892d6faf0" />
+            </dt>
+            <dd className="font-semibold text-green-700">
+              <GeneratedText id="m_10cad12b9fc18d" />
+            </dd>
           </div>
         </dl>
 
         <p className="mt-12 text-xs text-slate-400 print:text-slate-500">
-          This certificate was issued by the BeaconHS training platform. Verification:
-          training/assessments/{attempt.id}.
+          <GeneratedText id="m_137de9e5c8702d" />
+          <GeneratedValue value={attempt.id} />.
         </p>
 
         <div className="mt-8 print:hidden">

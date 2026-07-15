@@ -1,5 +1,9 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
+import { useGeneratedTranslations } from '@/i18n/generated'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
@@ -79,6 +83,7 @@ function flatten(groups: SearchGroup[]): FlatRow[] {
 }
 
 export function GlobalSearch() {
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [value, setValue] = useState('')
   const [groups, setGroups] = useState<SearchGroup[]>([])
@@ -245,8 +250,8 @@ export function GlobalSearch() {
           aria-expanded={showDropdown}
           aria-controls="global-search-results"
           aria-autocomplete="list"
-          aria-label="Search incidents, people, equipment, and more"
-          placeholder="Search…  (press /)"
+          aria-label={tGenerated('m_191fc50acfcb78')}
+          placeholder={tGenerated('m_1c801df5656dc2')}
           value={value}
           onChange={(e) => {
             setValue(e.target.value)
@@ -256,156 +261,201 @@ export function GlobalSearch() {
           onKeyDown={onKeyDown}
           className="pr-9 pl-9"
         />
-        {loading ? (
-          <Loader2
-            className="absolute top-2.5 right-2.5 animate-spin text-slate-400 dark:text-slate-500"
-            size={16}
-          />
-        ) : value ? (
-          <button
-            type="button"
-            aria-label="Clear search"
-            onClick={() => {
-              setValue('')
-              inputRef.current?.focus()
-            }}
-            className="absolute top-2.5 right-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-500"
-          >
-            <X size={16} />
-          </button>
-        ) : null}
+        <GeneratedValue
+          value={
+            loading ? (
+              <Loader2
+                className="absolute top-2.5 right-2.5 animate-spin text-slate-400 dark:text-slate-500"
+                size={16}
+              />
+            ) : value ? (
+              <button
+                type="button"
+                aria-label={tGenerated('m_0465aaf099e62c')}
+                onClick={() => {
+                  setValue('')
+                  inputRef.current?.focus()
+                }}
+                className="absolute top-2.5 right-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-500"
+              >
+                <X size={16} />
+              </button>
+            ) : null
+          }
+        />
       </div>
 
-      {showDropdown && mounted && portalRect && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              id="global-search-results"
-              role="listbox"
-              className="fixed z-40 max-h-[70vh] overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900"
-              style={{
-                top: portalRect.top,
-                left: portalRect.left,
-                width: Math.max(portalRect.width, 448),
-              }}
-            >
-              {flat.length === 0 ? (
-                <div className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
-                  {loading ? 'Searching…' : `No results for "${value}"`}
-                </div>
-              ) : (
-                <div className="py-1">
-                  {groups.map((group) => {
-                    const meta = ENTITY_META[group.type]
-                    const Icon = meta.icon
-                    return (
-                      <div key={group.type} className="py-1">
-                        <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
-                          <Icon size={11} className="text-slate-400 dark:text-slate-500" />
-                          <span>{meta.label}</span>
-                          <span className="ml-auto text-slate-400 dark:text-slate-500">
-                            {group.total}
-                          </span>
-                        </div>
-                        {group.items.map((it) => {
-                          const idx = flatIndex++
-                          const active = idx === activeIndex
-                          return (
-                            <Link
-                              key={`${group.type}-${it.id}`}
-                              href={it.href as any}
-                              onMouseEnter={() => setActiveIndex(idx)}
-                              onClick={() => {
-                                setOpen(false)
-                                setValue('')
-                              }}
-                              role="option"
-                              aria-selected={active}
-                              className={cn(
-                                'flex items-start gap-2 px-3 py-1.5 text-sm',
-                                active
-                                  ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-300'
-                                  : 'text-slate-800 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-800/60',
-                              )}
-                            >
-                              <Icon
-                                size={14}
-                                className={cn(
-                                  'mt-0.5 shrink-0',
-                                  active ? 'text-teal-600' : 'text-slate-400 dark:text-slate-500',
-                                )}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate">{it.label}</div>
-                                {it.sublabel ? (
-                                  <div
-                                    className={cn(
-                                      'truncate text-xs',
-                                      active
-                                        ? 'text-teal-700 dark:text-teal-300'
-                                        : 'text-slate-500 dark:text-slate-400',
-                                    )}
-                                  >
-                                    {it.sublabel}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </Link>
-                          )
-                        })}
-                        {group.total > group.items.length && group.items.length >= PER_GROUP_LIMIT
-                          ? (() => {
-                              const idx = flatIndex++
-                              const active = idx === activeIndex
-                              return (
-                                <Link
-                                  href={meta.viewAllHref(value) as any}
-                                  onMouseEnter={() => setActiveIndex(idx)}
-                                  onClick={() => {
-                                    setOpen(false)
-                                    setValue('')
-                                  }}
-                                  role="option"
-                                  aria-selected={active}
-                                  className={cn(
-                                    'flex items-center gap-2 px-3 py-1.5 text-xs',
-                                    active
-                                      ? 'bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
-                                      : 'text-teal-700 hover:bg-slate-50 dark:text-teal-300 dark:hover:bg-slate-800/60',
-                                  )}
-                                >
-                                  <span className="ml-5">
-                                    View all {meta.label.toLowerCase()} matching “{value}”
-                                    <span className="ml-1 text-slate-400 dark:text-slate-500">
-                                      ({group.total})
-                                    </span>
-                                  </span>
-                                </Link>
+      <GeneratedValue
+        value={
+          showDropdown && mounted && portalRect && typeof document !== 'undefined'
+            ? createPortal(
+                <div
+                  id="global-search-results"
+                  role="listbox"
+                  className="fixed z-40 max-h-[70vh] overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900"
+                  style={{
+                    top: portalRect.top,
+                    left: portalRect.left,
+                    width: Math.max(portalRect.width, 448),
+                  }}
+                >
+                  <GeneratedValue
+                    value={
+                      flat.length === 0 ? (
+                        <div className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                          <GeneratedValue
+                            value={
+                              loading ? (
+                                <GeneratedText id="m_0b8f8a9a8e1191" />
+                              ) : (
+                                <GeneratedText id="m_125dfc9086e748" values={{ value0: value }} />
                               )
-                            })()
-                          : null}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-              <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono dark:border-slate-800 dark:bg-slate-900">
-                  ↑↓
-                </kbd>
-                <span className="mx-1">navigate</span>
-                <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono dark:border-slate-800 dark:bg-slate-900">
-                  ↵
-                </kbd>
-                <span className="mx-1">open</span>
-                <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono dark:border-slate-800 dark:bg-slate-900">
-                  esc
-                </kbd>
-                <span className="mx-1">close</span>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <div className="py-1">
+                          <GeneratedValue
+                            value={groups.map((group) => {
+                              const meta = ENTITY_META[group.type]
+                              const Icon = meta.icon
+                              return (
+                                <div key={group.type} className="py-1">
+                                  <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
+                                    <Icon
+                                      size={11}
+                                      className="text-slate-400 dark:text-slate-500"
+                                    />
+                                    <span>
+                                      <GeneratedValue value={meta.label} />
+                                    </span>
+                                    <span className="ml-auto text-slate-400 dark:text-slate-500">
+                                      <GeneratedValue value={group.total} />
+                                    </span>
+                                  </div>
+                                  <GeneratedValue
+                                    value={group.items.map((it) => {
+                                      const idx = flatIndex++
+                                      const active = idx === activeIndex
+                                      return (
+                                        <Link
+                                          key={`${group.type}-${it.id}`}
+                                          href={it.href as any}
+                                          onMouseEnter={() => setActiveIndex(idx)}
+                                          onClick={() => {
+                                            setOpen(false)
+                                            setValue('')
+                                          }}
+                                          role="option"
+                                          aria-selected={active}
+                                          className={cn(
+                                            'flex items-start gap-2 px-3 py-1.5 text-sm',
+                                            active
+                                              ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-300'
+                                              : 'text-slate-800 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-800/60',
+                                          )}
+                                        >
+                                          <Icon
+                                            size={14}
+                                            className={cn(
+                                              'mt-0.5 shrink-0',
+                                              active
+                                                ? 'text-teal-600'
+                                                : 'text-slate-400 dark:text-slate-500',
+                                            )}
+                                          />
+                                          <div className="min-w-0 flex-1">
+                                            <div className="truncate">{it.label}</div>
+                                            {it.sublabel ? (
+                                              <div
+                                                className={cn(
+                                                  'truncate text-xs',
+                                                  active
+                                                    ? 'text-teal-700 dark:text-teal-300'
+                                                    : 'text-slate-500 dark:text-slate-400',
+                                                )}
+                                              >
+                                                {it.sublabel}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        </Link>
+                                      )
+                                    })}
+                                  />
+                                  <GeneratedValue
+                                    value={
+                                      group.total > group.items.length &&
+                                      group.items.length >= PER_GROUP_LIMIT
+                                        ? (() => {
+                                            const idx = flatIndex++
+                                            const active = idx === activeIndex
+                                            return (
+                                              <Link
+                                                href={meta.viewAllHref(value) as any}
+                                                onMouseEnter={() => setActiveIndex(idx)}
+                                                onClick={() => {
+                                                  setOpen(false)
+                                                  setValue('')
+                                                }}
+                                                role="option"
+                                                aria-selected={active}
+                                                className={cn(
+                                                  'flex items-center gap-2 px-3 py-1.5 text-xs',
+                                                  active
+                                                    ? 'bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
+                                                    : 'text-teal-700 hover:bg-slate-50 dark:text-teal-300 dark:hover:bg-slate-800/60',
+                                                )}
+                                              >
+                                                <span className="ml-5">
+                                                  <GeneratedText id="m_099da529c61580" />{' '}
+                                                  {meta.label.toLowerCase()}{' '}
+                                                  <GeneratedText id="m_1f593f83f8d749" />
+                                                  {value}”
+                                                  <span className="ml-1 text-slate-400 dark:text-slate-500">
+                                                    ({group.total})
+                                                  </span>
+                                                </span>
+                                              </Link>
+                                            )
+                                          })()
+                                        : null
+                                    }
+                                  />
+                                </div>
+                              )
+                            })}
+                          />
+                        </div>
+                      )
+                    }
+                  />
+                  <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono dark:border-slate-800 dark:bg-slate-900">
+                      ↑↓
+                    </kbd>
+                    <span className="mx-1">
+                      <GeneratedText id="m_0268b1886371a8" />
+                    </span>
+                    <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono dark:border-slate-800 dark:bg-slate-900">
+                      ↵
+                    </kbd>
+                    <span className="mx-1">
+                      <GeneratedText id="m_0dbdefec306063" />
+                    </span>
+                    <kbd className="rounded border border-slate-200 bg-slate-50 px-1 font-mono dark:border-slate-800 dark:bg-slate-900">
+                      esc
+                    </kbd>
+                    <span className="mx-1">
+                      <GeneratedText id="m_15563b465ac932" />
+                    </span>
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null
+        }
+      />
     </div>
   )
 }

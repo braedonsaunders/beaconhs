@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // PPE TYPE builder — 1/3 settings rail + 2/3 build surface, mirroring the
 // inspections type builder. The type owns its criteria directly, organised into
 // drag-reorderable, kind-scoped sections. A "Pre-use / Annual" toggle switches
@@ -97,6 +104,8 @@ export function PpeTypeBuilder({
   customFieldCount: number
   activitySlot: React.ReactNode
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [kind, setKind] = React.useState<Kind>('pre_use')
   const scope = React.useMemo(
@@ -152,7 +161,9 @@ export function PpeTypeBuilder({
             (c) => ({ ...c, groupId: g.id, inspectionKind: kind }) as BuilderCriterion,
           ),
         ])
-        toast.success(`Imported ${res.criteria.length} criteria from "${res.bankName}"`)
+        toast.success(
+          tGenerated('m_0773f5db0728c4', { value0: res.criteria.length, value1: res.bankName }),
+        )
       }
       setImporting(false)
     })
@@ -165,46 +176,55 @@ export function PpeTypeBuilder({
       <BuilderShell
         left={
           <>
-            <BuilderRailHeader icon={<HardHat size={15} />} title={type.name} subtitle="PPE type" />
+            <BuilderRailHeader
+              icon={<HardHat size={15} />}
+              title={tGeneratedValue(type.name)}
+              subtitle={tGenerated('m_0bdc13fe741bfd')}
+            />
             <BuilderRailNavigation active={leftTab} onChange={setLeftTab} />
             <BuilderScroll>
-              {leftTab === 'build' ? (
-                <ChecklistBuildMenu
-                  before={
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-slate-500 dark:text-slate-400">
-                        Checklist
-                      </Label>
-                      <KindToggle kind={kind} onChange={setKind} counts={counts} />
-                    </div>
-                  }
-                  description={
-                    <>
-                      Build the {kindLabel.toLowerCase()} checklist this PPE type runs. Group
-                      questions into sections, drag to reorder, or import a saved bank as a section.
-                    </>
-                  }
-                  onAddGroup={checklist.addGroup}
-                  onAddCriterion={() => checklist.openAdd(null)}
-                  onImport={() => setImporting(true)}
-                />
-              ) : leftTab === 'settings' ? (
-                <SettingsPanel
-                  type={type}
-                  itemCount={itemCount}
-                  customFieldCount={customFieldCount}
-                  onDeleted={() => router.push('/ppe/types')}
-                />
-              ) : (
-                activitySlot
-              )}
+              <GeneratedValue
+                value={
+                  leftTab === 'build' ? (
+                    <ChecklistBuildMenu
+                      before={
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-500 dark:text-slate-400">
+                            <GeneratedText id="m_08e83f80918eaf" />
+                          </Label>
+                          <KindToggle kind={kind} onChange={setKind} counts={counts} />
+                        </div>
+                      }
+                      description={tGeneratedValue(
+                        <>
+                          Build the {kindLabel.toLowerCase()} checklist this PPE type runs. Group
+                          questions into sections, drag to reorder, or import a saved bank as a
+                          section.
+                        </>,
+                      )}
+                      onAddGroup={checklist.addGroup}
+                      onAddCriterion={() => checklist.openAdd(null)}
+                      onImport={() => setImporting(true)}
+                    />
+                  ) : leftTab === 'settings' ? (
+                    <SettingsPanel
+                      type={type}
+                      itemCount={itemCount}
+                      customFieldCount={customFieldCount}
+                      onDeleted={() => router.push('/ppe/types')}
+                    />
+                  ) : (
+                    activitySlot
+                  )
+                }
+              />
             </BuilderScroll>
           </>
         }
         right={
           <>
             <ChecklistSurfaceHeader
-              title={`${kindLabel} checklist`}
+              title={tGenerated('m_14278c1c3a0b30', { value0: kindLabel })}
               sectionCount={checklist.scopedGroups.length}
               criterionCount={checklist.scopedCriteria.length}
             />
@@ -241,7 +261,7 @@ export function PpeTypeBuilder({
       <ImportCriteriaBankDrawer
         open={importing}
         banks={banks}
-        description={`Copy a saved criteria bank in as a new section on the ${kindLabel.toLowerCase()} checklist. Edits afterwards stay on this type.`}
+        description={tGenerated('m_1675549fab6dc1', { value0: kindLabel.toLowerCase() })}
         emptyMessage="No published banks yet. Create one under PPE → Criteria banks."
         onClose={() => setImporting(false)}
         onImport={handleImport}
@@ -261,21 +281,33 @@ function KindToggle({
 }) {
   return (
     <div className="flex rounded-md border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-800 dark:bg-slate-950">
-      {(['pre_use', 'annual'] as Kind[]).map((k) => (
-        <button
-          key={k}
-          type="button"
-          onClick={() => onChange(k)}
-          className={`flex-1 rounded px-2 py-1.5 text-xs font-medium transition ${
-            kind === k
-              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
-              : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-          }`}
-        >
-          {k === 'pre_use' ? 'Pre-use' : 'Annual'}
-          <span className="ml-1.5 text-slate-400">{counts[k]}</span>
-        </button>
-      ))}
+      <GeneratedValue
+        value={(['pre_use', 'annual'] as Kind[]).map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => onChange(k)}
+            className={`flex-1 rounded px-2 py-1.5 text-xs font-medium transition ${
+              kind === k
+                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
+                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            <GeneratedValue
+              value={
+                k === 'pre_use' ? (
+                  <GeneratedText id="m_0169e159d93a5b" />
+                ) : (
+                  <GeneratedText id="m_1a86ff2774c6a1" />
+                )
+              }
+            />
+            <span className="ml-1.5 text-slate-400">
+              <GeneratedValue value={counts[k]} />
+            </span>
+          </button>
+        ))}
+      />
     </div>
   )
 }
@@ -284,16 +316,20 @@ function CriterionContent({ c }: { c: BuilderCriterion }) {
   return (
     <>
       <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-        {c.question}
+        <GeneratedValue value={c.question} />
       </span>
       <Badge variant={severityVariant(c.severity)} className="text-[10px]">
-        {c.severity}
+        <GeneratedValue value={c.severity} />
       </Badge>
-      {c.requiresPhoto ? (
-        <Badge variant="outline" className="text-[10px]">
-          photo
-        </Badge>
-      ) : null}
+      <GeneratedValue
+        value={
+          c.requiresPhoto ? (
+            <Badge variant="outline" className="text-[10px]">
+              <GeneratedText id="m_07cb1cfb72cff4" />
+            </Badge>
+          ) : null
+        }
+      />
     </>
   )
 }
@@ -324,6 +360,7 @@ function SettingsPanel({
   customFieldCount: number
   onDeleted: () => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const run = useBuilderActionRunner('Failed to save')
   const [name, setName] = React.useState(type.name)
   const [category, setCategory] = React.useState(type.category ?? '')
@@ -355,18 +392,20 @@ function SettingsPanel({
               .filter(Boolean)
           : null,
       })
-      toast.success('Saved')
+      toast.success(tGenerated('m_0a0569b726b225'))
     })
   }
   function del() {
     if (itemCount > 0 || customFieldCount > 0) {
       toast.error(
-        `Cannot delete — ${[
-          itemCount > 0 ? `${itemCount} item(s)` : null,
-          customFieldCount > 0 ? `${customFieldCount} scoped custom field(s)` : null,
-        ]
-          .filter(Boolean)
-          .join(' and ')} reference this type`,
+        tGenerated('m_0ec08428d4f01b', {
+          value0: [
+            itemCount > 0 ? `${itemCount} item(s)` : null,
+            customFieldCount > 0 ? `${customFieldCount} scoped custom field(s)` : null,
+          ]
+            .filter(Boolean)
+            .join(' and '),
+        }),
       )
       return
     }
@@ -376,74 +415,90 @@ function SettingsPanel({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label>Name *</Label>
+        <Label>
+          <GeneratedText id="m_1a9978900838e6" />
+        </Label>
         <Input value={name} onChange={(e) => setName(e.target.value)} required />
       </div>
       <div className="space-y-1.5">
-        <Label>Category</Label>
+        <Label>
+          <GeneratedText id="m_108b41637f364f" />
+        </Label>
         <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-          {CATEGORY_OPTIONS.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
+          <GeneratedValue
+            value={CATEGORY_OPTIONS.map((c) => (
+              <option key={c.value} value={c.value}>
+                <GeneratedValue value={c.label} />
+              </option>
+            ))}
+          />
         </Select>
       </div>
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
-        <legend className="px-1 text-xs font-medium text-slate-500">Inspection</legend>
+        <legend className="px-1 text-xs font-medium text-slate-500">
+          <GeneratedText id="m_0ef24e5f31b073" />
+        </legend>
         <BuilderCheckboxRow
-          label="This PPE type requires periodic inspection"
+          label={tGenerated('m_1527e8efa769ae')}
           checked={isInspectable}
           onChange={setIsInspectable}
         />
-        {isInspectable ? (
-          <div className="space-y-1.5 pt-1">
-            <Label className="text-xs">Inspection cadence (days)</Label>
-            <Input
-              type="number"
-              min={1}
-              value={everyDays}
-              onChange={(e) => setEveryDays(e.target.value)}
-              placeholder="e.g. 30"
-            />
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            isInspectable ? (
+              <div className="space-y-1.5 pt-1">
+                <Label className="text-xs">
+                  <GeneratedText id="m_0813b38052044d" />
+                </Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={everyDays}
+                  onChange={(e) => setEveryDays(e.target.value)}
+                  placeholder={tGenerated('m_0490a6f4ad3193')}
+                />
+              </div>
+            ) : null
+          }
+        />
       </fieldset>
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
-        <legend className="px-1 text-xs font-medium text-slate-500">Certificates</legend>
+        <legend className="px-1 text-xs font-medium text-slate-500">
+          <GeneratedText id="m_0a14bf1b44e910" />
+        </legend>
         <BuilderCheckboxRow
-          label="This PPE type requires third-party recertification certificates"
+          label={tGenerated('m_1564ef09640973')}
           checked={requiresCertificate}
           onChange={setRequiresCertificate}
         />
         <p className="px-1 text-xs text-slate-500 dark:text-slate-400">
-          When on, items of this type get a Certificates tab for uploading the signed annual
-          recertification (e.g. a harness inspection by a certified rigger).
+          <GeneratedText id="m_0c5ae6f506063d" />
         </p>
       </fieldset>
       <div className="space-y-1.5">
-        <Label>Sizing scheme</Label>
+        <Label>
+          <GeneratedText id="m_0a5f6be4b30d1d" />
+        </Label>
         <Textarea
           rows={2}
           value={sizing}
           onChange={(e) => setSizing(e.target.value)}
-          placeholder="S, M, L, XL"
+          placeholder={tGenerated('m_0ef287c3534753')}
         />
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Comma- or newline-separated valid sizes. Shown as a dropdown when issuing or editing items
-          of this type.
+          <GeneratedText id="m_1047ca0b38037c" />
         </p>
       </div>
       <div className="flex justify-end">
         <Button onClick={save}>
-          <Save size={14} /> Save
+          <Save size={14} /> <GeneratedText id="m_19e6bff894c3c7" />
         </Button>
       </div>
 
       <BuilderDangerZone
-        title="Delete PPE type"
-        description="Removes this type and its criteria. Only allowed when no items or custom fields reference it."
-        buttonLabel="Delete type"
+        title={tGenerated('m_08a9fece5a47cb')}
+        description={tGenerated('m_0fbfa83bdc076b')}
+        buttonLabel={tGenerated('m_12fda1066d2e96')}
         onDelete={del}
         disabled={itemCount > 0 || customFieldCount > 0}
       />

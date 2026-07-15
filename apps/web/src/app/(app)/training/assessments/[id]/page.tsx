@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { asc, eq } from 'drizzle-orm'
@@ -37,6 +41,8 @@ export default async function AssessmentAttemptDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -103,24 +109,34 @@ export default async function AssessmentAttemptDetailPage({
       <div className="space-y-6">
         <DetailHeader
           back={{ href: '/training/assessments', label: 'Back to assessments' }}
-          title={type?.name ?? 'Assessment'}
-          subtitle={person ? `${person.firstName} ${person.lastName}` : 'Unknown person'}
+          title={tGeneratedValue(type?.name ?? tGenerated('m_1df1ba1205cf9e'))}
+          subtitle={tGeneratedValue(
+            person ? `${person.firstName} ${person.lastName}` : tGenerated('m_03029599bbfa85'),
+          )}
           badge={
             attempt.status === 'in_progress' ? (
-              <Badge variant="secondary">In progress</Badge>
+              <Badge variant="secondary">
+                <GeneratedText id="m_1a03b06872ffd9" />
+              </Badge>
             ) : attempt.status === 'cancelled' ? (
-              <Badge variant="outline">Cancelled</Badge>
+              <Badge variant="outline">
+                <GeneratedText id="m_1a7e1cf2be443e" />
+              </Badge>
             ) : attempt.passed ? (
-              <Badge variant="success">Pass</Badge>
+              <Badge variant="success">
+                <GeneratedText id="m_0e4b19568a01bf" />
+              </Badge>
             ) : (
-              <Badge variant="destructive">Fail</Badge>
+              <Badge variant="destructive">
+                <GeneratedText id="m_169669494a86f8" />
+              </Badge>
             )
           }
           actions={
             attempt.status === 'submitted' && attempt.passed ? (
               <Link href={`/training/assessments/${attempt.id}/certificate`}>
                 <Button variant="outline">
-                  <Award size={14} /> View certificate
+                  <Award size={14} /> <GeneratedText id="m_12069317ccd53b" />
                 </Button>
               </Link>
             ) : null
@@ -159,123 +175,175 @@ export default async function AssessmentAttemptDetailPage({
           ]}
         />
 
-        {type?.preAssessmentMessage && isInProgress ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Instructions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
-                {type.preAssessmentMessage}
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
+        <GeneratedValue
+          value={
+            type?.preAssessmentMessage && isInProgress ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    <GeneratedText id="m_146cd84bfd9be5" />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+                    <GeneratedValue value={type.preAssessmentMessage} />
+                  </p>
+                </CardContent>
+              </Card>
+            ) : null
+          }
+        />
 
-        {type?.postAssessmentMessage && !isInProgress ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Result message</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
-                {type.postAssessmentMessage}
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
+        <GeneratedValue
+          value={
+            type?.postAssessmentMessage && !isInProgress ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    <GeneratedText id="m_1e17c7577f99c4" />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+                    <GeneratedValue value={type.postAssessmentMessage} />
+                  </p>
+                </CardContent>
+              </Card>
+            ) : null
+          }
+        />
 
         <Card>
           <CardHeader>
-            <CardTitle>Questions ({results.length})</CardTitle>
+            <CardTitle>
+              <GeneratedText id="m_0bb649d5a9f63f" />
+              <GeneratedValue value={results.length} />)
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {results.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                No questions on this attempt.
-              </p>
-            ) : (
-              <form action={submitAction} className="space-y-4">
-                <ol className="space-y-4">
-                  {results.map((r, i) => {
-                    return (
-                      <li
-                        key={r.id}
-                        className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                              Q{i + 1} · {r.kindSnapshot.replace('_', ' ')} · {r.pointsPossible}
-                              pt
-                            </div>
-                            <p className="mt-1 text-sm font-medium text-slate-900 dark:text-slate-100">
-                              {r.promptSnapshot}
-                            </p>
-                          </div>
-                          {!isInProgress ? (
-                            r.correct === true ? (
-                              <Badge variant="success">
-                                <Check size={12} /> Correct
-                              </Badge>
-                            ) : r.correct === false ? (
-                              <Badge variant="destructive">
-                                <X size={12} /> Incorrect
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline">Not scored</Badge>
-                            )
-                          ) : null}
-                        </div>
-                        <div className="mt-3">
-                          <AnswerInput
-                            resultId={r.id}
-                            kind={r.kindSnapshot}
-                            answer={r.answer}
-                            disabled={!canAct}
-                          />
-                        </div>
-                        {/* The answer key is proctor-only: candidates can retake
+            <GeneratedValue
+              value={
+                results.length === 0 ? (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    <GeneratedText id="m_0f1106220ddd16" />
+                  </p>
+                ) : (
+                  <form action={submitAction} className="space-y-4">
+                    <ol className="space-y-4">
+                      <GeneratedValue
+                        value={results.map((r, i) => {
+                          return (
+                            <li
+                              key={r.id}
+                              className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                                    <GeneratedText id="m_1543089e390910" />
+                                    <GeneratedValue value={i + 1} /> ·{' '}
+                                    <GeneratedValue value={r.kindSnapshot.replace('_', ' ')} /> ·{' '}
+                                    <GeneratedValue value={r.pointsPossible} />
+                                    <GeneratedText id="m_07fd31c97533c2" />
+                                  </div>
+                                  <p className="mt-1 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    <GeneratedValue value={r.promptSnapshot} />
+                                  </p>
+                                </div>
+                                <GeneratedValue
+                                  value={
+                                    !isInProgress ? (
+                                      r.correct === true ? (
+                                        <Badge variant="success">
+                                          <Check size={12} />{' '}
+                                          <GeneratedText id="m_0b8e912869ae1c" />
+                                        </Badge>
+                                      ) : r.correct === false ? (
+                                        <Badge variant="destructive">
+                                          <X size={12} /> <GeneratedText id="m_0daff82e544a72" />
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="outline">
+                                          <GeneratedText id="m_1b859977f25898" />
+                                        </Badge>
+                                      )
+                                    ) : null
+                                  }
+                                />
+                              </div>
+                              <div className="mt-3">
+                                <AnswerInput
+                                  resultId={r.id}
+                                  kind={r.kindSnapshot}
+                                  answer={r.answer}
+                                  disabled={!canAct}
+                                />
+                              </div>
+                              {/* The answer key is proctor-only: candidates can retake
                             assessments, so revealing it would let a failed
                             attempt harvest every correct answer. */}
-                        {!isInProgress && isProctor && r.correctAnswerSnapshot ? (
-                          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                            Correct answer:{' '}
-                            <span className="font-mono">{r.correctAnswerSnapshot}</span>
-                          </p>
-                        ) : null}
-                      </li>
-                    )
-                  })}
-                </ol>
-                {canAct ? (
-                  <div className="flex items-center justify-between gap-2 pt-2">
-                    <button
-                      type="submit"
-                      formAction={cancelAction}
-                      formNoValidate
-                      className="inline-flex items-center rounded border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
-                    >
-                      Cancel attempt
-                    </button>
-                    <Button type="submit">Submit for grading</Button>
-                  </div>
-                ) : isInProgress ? (
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    This attempt is in progress. Only the candidate or training staff can record
-                    answers and submit it.
-                  </div>
-                ) : (
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    This attempt is locked. Submitted at{' '}
-                    {attempt.completedAt
-                      ? formatDateTime(new Date(attempt.completedAt), ctx.timezone, ctx.locale)
-                      : '—'}
-                    .
-                  </div>
-                )}
-              </form>
-            )}
+                              <GeneratedValue
+                                value={
+                                  !isInProgress && isProctor && r.correctAnswerSnapshot ? (
+                                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                      <GeneratedText id="m_08f8d29ea3c01e" />
+                                      <GeneratedValue value={' '} />
+                                      <span className="font-mono">
+                                        <GeneratedValue value={r.correctAnswerSnapshot} />
+                                      </span>
+                                    </p>
+                                  ) : null
+                                }
+                              />
+                            </li>
+                          )
+                        })}
+                      />
+                    </ol>
+                    <GeneratedValue
+                      value={
+                        canAct ? (
+                          <div className="flex items-center justify-between gap-2 pt-2">
+                            <button
+                              type="submit"
+                              formAction={cancelAction}
+                              formNoValidate
+                              className="inline-flex items-center rounded border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                            >
+                              <GeneratedText id="m_1a7698c35ef272" />
+                            </button>
+                            <Button type="submit">
+                              <GeneratedText id="m_1e73dbf5825a68" />
+                            </Button>
+                          </div>
+                        ) : isInProgress ? (
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            <GeneratedText id="m_1f90bbbaef60bc" />
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            <GeneratedText id="m_1c5092a996f3c7" />
+                            <GeneratedValue value={' '} />
+                            <GeneratedValue
+                              value={
+                                attempt.completedAt
+                                  ? formatDateTime(
+                                      new Date(attempt.completedAt),
+                                      ctx.timezone,
+                                      ctx.locale,
+                                    )
+                                  : '—'
+                              }
+                            />
+                            .
+                          </div>
+                        )
+                      }
+                    />
+                  </form>
+                )
+              }
+            />
           </CardContent>
         </Card>
       </div>
@@ -301,6 +369,7 @@ function AnswerInput({
   answer: string | null
   disabled?: boolean
 }) {
+  const tGenerated = useGeneratedTranslations()
   const name = `answer_${resultId}`
   if (kind === 'text') {
     return (
@@ -309,7 +378,7 @@ function AnswerInput({
         rows={3}
         defaultValue={answer ?? ''}
         disabled={disabled}
-        placeholder="Free-form answer (recorded, not scored)…"
+        placeholder={tGenerated('m_03679ea3fca4d3')}
       />
     )
   }
@@ -321,9 +390,15 @@ function AnswerInput({
   if (kind === 'true_false') {
     return (
       <Select name={name} defaultValue={answer ?? ''} disabled={disabled}>
-        <option value="">— Pick one —</option>
-        <option value="true">True</option>
-        <option value="false">False</option>
+        <option value="">
+          <GeneratedText id="m_184af7c1f2cebc" />
+        </option>
+        <option value="true">
+          <GeneratedText id="m_135cfc93a0437b" />
+        </option>
+        <option value="false">
+          <GeneratedText id="m_0e0397bd9d7ef3" />
+        </option>
       </Select>
     )
   }
@@ -334,16 +409,21 @@ function AnswerInput({
           name={name}
           defaultValue={answer ?? ''}
           disabled={disabled}
-          placeholder='Comma-separated, e.g. "A,C"'
+          placeholder={tGenerated('m_00800734f33d24')}
         />
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Enter the letter values of every correct option, separated by commas.
+          <GeneratedText id="m_0202beb2abf5c8" />
         </p>
       </div>
     )
   }
   // single_choice (and fallback)
   return (
-    <Input name={name} defaultValue={answer ?? ''} disabled={disabled} placeholder='e.g. "A"' />
+    <Input
+      name={name}
+      defaultValue={answer ?? ''}
+      disabled={disabled}
+      placeholder={tGenerated('m_0e2e5b38857229')}
+    />
   )
 }

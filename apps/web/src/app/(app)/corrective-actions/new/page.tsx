@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { eq } from 'drizzle-orm'
@@ -26,7 +28,10 @@ import { PageContainer } from '@/components/page-layout'
 import { RemoteSelectField } from '@/components/remote-search-select'
 import { nextReference } from '@/lib/reference'
 
-export const metadata = { title: 'New corrective action' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_16b0371ad9cc2c') }
+}
 
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
 const SOURCES = [
@@ -127,6 +132,7 @@ export default async function NewCAPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const presetSourceType = pickString(sp.sourceEntityType)
   const presetSourceId = pickString(sp.sourceEntityId)
@@ -146,66 +152,79 @@ export default async function NewCAPage({
       <div className="max-w-3xl space-y-6">
         <DetailHeader
           back={{ href: '/corrective-actions', label: 'Back to corrective actions' }}
-          title="New corrective action"
+          title={tGenerated('m_16b0371ad9cc2c')}
         />
-        {sourceIncident ? (
-          <Alert variant="info">
-            <AlertTitle>Linked to incident</AlertTitle>
-            <AlertDescription>
-              {sourceIncident.reference} · {sourceIncident.title}
-            </AlertDescription>
-          </Alert>
-        ) : null}
+        <GeneratedValue
+          value={
+            sourceIncident ? (
+              <Alert variant="info">
+                <AlertTitle>
+                  <GeneratedText id="m_0bbef5a046ab0a" />
+                </AlertTitle>
+                <AlertDescription>
+                  <GeneratedValue value={sourceIncident.reference} /> ·{' '}
+                  <GeneratedValue value={sourceIncident.title} />
+                </AlertDescription>
+              </Alert>
+            ) : null
+          }
+        />
         <Card>
           <CardContent className="pt-6">
             <form action={createCA} className="space-y-4">
               <input type="hidden" name="sourceEntityId" value={presetSourceId ?? ''} />
               <input type="hidden" name="sourceEntityType" value={presetSourceType ?? ''} />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Title" required className="sm:col-span-2">
-                  <Input name="title" required placeholder="What needs to be done?" />
+                <Field label={tGenerated('m_0decefd558c355')} required className="sm:col-span-2">
+                  <Input name="title" required placeholder={tGenerated('m_0915692fccfff8')} />
                 </Field>
-                <Field label="Description" className="sm:col-span-2">
+                <Field label={tGenerated('m_14d923495cf14c')} className="sm:col-span-2">
                   <Textarea
                     name="description"
                     rows={3}
-                    placeholder="Context, scope, expected outcome"
+                    placeholder={tGenerated('m_1d4bdebb9135a7')}
                   />
                 </Field>
-                <Field label="Severity" required>
+                <Field label={tGenerated('m_168b365cc671bf')} required>
                   <Select name="severity" defaultValue="medium">
-                    {SEVERITIES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
+                    <GeneratedValue
+                      value={SEVERITIES.map((s) => (
+                        <option key={s} value={s}>
+                          <GeneratedValue value={s} />
+                        </option>
+                      ))}
+                    />
                   </Select>
                 </Field>
-                <Field label="Source">
+                <Field label={tGenerated('m_1d05fa7a091a9b')}>
                   <Select name="source" defaultValue={presetSourceType ?? 'observation'}>
-                    {SOURCES.map((s) => (
-                      <option key={s} value={s}>
-                        {s.replace('_', ' ')}
-                      </option>
-                    ))}
+                    <GeneratedValue
+                      value={SOURCES.map((s) => (
+                        <option key={s} value={s}>
+                          <GeneratedValue value={s.replace('_', ' ')} />
+                        </option>
+                      ))}
+                    />
                   </Select>
                 </Field>
-                <Field label="Site">
+                <Field label={tGenerated('m_020146dd3d3d5a')}>
                   <RemoteSelectField
                     lookup="corrective-action-sites"
                     name="siteOrgUnitId"
-                    placeholder="Select a site…"
-                    searchPlaceholder="Search sites…"
+                    placeholder={tGenerated('m_015c668f21e7b9')}
+                    searchPlaceholder={tGenerated('m_1931aa93098220')}
                     sheetTitle="Select a site"
                     emptyLabel="—"
                   />
                 </Field>
-                <Field label="Due on">
+                <Field label={tGenerated('m_04bfc1eaee3a4b')}>
                   <Input name="dueOn" type="date" />
                 </Field>
               </div>
               <div className="flex items-center justify-end gap-2">
-                <Button type="submit">Create action</Button>
+                <Button type="submit">
+                  <GeneratedText id="m_0db5c2019349bf" />
+                </Button>
               </div>
             </form>
           </CardContent>
@@ -229,10 +248,10 @@ function Field({
   return (
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label>
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        <GeneratedValue value={label} />
+        <GeneratedValue value={required ? <span className="text-red-600"> *</span> : null} />
       </Label>
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }

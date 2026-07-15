@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // PPE criteria BANK builder — same 1/3-2/3 shell + drag list as the type
 // builder, but flat (a bank is just a reusable, severity-aware pool of criteria
 // that PPE types import from).
@@ -83,16 +85,20 @@ export function PpeBankBuilder({
       renderCriterion={(criterion) => (
         <>
           <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-            {criterion.question}
+            <GeneratedValue value={criterion.question} />
           </span>
           <Badge variant={severityVariant(criterion.severity)} className="text-[10px]">
-            {criterion.severity}
+            <GeneratedValue value={criterion.severity} />
           </Badge>
-          {criterion.requiresPhoto ? (
-            <Badge variant="outline" className="text-[10px]">
-              photo
-            </Badge>
-          ) : null}
+          <GeneratedValue
+            value={
+              criterion.requiresPhoto ? (
+                <Badge variant="outline" className="text-[10px]">
+                  <GeneratedText id="m_07cb1cfb72cff4" />
+                </Badge>
+              ) : null
+            }
+          />
         </>
       )}
       renderEditor={(props) => (

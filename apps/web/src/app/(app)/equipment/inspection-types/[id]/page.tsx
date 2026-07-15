@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { asc, eq } from 'drizzle-orm'
@@ -20,8 +23,9 @@ import { EquipmentInspectionTypeBuilder } from './_type-builder'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Equipment inspection type · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_0e6f31f873d298', { value0: id.slice(0, 8) }) }
 }
 
 export default async function EquipmentInspectionTypeDetailPage({
@@ -29,6 +33,7 @@ export default async function EquipmentInspectionTypeDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
   const ctx = await requireModuleManage('equipment')
@@ -82,19 +87,31 @@ export default async function EquipmentInspectionTypeDetailPage({
       header={
         <DetailHeader
           back={{ href: '/equipment/inspection-types', label: 'Back to inspection types' }}
-          title={type.name}
+          title={tGeneratedValue(type.name)}
           badge={
             <div className="flex items-center gap-2">
               <Badge variant="secondary">
-                {formatInterval(type.intervalValue, type.intervalUnit, { preUse: type.isPreUse })}
+                <GeneratedValue
+                  value={formatInterval(type.intervalValue, type.intervalUnit, {
+                    preUse: type.isPreUse,
+                  })}
+                />
               </Badge>
-              {!type.isActive ? <Badge variant="secondary">Inactive</Badge> : null}
+              <GeneratedValue
+                value={
+                  !type.isActive ? (
+                    <Badge variant="secondary">
+                      <GeneratedText id="m_0f47ea07c99dba" />
+                    </Badge>
+                  ) : null
+                }
+              />
             </div>
           }
           actions={
             <Link href={`/equipment/inspections/new?typeId=${id}`}>
               <Button variant="outline">
-                <ClipboardCheck size={14} /> Start inspection
+                <ClipboardCheck size={14} /> <GeneratedText id="m_050ae31d3122aa" />
               </Button>
             </Link>
           }

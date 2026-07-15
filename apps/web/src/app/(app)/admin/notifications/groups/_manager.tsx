@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Notification-group manager: a list of reusable audiences + a composable
 // member builder with a live "reaches N people" preview. Members union together
 // (roles/departments/sites/crews/trades/people-groups/individuals), and
@@ -123,6 +130,7 @@ export function NotificationGroupsManager({
   hasSearch: boolean
   basePath: string
 }) {
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [editing, setEditing] = React.useState<GroupRow | 'new' | null>(null)
 
@@ -130,83 +138,97 @@ export function NotificationGroupsManager({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <SearchInput placeholder="Search group name or description…" />
+          <SearchInput placeholder={tGenerated('m_0fd66932ffe849')} />
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {total.toLocaleString()} {hasSearch ? 'matching ' : ''}group
-            {total === 1 ? '' : 's'}
+            <GeneratedValue value={total.toLocaleString()} />{' '}
+            <GeneratedValue value={hasSearch ? <GeneratedText id="m_05062e662db3c5" /> : ''} />
+            <GeneratedText id="m_04659be4c4e726" />
+            <GeneratedValue value={total === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />} />
           </p>
         </div>
         <Button onClick={() => setEditing('new')}>
-          <Plus size={14} /> New group
+          <Plus size={14} /> <GeneratedText id="m_1cffae5082cb21" />
         </Button>
       </div>
 
-      {groups.length === 0 && total > 0 ? (
-        <EmptyState
-          icon={<Users size={24} />}
-          title="This page is past the end of the results"
-          description="Use the pagination control below to return to the last page."
-        />
-      ) : groups.length === 0 && hasSearch ? (
-        <EmptyState
-          icon={<Users size={24} />}
-          title="No notification groups match your search"
-          description="Try a different group name or description."
-        />
-      ) : groups.length === 0 ? (
-        <EmptyState
-          icon={<Users size={24} />}
-          title="No notification groups yet"
-          description="Create a group like 'Site Supervisors' or 'First-Aid Responders' once, then target it from any alert."
-          action={
-            <Button variant="outline" onClick={() => setEditing('new')}>
-              <Plus size={14} /> Create the first group
-            </Button>
-          }
-        />
-      ) : (
-        <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          {groups.map((g) => (
-            <li
-              key={g.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
-            >
-              <button
-                type="button"
-                onClick={() => setEditing(g)}
-                className="flex min-w-0 flex-1 items-center gap-3 text-left"
-              >
-                <span
-                  className="h-3 w-3 shrink-0 rounded-full"
-                  style={{ backgroundColor: g.color ?? '#94a3b8' }}
-                />
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-                    {g.name}
-                  </span>
-                  <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
-                    {g.description || memberSummary(g.members)}
-                  </span>
-                </span>
-              </button>
-              <Badge variant="secondary">{memberSummary(g.members)}</Badge>
-              <Button variant="outline" size="sm" onClick={() => setEditing(g)}>
-                Edit
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <GeneratedValue
+        value={
+          groups.length === 0 && total > 0 ? (
+            <EmptyState
+              icon={<Users size={24} />}
+              title={tGenerated('m_1be5d8cca8b626')}
+              description={tGenerated('m_1364361e81aa5c')}
+            />
+          ) : groups.length === 0 && hasSearch ? (
+            <EmptyState
+              icon={<Users size={24} />}
+              title={tGenerated('m_144c691c15a3dd')}
+              description={tGenerated('m_1321ee6e86e717')}
+            />
+          ) : groups.length === 0 ? (
+            <EmptyState
+              icon={<Users size={24} />}
+              title={tGenerated('m_0ef63f018d68aa')}
+              description={tGenerated('m_1e357024f64886')}
+              action={
+                <Button variant="outline" onClick={() => setEditing('new')}>
+                  <Plus size={14} /> <GeneratedText id="m_1ce910ec2d7bc2" />
+                </Button>
+              }
+            />
+          ) : (
+            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              <GeneratedValue
+                value={groups.map((g) => (
+                  <li
+                    key={g.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setEditing(g)}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    >
+                      <span
+                        className="h-3 w-3 shrink-0 rounded-full"
+                        style={{ backgroundColor: g.color ?? '#94a3b8' }}
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                          <GeneratedValue value={g.name} />
+                        </span>
+                        <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
+                          <GeneratedValue value={g.description || memberSummary(g.members)} />
+                        </span>
+                      </span>
+                    </button>
+                    <Badge variant="secondary">
+                      <GeneratedValue value={memberSummary(g.members)} />
+                    </Badge>
+                    <Button variant="outline" size="sm" onClick={() => setEditing(g)}>
+                      <GeneratedText id="m_03a66f9d34ac7b" />
+                    </Button>
+                  </li>
+                ))}
+              />
+            </ul>
+          )
+        }
+      />
 
-      {total > 0 ? (
-        <Pagination
-          basePath={basePath}
-          currentParams={currentParams}
-          total={total}
-          page={page}
-          perPage={perPage}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          total > 0 ? (
+            <Pagination
+              basePath={basePath}
+              currentParams={currentParams}
+              total={total}
+              page={page}
+              perPage={perPage}
+            />
+          ) : null
+        }
+      />
 
       <GroupEditor
         key={editing === 'new' ? 'new' : (editing?.id ?? 'closed')}
@@ -236,6 +258,8 @@ function GroupEditor({
   onClose: () => void
   onSaved: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [name, setName] = React.useState(group?.name ?? '')
   const [description, setDescription] = React.useState(group?.description ?? '')
   const [color, setColor] = React.useState(
@@ -294,7 +318,7 @@ function GroupEditor({
 
   function addMember() {
     if (members.length >= NOTIFICATION_GROUP_LIMITS.memberCount) {
-      toast.error(`A group can have no more than ${NOTIFICATION_GROUP_LIMITS.memberCount} members.`)
+      toast.error(tGenerated('m_0b2a7701681b4d', { value0: NOTIFICATION_GROUP_LIMITS.memberCount }))
       return
     }
     setMembers((m) => [...m, { kind: 'role', entityKey: '', mode: 'include' }])
@@ -308,7 +332,7 @@ function GroupEditor({
 
   function save() {
     if (!name.trim()) {
-      toast.error('Name is required')
+      toast.error(tGenerated('m_1a955a149161d3'))
       return
     }
     start(async () => {
@@ -317,10 +341,12 @@ function GroupEditor({
         ? await updateGroup({ id: group.id, ...payload })
         : await createGroup(payload)
       if (res.ok) {
-        toast.success(group ? 'Group saved' : 'Group created')
+        toast.success(
+          tGeneratedValue(group ? tGenerated('m_1f00296b696e0d') : tGenerated('m_1fd94fc7149f90')),
+        )
         onSaved()
       } else {
-        toast.error(res.error)
+        toast.error(tGeneratedValue(res.error))
       }
     })
   }
@@ -337,10 +363,10 @@ function GroupEditor({
     start(async () => {
       const res = await deleteGroup({ id: group.id })
       if (res.ok) {
-        toast.success('Group deleted')
+        toast.success(tGenerated('m_0c355fc3e24039'))
         onSaved()
       } else {
-        toast.error(res.error)
+        toast.error(tGeneratedValue(res.error))
       }
     })
   }
@@ -349,25 +375,46 @@ function GroupEditor({
     <Drawer
       open={open}
       onClose={onClose}
-      title={group ? 'Edit group' : 'New group'}
-      description="Members union together. Add an Exclude row to remove specific people from the result."
+      title={tGeneratedValue(
+        group ? tGenerated('m_16f388543b98cf') : tGenerated('m_1cffae5082cb21'),
+      )}
+      description={tGenerated('m_0fbcc6f09ce94a')}
       size="md"
       footer={
         <div className="flex w-full items-center justify-between gap-2">
-          {group ? (
-            <Button variant="outline" onClick={del} disabled={pending} className="text-rose-600">
-              <Trash2 size={14} /> Delete
-            </Button>
-          ) : (
-            <span />
-          )}
+          <GeneratedValue
+            value={
+              group ? (
+                <Button
+                  variant="outline"
+                  onClick={del}
+                  disabled={pending}
+                  className="text-rose-600"
+                >
+                  <Trash2 size={14} /> <GeneratedText id="m_11773f3c3f7558" />
+                </Button>
+              ) : (
+                <span />
+              )
+            }
+          />
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose} disabled={pending}>
-              Cancel
+              <GeneratedText id="m_112e2e8ecda428" />
             </Button>
             <Button onClick={save} disabled={pending}>
-              {pending ? <Loader2 size={14} className="mr-1 animate-spin" /> : null}
-              {group ? 'Save' : 'Create'}
+              <GeneratedValue
+                value={pending ? <Loader2 size={14} className="mr-1 animate-spin" /> : null}
+              />
+              <GeneratedValue
+                value={
+                  group ? (
+                    <GeneratedText id="m_19e6bff894c3c7" />
+                  ) : (
+                    <GeneratedText id="m_017309f0f9f564" />
+                  )
+                }
+              />
             </Button>
           </div>
         </div>
@@ -375,44 +422,54 @@ function GroupEditor({
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>Name *</Label>
+          <Label>
+            <GeneratedText id="m_1a9978900838e6" />
+          </Label>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Site Supervisors"
+            placeholder={tGenerated('m_17a97164786185')}
             maxLength={NOTIFICATION_GROUP_LIMITS.nameLength}
             autoFocus
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Description</Label>
+          <Label>
+            <GeneratedText id="m_14d923495cf14c" />
+          </Label>
           <Input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional — what this group is for"
+            placeholder={tGenerated('m_147895675e1350')}
             maxLength={NOTIFICATION_GROUP_LIMITS.descriptionLength}
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Colour</Label>
+          <Label>
+            <GeneratedText id="m_1242677f454516" />
+          </Label>
           <div className="flex items-center gap-1.5">
-            {NOTIFICATION_GROUP_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                aria-label={`Colour ${c}`}
-                onClick={() => setColor(c)}
-                className={`h-6 w-6 rounded-full border-2 ${color === c ? 'border-slate-900 dark:border-white' : 'border-transparent'}`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
+            <GeneratedValue
+              value={NOTIFICATION_GROUP_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-label={tGenerated('m_146e65119955be', { value0: c })}
+                  onClick={() => setColor(c)}
+                  className={`h-6 w-6 rounded-full border-2 ${color === c ? 'border-slate-900 dark:border-white' : 'border-transparent'}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            />
           </div>
         </div>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label>
-              Members ({members.length}/{NOTIFICATION_GROUP_LIMITS.memberCount})
+              <GeneratedText id="m_1495e10d0698d6" />
+              <GeneratedValue value={members.length} />/
+              <GeneratedValue value={NOTIFICATION_GROUP_LIMITS.memberCount} />)
             </Label>
             <Button
               variant="outline"
@@ -420,102 +477,148 @@ function GroupEditor({
               onClick={addMember}
               disabled={members.length >= NOTIFICATION_GROUP_LIMITS.memberCount}
             >
-              <Plus size={13} /> Add member
+              <Plus size={13} /> <GeneratedText id="m_0f3c6b203f7b59" />
             </Button>
           </div>
-          {members.length === 0 ? (
-            <p className="rounded-md border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700">
-              No members yet — add a role, department, crew, people group, or named person.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {members.map((m, i) => (
-                <li
-                  key={i}
-                  className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 p-2 dark:border-slate-800"
-                >
-                  <Select
-                    value={m.mode}
-                    triggerClassName="w-28"
-                    onChange={(e) =>
-                      updateMember(i, { mode: e.target.value as 'include' | 'exclude' })
-                    }
-                  >
-                    <option value="include">Include</option>
-                    <option value="exclude">Exclude</option>
-                  </Select>
-                  <Select
-                    value={m.kind}
-                    triggerClassName="w-40"
-                    onChange={(e) =>
-                      updateMember(i, {
-                        kind: e.target.value as NotificationGroupMemberKind,
-                        entityKey: '',
-                      })
-                    }
-                  >
-                    {KIND_OPTIONS.map((k) => (
-                      <option key={k} value={k}>
-                        {KIND_LABEL[k]}
-                      </option>
+          <GeneratedValue
+            value={
+              members.length === 0 ? (
+                <p className="rounded-md border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700">
+                  <GeneratedText id="m_166c95d538c0f8" />
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  <GeneratedValue
+                    value={members.map((m, i) => (
+                      <li
+                        key={i}
+                        className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 p-2 dark:border-slate-800"
+                      >
+                        <Select
+                          value={m.mode}
+                          triggerClassName="w-28"
+                          onChange={(e) =>
+                            updateMember(i, { mode: e.target.value as 'include' | 'exclude' })
+                          }
+                        >
+                          <option value="include">
+                            <GeneratedText id="m_0ad12520e40f09" />
+                          </option>
+                          <option value="exclude">
+                            <GeneratedText id="m_06ec0f75d38049" />
+                          </option>
+                        </Select>
+                        <Select
+                          value={m.kind}
+                          triggerClassName="w-40"
+                          onChange={(e) =>
+                            updateMember(i, {
+                              kind: e.target.value as NotificationGroupMemberKind,
+                              entityKey: '',
+                            })
+                          }
+                        >
+                          <GeneratedValue
+                            value={KIND_OPTIONS.map((k) => (
+                              <option key={k} value={k}>
+                                <GeneratedValue value={KIND_LABEL[k]} />
+                              </option>
+                            ))}
+                          />
+                        </Select>
+                        <GeneratedValue
+                          value={
+                            m.kind !== 'everyone' ? (
+                              <div className="min-w-[10rem] flex-1">
+                                <RemoteSearchSelect
+                                  lookup={lookupFor(m.kind)}
+                                  value={m.entityKey}
+                                  initialOption={optionsFor(m.kind, options).find(
+                                    (candidate) => candidate.value === m.entityKey,
+                                  )}
+                                  placeholder={tGenerated('m_1d7c7208545be9', {
+                                    value0: KIND_LABEL[m.kind].toLowerCase(),
+                                  })}
+                                  searchPlaceholder={tGenerated('m_0c0f4b8e077d91')}
+                                  sheetTitle={`Choose a ${KIND_LABEL[m.kind].toLowerCase()}`}
+                                  ariaLabel={KIND_LABEL[m.kind]}
+                                  onChange={(v) => updateMember(i, { entityKey: v })}
+                                />
+                              </div>
+                            ) : (
+                              <span className="flex-1 text-xs text-slate-500">
+                                <GeneratedText id="m_008abd14d0ce99" />
+                              </span>
+                            )
+                          }
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeMember(i)}
+                          aria-label={tGenerated('m_13fbbf976f1841')}
+                          className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/40"
+                        >
+                          <X size={15} />
+                        </button>
+                      </li>
                     ))}
-                  </Select>
-                  {m.kind !== 'everyone' ? (
-                    <div className="min-w-[10rem] flex-1">
-                      <RemoteSearchSelect
-                        lookup={lookupFor(m.kind)}
-                        value={m.entityKey}
-                        initialOption={optionsFor(m.kind, options).find(
-                          (candidate) => candidate.value === m.entityKey,
-                        )}
-                        placeholder={`Choose a ${KIND_LABEL[m.kind].toLowerCase()}`}
-                        searchPlaceholder="Search…"
-                        sheetTitle={`Choose a ${KIND_LABEL[m.kind].toLowerCase()}`}
-                        ariaLabel={KIND_LABEL[m.kind]}
-                        onChange={(v) => updateMember(i, { entityKey: v })}
-                      />
-                    </div>
-                  ) : (
-                    <span className="flex-1 text-xs text-slate-500">
-                      Every active person in the tenant
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeMember(i)}
-                    aria-label="Remove member"
-                    className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/40"
-                  >
-                    <X size={15} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+                  />
+                </ul>
+              )
+            }
+          />
         </div>
 
         <div className="rounded-md border border-teal-200 bg-teal-50/60 p-3 text-sm dark:border-teal-900 dark:bg-teal-950/30">
           <div className="flex items-center gap-2 font-medium text-teal-900 dark:text-teal-200">
             <Users size={14} />
-            {resolvedPreviewing ? (
-              <span className="text-slate-500">Resolving…</span>
-            ) : resolvedPreviewError ? (
-              <span className="text-rose-700 dark:text-rose-300">{resolvedPreviewError}</span>
-            ) : resolvedPreview ? (
-              <span>
-                Reaches {resolvedPreview.count} {resolvedPreview.count === 1 ? 'person' : 'people'}{' '}
-                · {resolvedPreview.withEmail} with email
-              </span>
-            ) : (
-              <span className="text-slate-500">Add members to see who this reaches</span>
-            )}
+            <GeneratedValue
+              value={
+                resolvedPreviewing ? (
+                  <span className="text-slate-500">
+                    <GeneratedText id="m_0dca828cb92cbc" />
+                  </span>
+                ) : resolvedPreviewError ? (
+                  <span className="text-rose-700 dark:text-rose-300">
+                    <GeneratedValue value={resolvedPreviewError} />
+                  </span>
+                ) : resolvedPreview ? (
+                  <span>
+                    <GeneratedText id="m_010c0ce61be9ed" />{' '}
+                    <GeneratedValue value={resolvedPreview.count} />{' '}
+                    <GeneratedValue
+                      value={
+                        resolvedPreview.count === 1 ? (
+                          <GeneratedText id="m_15ba73a802eb25" />
+                        ) : (
+                          <GeneratedText id="m_01376047f0528f" />
+                        )
+                      }
+                    />
+                    <GeneratedValue value={' '} />
+                    · <GeneratedValue value={resolvedPreview.withEmail} />{' '}
+                    <GeneratedText id="m_1aba932a5ea4ce" />
+                  </span>
+                ) : (
+                  <span className="text-slate-500">
+                    <GeneratedText id="m_1803ddd3590ecd" />
+                  </span>
+                )
+              }
+            />
           </div>
-          {resolvedPreview && resolvedPreview.sample.length > 0 ? (
-            <p className="mt-1 text-xs text-teal-800/80 dark:text-teal-300/80">
-              {resolvedPreview.sample.join(', ')}
-              {resolvedPreview.count > resolvedPreview.sample.length ? ', …' : ''}
-            </p>
-          ) : null}
+          <GeneratedValue
+            value={
+              resolvedPreview && resolvedPreview.sample.length > 0 ? (
+                <p className="mt-1 text-xs text-teal-800/80 dark:text-teal-300/80">
+                  <GeneratedValue value={resolvedPreview.sample.join(', ')} />
+                  <GeneratedValue
+                    value={resolvedPreview.count > resolvedPreview.sample.length ? ', …' : ''}
+                  />
+                </p>
+              ) : null
+            }
+          />
         </div>
       </div>
     </Drawer>

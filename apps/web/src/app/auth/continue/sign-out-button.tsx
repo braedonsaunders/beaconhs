@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { signOut } from '@beaconhs/auth/client'
@@ -20,7 +22,15 @@ export function SignOutButton() {
         })
       }
     >
-      {pending ? 'Signing out…' : 'Sign out'}
+      <GeneratedValue
+        value={
+          pending ? (
+            <GeneratedText id="m_0445a4b68b7d56" />
+          ) : (
+            <GeneratedText id="m_15fa385f9d4f64" />
+          )
+        }
+      />
     </Button>
   )
 }

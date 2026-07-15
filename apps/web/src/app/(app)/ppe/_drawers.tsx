@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Sub-entity drawer for the PPE register:
 //   • issue → register a new PPE item and (optionally) issue it to a person
 //
@@ -72,6 +79,8 @@ function IssueDrawer({
   types: PpeDrawerType[]
   action: IssueAction
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [typeId, setTypeId] = useState('')
   const [serialNumber, setSerialNumber] = useState('')
@@ -85,9 +94,9 @@ function IssueDrawer({
   const [pending, startTransition] = useTransition()
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     if (!typeId) {
-      setError('Pick a PPE type.')
+      setError(tGenerated('m_022ec7a2f10f4b'))
       return
     }
     startTransition(async () => {
@@ -105,7 +114,7 @@ function IssueDrawer({
         router.push(`/ppe/${res.id}`)
         router.refresh()
       } else {
-        setError(res.error)
+        setError(tGeneratedValue(res.error))
       }
     })
   }
@@ -125,8 +134,8 @@ function IssueDrawer({
     <UrlDrawer
       open={open}
       closeHref={closeHref}
-      title="Issue PPE"
-      description="Register a new PPE item. Pick a person to hand it over in the same step, or leave blank to add it to stock."
+      title={tGenerated('m_14d0f6a29a2597')}
+      description={tGenerated('m_1b620b8a81380f')}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -136,22 +145,36 @@ function IssueDrawer({
             onClick={() => router.push(closeHref)}
             disabled={pending}
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={submit} disabled={pending || !typeId}>
-            {pending ? (
-              <Loader2 size={14} className="mr-1.5 animate-spin" />
-            ) : (
-              <UserPlus size={14} className="mr-1.5" />
-            )}
-            {personId ? 'Create & issue' : 'Add to stock'}
+            <GeneratedValue
+              value={
+                pending ? (
+                  <Loader2 size={14} className="mr-1.5 animate-spin" />
+                ) : (
+                  <UserPlus size={14} className="mr-1.5" />
+                )
+              }
+            />
+            <GeneratedValue
+              value={
+                personId ? (
+                  <GeneratedText id="m_1bf5a074ef3e26" />
+                ) : (
+                  <GeneratedText id="m_0b80df3186fa9a" />
+                )
+              }
+            />
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>PPE type *</Label>
+          <Label>
+            <GeneratedText id="m_08e32bb4e625a8" />
+          </Label>
           <SearchSelect
             value={typeId}
             onChange={(next) => {
@@ -160,50 +183,72 @@ function IssueDrawer({
               setSize('')
             }}
             options={typeOptions}
-            placeholder="Select a PPE type…"
-            searchPlaceholder="Search PPE types…"
+            placeholder={tGenerated('m_034a12ae110edb')}
+            searchPlaceholder={tGenerated('m_116a037295ed53')}
             sheetTitle="Select a PPE type"
             clearable={false}
           />
-          {types.length === 0 ? (
-            <p className="text-xs text-amber-700 dark:text-amber-400">
-              No PPE types yet — add one under PPE → Types first.
-            </p>
-          ) : null}
+          <GeneratedValue
+            value={
+              types.length === 0 ? (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  <GeneratedText id="m_09da41907891bc" />
+                </p>
+              ) : null
+            }
+          />
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="pi-serial">Serial number</Label>
+            <Label htmlFor="pi-serial">
+              <GeneratedText id="m_0ff1343b241439" />
+            </Label>
             <Input
               id="pi-serial"
               value={serialNumber}
               onChange={(e) => setSerialNumber(e.currentTarget.value)}
-              placeholder="manufacturer or in-house tag"
+              placeholder={tGenerated('m_069c786552daed')}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pi-size">Size</Label>
-            {sizeOptions ? (
-              <Select id="pi-size" value={size} onChange={(e) => setSize(e.currentTarget.value)}>
-                <option value="">— No size —</option>
-                {sizeOptions.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </Select>
-            ) : (
-              <Input
-                id="pi-size"
-                value={size}
-                onChange={(e) => setSize(e.currentTarget.value)}
-                placeholder="S / M / L / 10 / etc."
-              />
-            )}
+            <Label htmlFor="pi-size">
+              <GeneratedText id="m_11ad4bbeced31b" />
+            </Label>
+            <GeneratedValue
+              value={
+                sizeOptions ? (
+                  <Select
+                    id="pi-size"
+                    value={size}
+                    onChange={(e) => setSize(e.currentTarget.value)}
+                  >
+                    <option value="">
+                      <GeneratedText id="m_0c4b905e20de49" />
+                    </option>
+                    <GeneratedValue
+                      value={sizeOptions.map((s) => (
+                        <option key={s} value={s}>
+                          <GeneratedValue value={s} />
+                        </option>
+                      ))}
+                    />
+                  </Select>
+                ) : (
+                  <Input
+                    id="pi-size"
+                    value={size}
+                    onChange={(e) => setSize(e.currentTarget.value)}
+                    placeholder={tGenerated('m_03e655a90f63bb')}
+                  />
+                )
+              }
+            />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pi-purchase">Purchase date</Label>
+            <Label htmlFor="pi-purchase">
+              <GeneratedText id="m_0c895e284365aa" />
+            </Label>
             <Input
               id="pi-purchase"
               type="date"
@@ -212,7 +257,9 @@ function IssueDrawer({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="pi-expires">Expires on</Label>
+            <Label htmlFor="pi-expires">
+              <GeneratedText id="m_001b29133dcb72" />
+            </Label>
             <Input
               id="pi-expires"
               type="date"
@@ -223,48 +270,62 @@ function IssueDrawer({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="pi-notes">Notes</Label>
+          <Label htmlFor="pi-notes">
+            <GeneratedText id="m_0b8dadcb78cd08" />
+          </Label>
           <Textarea
             id="pi-notes"
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.currentTarget.value)}
-            placeholder="Anything reviewers should know."
+            placeholder={tGenerated('m_109acff0d80cf1')}
           />
         </div>
 
         <div className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-800">
           <div className="space-y-1.5">
-            <Label>Issue to a person (optional)</Label>
+            <Label>
+              <GeneratedText id="m_0e6c93268e8a38" />
+            </Label>
             <RemoteSearchSelect
               lookup="ppe-active-people"
               value={personId}
               onChange={setPersonId}
-              placeholder="Leave blank to add to stock…"
-              searchPlaceholder="Search people…"
+              placeholder={tGenerated('m_0f5efe4fcca38f')}
+              searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
               sheetTitle="Issue to a person"
               clearable
-              emptyLabel="— Add to stock —"
+              emptyLabel={tGenerated('m_0690561bb866de')}
             />
           </div>
-          {personId ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="pi-note">Issuance note</Label>
-              <Input
-                id="pi-note"
-                value={note}
-                onChange={(e) => setNote(e.currentTarget.value)}
-                placeholder='e.g. "Replaces lost helmet, site induction"'
-              />
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              personId ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="pi-note">
+                    <GeneratedText id="m_1f1b7fe0457e9a" />
+                  </Label>
+                  <Input
+                    id="pi-note"
+                    value={note}
+                    onChange={(e) => setNote(e.currentTarget.value)}
+                    placeholder={tGenerated('m_0bf12343056455')}
+                  />
+                </div>
+              ) : null
+            }
+          />
         </div>
 
-        {error ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
-            {error}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+                <GeneratedValue value={error} />
+              </p>
+            ) : null
+          }
+        />
       </div>
     </UrlDrawer>
   )

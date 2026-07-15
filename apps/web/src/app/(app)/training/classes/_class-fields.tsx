@@ -1,3 +1,4 @@
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, type SelectOption } from '@beaconhs/ui'
 import { LiveDateTime, LiveField, LiveRemoteSelect } from '@/components/live-field'
@@ -41,18 +42,21 @@ export function ClassDetailFields({
   notice?: React.ReactNode
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Class details</CardTitle>
+        <CardTitle>
+          <GeneratedText id="m_1c674022b2b43f" />
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {notice}
+        <GeneratedValue value={notice} />
         <div className="space-y-1">
           <LiveRemoteSelect
             id={id}
             field="courseId"
-            label="Course"
+            label={tGenerated('m_14fc1e0739b60e')}
             initialValue={initial.courseId}
             initialOption={options.course}
             lookup="training-class-courses"
@@ -60,19 +64,23 @@ export function ClassDetailFields({
             disabled={disabled}
             updateAction={updateAction}
           />
-          {courseHref ? (
-            <Link
-              href={courseHref}
-              className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-            >
-              Open course page →
-            </Link>
-          ) : null}
+          <GeneratedValue
+            value={
+              courseHref ? (
+                <Link
+                  href={courseHref}
+                  className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  <GeneratedText id="m_0ab383979f7a07" />
+                </Link>
+              ) : null
+            }
+          />
         </div>
         <LiveField
           id={id}
           field="title"
-          label="Title"
+          label={tGenerated('m_0decefd558c355')}
           initialValue={initial.title}
           maxLength={200}
           disabled={disabled}
@@ -82,7 +90,7 @@ export function ClassDetailFields({
           <LiveDateTime
             id={id}
             field="startsAt"
-            label="Starts at"
+            label={tGenerated('m_1fbd4c28375213')}
             initialValue={initial.startsAt}
             disabled={disabled}
             updateAction={updateAction}
@@ -90,7 +98,7 @@ export function ClassDetailFields({
           <LiveDateTime
             id={id}
             field="endsAt"
-            label="Ends at"
+            label={tGenerated('m_1c40705ea1aabf')}
             initialValue={initial.endsAt}
             disabled={disabled}
             updateAction={updateAction}
@@ -100,22 +108,22 @@ export function ClassDetailFields({
           <LiveRemoteSelect
             id={id}
             field="siteOrgUnitId"
-            label="Site (location)"
+            label={tGenerated('m_1fc91567299335')}
             initialValue={initial.siteOrgUnitId}
             initialOption={options.site}
             lookup="training-class-sites"
-            emptyLabel="— No site —"
+            emptyLabel={tGenerated('m_13cf177934a5e3')}
             disabled={disabled}
             updateAction={updateAction}
           />
           <LiveRemoteSelect
             id={id}
             field="instructorTenantUserId"
-            label="Instructor"
+            label={tGenerated('m_0797e9a65b95e2')}
             initialValue={initial.instructorTenantUserId}
             initialOption={options.instructor}
             lookup="training-class-instructors"
-            emptyLabel="— No instructor —"
+            emptyLabel={tGenerated('m_176dd8fa7fc529')}
             disabled={disabled}
             updateAction={updateAction}
           />
@@ -123,7 +131,7 @@ export function ClassDetailFields({
         <LiveField
           id={id}
           field="capacity"
-          label="Max attendees"
+          label={tGenerated('m_0b57f1d8f70101')}
           initialValue={initial.capacity}
           type="number"
           min={1}
@@ -134,7 +142,7 @@ export function ClassDetailFields({
         <LiveField
           id={id}
           field="notes"
-          label="Notes"
+          label={tGenerated('m_0b8dadcb78cd08')}
           initialValue={initial.notes}
           multiline
           rows={3}

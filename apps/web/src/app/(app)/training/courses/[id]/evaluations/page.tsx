@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound } from 'next/navigation'
 import { and, asc, count, eq, ilike, inArray, isNull, or } from 'drizzle-orm'
 import { Button, DetailHeader, EmptyState } from '@beaconhs/ui'
@@ -24,8 +28,9 @@ export const dynamic = 'force-dynamic'
 const SORTS = ['person'] as const
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Evaluations · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_0dcf71699d2da6', { value0: id.slice(0, 8) }) }
 }
 
 export default async function CourseEvaluationsPage({
@@ -35,6 +40,8 @@ export default async function CourseEvaluationsPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -172,69 +179,84 @@ export default async function CourseEvaluationsPage({
       header={
         <DetailHeader
           back={{ href: `/training/courses/${id}`, label: 'Back to course' }}
-          title={`Evaluations · ${course.name}`}
-          subtitle="Sign learners off on the practical components of this course"
+          title={tGenerated('m_0dcf71699d2da6', { value0: course.name })}
+          subtitle={tGenerated('m_06da1e876df6a1')}
         />
       }
     >
-      {lessons.length === 0 ? (
-        <EmptyState
-          icon={<UserCheck size={32} />}
-          title="No practical tests in this course"
-          description="Add a “Practical / physical test” lesson in the studio, then sign learners off here."
-        />
-      ) : (
-        <div className="space-y-4">
-          <form
-            action={enrollLearner.bind(null, id)}
-            className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
-          >
-            <RemoteSelectField
-              name="personId"
-              lookup="training-evaluation-people"
-              contextId={id}
-              placeholder="Enroll a learner…"
-              searchPlaceholder="Search people…"
-              sheetTitle="Enroll a learner"
-              clearable={false}
-              className="w-72 max-w-full"
-            />
-            <Button type="submit" size="sm">
-              <UserPlus size={14} /> Enroll
-            </Button>
-          </form>
-          <TableToolbar>
-            <SearchInput placeholder="Search learners…" />
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              {enrollmentCount} enrolled
-            </span>
-          </TableToolbar>
-          {rows.length === 0 ? (
+      <GeneratedValue
+        value={
+          lessons.length === 0 ? (
             <EmptyState
               icon={<UserCheck size={32} />}
-              title={
-                listParams.q ? 'No enrolled learners match your search' : 'No enrolled learners'
-              }
-              description={
-                listParams.q
-                  ? 'Try a different name or employee number.'
-                  : 'Enroll a learner above to start signing off practicals.'
-              }
+              title={tGenerated('m_01d18bea6e8486')}
+              description={tGenerated('m_1701deb5c92f97')}
             />
           ) : (
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-              <EvaluationsGrid courseId={id} lessons={lessons} rows={rows} bordered={false} />
-              <Pagination
-                basePath={`/training/courses/${id}/evaluations`}
-                currentParams={sp}
-                total={filteredEnrollmentCount}
-                page={listParams.page}
-                perPage={listParams.perPage}
+            <div className="space-y-4">
+              <form
+                action={enrollLearner.bind(null, id)}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <RemoteSelectField
+                  name="personId"
+                  lookup="training-evaluation-people"
+                  contextId={id}
+                  placeholder={tGenerated('m_1ca71e4464e800')}
+                  searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
+                  sheetTitle="Enroll a learner"
+                  clearable={false}
+                  className="w-72 max-w-full"
+                />
+                <Button type="submit" size="sm">
+                  <UserPlus size={14} /> <GeneratedText id="m_0f64da7946713b" />
+                </Button>
+              </form>
+              <TableToolbar>
+                <SearchInput placeholder={tGenerated('m_177e2342690354')} />
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <GeneratedValue value={enrollmentCount} /> <GeneratedText id="m_147bb20e32281d" />
+                </span>
+              </TableToolbar>
+              <GeneratedValue
+                value={
+                  rows.length === 0 ? (
+                    <EmptyState
+                      icon={<UserCheck size={32} />}
+                      title={tGeneratedValue(
+                        listParams.q
+                          ? tGenerated('m_0e0d186265bbec')
+                          : tGenerated('m_13d81dfeab7bc4'),
+                      )}
+                      description={tGeneratedValue(
+                        listParams.q
+                          ? tGenerated('m_11aabaa51ed686')
+                          : tGenerated('m_1065b3e0a488c3'),
+                      )}
+                    />
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                      <EvaluationsGrid
+                        courseId={id}
+                        lessons={lessons}
+                        rows={rows}
+                        bordered={false}
+                      />
+                      <Pagination
+                        basePath={`/training/courses/${id}/evaluations`}
+                        currentParams={sp}
+                        total={filteredEnrollmentCount}
+                        page={listParams.page}
+                        perPage={listParams.perPage}
+                      />
+                    </div>
+                  )
+                }
               />
             </div>
-          )}
-        </div>
-      )}
+          )
+        }
+      />
     </DetailPageLayout>
   )
 }

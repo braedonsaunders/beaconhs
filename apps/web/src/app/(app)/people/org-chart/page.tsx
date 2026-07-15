@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Org chart — renders the reports-to hierarchy as an indented vertical tree.
 //
 // Each manager_person_id link becomes a parent → child edge. Top-level nodes
@@ -24,7 +26,10 @@ import { ListPageLayout } from '@/components/page-layout'
 import { PeopleSubNav } from '../_components/people-sub-nav'
 import { TreeNode, type OrgNode } from './_tree-node'
 
-export const metadata = { title: 'Org chart' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_08c30fd0a5d347') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function OrgChartPage({
@@ -32,6 +37,7 @@ export default async function OrgChartPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const rootParam = typeof sp.root === 'string' ? sp.root : null
 
@@ -110,42 +116,64 @@ export default async function OrgChartPage({
         <>
           <PeopleSubNav active="org-chart" />
           <PageHeader
-            title="Org chart"
-            description="Reporting structure built from the manager assigned on each person. Edit a person to change who they report to."
+            title={tGenerated('m_08c30fd0a5d347')}
+            description={tGenerated('m_110bf330fbe0c9')}
             actions={
               rootParam ? (
                 <Link href="/people/org-chart">
-                  <Button variant="outline">View full chart</Button>
+                  <Button variant="outline">
+                    <GeneratedText id="m_15be5317649161" />
+                  </Button>
                 </Link>
               ) : null
             }
           />
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <Badge variant="secondary">{totalPeople} people</Badge>
-            <Badge variant="secondary">{orphanCount} top-level</Badge>
-            {rootParam ? <Badge variant="warning">Subtree view</Badge> : null}
+            <Badge variant="secondary">
+              <GeneratedValue value={totalPeople} /> <GeneratedText id="m_01376047f0528f" />
+            </Badge>
+            <Badge variant="secondary">
+              <GeneratedValue value={orphanCount} /> <GeneratedText id="m_1de83fcd001b92" />
+            </Badge>
+            <GeneratedValue
+              value={
+                rootParam ? (
+                  <Badge variant="warning">
+                    <GeneratedText id="m_045421d4990842" />
+                  </Badge>
+                ) : null
+              }
+            />
           </div>
         </>
       }
     >
-      {roots.length === 0 ? (
-        <EmptyState
-          icon={<Users size={32} />}
-          title="No people to chart"
-          description="Add a person and assign their manager to start building the org tree."
-          action={
-            <Link href="/people/new">
-              <Button>Add a person</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <div className="space-y-2">
-          {roots.map((r) => (
-            <TreeNode key={r.id} node={r} depth={0} />
-          ))}
-        </div>
-      )}
+      <GeneratedValue
+        value={
+          roots.length === 0 ? (
+            <EmptyState
+              icon={<Users size={32} />}
+              title={tGenerated('m_01db31d71ab48c')}
+              description={tGenerated('m_010a376d453e3c')}
+              action={
+                <Link href="/people/new">
+                  <Button>
+                    <GeneratedText id="m_01e3826a48269c" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <div className="space-y-2">
+              <GeneratedValue
+                value={roots.map((r) => (
+                  <TreeNode key={r.id} node={r} depth={0} />
+                ))}
+              />
+            </div>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

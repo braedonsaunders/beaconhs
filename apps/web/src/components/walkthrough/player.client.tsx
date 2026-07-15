@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The guided-tour overlay: dims the app, spotlights the current step's target
 // and shows a step card with Back / Next / Skip. Portaled to document.body —
 // PageContainer's fade-in transform would otherwise capture position:fixed
@@ -42,6 +49,8 @@ export function WalkthroughPlayer({
   /** Called exactly once when the tour ends, however it ends. */
   onFinish: (status: 'completed' | 'dismissed') => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const pathname = usePathname()
   const [index, setIndex] = useState(0)
@@ -158,23 +167,32 @@ export function WalkthroughPlayer({
   const waiting = targetState === 'looking'
 
   return createPortal(
-    <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label={step.title}>
+    <div
+      className="fixed inset-0 z-[100]"
+      role="dialog"
+      aria-modal="true"
+      aria-label={tGeneratedValue(step.title)}
+    >
       {/* Dimmer. With a spotlight the hole is punched via box-shadow. */}
-      {spotlight ? (
-        <div
-          aria-hidden
-          className="absolute rounded-lg ring-2 ring-teal-400 transition-all duration-200"
-          style={{
-            top: spotlight.top - 4,
-            left: spotlight.left - 4,
-            width: spotlight.width + 8,
-            height: spotlight.height + 8,
-            boxShadow: '0 0 0 9999px rgba(2, 6, 23, 0.6)',
-          }}
-        />
-      ) : (
-        <div aria-hidden className="absolute inset-0 bg-slate-950/60" />
-      )}
+      <GeneratedValue
+        value={
+          spotlight ? (
+            <div
+              aria-hidden
+              className="absolute rounded-lg ring-2 ring-teal-400 transition-all duration-200"
+              style={{
+                top: spotlight.top - 4,
+                left: spotlight.left - 4,
+                width: spotlight.width + 8,
+                height: spotlight.height + 8,
+                boxShadow: '0 0 0 9999px rgba(2, 6, 23, 0.6)',
+              }}
+            />
+          ) : (
+            <div aria-hidden className="absolute inset-0 bg-slate-950/60" />
+          )
+        }
+      />
 
       {/* Step card — desktop floats near the target, phones get a bottom sheet. */}
       <div
@@ -186,20 +204,23 @@ export function WalkthroughPlayer({
       >
         <div className="mb-1 flex items-start justify-between gap-3">
           <div className="text-[11px] font-semibold tracking-wide text-teal-700 uppercase dark:text-teal-300">
-            {walkthrough.title} · {index + 1}/{total}
+            <GeneratedValue value={walkthrough.title} /> · <GeneratedValue value={index + 1} />/
+            <GeneratedValue value={total} />
           </div>
           <button
             type="button"
             onClick={() => finish('dismissed')}
-            aria-label="Close tour"
+            aria-label={tGenerated('m_057ec1a7d3f888')}
             className="rounded p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
           >
             <X size={15} />
           </button>
         </div>
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{step.title}</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          <GeneratedValue value={step.title} />
+        </h2>
         <p className="mt-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          {waiting ? 'One moment…' : step.body}
+          <GeneratedValue value={waiting ? <GeneratedText id="m_12276be52c8637" /> : step.body} />
         </p>
         <div className="mt-3 flex items-center justify-between gap-2">
           <button
@@ -207,19 +228,31 @@ export function WalkthroughPlayer({
             onClick={() => finish('dismissed')}
             className="text-xs font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
           >
-            Skip tour
+            <GeneratedText id="m_1367cf6aef1ff0" />
           </button>
           <div className="flex items-center gap-2">
-            {index > 0 ? (
-              <Button variant="outline" size="sm" onClick={() => setIndex((i) => i - 1)}>
-                Back
-              </Button>
-            ) : null}
+            <GeneratedValue
+              value={
+                index > 0 ? (
+                  <Button variant="outline" size="sm" onClick={() => setIndex((i) => i - 1)}>
+                    <GeneratedText id="m_1a7cefe5a9894e" />
+                  </Button>
+                ) : null
+              }
+            />
             <Button
               size="sm"
               onClick={() => (isLast ? finish('completed') : setIndex((i) => i + 1))}
             >
-              {isLast ? 'Done' : 'Next'}
+              <GeneratedValue
+                value={
+                  isLast ? (
+                    <GeneratedText id="m_00609f822e0571" />
+                  ) : (
+                    <GeneratedText id="m_08b5fa148b2af7" />
+                  )
+                }
+              />
             </Button>
           </div>
         </div>

@@ -1,6 +1,10 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { EmailLogListView } from '@/components/email-log/list-view'
 
-export const metadata = { title: 'Email log · Platform' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_16173cb70c8501') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function PlatformEmailLogPage({

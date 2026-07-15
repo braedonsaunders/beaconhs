@@ -1,3 +1,4 @@
+import { useGeneratedTranslations } from '@/i18n/generated'
 import { PageHeader, Skeleton } from '@beaconhs/ui'
 import { ListPageLayout } from '@/components/page-layout'
 import { RecordsSkeleton } from '@/components/records-skeleton'
@@ -8,13 +9,14 @@ import { RecordsSkeleton } from '@/components/records-skeleton'
  * table.
  */
 export default function Loading() {
+  const tGenerated = useGeneratedTranslations()
   return (
     <ListPageLayout
       header={
         <>
           <PageHeader
-            title="Safe Distance"
-            description="Pneumatic pressure-test stand-off — NASA-Glenn, ASME PCC-2, and Lloyd's Register."
+            title={tGenerated('m_10d9a8a587b168')}
+            description={tGenerated('m_0f6ba29274dedf')}
             back={{ href: '/tools', label: 'All tools' }}
             actions={<Skeleton className="h-9 w-40" />}
           />

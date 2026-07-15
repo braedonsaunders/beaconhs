@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { HardHat } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
@@ -16,7 +19,10 @@ import { createAndIssuePpe } from './_actions'
 import { PpeDrawers } from './_drawers'
 import { PpeRecordsTable, type PpeTableRow } from './_records-table'
 
-export const metadata = { title: 'PPE' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_18391e161b9ed6') }
+}
 
 const SORTS = [
   'type',
@@ -43,6 +49,8 @@ export default async function PpePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'assigned',
@@ -169,29 +177,37 @@ export default async function PpePage({
       header={
         <>
           <PageHeader
-            title="PPE"
-            description="Issue, inspect, and track PPE through its lifecycle."
+            title={tGenerated('m_18391e161b9ed6')}
+            description={tGenerated('m_1b88ed46c964ad')}
             actions={
               <div className="flex items-center gap-2">
-                {canExport ? (
-                  <a href={buildExportHref('/ppe/export.csv', sp)}>
-                    <Button variant="outline">Export CSV</Button>
-                  </a>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    canExport ? (
+                      <a href={buildExportHref('/ppe/export.csv', sp)}>
+                        <Button variant="outline">
+                          <GeneratedText id="m_14c6440eca1edc" />
+                        </Button>
+                      </a>
+                    ) : null
+                  }
+                />
                 <Link href="/ppe?drawer=issue" scroll={false}>
-                  <Button>Issue PPE</Button>
+                  <Button>
+                    <GeneratedText id="m_14d0f6a29a2597" />
+                  </Button>
                 </Link>
               </div>
             }
           />
           <PpeSubNav active="records" />
           <TableToolbar>
-            <SearchInput placeholder="Search type or serial #" />
+            <SearchInput placeholder={tGenerated('m_11cff7d8946766')} />
             <FilterChips
               basePath="/ppe"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               allLabel="All statuses"
               defaultValue="issued"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
@@ -200,35 +216,45 @@ export default async function PpePage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<HardHat size={32} />}
-          title={params.q || statusFilter ? 'No PPE matches these filters' : 'No PPE registered'}
-          description="Track helmets, harnesses, glasses, gloves, and every other inspectable item."
-          action={
-            <Link href="/ppe?drawer=issue" scroll={false}>
-              <Button>Issue PPE</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <PpeRecordsTable
-            rows={tableRows}
-            basePath="/ppe"
-            currentParams={sp}
-            sort={params.sort}
-            dir={params.dir}
-          />
-          <Pagination
-            basePath="/ppe"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<HardHat size={32} />}
+              title={tGeneratedValue(
+                params.q || statusFilter
+                  ? tGenerated('m_0248860124a3b8')
+                  : tGenerated('m_1377ea870e44b9'),
+              )}
+              description={tGenerated('m_14072059043556')}
+              action={
+                <Link href="/ppe?drawer=issue" scroll={false}>
+                  <Button>
+                    <GeneratedText id="m_14d0f6a29a2597" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <PpeRecordsTable
+                rows={tableRows}
+                basePath="/ppe"
+                currentParams={sp}
+                sort={params.sort}
+                dir={params.dir}
+              />
+              <Pagination
+                basePath="/ppe"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
       <PpeDrawers
         openDrawer={issueDrawer}
         closeHref="/ppe"

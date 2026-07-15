@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 // Confirm card for a drafted (proposed) write. The draft tool returns a signed
 // proposal in its output; this renders the preview + Apply/Discard. The real
 // mutation happens only in _commit-actions.ts after the user clicks Apply.
@@ -65,6 +67,7 @@ function previewRows(kind: string, p: Record<string, unknown>): { label: string;
 }
 
 export function ProposalCard({ proposal }: { proposal: ProposalData }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [state, setState] = useState<'idle' | 'done' | 'discarded' | 'error'>('idle')
   const [result, setResult] = useState<{ reference: string; href: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -75,7 +78,7 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
   const description = proposal.preview.description ? String(proposal.preview.description) : null
 
   function apply() {
-    setError(null)
+    setError(tGeneratedValue(null))
     start(async () => {
       let res: CommitResult
       if (proposal.kind === 'create_corrective_action') {
@@ -95,7 +98,7 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
         setResult({ reference: res.reference, href: res.href })
         setState('done')
       } else {
-        setError(res.error)
+        setError(tGeneratedValue(res.error))
         setState('error')
       }
     })
@@ -104,7 +107,7 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
   if (state === 'discarded') {
     return (
       <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900/50">
-        Draft discarded.
+        <GeneratedText id="m_17980117dac8cb" />
       </div>
     )
   }
@@ -114,60 +117,93 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
       <div className="flex items-center gap-2 border-b border-teal-200/70 px-3 py-2 dark:border-teal-900/40">
         <Sparkles className="h-4 w-4 text-teal-600 dark:text-teal-400" />
         <span className="text-xs font-semibold tracking-wide text-teal-700 uppercase dark:text-teal-300">
-          Drafted {label.toLowerCase()} · needs your approval
+          <GeneratedText id="m_012d3d77fa9cbf" /> <GeneratedValue value={label.toLowerCase()} />{' '}
+          <GeneratedText id="m_1588a1287c3b57" />
         </span>
       </div>
       <div className="space-y-3 px-3 py-3">
         <div>
-          <div className="font-medium text-slate-900 dark:text-slate-100">{title}</div>
-          {description ? (
-            <p className="mt-1 text-sm whitespace-pre-wrap text-slate-600 dark:text-slate-300">
-              {description}
-            </p>
-          ) : null}
+          <div className="font-medium text-slate-900 dark:text-slate-100">
+            <GeneratedValue value={title} />
+          </div>
+          <GeneratedValue
+            value={
+              description ? (
+                <p className="mt-1 text-sm whitespace-pre-wrap text-slate-600 dark:text-slate-300">
+                  <GeneratedValue value={description} />
+                </p>
+              ) : null
+            }
+          />
         </div>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-3">
-          {previewRows(proposal.kind, proposal.preview).map((r) => (
-            <div key={r.label}>
-              <dt className="text-[11px] tracking-wide text-slate-400 uppercase dark:text-slate-500">
-                {r.label}
-              </dt>
-              <dd className="text-slate-700 dark:text-slate-200">{r.value}</dd>
-            </div>
-          ))}
+          <GeneratedValue
+            value={previewRows(proposal.kind, proposal.preview).map((r) => (
+              <div key={r.label}>
+                <dt className="text-[11px] tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                  <GeneratedValue value={r.label} />
+                </dt>
+                <dd className="text-slate-700 dark:text-slate-200">
+                  <GeneratedValue value={r.value} />
+                </dd>
+              </div>
+            ))}
+          />
         </dl>
 
-        {state === 'done' && result ? (
-          <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-300">
-            <Check className="h-4 w-4" />
-            Created {result.reference}.
-            <a href={result.href} className="inline-flex items-center gap-1 font-medium underline">
-              Open <ExternalLink className="h-3 w-3" />
-            </a>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Button type="button" size="sm" onClick={apply} disabled={pending}>
-              <Check className="h-4 w-4" />
-              {pending ? 'Applying…' : `Create ${label.toLowerCase()}`}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => setState('discarded')}
-              disabled={pending}
-            >
-              Discard
-            </Button>
-          </div>
-        )}
-        {state === 'error' && error ? (
-          <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
-            <FileWarning className="h-4 w-4" />
-            {error}
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            state === 'done' && result ? (
+              <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                <Check className="h-4 w-4" />
+                <GeneratedText id="m_10cbe051fb5e05" /> <GeneratedValue value={result.reference} />.
+                <a
+                  href={result.href}
+                  className="inline-flex items-center gap-1 font-medium underline"
+                >
+                  <GeneratedText id="m_107ab58c3c38bc" /> <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button type="button" size="sm" onClick={apply} disabled={pending}>
+                  <Check className="h-4 w-4" />
+                  <GeneratedValue
+                    value={
+                      pending ? (
+                        <GeneratedText id="m_07e89d37979c9e" />
+                      ) : (
+                        <GeneratedText
+                          id="m_0c71c6fe29091f"
+                          values={{ value0: label.toLowerCase() }}
+                        />
+                      )
+                    }
+                  />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setState('discarded')}
+                  disabled={pending}
+                >
+                  <GeneratedText id="m_056c8c15d77140" />
+                </Button>
+              </div>
+            )
+          }
+        />
+        <GeneratedValue
+          value={
+            state === 'error' && error ? (
+              <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                <FileWarning className="h-4 w-4" />
+                <GeneratedValue value={error} />
+              </div>
+            ) : null
+          }
+        />
       </div>
     </div>
   )

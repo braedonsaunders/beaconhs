@@ -27,6 +27,7 @@ import { resolveAnalyticsAccess } from '@/lib/analytics-access'
 import { isUuid } from '@/lib/list-params'
 import { loadTenantBranding } from '../_run'
 import { validateCustomQuery, validateReportLayout } from './validate'
+import { getGeneratedValueTranslations } from '@/i18n/generated.server'
 
 /** Definition category for an entity key. Scoped per-app keys
  *  (`form_responses:<templateId>`) fall back to their base table. */
@@ -217,6 +218,7 @@ export async function previewCustomReport(payload: {
   name?: string
 }): Promise<StudioPreviewResult> {
   try {
+    const tGeneratedValue = await getGeneratedValueTranslations()
     const ctx = await requireRequestContext()
     assertCan(ctx, 'reports.builder')
     const range = computeRangeFor('custom_query', {})
@@ -247,6 +249,7 @@ export async function previewCustomReport(payload: {
       generatedAt: new Date(),
       summary: layout.showSummary ? result.summary : undefined,
       groups: result.groups,
+      translate: tGeneratedValue,
     })
     const css =
       buildReportPageCss(layout, {

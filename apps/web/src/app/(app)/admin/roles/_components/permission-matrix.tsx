@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // Grouped permission picker for the role editor. Renders one real checkbox per
 // catalogue permission (so the set posts as repeated `permissions` fields in a
 // plain server-action form) while managing `checked` state in React to power
@@ -49,7 +51,8 @@ export function PermissionMatrix({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-slate-500 dark:text-slate-400">
-          {selected.size} of {allKeys.length} permissions
+          <GeneratedValue value={selected.size} /> <GeneratedText id="m_00e704d1194796" />{' '}
+          <GeneratedValue value={allKeys.length} /> <GeneratedText id="m_09bf4989e97c65" />
         </span>
         <button
           type="button"
@@ -60,72 +63,98 @@ export function PermissionMatrix({
             readOnly && 'cursor-not-allowed text-slate-400 hover:no-underline dark:text-slate-500',
           )}
         >
-          {allOn ? 'Clear all' : 'Select all'}
+          <GeneratedValue
+            value={
+              allOn ? (
+                <GeneratedText id="m_1fb0401a79fc56" />
+              ) : (
+                <GeneratedText id="m_156c1ecb65d5e8" />
+              )
+            }
+          />
         </button>
       </div>
 
-      {PERMISSION_GROUPS.map((g) => {
-        const keys = g.permissions.map((p) => p.key)
-        const groupOn = keys.every((k) => selected.has(k))
-        const groupSome = !groupOn && keys.some((k) => selected.has(k))
-        return (
-          <div
-            key={g.key}
-            className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800"
-          >
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/60 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/60">
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                {g.label}
-                {groupSome ? (
-                  <span className="ml-1.5 text-xs font-normal text-slate-400">partial</span>
-                ) : null}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setMany(keys, !groupOn)}
-                disabled={readOnly}
-                className={cn(
-                  'text-xs font-medium text-teal-700 hover:underline dark:text-teal-300',
-                  readOnly &&
-                    'cursor-not-allowed text-slate-400 hover:no-underline dark:text-slate-500',
-                )}
-              >
-                {groupOn ? 'Clear' : 'Select all'}
-              </button>
+      <GeneratedValue
+        value={PERMISSION_GROUPS.map((g) => {
+          const keys = g.permissions.map((p) => p.key)
+          const groupOn = keys.every((k) => selected.has(k))
+          const groupSome = !groupOn && keys.some((k) => selected.has(k))
+          return (
+            <div
+              key={g.key}
+              className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800"
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/60 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/60">
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  <GeneratedValue value={g.label} />
+                  <GeneratedValue
+                    value={
+                      groupSome ? (
+                        <span className="ml-1.5 text-xs font-normal text-slate-400">
+                          <GeneratedText id="m_17523399d3da62" />
+                        </span>
+                      ) : null
+                    }
+                  />
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setMany(keys, !groupOn)}
+                  disabled={readOnly}
+                  className={cn(
+                    'text-xs font-medium text-teal-700 hover:underline dark:text-teal-300',
+                    readOnly &&
+                      'cursor-not-allowed text-slate-400 hover:no-underline dark:text-slate-500',
+                  )}
+                >
+                  <GeneratedValue
+                    value={
+                      groupOn ? (
+                        <GeneratedText id="m_1e4d427e74e767" />
+                      ) : (
+                        <GeneratedText id="m_156c1ecb65d5e8" />
+                      )
+                    }
+                  />
+                </button>
+              </div>
+              <ul className="grid gap-x-4 gap-y-1 p-3 sm:grid-cols-2">
+                <GeneratedValue
+                  value={g.permissions.map((p) => {
+                    const on = selected.has(p.key)
+                    return (
+                      <li key={p.key}>
+                        <label
+                          className={cn(
+                            'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                            readOnly && 'cursor-default',
+                            on
+                              ? 'text-slate-900 dark:text-slate-100'
+                              : 'text-slate-600 dark:text-slate-400',
+                            !readOnly && 'hover:bg-slate-50 dark:hover:bg-slate-800/60',
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            name={name}
+                            value={p.key}
+                            checked={on}
+                            onChange={() => toggle(p.key)}
+                            disabled={readOnly}
+                            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500/40 dark:border-slate-600 dark:bg-slate-800"
+                          />
+                          <GeneratedValue value={p.label} />
+                        </label>
+                      </li>
+                    )
+                  })}
+                />
+              </ul>
             </div>
-            <ul className="grid gap-x-4 gap-y-1 p-3 sm:grid-cols-2">
-              {g.permissions.map((p) => {
-                const on = selected.has(p.key)
-                return (
-                  <li key={p.key}>
-                    <label
-                      className={cn(
-                        'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-                        readOnly && 'cursor-default',
-                        on
-                          ? 'text-slate-900 dark:text-slate-100'
-                          : 'text-slate-600 dark:text-slate-400',
-                        !readOnly && 'hover:bg-slate-50 dark:hover:bg-slate-800/60',
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        name={name}
-                        value={p.key}
-                        checked={on}
-                        onChange={() => toggle(p.key)}
-                        disabled={readOnly}
-                        className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500/40 dark:border-slate-600 dark:bg-slate-800"
-                      />
-                      {p.label}
-                    </label>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        )
-      })}
+          )
+        })}
+      />
     </div>
   )
 }

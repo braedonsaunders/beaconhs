@@ -1,5 +1,9 @@
 'use client'
 
+import { useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
+import { GeneratedText } from '@/i18n/generated'
+
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
@@ -26,6 +30,7 @@ export function AddSignatureDrawerBody({
   closeHref: string
   addAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [type, setType] = useState<'internal' | 'external'>('internal')
   const [personId, setPersonId] = useState<string>('')
@@ -74,83 +79,121 @@ export function AddSignatureDrawerBody({
     <>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>Signer type</Label>
+          <Label>
+            <GeneratedText id="m_0eb37b54326290" />
+          </Label>
           <Select value={type} onChange={(e) => setType(e.target.value as 'internal' | 'external')}>
-            <option value="internal">Internal (employee)</option>
-            <option value="external">External (visitor / contractor)</option>
+            <option value="internal">
+              <GeneratedText id="m_1ad5bdc61b1e18" />
+            </option>
+            <option value="external">
+              <GeneratedText id="m_017ddded95fdb4" />
+            </option>
           </Select>
         </div>
-        {type === 'internal' ? (
-          <div className="space-y-1.5">
-            <Label>Person</Label>
-            <SearchSelect
-              value={personId}
-              onChange={setPersonId}
-              options={people.map((p) => ({
-                value: p.id,
-                label: `${p.lastName}, ${p.firstName}`,
-                hint: p.employeeNo ?? undefined,
-              }))}
-              placeholder="Select a person..."
-              clearable
-              emptyLabel="—"
-            />
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            <Label>External name</Label>
-            <Input
-              value={externalName}
-              onChange={(e) => setExternalName(e.target.value)}
-              placeholder="Full name"
-            />
-          </div>
-        )}
-        {showCSRoles ? (
-          <div className="space-y-1.5">
-            <Label>CS role(s)</Label>
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={csEntrant}
-                  onChange={(e) => setCsEntrant(e.target.checked)}
+        <GeneratedValue
+          value={
+            type === 'internal' ? (
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_12e926c9216094" />
+                </Label>
+                <SearchSelect
+                  value={personId}
+                  onChange={setPersonId}
+                  options={people.map((p) => ({
+                    value: p.id,
+                    label: `${p.lastName}, ${p.firstName}`,
+                    hint: p.employeeNo ?? undefined,
+                  }))}
+                  placeholder={tGenerated('m_1217000e094ba7')}
+                  clearable
+                  emptyLabel="—"
                 />
-                Entrant
-              </label>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={csAttendant}
-                  onChange={(e) => setCsAttendant(e.target.checked)}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_07381c82ba8cc2" />
+                </Label>
+                <Input
+                  value={externalName}
+                  onChange={(e) => setExternalName(e.target.value)}
+                  placeholder={tGenerated('m_0b8541b5894beb')}
                 />
-                Attendant
-              </label>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={csRescue}
-                  onChange={(e) => setCsRescue(e.target.checked)}
-                />
-                Rescue
-              </label>
-            </div>
-          </div>
-        ) : null}
+              </div>
+            )
+          }
+        />
+        <GeneratedValue
+          value={
+            showCSRoles ? (
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_1dcbcb1a64b03f" />
+                </Label>
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={csEntrant}
+                      onChange={(e) => setCsEntrant(e.target.checked)}
+                    />
+                    <GeneratedText id="m_022b05599a1a05" />
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={csAttendant}
+                      onChange={(e) => setCsAttendant(e.target.checked)}
+                    />
+                    <GeneratedText id="m_0d8bbd3094ef27" />
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={csRescue}
+                      onChange={(e) => setCsRescue(e.target.checked)}
+                    />
+                    <GeneratedText id="m_1bac787ac2b6fc" />
+                  </label>
+                </div>
+              </div>
+            ) : null
+          }
+        />
         <div className="space-y-1.5">
-          <Label>Signature</Label>
+          <Label>
+            <GeneratedText id="m_0c0bc02db58371" />
+          </Label>
           <SignaturePad value={signature} onChange={setSignature} />
         </div>
-        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+        <GeneratedValue
+          value={
+            err ? (
+              <div className="text-sm text-red-600">
+                <GeneratedValue value={err} />
+              </div>
+            ) : null
+          }
+        />
       </div>
       <div className="sticky bottom-0 -mx-6 mt-6 -mb-5 flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3 dark:border-slate-800 dark:bg-slate-800/50">
         <Link href={closeHref as any}>
           <Button type="button" variant="outline">
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
         </Link>
         <Button type="button" onClick={submit} disabled={pending}>
-          {pending ? 'Saving…' : 'Add signature'}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_106811f2aac664" />
+              ) : (
+                <GeneratedText id="m_173c1ae83a1c73" />
+              )
+            }
+          />
         </Button>
       </div>
     </>

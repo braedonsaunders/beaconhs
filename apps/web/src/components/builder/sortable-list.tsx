@@ -1,5 +1,11 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Straight vertical drag-to-reorder list, built on framer-motion's Reorder —
 // the same pattern the app/form designer uses for fields. Drag via the grip
 // handle only (so clicking a row selects it); up/down arrows remain as a
@@ -29,7 +35,7 @@ export function SortableList<T>({
       as="ul"
       className={cn('divide-y divide-slate-100 dark:divide-slate-800', className)}
     >
-      {children}
+      <GeneratedValue value={children} />
     </Reorder.Group>
   )
 }
@@ -55,6 +61,7 @@ export function SortableRow<T>({
   canDown?: boolean
   children: React.ReactNode
 }) {
+  const tGenerated = useGeneratedTranslations()
   const controls = useDragControls()
   return (
     <Reorder.Item
@@ -71,7 +78,7 @@ export function SortableRow<T>({
     >
       <button
         type="button"
-        aria-label="Drag to reorder"
+        aria-label={tGenerated('m_0b04b904ce4f9a')}
         onPointerDown={(e) => controls.start(e)}
         className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600 dark:hover:text-slate-400"
       >
@@ -82,24 +89,44 @@ export function SortableRow<T>({
         onClick={onSelect}
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
-        {children}
+        <GeneratedValue value={children} />
       </button>
       <div className="flex shrink-0 items-center gap-0.5">
-        {onMoveUp ? (
-          <RowIconButton title="Move up" onClick={onMoveUp} disabled={!canUp}>
-            <ArrowUp size={12} />
-          </RowIconButton>
-        ) : null}
-        {onMoveDown ? (
-          <RowIconButton title="Move down" onClick={onMoveDown} disabled={!canDown}>
-            <ArrowDown size={12} />
-          </RowIconButton>
-        ) : null}
-        {onDelete ? (
-          <RowIconButton title="Delete" onClick={onDelete}>
-            <Trash2 size={12} className="text-rose-500" />
-          </RowIconButton>
-        ) : null}
+        <GeneratedValue
+          value={
+            onMoveUp ? (
+              <RowIconButton
+                title={tGenerated('m_1ec1460770eaa0')}
+                onClick={onMoveUp}
+                disabled={!canUp}
+              >
+                <ArrowUp size={12} />
+              </RowIconButton>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            onMoveDown ? (
+              <RowIconButton
+                title={tGenerated('m_14ab8cefda3cf9')}
+                onClick={onMoveDown}
+                disabled={!canDown}
+              >
+                <ArrowDown size={12} />
+              </RowIconButton>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            onDelete ? (
+              <RowIconButton title={tGenerated('m_11773f3c3f7558')} onClick={onDelete}>
+                <Trash2 size={12} className="text-rose-500" />
+              </RowIconButton>
+            ) : null
+          }
+        />
       </div>
     </Reorder.Item>
   )
@@ -116,15 +143,16 @@ function RowIconButton({
   disabled?: boolean
   children: React.ReactNode
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <button
       type="button"
-      title={title}
+      title={tGeneratedValue(title)}
       onClick={onClick}
       disabled={disabled}
       className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-30 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
     >
-      {children}
+      <GeneratedValue value={children} />
     </button>
   )
 }

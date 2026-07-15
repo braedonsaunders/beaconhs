@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // True print preview for a report document. Paginates the server-rendered
 // document body into real page boxes with Paged.js — @page size, margins, and
 // running footer page numbers — so what you see here is exactly what the
@@ -102,20 +104,34 @@ export function ReportPagedPreview({
       <style>{`
         .bhs-paged-host .pagedjs_page { background:#fff; box-shadow:0 1px 10px rgba(0,0,0,.25); margin:0 auto 24px; }
       `}</style>
-      {err ? (
-        <p className="mb-3 text-center text-sm text-red-600 dark:text-red-400">
-          Preview error: {err}
-        </p>
-      ) : pages != null ? (
-        <p className="mb-3 text-center text-xs font-medium text-slate-600 dark:text-slate-300">
-          {pages} page{pages === 1 ? '' : 's'}
-          {caption ? (
-            <span className="font-normal text-slate-500 dark:text-slate-400"> · {caption}</span>
-          ) : null}
-        </p>
-      ) : (
-        <p className="mb-3 text-center text-xs text-slate-500 dark:text-slate-400">Paginating…</p>
-      )}
+      <GeneratedValue
+        value={
+          err ? (
+            <p className="mb-3 text-center text-sm text-red-600 dark:text-red-400">
+              <GeneratedText id="m_113ec1672ca48f" /> <GeneratedValue value={err} />
+            </p>
+          ) : pages != null ? (
+            <p className="mb-3 text-center text-xs font-medium text-slate-600 dark:text-slate-300">
+              <GeneratedValue value={pages} /> <GeneratedText id="m_095a79b2a25706" />
+              <GeneratedValue value={pages === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />} />
+              <GeneratedValue
+                value={
+                  caption ? (
+                    <span className="font-normal text-slate-500 dark:text-slate-400">
+                      {' '}
+                      · <GeneratedValue value={caption} />
+                    </span>
+                  ) : null
+                }
+              />
+            </p>
+          ) : (
+            <p className="mb-3 text-center text-xs text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_0d7c240956c1d3" />
+            </p>
+          )
+        }
+      />
       <div ref={ref} className="bhs-paged-host" />
     </div>
   )

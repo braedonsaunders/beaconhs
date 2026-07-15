@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { randomUUID } from 'node:crypto'
 import { notFound } from 'next/navigation'
@@ -252,8 +256,9 @@ async function updateTextField(formData: FormData) {
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `CA · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_129f86a1832647', { value0: id.slice(0, 8) }) }
 }
 
 export default async function CorrectiveActionPage({
@@ -263,6 +268,8 @@ export default async function CorrectiveActionPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -395,8 +402,10 @@ export default async function CorrectiveActionPage({
       header={
         <DetailHeader
           back={{ href: '/corrective-actions', label: 'Back to corrective actions' }}
-          title={ca.title}
-          subtitle={`${ca.reference}${ca.assignedOn ? ` · assigned ${ca.assignedOn}` : ''}`}
+          title={tGeneratedValue(ca.title)}
+          subtitle={tGeneratedValue(
+            `${ca.reference}${ca.assignedOn ? ` · assigned ${ca.assignedOn}` : ''}`,
+          )}
           badge={
             <div className="flex items-center gap-2">
               <Badge
@@ -409,24 +418,32 @@ export default async function CorrectiveActionPage({
                 }
                 className="capitalize"
               >
-                {ca.severity}
+                <GeneratedValue value={ca.severity} />
               </Badge>
               <Badge
                 variant={ca.status === 'closed' ? 'success' : 'warning'}
                 className="capitalize"
               >
-                {ca.status.replace(/_/g, ' ')}
+                <GeneratedValue value={ca.status.replace(/_/g, ' ')} />
               </Badge>
-              {locked ? (
-                <Badge variant="outline" className="border-amber-300 text-amber-800">
-                  <Lock size={10} className="mr-1" /> Locked
-                </Badge>
-              ) : null}
-              {ca.verificationRequired ? (
-                <Badge variant="outline" className="border-sky-300 text-sky-800">
-                  Verification required
-                </Badge>
-              ) : null}
+              <GeneratedValue
+                value={
+                  locked ? (
+                    <Badge variant="outline" className="border-amber-300 text-amber-800">
+                      <Lock size={10} className="mr-1" /> <GeneratedText id="m_0e259fa0babc2d" />
+                    </Badge>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  ca.verificationRequired ? (
+                    <Badge variant="outline" className="border-sky-300 text-sky-800">
+                      <GeneratedText id="m_07a541edc3e0c7" />
+                    </Badge>
+                  ) : null
+                }
+              />
             </div>
           }
           actions={
@@ -448,19 +465,27 @@ export default async function CorrectiveActionPage({
       alerts={
         locked ? (
           <Alert variant="warning">
-            <AlertTitle>This action is locked</AlertTitle>
+            <AlertTitle>
+              <GeneratedText id="m_15ca38df986113" />
+            </AlertTitle>
             <AlertDescription>
-              Closed on{' '}
-              {ca.closedAt ? formatDate(new Date(ca.closedAt), ctx.timezone, ctx.locale) : '—'}.
-              Reopen from the header to edit.
+              <GeneratedText id="m_01381607e25f0d" />
+              <GeneratedValue value={' '} />
+              <GeneratedValue
+                value={
+                  ca.closedAt ? formatDate(new Date(ca.closedAt), ctx.timezone, ctx.locale) : '—'
+                }
+              />
+              <GeneratedText id="m_1d0f03f015029b" />
             </AlertDescription>
           </Alert>
         ) : ca.verificationRequired && !ca.verifiedAt ? (
           <Alert variant="info">
-            <AlertTitle>Verification pending</AlertTitle>
+            <AlertTitle>
+              <GeneratedText id="m_1c1c6acd0769c9" />
+            </AlertTitle>
             <AlertDescription>
-              This corrective action can't be closed until a verifier signs off in the Verification
-              section.
+              <GeneratedText id="m_1402c94aca2b1a" />
             </AlertDescription>
           </Alert>
         ) : null
@@ -468,7 +493,9 @@ export default async function CorrectiveActionPage({
       subtabs={<SectionNav sections={sectionItems} />}
     >
       <div className="space-y-5">
-        {pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
+        <GeneratedValue
+          value={pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
+        />
         {/* ===================== OVERVIEW ===================== */}
         <section id="section-overview" className="scroll-mt-2 space-y-5">
           <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-900">
@@ -496,48 +523,52 @@ export default async function CorrectiveActionPage({
                   />
                 </svg>
                 <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {pct}%
+                  <GeneratedValue value={pct} />%
                 </span>
               </div>
               <div className="min-w-0">
                 <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                  {doneCount} of {milestones.length} steps complete
+                  <GeneratedValue value={doneCount} /> <GeneratedText id="m_00e704d1194796" />{' '}
+                  <GeneratedValue value={milestones.length} />{' '}
+                  <GeneratedText id="m_0562433d6260c9" />
                 </div>
                 <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
-                  {ca.source ? `${ca.source.replace(/_/g, ' ')} · ` : ''}
-                  {ca.reference}
+                  <GeneratedValue value={ca.source ? `${ca.source.replace(/_/g, ' ')} · ` : ''} />
+                  <GeneratedValue value={ca.reference} />
                 </div>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-1 lg:grid-cols-2">
-              {milestones.map((m) => (
-                <div key={m.label} className="flex items-center gap-2 text-sm">
-                  <span
-                    className={
-                      m.done
-                        ? 'inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white'
-                        : 'inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 dark:border-slate-600'
-                    }
-                  >
-                    {m.done ? '✓' : ''}
-                  </span>
-                  <span
-                    className={
-                      m.done
-                        ? 'text-slate-700 dark:text-slate-200'
-                        : 'text-slate-400 dark:text-slate-500'
-                    }
-                  >
-                    {m.label}
-                  </span>
-                </div>
-              ))}
+              <GeneratedValue
+                value={milestones.map((m) => (
+                  <div key={m.label} className="flex items-center gap-2 text-sm">
+                    <span
+                      className={
+                        m.done
+                          ? 'inline-flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white'
+                          : 'inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 dark:border-slate-600'
+                      }
+                    >
+                      <GeneratedValue value={m.done ? '✓' : ''} />
+                    </span>
+                    <span
+                      className={
+                        m.done
+                          ? 'text-slate-700 dark:text-slate-200'
+                          : 'text-slate-400 dark:text-slate-500'
+                      }
+                    >
+                      <GeneratedValue value={m.label} />
+                    </span>
+                  </div>
+                ))}
+              />
             </div>
           </div>
 
           <Section
-            title="General"
-            subtitle="What, who, when"
+            title={tGenerated('m_1086584d9aca6a')}
+            subtitle={tGenerated('m_03ce181c7f3cf6')}
             icon={<Building2 size={20} />}
             tone="slate"
           >
@@ -546,7 +577,7 @@ export default async function CorrectiveActionPage({
                 <LiveField
                   id={id}
                   field="title"
-                  label="Title"
+                  label={tGenerated('m_0decefd558c355')}
                   initialValue={ca.title}
                   disabled={locked}
                   updateAction={updateTextField}
@@ -555,7 +586,7 @@ export default async function CorrectiveActionPage({
               <LiveSelect
                 id={id}
                 field="severity"
-                label="Severity"
+                label={tGenerated('m_168b365cc671bf')}
                 initialValue={ca.severity}
                 allowEmpty={false}
                 options={SEVERITIES.map((s) => ({ value: s, label: s }))}
@@ -565,7 +596,7 @@ export default async function CorrectiveActionPage({
               <LiveSelect
                 id={id}
                 field="source"
-                label="Source category"
+                label={tGenerated('m_054b853e6873d3')}
                 initialValue={ca.source}
                 options={SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))}
                 disabled={locked}
@@ -574,7 +605,7 @@ export default async function CorrectiveActionPage({
               <LiveRemoteSelect
                 id={id}
                 field="siteOrgUnitId"
-                label="Site"
+                label={tGenerated('m_020146dd3d3d5a')}
                 initialValue={ca.siteOrgUnitId}
                 lookup="corrective-action-sites"
                 disabled={locked}
@@ -583,7 +614,7 @@ export default async function CorrectiveActionPage({
               <LiveRemoteSelect
                 id={id}
                 field="ownerTenantUserId"
-                label="Owner"
+                label={tGenerated('m_09e0cae12d3f44')}
                 initialValue={ca.ownerTenantUserId}
                 lookup="corrective-action-owners"
                 disabled={locked}
@@ -592,7 +623,7 @@ export default async function CorrectiveActionPage({
               <LiveField
                 id={id}
                 field="assignedOn"
-                label="Assigned on"
+                label={tGenerated('m_1e9e6bca0bc9ef')}
                 type="date"
                 initialValue={ca.assignedOn}
                 disabled={locked}
@@ -601,7 +632,7 @@ export default async function CorrectiveActionPage({
               <LiveField
                 id={id}
                 field="dueOn"
-                label="Due on"
+                label={tGenerated('m_04bfc1eaee3a4b')}
                 type="date"
                 initialValue={ca.dueOn}
                 disabled={locked}
@@ -610,33 +641,38 @@ export default async function CorrectiveActionPage({
               <LiveField
                 id={id}
                 field="costImpact"
-                label="Cost impact (USD)"
+                label={tGenerated('m_1f434615001b22')}
                 type="number"
                 initialValue={ca.costImpact != null ? String(ca.costImpact) : null}
                 disabled={locked}
                 updateAction={updateTextField}
               />
-              {source ? (
-                <div className="sm:col-span-2">
-                  <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                    Linked source
-                  </div>
-                  <Link
-                    href={source.href as any}
-                    className="mt-1 inline-block text-sm text-teal-700 hover:underline dark:text-teal-400"
-                  >
-                    {source.type} · {source.ref}
-                    {source.title ? ` — ${source.title}` : ''}
-                  </Link>
-                </div>
-              ) : null}
+              <GeneratedValue
+                value={
+                  source ? (
+                    <div className="sm:col-span-2">
+                      <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                        <GeneratedText id="m_196b4ac932b0f9" />
+                      </div>
+                      <Link
+                        href={source.href as any}
+                        className="mt-1 inline-block text-sm text-teal-700 hover:underline dark:text-teal-400"
+                      >
+                        <GeneratedValue value={source.type} /> ·{' '}
+                        <GeneratedValue value={source.ref} />
+                        <GeneratedValue value={source.title ? ` — ${source.title}` : ''} />
+                      </Link>
+                    </div>
+                  ) : null
+                }
+              />
               <div className="sm:col-span-2">
                 <LiveRichText
                   id={id}
                   field="description"
-                  label="Description"
+                  label={tGenerated('m_14d923495cf14c')}
                   initialValue={ca.description}
-                  placeholder="What needs to be corrected?"
+                  placeholder={tGenerated('m_02201d819cd3ca')}
                   disabled={locked}
                   updateAction={updateTextField}
                 />
@@ -645,7 +681,7 @@ export default async function CorrectiveActionPage({
                 <LiveToggle
                   id={id}
                   field="verificationRequired"
-                  label="Require verification before closing"
+                  label={tGenerated('m_169d0ac6296114')}
                   initialValue={ca.verificationRequired}
                   disabled={locked}
                   updateAction={updateTextField}
@@ -658,8 +694,8 @@ export default async function CorrectiveActionPage({
         {/* ===================== WORK ===================== */}
         <section id="section-work" className="scroll-mt-2">
           <Section
-            title="Work"
-            subtitle="Root cause, action taken, and the complete-action trail"
+            title={tGenerated('m_14dd6efe395cda')}
+            subtitle={tGenerated('m_1ba7b1917d21bf')}
             icon={<Wrench size={20} />}
             tone="teal"
           >
@@ -667,33 +703,38 @@ export default async function CorrectiveActionPage({
               <LiveRichText
                 id={id}
                 field="rootCause"
-                label="Root cause"
+                label={tGenerated('m_0e04308a7a3472')}
                 initialValue={ca.rootCause}
-                placeholder="What caused this?"
+                placeholder={tGenerated('m_0d9ef299d49aed')}
                 disabled={locked}
                 updateAction={updateTextField}
               />
               <LiveRichText
                 id={id}
                 field="actionTaken"
-                label="Action taken"
+                label={tGenerated('m_0da1a29f41377e')}
                 initialValue={ca.actionTaken}
-                placeholder="What's been done to fix it?"
+                placeholder={tGenerated('m_036d8302ac2cb7')}
                 disabled={locked}
                 updateAction={updateTextField}
               />
               <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    Complete-action steps ({steps.length})
+                    <GeneratedText id="m_0c51278f3e07ad" />
+                    <GeneratedValue value={steps.length} />)
                   </h3>
-                  {!locked ? (
-                    <Link href={drawerHref('add-step') as any} scroll={false}>
-                      <Button type="button" size="sm" variant="outline">
-                        <Plus size={12} /> Add step
-                      </Button>
-                    </Link>
-                  ) : null}
+                  <GeneratedValue
+                    value={
+                      !locked ? (
+                        <Link href={drawerHref('add-step') as any} scroll={false}>
+                          <Button type="button" size="sm" variant="outline">
+                            <Plus size={12} /> <GeneratedText id="m_0ce705b8fa979c" />
+                          </Button>
+                        </Link>
+                      ) : null
+                    }
+                  />
                 </div>
                 <CompleteStepsTimeline steps={steps} />
               </div>
@@ -704,7 +745,7 @@ export default async function CorrectiveActionPage({
         {/* ===================== PHOTOS ===================== */}
         <section id="section-photos" className="scroll-mt-2">
           <Section
-            title={`Photos (${photos.length})`}
+            title={tGenerated('m_0705e8a460ad79', { value0: photos.length })}
             icon={<Camera size={20} />}
             tone="slate"
             defaultOpen={photos.length > 0}
@@ -714,41 +755,49 @@ export default async function CorrectiveActionPage({
         </section>
 
         {/* ===================== VERIFICATION ===================== */}
-        {ca.verificationRequired ? (
-          <section id="section-verification" className="scroll-mt-2">
-            <Section
-              title="Verification"
-              subtitle="Independent sign-off before the action can close"
-              icon={<ShieldCheck size={20} />}
-              tone="emerald"
-            >
-              <VerificationPanel
-                caId={id}
-                verifiedAt={ca.verifiedAt}
-                verifierName={verifierName}
-                verificationNotes={ca.verificationNotes}
-                locked={locked}
-              />
-            </Section>
-          </section>
-        ) : null}
+        <GeneratedValue
+          value={
+            ca.verificationRequired ? (
+              <section id="section-verification" className="scroll-mt-2">
+                <Section
+                  title={tGenerated('m_06bd85b54c842c')}
+                  subtitle={tGenerated('m_0a202276c53aae')}
+                  icon={<ShieldCheck size={20} />}
+                  tone="emerald"
+                >
+                  <VerificationPanel
+                    caId={id}
+                    verifiedAt={ca.verifiedAt}
+                    verifierName={verifierName}
+                    verificationNotes={ca.verificationNotes}
+                    locked={locked}
+                  />
+                </Section>
+              </section>
+            ) : null
+          }
+        />
 
         {/* ===================== ACTIVITY ===================== */}
         <section id="section-activity" className="scroll-mt-2">
           <Section
-            title={`Activity (${activity.length})`}
+            title={tGenerated('m_158532c8e94ad5', { value0: activity.length })}
             icon={<History size={20} />}
             tone="slate"
             defaultOpen={false}
           >
-            {activity.length === 0 ? (
-              <EmptyState
-                title="No activity yet"
-                description="Edits and status changes show up here."
-              />
-            ) : (
-              <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
-            )}
+            <GeneratedValue
+              value={
+                activity.length === 0 ? (
+                  <EmptyState
+                    title={tGenerated('m_07e310bb161e0f')}
+                    description={tGenerated('m_1512653689680a')}
+                  />
+                ) : (
+                  <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+                )
+              }
+            />
           </Section>
         </section>
       </div>
@@ -757,18 +806,18 @@ export default async function CorrectiveActionPage({
       <UrlDrawer
         open={drawer === 'add-step'}
         closeHref={`${basePath}#section-work`}
-        title="Add complete-action step"
-        description="Record an action-taken note, a verification check, or capture a signature."
+        title={tGenerated('m_014983831ef577')}
+        description={tGenerated('m_0ff1c68b440ca9')}
         size="md"
         footer={
           <>
             <Link href={`${basePath}#section-work`}>
               <Button type="button" variant="outline">
-                Cancel
+                <GeneratedText id="m_112e2e8ecda428" />
               </Button>
             </Link>
             <Button type="submit" form="ca-add-step-form">
-              Add step
+              <GeneratedText id="m_0ce705b8fa979c" />
             </Button>
           </>
         }
@@ -779,18 +828,18 @@ export default async function CorrectiveActionPage({
       <UrlDrawer
         open={drawer === 'verify'}
         closeHref={`${basePath}#section-verification`}
-        title="Sign verification"
-        description="Confirm the corrective action is complete and effective."
+        title={tGenerated('m_0fd315c49f4689')}
+        description={tGenerated('m_11c79af5be9c70')}
         size="md"
         footer={
           <>
             <Link href={`${basePath}#section-verification`}>
               <Button type="button" variant="outline">
-                Cancel
+                <GeneratedText id="m_112e2e8ecda428" />
               </Button>
             </Link>
             <Button type="submit" form="ca-verify-form">
-              Sign verification
+              <GeneratedText id="m_0fd315c49f4689" />
             </Button>
           </>
         }
@@ -806,18 +855,18 @@ export default async function CorrectiveActionPage({
       <UrlDrawer
         open={drawer === 'send-email'}
         closeHref={basePath}
-        title={`Send corrective action · ${ca.reference}`}
-        description="Email a copy of this corrective action to one or more recipients."
+        title={tGenerated('m_10aedcfd4e3a24', { value0: ca.reference })}
+        description={tGenerated('m_0547e4210ef4ca')}
         size="md"
         footer={
           <>
             <Link href={basePath}>
               <Button type="button" variant="outline">
-                Cancel
+                <GeneratedText id="m_112e2e8ecda428" />
               </Button>
             </Link>
             <Button type="submit" form="ca-send-email-form">
-              Send
+              <GeneratedText id="m_16b55d7868e000" />
             </Button>
           </>
         }
@@ -828,18 +877,18 @@ export default async function CorrectiveActionPage({
       <UrlDrawer
         open={drawer === 'close'}
         closeHref={basePath}
-        title={`Close corrective action · ${ca.reference}`}
-        description="Capture cost impact + a close note and lock the record."
+        title={tGenerated('m_0f1f808447aa0d', { value0: ca.reference })}
+        description={tGenerated('m_047e5daf49344f')}
         size="md"
         footer={
           <>
             <Link href={basePath}>
               <Button type="button" variant="outline">
-                Cancel
+                <GeneratedText id="m_112e2e8ecda428" />
               </Button>
             </Link>
             <Button type="submit" form="ca-close-form">
-              Close + lock
+              <GeneratedText id="m_18770419e64d7e" />
             </Button>
           </>
         }

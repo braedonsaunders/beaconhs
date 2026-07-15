@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 // Markdown renderer for assistant messages. Sanitized (no raw HTML), GFM tables
 // + lists + code, styled with the app's prose tokens incl. dark mode.
@@ -31,7 +32,7 @@ export function ChatMarkdown({ children, className }: { children: string; classN
         components={{
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noreferrer">
-              {children}
+              <GeneratedValue value={children} />
             </a>
           ),
         }}

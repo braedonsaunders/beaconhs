@@ -10,7 +10,8 @@
 // and per-file error states inline.
 
 import { useCallback, useRef, useState } from 'react'
-import { defaultMaxUploadBytes, formatUploadSizeLimit, type AttachmentKind } from './upload-limits'
+import { defaultMaxUploadBytes, type AttachmentKind } from './upload-limits'
+import { useUiText } from './text-context'
 import { cn } from './utils'
 
 export type UploadRequestResult =
@@ -91,7 +92,7 @@ function uploadWithXhr(args: {
     xhr.upload.onprogress = (event) => args.onProgress(event.loaded)
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve()
-      else reject(new Error(`Upload failed (HTTP ${xhr.status})`))
+      else reject(new Error('Upload failed.'))
     }
     xhr.onerror = () => reject(new Error('Network error during upload'))
     xhr.send(args.body)
@@ -143,9 +144,10 @@ export function FileUploader({
   maxSize,
   compact = false,
   className,
-  label = 'Drop files here or click to select',
+  label,
   hint,
 }: FileUploaderProps) {
+  const t = useUiText()
   const effectiveMaxSize = maxSize ?? defaultMaxUploadBytes(kind)
   const inputRef = useRef<HTMLInputElement>(null)
   const [items, setItems] = useState<Item[]>([])
@@ -159,7 +161,9 @@ export function FileUploader({
       if (file.size > effectiveMaxSize) {
         updateItem({
           status: 'error',
-          error: `File exceeds ${formatUploadSizeLimit(effectiveMaxSize)} limit`,
+          error: t('File exceeds {value0} MB limit', {
+            value0: Math.round(effectiveMaxSize / 1024 / 1024),
+          }),
         })
         return
       }
@@ -180,7 +184,10 @@ export function FileUploader({
       try {
         finalizeInput = await uploadReservedFile(req, file, (progress) => updateItem({ progress }))
       } catch (err) {
-        updateItem({ status: 'error', error: err instanceof Error ? err.message : 'Upload failed' })
+        updateItem({
+          status: 'error',
+          error: err instanceof Error ? t(err.message) : t('Upload failed.'),
+        })
         return
       }
 
@@ -202,7 +209,7 @@ export function FileUploader({
         url: finalise.url,
       })
     },
-    [finalizeUploadAction, kind, effectiveMaxSize, onUploaded, requestUploadAction],
+    [finalizeUploadAction, kind, effectiveMaxSize, onUploaded, requestUploadAction, t],
   )
 
   const handleFiles = useCallback(
@@ -252,9 +259,11 @@ export function FileUploader({
             : 'border-slate-300 bg-slate-50 text-slate-600 hover:border-teal-300 hover:bg-teal-50/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-teal-950/40',
         )}
       >
-        <span className={cn('font-medium', compact ? 'text-xs' : 'text-sm')}>{label}</span>
+        <span className={cn('font-medium', compact ? 'text-xs' : 'text-sm')}>
+          {t(label ?? 'Drop files here or click to select')}
+        </span>
         {!compact && hint ? (
-          <span className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{hint}</span>
+          <span className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{t(hint)}</span>
         ) : null}
         <input
           ref={inputRef}
@@ -283,16 +292,20 @@ export function FileUploader({
                   {item.file.name}
                 </div>
                 {item.status === 'error' ? (
-                  <div className="text-[11px] text-rose-600 dark:text-rose-400">{item.error}</div>
+                  <div className="text-[11px] text-rose-600 dark:text-rose-400">
+                    {item.error ? t(item.error) : null}
+                  </div>
                 ) : item.status === 'done' ? (
-                  <div className="text-[11px] text-emerald-700 dark:text-emerald-400">Uploaded</div>
+                  <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                    {t('Uploaded')}
+                  </div>
                 ) : (
                   <div className="text-[11px] text-slate-500 dark:text-slate-400">
                     {item.status === 'uploading'
-                      ? `Uploading… ${item.progress ?? 0}%`
+                      ? t('Uploading… {value0}%', { value0: item.progress ?? 0 })
                       : item.status === 'finalising'
-                        ? 'Finalising…'
-                        : 'Queued'}
+                        ? t('Finalising…')
+                        : t('Queued')}
                   </div>
                 )}
                 {(item.status === 'uploading' || item.status === 'finalising') && (
@@ -310,7 +323,7 @@ export function FileUploader({
                   onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
                   className="rounded px-2 py-0.5 text-[11px] font-medium text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
                 >
-                  Dismiss
+                  {t('Dismiss')}
                 </button>
               ) : null}
             </li>

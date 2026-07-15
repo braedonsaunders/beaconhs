@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { AI_PROVIDER_SPECS } from '@beaconhs/ai'
 import { Button, Card, CardContent, DetailHeader } from '@beaconhs/ui'
 import { getPlatformAiSettings } from '@/lib/ai-config'
@@ -7,10 +9,14 @@ import { AiTestButton } from '@/components/ai-settings/test-button'
 import { AiSettingsForm, type ProviderSpecLite } from '@/components/ai-settings/settings-form'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Platform AI' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_08323e078472f2') }
+}
 
 // Authorization is enforced once by /platform/layout.tsx (super-admin only).
 export default async function PlatformAiPage() {
+  const tGenerated = await getGeneratedTranslations()
   const specs: ProviderSpecLite[] = AI_PROVIDER_SPECS.map((p) => ({
     value: p.value,
     label: p.label,
@@ -29,19 +35,18 @@ export default async function PlatformAiPage() {
       <div className="max-w-2xl space-y-4">
         <DetailHeader
           back={{ href: '/platform', label: 'Back to platform' }}
-          title="Platform AI"
-          subtitle="The deployment-wide default AI provider plus the policy that governs whether tenants may use their own — including the global kill switch."
+          title={tGenerated('m_08323e078472f2')}
+          subtitle={tGenerated('m_0fe02a5368c97d')}
         />
 
         <Card>
           <CardContent className="space-y-6 pt-6">
             <div>
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                Platform default — all tenants
+                <GeneratedText id="m_066667acd671a3" />
               </h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                The fallback provider used when a tenant has none, and the policy that governs
-                tenant overrides and the global kill switch.
+                <GeneratedText id="m_13275506e08cf4" />
               </p>
             </div>
             <AiSettingsForm
@@ -60,13 +65,17 @@ export default async function PlatformAiPage() {
             />
             <div className="flex items-end justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
               <AiTestButton scope="platform" />
-              {platform.hasKey ? (
-                <form action={clearPlatformAi}>
-                  <Button type="submit" variant="ghost" className="text-red-600">
-                    Remove key
-                  </Button>
-                </form>
-              ) : null}
+              <GeneratedValue
+                value={
+                  platform.hasKey ? (
+                    <form action={clearPlatformAi}>
+                      <Button type="submit" variant="ghost" className="text-red-600">
+                        <GeneratedText id="m_03654054061f7d" />
+                      </Button>
+                    </form>
+                  ) : null
+                }
+              />
             </div>
           </CardContent>
         </Card>

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // /journals/records — the admin / safety "browse all journals" surface.
 // A standard list page (header + sortable table + filter toolbar + pagination)
 // over every entry the viewer is allowed to see. Rows open a read-only flyout,
@@ -37,7 +40,10 @@ import {
 } from './_tag-picker-actions'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Journal records' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_04515b24a6cbe3') }
+}
 
 const SORTS: readonly JournalSort[] = ['date', 'author', 'site', 'status', 'reference']
 
@@ -64,6 +70,8 @@ export default async function JournalRecordsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!journalCanBrowseAll(ctx)) redirect('/journals')
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'journals.read.self')
@@ -130,24 +138,26 @@ export default async function JournalRecordsPage({
       header={
         <>
           <PageHeader
-            title="Journal records"
-            description="Browse, filter and read every journal you have access to."
+            title={tGenerated('m_04515b24a6cbe3')}
+            description={tGenerated('m_052281e1e91a00')}
             actions={
               canExport ? (
                 <a href={buildExportHref('/journals/export.csv', sp)}>
-                  <Button variant="outline">Export CSV</Button>
+                  <Button variant="outline">
+                    <GeneratedText id="m_14c6440eca1edc" />
+                  </Button>
                 </a>
               ) : null
             }
           />
           <ModuleNav moduleKey="journals" active="records" />
           <TableToolbar>
-            <SearchInput placeholder="Search journals…" />
+            <SearchInput placeholder={tGenerated('m_0cec466d6457e1')} />
             <FilterChips
               basePath="/journals/records"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               allLabel="Any status"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: facets.statusCounts[o.value] }))}
             />
@@ -155,7 +165,7 @@ export default async function JournalRecordsPage({
               basePath="/journals/records"
               currentParams={sp}
               paramKey="definition"
-              label="Type"
+              label={tGenerated('m_074ba2f160c506')}
               allLabel="Any type"
               options={TYPE_OPTIONS}
             />
@@ -164,9 +174,9 @@ export default async function JournalRecordsPage({
               basePath="/journals/records"
               currentParams={sp}
               paramKey="person"
-              placeholder="All authors"
+              placeholder={tGenerated('m_102255d7ce7611')}
               allLabel="All authors"
-              searchPlaceholder="Search journal authors…"
+              searchPlaceholder={tGenerated('m_0a8edb9f718779')}
               ariaLabel="Filter journal records by author"
             />
             <RemoteSearchFilter
@@ -174,9 +184,9 @@ export default async function JournalRecordsPage({
               basePath="/journals/records"
               currentParams={sp}
               paramKey="site"
-              placeholder="All locations"
+              placeholder={tGenerated('m_1a37e747f6006b')}
               allLabel="All locations"
-              searchPlaceholder="Search journal locations…"
+              searchPlaceholder={tGenerated('m_1545cf488b21b6')}
               ariaLabel="Filter journal records by location"
             />
             <RemoteSearchFilter
@@ -184,28 +194,30 @@ export default async function JournalRecordsPage({
               basePath="/journals/records"
               currentParams={sp}
               paramKey="tag"
-              placeholder="Any tag"
+              placeholder={tGenerated('m_0834b9f57a434d')}
               allLabel="Any tag"
-              searchPlaceholder="Search tags used by journals…"
+              searchPlaceholder={tGenerated('m_11dafb1e93f6ca')}
               ariaLabel="Filter journal records by tag"
             />
             <form method="get" className="flex items-center gap-1 text-xs">
-              {Object.entries({
-                q: filters.q,
-                status: filters.status,
-                definition: filters.definition,
-                site: filters.site,
-                person: filters.person,
-                tag: filters.tag,
-                sort: params.sort !== 'date' ? params.sort : undefined,
-                dir: params.dir !== 'desc' ? params.dir : undefined,
-              })
-                .filter(([, v]) => v)
-                .map(([k, v]) => (
-                  <input key={k} type="hidden" name={k} value={String(v)} />
-                ))}
+              <GeneratedValue
+                value={Object.entries({
+                  q: filters.q,
+                  status: filters.status,
+                  definition: filters.definition,
+                  site: filters.site,
+                  person: filters.person,
+                  tag: filters.tag,
+                  sort: params.sort !== 'date' ? params.sort : undefined,
+                  dir: params.dir !== 'desc' ? params.dir : undefined,
+                })
+                  .filter(([, v]) => v)
+                  .map(([k, v]) => (
+                    <input key={k} type="hidden" name={k} value={String(v)} />
+                  ))}
+              />
               <label className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                From
+                <GeneratedText id="m_154c9d7a784dda" />
                 <input
                   type="date"
                   name="from"
@@ -214,7 +226,7 @@ export default async function JournalRecordsPage({
                 />
               </label>
               <label className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                to
+                <GeneratedText id="m_02d4f83ff8f11c" />
                 <input
                   type="date"
                   name="to"
@@ -226,31 +238,39 @@ export default async function JournalRecordsPage({
                 type="submit"
                 className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
-                Apply
+                <GeneratedText id="m_01185cdc1c20a5" />
               </button>
             </form>
           </TableToolbar>
         </>
       }
     >
-      {items.length === 0 ? (
-        <EmptyState
-          icon={<BookText size={32} />}
-          title={params.q ? `No journals match "${params.q}"` : 'No journals found'}
-          description="Try adjusting your filters or date range."
-        />
-      ) : (
-        <>
-          <JournalRecordsTable items={items} tagColors={tagColors} sortProps={sortProps} />
-          <Pagination
-            basePath="/journals/records"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          items.length === 0 ? (
+            <EmptyState
+              icon={<BookText size={32} />}
+              title={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_0f2e18c75b0f31', { value0: params.q })
+                  : tGenerated('m_097ebca00485be'),
+              )}
+              description={tGenerated('m_041e29cfede4d7')}
+            />
+          ) : (
+            <>
+              <JournalRecordsTable items={items} tagColors={tagColors} sortProps={sortProps} />
+              <Pagination
+                basePath="/journals/records"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

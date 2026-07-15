@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // Criteria-driven inspection form for the PPE record page.
 //
 // Behaviour (per spec):
@@ -45,6 +47,7 @@ export function PpeInspectionForm({
   criteria: Criterion[]
   action: (fd: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const [answers, setAnswers] = React.useState<Record<string, Answer>>({})
   const [reasons, setReasons] = React.useState<Record<string, string>>({})
   const [photos, setPhotos] = React.useState<Record<string, AttachedFile[]>>({})
@@ -82,10 +85,10 @@ export function PpeInspectionForm({
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-              {kindLabel} criteria
+              <GeneratedValue value={kindLabel} /> <GeneratedText id="m_0196fe7432bec3" />
             </p>
             <p className="text-xs text-slate-500">
-              Answer every criterion. High and critical failures create a corrective action.
+              <GeneratedText id="m_1e7a6e975f16ba" />
             </p>
           </div>
           <StatusBadge
@@ -98,127 +101,166 @@ export function PpeInspectionForm({
         </div>
 
         <ul className="space-y-2">
-          {criteria.map((c, i) => (
-            <li
-              key={c.id}
-              className={cn(
-                'rounded border bg-white p-3 dark:bg-slate-900',
-                answers[c.id] === 'fail'
-                  ? 'border-red-300 dark:border-red-900'
-                  : 'border-slate-200 dark:border-slate-800',
-              )}
-            >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
-                    <span className="text-slate-400">{i + 1}.</span>
-                    <span className="flex-1">{c.question}</span>
-                    <Badge
-                      variant={
-                        c.severity === 'critical' || c.severity === 'high'
-                          ? 'destructive'
-                          : c.severity === 'medium'
-                            ? 'warning'
-                            : 'secondary'
-                      }
-                    >
-                      {c.severity}
-                    </Badge>
-                  </div>
-                  {c.description ? (
-                    <p className="mt-1 text-xs text-slate-500">{c.description}</p>
-                  ) : null}
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  {ANSWERS.map((a) => {
-                    const active = answers[c.id] === a.value
-                    return (
-                      <label
-                        key={a.value}
-                        className={cn(
-                          'cursor-pointer rounded border px-2.5 py-1 text-xs font-medium transition-colors',
-                          active && a.value === 'pass'
-                            ? 'border-emerald-400 bg-emerald-100 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200'
-                            : active && a.value === 'fail'
-                              ? 'border-red-400 bg-red-100 text-red-900 dark:border-red-700 dark:bg-red-950/50 dark:text-red-200'
-                              : active
-                                ? 'border-slate-400 bg-slate-100 text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
-                                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400',
-                        )}
+          <GeneratedValue
+            value={criteria.map((c, i) => (
+              <li
+                key={c.id}
+                className={cn(
+                  'rounded border bg-white p-3 dark:bg-slate-900',
+                  answers[c.id] === 'fail'
+                    ? 'border-red-300 dark:border-red-900'
+                    : 'border-slate-200 dark:border-slate-800',
+                )}
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                      <span className="text-slate-400">
+                        <GeneratedValue value={i + 1} />.
+                      </span>
+                      <span className="flex-1">
+                        <GeneratedValue value={c.question} />
+                      </span>
+                      <Badge
+                        variant={
+                          c.severity === 'critical' || c.severity === 'high'
+                            ? 'destructive'
+                            : c.severity === 'medium'
+                              ? 'warning'
+                              : 'secondary'
+                        }
                       >
-                        <input
-                          type="radio"
-                          name={`criterion_${c.id}`}
-                          value={a.value}
-                          checked={active}
-                          disabled={uploading[c.id] === true}
-                          onChange={() => setAnswers((prev) => ({ ...prev, [c.id]: a.value }))}
-                          className="sr-only"
-                        />
-                        {a.label}
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
-              {answers[c.id] === 'fail' ? (
-                <div className="mt-3 space-y-1.5 border-t border-red-200 pt-3 dark:border-red-900/70">
-                  <Label htmlFor={`criterion_reason_${c.id}`}>
-                    What failed? <span className="text-red-600">*</span>
-                  </Label>
-                  <Textarea
-                    id={`criterion_reason_${c.id}`}
-                    name={`criterion_reason_${c.id}`}
-                    value={reasons[c.id] ?? ''}
-                    maxLength={10_000}
-                    required
-                    rows={2}
-                    placeholder="Describe the defect or unsafe condition"
-                    onChange={(event) =>
-                      setReasons((previous) => ({ ...previous, [c.id]: event.target.value }))
-                    }
-                  />
-                </div>
-              ) : null}
-              {answers[c.id] && answers[c.id] !== 'n_a' ? (
-                <div className="mt-3 space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-800">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label>
-                      Photo evidence
-                      {c.requiresPhoto ? <span className="text-red-600"> *</span> : ''}
-                    </Label>
-                    {!c.requiresPhoto ? (
-                      <span className="text-xs text-slate-500">Optional</span>
-                    ) : null}
+                        <GeneratedValue value={c.severity} />
+                      </Badge>
+                    </div>
+                    <GeneratedValue
+                      value={
+                        c.description ? (
+                          <p className="mt-1 text-xs text-slate-500">
+                            <GeneratedValue value={c.description} />
+                          </p>
+                        ) : null
+                      }
+                    />
                   </div>
-                  <FileUpload
-                    variant="photo"
-                    maxFiles={10}
-                    value={photos[c.id] ?? []}
-                    onChange={(files) => setPhotos((previous) => ({ ...previous, [c.id]: files }))}
-                    onUploadingChange={(isUploading) =>
-                      setUploading((previous) =>
-                        previous[c.id] === isUploading
-                          ? previous
-                          : { ...previous, [c.id]: isUploading },
-                      )
-                    }
-                  />
-                  <p className="text-xs text-slate-500">Up to 10 photos.</p>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <GeneratedValue
+                      value={ANSWERS.map((a) => {
+                        const active = answers[c.id] === a.value
+                        return (
+                          <label
+                            key={a.value}
+                            className={cn(
+                              'cursor-pointer rounded border px-2.5 py-1 text-xs font-medium transition-colors',
+                              active && a.value === 'pass'
+                                ? 'border-emerald-400 bg-emerald-100 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200'
+                                : active && a.value === 'fail'
+                                  ? 'border-red-400 bg-red-100 text-red-900 dark:border-red-700 dark:bg-red-950/50 dark:text-red-200'
+                                  : active
+                                    ? 'border-slate-400 bg-slate-100 text-slate-900 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
+                                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400',
+                            )}
+                          >
+                            <input
+                              type="radio"
+                              name={`criterion_${c.id}`}
+                              value={a.value}
+                              checked={active}
+                              disabled={uploading[c.id] === true}
+                              onChange={() => setAnswers((prev) => ({ ...prev, [c.id]: a.value }))}
+                              className="sr-only"
+                            />
+                            <GeneratedValue value={a.label} />
+                          </label>
+                        )
+                      })}
+                    />
+                  </div>
                 </div>
-              ) : null}
-              <input
-                type="hidden"
-                name={`criterion_photos_${c.id}`}
-                value={(photos[c.id] ?? []).map((file) => file.attachmentId).join(',')}
-              />
-            </li>
-          ))}
+                <GeneratedValue
+                  value={
+                    answers[c.id] === 'fail' ? (
+                      <div className="mt-3 space-y-1.5 border-t border-red-200 pt-3 dark:border-red-900/70">
+                        <Label htmlFor={`criterion_reason_${c.id}`}>
+                          <GeneratedText id="m_0deb332b6749bf" />{' '}
+                          <span className="text-red-600">*</span>
+                        </Label>
+                        <Textarea
+                          id={`criterion_reason_${c.id}`}
+                          name={`criterion_reason_${c.id}`}
+                          value={reasons[c.id] ?? ''}
+                          maxLength={10_000}
+                          required
+                          rows={2}
+                          placeholder={tGenerated('m_1dc91a165513e8')}
+                          onChange={(event) =>
+                            setReasons((previous) => ({ ...previous, [c.id]: event.target.value }))
+                          }
+                        />
+                      </div>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    answers[c.id] && answers[c.id] !== 'n_a' ? (
+                      <div className="mt-3 space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-800">
+                        <div className="flex items-center justify-between gap-2">
+                          <Label>
+                            <GeneratedText id="m_065ba2f8f7df4e" />
+                            <GeneratedValue
+                              value={
+                                c.requiresPhoto ? <span className="text-red-600"> *</span> : ''
+                              }
+                            />
+                          </Label>
+                          <GeneratedValue
+                            value={
+                              !c.requiresPhoto ? (
+                                <span className="text-xs text-slate-500">
+                                  <GeneratedText id="m_0cadbe8ae1ae4e" />
+                                </span>
+                              ) : null
+                            }
+                          />
+                        </div>
+                        <FileUpload
+                          variant="photo"
+                          maxFiles={10}
+                          value={photos[c.id] ?? []}
+                          onChange={(files) =>
+                            setPhotos((previous) => ({ ...previous, [c.id]: files }))
+                          }
+                          onUploadingChange={(isUploading) =>
+                            setUploading((previous) =>
+                              previous[c.id] === isUploading
+                                ? previous
+                                : { ...previous, [c.id]: isUploading },
+                            )
+                          }
+                        />
+                        <p className="text-xs text-slate-500">
+                          <GeneratedText id="m_14afd8403e2327" />
+                        </p>
+                      </div>
+                    ) : null
+                  }
+                />
+                <input
+                  type="hidden"
+                  name={`criterion_photos_${c.id}`}
+                  value={(photos[c.id] ?? []).map((file) => file.attachmentId).join(',')}
+                />
+              </li>
+            ))}
+          />
         </ul>
 
         <div className="space-y-1.5">
-          <Label>Notes</Label>
-          <Input name="notes" placeholder="Anything to flag overall?" />
+          <Label>
+            <GeneratedText id="m_0b8dadcb78cd08" />
+          </Label>
+          <Input name="notes" placeholder={tGenerated('m_0e9c5a8419946e')} />
         </div>
       </div>
 
@@ -231,7 +273,15 @@ export function PpeInspectionForm({
           uploadingCount={uploadingCount}
         />
         <Button type="submit" disabled={!allAnswered}>
-          {status === 'fail' ? 'Record failed inspection' : 'Record inspection'}
+          <GeneratedValue
+            value={
+              status === 'fail' ? (
+                <GeneratedText id="m_1ed7946243bd47" />
+              ) : (
+                <GeneratedText id="m_1867ec444b9ac8" />
+              )
+            }
+          />
         </Button>
       </div>
     </form>
@@ -254,25 +304,38 @@ function StatusBadge({
   if (status === 'incomplete') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-        <CircleDashed size={13} />{' '}
-        {uploadingCount > 0
-          ? `Uploading ${uploadingCount} photo${uploadingCount === 1 ? '' : 's'}…`
-          : answered === total && missingEvidence > 0
-            ? `${missingEvidence} evidence item${missingEvidence === 1 ? '' : 's'} needed`
-            : `${answered} of ${total} answered`}
+        <CircleDashed size={13} />
+        <GeneratedValue value={' '} />
+        <GeneratedValue
+          value={
+            uploadingCount > 0 ? (
+              <GeneratedText
+                id="m_05040bfa089e75"
+                values={{ value0: uploadingCount, value1: uploadingCount === 1 ? '' : 's' }}
+              />
+            ) : answered === total && missingEvidence > 0 ? (
+              <GeneratedText
+                id="m_0ad8b310bbb7d4"
+                values={{ value0: missingEvidence, value1: missingEvidence === 1 ? '' : 's' }}
+              />
+            ) : (
+              <GeneratedText id="m_1a4120b4c3f046" values={{ value0: answered, value1: total }} />
+            )
+          }
+        />
       </span>
     )
   }
   if (status === 'fail') {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700 dark:bg-red-950/50 dark:text-red-300">
-        <XCircle size={13} /> Fail
+        <XCircle size={13} /> <GeneratedText id="m_169669494a86f8" />
       </span>
     )
   }
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
-      <CheckCircle2 size={13} /> Pass
+      <CheckCircle2 size={13} /> <GeneratedText id="m_0e4b19568a01bf" />
     </span>
   )
 }

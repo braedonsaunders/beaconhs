@@ -1,5 +1,9 @@
 'use client'
 
+import { useGeneratedTranslations, useGeneratedValueTranslations } from '@/i18n/generated'
+
+import { GeneratedValue } from '@/i18n/generated'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2 } from 'lucide-react'
@@ -22,6 +26,8 @@ export function CardToolbar({
   roles: PublishRoleOption[]
   allowedRoles: string[] | null
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
   const [published, setPublished] = useState(status === 'published')
@@ -30,11 +36,11 @@ export function CardToolbar({
     start(async () => {
       const r = await publishCard({ id, allowedRoles: nextAllowedRoles })
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
       setPublished(true)
-      toast.success('Published to library')
+      toast.success(tGenerated('m_14d4f6912fd1cc'))
       router.refresh()
     })
   }
@@ -43,11 +49,11 @@ export function CardToolbar({
     start(async () => {
       const r = await unpublishCard(id)
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
       setPublished(false)
-      toast.success('Unpublished')
+      toast.success(tGenerated('m_05e0d33d6dd310'))
       router.refresh()
     })
   }
@@ -63,10 +69,10 @@ export function CardToolbar({
     start(async () => {
       const r = await deleteCard(id)
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
-      toast.success('Card deleted')
+      toast.success(tGenerated('m_171b0b11eb1e0f'))
       router.push('/insights/library')
       router.refresh()
     })
@@ -74,16 +80,20 @@ export function CardToolbar({
 
   return (
     <div className="flex items-center gap-2">
-      {canPublish ? (
-        <PublishControl
-          status={published ? 'published' : 'draft'}
-          roles={roles}
-          initialAllowedRoles={allowedRoles}
-          pending={pending}
-          onPublish={publish}
-          onUnpublish={unpublish}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          canPublish ? (
+            <PublishControl
+              status={published ? 'published' : 'draft'}
+              roles={roles}
+              initialAllowedRoles={allowedRoles}
+              pending={pending}
+              onPublish={publish}
+              onUnpublish={unpublish}
+            />
+          ) : null
+        }
+      />
       <Button
         type="button"
         variant="ghost"

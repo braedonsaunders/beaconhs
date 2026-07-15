@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import {
   Badge,
@@ -27,7 +29,10 @@ import {
   listDueSignals,
 } from '../_signals'
 
-export const metadata = { title: 'Compliance · Due & expiring' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_00ff656ab7f5a3') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/compliance/expiring'
@@ -45,10 +50,29 @@ const MODULE_OPTIONS = (Object.keys(SIGNAL_MODULE_LABELS) as SignalModule[]).map
 }))
 
 function SignalStatusBadge({ status }: { status: SignalStatus }) {
-  if (status === 'overdue') return <Badge variant="destructive">Overdue</Badge>
-  if (status === 'expired') return <Badge variant="destructive">Expired</Badge>
-  if (status === 'due_soon') return <Badge variant="warning">Due soon</Badge>
-  return <Badge variant="secondary">Open</Badge>
+  if (status === 'overdue')
+    return (
+      <Badge variant="destructive">
+        <GeneratedText id="m_1e40bdcf2d1ba1" />
+      </Badge>
+    )
+  if (status === 'expired')
+    return (
+      <Badge variant="destructive">
+        <GeneratedText id="m_13f7150c94b182" />
+      </Badge>
+    )
+  if (status === 'due_soon')
+    return (
+      <Badge variant="warning">
+        <GeneratedText id="m_0971fcc40acc3d" />
+      </Badge>
+    )
+  return (
+    <Badge variant="secondary">
+      <GeneratedText id="m_107ab58c3c38bc" />
+    </Badge>
+  )
 }
 
 export default async function ExpiringPage({
@@ -56,6 +80,7 @@ export default async function ExpiringPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.read')
@@ -99,24 +124,24 @@ export default async function ExpiringPage({
       header={
         <>
           <PageHeader
-            title="Compliance"
-            description="Everything coming due, expiring, or overdue across every module — certifications, permits, equipment, PPE, monitored sessions, document reviews, and corrective actions."
+            title={tGenerated('m_096d47f60747b3')}
+            description={tGenerated('m_08b47a2a64f061')}
           />
           <ComplianceSubNav active="expiring" />
           <TableToolbar>
-            <SearchInput placeholder="Search item, person, module, or status…" />
+            <SearchInput placeholder={tGenerated('m_09a108f65ff92f')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={STATUS_OPTIONS}
             />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="module"
-              label="Module"
+              label={tGenerated('m_065b964e065bf7')}
               options={MODULE_OPTIONS}
             />
           </TableToolbar>
@@ -125,86 +150,108 @@ export default async function ExpiringPage({
     >
       <div className="space-y-6">
         <div className="grid gap-3 sm:grid-cols-4">
-          <SummaryCard label="Overdue" value={counts.overdue} tone="danger" />
-          <SummaryCard label="Expired" value={counts.expired} tone="danger" />
-          <SummaryCard label="Due soon (30d)" value={counts.due_soon} tone="warn" />
-          <SummaryCard label="Open tasks" value={counts.open} tone="muted" />
+          <SummaryCard
+            label={tGenerated('m_1e40bdcf2d1ba1')}
+            value={counts.overdue}
+            tone="danger"
+          />
+          <SummaryCard
+            label={tGenerated('m_13f7150c94b182')}
+            value={counts.expired}
+            tone="danger"
+          />
+          <SummaryCard label={tGenerated('m_0940472e630286')} value={counts.due_soon} tone="warn" />
+          <SummaryCard label={tGenerated('m_082fbc548bd97d')} value={counts.open} tone="muted" />
         </div>
 
-        {total === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
-            {allCount === 0
-              ? 'Nothing due or expiring in the next 30 days — nice work.'
-              : 'No items match these filters.'}
-          </div>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortableTh
-                    basePath={BASE}
-                    currentParams={sp}
-                    dir={params.dir}
-                    column="module"
-                    active={params.sort === 'module'}
-                  >
-                    Module
-                  </SortableTh>
-                  <TableHead>Type</TableHead>
-                  <SortableTh
-                    basePath={BASE}
-                    currentParams={sp}
-                    dir={params.dir}
-                    column="item"
-                    active={params.sort === 'item'}
-                  >
-                    Item
-                  </SortableTh>
-                  <SortableTh
-                    basePath={BASE}
-                    currentParams={sp}
-                    dir={params.dir}
-                    column="person"
-                    active={params.sort === 'person'}
-                  >
-                    Person
-                  </SortableTh>
-                  <SortableTh
-                    basePath={BASE}
-                    currentParams={sp}
-                    dir={params.dir}
-                    column="due"
-                    active={params.sort === 'due'}
-                  >
-                    Due
-                  </SortableTh>
-                  <SortableTh
-                    basePath={BASE}
-                    currentParams={sp}
-                    dir={params.dir}
-                    column="status"
-                    active={params.sort === 'status'}
-                  >
-                    Status
-                  </SortableTh>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((s, i) => (
-                  <SignalRow key={`${s.module}:${s.family}:${i}`} signal={s} />
-                ))}
-              </TableBody>
-            </Table>
-            <Pagination
-              basePath={BASE}
-              currentParams={sp}
-              total={total}
-              page={page}
-              perPage={params.perPage}
-            />
-          </>
-        )}
+        <GeneratedValue
+          value={
+            total === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
+                <GeneratedValue
+                  value={
+                    allCount === 0 ? (
+                      <GeneratedText id="m_0d4e1e302235be" />
+                    ) : (
+                      <GeneratedText id="m_03f142850f1679" />
+                    )
+                  }
+                />
+              </div>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableTh
+                        basePath={BASE}
+                        currentParams={sp}
+                        dir={params.dir}
+                        column="module"
+                        active={params.sort === 'module'}
+                      >
+                        <GeneratedText id="m_065b964e065bf7" />
+                      </SortableTh>
+                      <TableHead>
+                        <GeneratedText id="m_074ba2f160c506" />
+                      </TableHead>
+                      <SortableTh
+                        basePath={BASE}
+                        currentParams={sp}
+                        dir={params.dir}
+                        column="item"
+                        active={params.sort === 'item'}
+                      >
+                        <GeneratedText id="m_02fb6dc94e4dca" />
+                      </SortableTh>
+                      <SortableTh
+                        basePath={BASE}
+                        currentParams={sp}
+                        dir={params.dir}
+                        column="person"
+                        active={params.sort === 'person'}
+                      >
+                        <GeneratedText id="m_12e926c9216094" />
+                      </SortableTh>
+                      <SortableTh
+                        basePath={BASE}
+                        currentParams={sp}
+                        dir={params.dir}
+                        column="due"
+                        active={params.sort === 'due'}
+                      >
+                        <GeneratedText id="m_0c2eb92551e08b" />
+                      </SortableTh>
+                      <SortableTh
+                        basePath={BASE}
+                        currentParams={sp}
+                        dir={params.dir}
+                        column="status"
+                        active={params.sort === 'status'}
+                      >
+                        <GeneratedText id="m_0b9da892d6faf0" />
+                      </SortableTh>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <GeneratedValue
+                      value={rows.map((s, i) => (
+                        <SignalRow key={`${s.module}:${s.family}:${i}`} signal={s} />
+                      ))}
+                    />
+                  </TableBody>
+                </Table>
+                <Pagination
+                  basePath={BASE}
+                  currentParams={sp}
+                  total={total}
+                  page={page}
+                  perPage={params.perPage}
+                />
+              </>
+            )
+          }
+        />
       </div>
     </ListPageLayout>
   )
@@ -213,20 +260,32 @@ export default async function ExpiringPage({
 function SignalRow({ signal: s }: { signal: ComplianceSignal }) {
   const subject = s.href ? (
     <Link href={s.href as never} className="text-slate-900 hover:underline dark:text-slate-100">
-      {s.subject}
+      <GeneratedValue value={s.subject} />
     </Link>
   ) : (
-    <span className="text-slate-900 dark:text-slate-100">{s.subject}</span>
+    <span className="text-slate-900 dark:text-slate-100">
+      <GeneratedValue value={s.subject} />
+    </span>
   )
   return (
     <TableRow>
       <TableCell>
-        <Badge variant="secondary">{SIGNAL_MODULE_LABELS[s.module]}</Badge>
+        <Badge variant="secondary">
+          <GeneratedValue value={SIGNAL_MODULE_LABELS[s.module]} />
+        </Badge>
       </TableCell>
-      <TableCell className="text-xs text-slate-600 dark:text-slate-400">{s.family}</TableCell>
-      <TableCell>{subject}</TableCell>
-      <TableCell className="text-slate-700 dark:text-slate-300">{s.personName ?? '—'}</TableCell>
-      <TableCell className="text-slate-700 dark:text-slate-300">{s.dueOn ?? '—'}</TableCell>
+      <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+        <GeneratedValue value={s.family} />
+      </TableCell>
+      <TableCell>
+        <GeneratedValue value={subject} />
+      </TableCell>
+      <TableCell className="text-slate-700 dark:text-slate-300">
+        <GeneratedValue value={s.personName ?? '—'} />
+      </TableCell>
+      <TableCell className="text-slate-700 dark:text-slate-300">
+        <GeneratedValue value={s.dueOn ?? '—'} />
+      </TableCell>
       <TableCell>
         <SignalStatusBadge status={s.status} />
       </TableCell>
@@ -252,9 +311,11 @@ function SummaryCard({
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        {label}
+        <GeneratedValue value={label} />
       </div>
-      <div className={`mt-1 text-2xl font-semibold ${color}`}>{value}</div>
+      <div className={`mt-1 text-2xl font-semibold ${color}`}>
+        <GeneratedValue value={value} />
+      </div>
     </div>
   )
 }

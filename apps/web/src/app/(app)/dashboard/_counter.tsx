@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 import { useEffect, useState } from 'react'
 import { animate, useMotionValue } from 'framer-motion'
@@ -43,5 +44,9 @@ export function AnimatedNumber({
     }
   }, [delay, duration, mv, value])
 
-  return <span className={className}>{format(displayValue)}</span>
+  return (
+    <span className={className}>
+      <GeneratedValue value={format(displayValue)} />
+    </span>
+  )
 }

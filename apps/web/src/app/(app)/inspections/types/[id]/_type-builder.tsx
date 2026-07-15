@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Inspection TYPE builder — 1/3 settings rail + 2/3 build surface. The type
 // owns its criteria directly, organised into drag-reorderable groups; criteria
 // drag within a group, and a criterion's drawer lets you move it between
@@ -101,6 +108,8 @@ export function InspectionTypeBuilder({
   banks: BuilderBank[]
   activitySlot: React.ReactNode
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const checklist = useTypeChecklistController<CriterionData>(
     type.id,
@@ -123,7 +132,9 @@ export function InspectionTypeBuilder({
           ...prev,
           ...res.criteria.map((c) => ({ ...c, groupId: g.id }) as BuilderCriterion),
         ])
-        toast.success(`Imported ${res.criteria.length} criteria from "${res.bankName}"`)
+        toast.success(
+          tGenerated('m_0773f5db0728c4', { value0: res.criteria.length, value1: res.bankName }),
+        )
       }
       setImporting(false)
     })
@@ -145,23 +156,30 @@ export function InspectionTypeBuilder({
           <>
             <BuilderRailHeader
               icon={<ClipboardList size={15} />}
-              title={type.name}
-              subtitle="Inspection type"
+              title={tGeneratedValue(type.name)}
+              subtitle={tGenerated('m_0bbd7790743193')}
             />
             <BuilderRailNavigation active={leftTab} onChange={setLeftTab} />
             <BuilderScroll>
-              {leftTab === 'build' ? (
-                <ChecklistBuildMenu
-                  description="Build the checklist this inspection runs. Group questions into sections, drag to reorder, or import a saved bank as a section."
-                  onAddGroup={checklist.addGroup}
-                  onAddCriterion={() => checklist.openAdd(null)}
-                  onImport={() => setImporting(true)}
-                />
-              ) : leftTab === 'settings' ? (
-                <SettingsPanel type={type} onDeleted={() => router.push('/inspections/types')} />
-              ) : (
-                activitySlot
-              )}
+              <GeneratedValue
+                value={
+                  leftTab === 'build' ? (
+                    <ChecklistBuildMenu
+                      description={tGenerated('m_046e5255db1485')}
+                      onAddGroup={checklist.addGroup}
+                      onAddCriterion={() => checklist.openAdd(null)}
+                      onImport={() => setImporting(true)}
+                    />
+                  ) : leftTab === 'settings' ? (
+                    <SettingsPanel
+                      type={type}
+                      onDeleted={() => router.push('/inspections/types')}
+                    />
+                  ) : (
+                    activitySlot
+                  )
+                }
+              />
             </BuilderScroll>
           </>
         }
@@ -206,7 +224,7 @@ export function InspectionTypeBuilder({
       <ImportCriteriaBankDrawer
         open={importing}
         banks={banks}
-        description="Copy a saved criteria bank in as a new section. Edits afterwards stay on this type."
+        description={tGenerated('m_14e054a891bfd2')}
         emptyMessage="No published banks yet. Create one under Inspections → Banks."
         onClose={() => setImporting(false)}
         onImport={handleImport}
@@ -219,26 +237,39 @@ function CriterionContent({ c }: { c: BuilderCriterion }) {
   return (
     <>
       <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-        {c.text}
+        <GeneratedValue value={c.text} />
       </span>
       <span className="hidden shrink-0 text-[11px] text-slate-400 sm:inline">
-        {RESPONSE_LABELS[c.responseType]}
+        <GeneratedValue value={RESPONSE_LABELS[c.responseType]} />
       </span>
-      {c.responseType === 'choice' ? (
-        <Badge variant="outline" className="text-[10px]">
-          {c.choiceOptions.length} options
-        </Badge>
-      ) : null}
-      {c.requiresPhoto ? (
-        <Badge variant="outline" className="text-[10px]">
-          photo
-        </Badge>
-      ) : null}
-      {c.requiresComment ? (
-        <Badge variant="outline" className="text-[10px]">
-          comment
-        </Badge>
-      ) : null}
+      <GeneratedValue
+        value={
+          c.responseType === 'choice' ? (
+            <Badge variant="outline" className="text-[10px]">
+              <GeneratedValue value={c.choiceOptions.length} />{' '}
+              <GeneratedText id="m_13be14e62f47a1" />
+            </Badge>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          c.requiresPhoto ? (
+            <Badge variant="outline" className="text-[10px]">
+              <GeneratedText id="m_07cb1cfb72cff4" />
+            </Badge>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          c.requiresComment ? (
+            <Badge variant="outline" className="text-[10px]">
+              <GeneratedText id="m_05b9f700b46533" />
+            </Badge>
+          ) : null
+        }
+      />
     </>
   )
 }
@@ -255,6 +286,7 @@ const CADENCES = [
 ]
 
 function SettingsPanel({ type, onDeleted }: { type: BuilderType; onDeleted: () => void }) {
+  const tGenerated = useGeneratedTranslations()
   const run = useBuilderActionRunner('Failed to save')
   const [name, setName] = React.useState(type.name)
   const [description, setDescription] = React.useState(type.description ?? '')
@@ -285,62 +317,72 @@ function SettingsPanel({ type, onDeleted }: { type: BuilderType; onDeleted: () =
         enableCorrectiveActions,
         allowCompliantNotes,
       })
-      toast.success('Saved')
+      toast.success(tGenerated('m_0a0569b726b225'))
     })
   }
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label>Name *</Label>
+        <Label>
+          <GeneratedText id="m_1a9978900838e6" />
+        </Label>
         <Input value={name} onChange={(e) => setName(e.target.value)} required />
       </div>
       <div className="space-y-1.5">
-        <Label>Description</Label>
+        <Label>
+          <GeneratedText id="m_14d923495cf14c" />
+        </Label>
         <Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
       <div className="space-y-1.5">
-        <Label>Default cadence</Label>
+        <Label>
+          <GeneratedText id="m_0a1355e9241639" />
+        </Label>
         <Select value={defaultCadence} onChange={(e) => setDefaultCadence(e.target.value)}>
-          {CADENCES.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
+          <GeneratedValue
+            value={CADENCES.map((c) => (
+              <option key={c.value} value={c.value}>
+                <GeneratedValue value={c.label} />
+              </option>
+            ))}
+          />
         </Select>
       </div>
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
-        <legend className="px-1 text-xs font-medium text-slate-500">Workflow</legend>
+        <legend className="px-1 text-xs font-medium text-slate-500">
+          <GeneratedText id="m_0766273722e564" />
+        </legend>
         <BuilderCheckboxRow
-          label="Requires foreman"
+          label={tGenerated('m_009aa82c778013')}
           checked={requiresForeman}
           onChange={setRequiresForeman}
         />
         <BuilderCheckboxRow
-          label="Requires customer signature"
+          label={tGenerated('m_07085f507bc4a0')}
           checked={requiresCustomerSignature}
           onChange={setRequiresCustomerSignature}
         />
         <BuilderCheckboxRow
-          label="Auto-spawn corrective actions on fail (severity ≥ high)"
+          label={tGenerated('m_1bc1e69de7f1bc')}
           checked={enableCorrectiveActions}
           onChange={setEnableCorrectiveActions}
         />
         <BuilderCheckboxRow
-          label="Allow compliant notes"
+          label={tGenerated('m_0f1dacb4f6caeb')}
           checked={allowCompliantNotes}
           onChange={setAllowCompliantNotes}
         />
       </fieldset>
       <div className="flex justify-end">
         <Button onClick={save}>
-          <Save size={14} /> Save
+          <Save size={14} /> <GeneratedText id="m_19e6bff894c3c7" />
         </Button>
       </div>
 
       <BuilderDangerZone
-        title="Delete inspection type"
-        description="Removes this type from the library. Existing records are unaffected."
-        buttonLabel="Delete type"
+        title={tGenerated('m_0f55d85091996a')}
+        description={tGenerated('m_1ba34d70c06f79')}
+        buttonLabel={tGenerated('m_12fda1066d2e96')}
         onDelete={deleteType}
       />
     </div>

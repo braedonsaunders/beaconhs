@@ -1,4 +1,5 @@
 'use client'
+import { useGeneratedValueTranslations } from '@/i18n/generated'
 
 // Searchable single-select list filter. A SearchSelect that writes the chosen
 // value into a URL param (and resets page=1), the searchable counterpart of
@@ -32,6 +33,7 @@ export function SearchFilter({
   ariaLabel?: string
   className?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const router = useRouter()
   const value =
     typeof currentParams[paramKey] === 'string' ? (currentParams[paramKey] as string) : ''
@@ -47,12 +49,12 @@ export function SearchFilter({
         )
       }
       options={options}
-      placeholder={placeholder}
-      searchPlaceholder={searchPlaceholder ?? placeholder}
+      placeholder={tGeneratedValue(placeholder)}
+      searchPlaceholder={tGeneratedValue(searchPlaceholder ?? placeholder)}
       ariaLabel={ariaLabel ?? placeholder}
       sheetTitle={placeholder}
       clearable
-      emptyLabel={allLabel ?? placeholder}
+      emptyLabel={tGeneratedValue(allLabel ?? placeholder)}
       className={className}
       triggerClassName="h-8 text-sm"
     />

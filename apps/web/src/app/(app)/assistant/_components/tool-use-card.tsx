@@ -1,5 +1,7 @@
 'use client'
 
+import { useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // A single tool call rendered as a tidy, expandable card. Driven by the SDK part
 // `state`: input-streaming/input-available → spinner; output-available → check;
 // output-error → alert. The same card renders live and on transcript reload.
@@ -85,6 +87,7 @@ export function ToolUseCard({
   input?: unknown
   output?: unknown
 }) {
+  const tGenerated = useGeneratedTranslations()
   const [open, setOpen] = useState(false)
   const { label, icon: Icon } = metaFor(name)
   const running = state === 'input-streaming' || state === 'input-available'
@@ -109,18 +112,28 @@ export function ToolUseCard({
           <Icon className="h-3.5 w-3.5" />
         </span>
         <span className="min-w-0 flex-1 truncate font-medium text-slate-700 dark:text-slate-200">
-          {label}
+          <GeneratedValue value={label} />
         </span>
-        {summary ? (
-          <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">{summary}</span>
-        ) : null}
-        {running ? (
-          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-slate-400" />
-        ) : errored ? (
-          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
-        ) : (
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-teal-600 dark:text-teal-400" />
-        )}
+        <GeneratedValue
+          value={
+            summary ? (
+              <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedValue value={summary} />
+              </span>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            running ? (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-slate-400" />
+            ) : errored ? (
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
+            ) : (
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-teal-600 dark:text-teal-400" />
+            )
+          }
+        />
         <ChevronRight
           className={cn(
             'h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform',
@@ -128,14 +141,28 @@ export function ToolUseCard({
           )}
         />
       </button>
-      {open ? (
-        <div className="space-y-2 border-t border-slate-200 px-3 py-2 dark:border-slate-800">
-          {input !== undefined && input !== null && Object.keys(input).length > 0 ? (
-            <Detail label="Request" value={input} />
-          ) : null}
-          {output !== undefined ? <Detail label="Result" value={redactImages(output)} /> : null}
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          open ? (
+            <div className="space-y-2 border-t border-slate-200 px-3 py-2 dark:border-slate-800">
+              <GeneratedValue
+                value={
+                  input !== undefined && input !== null && Object.keys(input).length > 0 ? (
+                    <Detail label={tGenerated('m_1e1f914677096e')} value={input} />
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  output !== undefined ? (
+                    <Detail label={tGenerated('m_100e41041dbe51')} value={redactImages(output)} />
+                  ) : null
+                }
+              />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -144,7 +171,7 @@ function Detail({ label, value }: { label: string; value: unknown }) {
   return (
     <div>
       <div className="mb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
-        {label}
+        <GeneratedValue value={label} />
       </div>
       <pre className="app-scroll max-h-60 overflow-auto rounded-md bg-white p-2 text-xs leading-relaxed text-slate-700 ring-1 ring-slate-200 dark:bg-slate-950 dark:text-slate-300 dark:ring-slate-800">
         {safeStringify(value)}

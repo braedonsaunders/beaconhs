@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import * as React from 'react'
 import { Boxes, ListChecks, Plus, Save } from 'lucide-react'
 import { Badge, Button, EmptyState, Input, Label, Select, Textarea } from '@beaconhs/ui'
@@ -63,6 +70,8 @@ export function FlatCriteriaBankBuilder<C extends FlatBankCriterion, D>({
     onSave: (data: D) => void
   }) => React.ReactNode
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [criteria, setCriteria] = useReseededState(initialCriteria, initialCriteria)
   const [leftTab, setLeftTab] = React.useState<'build' | 'settings' | 'activity'>('build')
   const [published, setPublished] = React.useState(bank.isPublished)
@@ -128,44 +137,50 @@ export function FlatCriteriaBankBuilder<C extends FlatBankCriterion, D>({
           <>
             <BuilderRailHeader
               icon={<Boxes size={15} />}
-              title={bank.name}
-              subtitle="Criteria bank"
+              title={tGeneratedValue(bank.name)}
+              subtitle={tGenerated('m_038e3f65e38a7d')}
             />
             <BuilderRailTabs>
               <BuilderRailTab
                 active={leftTab === 'build'}
                 onClick={() => setLeftTab('build')}
                 icon={<ListChecks size={14} />}
-                label="Build"
+                label={tGenerated('m_0adae4a94c7be3')}
               />
               <BuilderRailTab
                 active={leftTab === 'settings'}
                 onClick={() => setLeftTab('settings')}
-                label="Settings"
+                label={tGenerated('m_151769a9fde954')}
               />
               <BuilderRailTab
                 active={leftTab === 'activity'}
                 onClick={() => setLeftTab('activity')}
-                label="Activity"
+                label={tGenerated('m_14b78af1b2f95e')}
               />
             </BuilderRailTabs>
             <BuilderScroll>
-              {leftTab === 'build' ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{intro}</p>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => setEditor({ mode: 'add' })}
-                  >
-                    <Plus size={14} /> Add question
-                  </Button>
-                </div>
-              ) : leftTab === 'settings' ? (
-                settings
-              ) : (
-                activitySlot
-              )}
+              <GeneratedValue
+                value={
+                  leftTab === 'build' ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedValue value={intro} />
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start"
+                        onClick={() => setEditor({ mode: 'add' })}
+                      >
+                        <Plus size={14} /> <GeneratedText id="m_029dffafbff34b" />
+                      </Button>
+                    </div>
+                  ) : leftTab === 'settings' ? (
+                    settings
+                  ) : (
+                    activitySlot
+                  )
+                }
+              />
             </BuilderScroll>
           </>
         }
@@ -173,66 +188,92 @@ export function FlatCriteriaBankBuilder<C extends FlatBankCriterion, D>({
           <>
             <BuilderSurfaceHeader
               icon={<ListChecks size={15} />}
-              title="Criteria"
+              title={tGenerated('m_1a1ce62686f0b8')}
               actions={
                 <>
                   <Badge variant="secondary">
-                    {criteria.length} criteri{criteria.length === 1 ? 'on' : 'a'}
+                    <GeneratedValue value={criteria.length} />{' '}
+                    <GeneratedText id="m_0267cb8c0ed520" />
+                    <GeneratedValue
+                      value={
+                        criteria.length === 1 ? (
+                          <GeneratedText id="m_17414f59d8f567" />
+                        ) : (
+                          <GeneratedText id="m_1c2ba782c97901" />
+                        )
+                      }
+                    />
                   </Badge>
                   <Button
                     size="sm"
                     variant={published ? 'outline' : 'default'}
                     onClick={togglePublish}
                   >
-                    {published ? 'Unpublish' : 'Publish'}
+                    <GeneratedValue
+                      value={
+                        published ? (
+                          <GeneratedText id="m_0d6976fc2d60c8" />
+                        ) : (
+                          <GeneratedText id="m_0c072fb8baf115" />
+                        )
+                      }
+                    />
                   </Button>
                 </>
               }
             />
             <BuilderScroll className="space-y-3 lg:p-6">
-              {criteria.length === 0 ? (
-                <EmptyState
-                  icon={<ListChecks size={24} />}
-                  title="No criteria yet"
-                  description={emptyDescription}
-                />
-              ) : (
-                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
-                  <SortableList items={sorted} onReorder={handleReorder}>
-                    {sorted.map((criterion, index) => (
-                      <SortableRow
-                        key={criterion.id}
-                        value={criterion}
-                        selected={selectedId === criterion.id}
-                        onSelect={() => {
-                          setSelectedId(criterion.id)
-                          setEditor({ mode: 'edit', criterion })
-                        }}
-                        onMoveUp={() => moveCriterion(criterion, -1)}
-                        onMoveDown={() => moveCriterion(criterion, 1)}
-                        onDelete={() => handleDelete(criterion)}
-                        canUp={index > 0}
-                        canDown={index < sorted.length - 1}
-                      >
-                        {renderCriterion(criterion)}
-                      </SortableRow>
-                    ))}
-                  </SortableList>
-                </div>
-              )}
+              <GeneratedValue
+                value={
+                  criteria.length === 0 ? (
+                    <EmptyState
+                      icon={<ListChecks size={24} />}
+                      title={tGenerated('m_06424995a9aee2')}
+                      description={tGeneratedValue(emptyDescription)}
+                    />
+                  ) : (
+                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-900">
+                      <SortableList items={sorted} onReorder={handleReorder}>
+                        <GeneratedValue
+                          value={sorted.map((criterion, index) => (
+                            <SortableRow
+                              key={criterion.id}
+                              value={criterion}
+                              selected={selectedId === criterion.id}
+                              onSelect={() => {
+                                setSelectedId(criterion.id)
+                                setEditor({ mode: 'edit', criterion })
+                              }}
+                              onMoveUp={() => moveCriterion(criterion, -1)}
+                              onMoveDown={() => moveCriterion(criterion, 1)}
+                              onDelete={() => handleDelete(criterion)}
+                              canUp={index > 0}
+                              canDown={index < sorted.length - 1}
+                            >
+                              <GeneratedValue value={renderCriterion(criterion)} />
+                            </SortableRow>
+                          ))}
+                        />
+                      </SortableList>
+                    </div>
+                  )
+                }
+              />
               <Button
                 variant="outline"
                 className="w-full"
                 onClick={() => setEditor({ mode: 'add' })}
               >
-                <Plus size={14} /> Add question
+                <Plus size={14} /> <GeneratedText id="m_029dffafbff34b" />
               </Button>
             </BuilderScroll>
           </>
         }
       />
 
-      {renderEditor({ editor, onClose: () => setEditor(null), onSave: saveCriterion })}
+      <GeneratedValue
+        value={renderEditor({ editor, onClose: () => setEditor(null), onSave: saveCriterion })}
+      />
     </>
   )
 }
@@ -251,6 +292,8 @@ export function CriteriaBankSettings({
     category: string | null
   }) => Promise<unknown>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [, startTransition] = React.useTransition()
   const [name, setName] = React.useState(bank.name)
   const [description, setDescription] = React.useState(bank.description ?? '')
@@ -260,9 +303,11 @@ export function CriteriaBankSettings({
     startTransition(async () => {
       try {
         await update({ id: bank.id, name, description, category: category || null })
-        toast.success('Saved')
+        toast.success(tGenerated('m_0a0569b726b225'))
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Failed to save')
+        toast.error(
+          tGeneratedValue(error instanceof Error ? error.message : tGenerated('m_084d4d5382264e')),
+        )
       }
     })
   }
@@ -270,11 +315,15 @@ export function CriteriaBankSettings({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label>Name *</Label>
+        <Label>
+          <GeneratedText id="m_1a9978900838e6" />
+        </Label>
         <Input value={name} onChange={(event) => setName(event.target.value)} required />
       </div>
       <div className="space-y-1.5">
-        <Label>Description</Label>
+        <Label>
+          <GeneratedText id="m_14d923495cf14c" />
+        </Label>
         <Textarea
           rows={3}
           value={description}
@@ -282,18 +331,22 @@ export function CriteriaBankSettings({
         />
       </div>
       <div className="space-y-1.5">
-        <Label>Category</Label>
+        <Label>
+          <GeneratedText id="m_108b41637f364f" />
+        </Label>
         <Select value={category} onChange={(event) => setCategory(event.target.value)}>
-          {categories.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          <GeneratedValue
+            value={categories.map((option) => (
+              <option key={option.value} value={option.value}>
+                <GeneratedValue value={option.label} />
+              </option>
+            ))}
+          />
         </Select>
       </div>
       <div className="flex justify-end">
         <Button onClick={save}>
-          <Save size={14} /> Save
+          <Save size={14} /> <GeneratedText id="m_19e6bff894c3c7" />
         </Button>
       </div>
     </div>

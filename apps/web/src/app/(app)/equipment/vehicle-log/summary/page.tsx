@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { and, asc, count, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
@@ -25,7 +28,10 @@ import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
 import { resolveVehicleEquipmentWhere } from '../_equipment-policy'
 
-export const metadata = { title: 'Vehicle log summary' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_062636ebd477e6') }
+}
 export const dynamic = 'force-dynamic'
 const BASE = '/equipment/vehicle-log/summary'
 const SORTS = ['asset_tag'] as const
@@ -63,6 +69,8 @@ export default async function TruckLogSummaryPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const year = parseYear(pickString(sp.year))
   const params = parseListParams(sp, {
@@ -237,38 +245,48 @@ export default async function TruckLogSummaryPage({
       header={
         <>
           <PageHeader
-            title="Vehicle log summary"
-            description={`Annual roll-up of km driven, hours on site, and crew count for ${year}.`}
+            title={tGenerated('m_062636ebd477e6')}
+            description={tGenerated('m_02683b214e28b7', { value0: year })}
             actions={
               <div className="flex items-center gap-2">
                 <Link href={{ pathname: BASE, query: { ...sp, year: year - 1, page: undefined } }}>
                   <Button variant="outline" size="sm">
-                    ← {year - 1}
+                    ← <GeneratedValue value={year - 1} />
                   </Button>
                 </Link>
                 <Link href={{ pathname: BASE, query: { ...sp, year: year + 1, page: undefined } }}>
                   <Button variant="outline" size="sm">
-                    {year + 1} →
+                    <GeneratedValue value={year + 1} /> →
                   </Button>
                 </Link>
-                {canExport ? (
-                  <Link
-                    href={{
-                      pathname: '/equipment/vehicle-log/export.csv',
-                      query: { year, q: params.q },
-                    }}
-                  >
-                    <Button>Export CSV</Button>
-                  </Link>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    canExport ? (
+                      <Link
+                        href={{
+                          pathname: '/equipment/vehicle-log/export.csv',
+                          query: { year, q: params.q },
+                        }}
+                      >
+                        <Button>
+                          <GeneratedText id="m_14c6440eca1edc" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
               </div>
             }
           />
           <EquipmentSubNav active="vehicle-log" />
           <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-            <span>Year</span>
+            <span>
+              <GeneratedText id="m_1f69767390b86a" />
+            </span>
             <form className="flex items-center gap-2" action="/equipment/vehicle-log/summary">
-              {params.q ? <input type="hidden" name="q" value={params.q} /> : null}
+              <GeneratedValue
+                value={params.q ? <input type="hidden" name="q" value={params.q} /> : null}
+              />
               <input
                 name="year"
                 type="number"
@@ -278,134 +296,170 @@ export default async function TruckLogSummaryPage({
                 className="w-24 rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-800"
               />
               <Button type="submit" variant="outline" size="sm">
-                Apply
+                <GeneratedText id="m_01185cdc1c20a5" />
               </Button>
             </form>
           </div>
           <TableToolbar>
-            <SearchInput placeholder="Search asset tag, name, category, or type…" />
+            <SearchInput placeholder={tGenerated('m_016f56eb48416e')} />
           </TableToolbar>
         </>
       }
     >
-      {trucks.length === 0 ? (
-        <EmptyState
-          icon={<Truck size={32} />}
-          title={params.q ? 'No vehicles match your search' : 'No equipment'}
-          description={
-            params.q
-              ? 'Clear the search to see other accessible vehicles.'
-              : 'Add equipment first, then log daily entries to populate the monthly roll-up.'
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="sticky left-0 z-10 bg-white dark:bg-slate-900">
-                  Truck
-                </TableHead>
-                {MONTHS.map((m) => (
-                  <TableHead
-                    key={m}
-                    className="text-center text-xs text-slate-500 dark:text-slate-400"
-                  >
-                    {m}
-                  </TableHead>
-                ))}
-                <TableHead className="text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {trucks.map((t) => {
-                const months = grid.get(t.id) ?? new Map<number, MonthRollup>()
-                const totals = truckTotals.get(t.id) ?? { km: 0, hours: 0, manpower: 0, days: 0 }
-                return (
-                  <TableRow key={t.id}>
-                    <TableCell className="sticky left-0 z-10 bg-white whitespace-nowrap dark:bg-slate-900">
-                      <Link href={`/equipment/${t.id}`} className="hover:underline">
-                        <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                          {t.assetTag}
-                        </div>
-                        <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {t.name}
-                        </div>
-                      </Link>
-                    </TableCell>
-                    {MONTHS.map((_, i) => {
-                      const m = months.get(i + 1)
-                      if (!m)
-                        return (
-                          <TableCell key={i} className="text-center text-xs text-slate-300">
-                            —
-                          </TableCell>
-                        )
+      <GeneratedValue
+        value={
+          trucks.length === 0 ? (
+            <EmptyState
+              icon={<Truck size={32} />}
+              title={tGeneratedValue(
+                params.q ? tGenerated('m_0facdddbc34f7d') : tGenerated('m_0f44a06d1a2711'),
+              )}
+              description={tGeneratedValue(
+                params.q ? tGenerated('m_03cbeaf84beb85') : tGenerated('m_1e6f192b7c254a'),
+              )}
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="sticky left-0 z-10 bg-white dark:bg-slate-900">
+                      <GeneratedText id="m_0b28fe409b19d3" />
+                    </TableHead>
+                    <GeneratedValue
+                      value={MONTHS.map((m) => (
+                        <TableHead
+                          key={m}
+                          className="text-center text-xs text-slate-500 dark:text-slate-400"
+                        >
+                          <GeneratedValue value={m} />
+                        </TableHead>
+                      ))}
+                    />
+                    <TableHead className="text-right">
+                      <GeneratedText id="m_13829da903be72" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={trucks.map((t) => {
+                      const months = grid.get(t.id) ?? new Map<number, MonthRollup>()
+                      const totals = truckTotals.get(t.id) ?? {
+                        km: 0,
+                        hours: 0,
+                        manpower: 0,
+                        days: 0,
+                      }
                       return (
-                        <TableCell key={i} className="text-center align-top">
-                          <Link
-                            href={`/equipment/vehicle-log?month=${year}-${pad2(i + 1)}` as any}
-                            className="block rounded bg-slate-50 px-1.5 py-1 text-[11px] hover:bg-teal-50 dark:bg-slate-800"
-                          >
-                            <div className="font-medium text-slate-900 dark:text-slate-100">
-                              {m.km} km
+                        <TableRow key={t.id}>
+                          <TableCell className="sticky left-0 z-10 bg-white whitespace-nowrap dark:bg-slate-900">
+                            <Link href={`/equipment/${t.id}`} className="hover:underline">
+                              <div className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                                <GeneratedValue value={t.assetTag} />
+                              </div>
+                              <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                <GeneratedValue value={t.name} />
+                              </div>
+                            </Link>
+                          </TableCell>
+                          <GeneratedValue
+                            value={MONTHS.map((_, i) => {
+                              const m = months.get(i + 1)
+                              if (!m)
+                                return (
+                                  <TableCell key={i} className="text-center text-xs text-slate-300">
+                                    —
+                                  </TableCell>
+                                )
+                              return (
+                                <TableCell key={i} className="text-center align-top">
+                                  <Link
+                                    href={
+                                      `/equipment/vehicle-log?month=${year}-${pad2(i + 1)}` as any
+                                    }
+                                    className="block rounded bg-slate-50 px-1.5 py-1 text-[11px] hover:bg-teal-50 dark:bg-slate-800"
+                                  >
+                                    <div className="font-medium text-slate-900 dark:text-slate-100">
+                                      <GeneratedValue value={m.km} />{' '}
+                                      <GeneratedText id="m_052eec8e5ae8ca" />
+                                    </div>
+                                    <div className="text-slate-500 dark:text-slate-400">
+                                      <GeneratedValue value={m.hours.toFixed(1)} />{' '}
+                                      <GeneratedText id="m_0e3010419001f6" />
+                                    </div>
+                                    <div className="text-slate-500 dark:text-slate-400">
+                                      <GeneratedValue value={m.manpower} />{' '}
+                                      <GeneratedText id="m_02e2faa9b2f319" />
+                                    </div>
+                                  </Link>
+                                </TableCell>
+                              )
+                            })}
+                          />
+                          <TableCell className="text-right text-sm font-medium">
+                            <div>
+                              <GeneratedValue value={totals.km} />{' '}
+                              <GeneratedText id="m_052eec8e5ae8ca" />
                             </div>
-                            <div className="text-slate-500 dark:text-slate-400">
-                              {m.hours.toFixed(1)} h
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              <GeneratedValue value={totals.hours.toFixed(1)} />{' '}
+                              <GeneratedText id="m_0e3010419001f6" />
                             </div>
-                            <div className="text-slate-500 dark:text-slate-400">
-                              {m.manpower} crew
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              <GeneratedValue value={totals.manpower} />{' '}
+                              <GeneratedText id="m_02e2faa9b2f319" />
                             </div>
-                          </Link>
-                        </TableCell>
+                          </TableCell>
+                        </TableRow>
                       )
                     })}
-                    <TableCell className="text-right text-sm font-medium">
-                      <div>{totals.km} km</div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        {totals.hours.toFixed(1)} h
+                  />
+                  <TableRow>
+                    <TableCell className="sticky left-0 z-10 bg-slate-50 font-semibold dark:bg-slate-800">
+                      <GeneratedText id="m_1d7be7cee88a16" />
+                    </TableCell>
+                    <GeneratedValue
+                      value={monthTotals.map((m, i) => (
+                        <TableCell
+                          key={i}
+                          className="bg-slate-50 text-center align-top dark:bg-slate-800"
+                        >
+                          <div className="text-xs font-medium text-slate-900 dark:text-slate-100">
+                            <GeneratedValue value={m.km} /> <GeneratedText id="m_052eec8e5ae8ca" />
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            <GeneratedValue value={m.hours.toFixed(1)} />{' '}
+                            <GeneratedText id="m_0e3010419001f6" />
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            <GeneratedValue value={m.manpower} />{' '}
+                            <GeneratedText id="m_02e2faa9b2f319" />
+                          </div>
+                        </TableCell>
+                      ))}
+                    />
+                    <TableCell className="bg-slate-50 text-right dark:bg-slate-800">
+                      <div className="text-sm font-semibold">
+                        <GeneratedValue value={grandTotals.km} />{' '}
+                        <GeneratedText id="m_052eec8e5ae8ca" />
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">
-                        {totals.manpower} crew
+                        <GeneratedValue value={grandTotals.hours.toFixed(1)} />{' '}
+                        <GeneratedText id="m_0e3010419001f6" />
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedValue value={grandTotals.manpower} />{' '}
+                        <GeneratedText id="m_02e2faa9b2f319" />
                       </div>
                     </TableCell>
                   </TableRow>
-                )
-              })}
-              <TableRow>
-                <TableCell className="sticky left-0 z-10 bg-slate-50 font-semibold dark:bg-slate-800">
-                  Totals
-                </TableCell>
-                {monthTotals.map((m, i) => (
-                  <TableCell
-                    key={i}
-                    className="bg-slate-50 text-center align-top dark:bg-slate-800"
-                  >
-                    <div className="text-xs font-medium text-slate-900 dark:text-slate-100">
-                      {m.km} km
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {m.hours.toFixed(1)} h
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      {m.manpower} crew
-                    </div>
-                  </TableCell>
-                ))}
-                <TableCell className="bg-slate-50 text-right dark:bg-slate-800">
-                  <div className="text-sm font-semibold">{grandTotals.km} km</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    {grandTotals.hours.toFixed(1)} h
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    {grandTotals.manpower} crew
-                  </div>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                </TableBody>
+              </Table>
+            </div>
+          )
+        }
+      />
       <Pagination
         basePath={BASE}
         currentParams={sp}

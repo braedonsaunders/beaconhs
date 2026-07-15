@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 import Link from 'next/link'
 import { cookies, headers } from 'next/headers'
 import {
@@ -52,7 +55,10 @@ import { createApiKey, dismissReveal, revokeApiKey } from './_actions'
 import { requireApiKeyAdmin } from './_guard'
 import { apiKeyIdFromRevealCookie } from './_reveal-cookie'
 
-export const metadata = { title: 'API keys' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_100ad61f23e3c3') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/admin/api-keys'
@@ -64,7 +70,12 @@ const DOC_LINK_CLASS =
   'inline-flex h-8 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800/60'
 
 function permissionSummary(permissions: string[]) {
-  if (permissions.length === 0) return <span className="text-xs text-slate-400">none</span>
+  if (permissions.length === 0)
+    return (
+      <span className="text-xs text-slate-400">
+        <GeneratedText id="m_1fddcd7c1dea78" />
+      </span>
+    )
   const byGroup = new Map<string, number>()
   for (const permission of permissions) {
     const group = permissionGroupLabel(permission)
@@ -73,19 +84,25 @@ function permissionSummary(permissions: string[]) {
   const entries = [...byGroup.entries()].slice(0, 3)
   return (
     <span className="flex flex-wrap gap-1" title={permissions.join(', ')}>
-      {entries.map(([group, count]) => (
-        <span
-          key={group}
-          className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-        >
-          {group} {count}
-        </span>
-      ))}
-      {byGroup.size > entries.length ? (
-        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-          +{byGroup.size - entries.length}
-        </span>
-      ) : null}
+      <GeneratedValue
+        value={entries.map(([group, count]) => (
+          <span
+            key={group}
+            className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          >
+            <GeneratedValue value={group} /> <GeneratedValue value={count} />
+          </span>
+        ))}
+      />
+      <GeneratedValue
+        value={
+          byGroup.size > entries.length ? (
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+              +<GeneratedValue value={byGroup.size - entries.length} />
+            </span>
+          ) : null
+        }
+      />
     </span>
   )
 }
@@ -95,6 +112,8 @@ export default async function ApiKeysPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireApiKeyAdmin()
   const sp = await searchParams
   const statusParam = pickString(sp.status)
@@ -200,52 +219,66 @@ export default async function ApiKeysPage({
       <div className="space-y-5">
         <DetailHeader
           back={{ href: '/admin', label: 'Back to admin' }}
-          title="API keys"
-          subtitle="Per-tenant secrets for the public REST API"
+          title={tGenerated('m_100ad61f23e3c3')}
+          subtitle={tGenerated('m_0c0529edc503cf')}
         />
 
-        {reveals.map((reveal) => (
-          <Alert key={reveal.cookieName} variant="warning">
-            <AlertTitle>Copy {reveal.label} now — this secret won't be shown again</AlertTitle>
-            <AlertDescription className="mt-2 flex items-center justify-between gap-2">
-              <code className="block flex-1 overflow-x-auto rounded bg-slate-900 px-3 py-2 font-mono text-xs text-emerald-300">
-                {reveal.secret}
-              </code>
-              <form action={dismissReveal}>
-                <input type="hidden" name="cookieName" value={reveal.cookieName} />
-                <Button type="submit" variant="outline" size="sm">
-                  I've copied it
-                </Button>
-              </form>
-            </AlertDescription>
-          </Alert>
-        ))}
+        <GeneratedValue
+          value={reveals.map((reveal) => (
+            <Alert key={reveal.cookieName} variant="warning">
+              <AlertTitle>
+                <GeneratedText id="m_17e5ebd91b9a4f" /> <GeneratedValue value={reveal.label} />{' '}
+                <GeneratedText id="m_13d1df31a4a123" />
+              </AlertTitle>
+              <AlertDescription className="mt-2 flex items-center justify-between gap-2">
+                <code className="block flex-1 overflow-x-auto rounded bg-slate-900 px-3 py-2 font-mono text-xs text-emerald-300">
+                  {reveal.secret}
+                </code>
+                <form action={dismissReveal}>
+                  <input type="hidden" name="cookieName" value={reveal.cookieName} />
+                  <Button type="submit" variant="outline" size="sm">
+                    <GeneratedText id="m_13e64df149eaba" />
+                  </Button>
+                </form>
+              </AlertDescription>
+            </Alert>
+          ))}
+        />
 
-        {error ? (
-          <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            {error}
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            error ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+                <GeneratedValue value={error} />
+              </div>
+            ) : null
+          }
+        />
 
         <Card>
           <CardHeader>
-            <CardTitle>Developer</CardTitle>
+            <CardTitle>
+              <GeneratedText id="m_1d0df07e8599e0" />
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1">
-              <div className="text-sm text-slate-600 dark:text-slate-300">Base URL</div>
+              <div className="text-sm text-slate-600 dark:text-slate-300">
+                <GeneratedText id="m_07585a641ed71e" />
+              </div>
               <code className="block w-fit rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 {baseUrl}
               </code>
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              Authenticate with{' '}
-              <code className="font-mono text-xs">Authorization: Bearer &lt;key&gt;</code>. The full
-              schema is described by the OpenAPI spec and the interactive reference below.
+              <GeneratedText id="m_1301c29e1581dc" />
+              <GeneratedValue value={' '} />
+              <code className="font-mono text-xs">Authorization: Bearer &lt;key&gt;</code>
+              <GeneratedText id="m_000f83dccdbfbf" />
             </p>
             <div className="flex flex-wrap gap-2">
               <a href="/api/v1/docs" target="_blank" rel="noreferrer" className={DOC_LINK_CLASS}>
-                <BookText size={14} /> View API docs
+                <BookText size={14} /> <GeneratedText id="m_09bedcc06eba6d" />
               </a>
               <a
                 href="/api/v1/openapi.json"
@@ -253,7 +286,7 @@ export default async function ApiKeysPage({
                 rel="noreferrer"
                 className={DOC_LINK_CLASS}
               >
-                <Download size={14} /> OpenAPI spec
+                <Download size={14} /> <GeneratedText id="m_0a58d87e99a43e" />
               </a>
             </div>
           </CardContent>
@@ -261,64 +294,72 @@ export default async function ApiKeysPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Create new key</CardTitle>
+            <CardTitle>
+              <GeneratedText id="m_1e6054dc08562f" />
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <form action={createApiKey} className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Name</Label>
-                  <Input name="name" required placeholder="e.g. NetSuite integration" />
+                  <Label>
+                    <GeneratedText id="m_02b18d5c7f6f2d" />
+                  </Label>
+                  <Input name="name" required placeholder={tGenerated('m_15427f3611a133')} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Expires (optional)</Label>
+                  <Label>
+                    <GeneratedText id="m_1977d5e7826151" />
+                  </Label>
                   <Input type="date" name="expiresAt" />
                 </div>
               </div>
 
               <fieldset className="space-y-3">
                 <legend className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Permissions
+                  <GeneratedText id="m_0f16ebbc2ed672" />
                 </legend>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  API keys use the same permission catalogue as roles. Grant only the permissions
-                  this integration needs.
+                  <GeneratedText id="m_068e65729eb69b" />
                 </p>
                 <PermissionMatrix />
               </fieldset>
 
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Builder app grants
+                  <GeneratedText id="m_161e4f441da198" />
                 </legend>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Forms permissions do not grant every app. Select each published app this key may
-                  access. No selection means Builder app access is blocked.
+                  <GeneratedText id="m_17144d31fa030e" />
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  {builderApps.map((app) => (
-                    <label key={app.id} className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" name="builderTemplateIds" value={app.id} />
-                      <span>{app.name}</span>
-                    </label>
-                  ))}
+                  <GeneratedValue
+                    value={builderApps.map((app) => (
+                      <label key={app.id} className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" name="builderTemplateIds" value={app.id} />
+                        <span>
+                          <GeneratedValue value={app.name} />
+                        </span>
+                      </label>
+                    ))}
+                  />
                 </div>
               </fieldset>
 
               <Button type="submit">
-                <Key size={14} /> Generate
+                <Key size={14} /> <GeneratedText id="m_1dbb9f90b1c6f2" />
               </Button>
             </form>
           </CardContent>
         </Card>
 
         <TableToolbar>
-          <SearchInput placeholder="Search key name or prefix…" />
+          <SearchInput placeholder={tGenerated('m_0d2dd439687b7d')} />
           <FilterChips
             basePath={BASE}
             currentParams={sp}
             paramKey="status"
-            label="Status"
+            label={tGenerated('m_0b9da892d6faf0')}
             options={[
               { value: 'active', label: 'Active', count: list.statusCounts.active },
               { value: 'expired', label: 'Expired', count: list.statusCounts.expired },
@@ -327,118 +368,160 @@ export default async function ApiKeysPage({
           />
         </TableToolbar>
 
-        {list.rows.length === 0 ? (
-          <EmptyState
-            icon={<Key size={32} />}
-            title={!params.q && !statusFilter ? 'No API keys' : 'No matching API keys'}
-          />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="name"
-                  active={params.sort === 'name'}
-                >
-                  Name
-                </SortableTh>
-                <TableHead>Permissions</TableHead>
-                <TableHead>Prefix</TableHead>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="created"
-                  active={params.sort === 'created'}
-                >
-                  Created
-                </SortableTh>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="expires"
-                  active={params.sort === 'expires'}
-                >
-                  Expires
-                </SortableTh>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="lastUsed"
-                  active={params.sort === 'lastUsed'}
-                >
-                  Last used
-                </SortableTh>
-                <SortableTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  dir={params.dir}
-                  column="status"
-                  active={params.sort === 'status'}
-                >
-                  Status
-                </SortableTh>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.rows.map((k) => {
-                const expired = !k.revokedAt && k.expiresAt && k.expiresAt.getTime() <= now
-                return (
-                  <TableRow key={k.id}>
-                    <TableCell className="font-medium">
-                      <Link
-                        href={`/admin/api-keys/${k.id}` as any}
-                        className="text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {k.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{permissionSummary(k.permissions ?? [])}</TableCell>
-                    <TableCell className="font-mono text-xs">{k.prefix}…</TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {formatDate(new Date(k.createdAt), ctx.timezone, ctx.locale)}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {k.expiresAt
-                        ? formatDate(new Date(k.expiresAt), ctx.timezone, ctx.locale)
-                        : '—'}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {k.lastUsedAt
-                        ? formatDateTime(new Date(k.lastUsedAt), ctx.timezone, ctx.locale)
-                        : '—'}
-                    </TableCell>
-                    <TableCell>
-                      {k.revokedAt ? (
-                        <Badge variant="destructive">revoked</Badge>
-                      ) : expired ? (
-                        <span className="text-xs text-slate-500 dark:text-slate-400">expired</span>
-                      ) : (
-                        <Badge variant="success">active</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {!k.revokedAt ? (
-                        <form action={revokeApiKey} className="inline">
-                          <input type="hidden" name="id" value={k.id} />
-                          <Button type="submit" size="sm" variant="outline">
-                            Revoke
-                          </Button>
-                        </form>
-                      ) : null}
-                    </TableCell>
+        <GeneratedValue
+          value={
+            list.rows.length === 0 ? (
+              <EmptyState
+                icon={<Key size={32} />}
+                title={tGeneratedValue(
+                  !params.q && !statusFilter
+                    ? tGenerated('m_00d7c8efa838bf')
+                    : tGenerated('m_018fe15cc7c866'),
+                )}
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="name"
+                      active={params.sort === 'name'}
+                    >
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_0f16ebbc2ed672" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_00adfbfb276db4" />
+                    </TableHead>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="created"
+                      active={params.sort === 'created'}
+                    >
+                      <GeneratedText id="m_10cbe051fb5e05" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="expires"
+                      active={params.sort === 'expires'}
+                    >
+                      <GeneratedText id="m_14f3858b0a9ad6" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="lastUsed"
+                      active={params.sort === 'lastUsed'}
+                    >
+                      <GeneratedText id="m_0d0ec4c8965d4c" />
+                    </SortableTh>
+                    <SortableTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      dir={params.dir}
+                      column="status"
+                      active={params.sort === 'status'}
+                    >
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortableTh>
+                    <TableHead></TableHead>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={list.rows.map((k) => {
+                      const expired = !k.revokedAt && k.expiresAt && k.expiresAt.getTime() <= now
+                      return (
+                        <TableRow key={k.id}>
+                          <TableCell className="font-medium">
+                            <Link
+                              href={`/admin/api-keys/${k.id}` as any}
+                              className="text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={k.name} />
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            <GeneratedValue value={permissionSummary(k.permissions ?? [])} />
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            <GeneratedValue value={k.prefix} />…
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue
+                              value={formatDate(new Date(k.createdAt), ctx.timezone, ctx.locale)}
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue
+                              value={
+                                k.expiresAt
+                                  ? formatDate(new Date(k.expiresAt), ctx.timezone, ctx.locale)
+                                  : '—'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue
+                              value={
+                                k.lastUsedAt
+                                  ? formatDateTime(new Date(k.lastUsedAt), ctx.timezone, ctx.locale)
+                                  : '—'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <GeneratedValue
+                              value={
+                                k.revokedAt ? (
+                                  <Badge variant="destructive">
+                                    <GeneratedText id="m_0546f73f095668" />
+                                  </Badge>
+                                ) : expired ? (
+                                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                                    <GeneratedText id="m_0f5dff2d717856" />
+                                  </span>
+                                ) : (
+                                  <Badge variant="success">
+                                    <GeneratedText id="m_0af64d5dc843c0" />
+                                  </Badge>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <GeneratedValue
+                              value={
+                                !k.revokedAt ? (
+                                  <form action={revokeApiKey} className="inline">
+                                    <input type="hidden" name="id" value={k.id} />
+                                    <Button type="submit" size="sm" variant="outline">
+                                      <GeneratedText id="m_18718dd379a57d" />
+                                    </Button>
+                                  </form>
+                                ) : null
+                              }
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+            )
+          }
+        />
         <Pagination
           basePath={BASE}
           currentParams={sp}

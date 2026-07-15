@@ -1,3 +1,12 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
@@ -188,8 +197,9 @@ function equipmentStatusFrom(value: string | undefined) {
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Location · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_0c497d50eed230', { value0: id.slice(0, 8) }) }
 }
 
 // -------------------- Helpers --------------------
@@ -496,6 +506,8 @@ async function renderCustomer({
   hierarchy: TenantHierarchy
   canManage: boolean
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   // Drop levels this tenant has switched off so a disabled depth can't be
   // reached even via a hand-edited ?tab= URL.
   const visibleTabs = CUSTOMER_TABS.filter(
@@ -601,12 +613,24 @@ async function renderCustomer({
       header={
         <DetailHeader
           back={{ href: '/locations', label: 'Back to locations' }}
-          title={unit.name}
-          subtitle={unit.code ? `${levelLabel('customer')} · ${unit.code}` : levelLabel('customer')}
+          title={tGeneratedValue(unit.name)}
+          subtitle={tGeneratedValue(
+            unit.code ? `${levelLabel('customer')} · ${unit.code}` : levelLabel('customer'),
+          )}
           badge={
             <>
-              <Badge variant="secondary">{levelLabel('customer')}</Badge>
-              {unit.deletedAt ? <Badge variant="warning">Archived</Badge> : null}
+              <Badge variant="secondary">
+                <GeneratedValue value={levelLabel('customer')} />
+              </Badge>
+              <GeneratedValue
+                value={
+                  unit.deletedAt ? (
+                    <Badge variant="warning">
+                      <GeneratedText id="m_12a687134482ba" />
+                    </Badge>
+                  ) : null
+                }
+              />
             </>
           }
           actions={
@@ -615,14 +639,14 @@ async function renderCustomer({
                 <form action={restoreLocation}>
                   <input type="hidden" name="id" value={unit.id} />
                   <Button type="submit" variant="outline" size="sm">
-                    Restore
+                    <GeneratedText id="m_19500e41842c99" />
                   </Button>
                 </form>
               ) : (
                 <form action={archiveLocation}>
                   <input type="hidden" name="id" value={unit.id} />
                   <Button type="submit" variant="outline" size="sm">
-                    Archive
+                    <GeneratedText id="m_019c0a64030688" />
                   </Button>
                 </form>
               )
@@ -653,100 +677,132 @@ async function renderCustomer({
         />
       }
     >
-      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null}
-      {active === 'projects' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={orgData.filteredProjectCount}
-          placeholder="Search projects…"
-        >
-          <ProjectsTab unit={unit} projects={orgData.projects} canManage={canManage} />
-        </ListTabShell>
-      ) : null}
-      {active === 'sites' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={orgData.filteredSiteCount}
-          placeholder="Search sites…"
-        >
-          <SitesTab sites={orgData.sites} showParent />
-        </ListTabShell>
-      ) : null}
-      {active === 'contacts' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={contactData.filteredTotal}
-          placeholder="Search contacts…"
-        >
-          <ContactsTab unit={unit} contacts={contactData.rows} canManage={canManage} />
-        </ListTabShell>
-      ) : null}
-      {active === 'incidents' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={incidentData.filteredTotal}
-          placeholder="Search incidents…"
-          filters={
-            <FilterChips
+      <GeneratedValue
+        value={
+          active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'projects' ? (
+            <ListTabShell
               basePath={basePath}
-              currentParams={sp}
-              paramKey={listKeys.filter}
-              pageParamKey={listKeys.page}
-              label="Status"
-              options={[...INCIDENT_STATUSES]}
-            />
-          }
-        >
-          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} locale={ctx.locale} />
-        </ListTabShell>
-      ) : null}
-      {active === 'equipment' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={equipmentData.filteredTotal}
-          placeholder="Search equipment…"
-          filters={
-            <FilterChips
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={orgData.filteredProjectCount}
+              placeholder={tGenerated('m_0aeb3f9e506c57')}
+            >
+              <ProjectsTab unit={unit} projects={orgData.projects} canManage={canManage} />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'sites' ? (
+            <ListTabShell
               basePath={basePath}
-              currentParams={sp}
-              paramKey={listKeys.filter}
-              pageParamKey={listKeys.page}
-              label="Status"
-              options={[...EQUIPMENT_STATUSES]}
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={orgData.filteredSiteCount}
+              placeholder={tGenerated('m_1931aa93098220')}
+            >
+              <SitesTab sites={orgData.sites} showParent />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'contacts' ? (
+            <ListTabShell
+              basePath={basePath}
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={contactData.filteredTotal}
+              placeholder={tGenerated('m_1485419f15886a')}
+            >
+              <ContactsTab unit={unit} contacts={contactData.rows} canManage={canManage} />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'incidents' ? (
+            <ListTabShell
+              basePath={basePath}
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={incidentData.filteredTotal}
+              placeholder={tGenerated('m_11a87bf6094fb3')}
+              filters={
+                <FilterChips
+                  basePath={basePath}
+                  currentParams={sp}
+                  paramKey={listKeys.filter}
+                  pageParamKey={listKeys.page}
+                  label={tGenerated('m_0b9da892d6faf0')}
+                  options={[...INCIDENT_STATUSES]}
+                />
+              }
+            >
+              <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} locale={ctx.locale} />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'equipment' ? (
+            <ListTabShell
+              basePath={basePath}
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={equipmentData.filteredTotal}
+              placeholder={tGenerated('m_169312ecf5d54b')}
+              filters={
+                <FilterChips
+                  basePath={basePath}
+                  currentParams={sp}
+                  paramKey={listKeys.filter}
+                  pageParamKey={listKeys.page}
+                  label={tGenerated('m_0b9da892d6faf0')}
+                  options={[...EQUIPMENT_STATUSES]}
+                />
+              }
+            >
+              <EquipmentTab equipment={equipmentData.rows} />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'activity' ? (
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          canManage ? (
+            <ContactDrawer
+              open={drawer === 'new-contact' || drawer === 'edit-contact'}
+              orgUnitId={id}
+              contact={resolveEditContact(contactData.editing, drawer)}
+              closeHref={`${basePath}?tab=contacts`}
+              createAction={createContactFromDrawer}
+              updateAction={updateContactFromDrawer}
             />
-          }
-        >
-          <EquipmentTab equipment={equipmentData.rows} />
-        </ListTabShell>
-      ) : null}
-      {active === 'activity' ? (
-        <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
-      ) : null}
-      {canManage ? (
-        <ContactDrawer
-          open={drawer === 'new-contact' || drawer === 'edit-contact'}
-          orgUnitId={id}
-          contact={resolveEditContact(contactData.editing, drawer)}
-          closeHref={`${basePath}?tab=contacts`}
-          createAction={createContactFromDrawer}
-          updateAction={updateContactFromDrawer}
-        />
-      ) : null}
+          ) : null
+        }
+      />
     </DetailPageLayout>
   )
 }
@@ -776,6 +832,8 @@ async function renderProject({
   hierarchy: TenantHierarchy
   canManage: boolean
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const visibleTabs = PROJECT_TABS.filter((t) => t !== 'sites' || hierarchy.site)
   const active: ProjectTab = pickActiveTab(sp, visibleTabs, 'overview')
   const listKeys = LOCATION_LIST_KEYS[active]
@@ -831,11 +889,20 @@ async function renderProject({
       header={
         <DetailHeader
           back={{ href: backHref, label: backLabel }}
-          title={unit.name}
-          subtitle={
-            parent ? `${levelLabel('project')} under ${parent.name}` : levelLabel('project')
+          title={tGeneratedValue(unit.name)}
+          subtitle={tGeneratedValue(
+            parent
+              ? tGenerated('m_167c6af6e54ccc', {
+                  value0: levelLabel('project'),
+                  value1: parent.name,
+                })
+              : levelLabel('project'),
+          )}
+          badge={
+            <Badge variant="secondary">
+              <GeneratedValue value={levelLabel('project')} />
+            </Badge>
           }
-          badge={<Badge variant="secondary">{levelLabel('project')}</Badge>}
         />
       }
       subtabs={
@@ -855,88 +922,116 @@ async function renderProject({
         />
       }
     >
-      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null}
-      {active === 'sites' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={siteData.filteredTotal}
-          placeholder="Search sites…"
-        >
-          <SitesTab sites={siteData.rows} />
-        </ListTabShell>
-      ) : null}
-      {active === 'contacts' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={contactData.filteredTotal}
-          placeholder="Search contacts…"
-        >
-          <ContactsTab unit={unit} contacts={contactData.rows} canManage={canManage} />
-        </ListTabShell>
-      ) : null}
-      {active === 'incidents' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={incidentData.filteredTotal}
-          placeholder="Search incidents…"
-          filters={
-            <FilterChips
+      <GeneratedValue
+        value={
+          active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'sites' ? (
+            <ListTabShell
               basePath={basePath}
-              currentParams={sp}
-              paramKey={listKeys.filter}
-              pageParamKey={listKeys.page}
-              label="Status"
-              options={[...INCIDENT_STATUSES]}
-            />
-          }
-        >
-          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} locale={ctx.locale} />
-        </ListTabShell>
-      ) : null}
-      {active === 'equipment' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={equipmentData.filteredTotal}
-          placeholder="Search equipment…"
-          filters={
-            <FilterChips
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={siteData.filteredTotal}
+              placeholder={tGenerated('m_1931aa93098220')}
+            >
+              <SitesTab sites={siteData.rows} />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'contacts' ? (
+            <ListTabShell
               basePath={basePath}
-              currentParams={sp}
-              paramKey={listKeys.filter}
-              pageParamKey={listKeys.page}
-              label="Status"
-              options={[...EQUIPMENT_STATUSES]}
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={contactData.filteredTotal}
+              placeholder={tGenerated('m_1485419f15886a')}
+            >
+              <ContactsTab unit={unit} contacts={contactData.rows} canManage={canManage} />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'incidents' ? (
+            <ListTabShell
+              basePath={basePath}
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={incidentData.filteredTotal}
+              placeholder={tGenerated('m_11a87bf6094fb3')}
+              filters={
+                <FilterChips
+                  basePath={basePath}
+                  currentParams={sp}
+                  paramKey={listKeys.filter}
+                  pageParamKey={listKeys.page}
+                  label={tGenerated('m_0b9da892d6faf0')}
+                  options={[...INCIDENT_STATUSES]}
+                />
+              }
+            >
+              <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} locale={ctx.locale} />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'equipment' ? (
+            <ListTabShell
+              basePath={basePath}
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={equipmentData.filteredTotal}
+              placeholder={tGenerated('m_169312ecf5d54b')}
+              filters={
+                <FilterChips
+                  basePath={basePath}
+                  currentParams={sp}
+                  paramKey={listKeys.filter}
+                  pageParamKey={listKeys.page}
+                  label={tGenerated('m_0b9da892d6faf0')}
+                  options={[...EQUIPMENT_STATUSES]}
+                />
+              }
+            >
+              <EquipmentTab equipment={equipmentData.rows} />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'activity' ? (
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          canManage ? (
+            <ContactDrawer
+              open={drawer === 'new-contact' || drawer === 'edit-contact'}
+              orgUnitId={id}
+              contact={resolveEditContact(contactData.editing, drawer)}
+              closeHref={`${basePath}?tab=contacts`}
+              createAction={createContactFromDrawer}
+              updateAction={updateContactFromDrawer}
             />
-          }
-        >
-          <EquipmentTab equipment={equipmentData.rows} />
-        </ListTabShell>
-      ) : null}
-      {active === 'activity' ? (
-        <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
-      ) : null}
-      {canManage ? (
-        <ContactDrawer
-          open={drawer === 'new-contact' || drawer === 'edit-contact'}
-          orgUnitId={id}
-          contact={resolveEditContact(contactData.editing, drawer)}
-          closeHref={`${basePath}?tab=contacts`}
-          createAction={createContactFromDrawer}
-          updateAction={updateContactFromDrawer}
-        />
-      ) : null}
+          ) : null
+        }
+      />
     </DetailPageLayout>
   )
 }
@@ -964,6 +1059,8 @@ async function renderSite({
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
   canManage: boolean
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const active: SiteTab = pickActiveTab(sp, SITE_TABS, 'overview')
   const listKeys = LOCATION_LIST_KEYS[active]
   const basePath = `/locations/${id}`
@@ -994,11 +1091,20 @@ async function renderSite({
       header={
         <DetailHeader
           back={{ href: backHref, label: backLabel }}
-          title={unit.name}
-          subtitle={
-            parent ? `${levelLabel(unit.level)} under ${parent.name}` : levelLabel(unit.level)
+          title={tGeneratedValue(unit.name)}
+          subtitle={tGeneratedValue(
+            parent
+              ? tGenerated('m_167c6af6e54ccc', {
+                  value0: levelLabel(unit.level),
+                  value1: parent.name,
+                })
+              : levelLabel(unit.level),
+          )}
+          badge={
+            <Badge variant="secondary">
+              <GeneratedValue value={levelLabel(unit.level)} />
+            </Badge>
           }
-          badge={<Badge variant="secondary">{levelLabel(unit.level)}</Badge>}
         />
       }
       subtabs={
@@ -1017,76 +1123,100 @@ async function renderSite({
         />
       }
     >
-      {active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null}
-      {active === 'contacts' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={contactData.filteredTotal}
-          placeholder="Search contacts…"
-        >
-          <ContactsTab unit={unit} contacts={contactData.rows} canManage={canManage} />
-        </ListTabShell>
-      ) : null}
-      {active === 'incidents' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={incidentData.filteredTotal}
-          placeholder="Search incidents…"
-          filters={
-            <FilterChips
+      <GeneratedValue
+        value={
+          active === 'overview' ? <OverviewTab unit={unit} canManage={canManage} ctx={ctx} /> : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'contacts' ? (
+            <ListTabShell
               basePath={basePath}
-              currentParams={sp}
-              paramKey={listKeys.filter}
-              pageParamKey={listKeys.page}
-              label="Status"
-              options={[...INCIDENT_STATUSES]}
-            />
-          }
-        >
-          <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} locale={ctx.locale} />
-        </ListTabShell>
-      ) : null}
-      {active === 'equipment' ? (
-        <ListTabShell
-          basePath={basePath}
-          sp={sp}
-          params={listParams}
-          listKeys={listKeys}
-          total={equipmentData.filteredTotal}
-          placeholder="Search equipment…"
-          filters={
-            <FilterChips
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={contactData.filteredTotal}
+              placeholder={tGenerated('m_1485419f15886a')}
+            >
+              <ContactsTab unit={unit} contacts={contactData.rows} canManage={canManage} />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'incidents' ? (
+            <ListTabShell
               basePath={basePath}
-              currentParams={sp}
-              paramKey={listKeys.filter}
-              pageParamKey={listKeys.page}
-              label="Status"
-              options={[...EQUIPMENT_STATUSES]}
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={incidentData.filteredTotal}
+              placeholder={tGenerated('m_11a87bf6094fb3')}
+              filters={
+                <FilterChips
+                  basePath={basePath}
+                  currentParams={sp}
+                  paramKey={listKeys.filter}
+                  pageParamKey={listKeys.page}
+                  label={tGenerated('m_0b9da892d6faf0')}
+                  options={[...INCIDENT_STATUSES]}
+                />
+              }
+            >
+              <IncidentsTab rows={incidentData.rows} timeZone={ctx.timezone} locale={ctx.locale} />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'equipment' ? (
+            <ListTabShell
+              basePath={basePath}
+              sp={sp}
+              params={listParams}
+              listKeys={listKeys}
+              total={equipmentData.filteredTotal}
+              placeholder={tGenerated('m_169312ecf5d54b')}
+              filters={
+                <FilterChips
+                  basePath={basePath}
+                  currentParams={sp}
+                  paramKey={listKeys.filter}
+                  pageParamKey={listKeys.page}
+                  label={tGenerated('m_0b9da892d6faf0')}
+                  options={[...EQUIPMENT_STATUSES]}
+                />
+              }
+            >
+              <EquipmentTab equipment={equipmentData.rows} />
+            </ListTabShell>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          active === 'activity' ? (
+            <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          canManage ? (
+            <ContactDrawer
+              open={drawer === 'new-contact' || drawer === 'edit-contact'}
+              orgUnitId={id}
+              contact={resolveEditContact(contactData.editing, drawer)}
+              closeHref={`${basePath}?tab=contacts`}
+              createAction={createContactFromDrawer}
+              updateAction={updateContactFromDrawer}
             />
-          }
-        >
-          <EquipmentTab equipment={equipmentData.rows} />
-        </ListTabShell>
-      ) : null}
-      {active === 'activity' ? (
-        <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
-      ) : null}
-      {canManage ? (
-        <ContactDrawer
-          open={drawer === 'new-contact' || drawer === 'edit-contact'}
-          orgUnitId={id}
-          contact={resolveEditContact(contactData.editing, drawer)}
-          closeHref={`${basePath}?tab=contacts`}
-          createAction={createContactFromDrawer}
-          updateAction={updateContactFromDrawer}
-        />
-      ) : null}
+          ) : null
+        }
+      />
     </DetailPageLayout>
   )
 }
@@ -1129,13 +1259,18 @@ function ListTabShell({
   filters?: ReactNode
   children: ReactNode
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <div className="space-y-3">
       <TableToolbar>
-        <SearchInput placeholder={placeholder} paramKey={listKeys.q} pageParamKey={listKeys.page} />
-        {filters}
+        <SearchInput
+          placeholder={tGeneratedValue(placeholder)}
+          paramKey={listKeys.q}
+          pageParamKey={listKeys.page}
+        />
+        <GeneratedValue value={filters} />
       </TableToolbar>
-      {children}
+      <GeneratedValue value={children} />
       <Pagination
         basePath={basePath}
         currentParams={sp}
@@ -1157,6 +1292,7 @@ async function OverviewTab({
   canManage: boolean
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const addr = unit.address ?? {}
   const mapsHref =
     unit.lat != null && unit.lng != null
@@ -1164,13 +1300,13 @@ async function OverviewTab({
       : null
   return (
     <div className="space-y-4">
-      <Section title="Location details">
+      <Section title={tGenerated('m_10cb4da67c8c08')}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <LiveField
               id={unit.id}
               field="name"
-              label="Name"
+              label={tGenerated('m_02b18d5c7f6f2d')}
               initialValue={unit.name}
               disabled={!canManage}
               updateAction={updateLocationField}
@@ -1179,7 +1315,7 @@ async function OverviewTab({
           <LiveField
             id={unit.id}
             field="code"
-            label="Code"
+            label={tGenerated('m_0570e24c85cf95')}
             initialValue={unit.code}
             disabled={!canManage}
             updateAction={updateLocationField}
@@ -1187,13 +1323,13 @@ async function OverviewTab({
         </div>
       </Section>
 
-      <Section title="Address">
+      <Section title={tGenerated('m_02d326d09a4cc1')}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <LiveField
               id={unit.id}
               field="addressLine1"
-              label="Address line 1"
+              label={tGenerated('m_13c9eb2e75e0da')}
               initialValue={addr.line1 ?? null}
               disabled={!canManage}
               updateAction={updateLocationField}
@@ -1203,7 +1339,7 @@ async function OverviewTab({
             <LiveField
               id={unit.id}
               field="addressLine2"
-              label="Address line 2"
+              label={tGenerated('m_0abb02292d9133')}
               initialValue={addr.line2 ?? null}
               disabled={!canManage}
               updateAction={updateLocationField}
@@ -1212,7 +1348,7 @@ async function OverviewTab({
           <LiveField
             id={unit.id}
             field="addressCity"
-            label="City"
+            label={tGenerated('m_0f8706f757eeb9')}
             initialValue={addr.city ?? null}
             disabled={!canManage}
             updateAction={updateLocationField}
@@ -1220,7 +1356,7 @@ async function OverviewTab({
           <LiveField
             id={unit.id}
             field="addressRegion"
-            label="Region / Province"
+            label={tGenerated('m_1f186e5abd90ed')}
             initialValue={addr.region ?? null}
             disabled={!canManage}
             updateAction={updateLocationField}
@@ -1228,7 +1364,7 @@ async function OverviewTab({
           <LiveField
             id={unit.id}
             field="addressPostal"
-            label="Postal / Zip"
+            label={tGenerated('m_0a022396d35be5')}
             initialValue={addr.postal ?? null}
             disabled={!canManage}
             updateAction={updateLocationField}
@@ -1236,7 +1372,7 @@ async function OverviewTab({
           <LiveField
             id={unit.id}
             field="addressCountry"
-            label="Country"
+            label={tGenerated('m_1bcca98c4d6c29')}
             initialValue={addr.country ?? null}
             disabled={!canManage}
             updateAction={updateLocationField}
@@ -1244,12 +1380,12 @@ async function OverviewTab({
         </div>
       </Section>
 
-      <Section title="Geolocation">
+      <Section title={tGenerated('m_1e55796d4f87d2')}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <LiveField
             id={unit.id}
             field="lat"
-            label="Latitude"
+            label={tGenerated('m_1234a6d40fbc9d')}
             type="number"
             initialValue={unit.lat != null ? String(unit.lat) : null}
             disabled={!canManage}
@@ -1258,7 +1394,7 @@ async function OverviewTab({
           <LiveField
             id={unit.id}
             field="lng"
-            label="Longitude"
+            label={tGenerated('m_1c3995aeba4fd9')}
             type="number"
             initialValue={unit.lng != null ? String(unit.lng) : null}
             disabled={!canManage}
@@ -1267,7 +1403,7 @@ async function OverviewTab({
           <LiveField
             id={unit.id}
             field="geofenceMeters"
-            label="Geofence (m)"
+            label={tGenerated('m_1e7bd588f4976f')}
             type="number"
             initialValue={unit.geofenceMeters != null ? String(unit.geofenceMeters) : null}
             disabled={!canManage}
@@ -1287,43 +1423,54 @@ async function OverviewTab({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Map</CardTitle>
+          <CardTitle className="text-base">
+            <GeneratedText id="m_180c776129a91f" />
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          {unit.lat != null && unit.lng != null ? (
-            <div className="space-y-3">
-              <iframe
-                title="OpenStreetMap"
-                width="100%"
-                height="320"
-                loading="lazy"
-                className="rounded-md border border-slate-200"
-                src={`https://www.openstreetmap.org/export/embed.html?bbox=${(unit.lng - 0.005).toFixed(5)}%2C${(unit.lat - 0.003).toFixed(5)}%2C${(unit.lng + 0.005).toFixed(5)}%2C${(unit.lat + 0.003).toFixed(5)}&layer=mapnik&marker=${unit.lat}%2C${unit.lng}`}
-              />
-              <div className="flex items-center justify-between text-xs text-slate-600">
-                <span>
-                  <MapPin size={12} className="-mt-0.5 mr-1 inline" />
-                  {unit.lat.toFixed(5)}, {unit.lng.toFixed(5)}
-                </span>
-                {mapsHref ? (
-                  <a
-                    href={mapsHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-teal-700 hover:underline"
-                  >
-                    Open in Google Maps →
-                  </a>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <EmptyState
-              icon={<MapPin size={24} />}
-              title="No coordinates set"
-              description="Set latitude and longitude above — site-level coordinates feed GPS auto-suggest in the field app."
-            />
-          )}
+          <GeneratedValue
+            value={
+              unit.lat != null && unit.lng != null ? (
+                <div className="space-y-3">
+                  <iframe
+                    title={tGenerated('m_0e9bda3cb6b9b3')}
+                    width="100%"
+                    height="320"
+                    loading="lazy"
+                    className="rounded-md border border-slate-200"
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${(unit.lng - 0.005).toFixed(5)}%2C${(unit.lat - 0.003).toFixed(5)}%2C${(unit.lng + 0.005).toFixed(5)}%2C${(unit.lat + 0.003).toFixed(5)}&layer=mapnik&marker=${unit.lat}%2C${unit.lng}`}
+                  />
+                  <div className="flex items-center justify-between text-xs text-slate-600">
+                    <span>
+                      <MapPin size={12} className="-mt-0.5 mr-1 inline" />
+                      <GeneratedValue value={unit.lat.toFixed(5)} />,{' '}
+                      <GeneratedValue value={unit.lng.toFixed(5)} />
+                    </span>
+                    <GeneratedValue
+                      value={
+                        mapsHref ? (
+                          <a
+                            href={mapsHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-teal-700 hover:underline"
+                          >
+                            <GeneratedText id="m_05eca93b18873b" />
+                          </a>
+                        ) : null
+                      }
+                    />
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  icon={<MapPin size={24} />}
+                  title={tGenerated('m_09e620fe5fc423')}
+                  description={tGenerated('m_1f9e6dd6666220')}
+                />
+              )
+            }
+          />
         </CardContent>
       </Card>
     </div>
@@ -1339,61 +1486,86 @@ function ProjectsTab({
   projects: (typeof orgUnits.$inferSelect)[]
   canManage: boolean
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="space-y-4">
-      {canManage ? (
-        <div className="flex items-center justify-end">
-          <form action={createProject}>
-            <input type="hidden" name="parentId" value={unit.id} />
-            <Button type="submit">
-              <Plus size={14} /> Add project
-            </Button>
-          </form>
-        </div>
-      ) : null}
-      {projects.length === 0 ? (
-        <EmptyState
-          icon={<Folder size={32} />}
-          title="No projects"
-          description="Create a project to group sites for this location."
-        />
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Project</TableHead>
-              <TableHead>Code</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {projects.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/locations/${p.id}`}
-                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                    >
-                      {p.name}
-                    </Link>
-                    {p.deletedAt ? <Badge variant="warning">Archived</Badge> : null}
-                  </div>
-                </TableCell>
-                <TableCell className="font-mono text-xs text-slate-600">{p.code ?? '—'}</TableCell>
-                <TableCell className="text-right">
-                  <Link
-                    href={`/locations/${p.id}`}
-                    className="text-xs text-teal-700 hover:underline"
-                  >
-                    View →
-                  </Link>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      <GeneratedValue
+        value={
+          canManage ? (
+            <div className="flex items-center justify-end">
+              <form action={createProject}>
+                <input type="hidden" name="parentId" value={unit.id} />
+                <Button type="submit">
+                  <Plus size={14} /> <GeneratedText id="m_1b876f79d3bd88" />
+                </Button>
+              </form>
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          projects.length === 0 ? (
+            <EmptyState
+              icon={<Folder size={32} />}
+              title={tGenerated('m_0d430535129f9e')}
+              description={tGenerated('m_1887234fe137c9')}
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <GeneratedText id="m_05069b4b587da8" />
+                  </TableHead>
+                  <TableHead>
+                    <GeneratedText id="m_0570e24c85cf95" />
+                  </TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <GeneratedValue
+                  value={projects.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/locations/${p.id}`}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                          >
+                            <GeneratedValue value={p.name} />
+                          </Link>
+                          <GeneratedValue
+                            value={
+                              p.deletedAt ? (
+                                <Badge variant="warning">
+                                  <GeneratedText id="m_12a687134482ba" />
+                                </Badge>
+                              ) : null
+                            }
+                          />
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-slate-600">
+                        <GeneratedValue value={p.code ?? '—'} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Link
+                          href={`/locations/${p.id}`}
+                          className="text-xs text-teal-700 hover:underline"
+                        >
+                          <GeneratedText id="m_1be345fc118df8" />
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                />
+              </TableBody>
+            </Table>
+          )
+        }
+      />
     </div>
   )
 }
@@ -1405,12 +1577,13 @@ function SitesTab({
   sites: { unit: typeof orgUnits.$inferSelect; parentName: string | null }[]
   showParent?: boolean
 }) {
+  const tGenerated = useGeneratedTranslations()
   if (sites.length === 0) {
     return (
       <EmptyState
         icon={<MapPin size={32} />}
-        title="No sites"
-        description="Sites sit under a project or directly under a location."
+        title={tGenerated('m_039b3b14ce95cb')}
+        description={tGenerated('m_0e058ebbfcf047')}
       />
     )
   }
@@ -1418,38 +1591,68 @@ function SitesTab({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Site</TableHead>
-          {showParent ? <TableHead>Project</TableHead> : null}
-          <TableHead>Code</TableHead>
-          <TableHead>Coordinates</TableHead>
+          <TableHead>
+            <GeneratedText id="m_020146dd3d3d5a" />
+          </TableHead>
+          <GeneratedValue
+            value={
+              showParent ? (
+                <TableHead>
+                  <GeneratedText id="m_05069b4b587da8" />
+                </TableHead>
+              ) : null
+            }
+          />
+          <TableHead>
+            <GeneratedText id="m_0570e24c85cf95" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_00112966136b6e" />
+          </TableHead>
           <TableHead></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {sites.map(({ unit: s, parentName }) => (
-          <TableRow key={s.id}>
-            <TableCell>
-              <Link
-                href={`/locations/${s.id}`}
-                className="font-medium text-slate-900 hover:underline"
-              >
-                {s.name}
-              </Link>
-            </TableCell>
-            {showParent ? (
-              <TableCell className="text-slate-600">{parentName ?? '—'}</TableCell>
-            ) : null}
-            <TableCell className="font-mono text-xs text-slate-600">{s.code ?? '—'}</TableCell>
-            <TableCell className="text-slate-600">
-              {s.lat != null && s.lng != null ? `${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}` : '—'}
-            </TableCell>
-            <TableCell className="text-right">
-              <Link href={`/locations/${s.id}`} className="text-xs text-teal-700 hover:underline">
-                View →
-              </Link>
-            </TableCell>
-          </TableRow>
-        ))}
+        <GeneratedValue
+          value={sites.map(({ unit: s, parentName }) => (
+            <TableRow key={s.id}>
+              <TableCell>
+                <Link
+                  href={`/locations/${s.id}`}
+                  className="font-medium text-slate-900 hover:underline"
+                >
+                  <GeneratedValue value={s.name} />
+                </Link>
+              </TableCell>
+              <GeneratedValue
+                value={
+                  showParent ? (
+                    <TableCell className="text-slate-600">
+                      <GeneratedValue value={parentName ?? '—'} />
+                    </TableCell>
+                  ) : null
+                }
+              />
+              <TableCell className="font-mono text-xs text-slate-600">
+                <GeneratedValue value={s.code ?? '—'} />
+              </TableCell>
+              <TableCell className="text-slate-600">
+                <GeneratedValue
+                  value={
+                    s.lat != null && s.lng != null
+                      ? `${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}`
+                      : '—'
+                  }
+                />
+              </TableCell>
+              <TableCell className="text-right">
+                <Link href={`/locations/${s.id}`} className="text-xs text-teal-700 hover:underline">
+                  <GeneratedText id="m_1be345fc118df8" />
+                </Link>
+              </TableCell>
+            </TableRow>
+          ))}
+        />
       </TableBody>
     </Table>
   )
@@ -1464,109 +1667,156 @@ function ContactsTab({
   contacts: (typeof customerContacts.$inferSelect)[]
   canManage: boolean
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="space-y-4">
-      {canManage ? (
-        <div className="flex items-center justify-end">
-          <Link href={`/locations/${unit.id}?tab=contacts&drawer=new-contact`}>
-            <Button>
-              <Plus size={14} /> Add contact
-            </Button>
-          </Link>
-        </div>
-      ) : null}
-      {contacts.length === 0 ? (
-        <EmptyState
-          icon={<Users size={32} />}
-          title="No contacts"
-          description="Add a contact — site managers, client reps, emergency-only contacts."
-        />
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {contacts.map((c) => (
-              <TableRow key={c.id}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-slate-900">{c.name}</span>
-                    {c.isPrimary ? (
-                      <Badge variant="success" className="gap-1">
-                        <Star size={10} /> Primary
-                      </Badge>
-                    ) : null}
-                  </div>
-                  {c.notes ? <div className="text-xs text-slate-500">{c.notes}</div> : null}
-                </TableCell>
-                <TableCell className="text-slate-600">{c.role ?? '—'}</TableCell>
-                <TableCell className="text-slate-600">
-                  {c.email ? (
-                    <a
-                      href={`mailto:${c.email}`}
-                      className="inline-flex items-center gap-1 text-teal-700 hover:underline"
-                    >
-                      <Mail size={12} /> {c.email}
-                    </a>
-                  ) : (
-                    '—'
-                  )}
-                </TableCell>
-                <TableCell className="text-slate-600">
-                  {c.phone ? (
-                    <a
-                      href={`tel:${c.phone}`}
-                      className="inline-flex items-center gap-1 text-teal-700 hover:underline"
-                    >
-                      <Phone size={12} /> {c.phone}
-                    </a>
-                  ) : (
-                    '—'
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {canManage ? (
-                    <div className="flex items-center justify-end gap-1">
-                      <Link
-                        href={`/locations/${unit.id}?tab=contacts&drawer=edit-contact&contactId=${c.id}`}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                          aria-label={`Edit ${c.name}`}
-                        >
-                          <Pencil size={14} />
-                        </Button>
-                      </Link>
-                      <form action={deleteContact} className="inline">
-                        <input type="hidden" name="id" value={c.id} />
-                        <input type="hidden" name="orgUnitId" value={unit.id} />
-                        <Button
-                          type="submit"
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-500 hover:text-red-700"
-                          aria-label={`Remove ${c.name}`}
-                        >
-                          <Trash2 size={14} />
-                        </Button>
-                      </form>
-                    </div>
-                  ) : null}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      <GeneratedValue
+        value={
+          canManage ? (
+            <div className="flex items-center justify-end">
+              <Link href={`/locations/${unit.id}?tab=contacts&drawer=new-contact`}>
+                <Button>
+                  <Plus size={14} /> <GeneratedText id="m_00da93f3990e7a" />
+                </Button>
+              </Link>
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          contacts.length === 0 ? (
+            <EmptyState
+              icon={<Users size={32} />}
+              title={tGenerated('m_149f22842b1960')}
+              description={tGenerated('m_0c51dcd14d49fc')}
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <GeneratedText id="m_02b18d5c7f6f2d" />
+                  </TableHead>
+                  <TableHead>
+                    <GeneratedText id="m_1099c1fe8b6614" />
+                  </TableHead>
+                  <TableHead>
+                    <GeneratedText id="m_00a0ba9938bdff" />
+                  </TableHead>
+                  <TableHead>
+                    <GeneratedText id="m_129b102b56bf3a" />
+                  </TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <GeneratedValue
+                  value={contacts.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-900">
+                            <GeneratedValue value={c.name} />
+                          </span>
+                          <GeneratedValue
+                            value={
+                              c.isPrimary ? (
+                                <Badge variant="success" className="gap-1">
+                                  <Star size={10} /> <GeneratedText id="m_18aec830eeb5e0" />
+                                </Badge>
+                              ) : null
+                            }
+                          />
+                        </div>
+                        <GeneratedValue
+                          value={
+                            c.notes ? (
+                              <div className="text-xs text-slate-500">
+                                <GeneratedValue value={c.notes} />
+                              </div>
+                            ) : null
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        <GeneratedValue value={c.role ?? '—'} />
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        <GeneratedValue
+                          value={
+                            c.email ? (
+                              <a
+                                href={`mailto:${c.email}`}
+                                className="inline-flex items-center gap-1 text-teal-700 hover:underline"
+                              >
+                                <Mail size={12} /> <GeneratedValue value={c.email} />
+                              </a>
+                            ) : (
+                              '—'
+                            )
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-slate-600">
+                        <GeneratedValue
+                          value={
+                            c.phone ? (
+                              <a
+                                href={`tel:${c.phone}`}
+                                className="inline-flex items-center gap-1 text-teal-700 hover:underline"
+                              >
+                                <Phone size={12} /> <GeneratedValue value={c.phone} />
+                              </a>
+                            ) : (
+                              '—'
+                            )
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <GeneratedValue
+                          value={
+                            canManage ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <Link
+                                  href={`/locations/${unit.id}?tab=contacts&drawer=edit-contact&contactId=${c.id}`}
+                                >
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                                    aria-label={tGenerated('m_0a45a3f047a285', { value0: c.name })}
+                                  >
+                                    <Pencil size={14} />
+                                  </Button>
+                                </Link>
+                                <form action={deleteContact} className="inline">
+                                  <input type="hidden" name="id" value={c.id} />
+                                  <input type="hidden" name="orgUnitId" value={unit.id} />
+                                  <Button
+                                    type="submit"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-500 hover:text-red-700"
+                                    aria-label={tGenerated('m_101f98a70352fa', { value0: c.name })}
+                                  >
+                                    <Trash2 size={14} />
+                                  </Button>
+                                </form>
+                              </div>
+                            ) : null
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                />
+              </TableBody>
+            </Table>
+          )
+        }
+      />
     </div>
   )
 }
@@ -1580,16 +1830,17 @@ function IncidentsTab({
   timeZone: string
   locale: AppLocale
 }) {
+  const tGenerated = useGeneratedTranslations()
   if (rows.length === 0) {
     return (
       <EmptyState
         icon={<AlertTriangle size={32} />}
-        title="No incidents recorded"
-        description="Incidents reported at sites under this location appear here."
+        title={tGenerated('m_177f8be6c7aad5')}
+        description={tGenerated('m_01f410d09c88d5')}
         action={
           <Link href={`/incidents/new`}>
             <Button variant="outline" size="sm">
-              Report an incident →
+              <GeneratedText id="m_1e6299ac4979b3" />
             </Button>
           </Link>
         }
@@ -1600,29 +1851,49 @@ function IncidentsTab({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Ref</TableHead>
-          <TableHead>Occurred</TableHead>
-          <TableHead>Title</TableHead>
-          <TableHead>Severity</TableHead>
-          <TableHead>Status</TableHead>
+          <TableHead>
+            <GeneratedText id="m_036b564bb88dfe" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_14a5e97535a15a" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_0decefd558c355" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_168b365cc671bf" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_0b9da892d6faf0" />
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((i) => (
-          <TableRow key={i.id}>
-            <TableCell className="font-mono text-xs">
-              <Link href={`/incidents/${i.id}`} className="hover:underline">
-                {i.reference}
-              </Link>
-            </TableCell>
-            <TableCell>{formatDate(new Date(i.occurredAt), timeZone, locale)}</TableCell>
-            <TableCell>{i.title}</TableCell>
-            <TableCell>
-              <Badge variant={severityVariant(i.severity)}>{i.severity}</Badge>
-            </TableCell>
-            <TableCell className="text-slate-600">{i.status.replace(/_/g, ' ')}</TableCell>
-          </TableRow>
-        ))}
+        <GeneratedValue
+          value={rows.map((i) => (
+            <TableRow key={i.id}>
+              <TableCell className="font-mono text-xs">
+                <Link href={`/incidents/${i.id}`} className="hover:underline">
+                  <GeneratedValue value={i.reference} />
+                </Link>
+              </TableCell>
+              <TableCell>
+                <GeneratedValue value={formatDate(new Date(i.occurredAt), timeZone, locale)} />
+              </TableCell>
+              <TableCell>
+                <GeneratedValue value={i.title} />
+              </TableCell>
+              <TableCell>
+                <Badge variant={severityVariant(i.severity)}>
+                  <GeneratedValue value={i.severity} />
+                </Badge>
+              </TableCell>
+              <TableCell className="text-slate-600">
+                <GeneratedValue value={i.status.replace(/_/g, ' ')} />
+              </TableCell>
+            </TableRow>
+          ))}
+        />
       </TableBody>
     </Table>
   )
@@ -1637,16 +1908,17 @@ function EquipmentTab({
     holder: typeof people.$inferSelect | null
   }[]
 }) {
+  const tGenerated = useGeneratedTranslations()
   if (equipment.length === 0) {
     return (
       <EmptyState
         icon={<Truck size={32} />}
-        title="No equipment at this location"
-        description="Equipment currently held at sites under this location appears here."
+        title={tGenerated('m_0548db7bda45b3')}
+        description={tGenerated('m_01faba9f240948')}
         action={
           <Link href={`/equipment`}>
             <Button variant="outline" size="sm">
-              Browse equipment →
+              <GeneratedText id="m_01e20b5fb6d390" />
             </Button>
           </Link>
         }
@@ -1657,44 +1929,70 @@ function EquipmentTab({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Asset tag</TableHead>
-          <TableHead>Name</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Holder</TableHead>
-          <TableHead>Status</TableHead>
+          <TableHead>
+            <GeneratedText id="m_0d9ccb155777db" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_02b18d5c7f6f2d" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_074ba2f160c506" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_1dd437d2b4ab7f" />
+          </TableHead>
+          <TableHead>
+            <GeneratedText id="m_0b9da892d6faf0" />
+          </TableHead>
           <TableHead></TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {equipment.map((row) => (
-          <TableRow key={row.item.id}>
-            <TableCell className="font-mono text-xs">{row.item.assetTag}</TableCell>
-            <TableCell className="font-medium">{row.item.name}</TableCell>
-            <TableCell className="text-slate-600">{row.type?.name ?? '—'}</TableCell>
-            <TableCell className="text-slate-600">
-              {row.holder ? (
-                <Link href={`/people/${row.holder.id}`} className="text-teal-700 hover:underline">
-                  {row.holder.firstName} {row.holder.lastName}
+        <GeneratedValue
+          value={equipment.map((row) => (
+            <TableRow key={row.item.id}>
+              <TableCell className="font-mono text-xs">
+                <GeneratedValue value={row.item.assetTag} />
+              </TableCell>
+              <TableCell className="font-medium">
+                <GeneratedValue value={row.item.name} />
+              </TableCell>
+              <TableCell className="text-slate-600">
+                <GeneratedValue value={row.type?.name ?? '—'} />
+              </TableCell>
+              <TableCell className="text-slate-600">
+                <GeneratedValue
+                  value={
+                    row.holder ? (
+                      <Link
+                        href={`/people/${row.holder.id}`}
+                        className="text-teal-700 hover:underline"
+                      >
+                        <GeneratedValue value={row.holder.firstName} />{' '}
+                        <GeneratedValue value={row.holder.lastName} />
+                      </Link>
+                    ) : (
+                      '—'
+                    )
+                  }
+                />
+              </TableCell>
+              <TableCell>
+                <Badge variant={row.item.status === 'in_service' ? 'success' : 'warning'}>
+                  <GeneratedValue value={row.item.status.replace('_', ' ')} />
+                </Badge>
+              </TableCell>
+              <TableCell>
+                <Link
+                  href={`/equipment/${row.item.id}`}
+                  className="text-xs text-teal-700 hover:underline"
+                >
+                  <GeneratedText id="m_1be345fc118df8" />
                 </Link>
-              ) : (
-                '—'
-              )}
-            </TableCell>
-            <TableCell>
-              <Badge variant={row.item.status === 'in_service' ? 'success' : 'warning'}>
-                {row.item.status.replace('_', ' ')}
-              </Badge>
-            </TableCell>
-            <TableCell>
-              <Link
-                href={`/equipment/${row.item.id}`}
-                className="text-xs text-teal-700 hover:underline"
-              >
-                View →
-              </Link>
-            </TableCell>
-          </TableRow>
-        ))}
+              </TableCell>
+            </TableRow>
+          ))}
+        />
       </TableBody>
     </Table>
   )

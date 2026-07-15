@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { ListChecks } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
@@ -15,7 +18,10 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { CorrectiveActionsSubNav } from '@/components/corrective-actions-sub-nav'
 import { RecordsTable, type RecordsTableRow } from './_records-table'
 
-export const metadata = { title: 'Corrective Actions' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1eca9264eb7c3a') }
+}
 
 const SORTS = [
   'reference',
@@ -49,6 +55,8 @@ export default async function CorrectiveActionsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'created_at',
@@ -168,34 +176,42 @@ export default async function CorrectiveActionsPage({
       header={
         <>
           <PageHeader
-            title="Corrective Actions"
-            description="Standalone records, linkable to incidents, inspections, audits, JSHAs."
+            title={tGenerated('m_1eca9264eb7c3a')}
+            description={tGenerated('m_1fd2750d15b2ba')}
             actions={
               <div className="flex items-center gap-2">
-                {canExport ? (
-                  <a
-                    href={buildExportHref('/corrective-actions/export.csv', {
-                      ...sp,
-                      status: statusRaw,
-                    })}
-                  >
-                    <Button variant="outline">Export CSV</Button>
-                  </a>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    canExport ? (
+                      <a
+                        href={buildExportHref('/corrective-actions/export.csv', {
+                          ...sp,
+                          status: statusRaw,
+                        })}
+                      >
+                        <Button variant="outline">
+                          <GeneratedText id="m_14c6440eca1edc" />
+                        </Button>
+                      </a>
+                    ) : null
+                  }
+                />
                 <Link href="/corrective-actions/new">
-                  <Button>New action</Button>
+                  <Button>
+                    <GeneratedText id="m_1c4ac986e95578" />
+                  </Button>
                 </Link>
               </div>
             }
           />
           <CorrectiveActionsSubNav active="records" />
           <TableToolbar>
-            <SearchInput placeholder="Search reference, title, description…" />
+            <SearchInput placeholder={tGenerated('m_1ae990361ad66e')} />
             <FilterChips
               basePath="/corrective-actions"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               allLabel="All statuses"
               defaultValue="open"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
@@ -204,48 +220,54 @@ export default async function CorrectiveActionsPage({
               basePath="/corrective-actions"
               currentParams={sp}
               paramKey="severity"
-              label="Severity"
+              label={tGenerated('m_168b365cc671bf')}
               options={SEVERITY_OPTIONS.map((o) => ({ ...o, count: sevCounts[o.value] }))}
             />
           </TableToolbar>
         </>
       }
     >
-      {tableRows.length === 0 ? (
-        <EmptyState
-          icon={<ListChecks size={32} />}
-          title={
-            params.q || statusFilter || sevFilter
-              ? 'No corrective actions match these filters'
-              : 'No corrective actions'
-          }
-          description="Create one to assign accountability for a fix and track it to verification."
-          action={
-            <Link href="/corrective-actions/new">
-              <Button>New corrective action</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <RecordsTable
-            rows={tableRows}
-            today={today}
-            canUpdate={canUpdate}
-            basePath="/corrective-actions"
-            currentParams={sp}
-            sort={params.sort}
-            dir={params.dir}
-          />
-          <Pagination
-            basePath="/corrective-actions"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          tableRows.length === 0 ? (
+            <EmptyState
+              icon={<ListChecks size={32} />}
+              title={tGeneratedValue(
+                params.q || statusFilter || sevFilter
+                  ? tGenerated('m_003b25bf1c2c70')
+                  : tGenerated('m_065564e61d1905'),
+              )}
+              description={tGenerated('m_0eb933f79ad4ca')}
+              action={
+                <Link href="/corrective-actions/new">
+                  <Button>
+                    <GeneratedText id="m_16b0371ad9cc2c" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <RecordsTable
+                rows={tableRows}
+                today={today}
+                canUpdate={canUpdate}
+                basePath="/corrective-actions"
+                currentParams={sp}
+                sort={params.sort}
+                dir={params.dir}
+              />
+              <Pagination
+                basePath="/corrective-actions"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

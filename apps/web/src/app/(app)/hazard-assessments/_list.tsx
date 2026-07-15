@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Shared assessments list — powers both /hazard-assessments (everyone's) and
 // /my/hazard-assessments (only the signed-in user's). One server component
 // so the toolbar, KPI tiles, table, and pagination stay identical.
@@ -72,6 +76,8 @@ export async function AssessmentsListPage({
   basePath: '/hazard-assessments' | '/my/hazard-assessments'
   mineOnly?: boolean
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = searchParams
   const params = parseListParams(sp, {
     sort: 'occurred_at',
@@ -268,37 +274,41 @@ export async function AssessmentsListPage({
           <>
             <PageHeader
               back={mineOnly ? { href: '/my', label: 'Workspace' } : undefined}
-              title={mineOnly ? 'My hazard assessments' : 'Hazard assessments'}
-              description={
-                mineOnly
-                  ? 'Assessments you started — drafts to finish and records you own.'
-                  : 'Job hazard analyses and field risk assessments.'
-              }
+              title={tGeneratedValue(
+                mineOnly ? tGenerated('m_0dec5f2c651118') : tGenerated('m_12db47b4ac8e02'),
+              )}
+              description={tGeneratedValue(
+                mineOnly ? tGenerated('m_180efb0cc3e9dc') : tGenerated('m_063d5ef44c90a6'),
+              )}
               actions={
                 <Link href={`${basePath}?drawer=new`} scroll={false}>
-                  <Button>New assessment</Button>
+                  <Button>
+                    <GeneratedText id="m_0b765ce4236ed0" />
+                  </Button>
                 </Link>
               }
             />
             <HazidSubNav pathname={basePath} />
             <TableToolbar>
-              <SearchInput placeholder="Search reference, scope, location…" />
+              <SearchInput placeholder={tGenerated('m_1264d3630df305')} />
               {/* Date range is a desk feature; phones get search + filter chips. */}
               <form className="hidden items-center gap-1 text-xs sm:flex">
-                {Object.entries({
-                  q: params.q,
-                  type: typeFilter,
-                  status: statusFilter,
-                  site: siteFilter,
-                  sort: params.sort !== 'occurred_at' ? params.sort : undefined,
-                  dir: params.dir !== 'desc' ? params.dir : undefined,
-                })
-                  .filter(([, value]) => value)
-                  .map(([key, value]) => (
-                    <input key={key} type="hidden" name={key} value={String(value)} />
-                  ))}
+                <GeneratedValue
+                  value={Object.entries({
+                    q: params.q,
+                    type: typeFilter,
+                    status: statusFilter,
+                    site: siteFilter,
+                    sort: params.sort !== 'occurred_at' ? params.sort : undefined,
+                    dir: params.dir !== 'desc' ? params.dir : undefined,
+                  })
+                    .filter(([, value]) => value)
+                    .map(([key, value]) => (
+                      <input key={key} type="hidden" name={key} value={String(value)} />
+                    ))}
+                />
                 <label className="flex items-center gap-1 text-slate-500">
-                  From
+                  <GeneratedText id="m_154c9d7a784dda" />
                   <input
                     type="date"
                     name="dateFrom"
@@ -307,7 +317,7 @@ export async function AssessmentsListPage({
                   />
                 </label>
                 <label className="flex items-center gap-1 text-slate-500">
-                  to
+                  <GeneratedText id="m_02d4f83ff8f11c" />
                   <input
                     type="date"
                     name="dateTo"
@@ -319,21 +329,21 @@ export async function AssessmentsListPage({
                   type="submit"
                   className="h-8 rounded-md border border-slate-200 px-2 text-xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50"
                 >
-                  Apply
+                  <GeneratedText id="m_01185cdc1c20a5" />
                 </button>
               </form>
               <FilterChips
                 basePath={basePath}
                 currentParams={sp}
                 paramKey="type"
-                label="Type"
+                label={tGenerated('m_074ba2f160c506')}
                 options={types.map((t) => ({ value: t.id, label: t.name }))}
               />
               <FilterChips
                 basePath={basePath}
                 currentParams={sp}
                 paramKey="status"
-                label="Status"
+                label={tGenerated('m_0b9da892d6faf0')}
                 options={[
                   { value: 'open', label: 'In progress' },
                   { value: 'locked', label: 'Locked / complete' },
@@ -346,9 +356,9 @@ export async function AssessmentsListPage({
                 basePath={basePath}
                 currentParams={sp}
                 paramKey="site"
-                placeholder="All sites"
+                placeholder={tGenerated('m_1f5ad6ec6b5d2a')}
                 allLabel="All sites"
-                searchPlaceholder="Search sites used by assessments…"
+                searchPlaceholder={tGenerated('m_008b0b4bd263a4')}
                 ariaLabel="Filter hazard assessments by site"
               />
             </TableToolbar>
@@ -356,161 +366,224 @@ export async function AssessmentsListPage({
         }
       >
         <div className="space-y-4 sm:space-y-5">
-          {rows.length === 0 ? (
-            <EmptyState
-              icon={<ShieldAlert size={32} />}
-              title={anyFilter ? 'No assessments match these filters' : 'No assessments'}
-              description="Capture the hazards for a planned task before crews start work."
-              action={
-                <Link href={`${basePath}?drawer=new`} scroll={false}>
-                  <Button>Start an assessment</Button>
-                </Link>
-              }
-            />
-          ) : (
-            <>
-              {/* Phones: tappable cards — the whole card opens the assessment. */}
-              <ul className="space-y-2 sm:hidden">
-                {rows.map(({ a, site, type }) => {
-                  const worst = worstRisk.get(a.id)
-                  const scope = htmlToSnippet(a.jobScope, 120)
-                  return (
-                    <li key={a.id}>
-                      <Link
-                        href={`/hazard-assessments/${a.id}`}
-                        className="block rounded-lg border border-slate-200 bg-white p-3.5 active:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:active:bg-slate-800"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-xs font-semibold text-teal-700 dark:text-teal-400">
-                            {a.reference}
-                          </span>
-                          {a.locked ? (
-                            <Badge variant="success">Locked</Badge>
-                          ) : (
-                            <Badge variant="secondary">In progress</Badge>
-                          )}
-                        </div>
-                        <div className="mt-1 line-clamp-2 text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {scope || type?.name || 'Hazard assessment'}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {formatDate(a.occurredAt, ctx.timezone, ctx.locale)}
-                          {site ? ` · ${site.name}` : ''}
-                          {type?.name && scope ? ` · ${type.name}` : ''}
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {worst != null ? <RiskScoreChip score={worst} /> : null}
-                        </div>
-                      </Link>
-                    </li>
-                  )
-                })}
-              </ul>
-
-              <div className="hidden sm:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <SortableTh
-                        {...sortProps}
-                        column="reference"
-                        active={params.sort === 'reference'}
-                      >
-                        Ref
-                      </SortableTh>
-                      <SortableTh
-                        {...sortProps}
-                        column="occurred_at"
-                        active={params.sort === 'occurred_at'}
-                      >
-                        Date
-                      </SortableTh>
-                      <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
-                        Type
-                      </SortableTh>
-                      <SortableTh {...sortProps} column="site" active={params.sort === 'site'}>
-                        Site
-                      </SortableTh>
-                      <SortableTh
-                        {...sortProps}
-                        column="supervisor"
-                        active={params.sort === 'supervisor'}
-                      >
-                        Supervisor
-                      </SortableTh>
-                      <TableHead>Scope</TableHead>
-                      <TableHead>Residual risk</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map(({ a, site, supervisor, type }) => {
-                      const worst = worstRisk.get(a.id)
-                      const scope = htmlToSnippet(a.jobScope, 70)
-                      return (
-                        <TableRow key={a.id}>
-                          <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
-                            <Link href={`/hazard-assessments/${a.id}`} className="hover:underline">
-                              {a.reference}
-                            </Link>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
-                            {formatDate(a.occurredAt, ctx.timezone, ctx.locale)}
-                          </TableCell>
-                          <TableCell className="text-slate-600 dark:text-slate-400">
-                            {type?.name ?? '—'}
-                          </TableCell>
-                          <TableCell className="text-slate-600 dark:text-slate-400">
-                            {site?.name ?? '—'}
-                          </TableCell>
-                          <TableCell className="text-slate-600 dark:text-slate-400">
-                            {supervisor ? `${supervisor.firstName} ${supervisor.lastName}` : '—'}
-                          </TableCell>
-                          <TableCell>
+          <GeneratedValue
+            value={
+              rows.length === 0 ? (
+                <EmptyState
+                  icon={<ShieldAlert size={32} />}
+                  title={tGeneratedValue(
+                    anyFilter ? tGenerated('m_1774cc3000b3a2') : tGenerated('m_0caef616765e46'),
+                  )}
+                  description={tGenerated('m_0c4898dcfdd36c')}
+                  action={
+                    <Link href={`${basePath}?drawer=new`} scroll={false}>
+                      <Button>
+                        <GeneratedText id="m_039ccc682982ec" />
+                      </Button>
+                    </Link>
+                  }
+                />
+              ) : (
+                <>
+                  {/* Phones: tappable cards — the whole card opens the assessment. */}
+                  <ul className="space-y-2 sm:hidden">
+                    <GeneratedValue
+                      value={rows.map(({ a, site, type }) => {
+                        const worst = worstRisk.get(a.id)
+                        const scope = htmlToSnippet(a.jobScope, 120)
+                        return (
+                          <li key={a.id}>
                             <Link
                               href={`/hazard-assessments/${a.id}`}
-                              className="text-slate-900 hover:underline dark:text-slate-100"
+                              className="block rounded-lg border border-slate-200 bg-white p-3.5 active:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:active:bg-slate-800"
                             >
-                              {scope ? scope : <span className="text-slate-400">—</span>}
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-mono text-xs font-semibold text-teal-700 dark:text-teal-400">
+                                  <GeneratedValue value={a.reference} />
+                                </span>
+                                <GeneratedValue
+                                  value={
+                                    a.locked ? (
+                                      <Badge variant="success">
+                                        <GeneratedText id="m_0e259fa0babc2d" />
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="secondary">
+                                        <GeneratedText id="m_1a03b06872ffd9" />
+                                      </Badge>
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="mt-1 line-clamp-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                <GeneratedValue
+                                  value={
+                                    scope || type?.name || <GeneratedText id="m_171ca9d60eef14" />
+                                  }
+                                />
+                              </div>
+                              <div className="mt-1 text-xs text-slate-500">
+                                <GeneratedValue
+                                  value={formatDate(a.occurredAt, ctx.timezone, ctx.locale)}
+                                />
+                                <GeneratedValue value={site ? ` · ${site.name}` : ''} />
+                                <GeneratedValue
+                                  value={type?.name && scope ? ` · ${type.name}` : ''}
+                                />
+                              </div>
+                              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                <GeneratedValue
+                                  value={worst != null ? <RiskScoreChip score={worst} /> : null}
+                                />
+                              </div>
                             </Link>
-                          </TableCell>
-                          <TableCell>
-                            {worst != null ? (
-                              <RiskScoreChip score={worst} />
-                            ) : (
-                              <span className="text-xs text-slate-400">—</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {a.locked ? (
-                              <Badge variant="success">Locked</Badge>
-                            ) : (
-                              <Badge variant="secondary">In progress</Badge>
-                            )}
-                          </TableCell>
+                          </li>
+                        )
+                      })}
+                    />
+                  </ul>
+
+                  <div className="hidden sm:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <SortableTh
+                            {...sortProps}
+                            column="reference"
+                            active={params.sort === 'reference'}
+                          >
+                            <GeneratedText id="m_036b564bb88dfe" />
+                          </SortableTh>
+                          <SortableTh
+                            {...sortProps}
+                            column="occurred_at"
+                            active={params.sort === 'occurred_at'}
+                          >
+                            <GeneratedText id="m_0285c38761c540" />
+                          </SortableTh>
+                          <SortableTh {...sortProps} column="type" active={params.sort === 'type'}>
+                            <GeneratedText id="m_074ba2f160c506" />
+                          </SortableTh>
+                          <SortableTh {...sortProps} column="site" active={params.sort === 'site'}>
+                            <GeneratedText id="m_020146dd3d3d5a" />
+                          </SortableTh>
+                          <SortableTh
+                            {...sortProps}
+                            column="supervisor"
+                            active={params.sort === 'supervisor'}
+                          >
+                            <GeneratedText id="m_0ccb8e5b917b17" />
+                          </SortableTh>
+                          <TableHead>
+                            <GeneratedText id="m_1f10a46fc1db73" />
+                          </TableHead>
+                          <TableHead>
+                            <GeneratedText id="m_07b859db8c7ce8" />
+                          </TableHead>
+                          <TableHead>
+                            <GeneratedText id="m_0b9da892d6faf0" />
+                          </TableHead>
                         </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-              <Pagination
-                basePath={basePath}
-                currentParams={sp}
-                total={total}
-                page={params.page}
-                perPage={params.perPage}
-              />
-            </>
-          )}
+                      </TableHeader>
+                      <TableBody>
+                        <GeneratedValue
+                          value={rows.map(({ a, site, supervisor, type }) => {
+                            const worst = worstRisk.get(a.id)
+                            const scope = htmlToSnippet(a.jobScope, 70)
+                            return (
+                              <TableRow key={a.id}>
+                                <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                                  <Link
+                                    href={`/hazard-assessments/${a.id}`}
+                                    className="hover:underline"
+                                  >
+                                    <GeneratedValue value={a.reference} />
+                                  </Link>
+                                </TableCell>
+                                <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
+                                  <GeneratedValue
+                                    value={formatDate(a.occurredAt, ctx.timezone, ctx.locale)}
+                                  />
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-400">
+                                  <GeneratedValue value={type?.name ?? '—'} />
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-400">
+                                  <GeneratedValue value={site?.name ?? '—'} />
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-400">
+                                  <GeneratedValue
+                                    value={
+                                      supervisor
+                                        ? `${supervisor.firstName} ${supervisor.lastName}`
+                                        : '—'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Link
+                                    href={`/hazard-assessments/${a.id}`}
+                                    className="text-slate-900 hover:underline dark:text-slate-100"
+                                  >
+                                    <GeneratedValue
+                                      value={
+                                        scope ? scope : <span className="text-slate-400">—</span>
+                                      }
+                                    />
+                                  </Link>
+                                </TableCell>
+                                <TableCell>
+                                  <GeneratedValue
+                                    value={
+                                      worst != null ? (
+                                        <RiskScoreChip score={worst} />
+                                      ) : (
+                                        <span className="text-xs text-slate-400">—</span>
+                                      )
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <GeneratedValue
+                                    value={
+                                      a.locked ? (
+                                        <Badge variant="success">
+                                          <GeneratedText id="m_0e259fa0babc2d" />
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="secondary">
+                                          <GeneratedText id="m_1a03b06872ffd9" />
+                                        </Badge>
+                                      )
+                                    }
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        />
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <Pagination
+                    basePath={basePath}
+                    currentParams={sp}
+                    total={total}
+                    page={params.page}
+                    perPage={params.perPage}
+                  />
+                </>
+              )
+            }
+          />
         </div>
       </ListPageLayout>
 
       <UrlDrawer
         open={drawerKey === 'new'}
         closeHref={basePath}
-        title="Start a hazard assessment"
-        description="Pick a type to begin — site, supervisor, job scope and the rest are captured on the assessment."
+        title={tGenerated('m_09ea1faa2a45cf')}
+        description={tGenerated('m_15452a730a15cb')}
         size="md"
       >
         <NewAssessmentDrawer types={newTypes} startAction={startAssessment} />

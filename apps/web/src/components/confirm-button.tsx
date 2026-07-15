@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 // Submit button that gates a server-action <form> behind an animated
 // confirmation modal (confirmDialog). Shared across every module plus the admin
@@ -36,7 +37,7 @@ export function ConfirmButton({
         })
       }}
     >
-      {children}
+      <GeneratedValue value={children} />
     </Button>
   )
 }

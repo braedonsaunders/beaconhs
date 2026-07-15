@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import { BookOpen } from 'lucide-react'
 import { and, asc, count, desc, ilike, isNull, or, eq, type SQL } from 'drizzle-orm'
@@ -16,7 +19,10 @@ import { DocumentsRecordsTable, type DocumentsTableRow } from './_records-table'
 import { DocumentsSubNav } from './_components/documents-sub-nav'
 import { ReadOnlyDocumentsGrid, type ReadOnlyDoc } from './_read-only-grid'
 
-export const metadata = { title: 'Documents' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_05caa6a53f9b7f') }
+}
 
 const SORTS = ['title', 'category', 'status', 'next_review_on'] as const
 
@@ -33,6 +39,8 @@ export default async function DocumentsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'title',
@@ -163,22 +171,28 @@ export default async function DocumentsPage({
       header={
         <>
           <PageHeader
-            title="Documents"
-            description={
-              canManage
-                ? 'Versioned library + read-and-acknowledge + periodic review + management review books.'
-                : 'Browse and read your safety documents, policies, and procedures.'
-            }
+            title={tGenerated('m_05caa6a53f9b7f')}
+            description={tGeneratedValue(
+              canManage ? tGenerated('m_05cf23dffd3ef9') : tGenerated('m_0d0196d47f960b'),
+            )}
             actions={
               canManage ? (
                 <div className="flex items-center gap-2">
-                  {canExport ? (
-                    <a href={buildExportHref('/documents/export.csv', sp)}>
-                      <Button variant="outline">Export CSV</Button>
-                    </a>
-                  ) : null}
+                  <GeneratedValue
+                    value={
+                      canExport ? (
+                        <a href={buildExportHref('/documents/export.csv', sp)}>
+                          <Button variant="outline">
+                            <GeneratedText id="m_14c6440eca1edc" />
+                          </Button>
+                        </a>
+                      ) : null
+                    }
+                  />
                   <form action={createDocument}>
-                    <Button type="submit">New document</Button>
+                    <Button type="submit">
+                      <GeneratedText id="m_1c03b1cfc3b5e4" />
+                    </Button>
                   </form>
                 </div>
               ) : null
@@ -186,86 +200,110 @@ export default async function DocumentsPage({
           />
           <DocumentsSubNav active="documents" />
           <TableToolbar>
-            <SearchInput placeholder="Search title or description" />
-            {canManage ? (
-              <FilterChips
-                basePath="/documents"
-                currentParams={sp}
-                paramKey="status"
-                label="Status"
-                options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-              />
-            ) : null}
-            {categories.length > 0 ? (
-              <FilterChips
-                basePath="/documents"
-                currentParams={sp}
-                paramKey="category"
-                label="Category"
-                options={categories.map((c) => ({
-                  value: c.id,
-                  label: c.name,
-                  count: categoryCounts[c.id],
-                }))}
-              />
-            ) : null}
-            {types.length > 0 ? (
-              <FilterChips
-                basePath="/documents"
-                currentParams={sp}
-                paramKey="type"
-                label="Type"
-                options={types.map((t) => ({
-                  value: t.id,
-                  label: t.name,
-                  count: typeCounts[t.id],
-                }))}
-              />
-            ) : null}
+            <SearchInput placeholder={tGenerated('m_102da4ba6ceb5e')} />
+            <GeneratedValue
+              value={
+                canManage ? (
+                  <FilterChips
+                    basePath="/documents"
+                    currentParams={sp}
+                    paramKey="status"
+                    label={tGenerated('m_0b9da892d6faf0')}
+                    options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+                  />
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                categories.length > 0 ? (
+                  <FilterChips
+                    basePath="/documents"
+                    currentParams={sp}
+                    paramKey="category"
+                    label={tGenerated('m_108b41637f364f')}
+                    options={categories.map((c) => ({
+                      value: c.id,
+                      label: c.name,
+                      count: categoryCounts[c.id],
+                    }))}
+                  />
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                types.length > 0 ? (
+                  <FilterChips
+                    basePath="/documents"
+                    currentParams={sp}
+                    paramKey="type"
+                    label={tGenerated('m_074ba2f160c506')}
+                    options={types.map((t) => ({
+                      value: t.id,
+                      label: t.name,
+                      count: typeCounts[t.id],
+                    }))}
+                  />
+                ) : null
+              }
+            />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<BookOpen size={32} />}
-          title={params.q || statusFilter ? 'No documents match these filters' : 'No documents'}
-          description={
-            canManage
-              ? 'Add policies, procedures, SDS sheets, manuals, and have workers acknowledge them.'
-              : 'No published documents are available to view yet.'
-          }
-          action={
-            canManage ? (
-              <form action={createDocument}>
-                <Button type="submit">New document</Button>
-              </form>
-            ) : undefined
-          }
-        />
-      ) : (
-        <>
-          {canManage ? (
-            <DocumentsRecordsTable
-              rows={tableRows}
-              books={books}
-              basePath="/documents"
-              currentParams={sp}
-              sort={params.sort}
-              dir={params.dir}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<BookOpen size={32} />}
+              title={tGeneratedValue(
+                params.q || statusFilter
+                  ? tGenerated('m_0ad1bb032430fb')
+                  : tGenerated('m_19c5708340fc91'),
+              )}
+              description={tGeneratedValue(
+                canManage ? tGenerated('m_198902f0fd9668') : tGenerated('m_11fef320398fe5'),
+              )}
+              action={
+                canManage ? (
+                  <form action={createDocument}>
+                    <Button type="submit">
+                      <GeneratedText id="m_1c03b1cfc3b5e4" />
+                    </Button>
+                  </form>
+                ) : undefined
+              }
             />
           ) : (
-            <ReadOnlyDocumentsGrid docs={cardRows} />
-          )}
-          <Pagination
-            basePath="/documents"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+            <>
+              <GeneratedValue
+                value={
+                  canManage ? (
+                    <DocumentsRecordsTable
+                      rows={tableRows}
+                      books={books}
+                      basePath="/documents"
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                    />
+                  ) : (
+                    <ReadOnlyDocumentsGrid docs={cardRows} />
+                  )
+                }
+              />
+              <Pagination
+                basePath="/documents"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

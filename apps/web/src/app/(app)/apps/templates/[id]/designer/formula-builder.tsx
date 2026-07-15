@@ -1,5 +1,13 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
+import { GeneratedText } from '@/i18n/generated'
+
 // Guided builder for a FormulaExpression tree. Used by the designer's "Calc"
 // tab on formula fields. Renders a small recursive editor that lets
 // the user pick an operator, then either literals, field refs, repeating-row
@@ -137,6 +145,7 @@ export function FormulaBuilder({
   pickerFields?: PickerFieldDesc[]
   onChange: (next: FormulaExpression | undefined) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   // The preview pane lets the user fill in example values for any field /
   // repeating-row field referenced in the formula and see what evaluates.
   const [preview, setPreview] = useState<{
@@ -191,92 +200,129 @@ export function FormulaBuilder({
 
       <details className="rounded-md border border-slate-200 bg-slate-50/50 p-2 text-xs">
         <summary className="cursor-pointer font-semibold text-slate-600">
-          Preview · {value ? renderPreviewValue(previewValue) : '—'}
+          <GeneratedText id="m_07c67e89962d16" />{' '}
+          <GeneratedValue value={value ? renderPreviewValue(previewValue) : '—'} />
         </summary>
         <div className="mt-2 space-y-2">
-          {allFields.length > 0 ? (
-            <div className="space-y-1">
-              <div className="font-semibold text-slate-500">Example top-level values</div>
-              {allFields.map((f) => (
-                <div key={f.id} className="flex items-center gap-1">
-                  <Label className="w-32 truncate text-[10px]">{f.label}</Label>
-                  <Input
-                    className="h-7 flex-1 text-xs"
-                    value={preview.values[f.id] ?? ''}
-                    onChange={(e) =>
-                      setPreview((p) => ({ ...p, values: { ...p.values, [f.id]: e.target.value } }))
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {repeatingSections.length > 0 ? (
-            <div className="space-y-2">
-              <div className="font-semibold text-slate-500">Example repeating sections</div>
-              {repeatingSections.map((sec) => {
-                const rowCount = preview.rowCounts[sec.id] ?? 0
-                return (
-                  <div key={sec.id} className="rounded border border-slate-200 bg-white p-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">{sec.label}</span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          className="rounded border border-slate-200 px-1.5 py-0.5"
-                          onClick={() =>
+          <GeneratedValue
+            value={
+              allFields.length > 0 ? (
+                <div className="space-y-1">
+                  <div className="font-semibold text-slate-500">
+                    <GeneratedText id="m_1e3a16a7c41097" />
+                  </div>
+                  <GeneratedValue
+                    value={allFields.map((f) => (
+                      <div key={f.id} className="flex items-center gap-1">
+                        <Label className="w-32 truncate text-[10px]">
+                          <GeneratedValue value={f.label} />
+                        </Label>
+                        <Input
+                          className="h-7 flex-1 text-xs"
+                          value={preview.values[f.id] ?? ''}
+                          onChange={(e) =>
                             setPreview((p) => ({
                               ...p,
-                              rowCounts: { ...p.rowCounts, [sec.id]: Math.max(0, rowCount - 1) },
+                              values: { ...p.values, [f.id]: e.target.value },
                             }))
                           }
-                        >
-                          −
-                        </button>
-                        <span>{rowCount} rows</span>
-                        <button
-                          type="button"
-                          className="rounded border border-slate-200 px-1.5 py-0.5"
-                          onClick={() =>
-                            setPreview((p) => ({
-                              ...p,
-                              rowCounts: { ...p.rowCounts, [sec.id]: rowCount + 1 },
-                            }))
-                          }
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                    {Array.from({ length: rowCount }, (_, i) => (
-                      <div
-                        key={i}
-                        className="mt-1 grid grid-cols-2 gap-1 border-t border-slate-100 pt-1"
-                      >
-                        {sec.fields.map((f) => {
-                          const k = `${sec.id}.${i}.${f.id}`
-                          return (
-                            <Input
-                              key={f.id}
-                              className="h-7 text-xs"
-                              placeholder={`row ${i + 1} ${f.label}`}
-                              value={preview.values[k] ?? ''}
-                              onChange={(e) =>
-                                setPreview((p) => ({
-                                  ...p,
-                                  values: { ...p.values, [k]: e.target.value },
-                                }))
-                              }
-                            />
-                          )
-                        })}
+                        />
                       </div>
                     ))}
+                  />
+                </div>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              repeatingSections.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="font-semibold text-slate-500">
+                    <GeneratedText id="m_04b7380779afc4" />
                   </div>
-                )
-              })}
-            </div>
-          ) : null}
+                  <GeneratedValue
+                    value={repeatingSections.map((sec) => {
+                      const rowCount = preview.rowCounts[sec.id] ?? 0
+                      return (
+                        <div key={sec.id} className="rounded border border-slate-200 bg-white p-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold">
+                              <GeneratedValue value={sec.label} />
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                className="rounded border border-slate-200 px-1.5 py-0.5"
+                                onClick={() =>
+                                  setPreview((p) => ({
+                                    ...p,
+                                    rowCounts: {
+                                      ...p.rowCounts,
+                                      [sec.id]: Math.max(0, rowCount - 1),
+                                    },
+                                  }))
+                                }
+                              >
+                                −
+                              </button>
+                              <span>
+                                <GeneratedValue value={rowCount} />{' '}
+                                <GeneratedText id="m_19f38a950f87b6" />
+                              </span>
+                              <button
+                                type="button"
+                                className="rounded border border-slate-200 px-1.5 py-0.5"
+                                onClick={() =>
+                                  setPreview((p) => ({
+                                    ...p,
+                                    rowCounts: { ...p.rowCounts, [sec.id]: rowCount + 1 },
+                                  }))
+                                }
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                          <GeneratedValue
+                            value={Array.from({ length: rowCount }, (_, i) => (
+                              <div
+                                key={i}
+                                className="mt-1 grid grid-cols-2 gap-1 border-t border-slate-100 pt-1"
+                              >
+                                <GeneratedValue
+                                  value={sec.fields.map((f) => {
+                                    const k = `${sec.id}.${i}.${f.id}`
+                                    return (
+                                      <Input
+                                        key={f.id}
+                                        className="h-7 text-xs"
+                                        placeholder={tGenerated('m_14dac40a7e102a', {
+                                          value0: i + 1,
+                                          value1: f.label,
+                                        })}
+                                        value={preview.values[k] ?? ''}
+                                        onChange={(e) =>
+                                          setPreview((p) => ({
+                                            ...p,
+                                            values: { ...p.values, [k]: e.target.value },
+                                          }))
+                                        }
+                                      />
+                                    )
+                                  })}
+                                />
+                              </div>
+                            ))}
+                          />
+                        </div>
+                      )
+                    })}
+                  />
+                </div>
+              ) : null
+            }
+          />
         </div>
       </details>
     </div>
@@ -306,6 +352,8 @@ function Node({
   onClear?: () => void
   showClear?: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   if (!value) {
     return (
       <Select
@@ -313,16 +361,22 @@ function Node({
         value=""
         onChange={(e) => onChange(makeDefault(e.target.value as FormulaExpression['kind']))}
       >
-        <option value="">— pick an operator —</option>
-        {GROUPS.map((g) => (
-          <optgroup key={g.label} label={g.label}>
-            {OPS.filter((op) => op.group === g.kind).map((op) => (
-              <option key={op.kind} value={op.kind}>
-                {op.label}
-              </option>
-            ))}
-          </optgroup>
-        ))}
+        <option value="">
+          <GeneratedText id="m_0b6d9aa275a131" />
+        </option>
+        <GeneratedValue
+          value={GROUPS.map((g) => (
+            <optgroup key={g.label} label={tGeneratedValue(g.label)}>
+              <GeneratedValue
+                value={OPS.filter((op) => op.group === g.kind).map((op) => (
+                  <option key={op.kind} value={op.kind}>
+                    <GeneratedValue value={op.label} />
+                  </option>
+                ))}
+              />
+            </optgroup>
+          ))}
+        />
       </Select>
     )
   }
@@ -335,26 +389,34 @@ function Node({
           value={value.kind}
           onChange={(e) => onChange(makeDefault(e.target.value as FormulaExpression['kind']))}
         >
-          {GROUPS.map((g) => (
-            <optgroup key={g.label} label={g.label}>
-              {OPS.filter((op) => op.group === g.kind).map((op) => (
-                <option key={op.kind} value={op.kind}>
-                  {op.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
+          <GeneratedValue
+            value={GROUPS.map((g) => (
+              <optgroup key={g.label} label={tGeneratedValue(g.label)}>
+                <GeneratedValue
+                  value={OPS.filter((op) => op.group === g.kind).map((op) => (
+                    <option key={op.kind} value={op.kind}>
+                      <GeneratedValue value={op.label} />
+                    </option>
+                  ))}
+                />
+              </optgroup>
+            ))}
+          />
         </Select>
-        {showClear && onClear ? (
-          <button
-            type="button"
-            className="rounded p-1 text-slate-400 hover:text-red-500"
-            onClick={onClear}
-            title="Clear"
-          >
-            <Trash2 size={12} />
-          </button>
-        ) : null}
+        <GeneratedValue
+          value={
+            showClear && onClear ? (
+              <button
+                type="button"
+                className="rounded p-1 text-slate-400 hover:text-red-500"
+                onClick={onClear}
+                title={tGenerated('m_1e4d427e74e767')}
+              >
+                <Trash2 size={12} />
+              </button>
+            ) : null
+          }
+        />
       </div>
       <NodeBody
         value={value}
@@ -401,12 +463,16 @@ function NodeBody({
           value={value.fieldKey}
           onChange={(e) => onChange({ kind: 'field_ref', fieldKey: e.target.value })}
         >
-          <option value="">— pick field —</option>
-          {allFields.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.label} ({f.id})
-            </option>
-          ))}
+          <option value="">
+            <GeneratedText id="m_013296217bd0ea" />
+          </option>
+          <GeneratedValue
+            value={allFields.map((f) => (
+              <option key={f.id} value={f.id}>
+                <GeneratedValue value={f.label} /> (<GeneratedValue value={f.id} />)
+              </option>
+            ))}
+          />
         </Select>
       )
 
@@ -423,16 +489,22 @@ function NodeBody({
           pickerFields={pickerFields}
           onChange={(of) => onChange({ ...value, of })}
         >
-          {value.kind === 'concat' ? (
-            <div className="flex items-center gap-1">
-              <Label className="text-[10px]">Separator</Label>
-              <Input
-                className="h-7 flex-1 text-xs"
-                value={value.separator ?? ''}
-                onChange={(e) => onChange({ ...value, separator: e.target.value })}
-              />
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              value.kind === 'concat' ? (
+                <div className="flex items-center gap-1">
+                  <Label className="text-[10px]">
+                    <GeneratedText id="m_09a3fb77851262" />
+                  </Label>
+                  <Input
+                    className="h-7 flex-1 text-xs"
+                    value={value.separator ?? ''}
+                    onChange={(e) => onChange({ ...value, separator: e.target.value })}
+                  />
+                </div>
+              ) : null
+            }
+          />
         </NodeList>
       )
 
@@ -441,7 +513,9 @@ function NodeBody({
       return (
         <div className="space-y-1">
           <div>
-            <div className="text-[10px] font-semibold text-slate-500">Left</div>
+            <div className="text-[10px] font-semibold text-slate-500">
+              <GeneratedText id="m_146f7d831bfd96" />
+            </div>
             <Node
               value={value.left}
               allFields={allFields}
@@ -452,7 +526,9 @@ function NodeBody({
             />
           </div>
           <div>
-            <div className="text-[10px] font-semibold text-slate-500">Right</div>
+            <div className="text-[10px] font-semibold text-slate-500">
+              <GeneratedText id="m_0d4127eb7af91b" />
+            </div>
             <Node
               value={value.right}
               allFields={allFields}
@@ -474,7 +550,15 @@ function NodeBody({
         <div className="space-y-1">
           <div>
             <div className="text-[10px] font-semibold text-slate-500">
-              {isPower ? 'Base' : 'Value'}
+              <GeneratedValue
+                value={
+                  isPower ? (
+                    <GeneratedText id="m_0301e90977d549" />
+                  ) : (
+                    <GeneratedText id="m_1cc0e5e7b5f442" />
+                  )
+                }
+              />
             </div>
             <Node
               value={left}
@@ -489,7 +573,15 @@ function NodeBody({
           </div>
           <div>
             <div className="text-[10px] font-semibold text-slate-500">
-              {isPower ? 'Exponent' : 'Degree (2 = √, 3 = ∛)'}
+              <GeneratedValue
+                value={
+                  isPower ? (
+                    <GeneratedText id="m_1979ef2713c627" />
+                  ) : (
+                    <GeneratedText id="m_10f4f461b6e849" />
+                  )
+                }
+              />
             </div>
             <Node
               value={right}
@@ -532,7 +624,9 @@ function NodeBody({
             showClear={false}
           />
           <div className="flex items-center gap-1">
-            <Label className="text-[10px]">Decimal places</Label>
+            <Label className="text-[10px]">
+              <GeneratedText id="m_05b9318155a4da" />
+            </Label>
             <Input
               type="number"
               min="0"
@@ -558,12 +652,16 @@ function NodeBody({
             value={value.sectionKey}
             onChange={(e) => onChange({ ...value, sectionKey: e.target.value, rowFieldKey: '' })}
           >
-            <option value="">— pick section —</option>
-            {repeatingSections.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
+            <option value="">
+              <GeneratedText id="m_14e9585fa8e12d" />
+            </option>
+            <GeneratedValue
+              value={repeatingSections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  <GeneratedValue value={s.label} />
+                </option>
+              ))}
+            />
           </Select>
           <Select
             className="h-7 text-xs"
@@ -571,12 +669,16 @@ function NodeBody({
             onChange={(e) => onChange({ ...value, rowFieldKey: e.target.value })}
             disabled={!sec}
           >
-            <option value="">— pick row field —</option>
-            {sec?.fields.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.label}
-              </option>
-            ))}
+            <option value="">
+              <GeneratedText id="m_125aac439d6c75" />
+            </option>
+            <GeneratedValue
+              value={sec?.fields.map((f) => (
+                <option key={f.id} value={f.id}>
+                  <GeneratedValue value={f.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
       )
@@ -589,12 +691,16 @@ function NodeBody({
           value={value.sectionKey}
           onChange={(e) => onChange({ ...value, sectionKey: e.target.value })}
         >
-          <option value="">— pick section —</option>
-          {repeatingSections.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
+          <option value="">
+            <GeneratedText id="m_14e9585fa8e12d" />
+          </option>
+          <GeneratedValue
+            value={repeatingSections.map((s) => (
+              <option key={s.id} value={s.id}>
+                <GeneratedValue value={s.label} />
+              </option>
+            ))}
+          />
         </Select>
       )
 
@@ -602,7 +708,9 @@ function NodeBody({
       return (
         <div className="space-y-2">
           <div>
-            <div className="text-[10px] font-semibold text-slate-500">When (condition)</div>
+            <div className="text-[10px] font-semibold text-slate-500">
+              <GeneratedText id="m_0c75ca758719d2" />
+            </div>
             <LogicBuilder
               rule={value.condition}
               availableFields={allFields}
@@ -610,7 +718,9 @@ function NodeBody({
             />
           </div>
           <div>
-            <div className="text-[10px] font-semibold text-slate-500">Then</div>
+            <div className="text-[10px] font-semibold text-slate-500">
+              <GeneratedText id="m_1aea6765cbbb07" />
+            </div>
             <Node
               value={value.then}
               allFields={allFields}
@@ -621,7 +731,9 @@ function NodeBody({
             />
           </div>
           <div>
-            <div className="text-[10px] font-semibold text-slate-500">Else</div>
+            <div className="text-[10px] font-semibold text-slate-500">
+              <GeneratedText id="m_196f872aa354d3" />
+            </div>
             <Node
               value={value.else}
               allFields={allFields}
@@ -644,43 +756,54 @@ function NodeBody({
       const attrs = picker ? ENTITY_ATTRS[picker.kind] : []
       return (
         <div className="space-y-1">
-          {pickerFields.length === 0 ? (
-            <p className="text-[10px] text-slate-500 italic">
-              No compatible picker fields in this template. Add a person, customer, project, site,
-              or area picker first.
-            </p>
-          ) : (
-            <Select
-              className="h-7 text-xs"
-              value={value.pickerFieldKey}
-              onChange={(e) =>
-                onChange({
-                  kind: 'entity_attr',
-                  pickerFieldKey: e.target.value,
-                  attrKey: '',
-                })
-              }
-            >
-              <option value="">— pick picker field —</option>
-              {pickerFields.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label} ({p.kind})
-                </option>
-              ))}
-            </Select>
-          )}
+          <GeneratedValue
+            value={
+              pickerFields.length === 0 ? (
+                <p className="text-[10px] text-slate-500 italic">
+                  <GeneratedText id="m_15ca343c0669d7" />
+                </p>
+              ) : (
+                <Select
+                  className="h-7 text-xs"
+                  value={value.pickerFieldKey}
+                  onChange={(e) =>
+                    onChange({
+                      kind: 'entity_attr',
+                      pickerFieldKey: e.target.value,
+                      attrKey: '',
+                    })
+                  }
+                >
+                  <option value="">
+                    <GeneratedText id="m_12a2068b6d7120" />
+                  </option>
+                  <GeneratedValue
+                    value={pickerFields.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        <GeneratedValue value={p.label} /> (<GeneratedValue value={p.kind} />)
+                      </option>
+                    ))}
+                  />
+                </Select>
+              )
+            }
+          />
           <Select
             className="h-7 text-xs"
             value={value.attrKey}
             onChange={(e) => onChange({ ...value, attrKey: e.target.value })}
             disabled={!picker}
           >
-            <option value="">— pick attribute —</option>
-            {attrs.map((a) => (
-              <option key={a.key} value={a.key}>
-                {a.label}
-              </option>
-            ))}
+            <option value="">
+              <GeneratedText id="m_11fc7f034f88ce" />
+            </option>
+            <GeneratedValue
+              value={attrs.map((a) => (
+                <option key={a.key} value={a.key}>
+                  <GeneratedValue value={a.label} />
+                </option>
+              ))}
+            />
           </Select>
         </div>
       )
@@ -705,25 +828,27 @@ function NodeList({
 }) {
   return (
     <div className="space-y-1.5">
-      {children}
-      {items.map((it, i) => (
-        <div key={i} className="rounded border border-slate-100 bg-slate-50 p-1">
-          <Node
-            value={it}
-            allFields={allFields}
-            repeatingSections={repeatingSections}
-            pickerFields={pickerFields}
-            onChange={(next) => onChange(items.map((x, j) => (j === i ? next : x)))}
-            onClear={() => onChange(items.filter((_, j) => j !== i))}
-          />
-        </div>
-      ))}
+      <GeneratedValue value={children} />
+      <GeneratedValue
+        value={items.map((it, i) => (
+          <div key={i} className="rounded border border-slate-100 bg-slate-50 p-1">
+            <Node
+              value={it}
+              allFields={allFields}
+              repeatingSections={repeatingSections}
+              pickerFields={pickerFields}
+              onChange={(next) => onChange(items.map((x, j) => (j === i ? next : x)))}
+              onClear={() => onChange(items.filter((_, j) => j !== i))}
+            />
+          </div>
+        ))}
+      />
       <Button
         size="sm"
         variant="outline"
         onClick={() => onChange([...items, { kind: 'literal', value: 0 }])}
       >
-        <Plus size={12} /> Add operand
+        <Plus size={12} /> <GeneratedText id="m_068bf7c4eb45a2" />
       </Button>
     </div>
   )

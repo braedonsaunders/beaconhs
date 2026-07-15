@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // "In progress" — a card per unfinished entry the current user authored across
 // modules (journals, hazard assessments, incidents, inspections). Each card
 // links into the entry to resume it. Same data as the dashboard "In progress"
@@ -20,7 +22,10 @@ import { relativeTime } from '../../journals/_format'
 import { loadInProgressEntries, type InProgressEntry } from '../../dashboard/_metrics'
 import { WorkspaceNoIdentity } from '../_no-identity'
 
-export const metadata = { title: 'In progress' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1a03b06872ffd9') }
+}
 export const dynamic = 'force-dynamic'
 
 const KIND_META: Record<
@@ -54,14 +59,15 @@ const KIND_META: Record<
 }
 
 export default async function MyInProgressPage() {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   const membershipId = ctx.membership?.id ?? null
 
   const header = (
     <PageHeader
       back={{ href: '/my', label: 'Workspace' }}
-      title="In progress"
-      description="Drafts and unfinished entries you started. Pick one to resume."
+      title={tGenerated('m_1a03b06872ffd9')}
+      description={tGenerated('m_1844c2816e2bdc')}
     />
   )
 
@@ -70,7 +76,7 @@ export default async function MyInProgressPage() {
     return (
       <PageContainer>
         <div className="space-y-5">
-          {header}
+          <GeneratedValue value={header} />
           <WorkspaceNoIdentity reason="no-membership" noun="unfinished entries" />
         </div>
       </PageContainer>
@@ -82,69 +88,77 @@ export default async function MyInProgressPage() {
   return (
     <PageContainer>
       <div className="space-y-5">
-        {header}
+        <GeneratedValue value={header} />
 
-        {entries.length === 0 ? (
-          <EmptyState
-            icon={<PencilLine size={32} />}
-            title="Nothing in progress"
-            description="Drafts you start across journals, hazard assessments, incidents, and inspections appear here so you can pick up where you left off."
-            action={
-              <Link href="/dashboard">
-                <Button variant="outline">Go to dashboard</Button>
-              </Link>
-            }
-          />
-        ) : (
-          <div className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
-            {entries.map((e) => {
-              const meta = KIND_META[e.kind]
-              return (
-                <Link
-                  key={`${e.kind}-${e.id}`}
-                  href={e.href as never}
-                  className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
-                >
-                  {/* oversized ghost icon bleeding off the corner */}
-                  <meta.icon
-                    aria-hidden
-                    strokeWidth={1.5}
-                    className={cn(
-                      'pointer-events-none absolute -right-6 -bottom-7 h-32 w-32 -rotate-12 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6',
-                      meta.ghost,
-                    )}
-                  />
-                  <div className="relative flex h-full flex-col">
-                    <div className="flex items-center justify-between gap-3">
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium',
-                          meta.chip,
-                        )}
+        <GeneratedValue
+          value={
+            entries.length === 0 ? (
+              <EmptyState
+                icon={<PencilLine size={32} />}
+                title={tGenerated('m_03cdaafe508e1f')}
+                description={tGenerated('m_1b464e6d5939e2')}
+                action={
+                  <Link href="/dashboard">
+                    <Button variant="outline">
+                      <GeneratedText id="m_132d746a8ad9a0" />
+                    </Button>
+                  </Link>
+                }
+              />
+            ) : (
+              <div className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3">
+                <GeneratedValue
+                  value={entries.map((e) => {
+                    const meta = KIND_META[e.kind]
+                    return (
+                      <Link
+                        key={`${e.kind}-${e.id}`}
+                        href={e.href as never}
+                        className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
                       >
-                        <meta.icon size={14} />
-                        {meta.label}
-                      </span>
-                      <span className="text-xs text-slate-400 dark:text-slate-500">
-                        {relativeTime(e.updatedAt, ctx.locale)}
-                      </span>
-                    </div>
-                    <div className="mt-4 line-clamp-3 text-base font-semibold text-slate-900 dark:text-slate-100">
-                      {e.title}
-                    </div>
-                    <span className="mt-auto inline-flex items-center gap-1 pt-4 text-sm font-medium text-teal-700 dark:text-teal-300">
-                      Resume
-                      <ArrowRight
-                        size={14}
-                        className="transition-transform group-hover:translate-x-0.5"
-                      />
-                    </span>
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
-        )}
+                        {/* oversized ghost icon bleeding off the corner */}
+                        <meta.icon
+                          aria-hidden
+                          strokeWidth={1.5}
+                          className={cn(
+                            'pointer-events-none absolute -right-6 -bottom-7 h-32 w-32 -rotate-12 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6',
+                            meta.ghost,
+                          )}
+                        />
+                        <div className="relative flex h-full flex-col">
+                          <div className="flex items-center justify-between gap-3">
+                            <span
+                              className={cn(
+                                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium',
+                                meta.chip,
+                              )}
+                            >
+                              <meta.icon size={14} />
+                              <GeneratedValue value={meta.label} />
+                            </span>
+                            <span className="text-xs text-slate-400 dark:text-slate-500">
+                              <GeneratedValue value={relativeTime(e.updatedAt, ctx.locale)} />
+                            </span>
+                          </div>
+                          <div className="mt-4 line-clamp-3 text-base font-semibold text-slate-900 dark:text-slate-100">
+                            <GeneratedValue value={e.title} />
+                          </div>
+                          <span className="mt-auto inline-flex items-center gap-1 pt-4 text-sm font-medium text-teal-700 dark:text-teal-300">
+                            <GeneratedText id="m_0607d4d4be574c" />
+                            <ArrowRight
+                              size={14}
+                              className="transition-transform group-hover:translate-x-0.5"
+                            />
+                          </span>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                />
+              </div>
+            )
+          }
+        />
       </div>
     </PageContainer>
   )

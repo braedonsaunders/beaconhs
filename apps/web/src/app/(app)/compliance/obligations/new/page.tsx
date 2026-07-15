@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { PageHeader } from '@beaconhs/ui'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCan } from '@beaconhs/tenant'
@@ -7,7 +8,10 @@ import { ObligationForm } from '../_obligation-form'
 import { loadObligationFormOptions } from '../_form-options'
 import { OBLIGATION_KINDS, type ObligationKind } from '../_meta'
 
-export const metadata = { title: 'New obligation' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_01ea7b508d9390') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function NewObligationPage({
@@ -15,6 +19,7 @@ export default async function NewObligationPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.assign')
   const sp = await searchParams
@@ -41,8 +46,8 @@ export default async function NewObligationPage({
     <PageContainer>
       <div className="mx-auto max-w-3xl">
         <PageHeader
-          title="New obligation"
-          description="Select a kind, requirement, audience, and cadence. One form for every compliance obligation."
+          title={tGenerated('m_01ea7b508d9390')}
+          description={tGenerated('m_19a9339faa0d4f')}
           back={{ href: '/compliance/obligations', label: 'Back to obligations' }}
         />
         <ObligationForm

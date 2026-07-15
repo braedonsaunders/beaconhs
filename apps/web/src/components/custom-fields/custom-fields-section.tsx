@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations } from '@/i18n/generated.server'
+import { GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Server component: renders a record's tenant-defined custom fields, grouped by
 // their optional section heading. Returns null when no fields are defined for
 // the kind/subtype, so detail pages can mount it unconditionally without
@@ -33,6 +36,8 @@ export async function CustomFieldsSection({
    */
   defs?: CustomFieldDefRow[]
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const defs = defsProp ?? (await loadVisibleCustomFieldDefs(ctx, entityKind, subtypeId))
   if (defs.length === 0) return null
 
@@ -50,30 +55,37 @@ export async function CustomFieldsSection({
 
   return (
     <>
-      {[...groups.entries()].map(([groupLabel, list]) => (
-        <Section key={groupLabel || '__default'} title={groupLabel || 'Additional details'}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {list.map((def) => (
-              <CustomFieldInput
-                key={def.id}
-                entityKind={entityKind}
-                recordId={recordId}
-                def={{
-                  key: def.key,
-                  label: def.label,
-                  helpText: def.helpText,
-                  fieldType: def.fieldType,
-                  required: def.required,
-                  config: def.config,
-                }}
-                initialValue={values[def.key] ?? null}
-                disabled={locked}
-                updateAction={updateCustomFieldValueAction}
+      <GeneratedValue
+        value={[...groups.entries()].map(([groupLabel, list]) => (
+          <Section
+            key={groupLabel || '__default'}
+            title={tGeneratedValue(groupLabel || tGenerated('m_0fbbb37902b3de'))}
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <GeneratedValue
+                value={list.map((def) => (
+                  <CustomFieldInput
+                    key={def.id}
+                    entityKind={entityKind}
+                    recordId={recordId}
+                    def={{
+                      key: def.key,
+                      label: def.label,
+                      helpText: def.helpText,
+                      fieldType: def.fieldType,
+                      required: def.required,
+                      config: def.config,
+                    }}
+                    initialValue={values[def.key] ?? null}
+                    disabled={locked}
+                    updateAction={updateCustomFieldValueAction}
+                  />
+                ))}
               />
-            ))}
-          </div>
-        </Section>
-      ))}
+            </div>
+          </Section>
+        ))}
+      />
     </>
   )
 }

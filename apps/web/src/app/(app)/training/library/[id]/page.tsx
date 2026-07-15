@@ -1,3 +1,5 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound } from 'next/navigation'
 import { and, count, eq, isNull } from 'drizzle-orm'
 import { DetailHeader } from '@beaconhs/ui'
@@ -12,11 +14,14 @@ import { isUuid } from '@/lib/list-params'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Library · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_02251624555d90', { value0: id.slice(0, 8) }) }
 }
 
 export default async function ContentItemPage({ params }: { params: Promise<{ id: string }> }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -52,8 +57,8 @@ export default async function ContentItemPage({ params }: { params: Promise<{ id
       header={
         <DetailHeader
           back={{ href: '/training/library', label: 'Content Library' }}
-          title={data.it.title}
-          subtitle="Reusable library item"
+          title={tGeneratedValue(data.it.title)}
+          subtitle={tGenerated('m_10e52d390b591f')}
         />
       }
     >

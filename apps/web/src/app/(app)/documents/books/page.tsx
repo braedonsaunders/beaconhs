@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Library } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
@@ -28,7 +31,10 @@ import { DocumentsSubNav } from '../_components/documents-sub-nav'
 import { ReadOnlyBooksGrid } from './_read-only-books-grid'
 import { createBook } from './[id]/actions'
 
-export const metadata = { title: 'Document books' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_14e667fd8661b7') }
+}
 
 const SORTS = ['title', 'category', 'status', 'updated_at'] as const
 
@@ -43,6 +49,8 @@ export default async function DocumentBooksPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'title',
@@ -128,132 +136,163 @@ export default async function DocumentBooksPage({
       header={
         <>
           <PageHeader
-            title="Document books"
-            description={
-              canManage
-                ? 'Curated, ordered bundles of documents that publish as a single PDF — perfect for management review packs.'
-                : 'Read complete document packs — each book opens as a single PDF.'
-            }
+            title={tGenerated('m_14e667fd8661b7')}
+            description={tGeneratedValue(
+              canManage ? tGenerated('m_16fcfcfa6c96d6') : tGenerated('m_17ce63d85db80d'),
+            )}
             actions={
               canManage ? (
                 <form action={createBook}>
-                  <Button type="submit">New book</Button>
+                  <Button type="submit">
+                    <GeneratedText id="m_1fa9739f3f640f" />
+                  </Button>
                 </form>
               ) : null
             }
           />
           <DocumentsSubNav active="books" />
           <TableToolbar>
-            <SearchInput placeholder="Search title or description" />
-            {canManage ? (
-              <FilterChips
-                basePath="/documents/books"
-                currentParams={sp}
-                paramKey="status"
-                label="Status"
-                options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
-              />
-            ) : null}
+            <SearchInput placeholder={tGenerated('m_102da4ba6ceb5e')} />
+            <GeneratedValue
+              value={
+                canManage ? (
+                  <FilterChips
+                    basePath="/documents/books"
+                    currentParams={sp}
+                    paramKey="status"
+                    label={tGenerated('m_0b9da892d6faf0')}
+                    options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+                  />
+                ) : null
+              }
+            />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Library size={32} />}
-          title={params.q || statusFilter ? 'No books match these filters' : 'No books'}
-          description={
-            canManage
-              ? 'Create a book to bundle related documents into a single management-review PDF.'
-              : 'No published books are available to read yet.'
-          }
-          action={
-            canManage ? (
-              <form action={createBook}>
-                <Button type="submit">New book</Button>
-              </form>
-            ) : undefined
-          }
-        />
-      ) : !canManage ? (
-        <>
-          <ReadOnlyBooksGrid books={bookCards} />
-          <Pagination
-            basePath="/documents/books"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="title" active={params.sort === 'title'}>
-                  Title
-                </SortableTh>
-                <SortableTh {...sortProps} column="category" active={params.sort === 'category'}>
-                  Category
-                </SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                  Status
-                </SortableTh>
-                <TableHead>Documents</TableHead>
-                <SortableTh
-                  {...sortProps}
-                  column="updated_at"
-                  active={params.sort === 'updated_at'}
-                >
-                  Updated
-                </SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((b) => {
-                const memberCount = memberCounts[b.id] ?? 0
-                const display = b.title || '(untitled)'
-                return (
-                  <TableRow key={b.id}>
-                    <TableCell>
-                      <Link
-                        href={`/documents/books/${b.id}`}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {display}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {b.categoryName ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={b.status === 'published' ? 'success' : 'secondary'}>
-                        {b.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {memberCount} {memberCount === 1 ? 'document' : 'documents'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {formatDate(new Date(b.updatedAt), ctx.timezone, ctx.locale)}
-                    </TableCell>
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Library size={32} />}
+              title={tGeneratedValue(
+                params.q || statusFilter
+                  ? tGenerated('m_0c2848dc43a9ff')
+                  : tGenerated('m_032fe9dc1cb03d'),
+              )}
+              description={tGeneratedValue(
+                canManage ? tGenerated('m_0e46a3d2a9c1ef') : tGenerated('m_0a7f110f30576f'),
+              )}
+              action={
+                canManage ? (
+                  <form action={createBook}>
+                    <Button type="submit">
+                      <GeneratedText id="m_1fa9739f3f640f" />
+                    </Button>
+                  </form>
+                ) : undefined
+              }
+            />
+          ) : !canManage ? (
+            <>
+              <ReadOnlyBooksGrid books={bookCards} />
+              <Pagination
+                basePath="/documents/books"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="title" active={params.sort === 'title'}>
+                      <GeneratedText id="m_0decefd558c355" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="category"
+                      active={params.sort === 'category'}
+                    >
+                      <GeneratedText id="m_108b41637f364f" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_05caa6a53f9b7f" />
+                    </TableHead>
+                    <SortableTh
+                      {...sortProps}
+                      column="updated_at"
+                      active={params.sort === 'updated_at'}
+                    >
+                      <GeneratedText id="m_014ca61c68ab13" />
+                    </SortableTh>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/documents/books"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((b) => {
+                      const memberCount = memberCounts[b.id] ?? 0
+                      const display = b.title || '(untitled)'
+                      return (
+                        <TableRow key={b.id}>
+                          <TableCell>
+                            <Link
+                              href={`/documents/books/${b.id}`}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={display} />
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue value={b.categoryName ?? '—'} />
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={b.status === 'published' ? 'success' : 'secondary'}>
+                              <GeneratedValue value={b.status} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">
+                              <GeneratedValue value={memberCount} />{' '}
+                              <GeneratedValue
+                                value={
+                                  memberCount === 1 ? (
+                                    <GeneratedText id="m_08927559ee23e3" />
+                                  ) : (
+                                    <GeneratedText id="m_0211a9acf0110a" />
+                                  )
+                                }
+                              />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue
+                              value={formatDate(new Date(b.updatedAt), ctx.timezone, ctx.locale)}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/documents/books"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useUiText } from './text-context'
 import { cn } from './utils'
 
 /**
@@ -66,6 +67,7 @@ export function Sparkline({
   className,
   ariaLabel,
 }: SparklineProps) {
+  const t = useUiText()
   // Derive effective tone if auto requested.
   const resolvedTone: SparklineTone = React.useMemo(() => {
     if (!auto || points.length < 2) return tone
@@ -86,7 +88,7 @@ export function Sparkline({
         viewBox="0 0 100 32"
         preserveAspectRatio="none"
         role="img"
-        aria-label={ariaLabel ?? 'No trend data'}
+        aria-label={ariaLabel ? t(ariaLabel) : t('No trend data')}
         className={cn('block', className)}
       >
         <line
@@ -123,8 +125,13 @@ export function Sparkline({
   const pathD = 'M ' + coords.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join(' L ')
   const areaD = pathD + ` L ${VB_W} ${VB_H} L 0 ${VB_H} Z` // close path to baseline for the fill
 
-  const label =
-    ariaLabel ?? `Trend: ${points.length} points from ${points[0]} to ${points[points.length - 1]}`
+  const label = ariaLabel
+    ? t(ariaLabel)
+    : t('Trend: {value0} points from {value1} to {value2}', {
+        value0: points.length,
+        value1: points[0],
+        value2: points[points.length - 1],
+      })
 
   return (
     <svg

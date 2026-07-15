@@ -1,3 +1,4 @@
+import { GeneratedValue } from '@/i18n/generated'
 import { cn } from '@beaconhs/ui'
 
 /**
@@ -23,8 +24,16 @@ export function TableToolbar({
 }) {
   return (
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
-      {children}
-      {trailing ? <div className="ml-auto flex items-center gap-2">{trailing}</div> : null}
+      <GeneratedValue value={children} />
+      <GeneratedValue
+        value={
+          trailing ? (
+            <div className="ml-auto flex items-center gap-2">
+              <GeneratedValue value={trailing} />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }

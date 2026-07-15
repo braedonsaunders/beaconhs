@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Shared SMS-log list — rendered at two routes:
 //   • /admin/sms-log    (scope: 'tenant')   — only the active tenant's texts.
 //   • /platform/sms-log (scope: 'platform') — every tenant's texts (the
@@ -70,6 +74,8 @@ export async function SmsLogListView({
   basePath: string
   back: { href: string; label: string }
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const params = parseListParams(sp, {
     sort: 'created_at',
     dir: 'desc',
@@ -186,18 +192,18 @@ export async function SmsLogListView({
         <>
           <DetailHeader
             back={back}
-            title="SMS log"
-            subtitle={
+            title={tGenerated('m_1e58ae4efd7912')}
+            subtitle={tGeneratedValue(
               scope === 'platform'
-                ? 'Every text message the worker has dispatched, across all tenants'
-                : 'Every text message the worker has dispatched for this tenant'
-            }
+                ? tGenerated('m_0b66d20fff304b')
+                : tGenerated('m_1ef8c6970e1d32'),
+            )}
           />
           <TableToolbar>
-            <SearchInput placeholder="Search number, message, category" />
+            <SearchInput placeholder={tGenerated('m_1666870ccf1991')} />
             <TextParamFilter
               paramKey="recipient"
-              label="Recipient"
+              label={tGenerated('m_105e441033d31d')}
               type="tel"
               placeholder="+15551234567"
               className="h-8 w-48"
@@ -207,100 +213,168 @@ export async function SmsLogListView({
               basePath={basePath}
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={STATUS_OPTIONS}
             />
-            {categoryFacets.length > 0 ? (
-              <FilterChips
-                basePath={basePath}
-                currentParams={sp}
-                paramKey="category"
-                label="Category"
-                options={categoryFacets}
-              />
-            ) : null}
+            <GeneratedValue
+              value={
+                categoryFacets.length > 0 ? (
+                  <FilterChips
+                    basePath={basePath}
+                    currentParams={sp}
+                    paramKey="category"
+                    label={tGenerated('m_108b41637f364f')}
+                    options={categoryFacets}
+                  />
+                ) : null
+              }
+            />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState title="No texts logged" description="Sent SMS messages appear here." />
-      ) : (
-        <div className="space-y-4">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>When</TableHead>
-                <TableHead>To</TableHead>
-                <TableHead>Message</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Status</TableHead>
-                {showTenant ? <TableHead>Tenant</TableHead> : null}
-                <TableHead className="text-right">Detail</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ log, tenant }) => (
-                <TableRow key={log.id}>
-                  <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
-                    {formatDateTime(new Date(log.createdAt), ctx.timezone, ctx.locale)}
-                  </TableCell>
-                  <TableCell className="text-slate-900 dark:text-slate-100">
-                    <div className="font-mono text-xs">{log.recipient ?? '—'}</div>
-                  </TableCell>
-                  <TableCell className="max-w-md truncate text-slate-700 dark:text-slate-300">
-                    {log.body ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-slate-700 dark:text-slate-300">
-                    {log.categoryKey ? (
-                      <Badge variant="outline" className="font-mono text-[11px]">
-                        {log.categoryKey}
-                      </Badge>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap items-center gap-1">
-                      <Badge variant={statusVariant(log.status)}>{log.status}</Badge>
-                      {log.provider && log.status === 'sent' ? (
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                          via {log.provider}
-                        </span>
-                      ) : null}
-                    </div>
-                    {log.status === 'failed' && log.errorMessage ? (
-                      <div className="mt-0.5 max-w-xs truncate text-[11px] text-red-700 dark:text-red-400">
-                        {log.errorMessage}
-                      </div>
-                    ) : null}
-                  </TableCell>
-                  {showTenant ? (
-                    <TableCell className="text-xs text-slate-600 dark:text-slate-300">
-                      {tenant?.name ?? <span className="text-slate-400">platform</span>}
-                    </TableCell>
-                  ) : null}
-                  <TableCell className="text-right">
-                    <Link
-                      href={`${basePath}/${log.id}` as never}
-                      className="text-teal-700 hover:underline dark:text-teal-400"
-                    >
-                      Open
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath={basePath}
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </div>
-      )}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              title={tGenerated('m_14fee9d67d6101')}
+              description={tGenerated('m_110381de3e8ecc')}
+            />
+          ) : (
+            <div className="space-y-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <GeneratedText id="m_13cc128f69897c" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0ea10a854847b2" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0e4ff640f8e7d6" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_108b41637f364f" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </TableHead>
+                    <GeneratedValue
+                      value={
+                        showTenant ? (
+                          <TableHead>
+                            <GeneratedText id="m_1fd4a056042e4d" />
+                          </TableHead>
+                        ) : null
+                      }
+                    />
+                    <TableHead className="text-right">
+                      <GeneratedText id="m_1b34818ce3a832" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ log, tenant }) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
+                          <GeneratedValue
+                            value={formatDateTime(
+                              new Date(log.createdAt),
+                              ctx.timezone,
+                              ctx.locale,
+                            )}
+                          />
+                        </TableCell>
+                        <TableCell className="text-slate-900 dark:text-slate-100">
+                          <div className="font-mono text-xs">
+                            <GeneratedValue value={log.recipient ?? '—'} />
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-md truncate text-slate-700 dark:text-slate-300">
+                          <GeneratedValue value={log.body ?? '—'} />
+                        </TableCell>
+                        <TableCell className="text-slate-700 dark:text-slate-300">
+                          <GeneratedValue
+                            value={
+                              log.categoryKey ? (
+                                <Badge variant="outline" className="font-mono text-[11px]">
+                                  <GeneratedValue value={log.categoryKey} />
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Badge variant={statusVariant(log.status)}>
+                              <GeneratedValue value={log.status} />
+                            </Badge>
+                            <GeneratedValue
+                              value={
+                                log.provider && log.status === 'sent' ? (
+                                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    <GeneratedText id="m_1a68dfb8697673" />{' '}
+                                    <GeneratedValue value={log.provider} />
+                                  </span>
+                                ) : null
+                              }
+                            />
+                          </div>
+                          <GeneratedValue
+                            value={
+                              log.status === 'failed' && log.errorMessage ? (
+                                <div className="mt-0.5 max-w-xs truncate text-[11px] text-red-700 dark:text-red-400">
+                                  <GeneratedValue value={log.errorMessage} />
+                                </div>
+                              ) : null
+                            }
+                          />
+                        </TableCell>
+                        <GeneratedValue
+                          value={
+                            showTenant ? (
+                              <TableCell className="text-xs text-slate-600 dark:text-slate-300">
+                                <GeneratedValue
+                                  value={
+                                    tenant?.name ?? (
+                                      <span className="text-slate-400">
+                                        <GeneratedText id="m_123000091889d1" />
+                                      </span>
+                                    )
+                                  }
+                                />
+                              </TableCell>
+                            ) : null
+                          }
+                        />
+                        <TableCell className="text-right">
+                          <Link
+                            href={`${basePath}/${log.id}` as never}
+                            className="text-teal-700 hover:underline dark:text-teal-400"
+                          >
+                            <GeneratedText id="m_107ab58c3c38bc" />
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath={basePath}
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </div>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

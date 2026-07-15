@@ -1,5 +1,13 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
+import { GeneratedText } from '@/i18n/generated'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, FilePen, Signature } from 'lucide-react'
@@ -37,61 +45,83 @@ const KIND_META: Record<
  * a drawer triggered from a "+ Add step" link.
  */
 export function CompleteStepsTimeline({ steps }: { steps: CompleteStep[] }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div>
       <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        Timeline
+        <GeneratedText id="m_0d2b6a8a21df75" />
       </div>
-      {steps.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">No steps recorded.</p>
-      ) : (
-        <ol className="mt-2 space-y-2">
-          {steps.map((s) => {
-            const meta = KIND_META[s.kind]
-            const Icon = meta.icon
-            return (
-              <li
-                key={s.id}
-                className="rounded-md border border-slate-200 bg-white p-3 text-sm dark:border-slate-800 dark:bg-slate-900"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2">
-                    <span
-                      className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${meta.tone}`}
+      <GeneratedValue
+        value={
+          steps.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_0dd8c84571baa3" />
+            </p>
+          ) : (
+            <ol className="mt-2 space-y-2">
+              <GeneratedValue
+                value={steps.map((s) => {
+                  const meta = KIND_META[s.kind]
+                  const Icon = meta.icon
+                  return (
+                    <li
+                      key={s.id}
+                      className="rounded-md border border-slate-200 bg-white p-3 text-sm dark:border-slate-800 dark:bg-slate-900"
                     >
-                      <Icon size={11} />
-                    </span>
-                    <span className="font-medium text-slate-900 dark:text-slate-100">
-                      {meta.label}
-                    </span>
-                  </span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {s.completedAt.toLocaleString()}
-                  </span>
-                </div>
-                {s.completedByName ? (
-                  <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    by {s.completedByName}
-                  </div>
-                ) : null}
-                {s.description ? (
-                  <p className="mt-2 whitespace-pre-wrap text-slate-700 dark:text-slate-300">
-                    {s.description}
-                  </p>
-                ) : null}
-                {s.signatureDataUrl ? (
-                  <RawImage
-                    src={s.signatureDataUrl}
-                    alt="Signature"
-                    optimizationReason="generated"
-                    className="mt-2 h-20 rounded border border-slate-200 bg-white object-contain dark:border-slate-700"
-                  />
-                ) : null}
-              </li>
-            )
-          })}
-        </ol>
-      )}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${meta.tone}`}
+                          >
+                            <Icon size={11} />
+                          </span>
+                          <span className="font-medium text-slate-900 dark:text-slate-100">
+                            <GeneratedValue value={meta.label} />
+                          </span>
+                        </span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          <GeneratedValue value={s.completedAt.toLocaleString()} />
+                        </span>
+                      </div>
+                      <GeneratedValue
+                        value={
+                          s.completedByName ? (
+                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                              <GeneratedText id="m_19ec032b95249e" />{' '}
+                              <GeneratedValue value={s.completedByName} />
+                            </div>
+                          ) : null
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          s.description ? (
+                            <p className="mt-2 whitespace-pre-wrap text-slate-700 dark:text-slate-300">
+                              <GeneratedValue value={s.description} />
+                            </p>
+                          ) : null
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          s.signatureDataUrl ? (
+                            <RawImage
+                              src={s.signatureDataUrl}
+                              alt={tGenerated('m_0c0bc02db58371')}
+                              optimizationReason="generated"
+                              className="mt-2 h-20 rounded border border-slate-200 bg-white object-contain dark:border-slate-700"
+                            />
+                          ) : null
+                        }
+                      />
+                    </li>
+                  )
+                })}
+              />
+            </ol>
+          )
+        }
+      />
     </div>
   )
 }
@@ -110,6 +140,8 @@ export function AddStepBody({
   formId: string
   closeHref: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [kind, setKind] = useState<CompleteStep['kind']>('action_taken')
   const [description, setDescription] = useState('')
@@ -118,13 +150,13 @@ export function AddStepBody({
   const [error, setError] = useState<string | null>(null)
 
   function submit() {
-    setError(null)
+    setError(tGeneratedValue(null))
     if (kind === 'signature' && !sig) {
-      setError('Capture a signature first.')
+      setError(tGenerated('m_1b76abb47cf690'))
       return
     }
     if (kind !== 'signature' && !description.trim()) {
-      setError('Add a description for this step.')
+      setError(tGenerated('m_1d62d51c6b2ca0'))
       return
     }
     start(async () => {
@@ -135,7 +167,7 @@ export function AddStepBody({
         signatureDataUrl: kind === 'signature' ? sig : null,
       })
       if (!res.ok) {
-        setError(res.error)
+        setError(tGeneratedValue(res.error))
         return
       }
       setDescription('')
@@ -156,50 +188,78 @@ export function AddStepBody({
       className="space-y-3"
     >
       <div className="flex flex-wrap gap-1.5 text-xs">
-        {(Object.keys(KIND_META) as CompleteStep['kind'][]).map((k) => {
-          const meta = KIND_META[k]
-          const Icon = meta.icon
-          const active = kind === k
-          return (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setKind(k)}
-              disabled={pending}
-              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 transition-colors ${
-                active
-                  ? 'border-teal-700 bg-teal-700 text-white'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Icon size={11} />
-              {meta.label}
-            </button>
-          )
-        })}
+        <GeneratedValue
+          value={(Object.keys(KIND_META) as CompleteStep['kind'][]).map((k) => {
+            const meta = KIND_META[k]
+            const Icon = meta.icon
+            const active = kind === k
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setKind(k)}
+                disabled={pending}
+                className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 transition-colors ${
+                  active
+                    ? 'border-teal-700 bg-teal-700 text-white'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <Icon size={11} />
+                <GeneratedValue value={meta.label} />
+              </button>
+            )
+          })}
+        />
       </div>
-      {kind !== 'signature' ? (
-        <div className="space-y-1.5">
-          <Label>Description</Label>
-          <Textarea
-            rows={4}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={
-              kind === 'verification' ? 'What did you check?' : 'What was done to fix it?'
-            }
-            disabled={pending}
-          />
-        </div>
-      ) : (
-        <div className="space-y-1.5">
-          <Label>Signature</Label>
-          <SignaturePad value={sig} onChange={setSig} />
-        </div>
-      )}
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      <GeneratedValue
+        value={
+          kind !== 'signature' ? (
+            <div className="space-y-1.5">
+              <Label>
+                <GeneratedText id="m_14d923495cf14c" />
+              </Label>
+              <Textarea
+                rows={4}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={tGeneratedValue(
+                  kind === 'verification'
+                    ? tGenerated('m_0511efc3e6e2d4')
+                    : tGenerated('m_1f669b08e41af3'),
+                )}
+                disabled={pending}
+              />
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label>
+                <GeneratedText id="m_0c0bc02db58371" />
+              </Label>
+              <SignaturePad value={sig} onChange={setSig} />
+            </div>
+          )
+        }
+      />
+      <GeneratedValue
+        value={
+          error ? (
+            <p className="text-xs text-red-600">
+              <GeneratedValue value={error} />
+            </p>
+          ) : null
+        }
+      />
       <p className="text-xs text-slate-500">
-        {pending ? 'Saving…' : 'Use the Add button below to record this step.'}
+        <GeneratedValue
+          value={
+            pending ? (
+              <GeneratedText id="m_106811f2aac664" />
+            ) : (
+              <GeneratedText id="m_1cb9fcbb972395" />
+            )
+          }
+        />
       </p>
     </form>
   )

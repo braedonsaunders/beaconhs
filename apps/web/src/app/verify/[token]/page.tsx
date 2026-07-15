@@ -1,3 +1,4 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Public credential-verification page. Resolved purely from a token; no auth.
 // A token belongs to either a course certificate (training_certificates) or
 // a skill certificate (training_skill_certificates) — try both.
@@ -121,8 +122,12 @@ export default async function VerifyPage({ params }: { params: Promise<{ token: 
       <main className="grid min-h-screen place-items-center bg-slate-50 p-6">
         <Card className="max-w-md">
           <CardContent className="space-y-2 pt-6 text-center">
-            <h1 className="text-xl font-semibold text-red-700">Credential not found</h1>
-            <p className="text-sm text-slate-600">This verification token is unknown or invalid.</p>
+            <h1 className="text-xl font-semibold text-red-700">
+              <GeneratedText id="m_125b6e7b223e5b" />
+            </h1>
+            <p className="text-sm text-slate-600">
+              <GeneratedText id="m_0cb3bd1521b78e" />
+            </p>
           </CardContent>
         </Card>
       </main>
@@ -148,33 +153,77 @@ export default async function VerifyPage({ params }: { params: Promise<{ token: 
                   : 'bg-green-100 text-green-800'
             }`}
           >
-            {result.revoked ? 'REVOKED' : expired ? 'EXPIRED' : 'VALID'}
+            <GeneratedValue
+              value={
+                result.revoked ? (
+                  <GeneratedText id="m_08ed5aad6b8927" />
+                ) : expired ? (
+                  <GeneratedText id="m_1aa8377f0a5237" />
+                ) : (
+                  <GeneratedText id="m_086f3ee22af466" />
+                )
+              }
+            />
           </div>
           <div className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-            {result.kind === 'skill' ? 'Skill credential' : 'Training certificate'}
+            <GeneratedValue
+              value={
+                result.kind === 'skill' ? (
+                  <GeneratedText id="m_15c4378541c99b" />
+                ) : (
+                  <GeneratedText id="m_1f427b3defb13e" />
+                )
+              }
+            />
           </div>
-          <h1 className="text-2xl font-semibold">{result.personName}</h1>
+          <h1 className="text-2xl font-semibold">
+            <GeneratedValue value={result.personName} />
+          </h1>
           <p className="text-sm text-slate-600">
-            {result.credentialCode ? `${result.credentialCode} · ` : ''}
-            {result.credentialName}
+            <GeneratedValue value={result.credentialCode ? `${result.credentialCode} · ` : ''} />
+            <GeneratedValue value={result.credentialName} />
           </p>
           <dl className="mx-auto grid grid-cols-2 gap-2 pt-2 text-left text-sm">
-            <dt className="text-slate-500">Issued</dt>
-            <dd>{result.issuedOn}</dd>
-            {result.expiresOn ? (
-              <>
-                <dt className="text-slate-500">Expires</dt>
-                <dd>{result.expiresOn}</dd>
-              </>
-            ) : null}
-            <dt className="text-slate-500">Issuer</dt>
-            <dd>{result.issuerName}</dd>
-            {result.authorityName ? (
-              <>
-                <dt className="text-slate-500">Authority</dt>
-                <dd>{result.authorityName}</dd>
-              </>
-            ) : null}
+            <dt className="text-slate-500">
+              <GeneratedText id="m_1bde7809334816" />
+            </dt>
+            <dd>
+              <GeneratedValue value={result.issuedOn} />
+            </dd>
+            <GeneratedValue
+              value={
+                result.expiresOn ? (
+                  <>
+                    <dt className="text-slate-500">
+                      <GeneratedText id="m_14f3858b0a9ad6" />
+                    </dt>
+                    <dd>
+                      <GeneratedValue value={result.expiresOn} />
+                    </dd>
+                  </>
+                ) : null
+              }
+            />
+            <dt className="text-slate-500">
+              <GeneratedText id="m_0b16d109958503" />
+            </dt>
+            <dd>
+              <GeneratedValue value={result.issuerName} />
+            </dd>
+            <GeneratedValue
+              value={
+                result.authorityName ? (
+                  <>
+                    <dt className="text-slate-500">
+                      <GeneratedText id="m_012397255c5bd0" />
+                    </dt>
+                    <dd>
+                      <GeneratedValue value={result.authorityName} />
+                    </dd>
+                  </>
+                ) : null
+              }
+            />
           </dl>
         </CardContent>
       </Card>

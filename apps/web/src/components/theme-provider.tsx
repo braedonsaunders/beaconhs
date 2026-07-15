@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 // Light / dark / system theme state. The actual `.dark` class is applied before
 // first paint by the inline script in the root layout (no FOUC); this provider
@@ -79,7 +80,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme, mounted }}>
-      {children}
+      <GeneratedValue value={children} />
     </ThemeContext.Provider>
   )
 }

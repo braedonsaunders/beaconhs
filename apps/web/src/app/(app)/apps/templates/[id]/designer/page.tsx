@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound, redirect } from 'next/navigation'
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
@@ -21,8 +22,9 @@ import type { FlowSummary } from '../flows/_flows-canvas'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Designer · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_0129e7d95875b4', { value0: id.slice(0, 8) }) }
 }
 
 export default async function FormDesignerPage({

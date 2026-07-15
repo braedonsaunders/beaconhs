@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 // Shared open-state for the mobile nav drawer so both the hamburger (top bar)
 // and the "Menu" tab (bottom tab bar) can drive the same drawer.
@@ -9,7 +10,11 @@ const Ctx = createContext<{ open: boolean; setOpen: (v: boolean) => void } | nul
 
 export function MobileNavProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
-  return <Ctx.Provider value={{ open, setOpen }}>{children}</Ctx.Provider>
+  return (
+    <Ctx.Provider value={{ open, setOpen }}>
+      <GeneratedValue value={children} />
+    </Ctx.Provider>
+  )
 }
 
 export function useMobileNav() {

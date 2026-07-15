@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The visual query builder. LEFT 1/3 rail = authoring steps (source → summarize →
 // group-bys → measures → filters → pivot → visualize); RIGHT 2/3 = live preview.
 // Scoped entirely to the curated entity + semantic registry — no raw SQL. Builds
@@ -277,6 +284,8 @@ export function CardStudio({
   entities: AnalyticsEntity[]
   metrics?: StudioMetric[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const entityMap = useMemo(() => Object.fromEntries(entities.map((e) => [e.key, e])), [entities])
   // Group for the picker: each category an optgroup, in discovery order (primary first).
@@ -647,7 +656,7 @@ export function CardStudio({
     try {
       const r = await generateCard(p)
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
       const d = decodeQuery(r.query)
@@ -665,9 +674,9 @@ export function CardStudio({
       if (!name.trim() || name === 'Untitled card') {
         setName(p.charAt(0).toUpperCase() + p.slice(1, 80))
       }
-      toast.success('Built from your prompt — refine it on the left.')
+      toast.success(tGenerated('m_1d301a10020cd2'))
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not reach the AI.')
+      toast.error(tGeneratedValue(e instanceof Error ? e.message : tGenerated('m_1ccf19e338e8f3')))
     } finally {
       setAiLoading(false)
     }
@@ -691,10 +700,12 @@ export function CardStudio({
       : await createCard(payload)
     setSaving(false)
     if (!r.ok) {
-      toast.error(r.error)
+      toast.error(tGeneratedValue(r.error))
       return
     }
-    toast.success(initial.id ? 'Card updated' : 'Card created')
+    toast.success(
+      tGeneratedValue(initial.id ? tGenerated('m_1dd2dcc8aa5c8c') : tGenerated('m_0ba8e7b77af15a')),
+    )
     const targetId = initial.id ?? ('id' in r ? r.id : '')
     router.push(`/insights/cards/${targetId}`)
     router.refresh()
@@ -708,15 +719,15 @@ export function CardStudio({
           href="/insights/library"
           className="flex h-9 shrink-0 items-center gap-1 rounded-md px-2 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
         >
-          <ArrowLeft size={14} /> Library
+          <ArrowLeft size={14} /> <GeneratedText id="m_002a2afc4c73f9" />
         </Link>
         <BarChart3 size={16} className="text-teal-600" />
         <input
           value={name}
           maxLength={INSIGHT_CARD_NAME_MAX_LENGTH}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Card name"
-          aria-label="Card name"
+          placeholder={tGenerated('m_1638c2bd7144e8')}
+          aria-label={tGenerated('m_1638c2bd7144e8')}
           className="h-9 flex-1 rounded-md border border-transparent px-2 text-sm font-semibold outline-none hover:border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:text-slate-100 dark:hover:border-slate-700"
         />
         <Button
@@ -725,12 +736,16 @@ export function CardStudio({
           disabled={saving || !name.trim()}
           className="h-9 text-xs"
         >
-          {saving ? (
-            <Loader2 size={14} className="mr-1 animate-spin" />
-          ) : (
-            <Save size={14} className="mr-1" />
-          )}
-          Save card
+          <GeneratedValue
+            value={
+              saving ? (
+                <Loader2 size={14} className="mr-1 animate-spin" />
+              ) : (
+                <Save size={14} className="mr-1" />
+              )
+            }
+          />
+          <GeneratedText id="m_1d80fba450cfe1" />
         </Button>
       </div>
 
@@ -739,18 +754,19 @@ export function CardStudio({
           htmlFor="card-description"
           className="shrink-0 text-xs font-medium text-slate-500 dark:text-slate-400"
         >
-          Description
+          <GeneratedText id="m_14d923495cf14c" />
         </label>
         <input
           id="card-description"
           value={description}
           maxLength={INSIGHT_CARD_DESCRIPTION_MAX_LENGTH}
           onChange={(event) => setDescription(event.target.value)}
-          placeholder="Optional description shown in the Insights library"
+          placeholder={tGenerated('m_1cfacd2a1fd5ef')}
           className="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2.5 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         />
         <span className="shrink-0 text-[11px] text-slate-400" aria-live="polite">
-          {description.length}/{INSIGHT_CARD_DESCRIPTION_MAX_LENGTH}
+          <GeneratedValue value={description.length} />/
+          <GeneratedValue value={INSIGHT_CARD_DESCRIPTION_MAX_LENGTH} />
         </span>
       </div>
 
@@ -766,7 +782,7 @@ export function CardStudio({
               void askAi()
             }
           }}
-          placeholder="Ask AI to build this chart — e.g. “incidents by month this year”"
+          placeholder={tGenerated('m_002365aeadd3a6')}
           disabled={aiLoading}
           className="h-9 flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm outline-none placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         />
@@ -776,12 +792,16 @@ export function CardStudio({
           disabled={aiLoading || !aiPrompt.trim()}
           className="h-9 text-xs"
         >
-          {aiLoading ? (
-            <Loader2 size={14} className="mr-1 animate-spin" />
-          ) : (
-            <Sparkles size={14} className="mr-1" />
-          )}
-          Ask AI
+          <GeneratedValue
+            value={
+              aiLoading ? (
+                <Loader2 size={14} className="mr-1 animate-spin" />
+              ) : (
+                <Sparkles size={14} className="mr-1" />
+              )
+            }
+          />
+          <GeneratedText id="m_17f639ec1c7da4" />
         </Button>
       </div>
 
@@ -790,277 +810,369 @@ export function CardStudio({
         <div className="app-scroll space-y-3 lg:col-span-1 lg:min-h-0 lg:overflow-y-auto">
           {/* Source */}
           <div className={sectionCls}>
-            <h3 className={headCls}>Data</h3>
+            <h3 className={headCls}>
+              <GeneratedText id="m_19a80226d954c8" />
+            </h3>
             <Select
               value={entityKey}
               onChange={(e) => setEntityKey(e.target.value)}
               className={selectCls}
             >
-              {entityGroups.map(([cat, ents]) => (
-                <optgroup key={cat} label={cat}>
-                  {ents.map((en) => (
-                    <option key={en.key} value={en.key}>
-                      {en.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
+              <GeneratedValue
+                value={entityGroups.map(([cat, ents]) => (
+                  <optgroup key={cat} label={tGeneratedValue(cat)}>
+                    <GeneratedValue
+                      value={ents.map((en) => (
+                        <option key={en.key} value={en.key}>
+                          <GeneratedValue value={en.label} />
+                        </option>
+                      ))}
+                    />
+                  </optgroup>
+                ))}
+              />
             </Select>
-            {entity?.description ? (
-              <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                {entity.description}
-              </p>
-            ) : null}
+            <GeneratedValue
+              value={
+                entity?.description ? (
+                  <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={entity.description} />
+                  </p>
+                ) : null
+              }
+            />
             <div className="mt-3 inline-flex rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
-              {(['rows', 'summarize', 'matrix'] as Mode[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMode(m)}
-                  className={cn(
-                    'rounded px-3 py-1 text-xs font-medium capitalize transition',
-                    mode === m
-                      ? 'bg-teal-600 text-white'
-                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
-                  )}
-                >
-                  {m === 'rows' ? 'Raw rows' : m === 'summarize' ? 'Summarize' : 'Matrix'}
-                </button>
-              ))}
+              <GeneratedValue
+                value={(['rows', 'summarize', 'matrix'] as Mode[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMode(m)}
+                    className={cn(
+                      'rounded px-3 py-1 text-xs font-medium capitalize transition',
+                      mode === m
+                        ? 'bg-teal-600 text-white'
+                        : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
+                    )}
+                  >
+                    <GeneratedValue
+                      value={
+                        m === 'rows' ? (
+                          <GeneratedText id="m_0454dd4fb68598" />
+                        ) : m === 'summarize' ? (
+                          <GeneratedText id="m_0375c390df6ee0" />
+                        ) : (
+                          <GeneratedText id="m_1a0b9be7fec8f5" />
+                        )
+                      }
+                    />
+                  </button>
+                ))}
+              />
             </div>
           </div>
 
           {/* Card type — AI analysis / reusable metric (not for a matrix). */}
-          {mode !== 'matrix' ? (
-            <div className={sectionCls}>
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={isAiCard}
-                  onChange={(e) => {
-                    setIsAiCard(e.target.checked)
-                    if (e.target.checked) setIsMetric(false)
-                  }}
-                />
-                <Sparkles size={13} className="text-teal-500" />
-                AI analysis card
-              </label>
-              <label className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={isMetric}
-                  onChange={(e) => {
-                    setIsMetric(e.target.checked)
-                    if (e.target.checked) setIsAiCard(false)
-                  }}
-                />
-                <span className="font-semibold text-violet-500">ƒ</span>
-                Reusable metric — referenceable in other cards
-              </label>
-              {isAiCard ? (
-                <div className="mt-2 space-y-2">
-                  <textarea
-                    value={analysisPrompt}
-                    onChange={(e) => setAnalysisPrompt(e.target.value)}
-                    rows={3}
-                    placeholder="What should the AI do with this data? e.g. “Summarise the top risks and who should act.”"
-                    className="w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                  />
-                  <Select
-                    value={analysisOutput}
-                    onChange={(e) => setAnalysisOutput(e.target.value as AiCardOutputShape)}
-                    className={cn(selectCls, 'h-8 text-xs')}
-                  >
-                    <option value="insights">Findings &amp; insights</option>
-                    <option value="summary">Short summary</option>
-                    <option value="bullets">Key bullet points</option>
-                  </Select>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    The rail below builds the dataset the model reads. Open the saved card to run
-                    it.
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {mode === 'rows' ? (
-            <div className={sectionCls}>
-              <h3 className={headCls}>Columns</h3>
-              <div className="grid grid-cols-1 gap-1">
-                {cols.map((c) => (
-                  <label
-                    key={c.key}
-                    className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={columns.includes(c.key)}
-                      onChange={(e) =>
-                        setColumns((cs) =>
-                          e.target.checked ? [...cs, c.key] : cs.filter((k) => k !== c.key),
-                        )
-                      }
-                    />
-                    {c.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-          ) : mode === 'matrix' ? (
-            <MatrixEditor
-              spec={matrixSpec}
-              onChange={setMatrixSpec}
-              entities={entities}
-              entityMap={entityMap}
-            />
-          ) : (
-            <>
-              <RailList
-                title="Group by"
-                items={breakouts}
-                onAdd={() => setBreakouts((b) => [...b, { field: cols[0]?.key ?? '' }])}
-                onRemove={(i) => setBreakouts((b) => b.filter((_, j) => j !== i))}
-                render={(b, i) => (
-                  <BreakoutEditor
-                    fields={fields}
-                    row={b}
-                    onChange={(next) =>
-                      setBreakouts((bs) => bs.map((x, j) => (j === i ? next : x)))
-                    }
-                  />
-                )}
-              />
-              <RailList
-                title="Measures"
-                items={measures}
-                onAdd={() => setMeasures((m) => [...m, { fn: 'count' }])}
-                onRemove={(i) => setMeasures((m) => m.filter((_, j) => j !== i))}
-                render={(m, i) => (
-                  <MeasureEditor
-                    fields={fields}
-                    row={m}
-                    onChange={(next) => setMeasures((ms) => ms.map((x, j) => (j === i ? next : x)))}
-                  />
-                )}
-              />
-              <RailList
-                title="Cross-table rates"
-                items={crossMetrics}
-                onAdd={() =>
-                  setCrossMetrics((c) => [
-                    ...c,
-                    {
-                      numFn: 'count',
-                      denSource: entities[0]?.key ?? '',
-                      denFn: 'count',
-                      on: [],
-                      multiplier: 1,
-                    },
-                  ])
-                }
-                onRemove={(i) => setCrossMetrics((c) => c.filter((_, j) => j !== i))}
-                render={(cm, i) => (
-                  <CrossMetricEditor
-                    row={cm}
-                    primaryFields={fields}
-                    breakouts={breakouts}
-                    entities={entities}
-                    entityMap={entityMap}
-                    metrics={metrics}
-                    onChange={(next) =>
-                      setCrossMetrics((cs) => cs.map((x, j) => (j === i ? next : x)))
-                    }
-                  />
-                )}
-              />
-              {breakouts.length >= 2 && measures.length >= 1 ? (
+          <GeneratedValue
+            value={
+              mode !== 'matrix' ? (
                 <div className={sectionCls}>
                   <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
                     <input
                       type="checkbox"
-                      checked={pivotOn}
-                      onChange={(e) => setPivotOn(e.target.checked)}
+                      checked={isAiCard}
+                      onChange={(e) => {
+                        setIsAiCard(e.target.checked)
+                        if (e.target.checked) setIsMetric(false)
+                      }}
                     />
-                    Pivot — rows ={' '}
-                    {fieldCol(fields, breakouts[0]?.field ?? '')?.label ?? '1st group'}, columns ={' '}
-                    {fieldCol(fields, breakouts[1]?.field ?? '')?.label ?? '2nd group'}
+                    <Sparkles size={13} className="text-teal-500" />
+                    <GeneratedText id="m_105729877485ef" />
                   </label>
+                  <label className="mt-2 flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={isMetric}
+                      onChange={(e) => {
+                        setIsMetric(e.target.checked)
+                        if (e.target.checked) setIsAiCard(false)
+                      }}
+                    />
+                    <span className="font-semibold text-violet-500">ƒ</span>
+                    <GeneratedText id="m_0cb65b66f7d35e" />
+                  </label>
+                  <GeneratedValue
+                    value={
+                      isAiCard ? (
+                        <div className="mt-2 space-y-2">
+                          <textarea
+                            value={analysisPrompt}
+                            onChange={(e) => setAnalysisPrompt(e.target.value)}
+                            rows={3}
+                            placeholder={tGenerated('m_11703db1d01de8')}
+                            className="w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-xs outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                          />
+                          <Select
+                            value={analysisOutput}
+                            onChange={(e) => setAnalysisOutput(e.target.value as AiCardOutputShape)}
+                            className={cn(selectCls, 'h-8 text-xs')}
+                          >
+                            <option value="insights">
+                              <GeneratedText id="m_16d1e4944f777d" />
+                            </option>
+                            <option value="summary">
+                              <GeneratedText id="m_01cf7b315e3339" />
+                            </option>
+                            <option value="bullets">
+                              <GeneratedText id="m_1ff8af60832ca8" />
+                            </option>
+                          </Select>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            <GeneratedText id="m_0bc218daf4d82c" />
+                          </p>
+                        </div>
+                      ) : null
+                    }
+                  />
                 </div>
-              ) : null}
-            </>
-          )}
+              ) : null
+            }
+          />
+
+          <GeneratedValue
+            value={
+              mode === 'rows' ? (
+                <div className={sectionCls}>
+                  <h3 className={headCls}>
+                    <GeneratedText id="m_04eacfda3069db" />
+                  </h3>
+                  <div className="grid grid-cols-1 gap-1">
+                    <GeneratedValue
+                      value={cols.map((c) => (
+                        <label
+                          key={c.key}
+                          className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={columns.includes(c.key)}
+                            onChange={(e) =>
+                              setColumns((cs) =>
+                                e.target.checked ? [...cs, c.key] : cs.filter((k) => k !== c.key),
+                              )
+                            }
+                          />
+                          <GeneratedValue value={c.label} />
+                        </label>
+                      ))}
+                    />
+                  </div>
+                </div>
+              ) : mode === 'matrix' ? (
+                <MatrixEditor
+                  spec={matrixSpec}
+                  onChange={setMatrixSpec}
+                  entities={entities}
+                  entityMap={entityMap}
+                />
+              ) : (
+                <>
+                  <RailList
+                    title={tGenerated('m_175ee59112fb66')}
+                    items={breakouts}
+                    onAdd={() => setBreakouts((b) => [...b, { field: cols[0]?.key ?? '' }])}
+                    onRemove={(i) => setBreakouts((b) => b.filter((_, j) => j !== i))}
+                    render={(b, i) => (
+                      <BreakoutEditor
+                        fields={fields}
+                        row={b}
+                        onChange={(next) =>
+                          setBreakouts((bs) => bs.map((x, j) => (j === i ? next : x)))
+                        }
+                      />
+                    )}
+                  />
+                  <RailList
+                    title={tGenerated('m_05ef1aaad2e058')}
+                    items={measures}
+                    onAdd={() => setMeasures((m) => [...m, { fn: 'count' }])}
+                    onRemove={(i) => setMeasures((m) => m.filter((_, j) => j !== i))}
+                    render={(m, i) => (
+                      <MeasureEditor
+                        fields={fields}
+                        row={m}
+                        onChange={(next) =>
+                          setMeasures((ms) => ms.map((x, j) => (j === i ? next : x)))
+                        }
+                      />
+                    )}
+                  />
+                  <RailList
+                    title={tGenerated('m_013277f8c85c8f')}
+                    items={crossMetrics}
+                    onAdd={() =>
+                      setCrossMetrics((c) => [
+                        ...c,
+                        {
+                          numFn: 'count',
+                          denSource: entities[0]?.key ?? '',
+                          denFn: 'count',
+                          on: [],
+                          multiplier: 1,
+                        },
+                      ])
+                    }
+                    onRemove={(i) => setCrossMetrics((c) => c.filter((_, j) => j !== i))}
+                    render={(cm, i) => (
+                      <CrossMetricEditor
+                        row={cm}
+                        primaryFields={fields}
+                        breakouts={breakouts}
+                        entities={entities}
+                        entityMap={entityMap}
+                        metrics={metrics}
+                        onChange={(next) =>
+                          setCrossMetrics((cs) => cs.map((x, j) => (j === i ? next : x)))
+                        }
+                      />
+                    )}
+                  />
+                  <GeneratedValue
+                    value={
+                      breakouts.length >= 2 && measures.length >= 1 ? (
+                        <div className={sectionCls}>
+                          <label className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={pivotOn}
+                              onChange={(e) => setPivotOn(e.target.checked)}
+                            />
+                            <GeneratedText id="m_1911d17a940c54" />
+                            <GeneratedValue value={' '} />
+                            <GeneratedValue
+                              value={
+                                fieldCol(fields, breakouts[0]?.field ?? '')?.label ?? (
+                                  <GeneratedText id="m_10f7d345a480b7" />
+                                )
+                              }
+                            />
+                            <GeneratedText id="m_0756f945a3aecf" />
+                            <GeneratedValue value={' '} />
+                            <GeneratedValue
+                              value={
+                                fieldCol(fields, breakouts[1]?.field ?? '')?.label ?? (
+                                  <GeneratedText id="m_108a5c0caedc3c" />
+                                )
+                              }
+                            />
+                          </label>
+                        </div>
+                      ) : null
+                    }
+                  />
+                </>
+              )
+            }
+          />
 
           {/* Filters (the matrix has its own structure). */}
-          {mode !== 'matrix' ? (
-            <RailList
-              title="Filters"
-              items={filters}
-              onAdd={() =>
-                setFilters((f) => [...f, { field: cols[0]?.key ?? '', op: 'eq', value: '' }])
-              }
-              onRemove={(i) => setFilters((f) => f.filter((_, j) => j !== i))}
-              render={(f, i) => (
-                <FilterEditor
-                  fields={fields}
-                  row={f}
-                  onChange={(next) => setFilters((fs) => fs.map((x, j) => (j === i ? next : x)))}
+          <GeneratedValue
+            value={
+              mode !== 'matrix' ? (
+                <RailList
+                  title={tGenerated('m_1f9dc6f1f797f7')}
+                  items={filters}
+                  onAdd={() =>
+                    setFilters((f) => [...f, { field: cols[0]?.key ?? '', op: 'eq', value: '' }])
+                  }
+                  onRemove={(i) => setFilters((f) => f.filter((_, j) => j !== i))}
+                  render={(f, i) => (
+                    <FilterEditor
+                      fields={fields}
+                      row={f}
+                      onChange={(next) =>
+                        setFilters((fs) => fs.map((x, j) => (j === i ? next : x)))
+                      }
+                    />
+                  )}
                 />
-              )}
-            />
-          ) : null}
+              ) : null
+            }
+          />
 
           {/* Visualize — AI cards + matrices render their own output, not a chart. */}
-          {!isAiCard && mode !== 'matrix' ? (
-            <div className={sectionCls}>
-              <h3 className={headCls}>Visualize</h3>
-              <div className="grid grid-cols-4 gap-1.5">
-                {VIZ_LIST.map((v) => {
-                  const isSuggested = v.key === suggestedViz
-                  return (
-                    <button
-                      key={v.key}
-                      type="button"
-                      title={isSuggested ? `${v.label} — suggested` : v.label}
-                      onClick={() => {
-                        setVizType(v.key)
-                        setVizTouched(true)
-                      }}
-                      className={cn(
-                        'relative flex flex-col items-center gap-1 rounded-md border px-1 py-2 text-[10px] transition',
-                        vizType === v.key
-                          ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300'
-                          : isSuggested
-                            ? 'border-teal-300/70 text-slate-500 hover:border-teal-400 dark:border-teal-500/30 dark:text-slate-400'
-                            : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400',
-                      )}
-                    >
-                      {isSuggested && vizType !== v.key ? (
-                        <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-teal-400" />
-                      ) : null}
-                      <VizIcon iconKey={v.iconKey} size={15} />
-                      <span className="truncate">{v.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              !isAiCard && mode !== 'matrix' ? (
+                <div className={sectionCls}>
+                  <h3 className={headCls}>
+                    <GeneratedText id="m_048f94305f59f3" />
+                  </h3>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <GeneratedValue
+                      value={VIZ_LIST.map((v) => {
+                        const isSuggested = v.key === suggestedViz
+                        return (
+                          <button
+                            key={v.key}
+                            type="button"
+                            title={tGeneratedValue(
+                              isSuggested
+                                ? tGenerated('m_03bd2e476efe86', { value0: v.label })
+                                : v.label,
+                            )}
+                            onClick={() => {
+                              setVizType(v.key)
+                              setVizTouched(true)
+                            }}
+                            className={cn(
+                              'relative flex flex-col items-center gap-1 rounded-md border px-1 py-2 text-[10px] transition',
+                              vizType === v.key
+                                ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300'
+                                : isSuggested
+                                  ? 'border-teal-300/70 text-slate-500 hover:border-teal-400 dark:border-teal-500/30 dark:text-slate-400'
+                                  : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400',
+                            )}
+                          >
+                            <GeneratedValue
+                              value={
+                                isSuggested && vizType !== v.key ? (
+                                  <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-teal-400" />
+                                ) : null
+                              }
+                            />
+                            <VizIcon iconKey={v.iconKey} size={15} />
+                            <span className="truncate">
+                              <GeneratedValue value={v.label} />
+                            </span>
+                          </button>
+                        )
+                      })}
+                    />
+                  </div>
+                </div>
+              ) : null
+            }
+          />
 
-          {!isAiCard && mode !== 'matrix' ? (
-            <VizSettingsPanel
-              vizKey={vizType}
-              settings={userVizSettings}
-              onChange={setUserVizSettings}
-              measures={
-                result?.shape === 'flat'
-                  ? result.columns
-                      .filter((c) => c.role === 'measure')
-                      .map((c) => ({ key: c.key, label: c.label }))
-                  : []
-              }
-            />
-          ) : null}
+          <GeneratedValue
+            value={
+              !isAiCard && mode !== 'matrix' ? (
+                <VizSettingsPanel
+                  vizKey={vizType}
+                  settings={userVizSettings}
+                  onChange={setUserVizSettings}
+                  measures={
+                    result?.shape === 'flat'
+                      ? result.columns
+                          .filter((c) => c.role === 'measure')
+                          .map((c) => ({ key: c.key, label: c.label }))
+                      : []
+                  }
+                />
+              ) : null
+            }
+          />
         </div>
 
         {/* RIGHT preview */}
@@ -1068,31 +1180,45 @@ export function CardStudio({
           <div className="flex min-h-[60vh] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-3 lg:h-full lg:min-h-0 dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <Sparkles size={13} className="text-teal-500" />
-              Live preview
-              {previewing ? <Loader2 size={12} className="animate-spin" /> : null}
-              {result ? (
-                <span className="ml-auto">
-                  {result.rowCount} rows{result.truncated ? ' (capped)' : ''}
-                </span>
-              ) : null}
+              <GeneratedText id="m_0b248950c1bd33" />
+              <GeneratedValue
+                value={previewing ? <Loader2 size={12} className="animate-spin" /> : null}
+              />
+              <GeneratedValue
+                value={
+                  result ? (
+                    <span className="ml-auto">
+                      <GeneratedValue value={result.rowCount} />{' '}
+                      <GeneratedText id="m_19f38a950f87b6" />
+                      <GeneratedValue
+                        value={result.truncated ? <GeneratedText id="m_08f1207533fcbc" /> : ''}
+                      />
+                    </span>
+                  ) : null
+                }
+              />
             </div>
             <div className="min-h-0 flex-1">
-              {previewError ? (
-                <div className="grid h-full place-items-center rounded-lg border border-dashed border-rose-300 bg-rose-50/40 px-4 text-center text-xs text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/5 dark:text-rose-400">
-                  {previewError}
-                </div>
-              ) : result ? (
-                <VizRenderer
-                  vizType={isAiCard ? 'table' : mode === 'matrix' ? 'pivot' : vizType}
-                  result={result}
-                  settings={vizSettings}
-                  label={name}
-                />
-              ) : (
-                <div className="grid h-full place-items-center text-xs text-slate-400">
-                  Building preview…
-                </div>
-              )}
+              <GeneratedValue
+                value={
+                  previewError ? (
+                    <div className="grid h-full place-items-center rounded-lg border border-dashed border-rose-300 bg-rose-50/40 px-4 text-center text-xs text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/5 dark:text-rose-400">
+                      <GeneratedValue value={previewError} />
+                    </div>
+                  ) : result ? (
+                    <VizRenderer
+                      vizType={isAiCard ? 'table' : mode === 'matrix' ? 'pivot' : vizType}
+                      result={result}
+                      settings={vizSettings}
+                      label={tGeneratedValue(name)}
+                    />
+                  ) : (
+                    <div className="grid h-full place-items-center text-xs text-slate-400">
+                      <GeneratedText id="m_0188581ace1f14" />
+                    </div>
+                  )
+                }
+              />
             </div>
           </div>
         </div>
@@ -1119,28 +1245,38 @@ function RailList<T>({
   return (
     <div className={sectionCls}>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className={cn(headCls, 'mb-0')}>{title}</h3>
+        <h3 className={cn(headCls, 'mb-0')}>
+          <GeneratedValue value={title} />
+        </h3>
         <button type="button" onClick={onAdd} className="text-teal-600 hover:text-teal-700">
           <Plus size={15} />
         </button>
       </div>
       <div className="space-y-2">
-        {items.length === 0 ? (
-          <p className="text-[11px] text-slate-400 dark:text-slate-500">None.</p>
-        ) : (
-          items.map((it, i) => (
-            <div key={i} className="flex items-start gap-1.5">
-              <div className="flex-1">{render(it, i)}</div>
-              <button
-                type="button"
-                onClick={() => onRemove(i)}
-                className="mt-1 text-slate-300 hover:text-rose-500"
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))
-        )}
+        <GeneratedValue
+          value={
+            items.length === 0 ? (
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_089518a093f44c" />
+              </p>
+            ) : (
+              items.map((it, i) => (
+                <div key={i} className="flex items-start gap-1.5">
+                  <div className="flex-1">
+                    <GeneratedValue value={render(it, i)} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(i)}
+                    className="mt-1 text-slate-300 hover:text-rose-500"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))
+            )
+          }
+        />
       </div>
     </div>
   )
@@ -1209,6 +1345,7 @@ function FieldOptions({
   predicate?: (c: AnalyticsColumn) => boolean
   placeholder?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const filtered = predicate ? fields.filter((f) => predicate(f.col)) : fields
   const groups = new Map<string, FieldChoice[]>()
   for (const f of filtered) {
@@ -1219,23 +1356,37 @@ function FieldOptions({
   }
   return (
     <>
-      {placeholder ? <option value="">{placeholder}</option> : null}
-      {filtered
-        .filter((f) => f.group == null)
-        .map((f) => (
-          <option key={f.value} value={f.value}>
-            {f.label}
-          </option>
-        ))}
-      {[...groups.entries()].map(([g, opts]) => (
-        <optgroup key={g} label={`→ ${g}`}>
-          {opts.map((f) => (
+      <GeneratedValue
+        value={
+          placeholder ? (
+            <option value="">
+              <GeneratedValue value={placeholder} />
+            </option>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={filtered
+          .filter((f) => f.group == null)
+          .map((f) => (
             <option key={f.value} value={f.value}>
-              {f.label}
+              <GeneratedValue value={f.label} />
             </option>
           ))}
-        </optgroup>
-      ))}
+      />
+      <GeneratedValue
+        value={[...groups.entries()].map(([g, opts]) => (
+          <optgroup key={g} label={tGeneratedValue(`→ ${g}`)}>
+            <GeneratedValue
+              value={opts.map((f) => (
+                <option key={f.value} value={f.value}>
+                  <GeneratedValue value={f.label} />
+                </option>
+              ))}
+            />
+          </optgroup>
+        ))}
+      />
     </>
   )
 }
@@ -1249,6 +1400,7 @@ function BreakoutEditor({
   row: BreakoutRow
   onChange: (next: BreakoutRow) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const labelForField = (key: string) => {
     const f = fields.find((x) => x.value === key)
     return f ? exprLabel(f) : key
@@ -1270,20 +1422,20 @@ function BreakoutEditor({
       <div className="space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-semibold tracking-wide text-violet-500 uppercase">
-            ƒx Custom column
+            <GeneratedText id="m_1eb0da6b8c48be" />
           </span>
           <button
             type="button"
             onClick={() => onChange({ field: fields[0]?.value ?? '' })}
             className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
           >
-            ← simple field
+            <GeneratedText id="m_0bd1e567a3516d" />
           </button>
         </div>
         <ExpressionField
           value={exprText}
           fields={fields}
-          placeholder='case([Age] < 7, "0-6 days", "older")'
+          placeholder={tGenerated('m_00f916b39562ce')}
           onChange={(t) => {
             setExprText(t)
             const r = parseExpression(t, { resolveColumn })
@@ -1304,7 +1456,7 @@ function BreakoutEditor({
         }
         className="text-[11px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400"
       >
-        ƒx Custom column
+        <GeneratedText id="m_1eb0da6b8c48be" />
       </button>
       <Select
         value={row.field}
@@ -1313,62 +1465,84 @@ function BreakoutEditor({
       >
         <FieldOptions fields={fields} />
       </Select>
-      {col?.canBinTemporal ? (
-        <Select
-          value={row.bin?.kind === 'temporal' ? row.bin.unit : ''}
-          onChange={(e) =>
-            onChange({
-              ...row,
-              bin: e.target.value ? { kind: 'temporal', unit: e.target.value as never } : undefined,
-            })
-          }
-          className={cn(selectCls, 'h-8 text-xs')}
-        >
-          <option value="">No bucket</option>
-          {['day', 'week', 'month', 'quarter', 'year'].map((u) => (
-            <option key={u} value={u}>
-              by {u}
-            </option>
-          ))}
-        </Select>
-      ) : null}
-      {col?.canBinNumeric ? (
-        <Select
-          value={row.bin?.kind === 'numeric' ? String(row.bin.numBins) : ''}
-          onChange={(e) =>
-            onChange({
-              ...row,
-              bin: e.target.value
-                ? { kind: 'numeric', numBins: Number(e.target.value) }
-                : undefined,
-            })
-          }
-          className={cn(selectCls, 'h-8 text-xs')}
-        >
-          <option value="">No buckets</option>
-          {[5, 10, 20, 50].map((n) => (
-            <option key={n} value={n}>
-              {n} buckets
-            </option>
-          ))}
-        </Select>
-      ) : null}
-      {col?.arrayUnnest ? (
-        <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
-          <input
-            type="checkbox"
-            checked={!!row.unnest}
-            onChange={(e) =>
-              onChange({
-                ...row,
-                unnest: e.target.checked ? col?.arrayUnnest : undefined,
-                bin: undefined,
-              })
-            }
-          />
-          Unnest — one row per item
-        </label>
-      ) : null}
+      <GeneratedValue
+        value={
+          col?.canBinTemporal ? (
+            <Select
+              value={row.bin?.kind === 'temporal' ? row.bin.unit : ''}
+              onChange={(e) =>
+                onChange({
+                  ...row,
+                  bin: e.target.value
+                    ? { kind: 'temporal', unit: e.target.value as never }
+                    : undefined,
+                })
+              }
+              className={cn(selectCls, 'h-8 text-xs')}
+            >
+              <option value="">
+                <GeneratedText id="m_1be6394afb4aea" />
+              </option>
+              <GeneratedValue
+                value={['day', 'week', 'month', 'quarter', 'year'].map((u) => (
+                  <option key={u} value={u}>
+                    <GeneratedText id="m_19ec032b95249e" /> <GeneratedValue value={u} />
+                  </option>
+                ))}
+              />
+            </Select>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          col?.canBinNumeric ? (
+            <Select
+              value={row.bin?.kind === 'numeric' ? String(row.bin.numBins) : ''}
+              onChange={(e) =>
+                onChange({
+                  ...row,
+                  bin: e.target.value
+                    ? { kind: 'numeric', numBins: Number(e.target.value) }
+                    : undefined,
+                })
+              }
+              className={cn(selectCls, 'h-8 text-xs')}
+            >
+              <option value="">
+                <GeneratedText id="m_1fcc2f20471f53" />
+              </option>
+              <GeneratedValue
+                value={[5, 10, 20, 50].map((n) => (
+                  <option key={n} value={n}>
+                    <GeneratedValue value={n} /> <GeneratedText id="m_1b860f0f997f84" />
+                  </option>
+                ))}
+              />
+            </Select>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          col?.arrayUnnest ? (
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+              <input
+                type="checkbox"
+                checked={!!row.unnest}
+                onChange={(e) =>
+                  onChange({
+                    ...row,
+                    unnest: e.target.checked ? col?.arrayUnnest : undefined,
+                    bin: undefined,
+                  })
+                }
+              />
+              <GeneratedText id="m_0be5c2d271c0a7" />
+            </label>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -1382,6 +1556,7 @@ function ConditionRow({
   where?: MeasureWhere
   onChange: (w: MeasureWhere | undefined) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   if (!where) {
     return (
       <button
@@ -1389,7 +1564,7 @@ function ConditionRow({
         onClick={() => onChange({ field: fields[0]?.value ?? '', op: 'eq', value: '' })}
         className="text-[11px] font-medium text-teal-600 hover:text-teal-700"
       >
-        + only where…
+        <GeneratedText id="m_07fc589aa0fc10" />
       </button>
     )
   }
@@ -1397,7 +1572,9 @@ function ConditionRow({
   return (
     <div className="space-y-1 rounded bg-slate-50 p-1 dark:bg-slate-800/40">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] tracking-wide text-slate-400 uppercase">only where</span>
+        <span className="text-[10px] tracking-wide text-slate-400 uppercase">
+          <GeneratedText id="m_191bd4c5aaa72e" />
+        </span>
         <button
           type="button"
           onClick={() => onChange(undefined)}
@@ -1418,20 +1595,26 @@ function ConditionRow({
         onChange={(e) => onChange({ ...where, op: e.target.value as FilterOp })}
         className={cn(selectCls, 'h-7 text-xs')}
       >
-        {FILTER_OPS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </Select>
-      {op?.needsValue ? (
-        <input
-          value={where.value}
-          onChange={(e) => onChange({ ...where, value: e.target.value })}
-          placeholder="value to match…"
-          className={cn(inputCls, 'h-7 text-xs')}
+        <GeneratedValue
+          value={FILTER_OPS.map((o) => (
+            <option key={o.value} value={o.value}>
+              <GeneratedValue value={o.label} />
+            </option>
+          ))}
         />
-      ) : null}
+      </Select>
+      <GeneratedValue
+        value={
+          op?.needsValue ? (
+            <input
+              value={where.value}
+              onChange={(e) => onChange({ ...where, value: e.target.value })}
+              placeholder={tGenerated('m_0501d5939121b0')}
+              className={cn(inputCls, 'h-7 text-xs')}
+            />
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -1450,7 +1633,7 @@ function MultiplierField({ value, onChange }: { value: number; onChange: (n: num
     <div className="space-y-1">
       <div className="flex items-center gap-1.5">
         <span className="shrink-0 text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-          × scale
+          <GeneratedText id="m_0f7c92ecfd054e" />
         </span>
         <input
           type="number"
@@ -1462,21 +1645,23 @@ function MultiplierField({ value, onChange }: { value: number; onChange: (n: num
         />
       </div>
       <div className="flex flex-wrap gap-1">
-        {MULTIPLIER_PRESETS.map((p) => (
-          <button
-            key={p.v}
-            type="button"
-            onClick={() => onChange(p.v)}
-            className={cn(
-              'rounded border px-1.5 py-0.5 text-[10px] transition',
-              value === p.v
-                ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300'
-                : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400',
-            )}
-          >
-            {p.label}
-          </button>
-        ))}
+        <GeneratedValue
+          value={MULTIPLIER_PRESETS.map((p) => (
+            <button
+              key={p.v}
+              type="button"
+              onClick={() => onChange(p.v)}
+              className={cn(
+                'rounded border px-1.5 py-0.5 text-[10px] transition',
+                value === p.v
+                  ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300'
+                  : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400',
+              )}
+            >
+              <GeneratedValue value={p.label} />
+            </button>
+          ))}
+        />
       </div>
     </div>
   )
@@ -1509,23 +1694,27 @@ function VizSettingsPanel({
   if (rows.length === 0) return null
   return (
     <div className={sectionCls}>
-      <h3 className={headCls}>Format</h3>
+      <h3 className={headCls}>
+        <GeneratedText id="m_1f6288d5ae6aab" />
+      </h3>
       <div className="space-y-2">
-        {rows.map((s) => (
-          <SettingRow
-            key={s.key}
-            def={s}
-            value={settings[s.key]}
-            onChange={(v) =>
-              onChange(
-                v === undefined
-                  ? Object.fromEntries(Object.entries(settings).filter(([k]) => k !== s.key))
-                  : { ...settings, [s.key]: v },
-              )
-            }
-            measures={measures}
-          />
-        ))}
+        <GeneratedValue
+          value={rows.map((s) => (
+            <SettingRow
+              key={s.key}
+              def={s}
+              value={settings[s.key]}
+              onChange={(v) =>
+                onChange(
+                  v === undefined
+                    ? Object.fromEntries(Object.entries(settings).filter(([k]) => k !== s.key))
+                    : { ...settings, [s.key]: v },
+                )
+              }
+              measures={measures}
+            />
+          ))}
+        />
       </div>
     </div>
   )
@@ -1546,7 +1735,9 @@ function SettingRow({
   if (def.widget === 'toggle') {
     return (
       <label className={cn('flex items-center justify-between gap-2', labelCls)}>
-        <span>{def.label}</span>
+        <span>
+          <GeneratedValue value={def.label} />
+        </span>
         <input
           type="checkbox"
           checked={value === true}
@@ -1559,7 +1750,9 @@ function SettingRow({
   if (def.widget === 'color') {
     return (
       <label className={cn('flex items-center justify-between gap-2', labelCls)}>
-        <span>{def.label}</span>
+        <span>
+          <GeneratedValue value={def.label} />
+        </span>
         <input
           type="color"
           value={typeof value === 'string' ? value : '#0f766e'}
@@ -1576,18 +1769,32 @@ function SettingRow({
         : (def.options ?? [])
     return (
       <label className={cn('block space-y-1', labelCls)}>
-        <span>{def.label}</span>
+        <span>
+          <GeneratedValue value={def.label} />
+        </span>
         <Select
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => onChange(e.target.value || undefined)}
           className={cn(selectCls, 'h-8 text-xs')}
         >
-          <option value="">{def.widget === 'field' ? 'None' : 'Default'}</option>
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
+          <option value="">
+            <GeneratedValue
+              value={
+                def.widget === 'field' ? (
+                  <GeneratedText id="m_04be42f1f72c23" />
+                ) : (
+                  <GeneratedText id="m_1f7e78461783a1" />
+                )
+              }
+            />
+          </option>
+          <GeneratedValue
+            value={options.map((o) => (
+              <option key={o.value} value={o.value}>
+                <GeneratedValue value={o.label} />
+              </option>
+            ))}
+          />
         </Select>
       </label>
     )
@@ -1595,7 +1802,9 @@ function SettingRow({
   // number | text
   return (
     <label className={cn('block space-y-1', labelCls)}>
-      <span>{def.label}</span>
+      <span>
+        <GeneratedValue value={def.label} />
+      </span>
       <input
         type={def.widget === 'number' ? 'number' : 'text'}
         value={
@@ -1631,6 +1840,7 @@ function MeasureEditor({
   row: MeasureRow
   onChange: (next: MeasureRow) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const labelForField = (key: string) => {
     const f = fields.find((x) => x.value === key)
     return f ? exprLabel(f) : key
@@ -1652,14 +1862,14 @@ function MeasureEditor({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-semibold tracking-wide text-violet-500 uppercase">
-            ƒx Custom aggregation
+            <GeneratedText id="m_1a596dee9bd760" />
           </span>
           <button
             type="button"
             onClick={() => onChange({ fn: 'count' })}
             className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
           >
-            ← simple measure
+            <GeneratedText id="m_16fb15ffdd091c" />
           </button>
         </div>
         <ExpressionField
@@ -1682,32 +1892,38 @@ function MeasureEditor({
         onClick={() => onChange({ ...row, calc: false, expr: { ex: 'agg', fn: 'count' } })}
         className="text-[11px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-400"
       >
-        ƒx Custom expression
+        <GeneratedText id="m_0a2bcfa091ff20" />
       </button>
       <Select
         value={row.fn}
         onChange={(e) => onChange({ ...row, fn: e.target.value as BhqlAggFn })}
         className={selectCls}
       >
-        {AGG_FNS.map((a) => (
-          <option key={a.value} value={a.value}>
-            {a.label}
-          </option>
-        ))}
+        <GeneratedValue
+          value={AGG_FNS.map((a) => (
+            <option key={a.value} value={a.value}>
+              <GeneratedValue value={a.label} />
+            </option>
+          ))}
+        />
       </Select>
-      {row.fn !== 'count' ? (
-        <Select
-          value={row.field ?? ''}
-          onChange={(e) => onChange({ ...row, field: e.target.value })}
-          className={cn(selectCls, 'h-8 text-xs')}
-        >
-          <FieldOptions
-            fields={fields}
-            placeholder="Pick a field…"
-            predicate={(c) => (row.fn === 'sum' || row.fn === 'avg' ? c.canMeasure : true)}
-          />
-        </Select>
-      ) : null}
+      <GeneratedValue
+        value={
+          row.fn !== 'count' ? (
+            <Select
+              value={row.field ?? ''}
+              onChange={(e) => onChange({ ...row, field: e.target.value })}
+              className={cn(selectCls, 'h-8 text-xs')}
+            >
+              <FieldOptions
+                fields={fields}
+                placeholder={tGenerated('m_0ff98564d477ba')}
+                predicate={(c) => (row.fn === 'sum' || row.fn === 'avg' ? c.canMeasure : true)}
+              />
+            </Select>
+          ) : null
+        }
+      />
       <ConditionRow
         fields={fields}
         where={row.where}
@@ -1727,50 +1943,60 @@ function MeasureEditor({
             })
           }
         />
-        Make it a ratio (÷ another measure)
+        <GeneratedText id="m_116cb66b74a515" />
       </label>
-      {row.calc ? (
-        <div className="space-y-1 rounded-md bg-slate-50 p-1.5 dark:bg-slate-800/40">
-          <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-            ÷ denominator
-          </div>
-          <Select
-            value={row.denFn ?? 'count'}
-            onChange={(e) => onChange({ ...row, denFn: e.target.value as BhqlAggFn })}
-            className={cn(selectCls, 'h-8 text-xs')}
-          >
-            {AGG_FNS.map((a) => (
-              <option key={a.value} value={a.value}>
-                {a.label}
-              </option>
-            ))}
-          </Select>
-          {row.denFn && row.denFn !== 'count' ? (
-            <Select
-              value={row.denField ?? ''}
-              onChange={(e) => onChange({ ...row, denField: e.target.value })}
-              className={cn(selectCls, 'h-8 text-xs')}
-            >
-              <FieldOptions
-                fields={fields}
-                placeholder="Pick a field…"
-                predicate={(c) =>
-                  row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true
+      <GeneratedValue
+        value={
+          row.calc ? (
+            <div className="space-y-1 rounded-md bg-slate-50 p-1.5 dark:bg-slate-800/40">
+              <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+                <GeneratedText id="m_0aa1c34d7520a7" />
+              </div>
+              <Select
+                value={row.denFn ?? 'count'}
+                onChange={(e) => onChange({ ...row, denFn: e.target.value as BhqlAggFn })}
+                className={cn(selectCls, 'h-8 text-xs')}
+              >
+                <GeneratedValue
+                  value={AGG_FNS.map((a) => (
+                    <option key={a.value} value={a.value}>
+                      <GeneratedValue value={a.label} />
+                    </option>
+                  ))}
+                />
+              </Select>
+              <GeneratedValue
+                value={
+                  row.denFn && row.denFn !== 'count' ? (
+                    <Select
+                      value={row.denField ?? ''}
+                      onChange={(e) => onChange({ ...row, denField: e.target.value })}
+                      className={cn(selectCls, 'h-8 text-xs')}
+                    >
+                      <FieldOptions
+                        fields={fields}
+                        placeholder={tGenerated('m_0ff98564d477ba')}
+                        predicate={(c) =>
+                          row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true
+                        }
+                      />
+                    </Select>
+                  ) : null
                 }
               />
-            </Select>
-          ) : null}
-          <ConditionRow
-            fields={fields}
-            where={row.denWhere}
-            onChange={(w) => onChange({ ...row, denWhere: w })}
-          />
-          <MultiplierField
-            value={row.multiplier ?? 1}
-            onChange={(n) => onChange({ ...row, multiplier: n })}
-          />
-        </div>
-      ) : null}
+              <ConditionRow
+                fields={fields}
+                where={row.denWhere}
+                onChange={(w) => onChange({ ...row, denWhere: w })}
+              />
+              <MultiplierField
+                value={row.multiplier ?? 1}
+                onChange={(n) => onChange({ ...row, multiplier: n })}
+              />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -1792,6 +2018,8 @@ function CrossMetricEditor({
   entityMap: Record<string, AnalyticsEntity>
   metrics: StudioMetric[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   // When the denominator is a saved metric, grain-map against the metric's source.
   const metricSource = row.denMetricId
     ? metrics.find((m) => m.id === row.denMetricId)?.source
@@ -1812,32 +2040,40 @@ function CrossMetricEditor({
   return (
     <div className="space-y-1.5 rounded-md border border-slate-200 p-2 dark:border-slate-700">
       <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-        Numerator · this table
+        <GeneratedText id="m_048ea34995b37a" />
       </div>
       <Select
         value={row.numFn}
         onChange={(e) => onChange({ ...row, numFn: e.target.value as BhqlAggFn })}
         className={cn(selectCls, 'h-8 text-xs')}
       >
-        {AGG_FNS.map((a) => (
-          <option key={a.value} value={a.value}>
-            {a.label}
-          </option>
-        ))}
+        <GeneratedValue
+          value={AGG_FNS.map((a) => (
+            <option key={a.value} value={a.value}>
+              <GeneratedValue value={a.label} />
+            </option>
+          ))}
+        />
       </Select>
-      {row.numFn !== 'count' ? (
-        <Select
-          value={row.numField ?? ''}
-          onChange={(e) => onChange({ ...row, numField: e.target.value })}
-          className={cn(selectCls, 'h-8 text-xs')}
-        >
-          <FieldOptions
-            fields={primaryFields}
-            placeholder="Pick a field…"
-            predicate={(c) => (row.numFn === 'sum' || row.numFn === 'avg' ? c.canMeasure : true)}
-          />
-        </Select>
-      ) : null}
+      <GeneratedValue
+        value={
+          row.numFn !== 'count' ? (
+            <Select
+              value={row.numField ?? ''}
+              onChange={(e) => onChange({ ...row, numField: e.target.value })}
+              className={cn(selectCls, 'h-8 text-xs')}
+            >
+              <FieldOptions
+                fields={primaryFields}
+                placeholder={tGenerated('m_0ff98564d477ba')}
+                predicate={(c) =>
+                  row.numFn === 'sum' || row.numFn === 'avg' ? c.canMeasure : true
+                }
+              />
+            </Select>
+          ) : null
+        }
+      />
       <ConditionRow
         fields={primaryFields}
         where={row.numWhere}
@@ -1845,104 +2081,139 @@ function CrossMetricEditor({
       />
 
       <div className="pt-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-        ÷ Denominator
+        <GeneratedText id="m_0df853400e1bb8" />
       </div>
-      {metrics.length > 0 ? (
-        <Select
-          value={row.denMetricId ?? '__inline'}
-          onChange={(e) => {
-            const v = e.target.value
-            onChange({ ...row, denMetricId: v === '__inline' ? undefined : v, on: [] })
-          }}
-          className={cn(selectCls, 'h-8 text-xs')}
-        >
-          <option value="__inline">Build inline (another table)…</option>
-          {metrics.map((m) => (
-            <option key={m.id} value={m.id}>
-              ƒ {m.name} (saved metric)
-            </option>
-          ))}
-        </Select>
-      ) : null}
-      {!row.denMetricId ? (
-        <>
-          <Select
-            value={row.denSource}
-            onChange={(e) =>
-              onChange({ ...row, denSource: e.target.value, denField: undefined, on: [] })
-            }
-            className={cn(selectCls, 'h-8 text-xs')}
-          >
-            {entityGroups.map(([cat, ents]) => (
-              <optgroup key={cat} label={cat}>
-                {ents.map((en) => (
-                  <option key={en.key} value={en.key}>
-                    {en.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </Select>
-          <Select
-            value={row.denFn}
-            onChange={(e) => onChange({ ...row, denFn: e.target.value as BhqlAggFn })}
-            className={cn(selectCls, 'h-8 text-xs')}
-          >
-            {AGG_FNS.map((a) => (
-              <option key={a.value} value={a.value}>
-                {a.label}
-              </option>
-            ))}
-          </Select>
-          {row.denFn !== 'count' ? (
+      <GeneratedValue
+        value={
+          metrics.length > 0 ? (
             <Select
-              value={row.denField ?? ''}
-              onChange={(e) => onChange({ ...row, denField: e.target.value })}
+              value={row.denMetricId ?? '__inline'}
+              onChange={(e) => {
+                const v = e.target.value
+                onChange({ ...row, denMetricId: v === '__inline' ? undefined : v, on: [] })
+              }}
               className={cn(selectCls, 'h-8 text-xs')}
             >
-              <FieldOptions
-                fields={denFields}
-                placeholder="Pick a field…"
-                predicate={(c) =>
-                  row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true
-                }
+              <option value="__inline">
+                <GeneratedText id="m_10a2a576c7e5da" />
+              </option>
+              <GeneratedValue
+                value={metrics.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    ƒ <GeneratedValue value={m.name} /> <GeneratedText id="m_19cf099b62d084" />
+                  </option>
+                ))}
               />
             </Select>
-          ) : null}
-          <ConditionRow
-            fields={denFields}
-            where={row.denWhere}
-            onChange={(w) => onChange({ ...row, denWhere: w })}
-          />
-        </>
-      ) : null}
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          !row.denMetricId ? (
+            <>
+              <Select
+                value={row.denSource}
+                onChange={(e) =>
+                  onChange({ ...row, denSource: e.target.value, denField: undefined, on: [] })
+                }
+                className={cn(selectCls, 'h-8 text-xs')}
+              >
+                <GeneratedValue
+                  value={entityGroups.map(([cat, ents]) => (
+                    <optgroup key={cat} label={tGeneratedValue(cat)}>
+                      <GeneratedValue
+                        value={ents.map((en) => (
+                          <option key={en.key} value={en.key}>
+                            <GeneratedValue value={en.label} />
+                          </option>
+                        ))}
+                      />
+                    </optgroup>
+                  ))}
+                />
+              </Select>
+              <Select
+                value={row.denFn}
+                onChange={(e) => onChange({ ...row, denFn: e.target.value as BhqlAggFn })}
+                className={cn(selectCls, 'h-8 text-xs')}
+              >
+                <GeneratedValue
+                  value={AGG_FNS.map((a) => (
+                    <option key={a.value} value={a.value}>
+                      <GeneratedValue value={a.label} />
+                    </option>
+                  ))}
+                />
+              </Select>
+              <GeneratedValue
+                value={
+                  row.denFn !== 'count' ? (
+                    <Select
+                      value={row.denField ?? ''}
+                      onChange={(e) => onChange({ ...row, denField: e.target.value })}
+                      className={cn(selectCls, 'h-8 text-xs')}
+                    >
+                      <FieldOptions
+                        fields={denFields}
+                        placeholder={tGenerated('m_0ff98564d477ba')}
+                        predicate={(c) =>
+                          row.denFn === 'sum' || row.denFn === 'avg' ? c.canMeasure : true
+                        }
+                      />
+                    </Select>
+                  ) : null
+                }
+              />
+              <ConditionRow
+                fields={denFields}
+                where={row.denWhere}
+                onChange={(w) => onChange({ ...row, denWhere: w })}
+              />
+            </>
+          ) : null
+        }
+      />
 
-      {hasFieldBreakouts ? (
-        <div className="space-y-1 rounded bg-slate-50 p-1.5 dark:bg-slate-800/40">
-          <div className="text-[10px] tracking-wide text-slate-400 uppercase">Align the grain</div>
-          {breakouts.map((b, i) =>
-            b.field && !b.expr ? (
-              <div key={i} className="flex items-center gap-1">
-                <span className="w-1/3 truncate text-[11px] text-slate-500 dark:text-slate-400">
-                  {fieldCol(primaryFields, b.field)?.label ?? b.field}
-                </span>
-                <span className="text-slate-300">↔</span>
-                <Select
-                  value={row.on[i] ?? ''}
-                  onChange={(e) => {
-                    const on = [...row.on]
-                    on[i] = e.target.value
-                    onChange({ ...row, on })
-                  }}
-                  className={cn(selectCls, 'h-7 flex-1 text-xs')}
-                >
-                  <FieldOptions fields={denFields} placeholder="match field…" />
-                </Select>
+      <GeneratedValue
+        value={
+          hasFieldBreakouts ? (
+            <div className="space-y-1 rounded bg-slate-50 p-1.5 dark:bg-slate-800/40">
+              <div className="text-[10px] tracking-wide text-slate-400 uppercase">
+                <GeneratedText id="m_1dd00de538a2af" />
               </div>
-            ) : null,
-          )}
-        </div>
-      ) : null}
+              <GeneratedValue
+                value={breakouts.map((b, i) =>
+                  b.field && !b.expr ? (
+                    <div key={i} className="flex items-center gap-1">
+                      <span className="w-1/3 truncate text-[11px] text-slate-500 dark:text-slate-400">
+                        <GeneratedValue
+                          value={fieldCol(primaryFields, b.field)?.label ?? b.field}
+                        />
+                      </span>
+                      <span className="text-slate-300">↔</span>
+                      <Select
+                        value={row.on[i] ?? ''}
+                        onChange={(e) => {
+                          const on = [...row.on]
+                          on[i] = e.target.value
+                          onChange({ ...row, on })
+                        }}
+                        className={cn(selectCls, 'h-7 flex-1 text-xs')}
+                      >
+                        <FieldOptions
+                          fields={denFields}
+                          placeholder={tGenerated('m_1d5e598e4a9887')}
+                        />
+                      </Select>
+                    </div>
+                  ) : null,
+                )}
+              />
+            </div>
+          ) : null
+        }
+      />
 
       <MultiplierField
         value={row.multiplier}
@@ -1963,6 +2234,7 @@ function MatrixEditor({
   entities: AnalyticsEntity[]
   entityMap: Record<string, AnalyticsEntity>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const entityGroups = useMemo(() => {
     const m = new Map<string, AnalyticsEntity[]>()
     for (const e of entities) {
@@ -1974,12 +2246,14 @@ function MatrixEditor({
   }, [entities])
   const entityOptions = () =>
     entityGroups.map(([cat, ents]) => (
-      <optgroup key={cat} label={cat}>
-        {ents.map((en) => (
-          <option key={en.key} value={en.key}>
-            {en.label}
-          </option>
-        ))}
+      <optgroup key={cat} label={tGeneratedValue(cat)}>
+        <GeneratedValue
+          value={ents.map((en) => (
+            <option key={en.key} value={en.key}>
+              <GeneratedValue value={en.label} />
+            </option>
+          ))}
+        />
       </optgroup>
     ))
   const fieldOptions = (source: string, predicate?: (c: AnalyticsColumn) => boolean) => {
@@ -1988,11 +2262,11 @@ function MatrixEditor({
     )
     return [
       <option key="__" value="">
-        Pick a field…
+        <GeneratedText id="m_0ff98564d477ba" />
       </option>,
       ...cols.map((c) => (
         <option key={c.key} value={c.key}>
-          {c.label}
+          <GeneratedValue value={c.label} />
         </option>
       )),
     ]
@@ -2019,7 +2293,7 @@ function MatrixEditor({
       .filter((c) => c.semanticType !== 'pk')
       .map((c) => (
         <option key={c.key} value={c.key}>
-          {c.label}
+          <GeneratedValue value={c.label} />
         </option>
       ))
   const filterList = (
@@ -2029,7 +2303,9 @@ function MatrixEditor({
   ) => (
     <div className="space-y-1 rounded bg-slate-50 p-1.5 dark:bg-slate-800/40">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] tracking-wide text-slate-400 uppercase">Filters</span>
+        <span className="text-[10px] tracking-wide text-slate-400 uppercase">
+          <GeneratedText id="m_1f9dc6f1f797f7" />
+        </span>
         <button
           type="button"
           onClick={() => onRows([...rows, { field: fields[0]?.value ?? '', op: 'eq', value: '' }])}
@@ -2038,87 +2314,123 @@ function MatrixEditor({
           <Plus size={12} />
         </button>
       </div>
-      {rows.length === 0 ? <p className="text-[10px] text-slate-400">All rows.</p> : null}
-      {rows.map((f, i) => (
-        <div key={i} className="flex items-start gap-1">
-          <div className="flex-1">
-            <FilterEditor
-              fields={fields}
-              row={f}
-              onChange={(next) => onRows(rows.map((x, j) => (j === i ? next : x)))}
-            />
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <p className="text-[10px] text-slate-400">
+              <GeneratedText id="m_18980746d66186" />
+            </p>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={rows.map((f, i) => (
+          <div key={i} className="flex items-start gap-1">
+            <div className="flex-1">
+              <FilterEditor
+                fields={fields}
+                row={f}
+                onChange={(next) => onRows(rows.map((x, j) => (j === i ? next : x)))}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => onRows(rows.filter((_, j) => j !== i))}
+              className="mt-1 text-slate-300 hover:text-rose-500"
+            >
+              <Trash2 size={12} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => onRows(rows.filter((_, j) => j !== i))}
-            className="mt-1 text-slate-300 hover:text-rose-500"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
-      ))}
+        ))}
+      />
     </div>
   )
 
   return (
     <div className={cn(sectionCls, 'space-y-3')}>
       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-        Every <b>row</b> × every <b>column</b>, coloured by the latest matching record — no view.
+        <GeneratedText id="m_1a812a9a9de996" />{' '}
+        <b>
+          <GeneratedText id="m_18c766569d99e9" />
+        </b>{' '}
+        <GeneratedText id="m_009f54201282c8" />{' '}
+        <b>
+          <GeneratedText id="m_0fce539f330993" />
+        </b>
+        <GeneratedText id="m_0029111a9d9a4b" />
       </p>
       <div className="space-y-1">
-        <div className={lbl}>Rows</div>
+        <div className={lbl}>
+          <GeneratedText id="m_03be2202673df4" />
+        </div>
         <Select
           value={spec.rowSource}
           onChange={(e) => onChange({ ...spec, rowSource: e.target.value, rowLabel: '' })}
           className={sel}
         >
-          {entityOptions()}
+          <GeneratedValue value={entityOptions()} />
         </Select>
         <Select
           value={spec.rowLabel}
           onChange={(e) => onChange({ ...spec, rowLabel: e.target.value })}
           className={sel}
         >
-          {fieldOptions(spec.rowSource)}
+          <GeneratedValue value={fieldOptions(spec.rowSource)} />
         </Select>
         <Select
           value={spec.rowLabel2 ?? ''}
           onChange={(e) => onChange({ ...spec, rowLabel2: e.target.value || undefined })}
           className={cn(sel, 'text-slate-500')}
         >
-          <option value="">+ second label (optional)</option>
-          {secondLabelOptions(spec.rowSource)}
+          <option value="">
+            <GeneratedText id="m_06b0267d7d18df" />
+          </option>
+          <GeneratedValue value={secondLabelOptions(spec.rowSource)} />
         </Select>
-        {filterList(spec.rowFilters, rowFields, (r) => onChange({ ...spec, rowFilters: r }))}
+        <GeneratedValue
+          value={filterList(spec.rowFilters, rowFields, (r) =>
+            onChange({ ...spec, rowFilters: r }),
+          )}
+        />
       </div>
       <div className="space-y-1">
-        <div className={lbl}>Columns</div>
+        <div className={lbl}>
+          <GeneratedText id="m_04eacfda3069db" />
+        </div>
         <Select
           value={spec.colSource}
           onChange={(e) => onChange({ ...spec, colSource: e.target.value, colLabel: '' })}
           className={sel}
         >
-          {entityOptions()}
+          <GeneratedValue value={entityOptions()} />
         </Select>
         <Select
           value={spec.colLabel}
           onChange={(e) => onChange({ ...spec, colLabel: e.target.value })}
           className={sel}
         >
-          {fieldOptions(spec.colSource)}
+          <GeneratedValue value={fieldOptions(spec.colSource)} />
         </Select>
         <Select
           value={spec.colLabel2 ?? ''}
           onChange={(e) => onChange({ ...spec, colLabel2: e.target.value || undefined })}
           className={cn(sel, 'text-slate-500')}
         >
-          <option value="">+ second label (optional)</option>
-          {secondLabelOptions(spec.colSource)}
+          <option value="">
+            <GeneratedText id="m_06b0267d7d18df" />
+          </option>
+          <GeneratedValue value={secondLabelOptions(spec.colSource)} />
         </Select>
-        {filterList(spec.colFilters, colFields, (r) => onChange({ ...spec, colFilters: r }))}
+        <GeneratedValue
+          value={filterList(spec.colFilters, colFields, (r) =>
+            onChange({ ...spec, colFilters: r }),
+          )}
+        />
       </div>
       <div className="space-y-1">
-        <div className={lbl}>Latest record from</div>
+        <div className={lbl}>
+          <GeneratedText id="m_1c03bb3c28e914" />
+        </div>
         <Select
           value={spec.factSource}
           onChange={(e) =>
@@ -2134,42 +2446,54 @@ function MatrixEditor({
           }
           className={sel}
         >
-          {entityOptions()}
+          <GeneratedValue value={entityOptions()} />
         </Select>
         <div className={inline}>
-          <span className={hint}>→ row by</span>
+          <span className={hint}>
+            <GeneratedText id="m_18af665e7aeb46" />
+          </span>
           <Select
             value={spec.factRowKey}
             onChange={(e) => onChange({ ...spec, factRowKey: e.target.value })}
             className={cn(sel, 'flex-1')}
           >
-            {fieldOptions(spec.factSource)}
+            <GeneratedValue value={fieldOptions(spec.factSource)} />
           </Select>
         </div>
         <div className={inline}>
-          <span className={hint}>→ col by</span>
+          <span className={hint}>
+            <GeneratedText id="m_0a01a38c01bb34" />
+          </span>
           <Select
             value={spec.factColKey}
             onChange={(e) => onChange({ ...spec, factColKey: e.target.value })}
             className={cn(sel, 'flex-1')}
           >
-            {fieldOptions(spec.factSource)}
+            <GeneratedValue value={fieldOptions(spec.factSource)} />
           </Select>
         </div>
         <div className={inline}>
-          <span className={hint}>latest by</span>
+          <span className={hint}>
+            <GeneratedText id="m_1718a8277687c3" />
+          </span>
           <Select
             value={spec.latestBy}
             onChange={(e) => onChange({ ...spec, latestBy: e.target.value })}
             className={cn(sel, 'flex-1')}
           >
-            {fieldOptions(spec.factSource)}
+            <GeneratedValue value={fieldOptions(spec.factSource)} />
           </Select>
         </div>
-        {filterList(spec.factFilters, factFields, (r) => onChange({ ...spec, factFilters: r }))}
+        <GeneratedValue
+          value={filterList(spec.factFilters, factFields, (r) =>
+            onChange({ ...spec, factFilters: r }),
+          )}
+        />
       </div>
       <div className="space-y-1">
-        <div className={lbl}>Cell value</div>
+        <div className={lbl}>
+          <GeneratedText id="m_11805d75f38626" />
+        </div>
         <Select
           value={spec.valueMode}
           onChange={(e) =>
@@ -2177,32 +2501,49 @@ function MatrixEditor({
           }
           className={sel}
         >
-          <option value="coverage">Coverage status (by expiry)</option>
-          <option value="latest">Latest value of a field</option>
+          <option value="coverage">
+            <GeneratedText id="m_09ffa2398b3430" />
+          </option>
+          <option value="latest">
+            <GeneratedText id="m_128fa5dddcdec7" />
+          </option>
         </Select>
-        {spec.valueMode === 'coverage' ? (
-          <div className={inline}>
-            <span className={hint}>expiry date</span>
-            <Select
-              value={spec.expiryField}
-              onChange={(e) => onChange({ ...spec, expiryField: e.target.value })}
-              className={cn(sel, 'flex-1')}
-            >
-              {fieldOptions(spec.factSource, (c) => c.kind === 'date' || c.kind === 'timestamp')}
-            </Select>
-          </div>
-        ) : (
-          <div className={inline}>
-            <span className={hint}>show field</span>
-            <Select
-              value={spec.latestField}
-              onChange={(e) => onChange({ ...spec, latestField: e.target.value })}
-              className={cn(sel, 'flex-1')}
-            >
-              {fieldOptions(spec.factSource)}
-            </Select>
-          </div>
-        )}
+        <GeneratedValue
+          value={
+            spec.valueMode === 'coverage' ? (
+              <div className={inline}>
+                <span className={hint}>
+                  <GeneratedText id="m_1aab2f23b64cd1" />
+                </span>
+                <Select
+                  value={spec.expiryField}
+                  onChange={(e) => onChange({ ...spec, expiryField: e.target.value })}
+                  className={cn(sel, 'flex-1')}
+                >
+                  <GeneratedValue
+                    value={fieldOptions(
+                      spec.factSource,
+                      (c) => c.kind === 'date' || c.kind === 'timestamp',
+                    )}
+                  />
+                </Select>
+              </div>
+            ) : (
+              <div className={inline}>
+                <span className={hint}>
+                  <GeneratedText id="m_1301034d436a79" />
+                </span>
+                <Select
+                  value={spec.latestField}
+                  onChange={(e) => onChange({ ...spec, latestField: e.target.value })}
+                  className={cn(sel, 'flex-1')}
+                >
+                  <GeneratedValue value={fieldOptions(spec.factSource)} />
+                </Select>
+              </div>
+            )
+          }
+        />
       </div>
     </div>
   )
@@ -2217,6 +2558,7 @@ function FilterEditor({
   row: FilterRow
   onChange: (next: FilterRow) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const op = FILTER_OPS.find((o) => o.value === row.op)
   return (
     <div className="space-y-1">
@@ -2232,20 +2574,26 @@ function FilterEditor({
         onChange={(e) => onChange({ ...row, op: e.target.value as FilterOp })}
         className={cn(selectCls, 'h-8 text-xs')}
       >
-        {FILTER_OPS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </Select>
-      {op?.needsValue ? (
-        <input
-          value={row.value}
-          onChange={(e) => onChange({ ...row, value: e.target.value })}
-          placeholder="value to match…"
-          className={cn(inputCls, 'h-8 text-xs')}
+        <GeneratedValue
+          value={FILTER_OPS.map((o) => (
+            <option key={o.value} value={o.value}>
+              <GeneratedValue value={o.label} />
+            </option>
+          ))}
         />
-      ) : null}
+      </Select>
+      <GeneratedValue
+        value={
+          op?.needsValue ? (
+            <input
+              value={row.value}
+              onChange={(e) => onChange({ ...row, value: e.target.value })}
+              placeholder={tGenerated('m_0501d5939121b0')}
+              className={cn(inputCls, 'h-8 text-xs')}
+            />
+          ) : null
+        }
+      />
     </div>
   )
 }

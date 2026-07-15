@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Rich, clickable renderings of read/search tool output. Each find_* / get_* /
 // read_* tool returns structured rows; the model can't be trusted to hand-write
 // correct links, so we render the results ourselves as interactive cards that
@@ -92,7 +99,7 @@ function severityVariant(s: string): BadgeVariant {
 function ResultShell({ children }: { children: ReactNode }) {
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }
@@ -110,8 +117,13 @@ function TruncationNote({
   }
   return (
     <div className="border-t border-slate-100 px-3 py-1.5 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-      Showing {data.returned} of {data.total} {noun}
-      {data.total === 1 ? '' : 's'} — refine your search to narrow the list.
+      <GeneratedText id="m_01d77276c22eb1" /> <GeneratedValue value={data.returned} />{' '}
+      <GeneratedText id="m_00e704d1194796" /> <GeneratedValue value={data.total} />{' '}
+      <GeneratedValue value={noun} />
+      <GeneratedValue
+        value={data.total === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+      />{' '}
+      <GeneratedText id="m_144bc0201d12ef" />
     </div>
   )
 }
@@ -141,48 +153,64 @@ function RecordLinkTable({
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-800">
-              {columns.map((c) => (
-                <th
-                  key={c.key}
-                  className={cn(
-                    'px-3 py-2 text-left text-[11px] font-semibold tracking-wide whitespace-nowrap text-slate-400 uppercase dark:text-slate-500',
-                    c.className,
-                  )}
-                >
-                  {c.label}
-                </th>
-              ))}
+              <GeneratedValue
+                value={columns.map((c) => (
+                  <th
+                    key={c.key}
+                    className={cn(
+                      'px-3 py-2 text-left text-[11px] font-semibold tracking-wide whitespace-nowrap text-slate-400 uppercase dark:text-slate-500',
+                      c.className,
+                    )}
+                  >
+                    <GeneratedValue value={c.label} />
+                  </th>
+                ))}
+              />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {rows.map((r) => (
-              <tr
-                key={r.id}
-                className="group transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
-              >
-                {columns.map((c) => (
-                  <td key={c.key} className={cn('px-3 py-2 align-middle', c.className)}>
-                    {c.primary ? (
-                      <a
-                        href={r.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex max-w-full items-center gap-1 font-medium text-teal-700 hover:underline dark:text-teal-300"
-                      >
-                        <span className="truncate">{r.cells[c.key] ?? 'Open'}</span>
-                        <ArrowUpRight className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
-                      </a>
-                    ) : (
-                      (r.cells[c.key] ?? <span className="text-slate-400">—</span>)
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            <GeneratedValue
+              value={rows.map((r) => (
+                <tr
+                  key={r.id}
+                  className="group transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                >
+                  <GeneratedValue
+                    value={columns.map((c) => (
+                      <td key={c.key} className={cn('px-3 py-2 align-middle', c.className)}>
+                        <GeneratedValue
+                          value={
+                            c.primary ? (
+                              <a
+                                href={r.href}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex max-w-full items-center gap-1 font-medium text-teal-700 hover:underline dark:text-teal-300"
+                              >
+                                <span className="truncate">
+                                  <GeneratedValue
+                                    value={
+                                      r.cells[c.key] ?? <GeneratedText id="m_107ab58c3c38bc" />
+                                    }
+                                  />
+                                </span>
+                                <ArrowUpRight className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
+                              </a>
+                            ) : (
+                              (r.cells[c.key] ?? <span className="text-slate-400">—</span>)
+                            )
+                          }
+                        />
+                      </td>
+                    ))}
+                  />
+                </tr>
+              ))}
+            />
           </tbody>
         </table>
       </div>
-      {data ? <TruncationNote data={data} noun={noun} /> : null}
+      <GeneratedValue value={data ? <TruncationNote data={data} noun={noun} /> : null} />
     </ResultShell>
   )
 }
@@ -213,13 +241,13 @@ function RecordLinkCard({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
-          {kicker}
+          <GeneratedValue value={kicker} />
         </span>
         <span className="block truncate font-medium text-slate-800 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
-          {title}
+          <GeneratedValue value={title} />
         </span>
       </span>
-      {badges}
+      <GeneratedValue value={badges} />
       <ExternalLink className="h-4 w-4 shrink-0 text-slate-300 group-hover:text-teal-500 dark:text-slate-600" />
     </a>
   )
@@ -253,13 +281,13 @@ function DocOpenArea({
   if (reader) {
     return (
       <button type="button" onClick={() => reader.open(docRef)} className={className}>
-        {children}
+        <GeneratedValue value={children} />
       </button>
     )
   }
   return (
     <a href={HREF.document(docRef.id)} target="_blank" rel="noreferrer" className={className}>
-      {children}
+      <GeneratedValue value={children} />
     </a>
   )
 }
@@ -269,60 +297,79 @@ function DocumentResultList({
 }: {
   data: { items?: DocItem[]; truncated?: unknown; total?: unknown; returned?: unknown }
 }) {
+  const tGenerated = useGeneratedTranslations()
   const reader = useDocumentReader()
   const items = Array.isArray(data.items) ? data.items : []
   if (items.length === 0) return null
   return (
     <ResultShell>
       <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-        {items.map((d) => (
-          <li
-            key={d.id}
-            className="group flex items-start gap-2 px-1.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
-          >
-            <DocOpenArea
-              reader={reader}
-              docRef={{ id: d.id, title: d.title, key: d.key, status: d.status }}
-              className="flex min-w-0 flex-1 items-start gap-3 py-2.5 pl-1.5 text-left"
+        <GeneratedValue
+          value={items.map((d) => (
+            <li
+              key={d.id}
+              className="group flex items-start gap-2 px-1.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
             >
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500 group-hover:bg-teal-100 group-hover:text-teal-700 dark:bg-slate-800 dark:text-slate-400 dark:group-hover:bg-teal-950/50 dark:group-hover:text-teal-300">
-                <FileText className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5">
-                  <span className="truncate font-medium text-slate-800 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
-                    {d.title || 'Untitled document'}
+              <DocOpenArea
+                reader={reader}
+                docRef={{ id: d.id, title: d.title, key: d.key, status: d.status }}
+                className="flex min-w-0 flex-1 items-start gap-3 py-2.5 pl-1.5 text-left"
+              >
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500 group-hover:bg-teal-100 group-hover:text-teal-700 dark:bg-slate-800 dark:text-slate-400 dark:group-hover:bg-teal-950/50 dark:group-hover:text-teal-300">
+                  <FileText className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate font-medium text-slate-800 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
+                      <GeneratedValue value={d.title || <GeneratedText id="m_1a144508deb533" />} />
+                    </span>
+                  </span>
+                  <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedValue
+                      value={
+                        d.key ? (
+                          <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            {d.key}
+                          </code>
+                        ) : null
+                      }
+                    />
+                    <GeneratedValue
+                      value={
+                        d.category ? (
+                          <span className="truncate">
+                            <GeneratedValue value={d.category} />
+                          </span>
+                        ) : null
+                      }
+                    />
                   </span>
                 </span>
-                <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  {d.key ? (
-                    <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      {d.key}
-                    </code>
-                  ) : null}
-                  {d.category ? <span className="truncate">{d.category}</span> : null}
-                </span>
-              </span>
-            </DocOpenArea>
-            <div className="flex shrink-0 items-center gap-1 py-2.5 pr-1.5">
-              {d.status ? (
-                <Badge variant={docStatusVariant(d.status)} className="shrink-0">
-                  {humanize(d.status)}
-                </Badge>
-              ) : null}
-              <a
-                href={HREF.document(d.id)}
-                target="_blank"
-                rel="noreferrer"
-                title="Open full page"
-                aria-label="Open full page"
-                className="rounded p-1 text-slate-300 transition-colors hover:bg-slate-200 hover:text-slate-600 dark:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
-              >
-                <ArrowUpRight className="h-4 w-4" />
-              </a>
-            </div>
-          </li>
-        ))}
+              </DocOpenArea>
+              <div className="flex shrink-0 items-center gap-1 py-2.5 pr-1.5">
+                <GeneratedValue
+                  value={
+                    d.status ? (
+                      <Badge variant={docStatusVariant(d.status)} className="shrink-0">
+                        <GeneratedValue value={humanize(d.status)} />
+                      </Badge>
+                    ) : null
+                  }
+                />
+                <a
+                  href={HREF.document(d.id)}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={tGenerated('m_1878b86755b421')}
+                  aria-label={tGenerated('m_1878b86755b421')}
+                  className="rounded p-1 text-slate-300 transition-colors hover:bg-slate-200 hover:text-slate-600 dark:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                >
+                  <ArrowUpRight className="h-4 w-4" />
+                </a>
+              </div>
+            </li>
+          ))}
+        />
       </ul>
       <TruncationNote data={data} noun="document" />
     </ResultShell>
@@ -336,7 +383,7 @@ function DocumentResultList({
 function SectionHeading({ children }: { children: ReactNode }) {
   return (
     <div className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }
@@ -359,6 +406,8 @@ function str(v: unknown): string {
  * has no visual treatment (the model's text speaks for it).
  */
 export function ToolResultView({ name, output }: { name: string; output: unknown }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   if (!output || typeof output !== 'object') return null
   const o = output as { ok?: boolean; data?: unknown }
   if (o.ok === false) return null
@@ -377,10 +426,14 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
           reference: str(r.reference) || 'Incident',
           title: str(r.title) || '—',
           status: r.status ? (
-            <Badge variant={incidentStatusVariant(str(r.status))}>{humanize(r.status)}</Badge>
+            <Badge variant={incidentStatusVariant(str(r.status))}>
+              <GeneratedValue value={humanize(r.status)} />
+            </Badge>
           ) : null,
           severity: r.severity ? (
-            <Badge variant={severityVariant(str(r.severity))}>{humanize(r.severity)}</Badge>
+            <Badge variant={severityVariant(str(r.severity))}>
+              <GeneratedValue value={humanize(r.severity)} />
+            </Badge>
           ) : null,
         },
       }))
@@ -407,10 +460,14 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
           reference: str(r.reference) || 'Action',
           title: str(r.title) || '—',
           status: r.status ? (
-            <Badge variant={caStatusVariant(str(r.status))}>{humanize(r.status)}</Badge>
+            <Badge variant={caStatusVariant(str(r.status))}>
+              <GeneratedValue value={humanize(r.status)} />
+            </Badge>
           ) : null,
           severity: r.severity ? (
-            <Badge variant={severityVariant(str(r.severity))}>{humanize(r.severity)}</Badge>
+            <Badge variant={severityVariant(str(r.severity))}>
+              <GeneratedValue value={humanize(r.severity)} />
+            </Badge>
           ) : null,
           dueOn: r.dueOn ? fmtDate(r.dueOn) : '—',
         },
@@ -490,57 +547,71 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
       if (cas.length === 0 && training.length === 0) return null
       return (
         <div className="space-y-3">
-          {cas.length > 0 ? (
-            <div className="space-y-1.5">
-              <SectionHeading>Open corrective actions</SectionHeading>
-              <RecordLinkTable
-                noun="corrective action"
-                rows={cas.map((r) => ({
-                  id: str(r.id),
-                  href: HREF.correctiveAction(str(r.id)),
-                  cells: {
-                    reference: str(r.reference) || 'Action',
-                    title: str(r.title) || '—',
-                    status: r.status ? (
-                      <Badge variant={caStatusVariant(str(r.status))}>{humanize(r.status)}</Badge>
-                    ) : null,
-                    dueOn: r.dueOn ? fmtDate(r.dueOn) : '—',
-                  },
-                }))}
-                columns={[
-                  { key: 'reference', label: 'Reference', primary: true },
-                  { key: 'title', label: 'Title', className: 'w-full max-w-0 truncate' },
-                  { key: 'status', label: 'Status', className: 'whitespace-nowrap' },
-                  { key: 'dueOn', label: 'Due', className: 'whitespace-nowrap' },
-                ]}
-              />
-            </div>
-          ) : null}
-          {training.length > 0 ? (
-            <div className="space-y-1.5">
-              <SectionHeading>Training expiring soon</SectionHeading>
-              <RecordLinkTable
-                noun="training record"
-                rows={training.map((r) => ({
-                  id: str(r.id),
-                  href: HREF.trainingRecord(str(r.id)),
-                  cells: {
-                    course: str(r.course) || 'Training record',
-                    expiresOn: r.expiresOn ? fmtDate(r.expiresOn) : '—',
-                  },
-                }))}
-                columns={[
-                  {
-                    key: 'course',
-                    label: 'Course',
-                    primary: true,
-                    className: 'w-full max-w-0 truncate',
-                  },
-                  { key: 'expiresOn', label: 'Expires', className: 'whitespace-nowrap' },
-                ]}
-              />
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              cas.length > 0 ? (
+                <div className="space-y-1.5">
+                  <SectionHeading>
+                    <GeneratedText id="m_041ba3186b3b50" />
+                  </SectionHeading>
+                  <RecordLinkTable
+                    noun="corrective action"
+                    rows={cas.map((r) => ({
+                      id: str(r.id),
+                      href: HREF.correctiveAction(str(r.id)),
+                      cells: {
+                        reference: str(r.reference) || 'Action',
+                        title: str(r.title) || '—',
+                        status: r.status ? (
+                          <Badge variant={caStatusVariant(str(r.status))}>
+                            <GeneratedValue value={humanize(r.status)} />
+                          </Badge>
+                        ) : null,
+                        dueOn: r.dueOn ? fmtDate(r.dueOn) : '—',
+                      },
+                    }))}
+                    columns={[
+                      { key: 'reference', label: 'Reference', primary: true },
+                      { key: 'title', label: 'Title', className: 'w-full max-w-0 truncate' },
+                      { key: 'status', label: 'Status', className: 'whitespace-nowrap' },
+                      { key: 'dueOn', label: 'Due', className: 'whitespace-nowrap' },
+                    ]}
+                  />
+                </div>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              training.length > 0 ? (
+                <div className="space-y-1.5">
+                  <SectionHeading>
+                    <GeneratedText id="m_1e2b853b3124fa" />
+                  </SectionHeading>
+                  <RecordLinkTable
+                    noun="training record"
+                    rows={training.map((r) => ({
+                      id: str(r.id),
+                      href: HREF.trainingRecord(str(r.id)),
+                      cells: {
+                        course: str(r.course) || 'Training record',
+                        expiresOn: r.expiresOn ? fmtDate(r.expiresOn) : '—',
+                      },
+                    }))}
+                    columns={[
+                      {
+                        key: 'course',
+                        label: 'Course',
+                        primary: true,
+                        className: 'w-full max-w-0 truncate',
+                      },
+                      { key: 'expiresOn', label: 'Expires', className: 'whitespace-nowrap' },
+                    ]}
+                  />
+                </div>
+              ) : null
+            }
+          />
         </div>
       )
     }
@@ -551,11 +622,11 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
           href={HREF.incident(str(data.id))}
           icon={TriangleAlert}
           kicker={str(data.reference) || 'Incident'}
-          title={str(data.title) || 'Incident'}
+          title={tGeneratedValue(str(data.title) || tGenerated('m_08be8294ed6700'))}
           badges={
             data.status ? (
               <Badge variant={incidentStatusVariant(str(data.status))} className="shrink-0">
-                {humanize(data.status)}
+                <GeneratedValue value={humanize(data.status)} />
               </Badge>
             ) : null
           }
@@ -568,11 +639,11 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
           href={HREF.correctiveAction(str(data.id))}
           icon={ClipboardCheck}
           kicker={str(data.reference) || 'Corrective action'}
-          title={str(data.title) || 'Corrective action'}
+          title={tGeneratedValue(str(data.title) || tGenerated('m_004f8059566564'))}
           badges={
             data.status ? (
               <Badge variant={caStatusVariant(str(data.status))} className="shrink-0">
-                {humanize(data.status)}
+                <GeneratedValue value={humanize(data.status)} />
               </Badge>
             ) : null
           }
@@ -583,7 +654,7 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
       return data.id ? (
         <DocumentPreviewCard
           id={str(data.id)}
-          title={str(data.title) || 'Document'}
+          title={tGeneratedValue(str(data.title) || tGenerated('m_18ce070374179f'))}
           docKey={data.key ? str(data.key) : null}
           status={data.status ? str(data.status) : null}
         />

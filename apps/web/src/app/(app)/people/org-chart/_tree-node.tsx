@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // Recursive org-chart node. MUST be a client component: the in-summary links
 // use onClick={stopPropagation} so clicking a person/Focus link doesn't also
 // toggle the surrounding <details>. Event handlers are illegal in Server
@@ -32,6 +34,7 @@ export function TreeNode({
   depth: number
   seen?: Set<string>
 }) {
+  const tGenerated = useGeneratedTranslations()
   // In-memory cycle guard — if we somehow reach the same id twice we bail
   // rather than recurse forever.
   if (seen.has(node.id)) return null
@@ -63,35 +66,63 @@ export function TreeNode({
               className="font-medium text-slate-900 hover:text-teal-700 hover:underline dark:text-slate-100 dark:hover:text-teal-400"
               onClick={(e) => e.stopPropagation()}
             >
-              {node.firstName} {node.lastName}
+              <GeneratedValue value={node.firstName} /> <GeneratedValue value={node.lastName} />
             </Link>
-            {node.jobTitle ? (
-              <span className="text-xs text-slate-500 dark:text-slate-400">{node.jobTitle}</span>
-            ) : null}
+            <GeneratedValue
+              value={
+                node.jobTitle ? (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={node.jobTitle} />
+                  </span>
+                ) : null
+              }
+            />
           </div>
         </div>
-        {node.inCycle ? <Badge variant="warning">Reporting loop</Badge> : null}
-        {hasReports ? (
-          <Badge variant="secondary">
-            {node.reports.length} report{node.reports.length === 1 ? '' : 's'}
-          </Badge>
-        ) : null}
+        <GeneratedValue
+          value={
+            node.inCycle ? (
+              <Badge variant="warning">
+                <GeneratedText id="m_13f12f29889733" />
+              </Badge>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            hasReports ? (
+              <Badge variant="secondary">
+                <GeneratedValue value={node.reports.length} />{' '}
+                <GeneratedText id="m_109db3d62d40fa" />
+                <GeneratedValue
+                  value={node.reports.length === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+                />
+              </Badge>
+            ) : null
+          }
+        />
         <Link
           href={`/people/org-chart?root=${node.id}`}
           className="rounded px-1.5 py-0.5 text-[11px] text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-950"
           onClick={(e) => e.stopPropagation()}
-          title="Focus on this person's subtree"
+          title={tGenerated('m_1880fb34e8be74')}
         >
-          Focus
+          <GeneratedText id="m_00c4a6a789919d" />
         </Link>
       </summary>
-      {hasReports ? (
-        <div className="mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-800">
-          {node.reports.map((r) => (
-            <TreeNode key={r.id} node={r} depth={depth + 1} seen={nextSeen} />
-          ))}
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          hasReports ? (
+            <div className="mt-1 space-y-1 border-l border-slate-200 pl-3 dark:border-slate-800">
+              <GeneratedValue
+                value={node.reports.map((r) => (
+                  <TreeNode key={r.id} node={r} depth={depth + 1} seen={nextSeen} />
+                ))}
+              />
+            </div>
+          ) : null
+        }
+      />
     </details>
   )
 }

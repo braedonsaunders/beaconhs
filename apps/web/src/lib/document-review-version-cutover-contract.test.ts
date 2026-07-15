@@ -13,8 +13,9 @@ describe('document review version cutover contract', () => {
     expect(page).toContain('documentVersionId: reviewedVersion.id')
     expect(page).toContain("status: 'completed'")
     expect(page).toContain('Publish the document before recording a periodic review.')
-    expect(page).toContain("'outcome not recorded'")
-    expect(page).toContain('v{row.documentVersion}')
+    expect(page).toContain('<GeneratedText id="m_065f07a677dff5" />')
+    expect(page).toContain('<GeneratedText id="m_1c693e59d64fb2" />')
+    expect(page).toContain('<GeneratedValue value={row.documentVersion} />')
   })
 
   it('pins management-review selections transactionally instead of storing document-id JSON', () => {
@@ -26,7 +27,8 @@ describe('document review version cutover contract', () => {
     expect(actions).toContain('.delete(documentManagementReviewDocuments)')
     expect(actions).toContain('recordAuditInTransaction')
     expect(detail).toContain('.from(documentManagementReviewDocuments)')
-    expect(detail).toContain('v{d.version}')
+    expect(detail).toContain('<GeneratedText id="m_03cf121dcd22e3" />')
+    expect(detail).toContain('<GeneratedValue value={d.version} />')
     expect(actions).not.toContain('documentsReviewed: docIds')
   })
 
@@ -34,7 +36,7 @@ describe('document review version cutover contract', () => {
     const drawer = source('../app/(app)/documents/[id]/_drawers.tsx')
     expect(drawer).toContain("| 'approved_no_change'")
     expect(drawer).toContain("useState<'' | 'approved_no_change' | 'updated' | 'retired'>('')")
-    expect(drawer).toContain('Choose an outcome…')
-    expect(drawer).toContain("setError('Choose the review outcome.')")
+    expect(drawer).toContain('<GeneratedText id="m_14c507a6027f7b" />')
+    expect(drawer).toContain("setError(tGenerated('m_0be53dcc37f11a'))")
   })
 })

@@ -1,5 +1,13 @@
 'use client'
 
+import {
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
+import { GeneratedText } from '@/i18n/generated'
+
 // Channel × category matrix editor. The initial state is hydrated from the
 // notification_preferences rows on disk; any (category, channel) combo without
 // a row defaults to enabled (matches dispatcher behaviour).
@@ -21,6 +29,8 @@ import { saveNotificationPreferences } from './actions'
 type Cell = { category: NotificationCategory; channel: NotificationChannel; enabled: boolean }
 
 export function PreferencesForm({ initial }: { initial: Cell[] }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const initialMap = useMemo(() => {
     const m = new Map<string, boolean>()
     for (const c of initial) m.set(`${c.category}:${c.channel}`, c.enabled)
@@ -54,9 +64,9 @@ export function PreferencesForm({ initial }: { initial: Cell[] }) {
     startTransition(async () => {
       const res = await saveNotificationPreferences({ prefs })
       if (res.ok) {
-        toast.success('Preferences saved')
+        toast.success(tGenerated('m_1c87b580610c45'))
       } else {
-        toast.error(res.error ?? 'Failed to save preferences')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0278951c14f8a4')))
       }
     })
   }
@@ -67,63 +77,77 @@ export function PreferencesForm({ initial }: { initial: Cell[] }) {
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs tracking-wider text-slate-500 uppercase dark:bg-slate-800 dark:text-slate-400">
             <tr>
-              <th className="px-4 py-3 font-medium">Category</th>
-              {NOTIFICATION_CHANNELS.map((ch) => (
-                <th key={ch} className="px-4 py-3 text-center font-medium">
-                  {CHANNEL_LABELS[ch]}
-                </th>
-              ))}
+              <th className="px-4 py-3 font-medium">
+                <GeneratedText id="m_108b41637f364f" />
+              </th>
+              <GeneratedValue
+                value={NOTIFICATION_CHANNELS.map((ch) => (
+                  <th key={ch} className="px-4 py-3 text-center font-medium">
+                    <GeneratedValue value={CHANNEL_LABELS[ch]} />
+                  </th>
+                ))}
+              />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {NOTIFICATION_CATEGORIES.map((category) => {
-              const meta = CATEGORY_LABELS[category]
-              return (
-                <tr key={category}>
-                  <td className="px-4 py-3 align-top">
-                    <div className="font-medium text-slate-900 dark:text-slate-100">
-                      {meta.title}
-                    </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                      {meta.description}
-                    </div>
-                  </td>
-                  {NOTIFICATION_CHANNELS.map((channel) => {
-                    const key = `${category}:${channel}`
-                    const checked = state[key] ?? true
-                    return (
-                      <td key={channel} className="px-4 py-3 text-center align-top">
-                        <label className="inline-flex cursor-pointer items-center justify-center">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 cursor-pointer rounded border-slate-300 text-teal-700 focus:ring-teal-600 dark:border-slate-700 dark:text-teal-400"
-                            checked={checked}
-                            onChange={() => toggle(category, channel)}
-                            aria-label={`${meta.title} via ${CHANNEL_LABELS[channel]}`}
-                          />
-                        </label>
-                      </td>
-                    )
-                  })}
-                </tr>
-              )
-            })}
+            <GeneratedValue
+              value={NOTIFICATION_CATEGORIES.map((category) => {
+                const meta = CATEGORY_LABELS[category]
+                return (
+                  <tr key={category}>
+                    <td className="px-4 py-3 align-top">
+                      <div className="font-medium text-slate-900 dark:text-slate-100">
+                        <GeneratedValue value={meta.title} />
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedValue value={meta.description} />
+                      </div>
+                    </td>
+                    <GeneratedValue
+                      value={NOTIFICATION_CHANNELS.map((channel) => {
+                        const key = `${category}:${channel}`
+                        const checked = state[key] ?? true
+                        return (
+                          <td key={channel} className="px-4 py-3 text-center align-top">
+                            <label className="inline-flex cursor-pointer items-center justify-center">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 cursor-pointer rounded border-slate-300 text-teal-700 focus:ring-teal-600 dark:border-slate-700 dark:text-teal-400"
+                                checked={checked}
+                                onChange={() => toggle(category, channel)}
+                                aria-label={tGenerated('m_088c617bb509a4', {
+                                  value0: meta.title,
+                                  value1: CHANNEL_LABELS[channel],
+                                })}
+                              />
+                            </label>
+                          </td>
+                        )
+                      })}
+                    />
+                  </tr>
+                )
+              })}
+            />
           </tbody>
         </table>
       </div>
 
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Unchecked combinations are silently skipped by the notification dispatcher. In-app rows
-          still land in your inbox, but external channels are suppressed.
+          <GeneratedText id="m_0f7558da0e44a6" />
         </p>
         <Button type="button" onClick={save} disabled={pending}>
-          {pending ? (
-            <Loader2 size={14} className="mr-1.5 animate-spin" />
-          ) : (
-            <Save size={14} className="mr-1.5" />
-          )}
-          Save preferences
+          <GeneratedValue
+            value={
+              pending ? (
+                <Loader2 size={14} className="mr-1.5 animate-spin" />
+              ) : (
+                <Save size={14} className="mr-1.5" />
+              )
+            }
+          />
+          <GeneratedText id="m_1e4be3ab19587f" />
         </Button>
       </div>
     </div>

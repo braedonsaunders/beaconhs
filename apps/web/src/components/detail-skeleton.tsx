@@ -1,3 +1,4 @@
+import { GeneratedValue } from '@/i18n/generated'
 import { Skeleton } from '@beaconhs/ui'
 import { DetailPageLayout } from './page-layout'
 
@@ -31,9 +32,11 @@ export function DetailSkeleton() {
       }
       subtabs={
         <div className="flex flex-wrap gap-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-8 w-24" />
-          ))}
+          <GeneratedValue
+            value={Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-24" />
+            ))}
+          />
         </div>
       }
     >
@@ -47,19 +50,21 @@ export function DetailSkeleton() {
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div
-              key={i}
-              className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-            >
-              <Skeleton className="h-4 w-32" />
-              <div className="mt-3 space-y-2">
-                <Skeleton className="h-3.5 w-full" />
-                <Skeleton className="h-3.5 w-5/6" />
-                <Skeleton className="h-3.5 w-2/3" />
+          <GeneratedValue
+            value={Array.from({ length: 2 }).map((_, i) => (
+              <div
+                key={i}
+                className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+              >
+                <Skeleton className="h-4 w-32" />
+                <div className="mt-3 space-y-2">
+                  <Skeleton className="h-3.5 w-full" />
+                  <Skeleton className="h-3.5 w-5/6" />
+                  <Skeleton className="h-3.5 w-2/3" />
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          />
         </div>
       </div>
     </DetailPageLayout>

@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // The auto-generated folder tree — the headline rediscovery surface. Groups
 // entries by Date / Site / Topic / Person (rebuilt from data, never foldered by
 // hand), with quick filters, On-This-Day memories, and the activity heatmap.
@@ -71,6 +73,7 @@ export function SidebarTree({
   onNewEntry: () => void
   onPickDate: (dateISO: string) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const [expanded, setExpanded] = useState<Set<string>>(() => seedExpanded(data.tree, selectedId))
   const [q, setQ] = useState(filters.q ?? '')
   const selectedPath = pathTo(data.tree, selectedId)
@@ -100,15 +103,19 @@ export function SidebarTree({
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-white dark:bg-slate-900">
       {/* Header */}
       <div className="space-y-2.5 border-b border-slate-200 px-3 pt-3 pb-3 dark:border-slate-800">
-        {authorMode ? null : (
-          <button
-            type="button"
-            onClick={onNewEntry}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-800"
-          >
-            <Plus size={16} /> New entry
-          </button>
-        )}
+        <GeneratedValue
+          value={
+            authorMode ? null : (
+              <button
+                type="button"
+                onClick={onNewEntry}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-800"
+              >
+                <Plus size={16} /> <GeneratedText id="m_0036397741744c" />
+              </button>
+            )
+          }
+        />
 
         <div className="relative">
           <Search
@@ -118,18 +125,22 @@ export function SidebarTree({
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search journals…"
+            placeholder={tGenerated('m_0cec466d6457e1')}
             className="h-8 w-full rounded-md border border-slate-300 bg-white pr-7 pl-8 text-sm transition-shadow outline-none placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500"
           />
-          {q ? (
-            <button
-              type="button"
-              onClick={() => setQ('')}
-              className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300"
-            >
-              <X size={13} />
-            </button>
-          ) : null}
+          <GeneratedValue
+            value={
+              q ? (
+                <button
+                  type="button"
+                  onClick={() => setQ('')}
+                  className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300"
+                >
+                  <X size={13} />
+                </button>
+              ) : null
+            }
+          />
         </div>
 
         {/* Quick filters */}
@@ -138,119 +149,190 @@ export function SidebarTree({
             active={activeQuick === 'all'}
             onClick={() => onFiltersChange({ mine: undefined, status: undefined })}
           >
-            All {data.counts.total ? <Count>{data.counts.total}</Count> : null}
+            <GeneratedText id="m_17201516610431" />{' '}
+            <GeneratedValue
+              value={
+                data.counts.total ? (
+                  <Count>
+                    <GeneratedValue value={data.counts.total} />
+                  </Count>
+                ) : null
+              }
+            />
           </Chip>
           <Chip
             active={activeQuick === 'drafts'}
             onClick={() => onFiltersChange({ status: 'draft', mine: undefined })}
           >
-            Drafts {data.counts.drafts ? <Count>{data.counts.drafts}</Count> : null}
+            <GeneratedText id="m_1de545a5ec2dc8" />{' '}
+            <GeneratedValue
+              value={
+                data.counts.drafts ? (
+                  <Count>
+                    <GeneratedValue value={data.counts.drafts} />
+                  </Count>
+                ) : null
+              }
+            />
           </Chip>
         </div>
 
         {/* Group by */}
         <div className="flex items-center gap-0.5 rounded-md bg-slate-100 p-0.5 dark:bg-slate-800">
-          {GROUP_BY_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onGroupByChange(opt.value)}
-              className={cn(
-                'flex-1 rounded px-1.5 py-1 text-xs font-medium transition-colors',
-                groupBy === opt.value
-                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
+          <GeneratedValue
+            value={GROUP_BY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onGroupByChange(opt.value)}
+                className={cn(
+                  'flex-1 rounded px-1.5 py-1 text-xs font-medium transition-colors',
+                  groupBy === opt.value
+                    ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
+                )}
+              >
+                <GeneratedValue value={opt.label} />
+              </button>
+            ))}
+          />
         </div>
       </div>
 
       {/* Scroll body: on-this-day + tree */}
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
-        {data.onThisDay.length > 0 ? (
-          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2 dark:border-amber-500/25 dark:bg-amber-500/10">
-            <div className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-300">
-              <CalendarClock size={12} /> On this day
-            </div>
-            {data.onThisDay.slice(0, 3).map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => onSelect(m.id)}
-                className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs text-amber-900 hover:bg-amber-100/70 dark:text-amber-200 dark:hover:bg-amber-500/15"
-              >
-                <span className="shrink-0 rounded bg-amber-200/70 px-1 text-[10px] font-medium dark:bg-amber-500/25">
-                  {m.yearsAgo}y
-                </span>
-                <span className="min-w-0 flex-1 truncate">
-                  <span className="font-medium">{m.authorName ?? m.title ?? 'Journal'}</span>
-                  {m.snippet ? (
-                    <span className="text-amber-700/80 dark:text-amber-300/80"> — {m.snippet}</span>
-                  ) : null}
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            data.onThisDay.length > 0 ? (
+              <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2 dark:border-amber-500/25 dark:bg-amber-500/10">
+                <div className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-300">
+                  <CalendarClock size={12} /> <GeneratedText id="m_0d0c9d0b8f54c9" />
+                </div>
+                <GeneratedValue
+                  value={data.onThisDay.slice(0, 3).map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => onSelect(m.id)}
+                      className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs text-amber-900 hover:bg-amber-100/70 dark:text-amber-200 dark:hover:bg-amber-500/15"
+                    >
+                      <span className="shrink-0 rounded bg-amber-200/70 px-1 text-[10px] font-medium dark:bg-amber-500/25">
+                        <GeneratedValue value={m.yearsAgo} />
+                        <GeneratedText id="m_0e8b7c350cf08e" />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">
+                        <span className="font-medium">
+                          <GeneratedValue
+                            value={
+                              m.authorName ?? m.title ?? <GeneratedText id="m_10c742aace3a46" />
+                            }
+                          />
+                        </span>
+                        <GeneratedValue
+                          value={
+                            m.snippet ? (
+                              <span className="text-amber-700/80 dark:text-amber-300/80">
+                                {' '}
+                                — <GeneratedValue value={m.snippet} />
+                              </span>
+                            ) : null
+                          }
+                        />
+                      </span>
+                    </button>
+                  ))}
+                />
+              </div>
+            ) : null
+          }
+        />
 
-        {loading ? (
-          <div className="space-y-1.5 px-2 py-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-6 animate-pulse rounded bg-slate-100 dark:bg-slate-800"
-                style={{ width: `${90 - i * 8}%` }}
-              />
-            ))}
-          </div>
-        ) : data.tree.length === 0 ? (
-          <div className="px-3 py-10 text-center text-xs text-slate-400 dark:text-slate-500">
-            {authorMode ? (
-              'No journals for this person.'
+        <GeneratedValue
+          value={
+            loading ? (
+              <div className="space-y-1.5 px-2 py-4">
+                <GeneratedValue
+                  value={Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-6 animate-pulse rounded bg-slate-100 dark:bg-slate-800"
+                      style={{ width: `${90 - i * 8}%` }}
+                    />
+                  ))}
+                />
+              </div>
+            ) : data.tree.length === 0 ? (
+              <div className="px-3 py-10 text-center text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedValue
+                  value={
+                    authorMode ? (
+                      <GeneratedText id="m_101e0ee741e544" />
+                    ) : (
+                      <>
+                        <GeneratedText id="m_009a9fcf3c6c6e" />
+                        <GeneratedValue value={' '} />
+                        <span className="font-medium text-slate-600 dark:text-slate-300">
+                          <GeneratedText id="m_0036397741744c" />
+                        </span>{' '}
+                        <GeneratedText id="m_117e605b0f99fe" />
+                      </>
+                    )
+                  }
+                />
+              </div>
             ) : (
-              <>
-                No entries. Use{' '}
-                <span className="font-medium text-slate-600 dark:text-slate-300">New entry</span> to
-                start today’s journal.
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-px">
-            {data.tree.map((node) => (
-              <TreeRow
-                key={node.key}
-                node={node}
-                depth={0}
-                expanded={visibleExpanded}
-                selectedId={selectedId}
-                onToggle={toggle}
-                onSelect={onSelect}
-                countsPartial={data.treeHasMore}
-              />
-            ))}
-            {data.treeHasMore ? (
-              <button
-                type="button"
-                onClick={onLoadMore}
-                disabled={loadingMore}
-                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                {loadingMore ? <Loader2 size={13} className="animate-spin" /> : null}
-                {loadingMore ? 'Loading older entries…' : 'Load older entries'}
-              </button>
-            ) : null}
-          </div>
-        )}
+              <div className="space-y-px">
+                <GeneratedValue
+                  value={data.tree.map((node) => (
+                    <TreeRow
+                      key={node.key}
+                      node={node}
+                      depth={0}
+                      expanded={visibleExpanded}
+                      selectedId={selectedId}
+                      onToggle={toggle}
+                      onSelect={onSelect}
+                      countsPartial={data.treeHasMore}
+                    />
+                  ))}
+                />
+                <GeneratedValue
+                  value={
+                    data.treeHasMore ? (
+                      <button
+                        type="button"
+                        onClick={onLoadMore}
+                        disabled={loadingMore}
+                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        <GeneratedValue
+                          value={
+                            loadingMore ? <Loader2 size={13} className="animate-spin" /> : null
+                          }
+                        />
+                        <GeneratedValue
+                          value={
+                            loadingMore ? (
+                              <GeneratedText id="m_1d0b2c73292904" />
+                            ) : (
+                              <GeneratedText id="m_1016ae3e2348ef" />
+                            )
+                          }
+                        />
+                      </button>
+                    ) : null
+                  }
+                />
+              </div>
+            )
+          }
+        />
       </div>
 
       {/* Heatmap footer */}
       <div className="border-t border-slate-200 px-3 py-2.5 dark:border-slate-800">
         <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
-          <Sparkles size={11} /> Activity
+          <Sparkles size={11} /> <GeneratedText id="m_14b78af1b2f95e" />
         </div>
         <Heatmap data={data.heatmap} onPick={onPickDate} />
       </div>
@@ -305,7 +387,9 @@ function TreeRow({
               : 'bg-teal-500',
           )}
         />
-        <span className="truncate">{node.label}</span>
+        <span className="truncate">
+          <GeneratedValue value={node.label} />
+        </span>
       </button>
     )
   }
@@ -325,28 +409,36 @@ function TreeRow({
             isOpen && 'rotate-90',
           )}
         />
-        <span className="truncate">{node.label}</span>
+        <span className="truncate">
+          <GeneratedValue value={node.label} />
+        </span>
         <span className="ml-auto shrink-0 text-[11px] text-slate-400 tabular-nums dark:text-slate-500">
-          {node.count}
-          {countsPartial ? '+' : ''}
+          <GeneratedValue value={node.count} />
+          <GeneratedValue value={countsPartial ? '+' : ''} />
         </span>
       </button>
-      {isBranch && isOpen ? (
-        <div className="space-y-px">
-          {node.children!.map((child) => (
-            <TreeRow
-              key={child.key}
-              node={child}
-              depth={depth + 1}
-              expanded={expanded}
-              selectedId={selectedId}
-              onToggle={onToggle}
-              onSelect={onSelect}
-              countsPartial={countsPartial}
-            />
-          ))}
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          isBranch && isOpen ? (
+            <div className="space-y-px">
+              <GeneratedValue
+                value={node.children!.map((child) => (
+                  <TreeRow
+                    key={child.key}
+                    node={child}
+                    depth={depth + 1}
+                    expanded={expanded}
+                    selectedId={selectedId}
+                    onToggle={onToggle}
+                    onSelect={onSelect}
+                    countsPartial={countsPartial}
+                  />
+                ))}
+              />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -375,7 +467,7 @@ function Chip({
           : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700',
       )}
     >
-      {children}
+      <GeneratedValue value={children} />
     </button>
   )
 }
@@ -383,7 +475,7 @@ function Chip({
 function Count({ children }: { children: React.ReactNode }) {
   return (
     <span className="rounded-full bg-black/5 px-1 text-[10px] tabular-nums dark:bg-white/10">
-      {children}
+      <GeneratedValue value={children} />
     </span>
   )
 }

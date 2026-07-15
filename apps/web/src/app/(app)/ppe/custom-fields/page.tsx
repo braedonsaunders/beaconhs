@@ -1,7 +1,11 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { CustomFieldsAdminPage } from '@/components/custom-fields/custom-fields-admin-page'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'PPE custom fields' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0ce2f2f08d523a') }
+}
 
 export default function PpeCustomFieldsPage({
   searchParams,

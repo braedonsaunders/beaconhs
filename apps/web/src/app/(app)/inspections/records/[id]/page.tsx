@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -1130,8 +1134,9 @@ async function attachRecordPhotos(recordId: string, ids: string[]) {
 // ----------------------------------------------------------------------------
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Inspection · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_0436192894023b', { value0: id.slice(0, 8) }) }
 }
 
 export default async function InspectionRecordDetailPage({
@@ -1139,6 +1144,8 @@ export default async function InspectionRecordDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -1353,8 +1360,10 @@ export default async function InspectionRecordDetailPage({
       header={
         <DetailHeader
           back={{ href: '/inspections/records', label: 'Back to inspection records' }}
-          title={`${type.name}`}
-          subtitle={`${record.reference} · ${formatDateTime(new Date(record.occurredAt), ctx.timezone, ctx.locale)}`}
+          title={tGeneratedValue(`${type.name}`)}
+          subtitle={tGeneratedValue(
+            `${record.reference} · ${formatDateTime(new Date(record.occurredAt), ctx.timezone, ctx.locale)}`,
+          )}
           badge={
             <div className="flex items-center gap-2">
               <Badge
@@ -1366,18 +1375,30 @@ export default async function InspectionRecordDetailPage({
                       : 'secondary'
                 }
               >
-                {record.status.replace(/_/g, ' ')}
+                <GeneratedValue value={record.status.replace(/_/g, ' ')} />
               </Badge>
-              {recordImmutable ? (
-                <Badge variant="success">
-                  <Lock size={10} /> Locked
-                </Badge>
-              ) : null}
-              {failCount > 0 ? (
-                <Badge variant="destructive">
-                  <ShieldAlert size={10} /> {failCount} failure{failCount === 1 ? '' : 's'}
-                </Badge>
-              ) : null}
+              <GeneratedValue
+                value={
+                  recordImmutable ? (
+                    <Badge variant="success">
+                      <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
+                    </Badge>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  failCount > 0 ? (
+                    <Badge variant="destructive">
+                      <ShieldAlert size={10} /> <GeneratedValue value={failCount} />{' '}
+                      <GeneratedText id="m_14d24a7af36317" />
+                      <GeneratedValue
+                        value={failCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+                      />
+                    </Badge>
+                  ) : null
+                }
+              />
             </div>
           }
           actions={
@@ -1388,21 +1409,25 @@ export default async function InspectionRecordDetailPage({
                 rel="noreferrer"
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800/60"
               >
-                <FileText size={14} /> PDF
+                <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
               </Link>
               <form action={toggleLock}>
                 <input type="hidden" name="id" value={id} />
                 <input type="hidden" name="lock" value={recordImmutable ? 'false' : 'true'} />
                 <Button variant="outline" type="submit">
-                  {recordImmutable ? (
-                    <>
-                      <Unlock size={14} /> Unlock
-                    </>
-                  ) : (
-                    <>
-                      <Lock size={14} /> Lock
-                    </>
-                  )}
+                  <GeneratedValue
+                    value={
+                      recordImmutable ? (
+                        <>
+                          <Unlock size={14} /> <GeneratedText id="m_0ca830c9381fd6" />
+                        </>
+                      ) : (
+                        <>
+                          <Lock size={14} /> <GeneratedText id="m_19f2c846c5777a" />
+                        </>
+                      )
+                    }
+                  />
                 </Button>
               </form>
             </div>
@@ -1411,42 +1436,73 @@ export default async function InspectionRecordDetailPage({
       }
       alerts={
         <>
-          {recordImmutable ? (
-            <Alert variant="warning">
-              <AlertTitle>
-                {record.status === 'closed'
-                  ? 'This inspection is closed and locked'
-                  : 'This inspection is locked'}
-              </AlertTitle>
-              <AlertDescription>
-                {record.status === 'closed' ? (
-                  <>
-                    Closed on{' '}
-                    {record.closedAt
-                      ? formatDate(new Date(record.closedAt), ctx.timezone, ctx.locale)
-                      : 'an unknown date'}
-                    . Unlocking reopens it as Submitted so you can make an approved correction.
-                  </>
-                ) : (
-                  <>Unlock from the header to make further edits.</>
-                )}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {needsSignature && !signed ? (
-            <Alert variant="info">
-              <AlertTitle>Signature required</AlertTitle>
-              <AlertDescription>
-                This inspection type requires a customer signature before it can be closed.
-              </AlertDescription>
-            </Alert>
-          ) : null}
+          <GeneratedValue
+            value={
+              recordImmutable ? (
+                <Alert variant="warning">
+                  <AlertTitle>
+                    <GeneratedValue
+                      value={
+                        record.status === 'closed' ? (
+                          <GeneratedText id="m_0ebf07876cd391" />
+                        ) : (
+                          <GeneratedText id="m_1a9deab2633a94" />
+                        )
+                      }
+                    />
+                  </AlertTitle>
+                  <AlertDescription>
+                    <GeneratedValue
+                      value={
+                        record.status === 'closed' ? (
+                          <>
+                            <GeneratedText id="m_01381607e25f0d" />
+                            <GeneratedValue value={' '} />
+                            <GeneratedValue
+                              value={
+                                record.closedAt ? (
+                                  formatDate(new Date(record.closedAt), ctx.timezone, ctx.locale)
+                                ) : (
+                                  <GeneratedText id="m_15e0a049681b58" />
+                                )
+                              }
+                            />
+                            <GeneratedText id="m_0be94f4d1ad8da" />
+                          </>
+                        ) : (
+                          <>
+                            <GeneratedText id="m_16987bb5ddf0c8" />
+                          </>
+                        )
+                      }
+                    />
+                  </AlertDescription>
+                </Alert>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              needsSignature && !signed ? (
+                <Alert variant="info">
+                  <AlertTitle>
+                    <GeneratedText id="m_02ffe91f500dc8" />
+                  </AlertTitle>
+                  <AlertDescription>
+                    <GeneratedText id="m_1ed6655040e79e" />
+                  </AlertDescription>
+                </Alert>
+              ) : null
+            }
+          />
         </>
       }
       subtabs={<SectionNav sections={sectionItems} />}
     >
       <div className="ff-surface space-y-5">
-        {pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
+        <GeneratedValue
+          value={pendingGates.length > 0 ? <FlowApprovals gates={pendingGates} /> : null}
+        />
 
         {/* ---------------------------------------------------------------- */}
         {/* Overview — completion hero + compliance tiles + general info    */}
@@ -1477,23 +1533,24 @@ export default async function InspectionRecordDetailPage({
                   />
                 </svg>
                 <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {completionPct}%
+                  <GeneratedValue value={completionPct} />%
                 </span>
               </div>
               <div className="min-w-0">
                 <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                  {answeredCount} of {total} answered
+                  <GeneratedValue value={answeredCount} /> <GeneratedText id="m_00e704d1194796" />{' '}
+                  <GeneratedValue value={total} /> <GeneratedText id="m_02fc780b01e239" />
                 </div>
                 <div className="mt-0.5 truncate text-sm text-slate-500 dark:text-slate-400">
-                  {type.name}
-                  {site ? ` · ${site.name}` : ''}
-                  {inspector?.name ? ` · ${inspector.name}` : ''}
+                  <GeneratedValue value={type.name} />
+                  <GeneratedValue value={site ? ` · ${site.name}` : ''} />
+                  <GeneratedValue value={inspector?.name ? ` · ${inspector.name}` : ''} />
                 </div>
               </div>
             </div>
             <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
               <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
-                Compliant
+                <GeneratedText id="m_07f2b2ca960987" />
               </div>
               <div className="mt-1 flex items-baseline gap-1">
                 <span
@@ -1505,10 +1562,11 @@ export default async function InspectionRecordDetailPage({
                         : 'text-red-600'
                   }`}
                 >
-                  {compliantPct}%
+                  <GeneratedValue value={compliantPct} />%
                 </span>
                 <span className="text-xs text-slate-400">
-                  {passCount}/{failCount}/{naCount}
+                  <GeneratedValue value={passCount} />/<GeneratedValue value={failCount} />/
+                  <GeneratedValue value={naCount} />
                 </span>
               </div>
             </div>
@@ -1518,22 +1576,30 @@ export default async function InspectionRecordDetailPage({
           <div
             className={`grid grid-cols-2 gap-3 ${hasSupplementalCriteria ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}
           >
-            <StatTile label="Pass" value={passCount} accent="emerald" />
-            <StatTile label="Fail" value={failCount} accent="red" />
-            <StatTile label="N/A" value={naCount} accent="slate" />
-            {hasSupplementalCriteria ? (
-              <StatTile
-                label="Other responses"
-                value={supplementalAnsweredCount}
-                accent="emerald"
-              />
-            ) : null}
-            <StatTile label="Unanswered" value={unansweredCount} accent="amber" />
+            <StatTile label={tGenerated('m_0e4b19568a01bf')} value={passCount} accent="emerald" />
+            <StatTile label={tGenerated('m_169669494a86f8')} value={failCount} accent="red" />
+            <StatTile label={tGenerated('m_06702e4064e393')} value={naCount} accent="slate" />
+            <GeneratedValue
+              value={
+                hasSupplementalCriteria ? (
+                  <StatTile
+                    label={tGenerated('m_0cbfa10af93f84')}
+                    value={supplementalAnsweredCount}
+                    accent="emerald"
+                  />
+                ) : null
+              }
+            />
+            <StatTile
+              label={tGenerated('m_19224fcc639fd1')}
+              value={unansweredCount}
+              accent="amber"
+            />
           </div>
 
           <Section
-            title="General information"
-            subtitle="Who, what, where, when"
+            title={tGenerated('m_14d50eff4a957b')}
+            subtitle={tGenerated('m_1cf9885ac52ebd')}
             icon={<Building2 size={20} />}
             tone="slate"
           >
@@ -1541,7 +1607,7 @@ export default async function InspectionRecordDetailPage({
               <LiveDateTime
                 id={record.id}
                 field="occurredAt"
-                label="Occurred at"
+                label={tGenerated('m_03f174df92cf82')}
                 initialValue={localDatetimeValue(new Date(record.occurredAt))}
                 disabled={recordImmutable}
                 updateAction={updateRecordField}
@@ -1549,7 +1615,7 @@ export default async function InspectionRecordDetailPage({
               <LiveRemoteSelect
                 id={record.id}
                 field="siteOrgUnitId"
-                label="Site"
+                label={tGenerated('m_020146dd3d3d5a')}
                 initialValue={record.siteOrgUnitId}
                 lookup="inspection-sites"
                 disabled={recordImmutable}
@@ -1559,9 +1625,9 @@ export default async function InspectionRecordDetailPage({
                 <LiveField
                   id={record.id}
                   field="foremanText"
-                  label="Foreman"
+                  label={tGenerated('m_184fa8d9234543')}
                   initialValue={record.foremanText}
-                  placeholder="Crew foreman on shift"
+                  placeholder={tGenerated('m_075c37024b0c8f')}
                   disabled={recordImmutable}
                   updateAction={updateRecordField}
                 />
@@ -1570,11 +1636,11 @@ export default async function InspectionRecordDetailPage({
                 <LiveField
                   id={record.id}
                   field="notes"
-                  label="Notes"
+                  label={tGenerated('m_0b8dadcb78cd08')}
                   initialValue={record.notes}
                   multiline
                   rows={3}
-                  placeholder="Anything important about this inspection"
+                  placeholder={tGenerated('m_006d3808edf66d')}
                   disabled={recordImmutable}
                   updateAction={updateRecordField}
                 />
@@ -1584,22 +1650,26 @@ export default async function InspectionRecordDetailPage({
             {/* Read-only context */}
             <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-slate-100 pt-4 text-sm sm:grid-cols-4 dark:border-slate-800">
               <Meta
-                label="Reference"
-                value={<span className="font-mono">{record.reference}</span>}
+                label={tGenerated('m_17dc61a19b605c')}
+                value={
+                  <span className="font-mono">
+                    <GeneratedValue value={record.reference} />
+                  </span>
+                }
               />
               <Meta
-                label="Type"
+                label={tGenerated('m_074ba2f160c506')}
                 value={
                   <Link
                     className="text-teal-700 hover:underline dark:text-teal-400"
                     href={`/inspections/types/${record.typeId}`}
                   >
-                    {type.name}
+                    <GeneratedValue value={type.name} />
                   </Link>
                 }
               />
               <Meta
-                label="Submitted"
+                label={tGenerated('m_0c823c3949ebd6')}
                 value={
                   record.submittedAt
                     ? formatDate(new Date(record.submittedAt), ctx.timezone, ctx.locale)
@@ -1607,7 +1677,7 @@ export default async function InspectionRecordDetailPage({
                 }
               />
               <Meta
-                label="Closed"
+                label={tGenerated('m_003ea77d773d2d')}
                 value={
                   record.closedAt
                     ? formatDate(new Date(record.closedAt), ctx.timezone, ctx.locale)
@@ -1618,8 +1688,8 @@ export default async function InspectionRecordDetailPage({
           </Section>
 
           <Section
-            title="Status & workflow"
-            subtitle="Move the record through its lifecycle"
+            title={tGenerated('m_0593bc61467f52')}
+            subtitle={tGenerated('m_0d00823cf5c9d8')}
             icon={<ClipboardCheck size={20} />}
             tone="teal"
             defaultOpen={false}
@@ -1628,30 +1698,39 @@ export default async function InspectionRecordDetailPage({
               <form action={updateStatus} className="flex flex-wrap items-end gap-3">
                 <input type="hidden" name="id" value={id} />
                 <div className="space-y-1.5">
-                  <Label>Move to</Label>
+                  <Label>
+                    <GeneratedText id="m_1e8891cb78e5a3" />
+                  </Label>
                   <Select name="status" defaultValue={record.status} disabled={recordImmutable}>
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s.replace(/_/g, ' ')}
-                      </option>
-                    ))}
+                    <GeneratedValue
+                      value={STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          <GeneratedValue value={s.replace(/_/g, ' ')} />
+                        </option>
+                      ))}
+                    />
                   </Select>
                 </div>
                 <Button type="submit" disabled={recordImmutable}>
-                  Update status
+                  <GeneratedText id="m_0f931aecc2cfc6" />
                 </Button>
               </form>
-              {passableUnansweredCount > 0 && !recordImmutable ? (
-                <form action={passAll}>
-                  <input type="hidden" name="recordId" value={id} />
-                  <Button type="submit" variant="outline">
-                    <CheckCircle2 size={14} /> Mark {passableUnansweredCount} unanswered as pass
-                  </Button>
-                </form>
-              ) : null}
+              <GeneratedValue
+                value={
+                  passableUnansweredCount > 0 && !recordImmutable ? (
+                    <form action={passAll}>
+                      <input type="hidden" name="recordId" value={id} />
+                      <Button type="submit" variant="outline">
+                        <CheckCircle2 size={14} /> <GeneratedText id="m_14001de0aa07db" />{' '}
+                        <GeneratedValue value={passableUnansweredCount} />{' '}
+                        <GeneratedText id="m_1df46fe684f01f" />
+                      </Button>
+                    </form>
+                  ) : null
+                }
+              />
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Submitting or closing requires every criterion to be answered. Closing locks the
-                record.
+                <GeneratedText id="m_16ef6bf830b172" />
               </p>
             </div>
           </Section>
@@ -1662,84 +1741,111 @@ export default async function InspectionRecordDetailPage({
         {/* ---------------------------------------------------------------- */}
         <section id="section-criteria" className="scroll-mt-2">
           <Section
-            title={`Criteria (${total})`}
-            subtitle="Tap an answer — failures capture severity and remediation inline."
+            title={tGenerated('m_04f78c562a8b56', { value0: total })}
+            subtitle={tGenerated('m_1a1f624e1388c1')}
             icon={<ListChecks size={20} />}
             tone="blue"
             defaultOpen
           >
-            {criteria.length === 0 ? (
-              <Alert variant="info">
-                <AlertTitle>No criteria</AlertTitle>
-                <AlertDescription>
-                  This record's type has no criteria. Add some in{' '}
-                  <Link
-                    href={`/inspections/types/${record.typeId}`}
-                    className="text-teal-700 hover:underline dark:text-teal-400"
-                  >
-                    the type builder
-                  </Link>
-                  , then start a new inspection.
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <div className="space-y-4">
-                {criteriaGroups.map((group, gi) => (
-                  <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-2">
-                    {group.label || multiSection ? (
-                      <div className="sticky top-0 z-[1] -mx-1 flex items-center gap-2 bg-white/90 px-1 py-1 backdrop-blur dark:bg-slate-900/90">
-                        <h3 className="text-xs font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
-                          {group.label ?? 'Ungrouped'}
-                        </h3>
-                        <span className="text-xs text-slate-400">
-                          {group.rows.length} item{group.rows.length === 1 ? '' : 's'}
-                        </span>
-                      </div>
-                    ) : null}
-                    {group.rows.map((row) => (
-                      <CriterionCard
-                        key={row.c.id}
-                        recordId={id}
-                        rowId={row.c.id}
-                        index={indexById.get(row.c.id) ?? 0}
-                        question={row.c.questionTextSnapshot}
-                        responseType={row.c.responseType as CriterionResponseType}
-                        choiceOptions={row.c.choiceOptionsSnapshot}
-                        choiceAnswer={row.c.choiceAnswer}
-                        textAnswer={row.c.textAnswer}
-                        numberAnswer={row.c.numberAnswer}
-                        requiresPhoto={row.c.requiresPhoto ?? false}
-                        requiresComment={row.c.requiresComment ?? false}
-                        answer={row.c.answer}
-                        severity={row.c.severity as CriterionSeverity | null}
-                        nonComplianceDescription={row.c.nonComplianceDescription}
-                        actionTaken={row.c.actionTaken}
-                        compliantNote={row.c.compliantNote}
-                        assignedToPersonId={row.c.assignedToPersonId}
-                        assignedDueDate={row.c.assignedDueDate}
-                        correctedOn={row.c.correctedOn}
-                        overdue={isOverdue({
-                          answer: row.c.answer,
-                          assignedDueDate: row.c.assignedDueDate,
-                          correctedOn: row.c.correctedOn,
-                          recordOccurredAt: record.occurredAt,
-                        })}
-                        photoPreviews={(row.c.photoAttachmentIds ?? [])
-                          .map((aid) => data.criterionPhotoMap.get(aid))
-                          .filter((p): p is { id: string; url: string; filename: string } =>
-                            Boolean(p),
-                          )}
-                        correctiveActionRef={row.ca?.reference ?? null}
-                        correctiveActionId={row.c.correctiveActionId}
-                        locked={recordImmutable}
-                        allowCompliantNotes={type.allowCompliantNotes}
-                        actions={criterionActions}
-                      />
-                    ))}
+            <GeneratedValue
+              value={
+                criteria.length === 0 ? (
+                  <Alert variant="info">
+                    <AlertTitle>
+                      <GeneratedText id="m_09abab0bd4ecdf" />
+                    </AlertTitle>
+                    <AlertDescription>
+                      <GeneratedText id="m_1d25507d45162d" />
+                      <GeneratedValue value={' '} />
+                      <Link
+                        href={`/inspections/types/${record.typeId}`}
+                        className="text-teal-700 hover:underline dark:text-teal-400"
+                      >
+                        <GeneratedText id="m_0834705a18681d" />
+                      </Link>
+                      <GeneratedText id="m_1fe3e4d8851426" />
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="space-y-4">
+                    <GeneratedValue
+                      value={criteriaGroups.map((group, gi) => (
+                        <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-2">
+                          <GeneratedValue
+                            value={
+                              group.label || multiSection ? (
+                                <div className="sticky top-0 z-[1] -mx-1 flex items-center gap-2 bg-white/90 px-1 py-1 backdrop-blur dark:bg-slate-900/90">
+                                  <h3 className="text-xs font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
+                                    <GeneratedValue
+                                      value={group.label ?? <GeneratedText id="m_124ee6c18e0195" />}
+                                    />
+                                  </h3>
+                                  <span className="text-xs text-slate-400">
+                                    <GeneratedValue value={group.rows.length} />{' '}
+                                    <GeneratedText id="m_089f2b1abdb347" />
+                                    <GeneratedValue
+                                      value={
+                                        group.rows.length === 1 ? (
+                                          ''
+                                        ) : (
+                                          <GeneratedText id="m_00ded356f0f424" />
+                                        )
+                                      }
+                                    />
+                                  </span>
+                                </div>
+                              ) : null
+                            }
+                          />
+                          <GeneratedValue
+                            value={group.rows.map((row) => (
+                              <CriterionCard
+                                key={row.c.id}
+                                recordId={id}
+                                rowId={row.c.id}
+                                index={indexById.get(row.c.id) ?? 0}
+                                question={row.c.questionTextSnapshot}
+                                responseType={row.c.responseType as CriterionResponseType}
+                                choiceOptions={row.c.choiceOptionsSnapshot}
+                                choiceAnswer={row.c.choiceAnswer}
+                                textAnswer={row.c.textAnswer}
+                                numberAnswer={row.c.numberAnswer}
+                                requiresPhoto={row.c.requiresPhoto ?? false}
+                                requiresComment={row.c.requiresComment ?? false}
+                                answer={row.c.answer}
+                                severity={row.c.severity as CriterionSeverity | null}
+                                nonComplianceDescription={row.c.nonComplianceDescription}
+                                actionTaken={row.c.actionTaken}
+                                compliantNote={row.c.compliantNote}
+                                assignedToPersonId={row.c.assignedToPersonId}
+                                assignedDueDate={row.c.assignedDueDate}
+                                correctedOn={row.c.correctedOn}
+                                overdue={isOverdue({
+                                  answer: row.c.answer,
+                                  assignedDueDate: row.c.assignedDueDate,
+                                  correctedOn: row.c.correctedOn,
+                                  recordOccurredAt: record.occurredAt,
+                                })}
+                                photoPreviews={(row.c.photoAttachmentIds ?? [])
+                                  .map((aid) => data.criterionPhotoMap.get(aid))
+                                  .filter((p): p is { id: string; url: string; filename: string } =>
+                                    Boolean(p),
+                                  )}
+                                correctiveActionRef={row.ca?.reference ?? null}
+                                correctiveActionId={row.c.correctiveActionId}
+                                locked={recordImmutable}
+                                allowCompliantNotes={type.allowCompliantNotes}
+                                actions={criterionActions}
+                              />
+                            ))}
+                          />
+                        </div>
+                      ))}
+                    />
                   </div>
-                ))}
-              </div>
-            )}
+                )
+              }
+            />
           </Section>
         </section>
 
@@ -1748,21 +1854,25 @@ export default async function InspectionRecordDetailPage({
         {/* ---------------------------------------------------------------- */}
         <section id="section-photos" className="scroll-mt-2">
           <Section
-            title={`Photos (${photos.length})`}
+            title={tGenerated('m_0705e8a460ad79', { value0: photos.length })}
             icon={<Camera size={20} />}
             tone="slate"
             defaultOpen={photos.length > 0}
           >
             <div className="space-y-3">
               <PhotoGallery photos={galleryPhotos} />
-              {!recordImmutable ? (
-                <PhotoUploaderSection
-                  attachAction={async (ids) => {
-                    'use server'
-                    await attachRecordPhotos(id, ids)
-                  }}
-                />
-              ) : null}
+              <GeneratedValue
+                value={
+                  !recordImmutable ? (
+                    <PhotoUploaderSection
+                      attachAction={async (ids) => {
+                        'use server'
+                        await attachRecordPhotos(id, ids)
+                      }}
+                    />
+                  ) : null
+                }
+              />
             </div>
           </Section>
         </section>
@@ -1770,36 +1880,40 @@ export default async function InspectionRecordDetailPage({
         {/* ---------------------------------------------------------------- */}
         {/* Customer signature                                              */}
         {/* ---------------------------------------------------------------- */}
-        {needsSignature ? (
-          <section id="section-signature" className="scroll-mt-2">
-            <Section
-              title="Customer sign-off"
-              icon={<PenLine size={20} />}
-              tone="emerald"
-              defaultOpen
-            >
-              <CustomerSignatureCard
-                recordId={id}
-                currentSignature={
-                  record.customerSignatureAttachmentId
-                    ? attachmentUrl(record.customerSignatureAttachmentId)
-                    : null
-                }
-                currentSignerName={record.customerSignerName}
-                signedAt={record.customerSignedAt}
-                locked={recordImmutable}
-                saveAction={saveCustomerSignature}
-              />
-            </Section>
-          </section>
-        ) : null}
+        <GeneratedValue
+          value={
+            needsSignature ? (
+              <section id="section-signature" className="scroll-mt-2">
+                <Section
+                  title={tGenerated('m_12a3bdfedff1f8')}
+                  icon={<PenLine size={20} />}
+                  tone="emerald"
+                  defaultOpen
+                >
+                  <CustomerSignatureCard
+                    recordId={id}
+                    currentSignature={
+                      record.customerSignatureAttachmentId
+                        ? attachmentUrl(record.customerSignatureAttachmentId)
+                        : null
+                    }
+                    currentSignerName={record.customerSignerName}
+                    signedAt={record.customerSignedAt}
+                    locked={recordImmutable}
+                    saveAction={saveCustomerSignature}
+                  />
+                </Section>
+              </section>
+            ) : null
+          }
+        />
 
         {/* ---------------------------------------------------------------- */}
         {/* Activity                                                        */}
         {/* ---------------------------------------------------------------- */}
         <section id="section-activity" className="scroll-mt-2">
           <Section
-            title={`Activity (${activity.length})`}
+            title={tGenerated('m_158532c8e94ad5', { value0: activity.length })}
             icon={<History size={20} />}
             tone="slate"
             defaultOpen={false}
@@ -1835,9 +1949,11 @@ function StatTile({
           : 'text-slate-900 dark:text-slate-100'
   return (
     <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className={`text-2xl font-semibold tabular-nums ${valueTone}`}>{value}</div>
+      <div className={`text-2xl font-semibold tabular-nums ${valueTone}`}>
+        <GeneratedValue value={value} />
+      </div>
       <div className="mt-1 text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        {label}
+        <GeneratedValue value={label} />
       </div>
     </div>
   )
@@ -1847,9 +1963,11 @@ function Meta({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <dt className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
-        {label}
+        <GeneratedValue value={label} />
       </dt>
-      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">{value}</dd>
+      <dd className="mt-0.5 text-slate-800 dark:text-slate-200">
+        <GeneratedValue value={value} />
+      </dd>
     </div>
   )
 }

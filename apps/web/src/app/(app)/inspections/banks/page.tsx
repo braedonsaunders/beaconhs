@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { ClipboardList } from 'lucide-react'
@@ -29,7 +32,10 @@ import { FilterChips } from '@/components/filter-bar'
 import { InspectionsSubNav } from '../_sub-nav'
 import { InspectionBanksDrawers } from './_drawers'
 
-export const metadata = { title: 'Inspection Banks' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_02f6f730a215f8') }
+}
 
 async function createBankAction(input: {
   name: string
@@ -80,6 +86,8 @@ export default async function InspectionBanksPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'name',
@@ -153,101 +161,135 @@ export default async function InspectionBanksPage({
       header={
         <>
           <PageHeader
-            title="Inspection Banks"
-            description="Reusable criteria templates — drop one into a new inspection to skip rewriting the question list every time."
+            title={tGenerated('m_02f6f730a215f8')}
+            description={tGenerated('m_04be8588e33dcb')}
             actions={
               <Link href="/inspections/banks?drawer=new-bank" scroll={false}>
-                <Button>New bank</Button>
+                <Button>
+                  <GeneratedText id="m_0b211bf8765d07" />
+                </Button>
               </Link>
             }
           />
           <InspectionsSubNav active="banks" />
           <TableToolbar>
-            <SearchInput placeholder="Search by bank name" />
+            <SearchInput placeholder={tGenerated('m_0a377ecaa4554e')} />
             <FilterChips
               basePath="/inspections/banks"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardList size={32} />}
-          title={params.q ? `No banks match "${params.q}"` : 'No inspection banks'}
-          description="Create a bank, add criteria, and reuse it across inspections."
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                  Name
-                </SortableTh>
-                <SortableTh {...sortProps} column="category" active={params.sort === 'category'}>
-                  Category
-                </SortableTh>
-                <TableHead>Criteria</TableHead>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                  Status
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="created_at"
-                  active={params.sort === 'created_at'}
-                >
-                  Created
-                </SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ bank, criteriaCount }) => (
-                <TableRow key={bank.id}>
-                  <TableCell>
-                    <Link
-                      href={`/inspections/banks/${bank.id}`}
-                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<ClipboardList size={32} />}
+              title={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_1f2f294558529d', { value0: params.q })
+                  : tGenerated('m_03e7e4dfa0e6a6'),
+              )}
+              description={tGenerated('m_0f68850100d67a')}
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="category"
+                      active={params.sort === 'category'}
                     >
-                      {bank.name}
-                    </Link>
-                    {bank.description ? (
-                      <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
-                        {bank.description}
-                      </div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {bank.category ? bank.category.replace(/_/g, ' ') : '—'}
-                  </TableCell>
-                  <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
-                    {criteriaCount}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={bank.isPublished ? 'success' : 'secondary'}>
-                      {bank.isPublished ? 'Published' : 'Draft'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {formatDate(new Date(bank.createdAt), ctx.timezone, ctx.locale)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/inspections/banks"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                      <GeneratedText id="m_108b41637f364f" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_1a1ce62686f0b8" />
+                    </TableHead>
+                    <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="created_at"
+                      active={params.sort === 'created_at'}
+                    >
+                      <GeneratedText id="m_10cbe051fb5e05" />
+                    </SortableTh>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ bank, criteriaCount }) => (
+                      <TableRow key={bank.id}>
+                        <TableCell>
+                          <Link
+                            href={`/inspections/banks/${bank.id}`}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                          >
+                            <GeneratedValue value={bank.name} />
+                          </Link>
+                          <GeneratedValue
+                            value={
+                              bank.description ? (
+                                <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
+                                  <GeneratedValue value={bank.description} />
+                                </div>
+                              ) : null
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue
+                            value={bank.category ? bank.category.replace(/_/g, ' ') : '—'}
+                          />
+                        </TableCell>
+                        <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
+                          <GeneratedValue value={criteriaCount} />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={bank.isPublished ? 'success' : 'secondary'}>
+                            <GeneratedValue
+                              value={
+                                bank.isPublished ? (
+                                  <GeneratedText id="m_0a65097103ae1b" />
+                                ) : (
+                                  <GeneratedText id="m_13f3db1d0ca2fe" />
+                                )
+                              }
+                            />
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue
+                            value={formatDate(new Date(bank.createdAt), ctx.timezone, ctx.locale)}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/inspections/banks"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
       <InspectionBanksDrawers
         openDrawer={openDrawer}
         closeHref="/inspections/banks"

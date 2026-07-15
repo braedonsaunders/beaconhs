@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Shared subscribe/edit schedule form. Posts the exact field contract the
 // existing create/update server actions read (definitionId, cadence parts,
 // recipientUserIds, recipientEmails, filters-as-JSON) — but composes those
@@ -52,6 +59,8 @@ export function ScheduleForm({
   action: (formData: FormData) => Promise<void>
   extraFooter?: React.ReactNode
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [definitionId, setDefinitionId] = useState(
     initial?.definitionId ?? definitions[0]?.id ?? '',
   )
@@ -112,28 +121,38 @@ export function ScheduleForm({
 
       <div className="space-y-1.5">
         <Label>
-          Report <span className="text-red-600">*</span>
+          <GeneratedText id="m_0ab5a972fc80fd" /> <span className="text-red-600">*</span>
         </Label>
         <Select
           name="definitionId"
           value={definitionId}
           onChange={(e) => setDefinitionId(e.target.value)}
         >
-          {definitions.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-              {d.kind === 'custom' ? ' (custom)' : ''}
-            </option>
-          ))}
+          <GeneratedValue
+            value={definitions.map((d) => (
+              <option key={d.id} value={d.id}>
+                <GeneratedValue value={d.name} />
+                <GeneratedValue
+                  value={d.kind === 'custom' ? <GeneratedText id="m_1caf23f629a15c" /> : ''}
+                />
+              </option>
+            ))}
+          />
         </Select>
-        {definition?.description ? (
-          <p className="text-xs text-slate-500 dark:text-slate-400">{definition.description}</p>
-        ) : null}
+        <GeneratedValue
+          value={
+            definition?.description ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <GeneratedValue value={definition.description} />
+              </p>
+            ) : null
+          }
+        />
       </div>
 
       <div className="space-y-1.5">
         <Label>
-          Schedule name <span className="text-red-600">*</span>
+          <GeneratedText id="m_0fcdcb15bd7604" /> <span className="text-red-600">*</span>
         </Label>
         <Input
           name="name"
@@ -141,55 +160,79 @@ export function ScheduleForm({
           maxLength={REPORT_SCHEDULE_LIMITS.nameChars}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder={
-            definition ? `${definition.name} — ${cadence}` : 'e.g. Monday morning incidents'
-          }
+          placeholder={tGeneratedValue(
+            definition ? `${definition.name} — ${cadence}` : tGenerated('m_0e6260addabf9b'),
+          )}
         />
       </div>
 
       <fieldset className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
         <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          Delivery
+          <GeneratedText id="m_03db87cb2e7846" />
         </legend>
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="space-y-1.5">
-            <Label>Cadence</Label>
+            <Label>
+              <GeneratedText id="m_1151ed0308b6d1" />
+            </Label>
             <Select
               name="cadence"
               value={cadence}
               onChange={(e) => setCadence(e.target.value as typeof cadence)}
             >
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
+              <option value="daily">
+                <GeneratedText id="m_014f0a55186cc3" />
+              </option>
+              <option value="weekly">
+                <GeneratedText id="m_0f5fe94677f742" />
+              </option>
+              <option value="monthly">
+                <GeneratedText id="m_03da3ce41e10fb" />
+              </option>
             </Select>
           </div>
-          {cadence === 'weekly' ? (
-            <div className="space-y-1.5">
-              <Label>On</Label>
-              <Select name="dayOfWeek" defaultValue={String(initial?.dayOfWeek ?? 1)}>
-                {DOW.map((d, i) => (
-                  <option key={d} value={String(i)}>
-                    {d}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          ) : null}
-          {cadence === 'monthly' ? (
-            <div className="space-y-1.5">
-              <Label>Day of month</Label>
-              <Input
-                name="dayOfMonth"
-                type="number"
-                min={1}
-                max={31}
-                defaultValue={initial?.dayOfMonth ?? 1}
-              />
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              cadence === 'weekly' ? (
+                <div className="space-y-1.5">
+                  <Label>
+                    <GeneratedText id="m_0738c9c7544385" />
+                  </Label>
+                  <Select name="dayOfWeek" defaultValue={String(initial?.dayOfWeek ?? 1)}>
+                    <GeneratedValue
+                      value={DOW.map((d, i) => (
+                        <option key={d} value={String(i)}>
+                          <GeneratedValue value={d} />
+                        </option>
+                      ))}
+                    />
+                  </Select>
+                </div>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              cadence === 'monthly' ? (
+                <div className="space-y-1.5">
+                  <Label>
+                    <GeneratedText id="m_1f8ef50bb3fd8d" />
+                  </Label>
+                  <Input
+                    name="dayOfMonth"
+                    type="number"
+                    min={1}
+                    max={31}
+                    defaultValue={initial?.dayOfMonth ?? 1}
+                  />
+                </div>
+              ) : null
+            }
+          />
           <div className="space-y-1.5">
-            <Label>At</Label>
+            <Label>
+              <GeneratedText id="m_1cf3bee1218779" />
+            </Label>
             <div className="flex items-center gap-1">
               <Input
                 name="hour"
@@ -199,7 +242,7 @@ export function ScheduleForm({
                 defaultValue={initial?.hour ?? 7}
                 required
                 className="w-18"
-                aria-label="Hour (0-23)"
+                aria-label={tGenerated('m_1cdd126cee80c8')}
               />
               <span className="text-slate-400">:</span>
               <Input
@@ -210,12 +253,14 @@ export function ScheduleForm({
                 defaultValue={initial?.minute ?? 0}
                 required
                 className="w-18"
-                aria-label="Minute (0-59)"
+                aria-label={tGenerated('m_13b09b05ab2247')}
               />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Timezone</Label>
+            <Label>
+              <GeneratedText id="m_14c7a1feb33b17" />
+            </Label>
             <Input
               name="timezone"
               required
@@ -238,33 +283,45 @@ export function ScheduleForm({
 
       <fieldset className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
         <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          Recipients
+          <GeneratedText id="m_0d99b2b56f8b5d" />
         </legend>
         <div className="space-y-2">
-          <Label>Members</Label>
-          {selectedUsers.size > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {Array.from(selectedUsers).map((id) => {
-                const m = members.find((x) => x.userId === id)
-                return (
-                  <span
-                    key={id}
-                    className="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 py-0.5 pr-1 pl-2.5 text-xs text-teal-900 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200"
-                  >
-                    {m?.name ?? 'Former member'}
-                    <button
-                      type="button"
-                      onClick={() => toggleUser(id)}
-                      aria-label={`Remove ${m?.name ?? 'recipient'}`}
-                      className="rounded-full p-0.5 text-teal-600 hover:bg-teal-100 hover:text-teal-900 dark:text-teal-400 dark:hover:bg-teal-900"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                )
-              })}
-            </div>
-          ) : null}
+          <Label>
+            <GeneratedText id="m_0ef3898622f868" />
+          </Label>
+          <GeneratedValue
+            value={
+              selectedUsers.size > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  <GeneratedValue
+                    value={Array.from(selectedUsers).map((id) => {
+                      const m = members.find((x) => x.userId === id)
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 py-0.5 pr-1 pl-2.5 text-xs text-teal-900 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-200"
+                        >
+                          <GeneratedValue
+                            value={m?.name ?? <GeneratedText id="m_0d19396d98306c" />}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => toggleUser(id)}
+                            aria-label={tGenerated('m_101f98a70352fa', {
+                              value0: m?.name ?? 'recipient',
+                            })}
+                            className="rounded-full p-0.5 text-teal-600 hover:bg-teal-100 hover:text-teal-900 dark:text-teal-400 dark:hover:bg-teal-900"
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      )
+                    })}
+                  />
+                </div>
+              ) : null
+            }
+          />
           <SearchSelect
             value=""
             onChange={(id) => {
@@ -273,69 +330,83 @@ export function ScheduleForm({
             options={members
               .filter((m) => !selectedUsers.has(m.userId))
               .map((m) => ({ value: m.userId, label: m.name, hint: m.email }))}
-            placeholder="Add member…"
-            searchPlaceholder="Search members…"
+            placeholder={tGenerated('m_080c3856ee74d5')}
+            searchPlaceholder={tGenerated('m_0f2fe29f21ee57')}
             sheetTitle="Add recipient"
             ariaLabel="Add member recipient"
             className="max-w-sm"
           />
         </div>
         <div className="mt-3 space-y-1.5">
-          <Label>Additional email addresses</Label>
+          <Label>
+            <GeneratedText id="m_0bfee91aa5fe88" />
+          </Label>
           <Textarea
             name="recipientEmails"
             rows={2}
             maxLength={REPORT_SCHEDULE_LIMITS.recipientEmailListChars}
             defaultValue={(initial?.recipientEmails ?? []).join(', ')}
-            placeholder="hse@acme.com, manager@acme.com"
+            placeholder={tGenerated('m_1eef4d230cc634')}
           />
-          <p className="text-xs text-slate-400 dark:text-slate-500">Comma- or newline-separated.</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            <GeneratedText id="m_08778f6f4d177b" />
+          </p>
         </div>
       </fieldset>
 
       <fieldset className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
         <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          Data window
+          <GeneratedText id="m_1b6d30e8a7b8f2" />
         </legend>
         <div className="flex items-end gap-3">
           <div className="space-y-1.5">
-            <Label>Days of data</Label>
+            <Label>
+              <GeneratedText id="m_0d7a3c5db73e70" />
+            </Label>
             <Input
               type="number"
               min={1}
               max={365}
               value={days}
               onChange={(e) => setDays(e.target.value)}
-              placeholder="report default"
+              placeholder={tGenerated('m_063b869c773315')}
               className="w-36"
             />
           </div>
           <p className="pb-2 text-xs text-slate-400 dark:text-slate-500">
-            Leave blank to use the report default.
+            <GeneratedText id="m_038258667df019" />
           </p>
         </div>
         <details className="mt-2">
           <summary className="cursor-pointer text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400">
-            Advanced filters (JSON)
+            <GeneratedText id="m_1c766f2981b51f" />
           </summary>
           <Textarea
             rows={3}
             maxLength={REPORT_SCHEDULE_LIMITS.filtersChars}
             value={advanced}
             onChange={(e) => setAdvanced(e.target.value)}
-            placeholder='{"departmentId": "…", "siteOrgUnitId": "…"}'
+            placeholder={tGenerated('m_03573b6be12a60')}
             className="mt-2 font-mono text-xs"
           />
-          {advancedError ? (
-            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{advancedError}</p>
-          ) : null}
+          <GeneratedValue
+            value={
+              advancedError ? (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                  <GeneratedValue value={advancedError} />
+                </p>
+              ) : null
+            }
+          />
         </details>
       </fieldset>
 
       <div className="flex items-center justify-between gap-2">
-        <div>{extraFooter}</div>
+        <div>
+          <GeneratedValue value={extraFooter} />
+        </div>
         <Button type="submit" disabled={Boolean(advancedError)}>
-          {submitLabel}
+          <GeneratedValue value={submitLabel} />
         </Button>
       </div>
     </form>

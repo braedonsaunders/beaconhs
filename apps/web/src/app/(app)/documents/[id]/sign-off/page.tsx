@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Group sign-off sheet — a roomy, tablet-friendly page where a facilitator
 // records ONE session against the document's published version and collects each
 // attendee's signature on the device. Every signer writes their own
@@ -25,7 +28,10 @@ import { isUuid, pickString } from '@/lib/list-params'
 import { SignOffSheet, type SheetSigner } from './_sign-off-sheet'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Group sign-off' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1b116800589b7a') }
+}
 
 export default async function SignOffPage({
   params,
@@ -34,6 +40,8 @@ export default async function SignOffPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   const sp = await searchParams
   const resumeSessionId = pickString(sp.session) ?? null
@@ -124,34 +132,42 @@ export default async function SignOffPage({
     <PageContainer>
       <div className="mx-auto max-w-2xl">
         <PageHeader
-          title="Group sign-off"
-          description={`${doc.title} · ${doc.key}`}
+          title={tGenerated('m_1b116800589b7a')}
+          description={tGeneratedValue(`${doc.title} · ${doc.key}`)}
           back={{ href: backHref, label: 'Back to document' }}
         />
 
-        {!pub ? (
-          <Alert variant="warning">
-            <AlertTitle>Publish the document first</AlertTitle>
-            <AlertDescription className="space-y-3">
-              <p>A document must have a published version before it can be acknowledged.</p>
-              <Link href={backHref}>
-                <Button variant="outline">
-                  <ArrowLeft size={14} /> Back to document
-                </Button>
-              </Link>
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <SignOffSheet
-            documentId={id}
-            versionId={pub.id}
-            versionNumber={pub.version}
-            defaultTitle={doc.title}
-            initialRoster={roster}
-            initialSessionId={resumeSessionId}
-            backHref={backHref}
-          />
-        )}
+        <GeneratedValue
+          value={
+            !pub ? (
+              <Alert variant="warning">
+                <AlertTitle>
+                  <GeneratedText id="m_1889b3a36ba7b2" />
+                </AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>
+                    <GeneratedText id="m_153dbb9f3fd767" />
+                  </p>
+                  <Link href={backHref}>
+                    <Button variant="outline">
+                      <ArrowLeft size={14} /> <GeneratedText id="m_0d77915e52a475" />
+                    </Button>
+                  </Link>
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <SignOffSheet
+                documentId={id}
+                versionId={pub.id}
+                versionNumber={pub.version}
+                defaultTitle={doc.title}
+                initialRoster={roster}
+                initialSessionId={resumeSessionId}
+                backHref={backHref}
+              />
+            )
+          }
+        />
       </div>
     </PageContainer>
   )

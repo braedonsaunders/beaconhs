@@ -1,3 +1,4 @@
+import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { cn } from '@beaconhs/ui'
@@ -48,6 +49,7 @@ export function TabNav({
    */
   variant?: 'underline' | 'pills'
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   if (variant === 'pills') {
     return (
       <nav
@@ -61,43 +63,49 @@ export function TabNav({
         )}
         role="tablist"
       >
-        {tabs
-          .filter((t) => !t.hidden)
-          .map((t) => {
-            const isActive = t.key === active
-            const href = mergeHref(basePath, currentParams, { [paramKey]: t.key })
-            return (
-              <Link
-                key={t.key}
-                href={href as any}
-                role="tab"
-                aria-selected={isActive}
-                title={iconOnly && t.icon ? t.label : undefined}
-                aria-label={iconOnly && t.icon ? t.label : undefined}
-                className={cn(
-                  'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs whitespace-nowrap transition-colors',
-                  'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
-                  isActive
-                    ? 'border-teal-700 bg-teal-700 text-white'
-                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60',
-                )}
-              >
-                {iconOnly && t.icon ? t.icon : t.label}
-                {typeof t.count === 'number' ? (
-                  <span
-                    className={cn(
-                      'rounded-full px-1.5 py-0.5 text-[11px] leading-none transition-colors',
-                      isActive
-                        ? 'bg-white/20 text-white'
-                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-                    )}
-                  >
-                    {t.count}
-                  </span>
-                ) : null}
-              </Link>
-            )
-          })}
+        <GeneratedValue
+          value={tabs
+            .filter((t) => !t.hidden)
+            .map((t) => {
+              const isActive = t.key === active
+              const href = mergeHref(basePath, currentParams, { [paramKey]: t.key })
+              return (
+                <Link
+                  key={t.key}
+                  href={href as any}
+                  role="tab"
+                  aria-selected={isActive}
+                  title={tGeneratedValue(iconOnly && t.icon ? t.label : undefined)}
+                  aria-label={tGeneratedValue(iconOnly && t.icon ? t.label : undefined)}
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs whitespace-nowrap transition-colors',
+                    'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
+                    isActive
+                      ? 'border-teal-700 bg-teal-700 text-white'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800/60',
+                  )}
+                >
+                  <GeneratedValue value={iconOnly && t.icon ? t.icon : t.label} />
+                  <GeneratedValue
+                    value={
+                      typeof t.count === 'number' ? (
+                        <span
+                          className={cn(
+                            'rounded-full px-1.5 py-0.5 text-[11px] leading-none transition-colors',
+                            isActive
+                              ? 'bg-white/20 text-white'
+                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+                          )}
+                        >
+                          <GeneratedValue value={t.count} />
+                        </span>
+                      ) : null
+                    }
+                  />
+                </Link>
+              )
+            })}
+        />
       </nav>
     )
   }
@@ -114,45 +122,51 @@ export function TabNav({
       )}
       role="tablist"
     >
-      {tabs
-        .filter((t) => !t.hidden)
-        .map((t) => {
-          const isActive = t.key === active
-          const href = mergeHref(basePath, currentParams, { [paramKey]: t.key })
-          return (
-            <Link
-              key={t.key}
-              href={href as any}
-              role="tab"
-              aria-selected={isActive}
-              title={iconOnly && t.icon ? t.label : undefined}
-              aria-label={iconOnly && t.icon ? t.label : undefined}
-              className={cn(
-                '-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 py-2 text-sm whitespace-nowrap',
-                iconOnly && t.icon ? 'px-2.5' : 'px-3',
-                'transition-[color,border-color,background-color] duration-150 ease-out',
-                'focus-visible:rounded-t-md focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
-                isActive
-                  ? 'border-teal-700 font-medium text-teal-700 dark:text-teal-300'
-                  : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100',
-              )}
-            >
-              {iconOnly && t.icon ? t.icon : t.label}
-              {typeof t.count === 'number' ? (
-                <span
-                  className={cn(
-                    'rounded-full px-1.5 py-0.5 text-xs leading-none transition-colors duration-150',
-                    isActive
-                      ? 'bg-teal-100 text-teal-900 dark:bg-teal-950/50 dark:text-teal-300'
-                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-                  )}
-                >
-                  {t.count}
-                </span>
-              ) : null}
-            </Link>
-          )
-        })}
+      <GeneratedValue
+        value={tabs
+          .filter((t) => !t.hidden)
+          .map((t) => {
+            const isActive = t.key === active
+            const href = mergeHref(basePath, currentParams, { [paramKey]: t.key })
+            return (
+              <Link
+                key={t.key}
+                href={href as any}
+                role="tab"
+                aria-selected={isActive}
+                title={tGeneratedValue(iconOnly && t.icon ? t.label : undefined)}
+                aria-label={tGeneratedValue(iconOnly && t.icon ? t.label : undefined)}
+                className={cn(
+                  '-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 py-2 text-sm whitespace-nowrap',
+                  iconOnly && t.icon ? 'px-2.5' : 'px-3',
+                  'transition-[color,border-color,background-color] duration-150 ease-out',
+                  'focus-visible:rounded-t-md focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
+                  isActive
+                    ? 'border-teal-700 font-medium text-teal-700 dark:text-teal-300'
+                    : 'border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:text-slate-100',
+                )}
+              >
+                <GeneratedValue value={iconOnly && t.icon ? t.icon : t.label} />
+                <GeneratedValue
+                  value={
+                    typeof t.count === 'number' ? (
+                      <span
+                        className={cn(
+                          'rounded-full px-1.5 py-0.5 text-xs leading-none transition-colors duration-150',
+                          isActive
+                            ? 'bg-teal-100 text-teal-900 dark:bg-teal-950/50 dark:text-teal-300'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+                        )}
+                      >
+                        <GeneratedValue value={t.count} />
+                      </span>
+                    ) : null
+                  }
+                />
+              </Link>
+            )
+          })}
+      />
     </nav>
   )
 }

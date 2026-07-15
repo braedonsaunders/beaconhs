@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The report studio — a 1/3 ▸ 2/3 split (BuilderShell) shared with the
 // inspection-type / app / document builders. LEFT rail = authoring (name → data
 // source → Rows|Summarize → columns/group-by+measures → filters). RIGHT
@@ -268,6 +275,8 @@ export function ReportStudio({
   cloneFromId?: string | null
   action: (formData: FormData) => Promise<void>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const catalog = entities
 
   const fallbackEntity = catalog[0]!.key
@@ -479,8 +488,12 @@ export function ReportStudio({
             <>
               <BuilderRailHeader
                 icon={<FileText size={15} />}
-                title={intent === 'edit' ? 'Edit report' : 'New report'}
-                subtitle="Configure data and shape"
+                title={tGeneratedValue(
+                  intent === 'edit'
+                    ? tGenerated('m_186e85e2d4fd61')
+                    : tGenerated('m_084b76c7fa79df'),
+                )}
+                subtitle={tGenerated('m_12b7d8612bbf6c')}
               />
               <BuilderScroll className="space-y-3">
                 {/* Name */}
@@ -488,24 +501,27 @@ export function ReportStudio({
                   <div className="space-y-2.5">
                     <div className="space-y-1.5">
                       <Label>
-                        Report name <span className="text-red-600">*</span>
+                        <GeneratedText id="m_045180d0702017" />{' '}
+                        <span className="text-red-600">*</span>
                       </Label>
                       <Input
                         name="name"
                         required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="e.g. High-severity incidents this quarter"
+                        placeholder={tGenerated('m_1ebb71ef8a47e1')}
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Description</Label>
+                      <Label>
+                        <GeneratedText id="m_14d923495cf14c" />
+                      </Label>
                       <Textarea
                         name="description"
                         rows={2}
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Shown in the report library."
+                        placeholder={tGenerated('m_081dd252258c87')}
                       />
                     </div>
                   </div>
@@ -513,306 +529,377 @@ export function ReportStudio({
 
                 {/* Data source */}
                 <div className={sectionCls}>
-                  <h3 className={headCls}>Data source</h3>
+                  <h3 className={headCls}>
+                    <GeneratedText id="m_1e51e17fccd721" />
+                  </h3>
                   <Select
                     value={entityKey}
                     onChange={(e) => changeEntity(e.target.value)}
                     className={selectCls}
                   >
-                    {entityGroups.map(([cat, ents]) => (
-                      <optgroup key={cat} label={cat}>
-                        {ents.map((en) => (
-                          <option key={en.key} value={en.key}>
-                            {en.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
+                    <GeneratedValue
+                      value={entityGroups.map(([cat, ents]) => (
+                        <optgroup key={cat} label={tGeneratedValue(cat)}>
+                          <GeneratedValue
+                            value={ents.map((en) => (
+                              <option key={en.key} value={en.key}>
+                                <GeneratedValue value={en.label} />
+                              </option>
+                            ))}
+                          />
+                        </optgroup>
+                      ))}
+                    />
                   </Select>
-                  {entity.description ? (
-                    <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                      {entity.description}
-                    </p>
-                  ) : null}
+                  <GeneratedValue
+                    value={
+                      entity.description ? (
+                        <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                          <GeneratedValue value={entity.description} />
+                        </p>
+                      ) : null
+                    }
+                  />
                   <div className="mt-3 inline-flex rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
-                    {(['rows', 'summarize'] as QueryMode[]).map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setQueryMode(m)}
-                        className={cn(
-                          'rounded px-3 py-1 text-xs font-medium transition',
-                          queryMode === m
-                            ? 'bg-teal-600 text-white'
-                            : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
-                        )}
-                      >
-                        {m === 'rows' ? 'Detail rows' : 'Summarize'}
-                      </button>
-                    ))}
+                    <GeneratedValue
+                      value={(['rows', 'summarize'] as QueryMode[]).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setQueryMode(m)}
+                          className={cn(
+                            'rounded px-3 py-1 text-xs font-medium transition',
+                            queryMode === m
+                              ? 'bg-teal-600 text-white'
+                              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
+                          )}
+                        >
+                          <GeneratedValue
+                            value={
+                              m === 'rows' ? (
+                                <GeneratedText id="m_034bf55ed28d72" />
+                              ) : (
+                                <GeneratedText id="m_0375c390df6ee0" />
+                              )
+                            }
+                          />
+                        </button>
+                      ))}
+                    />
                   </div>
                 </div>
 
                 <div className={sectionCls}>
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <h3 className={cn(headCls, 'mb-0')}>Templates</h3>
+                    <h3 className={cn(headCls, 'mb-0')}>
+                      <GeneratedText id="m_0a19e6387037d4" />
+                    </h3>
                     <LayoutTemplate size={14} className="text-slate-400" />
                   </div>
                   <div className="space-y-1.5">
-                    {studioTemplates.map((template) => {
-                      const active =
-                        template.query.mode === queryMode &&
-                        template.query.entity === entityKey &&
-                        JSON.stringify(template.query.columns ?? []) ===
-                          JSON.stringify(Array.from(columns)) &&
-                        (template.query.groupBy ?? '') === groupBy
-                      return (
-                        <button
-                          key={template.id}
-                          type="button"
-                          onClick={() => hydrateQuery(entity, template.query)}
-                          className={cn(
-                            'flex w-full items-start gap-2 rounded-md border px-2.5 py-2 text-left transition-colors',
-                            active
-                              ? 'border-teal-300 bg-teal-50 text-teal-900 dark:border-teal-700/70 dark:bg-teal-500/10 dark:text-teal-100'
-                              : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-teal-700',
-                          )}
-                        >
-                          <CheckCircle2
-                            size={14}
+                    <GeneratedValue
+                      value={studioTemplates.map((template) => {
+                        const active =
+                          template.query.mode === queryMode &&
+                          template.query.entity === entityKey &&
+                          JSON.stringify(template.query.columns ?? []) ===
+                            JSON.stringify(Array.from(columns)) &&
+                          (template.query.groupBy ?? '') === groupBy
+                        return (
+                          <button
+                            key={template.id}
+                            type="button"
+                            onClick={() => hydrateQuery(entity, template.query)}
                             className={cn(
-                              'mt-0.5 shrink-0',
-                              active ? 'text-teal-600' : 'text-slate-300',
+                              'flex w-full items-start gap-2 rounded-md border px-2.5 py-2 text-left transition-colors',
+                              active
+                                ? 'border-teal-300 bg-teal-50 text-teal-900 dark:border-teal-700/70 dark:bg-teal-500/10 dark:text-teal-100'
+                                : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-teal-700',
                             )}
-                          />
-                          <span className="min-w-0">
-                            <span className="block text-xs font-medium">{template.label}</span>
-                            <span className="mt-0.5 block text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-                              {template.description}
+                          >
+                            <CheckCircle2
+                              size={14}
+                              className={cn(
+                                'mt-0.5 shrink-0',
+                                active ? 'text-teal-600' : 'text-slate-300',
+                              )}
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-xs font-medium">
+                                <GeneratedValue value={template.label} />
+                              </span>
+                              <span className="mt-0.5 block text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+                                <GeneratedValue value={template.description} />
+                              </span>
                             </span>
-                          </span>
-                        </button>
-                      )
-                    })}
+                          </button>
+                        )
+                      })}
+                    />
                   </div>
                 </div>
 
                 {/* Rows mode: columns + sort + limit */}
-                {queryMode === 'rows' ? (
-                  <>
-                    <div className={sectionCls}>
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <h3 className={cn(headCls, 'mb-0')}>Columns</h3>
-                        <span className="text-[11px] text-slate-400">
-                          {columns.size}/{entity.columns.length}
-                        </span>
-                      </div>
-                      <div className="relative mb-2">
-                        <Search
-                          size={13}
-                          className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-slate-400"
-                        />
-                        <Input
-                          value={columnSearch}
-                          onChange={(e) => setColumnSearch(e.target.value)}
-                          placeholder="Search fields"
-                          className="h-8 pl-7 text-xs"
-                        />
-                      </div>
-                      <div className="mb-2 flex flex-wrap gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setColumns(new Set(defaultColumnsFor(entity)))}
-                          className={tinyBtn}
-                        >
-                          Defaults
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setColumns(new Set(entity.columns.map((c) => c.key)))}
-                          className={tinyBtn}
-                        >
-                          All
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setColumns(new Set())}
-                          className={tinyBtn}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                      <div className="grid max-h-72 grid-cols-1 gap-1 overflow-y-auto pr-1">
-                        {visibleColumnOptions.map((c) => (
-                          <label
-                            key={c.key}
-                            className={cn(
-                              'flex items-center gap-2 rounded-md px-1.5 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/60',
-                              columns.has(c.key) && 'bg-teal-50/70 dark:bg-teal-500/10',
-                            )}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={columns.has(c.key)}
-                              onChange={() => toggleColumn(c.key)}
-                              className="h-3.5 w-3.5"
-                            />
-                            <span className="truncate">{c.label}</span>
-                            <span className="ml-auto shrink-0 text-[10px] text-slate-400">
-                              {c.kind}
+                <GeneratedValue
+                  value={
+                    queryMode === 'rows' ? (
+                      <>
+                        <div className={sectionCls}>
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <h3 className={cn(headCls, 'mb-0')}>
+                              <GeneratedText id="m_04eacfda3069db" />
+                            </h3>
+                            <span className="text-[11px] text-slate-400">
+                              <GeneratedValue value={columns.size} />/
+                              <GeneratedValue value={entity.columns.length} />
                             </span>
-                          </label>
-                        ))}
-                      </div>
-                      {visibleColumnOptions.length === 0 ? (
-                        <p className="rounded-md border border-dashed border-slate-200 px-2 py-4 text-center text-[11px] text-slate-400 dark:border-slate-800">
-                          No matching fields.
-                        </p>
-                      ) : null}
-                    </div>
+                          </div>
+                          <div className="relative mb-2">
+                            <Search
+                              size={13}
+                              className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-slate-400"
+                            />
+                            <Input
+                              value={columnSearch}
+                              onChange={(e) => setColumnSearch(e.target.value)}
+                              placeholder={tGenerated('m_0395d8cd5ec2f6')}
+                              className="h-8 pl-7 text-xs"
+                            />
+                          </div>
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setColumns(new Set(defaultColumnsFor(entity)))}
+                              className={tinyBtn}
+                            >
+                              <GeneratedText id="m_00aaa0609a81ac" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setColumns(new Set(entity.columns.map((c) => c.key)))}
+                              className={tinyBtn}
+                            >
+                              <GeneratedText id="m_17201516610431" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setColumns(new Set())}
+                              className={tinyBtn}
+                            >
+                              <GeneratedText id="m_1e4d427e74e767" />
+                            </button>
+                          </div>
+                          <div className="grid max-h-72 grid-cols-1 gap-1 overflow-y-auto pr-1">
+                            <GeneratedValue
+                              value={visibleColumnOptions.map((c) => (
+                                <label
+                                  key={c.key}
+                                  className={cn(
+                                    'flex items-center gap-2 rounded-md px-1.5 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/60',
+                                    columns.has(c.key) && 'bg-teal-50/70 dark:bg-teal-500/10',
+                                  )}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={columns.has(c.key)}
+                                    onChange={() => toggleColumn(c.key)}
+                                    className="h-3.5 w-3.5"
+                                  />
+                                  <span className="truncate">
+                                    <GeneratedValue value={c.label} />
+                                  </span>
+                                  <span className="ml-auto shrink-0 text-[10px] text-slate-400">
+                                    <GeneratedValue value={c.kind} />
+                                  </span>
+                                </label>
+                              ))}
+                            />
+                          </div>
+                          <GeneratedValue
+                            value={
+                              visibleColumnOptions.length === 0 ? (
+                                <p className="rounded-md border border-dashed border-slate-200 px-2 py-4 text-center text-[11px] text-slate-400 dark:border-slate-800">
+                                  <GeneratedText id="m_089eb7a830e9f5" />
+                                </p>
+                              ) : null
+                            }
+                          />
+                        </div>
 
-                    <div className={sectionCls}>
-                      <h3 className={headCls}>Sort & limit</h3>
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <Select value={sortCol} onChange={(e) => setSortCol(e.target.value)}>
-                            <option value="">— No sort —</option>
-                            {entity.columns.map((c) => (
-                              <option key={c.key} value={c.key}>
-                                {c.label}
-                              </option>
-                            ))}
-                          </Select>
-                          <Select
-                            value={sortDir}
-                            onChange={(e) => setSortDir(e.target.value as 'asc' | 'desc')}
-                          >
-                            <option value="desc">Descending</option>
-                            <option value="asc">Ascending</option>
-                          </Select>
+                        <div className={sectionCls}>
+                          <h3 className={headCls}>
+                            <GeneratedText id="m_0fd8dae84789a7" />
+                          </h3>
+                          <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <Select value={sortCol} onChange={(e) => setSortCol(e.target.value)}>
+                                <option value="">
+                                  <GeneratedText id="m_0470a81f1d91e3" />
+                                </option>
+                                <GeneratedValue
+                                  value={entity.columns.map((c) => (
+                                    <option key={c.key} value={c.key}>
+                                      <GeneratedValue value={c.label} />
+                                    </option>
+                                  ))}
+                                />
+                              </Select>
+                              <Select
+                                value={sortDir}
+                                onChange={(e) => setSortDir(e.target.value as 'asc' | 'desc')}
+                              >
+                                <option value="desc">
+                                  <GeneratedText id="m_14a3ccc633a056" />
+                                </option>
+                                <option value="asc">
+                                  <GeneratedText id="m_0027c5891082cf" />
+                                </option>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label>
+                                <GeneratedText id="m_1ffa0690b108df" />
+                              </Label>
+                              <Select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
+                                <option value="">
+                                  <GeneratedText id="m_15f23979c887ab" />
+                                </option>
+                                <GeneratedValue
+                                  value={entity.columns.map((c) => (
+                                    <option key={c.key} value={c.key}>
+                                      <GeneratedValue value={c.label} />
+                                    </option>
+                                  ))}
+                                />
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label>
+                                <GeneratedText id="m_18c8597bfe7908" />
+                              </Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={10000}
+                                value={limit}
+                                onChange={(e) => setLimit(Number(e.target.value) || 1000)}
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <Label>Group rows into sections by</Label>
-                          <Select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
-                            <option value="">— No grouping —</option>
-                            {entity.columns.map((c) => (
-                              <option key={c.key} value={c.key}>
-                                {c.label}
-                              </option>
-                            ))}
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Row limit</Label>
+                      </>
+                    ) : (
+                      // Summarize mode: breakouts + measures
+                      <>
+                        <RailList
+                          title={tGenerated('m_175ee59112fb66')}
+                          addLabel="Add group"
+                          items={breakouts}
+                          onAdd={() =>
+                            setBreakouts((b) => [...b, { column: entity.columns[0]?.key ?? '' }])
+                          }
+                          onRemove={(i) => setBreakouts((b) => b.filter((_, j) => j !== i))}
+                          render={(b, i) => (
+                            <BreakoutEditor
+                              cols={entity.columns}
+                              row={b}
+                              onChange={(next) =>
+                                setBreakouts((bs) => bs.map((x, j) => (j === i ? next : x)))
+                              }
+                            />
+                          )}
+                        />
+                        <RailList
+                          title={tGenerated('m_05ef1aaad2e058')}
+                          addLabel="Add measure"
+                          items={measures}
+                          onAdd={() => setMeasures((m) => [...m, { fn: 'count' }])}
+                          onRemove={(i) => setMeasures((m) => m.filter((_, j) => j !== i))}
+                          render={(m, i) => (
+                            <MeasureEditor
+                              cols={entity.columns}
+                              row={m}
+                              onChange={(next) =>
+                                setMeasures((ms) => ms.map((x, j) => (j === i ? next : x)))
+                              }
+                            />
+                          )}
+                        />
+                        <div className={sectionCls}>
+                          <Label>
+                            <GeneratedText id="m_18c8597bfe7908" />
+                          </Label>
                           <Input
                             type="number"
                             min={1}
                             max={10000}
                             value={limit}
                             onChange={(e) => setLimit(Number(e.target.value) || 1000)}
+                            className="mt-1"
                           />
                         </div>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  // Summarize mode: breakouts + measures
-                  <>
-                    <RailList
-                      title="Group by"
-                      addLabel="Add group"
-                      items={breakouts}
-                      onAdd={() =>
-                        setBreakouts((b) => [...b, { column: entity.columns[0]?.key ?? '' }])
-                      }
-                      onRemove={(i) => setBreakouts((b) => b.filter((_, j) => j !== i))}
-                      render={(b, i) => (
-                        <BreakoutEditor
-                          cols={entity.columns}
-                          row={b}
-                          onChange={(next) =>
-                            setBreakouts((bs) => bs.map((x, j) => (j === i ? next : x)))
-                          }
-                        />
-                      )}
-                    />
-                    <RailList
-                      title="Measures"
-                      addLabel="Add measure"
-                      items={measures}
-                      onAdd={() => setMeasures((m) => [...m, { fn: 'count' }])}
-                      onRemove={(i) => setMeasures((m) => m.filter((_, j) => j !== i))}
-                      render={(m, i) => (
-                        <MeasureEditor
-                          cols={entity.columns}
-                          row={m}
-                          onChange={(next) =>
-                            setMeasures((ms) => ms.map((x, j) => (j === i ? next : x)))
-                          }
-                        />
-                      )}
-                    />
-                    <div className={sectionCls}>
-                      <Label>Row limit</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={10000}
-                        value={limit}
-                        onChange={(e) => setLimit(Number(e.target.value) || 1000)}
-                        className="mt-1"
-                      />
-                    </div>
-                  </>
-                )}
+                      </>
+                    )
+                  }
+                />
 
                 {/* Filters */}
                 <div className={sectionCls}>
-                  <h3 className={headCls}>Filters</h3>
-                  {!mounted ? (
-                    <div className="h-16 animate-pulse rounded-lg border border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/50" />
-                  ) : (
-                    <QueryBuilder
-                      fields={fields}
-                      query={rqbQuery}
-                      onQueryChange={setRqbQuery}
-                      getOperators={getOperators}
-                      controlClassnames={{
-                        queryBuilder: 'space-y-2',
-                        ruleGroup:
-                          'space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-2 dark:border-slate-800 dark:bg-slate-900/50',
-                        header: 'flex flex-wrap items-center gap-1.5',
-                        body: 'space-y-1.5',
-                        rule: 'flex flex-wrap items-center gap-1.5',
-                        combinators: inputCls,
-                        fields: cn(inputCls, 'max-w-full'),
-                        operators: cn(inputCls, 'max-w-full'),
-                        value: cn(inputCls, 'min-w-24 flex-1'),
-                        addRule: tinyBtn,
-                        addGroup: tinyBtn,
-                        removeRule: cn(tinyBtn, 'hover:border-red-300 hover:text-red-600'),
-                        removeGroup: cn(tinyBtn, 'hover:border-red-300 hover:text-red-600'),
-                      }}
-                      translations={{
-                        addRule: { label: '+ Rule', title: 'Add rule' },
-                        addGroup: { label: '+ Group', title: 'Add group' },
-                        removeRule: { label: '×', title: 'Remove rule' },
-                        removeGroup: { label: '×', title: 'Remove group' },
-                      }}
-                    />
-                  )}
+                  <h3 className={headCls}>
+                    <GeneratedText id="m_1f9dc6f1f797f7" />
+                  </h3>
+                  <GeneratedValue
+                    value={
+                      !mounted ? (
+                        <div className="h-16 animate-pulse rounded-lg border border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/50" />
+                      ) : (
+                        <QueryBuilder
+                          fields={fields}
+                          query={rqbQuery}
+                          onQueryChange={setRqbQuery}
+                          getOperators={getOperators}
+                          controlClassnames={{
+                            queryBuilder: 'space-y-2',
+                            ruleGroup:
+                              'space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-2 dark:border-slate-800 dark:bg-slate-900/50',
+                            header: 'flex flex-wrap items-center gap-1.5',
+                            body: 'space-y-1.5',
+                            rule: 'flex flex-wrap items-center gap-1.5',
+                            combinators: inputCls,
+                            fields: cn(inputCls, 'max-w-full'),
+                            operators: cn(inputCls, 'max-w-full'),
+                            value: cn(inputCls, 'min-w-24 flex-1'),
+                            addRule: tinyBtn,
+                            addGroup: tinyBtn,
+                            removeRule: cn(tinyBtn, 'hover:border-red-300 hover:text-red-600'),
+                            removeGroup: cn(tinyBtn, 'hover:border-red-300 hover:text-red-600'),
+                          }}
+                          translations={{
+                            addRule: { label: '+ Rule', title: 'Add rule' },
+                            addGroup: { label: '+ Group', title: 'Add group' },
+                            removeRule: { label: '×', title: 'Remove rule' },
+                            removeGroup: { label: '×', title: 'Remove group' },
+                          }}
+                        />
+                      )
+                    }
+                  />
                   <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
-                    List values are comma-separated.
+                    <GeneratedText id="m_010115a808a976" />
                   </p>
                 </div>
 
                 {/* Page setup */}
                 <div className={sectionCls}>
-                  <h3 className={headCls}>Page setup</h3>
+                  <h3 className={headCls}>
+                    <GeneratedText id="m_121df9c0f57de4" />
+                  </h3>
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
-                        <Label>Paper</Label>
+                        <Label>
+                          <GeneratedText id="m_0ccb1fd4550a71" />
+                        </Label>
                         <Select
                           value={layout.paperSize}
                           onChange={(e) =>
@@ -823,15 +910,19 @@ export function ReportStudio({
                           }
                           className={selectCls}
                         >
-                          {PAPER_CHOICES.map((p) => (
-                            <option key={p.key} value={p.key}>
-                              {p.label}
-                            </option>
-                          ))}
+                          <GeneratedValue
+                            value={PAPER_CHOICES.map((p) => (
+                              <option key={p.key} value={p.key}>
+                                <GeneratedValue value={p.label} />
+                              </option>
+                            ))}
+                          />
                         </Select>
                       </div>
                       <div className="space-y-1">
-                        <Label>Margin (mm)</Label>
+                        <Label>
+                          <GeneratedText id="m_1c6c76aa5568a9" />
+                        </Label>
                         <Input
                           type="number"
                           min={5}
@@ -848,38 +939,58 @@ export function ReportStudio({
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="inline-flex rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
-                        {(['landscape', 'portrait'] as const).map((o) => (
-                          <button
-                            key={o}
-                            type="button"
-                            onClick={() => setLayout((l) => ({ ...l, orientation: o }))}
-                            className={cn(
-                              'rounded px-3 py-1 text-xs font-medium transition',
-                              layout.orientation === o
-                                ? 'bg-teal-600 text-white'
-                                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
-                            )}
-                          >
-                            {o === 'landscape' ? 'Landscape' : 'Portrait'}
-                          </button>
-                        ))}
+                        <GeneratedValue
+                          value={(['landscape', 'portrait'] as const).map((o) => (
+                            <button
+                              key={o}
+                              type="button"
+                              onClick={() => setLayout((l) => ({ ...l, orientation: o }))}
+                              className={cn(
+                                'rounded px-3 py-1 text-xs font-medium transition',
+                                layout.orientation === o
+                                  ? 'bg-teal-600 text-white'
+                                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
+                              )}
+                            >
+                              <GeneratedValue
+                                value={
+                                  o === 'landscape' ? (
+                                    <GeneratedText id="m_0e9e90da7290dd" />
+                                  ) : (
+                                    <GeneratedText id="m_062e481bc6e988" />
+                                  )
+                                }
+                              />
+                            </button>
+                          ))}
+                        />
                       </div>
                       <div className="inline-flex rounded-md border border-slate-200 p-0.5 dark:border-slate-700">
-                        {(['standard', 'compact'] as const).map((d) => (
-                          <button
-                            key={d}
-                            type="button"
-                            onClick={() => setLayout((l) => ({ ...l, density: d }))}
-                            className={cn(
-                              'rounded px-3 py-1 text-xs font-medium transition',
-                              (layout.density ?? 'standard') === d
-                                ? 'bg-teal-600 text-white'
-                                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
-                            )}
-                          >
-                            {d === 'standard' ? 'Standard' : 'Compact'}
-                          </button>
-                        ))}
+                        <GeneratedValue
+                          value={(['standard', 'compact'] as const).map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => setLayout((l) => ({ ...l, density: d }))}
+                              className={cn(
+                                'rounded px-3 py-1 text-xs font-medium transition',
+                                (layout.density ?? 'standard') === d
+                                  ? 'bg-teal-600 text-white'
+                                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400',
+                              )}
+                            >
+                              <GeneratedValue
+                                value={
+                                  d === 'standard' ? (
+                                    <GeneratedText id="m_007de27d66ad10" />
+                                  ) : (
+                                    <GeneratedText id="m_1b59d1bc396339" />
+                                  )
+                                }
+                              />
+                            </button>
+                          ))}
+                        />
                       </div>
                     </div>
                     <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
@@ -891,11 +1002,10 @@ export function ReportStudio({
                         }
                         className="h-3.5 w-3.5"
                       />
-                      Summary cards
+                      <GeneratedText id="m_0d08263bc0e047" />
                     </label>
                     <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                      Compact fits more rows per page. Summary cards print the key figures under the
-                      header.
+                      <GeneratedText id="m_17975c6c7b6952" />
                     </p>
                   </div>
                 </div>
@@ -906,46 +1016,73 @@ export function ReportStudio({
             <>
               <BuilderSurfaceHeader
                 icon={<Eye size={15} className="text-teal-600" />}
-                title="Print preview"
+                title={tGenerated('m_0e5a6984c726fa')}
                 actions={
                   <>
-                    {isPreviewing ? (
-                      <span className="flex items-center gap-1.5 text-xs text-slate-400">
-                        <Loader2 size={12} className="animate-spin" /> running…
-                      </span>
-                    ) : preview?.ok ? (
-                      <span className="text-xs text-slate-400">
-                        {preview.rowCount} row{preview.rowCount === 1 ? '' : 's'}
-                      </span>
-                    ) : null}
+                    <GeneratedValue
+                      value={
+                        isPreviewing ? (
+                          <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                            <Loader2 size={12} className="animate-spin" />{' '}
+                            <GeneratedText id="m_06d79f8e2c9a1a" />
+                          </span>
+                        ) : preview?.ok ? (
+                          <span className="text-xs text-slate-400">
+                            <GeneratedValue value={preview.rowCount} />{' '}
+                            <GeneratedText id="m_18c766569d99e9" />
+                            <GeneratedValue
+                              value={
+                                preview.rowCount === 1 ? (
+                                  ''
+                                ) : (
+                                  <GeneratedText id="m_00ded356f0f424" />
+                                )
+                              }
+                            />
+                          </span>
+                        ) : null
+                      }
+                    />
                     <Button type="submit" size="sm" disabled={!canSave}>
-                      {intent === 'edit' ? 'Save changes' : 'Save report'}
+                      <GeneratedValue
+                        value={
+                          intent === 'edit' ? (
+                            <GeneratedText id="m_1ab9025ed1067c" />
+                          ) : (
+                            <GeneratedText id="m_1ac7928fa7c187" />
+                          )
+                        }
+                      />
                     </Button>
                   </>
                 }
               />
               <div className="min-h-0 flex-1">
-                {!preview ? (
-                  <p className="py-16 text-center text-sm text-slate-400">
-                    Preview updates automatically as you build.
-                  </p>
-                ) : !preview.ok ? (
-                  <div className="p-4 lg:p-6">
-                    <div className="rounded-xl border border-dashed border-rose-300 bg-rose-50/40 px-4 py-8 text-center text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/5 dark:text-rose-400">
-                      {preview.error}
-                    </div>
-                  </div>
-                ) : (
-                  <ReportPagedPreview
-                    bodyHtml={preview.bodyHtml}
-                    css={preview.css}
-                    caption={
-                      preview.rowCount >= STUDIO_PREVIEW_ROWS
-                        ? `Preview paginates the first ${STUDIO_PREVIEW_ROWS} rows; saved reports use the configured row limit.`
-                        : null
-                    }
-                  />
-                )}
+                <GeneratedValue
+                  value={
+                    !preview ? (
+                      <p className="py-16 text-center text-sm text-slate-400">
+                        <GeneratedText id="m_1fddc33971bb3d" />
+                      </p>
+                    ) : !preview.ok ? (
+                      <div className="p-4 lg:p-6">
+                        <div className="rounded-xl border border-dashed border-rose-300 bg-rose-50/40 px-4 py-8 text-center text-sm text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/5 dark:text-rose-400">
+                          <GeneratedValue value={preview.error} />
+                        </div>
+                      </div>
+                    ) : (
+                      <ReportPagedPreview
+                        bodyHtml={preview.bodyHtml}
+                        css={preview.css}
+                        caption={tGeneratedValue(
+                          preview.rowCount >= STUDIO_PREVIEW_ROWS
+                            ? tGenerated('m_0a548538ba0a63', { value0: STUDIO_PREVIEW_ROWS })
+                            : null,
+                        )}
+                      />
+                    )
+                  }
+                />
               </div>
             </>
           }
@@ -975,32 +1112,42 @@ function RailList<T>({
   return (
     <div className={sectionCls}>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className={cn(headCls, 'mb-0')}>{title}</h3>
+        <h3 className={cn(headCls, 'mb-0')}>
+          <GeneratedValue value={title} />
+        </h3>
         <button
           type="button"
           onClick={onAdd}
           className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700"
         >
-          <Plus size={13} /> {addLabel}
+          <Plus size={13} /> <GeneratedValue value={addLabel} />
         </button>
       </div>
       <div className="space-y-2">
-        {items.length === 0 ? (
-          <p className="text-[11px] text-slate-400 dark:text-slate-500">None.</p>
-        ) : (
-          items.map((it, i) => (
-            <div key={i} className="flex items-start gap-1.5">
-              <div className="flex-1">{render(it, i)}</div>
-              <button
-                type="button"
-                onClick={() => onRemove(i)}
-                className="mt-1 text-slate-300 hover:text-rose-500"
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))
-        )}
+        <GeneratedValue
+          value={
+            items.length === 0 ? (
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_089518a093f44c" />
+              </p>
+            ) : (
+              items.map((it, i) => (
+                <div key={i} className="flex items-start gap-1.5">
+                  <div className="flex-1">
+                    <GeneratedValue value={render(it, i)} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(i)}
+                    className="mt-1 text-slate-300 hover:text-rose-500"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))
+            )
+          }
+        />
       </div>
     </div>
   )
@@ -1023,31 +1170,41 @@ function BreakoutEditor({
         onChange={(e) => onChange({ column: e.target.value, bin: undefined })}
         className={cn(selectCls, 'h-8 text-xs')}
       >
-        {cols.map((c) => (
-          <option key={c.key} value={c.key}>
-            {c.label}
-          </option>
-        ))}
-      </Select>
-      {col && isTemporalCol(col) ? (
-        <Select
-          value={row.bin ?? ''}
-          onChange={(e) =>
-            onChange({
-              ...row,
-              bin: (e.target.value || undefined) as ReportTemporalBin | undefined,
-            })
-          }
-          className={cn(selectCls, 'h-8 text-xs')}
-        >
-          <option value="">No bucket</option>
-          {TEMPORAL_BINS.map((u) => (
-            <option key={u} value={u}>
-              by {u}
+        <GeneratedValue
+          value={cols.map((c) => (
+            <option key={c.key} value={c.key}>
+              <GeneratedValue value={c.label} />
             </option>
           ))}
-        </Select>
-      ) : null}
+        />
+      </Select>
+      <GeneratedValue
+        value={
+          col && isTemporalCol(col) ? (
+            <Select
+              value={row.bin ?? ''}
+              onChange={(e) =>
+                onChange({
+                  ...row,
+                  bin: (e.target.value || undefined) as ReportTemporalBin | undefined,
+                })
+              }
+              className={cn(selectCls, 'h-8 text-xs')}
+            >
+              <option value="">
+                <GeneratedText id="m_1be6394afb4aea" />
+              </option>
+              <GeneratedValue
+                value={TEMPORAL_BINS.map((u) => (
+                  <option key={u} value={u}>
+                    <GeneratedText id="m_19ec032b95249e" /> <GeneratedValue value={u} />
+                  </option>
+                ))}
+              />
+            </Select>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -1070,26 +1227,36 @@ function MeasureEditor({
         onChange={(e) => onChange({ ...row, fn: e.target.value as ReportAggFn })}
         className={cn(selectCls, 'h-8 text-xs')}
       >
-        {AGG_FNS.map((a) => (
-          <option key={a.value} value={a.value}>
-            {a.label}
-          </option>
-        ))}
-      </Select>
-      {def?.needsColumn ? (
-        <Select
-          value={row.column ?? ''}
-          onChange={(e) => onChange({ ...row, column: e.target.value })}
-          className={cn(selectCls, 'h-8 text-xs')}
-        >
-          <option value="">Pick a column…</option>
-          {fieldCols.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
+        <GeneratedValue
+          value={AGG_FNS.map((a) => (
+            <option key={a.value} value={a.value}>
+              <GeneratedValue value={a.label} />
             </option>
           ))}
-        </Select>
-      ) : null}
+        />
+      </Select>
+      <GeneratedValue
+        value={
+          def?.needsColumn ? (
+            <Select
+              value={row.column ?? ''}
+              onChange={(e) => onChange({ ...row, column: e.target.value })}
+              className={cn(selectCls, 'h-8 text-xs')}
+            >
+              <option value="">
+                <GeneratedText id="m_1cb9e7d2a78b28" />
+              </option>
+              <GeneratedValue
+                value={fieldCols.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    <GeneratedValue value={c.label} />
+                  </option>
+                ))}
+              />
+            </Select>
+          ) : null
+        }
+      />
     </div>
   )
 }

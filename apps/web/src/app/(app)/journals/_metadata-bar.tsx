@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // Full-width metadata/controls strip: date, log type, site, supervisor, and an
 // editable tag chip set. Larger fields, generous spacing.
 
@@ -31,10 +33,11 @@ export function MetadataBar({
   }) => void
   onTagsChange: (tags: string[]) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Field label="Date" icon={<CalendarDays size={13} />}>
+        <Field label={tGenerated('m_0285c38761c540')} icon={<CalendarDays size={13} />}>
           <input
             type="date"
             value={entry.entryDate}
@@ -44,7 +47,7 @@ export function MetadataBar({
           />
         </Field>
 
-        <Field label="Log type" icon={<Briefcase size={13} />}>
+        <Field label={tGenerated('m_0d55dd6f409ab0')} icon={<Briefcase size={13} />}>
           <SearchSelect
             value={entry.definition}
             disabled={!editable}
@@ -58,30 +61,30 @@ export function MetadataBar({
           />
         </Field>
 
-        <Field label="Location" icon={<MapPin size={13} />}>
+        <Field label={tGenerated('m_055f11420b2da4')} icon={<MapPin size={13} />}>
           <RemoteSearchSelect
             lookup="journal-locations"
             value={entry.siteOrgUnitId ?? ''}
             disabled={!editable}
             clearable
-            emptyLabel="No location"
-            placeholder="No location"
-            searchPlaceholder="Search locations…"
+            emptyLabel={tGenerated('m_1ad901c0a1f003')}
+            placeholder={tGenerated('m_1ad901c0a1f003')}
+            searchPlaceholder={tGenerated('m_016e087c3c8544')}
             sheetTitle="Location"
             ariaLabel="Location"
             onChange={(v) => onPatch({ siteOrgUnitId: v || null })}
           />
         </Field>
 
-        <Field label="Supervisor" icon={<UserCog size={13} />}>
+        <Field label={tGenerated('m_0ccb8e5b917b17')} icon={<UserCog size={13} />}>
           <RemoteSearchSelect
             lookup="journal-supervisors"
             value={entry.supervisorPersonId ?? ''}
             disabled={!editable}
             clearable
-            emptyLabel="Unassigned"
-            placeholder="Unassigned"
-            searchPlaceholder="Search people…"
+            emptyLabel={tGenerated('m_10d1d0d92a9aaa')}
+            placeholder={tGenerated('m_10d1d0d92a9aaa')}
+            searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
             sheetTitle="Supervisor"
             ariaLabel="Supervisor"
             onChange={(v) => onPatch({ supervisorPersonId: v || null })}
@@ -117,10 +120,10 @@ function Field({
           'mb-1 flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500',
         )}
       >
-        {icon}
-        {label}
+        <GeneratedValue value={icon} />
+        <GeneratedValue value={label} />
       </span>
-      {children}
+      <GeneratedValue value={children} />
     </label>
   )
 }
@@ -141,6 +144,7 @@ function JournalTags({
   editable: boolean
   onChange: (tags: string[]) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const [open, setOpen] = useState(false)
 
   if (open) {
@@ -148,14 +152,14 @@ function JournalTags({
       <div>
         <div className="mb-1 flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
-            <Tag size={12} /> Tags
+            <Tag size={12} /> <GeneratedText id="m_168fcd8afec105" />
           </span>
           <button
             type="button"
             onClick={() => setOpen(false)}
             className="text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
           >
-            Done
+            <GeneratedText id="m_00609f822e0571" />
           </button>
         </div>
         <TagEditor
@@ -174,15 +178,23 @@ function JournalTags({
       type="button"
       onClick={() => editable && setOpen(true)}
       disabled={!editable}
-      title="Edit tags"
+      title={tGenerated('m_0de3a819ff17b3')}
       className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
     >
       <Tag size={13} className="shrink-0 text-slate-400 dark:text-slate-500" />
-      {tags.length > 0 ? (
-        <span className="truncate">{tags.join(' · ')}</span>
-      ) : (
-        <span>Add tags</span>
-      )}
+      <GeneratedValue
+        value={
+          tags.length > 0 ? (
+            <span className="truncate">
+              <GeneratedValue value={tags.join(' · ')} />
+            </span>
+          ) : (
+            <span>
+              <GeneratedText id="m_07eab83cc03cc2" />
+            </span>
+          )
+        }
+      />
     </button>
   )
 }

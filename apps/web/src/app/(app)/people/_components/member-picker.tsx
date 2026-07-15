@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Dual-list member picker. Left column = candidate people, right column =
 // currently-selected members. Search filters both lists, arrow buttons move
 // selected entries, and Save submits the final right-column IDs back to the
@@ -36,6 +43,8 @@ export function MemberPicker({
   action: (formData: FormData) => Promise<void>
   emptyMembersLabel?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
     () => new Set(initialMemberIds),
   )
@@ -119,7 +128,7 @@ export function MemberPicker({
     <div className="space-y-4">
       <div className="grid gap-3 lg:grid-cols-[1fr_56px_1fr]">
         <ListColumn
-          label={`People (${left.length})`}
+          label={tGenerated('m_00ea9f2d07f9db', { value0: left.length })}
           query={leftQuery}
           onQueryChange={setLeftQuery}
           items={left}
@@ -132,8 +141,8 @@ export function MemberPicker({
             variant="outline"
             size="sm"
             onClick={() => moveAll('right')}
-            aria-label="Move all right"
-            title="Move all right"
+            aria-label={tGenerated('m_03401e3b681e8a')}
+            title={tGenerated('m_03401e3b681e8a')}
           >
             <ChevronsRight size={14} />
           </Button>
@@ -142,8 +151,8 @@ export function MemberPicker({
             variant="outline"
             size="sm"
             onClick={() => moveSelected(leftHighlights, 'right')}
-            aria-label="Move selected right"
-            title="Move selected right"
+            aria-label={tGenerated('m_076633c16756c5')}
+            title={tGenerated('m_076633c16756c5')}
             disabled={leftHighlights.size === 0}
           >
             <ChevronRight size={14} />
@@ -153,8 +162,8 @@ export function MemberPicker({
             variant="outline"
             size="sm"
             onClick={() => moveSelected(rightHighlights, 'left')}
-            aria-label="Move selected left"
-            title="Move selected left"
+            aria-label={tGenerated('m_1549bdc9223a16')}
+            title={tGenerated('m_1549bdc9223a16')}
             disabled={rightHighlights.size === 0}
           >
             <ChevronLeft size={14} />
@@ -164,30 +173,43 @@ export function MemberPicker({
             variant="outline"
             size="sm"
             onClick={() => moveAll('left')}
-            aria-label="Move all left"
-            title="Move all left"
+            aria-label={tGenerated('m_077800474415e9')}
+            title={tGenerated('m_077800474415e9')}
           >
             <ChevronsLeft size={14} />
           </Button>
         </div>
         <ListColumn
-          label={`Members (${right.length})`}
+          label={tGenerated('m_1404c11495f01a', { value0: right.length })}
           query={rightQuery}
           onQueryChange={setRightQuery}
           items={right}
           highlighted={rightHighlights}
           onToggle={(id, e) => toggleHighlight(setRightHighlights, rightHighlights, right, id, e)}
-          emptyLabel={emptyMembersLabel}
+          emptyLabel={tGeneratedValue(emptyMembersLabel)}
         />
       </div>
       <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-        {savedAt ? (
-          <span className="text-xs text-emerald-700 dark:text-emerald-400">
-            Saved {formatRelative(savedAt)}
-          </span>
-        ) : null}
+        <GeneratedValue
+          value={
+            savedAt ? (
+              <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                <GeneratedText id="m_0a0569b726b225" />{' '}
+                <GeneratedValue value={formatRelative(savedAt)} />
+              </span>
+            ) : null
+          }
+        />
         <Button type="button" onClick={save} disabled={pending}>
-          {pending ? 'Saving…' : `Save (${selectedMembers.size} members)`}
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_106811f2aac664" />
+              ) : (
+                <GeneratedText id="m_0e8c7461ff317d" values={{ value0: selectedMembers.size }} />
+              )
+            }
+          />
         </Button>
       </div>
     </div>
@@ -211,11 +233,12 @@ function ListColumn({
   onToggle: (id: string, ev: React.MouseEvent) => void
   emptyLabel?: string
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <div className="flex h-[420px] flex-col rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
       <div className="border-b border-slate-100 p-2 dark:border-slate-800">
         <Label className="text-[11px] tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          {label}
+          <GeneratedValue value={label} />
         </Label>
         <div className="relative mt-1">
           <Search
@@ -225,44 +248,63 @@ function ListColumn({
           <Input
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Filter…"
+            placeholder={tGenerated('m_08df4f3df9d2e3')}
             className="h-7 pl-7 text-xs"
           />
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1 text-xs">
-        {items.length === 0 ? (
-          <div className="p-3 text-center text-slate-400">{emptyLabel}</div>
-        ) : (
-          <ul>
-            {items.map((c) => {
-              const isOn = highlighted.has(c.id)
-              return (
-                <li
-                  key={c.id}
-                  onClick={(e) => onToggle(c.id, e)}
-                  className={`cursor-pointer rounded px-2 py-1 ${
-                    isOn
-                      ? 'bg-teal-100 text-teal-900 dark:bg-teal-950 dark:text-teal-200'
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <span className="font-medium">
-                    {c.lastName}, {c.firstName}
-                  </span>
-                  {c.employeeNo ? (
-                    <span className="ml-1 text-slate-400 dark:text-slate-500">
-                      · {c.employeeNo}
-                    </span>
-                  ) : null}
-                  {c.status && c.status !== 'active' ? (
-                    <span className="ml-1 text-amber-600 dark:text-amber-400">({c.status})</span>
-                  ) : null}
-                </li>
-              )
-            })}
-          </ul>
-        )}
+        <GeneratedValue
+          value={
+            items.length === 0 ? (
+              <div className="p-3 text-center text-slate-400">
+                <GeneratedValue value={emptyLabel} />
+              </div>
+            ) : (
+              <ul>
+                <GeneratedValue
+                  value={items.map((c) => {
+                    const isOn = highlighted.has(c.id)
+                    return (
+                      <li
+                        key={c.id}
+                        onClick={(e) => onToggle(c.id, e)}
+                        className={`cursor-pointer rounded px-2 py-1 ${
+                          isOn
+                            ? 'bg-teal-100 text-teal-900 dark:bg-teal-950 dark:text-teal-200'
+                            : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <span className="font-medium">
+                          <GeneratedValue value={c.lastName} />,{' '}
+                          <GeneratedValue value={c.firstName} />
+                        </span>
+                        <GeneratedValue
+                          value={
+                            c.employeeNo ? (
+                              <span className="ml-1 text-slate-400 dark:text-slate-500">
+                                · <GeneratedValue value={c.employeeNo} />
+                              </span>
+                            ) : null
+                          }
+                        />
+                        <GeneratedValue
+                          value={
+                            c.status && c.status !== 'active' ? (
+                              <span className="ml-1 text-amber-600 dark:text-amber-400">
+                                (<GeneratedValue value={c.status} />)
+                              </span>
+                            ) : null
+                          }
+                        />
+                      </li>
+                    )
+                  })}
+                />
+              </ul>
+            )
+          }
+        />
       </div>
     </div>
   )

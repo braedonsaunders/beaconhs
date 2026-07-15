@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // KPI / number renderer — the big-figure scalar. Optional period-over-period
 // delta when a second measure (compare) is present. Dark-mode aware.
 
@@ -53,27 +55,37 @@ export function ScalarCard({
   return (
     <div className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <span className="truncate text-xs font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
-        {label ?? measureLabel ?? 'Value'}
+        <GeneratedValue value={label ?? measureLabel ?? <GeneratedText id="m_1cc0e5e7b5f442" />} />
       </span>
       <div className="flex items-end gap-2">
         <span className="text-3xl font-bold text-slate-900 tabular-nums dark:text-slate-100">
-          {format(value, decimals, prefix, suffix)}
+          <GeneratedValue value={format(value, decimals, prefix, suffix)} />
         </span>
-        {value == null ? (
-          <span className="mb-1 text-xs font-medium text-slate-400 dark:text-slate-500">
-            No data
-          </span>
-        ) : delta != null && delta !== 0 ? (
-          <span
-            className={cn(
-              'mb-1 inline-flex items-center text-xs font-medium',
-              delta >= 0 ? 'text-teal-600 dark:text-teal-400' : 'text-rose-500 dark:text-rose-400',
-            )}
-          >
-            {delta > 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
-            {Math.abs(delta).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-          </span>
-        ) : null}
+        <GeneratedValue
+          value={
+            value == null ? (
+              <span className="mb-1 text-xs font-medium text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_1e8cb69234e682" />
+              </span>
+            ) : delta != null && delta !== 0 ? (
+              <span
+                className={cn(
+                  'mb-1 inline-flex items-center text-xs font-medium',
+                  delta >= 0
+                    ? 'text-teal-600 dark:text-teal-400'
+                    : 'text-rose-500 dark:text-rose-400',
+                )}
+              >
+                <GeneratedValue
+                  value={delta > 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                />
+                <GeneratedValue
+                  value={Math.abs(delta).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                />
+              </span>
+            ) : null
+          }
+        />
       </div>
     </div>
   )

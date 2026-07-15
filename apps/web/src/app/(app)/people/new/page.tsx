@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
@@ -31,7 +33,10 @@ import {
 import { revalidatePath } from 'next/cache'
 import { PageContainer } from '@/components/page-layout'
 
-export const metadata = { title: 'New person' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0b26bbc21acc0c') }
+}
 
 async function createPerson(formData: FormData) {
   'use server'
@@ -117,6 +122,7 @@ async function createPerson(formData: FormData) {
 }
 
 export default async function NewPersonPage() {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireModuleManage('people')
   const [depts, allTrades, allCrews, allTitles] = await ctx.db(async (tx) => {
     const d = await tx.select().from(departments).orderBy(asc(departments.name))
@@ -133,79 +139,93 @@ export default async function NewPersonPage() {
   return (
     <PageContainer>
       <div className="max-w-2xl space-y-6">
-        <DetailHeader back={{ href: '/people', label: 'Back to people' }} title="Add person" />
+        <DetailHeader
+          back={{ href: '/people', label: 'Back to people' }}
+          title={tGenerated('m_12634c941f2fb6')}
+        />
         <Card>
           <CardContent className="pt-6">
             <form action={createPerson} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="First name" required>
+                <Field label={tGenerated('m_07cc2555a1b765')} required>
                   <Input name="firstName" required autoComplete="given-name" />
                 </Field>
-                <Field label="Last name" required>
+                <Field label={tGenerated('m_0e7d90a2ba2038')} required>
                   <Input name="lastName" required autoComplete="family-name" />
                 </Field>
-                <Field label="Employee #">
+                <Field label={tGenerated('m_0230d1a18b5206')}>
                   <Input name="employeeNo" />
                 </Field>
-                <Field label="Hire date">
+                <Field label={tGenerated('m_1bd874d72669b8')}>
                   <Input name="hireDate" type="date" />
                 </Field>
-                <Field label="Primary job title">
+                <Field label={tGenerated('m_1a4bbe2908d1a5')}>
                   <Select name="primaryTitleId" defaultValue="">
                     <option value="">—</option>
-                    {allTitles.map((title) => (
-                      <option key={title.id} value={title.id}>
-                        {title.name}
-                      </option>
-                    ))}
+                    <GeneratedValue
+                      value={allTitles.map((title) => (
+                        <option key={title.id} value={title.id}>
+                          <GeneratedValue value={title.name} />
+                        </option>
+                      ))}
+                    />
                   </Select>
                 </Field>
-                <Field label="Email">
+                <Field label={tGenerated('m_00a0ba9938bdff')}>
                   <Input name="email" type="email" autoComplete="email" />
                 </Field>
-                <Field label="Phone">
+                <Field label={tGenerated('m_129b102b56bf3a')}>
                   <Input name="phone" type="tel" autoComplete="tel" />
                 </Field>
-                <Field label="Department">
+                <Field label={tGenerated('m_1af68228b8305a')}>
                   <Select name="departmentId" defaultValue="">
                     <option value="">—</option>
-                    {depts.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
+                    <GeneratedValue
+                      value={depts.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          <GeneratedValue value={d.name} />
+                        </option>
+                      ))}
+                    />
                   </Select>
                 </Field>
-                <Field label="Trade">
+                <Field label={tGenerated('m_1f1e634a4380dc')}>
                   <Select name="tradeId" defaultValue="">
                     <option value="">—</option>
-                    {allTrades.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
+                    <GeneratedValue
+                      value={allTrades.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          <GeneratedValue value={t.name} />
+                        </option>
+                      ))}
+                    />
                   </Select>
                 </Field>
-                <Field label="Crew">
+                <Field label={tGenerated('m_13fc63a82a07d0')}>
                   <Select name="crewId" defaultValue="">
                     <option value="">—</option>
-                    {allCrews.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                    <GeneratedValue
+                      value={allCrews.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          <GeneratedValue value={c.name} />
+                        </option>
+                      ))}
+                    />
                   </Select>
                 </Field>
               </div>
               <Alert variant="info">
-                <AlertTitle>More ways to add people</AlertTitle>
+                <AlertTitle>
+                  <GeneratedText id="m_18a6f6f76adf7e" />
+                </AlertTitle>
                 <AlertDescription>
-                  Import people in bulk from a CSV, or connect an external system in Admin →
-                  Integrations to keep the directory in sync automatically.
+                  <GeneratedText id="m_143fbba3ff0af7" />
                 </AlertDescription>
               </Alert>
               <div className="flex items-center justify-end gap-2">
-                <Button type="submit">Create person</Button>
+                <Button type="submit">
+                  <GeneratedText id="m_1b83752940084d" />
+                </Button>
               </div>
             </form>
           </CardContent>
@@ -227,10 +247,10 @@ function Field({
   return (
     <div className="space-y-1.5">
       <Label>
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        <GeneratedValue value={label} />
+        <GeneratedValue value={required ? <span className="text-red-600"> *</span> : null} />
       </Label>
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }

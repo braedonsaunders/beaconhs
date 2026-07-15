@@ -1,3 +1,4 @@
+import { GeneratedValue } from '@/i18n/generated'
 import { cn } from '@beaconhs/ui'
 
 /**
@@ -17,14 +18,18 @@ export function DetailGrid({
         className,
       )}
     >
-      {rows.map((row, i) => (
-        <div key={i} className="flex flex-col gap-0.5">
-          <dt className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-            {row.label}
-          </dt>
-          <dd className="text-slate-900 dark:text-slate-100">{row.value}</dd>
-        </div>
-      ))}
+      <GeneratedValue
+        value={rows.map((row, i) => (
+          <div key={i} className="flex flex-col gap-0.5">
+            <dt className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
+              <GeneratedValue value={row.label} />
+            </dt>
+            <dd className="text-slate-900 dark:text-slate-100">
+              <GeneratedValue value={row.value} />
+            </dd>
+          </div>
+        ))}
+      />
     </dl>
   )
 }

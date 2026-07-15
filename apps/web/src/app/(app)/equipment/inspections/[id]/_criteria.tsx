@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // Equipment inspection criterion fill card — one always-live card per criterion.
 // The control varies by kind: pass/fail(/N/A) buttons, a text or numeric input,
 // or a photo requirement. A 'fail' reveals severity + reason + action-taken.
@@ -79,6 +81,7 @@ export function CriterionCard({
   locked: boolean
   actions: CriterionActions
 }) {
+  const tGenerated = useGeneratedTranslations()
   const { state, save, refresh } = useAutosave()
   const [answer, setAnswerState] = useState<EqAnswer | null>(initialAnswer)
   const [severity, setSeverityState] = useState<EqSeverity | null>(initialSeverity)
@@ -110,130 +113,224 @@ export function CriterionCard({
         <div className="min-w-0 flex-1">
           <p className="text-sm leading-snug text-slate-900 dark:text-slate-100">
             <span className="mr-1.5 align-baseline text-xs font-normal text-slate-400 tabular-nums dark:text-slate-500">
-              {index + 1}.
+              <GeneratedValue value={index + 1} />.
             </span>
-            <span className="font-medium">{question}</span>
+            <span className="font-medium">
+              <GeneratedValue value={question} />
+            </span>
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-            {isCritical ? <Badge variant="destructive">critical</Badge> : null}
-            {!isRequired ? <Badge variant="outline">Optional</Badge> : null}
-            {requiresPhoto ? (
-              <Badge variant="secondary" className="gap-1">
-                <Camera size={10} /> Photo
-              </Badge>
-            ) : null}
-            {requiresComment ? <Badge variant="secondary">Comment</Badge> : null}
-            {workOrderRef ? (
-              <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-amber-700 uppercase dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                ↳ {workOrderRef}
-              </span>
-            ) : null}
+            <GeneratedValue
+              value={
+                isCritical ? (
+                  <Badge variant="destructive">
+                    <GeneratedText id="m_027e9229c5c0d4" />
+                  </Badge>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                !isRequired ? (
+                  <Badge variant="outline">
+                    <GeneratedText id="m_0cadbe8ae1ae4e" />
+                  </Badge>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                requiresPhoto ? (
+                  <Badge variant="secondary" className="gap-1">
+                    <Camera size={10} /> <GeneratedText id="m_013eaaf5f5bde1" />
+                  </Badge>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                requiresComment ? (
+                  <Badge variant="secondary">
+                    <GeneratedText id="m_05543f5d84beb9" />
+                  </Badge>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                workOrderRef ? (
+                  <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-amber-700 uppercase dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                    ↳ <GeneratedValue value={workOrderRef} />
+                  </span>
+                ) : null
+              }
+            />
           </div>
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-1">
           <SaveDot state={state} />
-          {isChoice && !locked ? (
-            <div className="flex items-center gap-1">
-              {ANSWER_OPTS[kind as 'pass_fail' | 'pass_fail_na'].map((opt) => {
-                const active = answer === opt
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => pickAnswer(opt)}
-                    aria-pressed={active}
-                    className={cn(
-                      'min-h-9 rounded-md border px-2.5 text-sm font-medium transition-colors sm:min-h-0 sm:py-1 sm:text-xs',
-                      active
-                        ? opt === 'pass'
-                          ? 'border-emerald-500 bg-emerald-500 text-white'
-                          : opt === 'fail'
-                            ? 'border-red-500 bg-red-500 text-white'
-                            : 'border-slate-500 bg-slate-500 text-white'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800',
-                    )}
-                  >
-                    {ANSWER_LABEL[opt]}
-                  </button>
-                )
-              })}
-            </div>
-          ) : isChoice && locked ? (
-            <Badge variant="outline">{answer ? ANSWER_LABEL[answer] : '—'}</Badge>
-          ) : null}
+          <GeneratedValue
+            value={
+              isChoice && !locked ? (
+                <div className="flex items-center gap-1">
+                  <GeneratedValue
+                    value={ANSWER_OPTS[kind as 'pass_fail' | 'pass_fail_na'].map((opt) => {
+                      const active = answer === opt
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => pickAnswer(opt)}
+                          aria-pressed={active}
+                          className={cn(
+                            'min-h-9 rounded-md border px-2.5 text-sm font-medium transition-colors sm:min-h-0 sm:py-1 sm:text-xs',
+                            active
+                              ? opt === 'pass'
+                                ? 'border-emerald-500 bg-emerald-500 text-white'
+                                : opt === 'fail'
+                                  ? 'border-red-500 bg-red-500 text-white'
+                                  : 'border-slate-500 bg-slate-500 text-white'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800',
+                          )}
+                        >
+                          <GeneratedValue value={ANSWER_LABEL[opt]} />
+                        </button>
+                      )
+                    })}
+                  />
+                </div>
+              ) : isChoice && locked ? (
+                <Badge variant="outline">
+                  <GeneratedValue value={answer ? ANSWER_LABEL[answer] : '—'} />
+                </Badge>
+              ) : null
+            }
+          />
         </div>
       </div>
 
       {/* Text / numeric answer kinds */}
-      {kind === 'text' && !locked ? (
-        <div className="mt-2">
-          <AutoTextarea
-            label="Answer"
-            initial={textValue}
-            rows={1}
-            placeholder="Enter response"
-            onCommit={(v) => save(actions.setValue, { recordId, rowId, kind, value: v })}
-          />
-        </div>
-      ) : null}
-      {kind === 'numeric' && !locked ? (
-        <div className="mt-2 space-y-1">
-          <Label className="text-xs">Reading</Label>
-          <Input
-            type="number"
-            defaultValue={numericValue ?? ''}
-            placeholder="0"
-            onBlur={(e) => save(actions.setValue, { recordId, rowId, kind, value: e.target.value })}
-          />
-        </div>
-      ) : null}
-      {(kind === 'text' || kind === 'numeric') && locked ? (
-        <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">
-          {textValue ?? numericValue ?? '—'}
-        </p>
-      ) : null}
+      <GeneratedValue
+        value={
+          kind === 'text' && !locked ? (
+            <div className="mt-2">
+              <AutoTextarea
+                label={tGenerated('m_1a8adc979bc0b2')}
+                initial={textValue}
+                rows={1}
+                placeholder={tGenerated('m_114419b7fd0aa2')}
+                onCommit={(v) => save(actions.setValue, { recordId, rowId, kind, value: v })}
+              />
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          kind === 'numeric' && !locked ? (
+            <div className="mt-2 space-y-1">
+              <Label className="text-xs">
+                <GeneratedText id="m_0acd9d880cd089" />
+              </Label>
+              <Input
+                type="number"
+                defaultValue={numericValue ?? ''}
+                placeholder="0"
+                onBlur={(e) =>
+                  save(actions.setValue, { recordId, rowId, kind, value: e.target.value })
+                }
+              />
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          (kind === 'text' || kind === 'numeric') && locked ? (
+            <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">
+              <GeneratedValue value={textValue ?? numericValue ?? '—'} />
+            </p>
+          ) : null
+        }
+      />
 
       {/* Failure metadata — only when failed and editable. */}
-      {answer === 'fail' && !locked ? (
-        <div className="mt-3 space-y-3 border-t border-red-200/70 pt-3 dark:border-red-900/50">
-          <CriterionSeverityPicker severity={severity} onPick={pickSeverity} />
-          <AutoTextarea
-            label="What's wrong?"
-            initial={comment}
-            placeholder="Describe the defect"
-            onCommit={(v) => save(actions.setComment, { recordId, rowId, value: v })}
-          />
-          <AutoTextarea
-            label="Action taken"
-            initial={actionTaken}
-            placeholder="What was done to remediate?"
-            onCommit={(v) => save(actions.setActionTaken, { recordId, rowId, value: v })}
-          />
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          answer === 'fail' && !locked ? (
+            <div className="mt-3 space-y-3 border-t border-red-200/70 pt-3 dark:border-red-900/50">
+              <CriterionSeverityPicker severity={severity} onPick={pickSeverity} />
+              <AutoTextarea
+                label={tGenerated('m_0016970632a81e')}
+                initial={comment}
+                placeholder={tGenerated('m_0700202f9e3724')}
+                onCommit={(v) => save(actions.setComment, { recordId, rowId, value: v })}
+              />
+              <AutoTextarea
+                label={tGenerated('m_0da1a29f41377e')}
+                initial={actionTaken}
+                placeholder={tGenerated('m_0692fe3c89bfd4')}
+                onCommit={(v) => save(actions.setActionTaken, { recordId, rowId, value: v })}
+              />
+            </div>
+          ) : null
+        }
+      />
 
       {/* Photos */}
-      {photoPreviews.length > 0 ||
-      (!locked && (requiresPhoto || kind === 'photo' || answer === 'fail')) ? (
-        <CriterionPhotosPanel
-          photoPreviews={photoPreviews}
-          editable={!locked}
-          recordId={recordId}
-          rowId={rowId}
-          addPhotos={actions.addPhotos}
-          onDone={refresh}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          photoPreviews.length > 0 ||
+          (!locked && (requiresPhoto || kind === 'photo' || answer === 'fail')) ? (
+            <CriterionPhotosPanel
+              photoPreviews={photoPreviews}
+              editable={!locked}
+              recordId={recordId}
+              rowId={rowId}
+              addPhotos={actions.addPhotos}
+              onDone={refresh}
+            />
+          ) : null
+        }
+      />
 
       {/* Locked read-only summary */}
-      {locked && (comment || actionTaken || (severity && answer === 'fail')) ? (
-        <div className="mt-2 space-y-0.5 border-t border-slate-200 pt-2 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
-          {severity && answer === 'fail' ? <div>Severity: {severity}</div> : null}
-          {comment ? <div>Defect: {comment}</div> : null}
-          {actionTaken ? <div>Action taken: {actionTaken}</div> : null}
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          locked && (comment || actionTaken || (severity && answer === 'fail')) ? (
+            <div className="mt-2 space-y-0.5 border-t border-slate-200 pt-2 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
+              <GeneratedValue
+                value={
+                  severity && answer === 'fail' ? (
+                    <div>
+                      <GeneratedText id="m_104cb4e8ca96db" /> <GeneratedValue value={severity} />
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  comment ? (
+                    <div>
+                      <GeneratedText id="m_0ce541a471af67" /> <GeneratedValue value={comment} />
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  actionTaken ? (
+                    <div>
+                      <GeneratedText id="m_19a70f86732c4c" /> <GeneratedValue value={actionTaken} />
+                    </div>
+                  ) : null
+                }
+              />
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }

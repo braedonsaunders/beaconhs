@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The JournalEditor — an elevated TipTap surface: headings, lists, checklists,
 // highlight, smart typography, markdown shortcuts, voice dictation, and
 // streaming inline AI (tidy / expand / continue / fix / bulletize / summarize).
@@ -84,6 +91,8 @@ export function JournalEditor({
   placeholder?: string
   onChange: (html: string, text: string) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [aiBusy, setAiBusy] = useState<WritingMode | null>(null)
   const [aiOpen, setAiOpen] = useState(false)
   const aiRef = useRef<HTMLDivElement>(null)
@@ -149,12 +158,12 @@ export function JournalEditor({
       ? editor.state.doc.textBetween(sel.from, sel.to, '\n')
       : editor.getText()
     if (!source.trim()) {
-      toast.error('Write something first, then ask AI.')
+      toast.error(tGenerated('m_067c543565cd21'))
       return
     }
     if (source.length > MAX_JOURNAL_AI_SOURCE_LENGTH) {
       toast.error(
-        `Select ${MAX_JOURNAL_AI_SOURCE_LENGTH.toLocaleString()} characters or fewer for AI assist.`,
+        tGenerated('m_100fe28d9e38c7', { value0: MAX_JOURNAL_AI_SOURCE_LENGTH.toLocaleString() }),
       )
       return
     }
@@ -181,7 +190,9 @@ export function JournalEditor({
       }
       editor.commands.focus()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'AI request failed.')
+      toast.error(
+        tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_144eb024879229')),
+      )
     } finally {
       if (!editor.isDestroyed) editor.setEditable(editable)
       setAiBusy(null)
@@ -213,28 +224,28 @@ export function JournalEditor({
         <TBtn
           active={editor.isActive('bold')}
           onClick={() => editor.chain().focus().toggleBold().run()}
-          label="Bold"
+          label={tGenerated('m_1e62e6d69a0d11')}
         >
           <Bold size={15} />
         </TBtn>
         <TBtn
           active={editor.isActive('italic')}
           onClick={() => editor.chain().focus().toggleItalic().run()}
-          label="Italic"
+          label={tGenerated('m_1ee96b6856cb45')}
         >
           <Italic size={15} />
         </TBtn>
         <TBtn
           active={editor.isActive('strike')}
           onClick={() => editor.chain().focus().toggleStrike().run()}
-          label="Strikethrough"
+          label={tGenerated('m_12d4047e2b561e')}
         >
           <Strikethrough size={15} />
         </TBtn>
         <TBtn
           active={editor.isActive('highlight')}
           onClick={() => editor.chain().focus().toggleHighlight().run()}
-          label="Highlight"
+          label={tGenerated('m_041c65e7c65d79')}
         >
           <Highlighter size={15} />
         </TBtn>
@@ -242,21 +253,21 @@ export function JournalEditor({
         <TBtn
           active={editor.isActive('heading', { level: 1 })}
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-          label="Heading 1"
+          label={tGenerated('m_05a59f16978305')}
         >
           <Heading1 size={15} />
         </TBtn>
         <TBtn
           active={editor.isActive('heading', { level: 2 })}
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          label="Heading 2"
+          label={tGenerated('m_0b5fa291a5a72a')}
         >
           <Heading2 size={15} />
         </TBtn>
         <TBtn
           active={editor.isActive('heading', { level: 3 })}
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          label="Heading 3"
+          label={tGenerated('m_1e90df2a72ca42')}
         >
           <Heading3 size={15} />
         </TBtn>
@@ -264,39 +275,43 @@ export function JournalEditor({
         <TBtn
           active={editor.isActive('bulletList')}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
-          label="Bullet list"
+          label={tGenerated('m_0d3c39e0b97288')}
         >
           <List size={15} />
         </TBtn>
         <TBtn
           active={editor.isActive('orderedList')}
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          label="Numbered list"
+          label={tGenerated('m_018e8c7f92cf35')}
         >
           <ListOrdered size={15} />
         </TBtn>
         <TBtn
           active={editor.isActive('taskList')}
           onClick={() => editor.chain().focus().toggleTaskList().run()}
-          label="Checklist"
+          label={tGenerated('m_08e83f80918eaf')}
         >
           <CheckSquare size={15} />
         </TBtn>
         <TBtn
           active={editor.isActive('blockquote')}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          label="Quote"
+          label={tGenerated('m_0a071dfef73a21')}
         >
           <Quote size={15} />
         </TBtn>
         <TBtn
           active={editor.isActive('codeBlock')}
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-          label="Code block"
+          label={tGenerated('m_1fddea05d1c6f8')}
         >
           <Code size={15} />
         </TBtn>
-        <TBtn active={editor.isActive('link')} onClick={setLink} label="Link">
+        <TBtn
+          active={editor.isActive('link')}
+          onClick={setLink}
+          label={tGenerated('m_197fef09772e0d')}
+        >
           <Link2 size={15} />
         </TBtn>
 
@@ -306,9 +321,7 @@ export function JournalEditor({
           <button
             type="button"
             onClick={() =>
-              aiEnabled
-                ? setAiOpen((v) => !v)
-                : toast.error('AI isn’t configured. Add an API key to enable it.')
+              aiEnabled ? setAiOpen((v) => !v) : toast.error(tGenerated('m_18aa9e924adde2'))
             }
             disabled={!!aiBusy}
             className={cn(
@@ -319,29 +332,49 @@ export function JournalEditor({
               aiBusy && 'opacity-70',
             )}
           >
-            {aiBusy ? <Sparkles size={13} className="animate-pulse" /> : <Wand2 size={13} />}
-            {aiBusy ? 'Writing…' : 'AI'}
+            <GeneratedValue
+              value={
+                aiBusy ? <Sparkles size={13} className="animate-pulse" /> : <Wand2 size={13} />
+              }
+            />
+            <GeneratedValue
+              value={
+                aiBusy ? (
+                  <GeneratedText id="m_0d1f8b32fb25ef" />
+                ) : (
+                  <GeneratedText id="m_1e0a86199c09df" />
+                )
+              }
+            />
           </button>
-          {aiOpen ? (
-            <div className="absolute top-9 left-0 z-30 w-60 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-              <div className="px-3 pt-1.5 pb-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
-                Selection, or whole entry
-              </div>
-              {AI_ACTIONS.map((a) => (
-                <button
-                  key={a.mode}
-                  type="button"
-                  onClick={() => runAI(a.mode)}
-                  className="flex w-full flex-col items-start px-3 py-1.5 text-left transition-colors hover:bg-teal-50 dark:hover:bg-teal-500/15"
-                >
-                  <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                    {a.label}
-                  </span>
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500">{a.hint}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              aiOpen ? (
+                <div className="absolute top-9 left-0 z-30 w-60 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                  <div className="px-3 pt-1.5 pb-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">
+                    <GeneratedText id="m_176236a632ee19" />
+                  </div>
+                  <GeneratedValue
+                    value={AI_ACTIONS.map((a) => (
+                      <button
+                        key={a.mode}
+                        type="button"
+                        onClick={() => runAI(a.mode)}
+                        className="flex w-full flex-col items-start px-3 py-1.5 text-left transition-colors hover:bg-teal-50 dark:hover:bg-teal-500/15"
+                      >
+                        <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                          <GeneratedValue value={a.label} />
+                        </span>
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                          <GeneratedValue value={a.hint} />
+                        </span>
+                      </button>
+                    ))}
+                  />
+                </div>
+              ) : null
+            }
+          />
         </div>
 
         <VoiceButton
@@ -352,19 +385,19 @@ export function JournalEditor({
 
         <div className="ml-auto flex items-center gap-0.5 pr-1">
           <span className="mr-1 hidden text-[11px] text-slate-400 tabular-nums sm:inline dark:text-slate-500">
-            {words} words
+            <GeneratedValue value={words} /> <GeneratedText id="m_1e7760844c5b22" />
           </span>
           <TBtn
             disabled={!editor.can().undo()}
             onClick={() => editor.chain().focus().undo().run()}
-            label="Undo"
+            label={tGenerated('m_164c39255db582')}
           >
             <Undo2 size={15} />
           </TBtn>
           <TBtn
             disabled={!editor.can().redo()}
             onClick={() => editor.chain().focus().redo().run()}
-            label="Redo"
+            label={tGenerated('m_11d36eb7bdbd5d')}
           >
             <Redo2 size={15} />
           </TBtn>
@@ -413,13 +446,14 @@ function TBtn({
   onClick: () => void
   label: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      title={label}
-      aria-label={label}
+      title={tGeneratedValue(label)}
+      aria-label={tGeneratedValue(label)}
       className={cn(
         'inline-flex h-7 min-w-[28px] items-center justify-center rounded px-1.5 text-slate-600 transition-colors dark:text-slate-400',
         active
@@ -428,7 +462,7 @@ function TBtn({
         disabled && 'cursor-not-allowed opacity-30 hover:bg-transparent',
       )}
     >
-      {children}
+      <GeneratedValue value={children} />
     </button>
   )
 }

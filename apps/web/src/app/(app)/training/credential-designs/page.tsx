@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@beaconhs/ui'
 import { eq } from 'drizzle-orm'
@@ -10,9 +11,13 @@ import { TrainingSubNav } from '../_components/training-sub-nav'
 import { CredentialDesignStudio } from './studio'
 import { saveCredentialOutputs } from './_actions'
 
-export const metadata = { title: 'Card studio' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_048e076a639a29') }
+}
 
 export default async function CredentialDesignsPage() {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!canDesignTrainingCredentials(ctx)) redirect('/training')
 
@@ -30,8 +35,8 @@ export default async function CredentialDesignsPage() {
       header={
         <>
           <PageHeader
-            title="Card studio"
-            description="Design the certificates and wallet cards available from training records and skills."
+            title={tGenerated('m_048e076a639a29')}
+            description={tGenerated('m_0a477c646ffc48')}
           />
           <TrainingSubNav active="credential-designs" />
         </>

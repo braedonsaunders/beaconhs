@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Camera } from 'lucide-react'
@@ -31,16 +33,29 @@ export function PhotoUploaderSection({
   return (
     <div className="space-y-2 rounded-md border border-dashed border-slate-300 bg-slate-50/50 p-3 dark:border-slate-700">
       <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-        <Camera size={14} /> Add photos
+        <Camera size={14} /> <GeneratedText id="m_0d742b49add734" />
       </div>
       <FileUpload variant="photo" value={staged} onChange={setStaged} />
-      {staged.length > 0 ? (
-        <Button onClick={attach} disabled={pending}>
-          {pending
-            ? 'Attaching…'
-            : `Attach ${staged.length} photo${staged.length === 1 ? '' : 's'}`}
-        </Button>
-      ) : null}
+      <GeneratedValue
+        value={
+          staged.length > 0 ? (
+            <Button onClick={attach} disabled={pending}>
+              <GeneratedValue
+                value={
+                  pending ? (
+                    <GeneratedText id="m_1a0172e9314d7c" />
+                  ) : (
+                    <GeneratedText
+                      id="m_13e1e9a41e0cb0"
+                      values={{ value0: staged.length, value1: staged.length === 1 ? '' : 's' }}
+                    />
+                  )
+                }
+              />
+            </Button>
+          ) : null
+        }
+      />
     </div>
   )
 }

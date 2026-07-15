@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Full-screen Writer for a document's DOCX master. Editing happens inline in
 // Collabora (page setup, comments and track changes live in the file);
 // `?version=<id>` opens a published snapshot read-only instead. Publishing and
@@ -18,8 +20,9 @@ import { DocumentWriter } from './_writer'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Edit · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_0f00e02267e400', { value0: id.slice(0, 8) }) }
 }
 
 export default async function DocumentEditorPage({
@@ -29,6 +32,7 @@ export default async function DocumentEditorPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   const sp = await searchParams
   const versionId = typeof sp.version === 'string' ? sp.version : null
@@ -97,38 +101,57 @@ export default async function DocumentEditorPage({
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-900">
-        <SmartBackLink href={`/documents/${id}`} label="Back" />
+        <SmartBackLink href={`/documents/${id}`} label={tGenerated('m_1a7cefe5a9894e')} />
         <div className="min-w-0">
           <h1 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {data.doc.title}
+            <GeneratedValue value={data.doc.title} />
           </h1>
           <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-            {data.viewingVersion
-              ? `Version ${data.viewingVersion.version} — read-only snapshot`
-              : data.latestVersion
-                ? `Working draft — last published v${data.latestVersion}`
-                : 'Working draft — never published'}
+            <GeneratedValue
+              value={
+                data.viewingVersion ? (
+                  <GeneratedText
+                    id="m_0121acb823b520"
+                    values={{ value0: data.viewingVersion.version }}
+                  />
+                ) : data.latestVersion ? (
+                  <GeneratedText id="m_0946731ce72439" values={{ value0: data.latestVersion }} />
+                ) : (
+                  <GeneratedText id="m_191edafa880b6b" />
+                )
+              }
+            />
           </p>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
-          {data.viewingVersion ? (
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/documents/${id}/editor`}>Back to draft</Link>
-            </Button>
-          ) : null}
-          {data.att ? (
-            <Button asChild variant="outline" size="sm">
-              <a
-                href={
-                  data.viewingVersion
-                    ? `/documents/${id}/versions/${data.viewingVersion.id}/download?kind=docx`
-                    : `/documents/${id}/master`
-                }
-              >
-                <Download size={13} /> DOCX
-              </a>
-            </Button>
-          ) : null}
+          <GeneratedValue
+            value={
+              data.viewingVersion ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/documents/${id}/editor`}>
+                    <GeneratedText id="m_1fa1287c0f79fc" />
+                  </Link>
+                </Button>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              data.att ? (
+                <Button asChild variant="outline" size="sm">
+                  <a
+                    href={
+                      data.viewingVersion
+                        ? `/documents/${id}/versions/${data.viewingVersion.id}/download?kind=docx`
+                        : `/documents/${id}/master`
+                    }
+                  >
+                    <Download size={13} /> <GeneratedText id="m_18c2e68821b0cd" />
+                  </a>
+                </Button>
+              ) : null
+            }
+          />
         </div>
       </div>
       <DocumentWriter

@@ -1,5 +1,9 @@
 'use client'
 
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
+import { useGeneratedTranslations } from '@/i18n/generated'
+
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2 } from 'lucide-react'
@@ -29,32 +33,53 @@ export function PhotosPanel({
   const router = useRouter()
   return (
     <div className="space-y-4">
-      {photos.length > 0 ? (
-        <>
-          <PhotoGallery photos={photos} />
-          {!locked ? (
-            <div className="rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-              <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-                Captions
-              </div>
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {photos.map((p) => (
-                  <PhotoRow key={p.id} caId={caId} photo={p} onChanged={() => router.refresh()} />
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </>
-      ) : (
-        <p className="text-sm text-slate-500 dark:text-slate-400">No photos attached.</p>
-      )}
-      {!locked ? (
-        <PhotoUploaderSection
-          attachAction={async (ids) => {
-            await attachCaPhotos(caId, ids)
-          }}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          photos.length > 0 ? (
+            <>
+              <PhotoGallery photos={photos} />
+              <GeneratedValue
+                value={
+                  !locked ? (
+                    <div className="rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                      <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
+                        <GeneratedText id="m_198846e6854d54" />
+                      </div>
+                      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                        <GeneratedValue
+                          value={photos.map((p) => (
+                            <PhotoRow
+                              key={p.id}
+                              caId={caId}
+                              photo={p}
+                              onChanged={() => router.refresh()}
+                            />
+                          ))}
+                        />
+                      </ul>
+                    </div>
+                  ) : null
+                }
+              />
+            </>
+          ) : (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_177e2d48fbc8cb" />
+            </p>
+          )
+        }
+      />
+      <GeneratedValue
+        value={
+          !locked ? (
+            <PhotoUploaderSection
+              attachAction={async (ids) => {
+                await attachCaPhotos(caId, ids)
+              }}
+            />
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -68,6 +93,8 @@ function PhotoRow({
   photo: CaPhotoRow
   onChanged: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [caption, setCaption] = useState(photo.caption ?? '')
   const [pending, start] = useTransition()
   const [busy, setBusy] = useState<'caption' | 'delete' | null>(null)
@@ -102,17 +129,19 @@ function PhotoRow({
     <li className="flex items-center gap-3 px-3 py-2">
       <RawImage
         src={photo.url}
-        alt={photo.caption ?? photo.filename}
+        alt={tGeneratedValue(photo.caption ?? photo.filename)}
         optimizationReason="authenticated"
         className="h-10 w-10 shrink-0 rounded object-cover"
       />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-xs text-slate-500 dark:text-slate-400">{photo.filename}</div>
+        <div className="truncate text-xs text-slate-500 dark:text-slate-400">
+          <GeneratedValue value={photo.filename} />
+        </div>
         <Input
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
           onBlur={saveCaption}
-          placeholder="Add a caption…"
+          placeholder={tGenerated('m_1a7a1bf1a20c79')}
           disabled={pending}
           className="h-7 text-xs"
         />
@@ -123,7 +152,7 @@ function PhotoRow({
         size="sm"
         onClick={remove}
         disabled={pending}
-        aria-label="Remove photo"
+        aria-label={tGenerated('m_1d10555bea1d88')}
       >
         <Trash2 size={12} className={busy === 'delete' ? 'text-slate-400' : 'text-red-500'} />
       </Button>

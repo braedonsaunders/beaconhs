@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
@@ -11,7 +12,10 @@ import { BUILTIN_QUERIES, INSIGHT_WIDGET_MAP } from './_widgets'
 import { InsightsWorkspace } from './_workspace'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Insights' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_06145df9e2eb0d') }
+}
 
 export default async function InsightsPage({
   searchParams,

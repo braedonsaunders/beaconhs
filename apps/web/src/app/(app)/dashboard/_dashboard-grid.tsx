@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Dashboard grid powered by react-grid-layout v2.
 //
 // v2 dropped the WidthProvider HOC — you pass `width` directly. We measure the
@@ -102,6 +109,8 @@ export function DashboardGrid({
   quickActionsSaveAction?: SaveQuickActionsAction
   quickActionsSaveSuccessMessage?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const cardNameById = useMemo(
     () => new Map(libraryCards.map((c) => [c.id, c.name])),
     [libraryCards],
@@ -220,15 +229,23 @@ export function DashboardGrid({
       const res = await saveLayoutAction({ widgets: layout })
       if (res.ok) {
         setBaseline(JSON.stringify(layout))
-        toast.success(saveSuccessMessage)
+        toast.success(tGeneratedValue(saveSuccessMessage))
         router.push(saveRedirectHref)
       } else {
-        toast.error(res.error ?? 'Save failed')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0731204fbd1b17')))
       }
     } finally {
       setSaving(false)
     }
-  }, [layout, router, saveLayoutAction, saveRedirectHref, saveSuccessMessage])
+  }, [
+    layout,
+    router,
+    saveLayoutAction,
+    saveRedirectHref,
+    saveSuccessMessage,
+    tGenerated,
+    tGeneratedValue,
+  ])
 
   const handleReset = useCallback(async () => {
     if (!(await confirmDialog({ message: resetConfirmMessage, tone: 'danger' }))) return
@@ -236,15 +253,22 @@ export function DashboardGrid({
     try {
       const res = await resetLayoutAction()
       if (res.ok) {
-        toast.success(resetSuccessMessage)
+        toast.success(tGeneratedValue(resetSuccessMessage))
         router.refresh()
       } else {
-        toast.error(res.error ?? 'Reset failed')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_04eaf1aebf3fec')))
       }
     } finally {
       setResetting(false)
     }
-  }, [resetConfirmMessage, resetLayoutAction, resetSuccessMessage, router])
+  }, [
+    resetConfirmMessage,
+    resetLayoutAction,
+    resetSuccessMessage,
+    router,
+    tGenerated,
+    tGeneratedValue,
+  ])
 
   // Persist geometry only from real user gestures — wired to onDragStop /
   // onResizeStop, never a passive onLayoutChange. RGL re-emits positions on any
@@ -274,37 +298,47 @@ export function DashboardGrid({
     if (viewport === 'phone') {
       return (
         <div className="space-y-4">
-          {ordered.map((w) => (
-            <div key={w.id}>{nodes[w.id] ?? null}</div>
-          ))}
+          <GeneratedValue
+            value={ordered.map((w) => (
+              <div key={w.id}>
+                <GeneratedValue value={nodes[w.id] ?? null} />
+              </div>
+            ))}
+          />
         </div>
       )
     }
     return (
       <div className="columns-2 gap-4">
-        {ordered.map((w) => (
-          <div key={w.id} className="mb-4 break-inside-avoid">
-            {nodes[w.id] ?? null}
-          </div>
-        ))}
+        <GeneratedValue
+          value={ordered.map((w) => (
+            <div key={w.id} className="mb-4 break-inside-avoid">
+              <GeneratedValue value={nodes[w.id] ?? null} />
+            </div>
+          ))}
+        />
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      {mode === 'edit' ? (
-        <EditToolbar
-          dirty={dirty}
-          saving={saving}
-          resetting={resetting}
-          label={toolbarLabel}
-          onSave={handleSave}
-          onReset={handleReset}
-          onTogglePalette={() => setPaletteOpen((v) => !v)}
-          paletteOpen={paletteOpen}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          mode === 'edit' ? (
+            <EditToolbar
+              dirty={dirty}
+              saving={saving}
+              resetting={resetting}
+              label={tGeneratedValue(toolbarLabel)}
+              onSave={handleSave}
+              onReset={handleReset}
+              onTogglePalette={() => setPaletteOpen((v) => !v)}
+              paletteOpen={paletteOpen}
+            />
+          ) : null
+        }
+      />
 
       <div className="w-full">
         <div ref={measureRef} className="min-w-0">
@@ -335,83 +369,105 @@ export function DashboardGrid({
             onDragStop={(next: Layout) => commitLayout(next)}
             onResizeStop={(next: Layout) => commitLayout(next)}
           >
-            {layout.map((w) => {
-              const node =
-                w.id === 'personal-actions' && quickActionsSaveAction ? (
-                  <QuickActions
-                    key={quickActionsStateKey(initialLayout.quickActions)}
-                    actions={initialLayout.quickActions}
-                    saveAction={quickActionsSaveAction}
-                    saveSuccessMessage={quickActionsSaveSuccessMessage}
-                  />
-                ) : (
-                  nodes[w.id]
-                )
-              return (
-                <div key={w.id} className="group/cell">
-                  <div
-                    className="relative h-full w-full"
-                    // In edit mode, swallow link navigation so finishing a drag
-                    // (or a stray click) never follows a card's link. Capture
-                    // phase + stopPropagation stops it before the Link's own
-                    // onClick. Only anchors are blocked — the remove button and
-                    // any in-card buttons keep working.
-                    onClickCapture={
-                      mode === 'edit'
-                        ? (e) => {
-                            if (!(e.target as HTMLElement).closest('a')) return
-                            e.preventDefault()
-                            e.stopPropagation()
-                          }
-                        : undefined
-                    }
-                  >
-                    {mode === 'edit' ? (
-                      <>
-                        <div className="ring-dashed pointer-events-none absolute inset-0 z-10 rounded-xl ring-1 ring-teal-300/0 transition group-hover/cell:ring-teal-400/80" />
-                        <button
-                          type="button"
-                          onClick={() => handleRemove(w.id)}
-                          aria-label="Remove widget"
-                          className="no-drag absolute -top-2 -right-2 z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600 opacity-0 shadow-sm transition group-hover/cell:opacity-100 hover:bg-rose-50 dark:border-rose-800/60 dark:bg-slate-900 dark:hover:bg-rose-950/40"
-                        >
-                          <X size={12} />
-                        </button>
-                      </>
-                    ) : null}
-                    {node ??
-                      (isUuid(w.id) ? (
-                        <div className="flex h-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-teal-200 bg-teal-50/40 px-3 text-center dark:border-teal-800/50 dark:bg-teal-950/30">
-                          <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                            {cardNameById.get(w.id) ?? 'Insights card'}
-                          </span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                            Appears on your dashboard after you save.
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
-                          Widget "{w.id}" not available
-                        </div>
-                      ))}
+            <GeneratedValue
+              value={layout.map((w) => {
+                const node =
+                  w.id === 'personal-actions' && quickActionsSaveAction ? (
+                    <QuickActions
+                      key={quickActionsStateKey(initialLayout.quickActions)}
+                      actions={initialLayout.quickActions}
+                      saveAction={quickActionsSaveAction}
+                      saveSuccessMessage={quickActionsSaveSuccessMessage}
+                    />
+                  ) : (
+                    nodes[w.id]
+                  )
+                return (
+                  <div key={w.id} className="group/cell">
+                    <div
+                      className="relative h-full w-full"
+                      // In edit mode, swallow link navigation so finishing a drag
+                      // (or a stray click) never follows a card's link. Capture
+                      // phase + stopPropagation stops it before the Link's own
+                      // onClick. Only anchors are blocked — the remove button and
+                      // any in-card buttons keep working.
+                      onClickCapture={
+                        mode === 'edit'
+                          ? (e) => {
+                              if (!(e.target as HTMLElement).closest('a')) return
+                              e.preventDefault()
+                              e.stopPropagation()
+                            }
+                          : undefined
+                      }
+                    >
+                      <GeneratedValue
+                        value={
+                          mode === 'edit' ? (
+                            <>
+                              <div className="ring-dashed pointer-events-none absolute inset-0 z-10 rounded-xl ring-1 ring-teal-300/0 transition group-hover/cell:ring-teal-400/80" />
+                              <button
+                                type="button"
+                                onClick={() => handleRemove(w.id)}
+                                aria-label={tGenerated('m_0339832246cf9a')}
+                                className="no-drag absolute -top-2 -right-2 z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600 opacity-0 shadow-sm transition group-hover/cell:opacity-100 hover:bg-rose-50 dark:border-rose-800/60 dark:bg-slate-900 dark:hover:bg-rose-950/40"
+                              >
+                                <X size={12} />
+                              </button>
+                            </>
+                          ) : null
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          node ??
+                          (isUuid(w.id) ? (
+                            <div className="flex h-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-teal-200 bg-teal-50/40 px-3 text-center dark:border-teal-800/50 dark:bg-teal-950/30">
+                              <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                                <GeneratedValue
+                                  value={
+                                    cardNameById.get(w.id) ?? (
+                                      <GeneratedText id="m_084ab6a2b3afee" />
+                                    )
+                                  }
+                                />
+                              </span>
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                <GeneratedText id="m_04803316679abb" />
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
+                              <GeneratedText id="m_00c746ebe202ef" />
+                              <GeneratedValue value={w.id} />
+                              <GeneratedText id="m_11629edbed6269" />
+                            </div>
+                          ))
+                        }
+                      />
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            />
           </Responsive>
         </div>
 
-        {mode === 'edit' && paletteOpen ? (
-          <WidgetPalette
-            role={role}
-            presentIds={presentIds}
-            onAdd={handleAdd}
-            libraryCards={libraryCards}
-            onAddCard={handleAddCard}
-            allowedWidgetIds={allowedWidgetIds}
-            onClose={() => setPaletteOpen(false)}
-          />
-        ) : null}
+        <GeneratedValue
+          value={
+            mode === 'edit' && paletteOpen ? (
+              <WidgetPalette
+                role={role}
+                presentIds={presentIds}
+                onAdd={handleAdd}
+                libraryCards={libraryCards}
+                onAddCard={handleAddCard}
+                allowedWidgetIds={allowedWidgetIds}
+                onClose={() => setPaletteOpen(false)}
+              />
+            ) : null
+          }
+        />
       </div>
     </div>
   )
@@ -447,15 +503,25 @@ function EditToolbar({
     >
       <div className="flex items-center gap-2 text-sm">
         <Settings size={14} className="text-teal-700 dark:text-teal-300" />
-        <span className="font-semibold text-teal-900 dark:text-teal-300">{label}</span>
+        <span className="font-semibold text-teal-900 dark:text-teal-300">
+          <GeneratedValue value={label} />
+        </span>
         <span className="hidden text-xs text-teal-700/80 sm:inline dark:text-teal-300/80">
-          Drag tiles to reorder, drag the bottom-right corner to resize, click ✕ to remove.
+          <GeneratedText id="m_0f6492fdec8ee9" />
         </span>
       </div>
       <div className="flex items-center gap-2">
         <Button type="button" variant="ghost" onClick={onTogglePalette} className="h-8 text-xs">
           <Plus size={13} className="mr-1" />
-          {paletteOpen ? 'Hide widgets' : 'Add widget'}
+          <GeneratedValue
+            value={
+              paletteOpen ? (
+                <GeneratedText id="m_1e08c582823b1b" />
+              ) : (
+                <GeneratedText id="m_14641d51285e88" />
+              )
+            }
+          />
         </Button>
         <Button
           type="button"
@@ -464,20 +530,28 @@ function EditToolbar({
           disabled={resetting}
           className="h-8 text-xs text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
         >
-          {resetting ? (
-            <Loader2 size={13} className="mr-1 animate-spin" />
-          ) : (
-            <RotateCcw size={13} className="mr-1" />
-          )}
-          Reset to default
+          <GeneratedValue
+            value={
+              resetting ? (
+                <Loader2 size={13} className="mr-1 animate-spin" />
+              ) : (
+                <RotateCcw size={13} className="mr-1" />
+              )
+            }
+          />
+          <GeneratedText id="m_0a5029e50c13da" />
         </Button>
         <Button type="button" onClick={onSave} disabled={saving || !dirty} className="h-8 text-xs">
-          {saving ? (
-            <Loader2 size={13} className="mr-1 animate-spin" />
-          ) : (
-            <Save size={13} className="mr-1" />
-          )}
-          Save layout
+          <GeneratedValue
+            value={
+              saving ? (
+                <Loader2 size={13} className="mr-1 animate-spin" />
+              ) : (
+                <Save size={13} className="mr-1" />
+              )
+            }
+          />
+          <GeneratedText id="m_15123a8748a0cf" />
         </Button>
       </div>
     </motion.div>
@@ -503,6 +577,7 @@ function WidgetPalette({
   allowedWidgetIds?: readonly string[]
   onClose: () => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const allowed = allowedWidgetIds ? new Set(allowedWidgetIds) : null
   const sourceWidgets = allowed ? Object.values(WIDGETS) : widgetsForRole(role)
   const visible = sourceWidgets.filter((w) => !allowed || allowed.has(w.id))
@@ -526,20 +601,20 @@ function WidgetPalette({
       <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-800">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Widget library
+            <GeneratedText id="m_10749590108c69" />
           </h3>
           <p className="text-[10px] text-slate-500 dark:text-slate-400">
-            Click to add — the canvas keeps its layout
+            <GeneratedText id="m_0f08dd849ead8f" />
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="text-[10px] tracking-wider text-slate-400 uppercase dark:text-slate-500">
-            {visible.length}
+            <GeneratedValue value={visible.length} />
           </span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close widget library"
+            aria-label={tGenerated('m_106b3f52aadd9f')}
             className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
           >
             <X size={14} />
@@ -547,93 +622,115 @@ function WidgetPalette({
         </div>
       </div>
       <div className="app-scroll flex-1 space-y-3 overflow-y-auto p-3">
-        {[...byCategory.entries()].map(([cat, widgets]) => (
-          <div key={cat}>
-            <h4 className="mb-1 px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-              {CATEGORY_LABELS[cat]}
-            </h4>
-            <ul className="space-y-1">
-              {widgets.map((w) => {
-                const present = presentIds.has(w.id)
-                return (
-                  <li key={w.id}>
-                    <button
-                      type="button"
-                      onClick={() => onAdd(w)}
-                      disabled={present}
-                      className={`flex w-full items-start justify-between gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left transition ${
-                        present
-                          ? 'cursor-not-allowed bg-slate-50 text-slate-400 dark:bg-slate-900 dark:text-slate-500'
-                          : 'hover:border-teal-200 hover:bg-teal-50/50 dark:hover:border-teal-800/60 dark:hover:bg-teal-950/40'
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">
-                          {w.label}
-                        </div>
-                        <div className="line-clamp-2 text-[10px] text-slate-500 dark:text-slate-400">
-                          {w.description}
-                        </div>
-                      </div>
-                      {present ? (
-                        <span className="shrink-0 text-[10px] text-slate-400 dark:text-slate-500">
-                          added
-                        </span>
-                      ) : (
-                        <Plus size={13} className="shrink-0 text-teal-600" />
-                      )}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        ))}
-
-        {libraryCards.length > 0 ? (
-          <div>
-            <h4 className="mb-1 px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-              From your library
-            </h4>
-            <ul className="space-y-1">
-              {libraryCards.map((c) => {
-                const present = presentIds.has(c.id)
-                return (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      onClick={() => onAddCard(c)}
-                      disabled={present}
-                      className={`flex w-full items-start justify-between gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left transition ${
-                        present
-                          ? 'cursor-not-allowed bg-slate-50 text-slate-400 dark:bg-slate-900 dark:text-slate-500'
-                          : 'hover:border-teal-200 hover:bg-teal-50/50 dark:hover:border-teal-800/60 dark:hover:bg-teal-950/40'
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">
-                          {c.name}
-                        </div>
-                        {c.description ? (
-                          <div className="line-clamp-2 text-[10px] text-slate-500 dark:text-slate-400">
-                            {c.description}
+        <GeneratedValue
+          value={[...byCategory.entries()].map(([cat, widgets]) => (
+            <div key={cat}>
+              <h4 className="mb-1 px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+                <GeneratedValue value={CATEGORY_LABELS[cat]} />
+              </h4>
+              <ul className="space-y-1">
+                <GeneratedValue
+                  value={widgets.map((w) => {
+                    const present = presentIds.has(w.id)
+                    return (
+                      <li key={w.id}>
+                        <button
+                          type="button"
+                          onClick={() => onAdd(w)}
+                          disabled={present}
+                          className={`flex w-full items-start justify-between gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left transition ${
+                            present
+                              ? 'cursor-not-allowed bg-slate-50 text-slate-400 dark:bg-slate-900 dark:text-slate-500'
+                              : 'hover:border-teal-200 hover:bg-teal-50/50 dark:hover:border-teal-800/60 dark:hover:bg-teal-950/40'
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">
+                              <GeneratedValue value={w.label} />
+                            </div>
+                            <div className="line-clamp-2 text-[10px] text-slate-500 dark:text-slate-400">
+                              <GeneratedValue value={w.description} />
+                            </div>
                           </div>
-                        ) : null}
-                      </div>
-                      {present ? (
-                        <span className="shrink-0 text-[10px] text-slate-400 dark:text-slate-500">
-                          added
-                        </span>
-                      ) : (
-                        <Plus size={13} className="shrink-0 text-teal-600" />
-                      )}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        ) : null}
+                          <GeneratedValue
+                            value={
+                              present ? (
+                                <span className="shrink-0 text-[10px] text-slate-400 dark:text-slate-500">
+                                  <GeneratedText id="m_0e52384735efcc" />
+                                </span>
+                              ) : (
+                                <Plus size={13} className="shrink-0 text-teal-600" />
+                              )
+                            }
+                          />
+                        </button>
+                      </li>
+                    )
+                  })}
+                />
+              </ul>
+            </div>
+          ))}
+        />
+
+        <GeneratedValue
+          value={
+            libraryCards.length > 0 ? (
+              <div>
+                <h4 className="mb-1 px-1 text-[10px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+                  <GeneratedText id="m_144e2654d5be31" />
+                </h4>
+                <ul className="space-y-1">
+                  <GeneratedValue
+                    value={libraryCards.map((c) => {
+                      const present = presentIds.has(c.id)
+                      return (
+                        <li key={c.id}>
+                          <button
+                            type="button"
+                            onClick={() => onAddCard(c)}
+                            disabled={present}
+                            className={`flex w-full items-start justify-between gap-2 rounded-lg border border-transparent px-2 py-1.5 text-left transition ${
+                              present
+                                ? 'cursor-not-allowed bg-slate-50 text-slate-400 dark:bg-slate-900 dark:text-slate-500'
+                                : 'hover:border-teal-200 hover:bg-teal-50/50 dark:hover:border-teal-800/60 dark:hover:bg-teal-950/40'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-xs font-medium text-slate-800 dark:text-slate-100">
+                                <GeneratedValue value={c.name} />
+                              </div>
+                              <GeneratedValue
+                                value={
+                                  c.description ? (
+                                    <div className="line-clamp-2 text-[10px] text-slate-500 dark:text-slate-400">
+                                      <GeneratedValue value={c.description} />
+                                    </div>
+                                  ) : null
+                                }
+                              />
+                            </div>
+                            <GeneratedValue
+                              value={
+                                present ? (
+                                  <span className="shrink-0 text-[10px] text-slate-400 dark:text-slate-500">
+                                    <GeneratedText id="m_0e52384735efcc" />
+                                  </span>
+                                ) : (
+                                  <Plus size={13} className="shrink-0 text-teal-600" />
+                                )
+                              }
+                            />
+                          </button>
+                        </li>
+                      )
+                    })}
+                  />
+                </ul>
+              </div>
+            ) : null
+          }
+        />
       </div>
     </motion.aside>
   )

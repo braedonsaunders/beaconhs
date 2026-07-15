@@ -1,7 +1,11 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { CustomFieldsAdminPage } from '@/components/custom-fields/custom-fields-admin-page'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Location custom fields' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_112bb6e8b0956a') }
+}
 
 export default function LocationCustomFieldsPage({
   searchParams,

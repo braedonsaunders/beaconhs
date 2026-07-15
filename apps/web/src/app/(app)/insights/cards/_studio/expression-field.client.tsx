@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // A formula editor: a monospace field that parses live (via the clean-room
 // expression parser), shows inline validity/errors, and offers a click-to-insert
 // palette of the entity's fields + the function library. Produces a formula
@@ -44,6 +51,8 @@ export function ExpressionField({
   fields: InsightsExpressionField[]
   placeholder?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const taRef = useRef<HTMLTextAreaElement>(null)
   const [showPalette, setShowPalette] = useState(false)
   const [fieldQuery, setFieldQuery] = useState('')
@@ -86,7 +95,7 @@ export function ExpressionField({
         ref={taRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder ?? 'datediff("day", max([Occurred at]), now())'}
+        placeholder={tGeneratedValue(placeholder ?? tGenerated('m_06874a27274316'))}
         rows={2}
         spellCheck={false}
         className={cn(
@@ -97,83 +106,116 @@ export function ExpressionField({
         )}
       />
       <div className="flex items-center justify-between">
-        {error ? (
-          <p className="text-[11px] text-rose-600 dark:text-rose-400">{error}</p>
-        ) : value.trim() ? (
-          <p className="text-[11px] text-teal-600 dark:text-teal-400">✓ valid expression</p>
-        ) : (
-          <span className="text-[11px] text-slate-400">
-            Type a formula, or insert from the palette →
-          </span>
-        )}
+        <GeneratedValue
+          value={
+            error ? (
+              <p className="text-[11px] text-rose-600 dark:text-rose-400">
+                <GeneratedValue value={error} />
+              </p>
+            ) : value.trim() ? (
+              <p className="text-[11px] text-teal-600 dark:text-teal-400">
+                <GeneratedText id="m_022dc5dea23f14" />
+              </p>
+            ) : (
+              <span className="text-[11px] text-slate-400">
+                <GeneratedText id="m_0a5b0f1bf601d5" />
+              </span>
+            )
+          }
+        />
         <button
           type="button"
           onClick={() => setShowPalette((s) => !s)}
           className="text-[11px] font-medium text-teal-600 hover:text-teal-700 dark:text-teal-400"
         >
-          {showPalette ? 'Hide palette' : 'ƒ Fields & functions'}
+          <GeneratedValue
+            value={
+              showPalette ? (
+                <GeneratedText id="m_05a1c636afaf8c" />
+              ) : (
+                <GeneratedText id="m_0b29172f79b486" />
+              )
+            }
+          />
         </button>
       </div>
-      {showPalette ? (
-        <div className="max-h-44 space-y-1.5 overflow-auto rounded-md border border-slate-200 bg-slate-50/60 p-1.5 dark:border-slate-800 dark:bg-slate-800/30">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-              Fields
+      <GeneratedValue
+        value={
+          showPalette ? (
+            <div className="max-h-44 space-y-1.5 overflow-auto rounded-md border border-slate-200 bg-slate-50/60 p-1.5 dark:border-slate-800 dark:bg-slate-800/30">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+                  <GeneratedText id="m_147efea3b670a8" />
+                </div>
+                <span className="text-[10px] text-slate-400">
+                  <GeneratedValue value={visibleFields.length} />{' '}
+                  <GeneratedText id="m_00e704d1194796" /> <GeneratedValue value={fields.length} />
+                </span>
+              </div>
+              <input
+                type="search"
+                value={fieldQuery}
+                onChange={(event) => setFieldQuery(event.target.value.slice(0, 100))}
+                placeholder={tGenerated('m_1908587deafbfa')}
+                aria-label={tGenerated('m_0670b0e418e17d')}
+                className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              />
+              <div className="flex flex-wrap gap-1">
+                <GeneratedValue
+                  value={visibleFields.map((f) => (
+                    <button
+                      key={f.value}
+                      type="button"
+                      title={tGeneratedValue(exprLabel(f))}
+                      onClick={() => insert(`[${exprLabel(f)}]`)}
+                      className="rounded bg-white px-1.5 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200 hover:bg-teal-50 hover:text-teal-700 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700"
+                    >
+                      <GeneratedValue value={f.label} />
+                    </button>
+                  ))}
+                />
+                <GeneratedValue
+                  value={
+                    requireSearch ? (
+                      <p className="w-full py-2 text-center text-[11px] text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_091e83de9853e7" />{' '}
+                        <GeneratedValue value={fields.length} />{' '}
+                        <GeneratedText id="m_05e5e15745efed" />
+                      </p>
+                    ) : visibleFields.length === 0 ? (
+                      <p className="w-full py-2 text-center text-[11px] text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_1899e7d6b8d7c8" />
+                      </p>
+                    ) : null
+                  }
+                />
+              </div>
+              <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
+                <GeneratedText id="m_1610bada45d784" />
+              </div>
+              <div className="flex flex-wrap gap-1">
+                <GeneratedValue
+                  value={FN_PALETTE.map((fn) => (
+                    <button
+                      key={fn}
+                      type="button"
+                      title={tGeneratedValue(
+                        EXPR_FN_HELP[fn]?.sig
+                          ? `${EXPR_FN_HELP[fn]!.sig} — ${EXPR_FN_HELP[fn]!.doc}`
+                          : fn,
+                      )}
+                      onClick={() => insert(fn === 'now' ? 'now()' : `${fn}(`)}
+                      className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-violet-700 ring-1 ring-slate-200 hover:bg-violet-50 dark:bg-slate-900 dark:text-violet-300 dark:ring-slate-700"
+                    >
+                      <GeneratedValue value={fn} />
+                    </button>
+                  ))}
+                />
+              </div>
             </div>
-            <span className="text-[10px] text-slate-400">
-              {visibleFields.length} of {fields.length}
-            </span>
-          </div>
-          <input
-            type="search"
-            value={fieldQuery}
-            onChange={(event) => setFieldQuery(event.target.value.slice(0, 100))}
-            placeholder="Search fields or related tables…"
-            aria-label="Search expression fields"
-            className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-          />
-          <div className="flex flex-wrap gap-1">
-            {visibleFields.map((f) => (
-              <button
-                key={f.value}
-                type="button"
-                title={exprLabel(f)}
-                onClick={() => insert(`[${exprLabel(f)}]`)}
-                className="rounded bg-white px-1.5 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200 hover:bg-teal-50 hover:text-teal-700 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700"
-              >
-                {f.label}
-              </button>
-            ))}
-            {requireSearch ? (
-              <p className="w-full py-2 text-center text-[11px] text-slate-500 dark:text-slate-400">
-                Type a field or related-table name to search all {fields.length} fields.
-              </p>
-            ) : visibleFields.length === 0 ? (
-              <p className="w-full py-2 text-center text-[11px] text-slate-500 dark:text-slate-400">
-                No fields match this search.
-              </p>
-            ) : null}
-          </div>
-          <div className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase">
-            Functions
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {FN_PALETTE.map((fn) => (
-              <button
-                key={fn}
-                type="button"
-                title={
-                  EXPR_FN_HELP[fn]?.sig ? `${EXPR_FN_HELP[fn]!.sig} — ${EXPR_FN_HELP[fn]!.doc}` : fn
-                }
-                onClick={() => insert(fn === 'now' ? 'now()' : `${fn}(`)}
-                className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-violet-700 ring-1 ring-slate-200 hover:bg-violet-50 dark:bg-slate-900 dark:text-violet-300 dark:ring-slate-700"
-              >
-                {fn}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
+          ) : null
+        }
+      />
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Shared presentational pills (no 'use client' — safe in server and client
 // components). Used by the integrations hub list and the browse catalog.
 
@@ -16,7 +17,15 @@ export function DirectionPill({ dir }: { dir: 'in' | 'out' }) {
       )}
     >
       <Icon size={11} />
-      {dir === 'in' ? 'Sync in' : 'Push out'}
+      <GeneratedValue
+        value={
+          dir === 'in' ? (
+            <GeneratedText id="m_1cdce60ecabce0" />
+          ) : (
+            <GeneratedText id="m_0b3986b7284549" />
+          )
+        }
+      />
     </span>
   )
 }
@@ -42,7 +51,7 @@ export function StatusPill({ status }: { status: string }) {
         STATUS_PILL[status] ?? STATUS_PILL.draft,
       )}
     >
-      {status}
+      <GeneratedValue value={status} />
     </span>
   )
 }
@@ -66,7 +75,7 @@ export function RunPill({ status }: { status: string }) {
         RUN_PILL[status] ?? RUN_PILL.running,
       )}
     >
-      {status}
+      <GeneratedValue value={status} />
     </span>
   )
 }

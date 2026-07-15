@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // Paged.js page preview for a PDF document template. Renders the builder's HTML
 // filled with a REAL record's data (the most recent record of the template's
 // subject, via loadPdfPreviewData → adapter.loadValues()); falls back to
@@ -170,16 +172,36 @@ export default function PagedPreview({
       <style>{`
         .paged-host .pagedjs_page { background:#fff; box-shadow:0 1px 10px rgba(0,0,0,.25); margin:0 auto 24px; }
       `}</style>
-      {err ? (
-        <p className="mb-3 text-center text-sm text-red-600">Preview error: {err}</p>
-      ) : pages != null ? (
-        <p className="mb-3 text-center text-xs font-medium text-slate-600 dark:text-slate-300">
-          {pages} page{pages === 1 ? '' : 's'} ·{' '}
-          {sampleRef ? `record ${sampleRef}` : 'placeholder data (no records yet)'}
-        </p>
-      ) : (
-        <p className="mb-3 text-center text-xs text-slate-500">Paginating…</p>
-      )}
+      <GeneratedValue
+        value={
+          err ? (
+            <p className="mb-3 text-center text-sm text-red-600">
+              <GeneratedText id="m_113ec1672ca48f" /> <GeneratedValue value={err} />
+            </p>
+          ) : pages != null ? (
+            <p className="mb-3 text-center text-xs font-medium text-slate-600 dark:text-slate-300">
+              <GeneratedValue value={pages} /> <GeneratedText id="m_095a79b2a25706" />
+              <GeneratedValue
+                value={pages === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+              />{' '}
+              ·<GeneratedValue value={' '} />
+              <GeneratedValue
+                value={
+                  sampleRef ? (
+                    <GeneratedText id="m_15e62b473d2485" values={{ value0: sampleRef }} />
+                  ) : (
+                    <GeneratedText id="m_15f8afe7019723" />
+                  )
+                }
+              />
+            </p>
+          ) : (
+            <p className="mb-3 text-center text-xs text-slate-500">
+              <GeneratedText id="m_0d7c240956c1d3" />
+            </p>
+          )
+        }
+      />
       <div ref={ref} className="paged-host" />
     </div>
   )

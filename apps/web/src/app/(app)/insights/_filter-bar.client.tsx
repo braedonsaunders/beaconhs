@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Dashboard parameters UI:
 //   • DashboardFilters — a filter bar above the grid. Each param renders one
 //     control; setting a value writes it to the URL (?p_<key>=…), which the
@@ -61,6 +68,7 @@ export function DashboardFilters({
     paramMap: DashboardParamMap,
   ) => Promise<{ ok: true } | { ok: false; error: string }>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const sp = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -108,74 +116,107 @@ export function DashboardFilters({
     <>
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          <SlidersHorizontal size={13} /> Filters
-          {pending ? <Loader2 size={12} className="animate-spin text-teal-500" /> : null}
+          <SlidersHorizontal size={13} /> <GeneratedText id="m_1f9dc6f1f797f7" />
+          <GeneratedValue
+            value={pending ? <Loader2 size={12} className="animate-spin text-teal-500" /> : null}
+          />
         </div>
 
-        {hasParams ? (
-          params.map((p) => {
-            const opts = p.type === 'enum' ? enumOptions(p) : []
-            return (
-              <label key={p.key} className="flex items-center gap-2 text-sm">
-                <span className="text-slate-600 dark:text-slate-300">{p.label}</span>
-                {p.type === 'enum' && opts.length ? (
-                  <SearchSelect
-                    value={displayValue(p)}
-                    onChange={(v) => setValue(p.key, v)}
-                    options={opts}
-                    clearable
-                    emptyLabel="Any"
-                    placeholder="Any"
-                    sheetTitle={p.label}
-                    className="h-9 min-w-[11rem]"
-                  />
-                ) : (
-                  <ParamTextControl
-                    key={`${p.key}:${displayValue(p)}`}
-                    type={p.type}
-                    value={displayValue(p)}
-                    onCommit={(v) => setValue(p.key, v)}
-                  />
-                )}
-              </label>
+        <GeneratedValue
+          value={
+            hasParams ? (
+              params.map((p) => {
+                const opts = p.type === 'enum' ? enumOptions(p) : []
+                return (
+                  <label key={p.key} className="flex items-center gap-2 text-sm">
+                    <span className="text-slate-600 dark:text-slate-300">
+                      <GeneratedValue value={p.label} />
+                    </span>
+                    <GeneratedValue
+                      value={
+                        p.type === 'enum' && opts.length ? (
+                          <SearchSelect
+                            value={displayValue(p)}
+                            onChange={(v) => setValue(p.key, v)}
+                            options={opts}
+                            clearable
+                            emptyLabel={tGenerated('m_1ec3617d2cde86')}
+                            placeholder={tGenerated('m_1ec3617d2cde86')}
+                            sheetTitle={p.label}
+                            className="h-9 min-w-[11rem]"
+                          />
+                        ) : (
+                          <ParamTextControl
+                            key={`${p.key}:${displayValue(p)}`}
+                            type={p.type}
+                            value={displayValue(p)}
+                            onCommit={(v) => setValue(p.key, v)}
+                          />
+                        )
+                      }
+                    />
+                  </label>
+                )
+              })
+            ) : (
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_19edb5d00ebe54" />
+              </span>
             )
-          })
-        ) : (
-          <span className="text-xs text-slate-400 dark:text-slate-500">
-            No filters yet. Add one to scope the cards on this dashboard.
-          </span>
-        )}
+          }
+        />
 
         <div className="ml-auto flex items-center gap-1">
-          {anyActive ? (
-            <Button type="button" variant="ghost" onClick={resetAll} className="h-8 text-xs">
-              <RotateCcw size={13} className="mr-1" /> Reset
-            </Button>
-          ) : null}
-          {editable ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setSettingsOpen(true)}
-              className="h-8 text-xs"
-            >
-              <SlidersHorizontal size={13} className="mr-1" />{' '}
-              {hasParams ? 'Edit filters' : 'Add filters'}
-            </Button>
-          ) : null}
+          <GeneratedValue
+            value={
+              anyActive ? (
+                <Button type="button" variant="ghost" onClick={resetAll} className="h-8 text-xs">
+                  <RotateCcw size={13} className="mr-1" /> <GeneratedText id="m_1bd5864b59f5f2" />
+                </Button>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              editable ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSettingsOpen(true)}
+                  className="h-8 text-xs"
+                >
+                  <SlidersHorizontal size={13} className="mr-1" />
+                  <GeneratedValue value={' '} />
+                  <GeneratedValue
+                    value={
+                      hasParams ? (
+                        <GeneratedText id="m_063470895dbcc7" />
+                      ) : (
+                        <GeneratedText id="m_0b28f12ba1426e" />
+                      )
+                    }
+                  />
+                </Button>
+              ) : null
+            }
+          />
         </div>
       </div>
 
-      {editable ? (
-        <ParamsSettingsDrawer
-          open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-          initialParams={params}
-          initialParamMap={paramMap}
-          cards={cards}
-          onSave={onSaveParams}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          editable ? (
+            <ParamsSettingsDrawer
+              open={settingsOpen}
+              onClose={() => setSettingsOpen(false)}
+              initialParams={params}
+              initialParamMap={paramMap}
+              cards={cards}
+              onSave={onSaveParams}
+            />
+          ) : null
+        }
+      />
     </>
   )
 }
@@ -191,12 +232,14 @@ function ParamTextControl({
   value: string
   onCommit: (v: string) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const inputType = type === 'number' ? 'number' : type === 'date' ? 'date' : 'text'
   return (
     <Input
       type={inputType}
       defaultValue={value}
-      placeholder={type === 'date' ? '' : 'Any'}
+      placeholder={tGeneratedValue(type === 'date' ? '' : tGenerated('m_1ec3617d2cde86'))}
       onBlur={(e) => {
         if (e.target.value !== value) onCommit(e.target.value)
       }}
@@ -272,6 +315,8 @@ function ParamsSettingsBody({
     paramMap: DashboardParamMap,
   ) => Promise<{ ok: true } | { ok: false; error: string }>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [draft, setDraft] = useState<DraftParam[]>(initial)
   const [saving, setSaving] = useState(false)
 
@@ -327,11 +372,11 @@ function ParamsSettingsBody({
       const label = d.label.trim()
       const key = (d.key.trim() || slug(label)).trim()
       if (!label || !key) {
-        toast.error('Every filter needs a name.')
+        toast.error(tGenerated('m_19b34acc8fae56'))
         return
       }
       if (seen.has(key)) {
-        toast.error(`Duplicate filter key "${key}".`)
+        toast.error(tGenerated('m_0645dd50af964c', { value0: key }))
         return
       }
       seen.add(key)
@@ -352,10 +397,10 @@ function ParamsSettingsBody({
     const r = await onSave(params, paramMap)
     setSaving(false)
     if (!r.ok) {
-      toast.error(r.error)
+      toast.error(tGeneratedValue(r.error))
       return
     }
-    toast.success('Filters saved')
+    toast.success(tGenerated('m_078f18d5579a9f'))
     onClose()
   }
 
@@ -363,8 +408,8 @@ function ParamsSettingsBody({
     <Drawer
       open
       onClose={onClose}
-      title="Dashboard filters"
-      description="Define a filter, then point it at the cards it should scope."
+      title={tGenerated('m_0aecb77b56fbee')}
+      description={tGenerated('m_1428506b94cfe8')}
       size="lg"
       footer={
         <div className="flex items-center justify-end gap-2">
@@ -375,159 +420,190 @@ function ParamsSettingsBody({
             disabled={saving}
             className="text-xs"
           >
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button type="button" onClick={save} disabled={saving} className="text-xs">
-            {saving ? <Loader2 size={14} className="mr-1 animate-spin" /> : null} Save filters
+            <GeneratedValue
+              value={saving ? <Loader2 size={14} className="mr-1 animate-spin" /> : null}
+            />{' '}
+            <GeneratedText id="m_1d4e017c36def0" />
           </Button>
         </div>
       }
     >
       <div className="space-y-3">
-        {cards.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
-            Add some cards to this dashboard first — filters map onto card fields.
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            cards.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
+                <GeneratedText id="m_0495d946d2e332" />
+              </p>
+            ) : null
+          }
+        />
 
-        {draft.map((p, pi) => (
-          <div
-            key={pi}
-            className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
-          >
-            <div className="flex items-start gap-2">
-              <div className="grid flex-1 grid-cols-2 gap-2">
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    Name
-                  </label>
-                  <Input
-                    value={p.label}
-                    onChange={(e) =>
-                      update(pi, { label: e.target.value, key: p.key || slug(e.target.value) })
-                    }
-                    placeholder="e.g. Site"
-                    className="h-9"
-                  />
+        <GeneratedValue
+          value={draft.map((p, pi) => (
+            <div
+              key={pi}
+              className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+            >
+              <div className="flex items-start gap-2">
+                <div className="grid flex-1 grid-cols-2 gap-2">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </label>
+                    <Input
+                      value={p.label}
+                      onChange={(e) =>
+                        update(pi, { label: e.target.value, key: p.key || slug(e.target.value) })
+                      }
+                      placeholder={tGenerated('m_1246a5bfeb46fa')}
+                      className="h-9"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_169ff65a3cfc14" />{' '}
+                      <span className="font-normal text-slate-400">
+                        <GeneratedText id="m_0383274a2752ce" />
+                      </span>
+                    </label>
+                    <Input
+                      value={p.key}
+                      onChange={(e) => update(pi, { key: slug(e.target.value) })}
+                      placeholder={tGenerated('m_0415fcfa1df1a8')}
+                      className="h-9 font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_074ba2f160c506" />
+                    </label>
+                    <Select
+                      value={p.type}
+                      onChange={(e) => update(pi, { type: e.target.value as DashboardParamType })}
+                      className="h-9"
+                    >
+                      <GeneratedValue
+                        value={PARAM_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            <GeneratedValue value={t.label} />
+                          </option>
+                        ))}
+                      />
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_1f7e78461783a1" />{' '}
+                      <span className="font-normal text-slate-400">
+                        <GeneratedText id="m_1738060036f0ca" />
+                      </span>
+                    </label>
+                    <Input
+                      type={p.type === 'number' ? 'number' : p.type === 'date' ? 'date' : 'text'}
+                      value={p.defaultValue}
+                      onChange={(e) => update(pi, { defaultValue: e.target.value })}
+                      placeholder={tGenerated('m_04be42f1f72c23')}
+                      className="h-9"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    Key <span className="font-normal text-slate-400">· used in the URL</span>
-                  </label>
-                  <Input
-                    value={p.key}
-                    onChange={(e) => update(pi, { key: slug(e.target.value) })}
-                    placeholder="site"
-                    className="h-9 font-mono text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    Type
-                  </label>
-                  <Select
-                    value={p.type}
-                    onChange={(e) => update(pi, { type: e.target.value as DashboardParamType })}
-                    className="h-9"
-                  >
-                    {PARAM_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                    Default <span className="font-normal text-slate-400">· optional</span>
-                  </label>
-                  <Input
-                    type={p.type === 'number' ? 'number' : p.type === 'date' ? 'date' : 'text'}
-                    value={p.defaultValue}
-                    onChange={(e) => update(pi, { defaultValue: e.target.value })}
-                    placeholder="None"
-                    className="h-9"
-                  />
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => removeParam(pi)}
-                aria-label="Remove filter"
-                className="mt-6 text-slate-300 hover:text-rose-500"
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
-
-            {/* Targets */}
-            <div className="mt-3 border-t border-slate-100 pt-2 dark:border-slate-800">
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                  Applies to
-                </span>
                 <button
                   type="button"
-                  onClick={() => addTarget(pi)}
-                  disabled={cards.length === 0}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700 disabled:opacity-40"
+                  onClick={() => removeParam(pi)}
+                  aria-label={tGenerated('m_0cc73f88cebb2f')}
+                  className="mt-6 text-slate-300 hover:text-rose-500"
                 >
-                  <Plus size={13} /> Add card
+                  <Trash2 size={15} />
                 </button>
               </div>
-              {p.targets.length === 0 ? (
-                <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                  Not mapped — this filter won&apos;t do anything until you add a card.
-                </p>
-              ) : (
-                <div className="space-y-1.5">
-                  {p.targets.map((t, ti) => (
-                    <div key={ti} className="flex items-center gap-1.5">
-                      <Select
-                        value={t.cardId}
-                        onChange={(e) =>
-                          updateTarget(pi, ti, { cardId: e.target.value, field: '' })
-                        }
-                        className="flex-1"
-                      >
-                        <option value="">Pick a card…</option>
-                        {cardOptions.map((c) => (
-                          <option key={c.value} value={c.value}>
-                            {c.label}
-                          </option>
-                        ))}
-                      </Select>
-                      <Select
-                        value={t.field}
-                        onChange={(e) => updateTarget(pi, ti, { field: e.target.value })}
-                        className="flex-1"
-                        disabled={!t.cardId}
-                      >
-                        <option value="">Pick a field…</option>
-                        {fieldsFor(t.cardId).map((f) => (
-                          <option key={f.value} value={f.value}>
-                            {f.label}
-                          </option>
-                        ))}
-                      </Select>
-                      <button
-                        type="button"
-                        onClick={() => removeTarget(pi, ti)}
-                        aria-label="Remove mapping"
-                        className="text-slate-300 hover:text-rose-500"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  ))}
+
+              {/* Targets */}
+              <div className="mt-3 border-t border-slate-100 pt-2 dark:border-slate-800">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                    <GeneratedText id="m_1b4e50d87500ba" />
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => addTarget(pi)}
+                    disabled={cards.length === 0}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:text-teal-700 disabled:opacity-40"
+                  >
+                    <Plus size={13} /> <GeneratedText id="m_1d648db6d730f4" />
+                  </button>
                 </div>
-              )}
+                <GeneratedValue
+                  value={
+                    p.targets.length === 0 ? (
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                        <GeneratedText id="m_13c76d75f640b0" />
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <GeneratedValue
+                          value={p.targets.map((t, ti) => (
+                            <div key={ti} className="flex items-center gap-1.5">
+                              <Select
+                                value={t.cardId}
+                                onChange={(e) =>
+                                  updateTarget(pi, ti, { cardId: e.target.value, field: '' })
+                                }
+                                className="flex-1"
+                              >
+                                <option value="">
+                                  <GeneratedText id="m_0f1fcbe4c0f7e5" />
+                                </option>
+                                <GeneratedValue
+                                  value={cardOptions.map((c) => (
+                                    <option key={c.value} value={c.value}>
+                                      {c.label}
+                                    </option>
+                                  ))}
+                                />
+                              </Select>
+                              <Select
+                                value={t.field}
+                                onChange={(e) => updateTarget(pi, ti, { field: e.target.value })}
+                                className="flex-1"
+                                disabled={!t.cardId}
+                              >
+                                <option value="">
+                                  <GeneratedText id="m_0ff98564d477ba" />
+                                </option>
+                                <GeneratedValue
+                                  value={fieldsFor(t.cardId).map((f) => (
+                                    <option key={f.value} value={f.value}>
+                                      {f.label}
+                                    </option>
+                                  ))}
+                                />
+                              </Select>
+                              <button
+                                type="button"
+                                onClick={() => removeTarget(pi, ti)}
+                                aria-label={tGenerated('m_1d82f43c88df4c')}
+                                className="text-slate-300 hover:text-rose-500"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          ))}
+                        />
+                      </div>
+                    )
+                  }
+                />
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        />
 
         <Button type="button" variant="outline" onClick={addParam} className="w-full text-xs">
-          <Plus size={14} className="mr-1" /> Add filter
+          <Plus size={14} className="mr-1" /> <GeneratedText id="m_1d132305dbefb5" />
         </Button>
       </div>
     </Drawer>

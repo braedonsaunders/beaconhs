@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // "My inspections" — inspection_records performed by the current user (as the
 // inspector). Mirrors the columns from /inspections/records but pinned to
 // inspectorTenantUserId = ctx.membership.id.
@@ -29,7 +32,10 @@ import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { WorkspaceNoIdentity } from '../_no-identity'
 
-export const metadata = { title: 'My inspections' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1c7449eea10aa1') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['reference', 'occurred_at', 'status'] as const
@@ -46,6 +52,8 @@ export default async function MyInspectionsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'occurred_at',
@@ -68,11 +76,13 @@ export default async function MyInspectionsPage({
         header={
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title="My inspections"
-            description="Inspections you carried out."
+            title={tGenerated('m_1c7449eea10aa1')}
+            description={tGenerated('m_13a257b1a83d33')}
             actions={
               <Link href="/inspections">
-                <Button variant="outline">All inspections</Button>
+                <Button variant="outline">
+                  <GeneratedText id="m_17d8d7d44e5ef7" />
+                </Button>
               </Link>
             }
           />
@@ -154,116 +164,152 @@ export default async function MyInspectionsPage({
         <>
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title="My inspections"
-            description="Inspection records you carried out as the inspector."
+            title={tGenerated('m_1c7449eea10aa1')}
+            description={tGenerated('m_08798427ccca06')}
             actions={
               <div className="flex items-center gap-2">
                 <Link href="/inspections/records">
-                  <Button variant="outline">All inspections</Button>
+                  <Button variant="outline">
+                    <GeneratedText id="m_17d8d7d44e5ef7" />
+                  </Button>
                 </Link>
                 <Link href="/inspections/records?drawer=new">
-                  <Button>New inspection</Button>
+                  <Button>
+                    <GeneratedText id="m_0f060bce7a52ef" />
+                  </Button>
                 </Link>
               </div>
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search reference, notes…" />
+            <SearchInput placeholder={tGenerated('m_0326a39f690c7c')} />
             <FilterChips
               basePath="/my/inspections"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardList size={32} />}
-          title={params.q || statusFilter ? 'No inspections match these filters' : 'No inspections'}
-          description="Inspections you carry out appear here."
-          action={
-            <Link href="/inspections/records?drawer=new">
-              <Button>Start an inspection</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
-                  Ref
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="occurred_at"
-                  active={params.sort === 'occurred_at'}
-                >
-                  Occurred
-                </SortableTh>
-                <TableHead>Type</TableHead>
-                <TableHead>Site</TableHead>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                  Status
-                </SortableTh>
-                <TableHead>Customer signed</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ rec, type, site }) => (
-                <TableRow key={rec.id}>
-                  <TableCell className="font-mono text-xs">
-                    <Link href={`/inspections/records/${rec.id}`} className="hover:underline">
-                      {rec.reference}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {formatDate(new Date(rec.occurredAt), ctx.timezone, ctx.locale)}
-                  </TableCell>
-                  <TableCell>{type?.name ?? '—'}</TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {site?.name ?? '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        rec.status === 'closed'
-                          ? 'success'
-                          : rec.status === 'submitted'
-                            ? 'default'
-                            : rec.status === 'in_progress'
-                              ? 'warning'
-                              : 'secondary'
-                      }
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<ClipboardList size={32} />}
+              title={tGeneratedValue(
+                params.q || statusFilter
+                  ? tGenerated('m_0bb6621f58446d')
+                  : tGenerated('m_126c2564fdaabf'),
+              )}
+              description={tGenerated('m_00d9035db6bbab')}
+              action={
+                <Link href="/inspections/records?drawer=new">
+                  <Button>
+                    <GeneratedText id="m_1edf2b8e0e3013" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      {...sortProps}
+                      column="reference"
+                      active={params.sort === 'reference'}
                     >
-                      {rec.status.replace('_', ' ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {rec.customerSignedAt ? (
-                      <Badge variant="success">Signed</Badge>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/my/inspections"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                      <GeneratedText id="m_036b564bb88dfe" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="occurred_at"
+                      active={params.sort === 'occurred_at'}
+                    >
+                      <GeneratedText id="m_14a5e97535a15a" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_074ba2f160c506" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_020146dd3d3d5a" />
+                    </TableHead>
+                    <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_011c62a541c44d" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ rec, type, site }) => (
+                      <TableRow key={rec.id}>
+                        <TableCell className="font-mono text-xs">
+                          <Link href={`/inspections/records/${rec.id}`} className="hover:underline">
+                            <GeneratedValue value={rec.reference} />
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue
+                            value={formatDate(new Date(rec.occurredAt), ctx.timezone, ctx.locale)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <GeneratedValue value={type?.name ?? '—'} />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={site?.name ?? '—'} />
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              rec.status === 'closed'
+                                ? 'success'
+                                : rec.status === 'submitted'
+                                  ? 'default'
+                                  : rec.status === 'in_progress'
+                                    ? 'warning'
+                                    : 'secondary'
+                            }
+                          >
+                            <GeneratedValue value={rec.status.replace('_', ' ')} />
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <GeneratedValue
+                            value={
+                              rec.customerSignedAt ? (
+                                <Badge variant="success">
+                                  <GeneratedText id="m_142c80b0b4c3f4" />
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )
+                            }
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/my/inspections"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

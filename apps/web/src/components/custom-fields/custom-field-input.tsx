@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 // Always-editable, auto-saving input for a single custom field — the
 // custom-field counterpart of <LiveField>. Saves through the generic
 // `updateCustomFieldValueAction` (entityKind + id + key + value). Renders the
@@ -68,8 +70,8 @@ export function CustomFieldInput({
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-2">
         <label className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          {def.label}
-          {def.required ? <span className="text-red-600"> *</span> : null}
+          <GeneratedValue value={def.label} />
+          <GeneratedValue value={def.required ? <span className="text-red-600"> *</span> : null} />
         </label>
         <SaveDot state={state} onRetry={retry} />
       </div>
@@ -83,9 +85,15 @@ export function CustomFieldInput({
         baseline={baseline}
         hasPending={hasPending}
       />
-      {def.helpText ? (
-        <p className="text-xs text-slate-400 dark:text-slate-500">{def.helpText}</p>
-      ) : null}
+      <GeneratedValue
+        value={
+          def.helpText ? (
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              <GeneratedValue value={def.helpText} />
+            </p>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -183,12 +191,16 @@ function SelectControl({
         persist(e.target.value)
       }}
     >
-      <option value="">— None —</option>
-      {(def.config?.options ?? []).map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
+      <option value="">
+        <GeneratedText id="m_0dd5f8a31ce3e1" />
+      </option>
+      <GeneratedValue
+        value={(def.config?.options ?? []).map((o) => (
+          <option key={o.value} value={o.value}>
+            <GeneratedValue value={o.label} />
+          </option>
+        ))}
+      />
     </Select>
   )
 }
@@ -218,26 +230,28 @@ function MultiSelectControl({
   }
   return (
     <div className="flex flex-wrap gap-2">
-      {(def.config?.options ?? []).map((o) => {
-        const on = selected.includes(o.value)
-        return (
-          <button
-            key={o.value}
-            type="button"
-            disabled={disabled}
-            aria-pressed={on}
-            onClick={() => toggle(o.value)}
-            className={cn(
-              'rounded-full border px-3 py-1 text-sm transition-colors disabled:opacity-50',
-              on
-                ? 'border-teal-500 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-500/15 dark:text-teal-200'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
-            )}
-          >
-            {o.label}
-          </button>
-        )
-      })}
+      <GeneratedValue
+        value={(def.config?.options ?? []).map((o) => {
+          const on = selected.includes(o.value)
+          return (
+            <button
+              key={o.value}
+              type="button"
+              disabled={disabled}
+              aria-pressed={on}
+              onClick={() => toggle(o.value)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-sm transition-colors disabled:opacity-50',
+                on
+                  ? 'border-teal-500 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-500/15 dark:text-teal-200'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+              )}
+            >
+              <GeneratedValue value={o.label} />
+            </button>
+          )
+        })}
+      />
     </div>
   )
 }
@@ -253,13 +267,14 @@ function BooleanControl({
   initialValue: unknown
   persist: (value: string) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [on, setOn] = useState(initialValue === true)
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
-      aria-label={def.label}
+      aria-label={tGeneratedValue(def.label)}
       disabled={disabled}
       onClick={() => {
         const next = !on
@@ -300,6 +315,7 @@ function TextLikeControl({
   baseline: { current: string }
   hasPending: () => boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [value, setValue] = useState(initialValue)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -336,7 +352,7 @@ function TextLikeControl({
         rows={3}
         value={value}
         disabled={disabled}
-        placeholder={def.config?.placeholder ?? undefined}
+        placeholder={tGeneratedValue(def.config?.placeholder ?? undefined)}
         maxLength={CUSTOM_FIELD_LIMITS.textarea}
         onChange={(e) => onChange(e.target.value)}
         onBlur={() => commit(value)}
@@ -364,7 +380,7 @@ function TextLikeControl({
       type={inputType}
       value={value}
       disabled={disabled}
-      placeholder={def.config?.placeholder ?? undefined}
+      placeholder={tGeneratedValue(def.config?.placeholder ?? undefined)}
       min={meta.supportsRange ? (def.config?.min ?? undefined) : undefined}
       max={meta.supportsRange ? (def.config?.max ?? undefined) : undefined}
       step={meta.supportsRange ? (def.config?.step ?? undefined) : undefined}
@@ -388,8 +404,12 @@ function TextLikeControl({
   if (def.fieldType === 'number' && def.config?.unit) {
     return (
       <div className="flex items-center gap-2">
-        <div className="flex-1">{input}</div>
-        <span className="text-sm text-slate-500 dark:text-slate-400">{def.config.unit}</span>
+        <div className="flex-1">
+          <GeneratedValue value={input} />
+        </div>
+        <span className="text-sm text-slate-500 dark:text-slate-400">
+          <GeneratedValue value={def.config.unit} />
+        </span>
       </div>
     )
   }

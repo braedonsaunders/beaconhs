@@ -20,6 +20,13 @@
 
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
@@ -51,6 +58,7 @@ export function AddTaskDrawerBody({
   closeHref: string
   addAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const close = useDrawerClose(closeHref)
   const [taskId, setTaskId] = useState<string>('')
   const [description, setDescription] = useState<string>('')
@@ -79,43 +87,61 @@ export function AddTaskDrawerBody({
     <>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>From library</Label>
+          <Label>
+            <GeneratedText id="m_1ea86ac5ad7afa" />
+          </Label>
           <Select value={taskId} onChange={(e) => setTaskId(e.target.value)}>
-            <option value="">— ad-hoc task —</option>
-            {taskLibrary.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
+            <option value="">
+              <GeneratedText id="m_168189b204837c" />
+            </option>
+            <GeneratedValue
+              value={taskLibrary.map((t) => (
+                <option key={t.id} value={t.id}>
+                  <GeneratedValue value={t.name} />
+                </option>
+              ))}
+            />
           </Select>
           <p className="text-xs text-slate-500">
-            Selecting a library task pre-fills the controls and links any associated hazards.
+            <GeneratedText id="m_0c8805d993d503" />
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label>Ad-hoc description</Label>
+          <Label>
+            <GeneratedText id="m_1f66885a1eaae2" />
+          </Label>
           <Input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Short task name (required if not from library)"
+            placeholder={tGenerated('m_143fbcb93fa38e')}
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Controls (override / extra)</Label>
+          <Label>
+            <GeneratedText id="m_1000e754ae934f" />
+          </Label>
           <Textarea
             value={controls}
             onChange={(e) => setControls(e.target.value)}
             rows={3}
-            placeholder="Optional — overrides the library task's controls"
+            placeholder={tGenerated('m_19b0625a801b33')}
           />
         </div>
-        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+        <GeneratedValue
+          value={
+            err ? (
+              <div className="text-sm text-red-600">
+                <GeneratedValue value={err} />
+              </div>
+            ) : null
+          }
+        />
       </div>
       <DrawerSubmitHandle
         pending={pending}
         onSubmit={submit}
         closeHref={closeHref}
-        submitLabel="Add task"
+        submitLabel={tGenerated('m_02ac1cf154a4f9')}
       />
     </>
   )
@@ -141,6 +167,8 @@ export function EditTaskDrawerBody({
   hazardLookup: Map<string, string>
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const close = useDrawerClose(closeHref)
   const [description, setDescription] = useState<string>(row.description ?? '')
   const [controls, setControls] = useState<string>(row.controls ?? '')
@@ -161,43 +189,63 @@ export function EditTaskDrawerBody({
   return (
     <>
       <div className="space-y-4">
-        {taskName ? (
-          <div className="rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
-            <div className="text-xs tracking-wide text-slate-500 uppercase">From library</div>
-            <div className="font-medium text-slate-900 dark:text-slate-100">{taskName}</div>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            taskName ? (
+              <div className="rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
+                <div className="text-xs tracking-wide text-slate-500 uppercase">
+                  <GeneratedText id="m_1ea86ac5ad7afa" />
+                </div>
+                <div className="font-medium text-slate-900 dark:text-slate-100">
+                  <GeneratedValue value={taskName} />
+                </div>
+              </div>
+            ) : null
+          }
+        />
         <div className="space-y-1.5">
-          <Label>Description override</Label>
+          <Label>
+            <GeneratedText id="m_197d24c1b596bb" />
+          </Label>
           <Input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder={taskName ?? 'Task description'}
+            placeholder={tGeneratedValue(taskName ?? tGenerated('m_122f8628a8f74b'))}
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Controls</Label>
+          <Label>
+            <GeneratedText id="m_163b887b41bdd5" />
+          </Label>
           <Textarea
             value={controls}
             onChange={(e) => setControls(e.target.value)}
             rows={4}
-            placeholder="Controls and safe-work practices that apply"
+            placeholder={tGenerated('m_0b1ab817c141f3')}
           />
         </div>
-        {row.hazardIds.length > 0 ? (
-          <div className="rounded-md bg-slate-50 px-3 py-2 text-xs dark:bg-slate-800/50">
-            <div className="font-medium tracking-wide text-slate-500 uppercase">Linked hazards</div>
-            <div className="mt-1 text-slate-700 dark:text-slate-300">
-              {row.hazardIds.map((id) => hazardLookup.get(id) ?? '?').join(', ')}
-            </div>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            row.hazardIds.length > 0 ? (
+              <div className="rounded-md bg-slate-50 px-3 py-2 text-xs dark:bg-slate-800/50">
+                <div className="font-medium tracking-wide text-slate-500 uppercase">
+                  <GeneratedText id="m_0d68207e1f7148" />
+                </div>
+                <div className="mt-1 text-slate-700 dark:text-slate-300">
+                  <GeneratedValue
+                    value={row.hazardIds.map((id) => hazardLookup.get(id) ?? '?').join(', ')}
+                  />
+                </div>
+              </div>
+            ) : null
+          }
+        />
       </div>
       <DrawerSubmitHandle
         pending={pending}
         onSubmit={submit}
         closeHref={closeHref}
-        submitLabel="Save"
+        submitLabel={tGenerated('m_19e6bff894c3c7')}
       />
     </>
   )
@@ -236,49 +284,85 @@ export function TaskRow({
     <li className="space-y-2 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-xs tracking-wide text-slate-500 uppercase">Task #{index + 1}</div>
+          <div className="text-xs tracking-wide text-slate-500 uppercase">
+            <GeneratedText id="m_1c0e96e4dbce0f" />
+            <GeneratedValue value={index + 1} />
+          </div>
           <div className="font-medium text-slate-900 dark:text-slate-100">
-            {taskName ?? row.description ?? <span className="text-slate-400">— untitled —</span>}
+            <GeneratedValue
+              value={
+                taskName ??
+                row.description ?? (
+                  <span className="text-slate-400">
+                    <GeneratedText id="m_1ffac86e914f96" />
+                  </span>
+                )
+              }
+            />
           </div>
-          {row.description && taskName && row.description !== taskName ? (
-            <div className="text-xs text-slate-500">Override: {row.description}</div>
-          ) : null}
+          <GeneratedValue
+            value={
+              row.description && taskName && row.description !== taskName ? (
+                <div className="text-xs text-slate-500">
+                  <GeneratedText id="m_1e041e56c1d295" /> <GeneratedValue value={row.description} />
+                </div>
+              ) : null
+            }
+          />
         </div>
-        {disabled ? null : (
-          <div className="flex items-center gap-1">
-            <EditLinkButton href={`${basePath}?drawer=edit-task&taskId=${row.id}`} />
-            <MoveButton
-              id={row.id}
-              assessmentId={assessmentId}
-              direction="up"
-              disabled={index === 0}
-              action={moveAction}
-            />
-            <MoveButton
-              id={row.id}
-              assessmentId={assessmentId}
-              direction="down"
-              disabled={index >= totalCount - 1}
-              action={moveAction}
-            />
-            <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
-          </div>
-        )}
+        <GeneratedValue
+          value={
+            disabled ? null : (
+              <div className="flex items-center gap-1">
+                <EditLinkButton href={`${basePath}?drawer=edit-task&taskId=${row.id}`} />
+                <MoveButton
+                  id={row.id}
+                  assessmentId={assessmentId}
+                  direction="up"
+                  disabled={index === 0}
+                  action={moveAction}
+                />
+                <MoveButton
+                  id={row.id}
+                  assessmentId={assessmentId}
+                  direction="down"
+                  disabled={index >= totalCount - 1}
+                  action={moveAction}
+                />
+                <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
+              </div>
+            )
+          }
+        />
       </div>
-      {row.controls ? (
-        <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
-          <span className="font-medium tracking-wide text-slate-500 uppercase">Controls:</span>{' '}
-          {row.controls}
-        </div>
-      ) : null}
-      {row.hazardIds.length > 0 ? (
-        <div className="text-xs text-slate-500">
-          Linked hazards:{' '}
-          <span className="text-slate-700 dark:text-slate-300">
-            {row.hazardIds.map((id) => hazardLookup.get(id) ?? '?').join(', ')}
-          </span>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          row.controls ? (
+            <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
+              <span className="font-medium tracking-wide text-slate-500 uppercase">
+                <GeneratedText id="m_1cf9abb5566412" />
+              </span>
+              <GeneratedValue value={' '} />
+              <GeneratedValue value={row.controls} />
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          row.hazardIds.length > 0 ? (
+            <div className="text-xs text-slate-500">
+              <GeneratedText id="m_07d8bdb7c50c15" />
+              <GeneratedValue value={' '} />
+              <span className="text-slate-700 dark:text-slate-300">
+                <GeneratedValue
+                  value={row.hazardIds.map((id) => hazardLookup.get(id) ?? '?').join(', ')}
+                />
+              </span>
+            </div>
+          ) : null
+        }
+      />
     </li>
   )
 }
@@ -298,6 +382,7 @@ export function AddHazardLibraryDrawerBody({
   closeHref: string
   addAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const close = useDrawerClose(closeHref)
   const [hazardId, setHazardId] = useState<string>('')
   const [query, setQuery] = useState<string>('')
@@ -330,50 +415,76 @@ export function AddHazardLibraryDrawerBody({
     <>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>Search</Label>
+          <Label>
+            <GeneratedText id="m_1417e84947b481" />
+          </Label>
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search hazard library…"
+            placeholder={tGenerated('m_1a2234377867d3')}
           />
         </div>
         <div className="-mx-1 max-h-[60vh] overflow-y-auto rounded-md border border-slate-200 dark:border-slate-800">
-          {filtered.length === 0 ? (
-            <div className="px-3 py-6 text-center text-sm text-slate-500">No hazards match.</div>
-          ) : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filtered.map((h) => (
-                <li key={h.id}>
-                  <label
-                    className={`flex cursor-pointer items-start gap-3 px-3 py-2 text-sm hover:bg-slate-50 dark:bg-slate-800/50 ${hazardId === h.id ? 'bg-teal-50' : ''}`}
-                  >
-                    <input
-                      type="radio"
-                      name="hazardId"
-                      value={h.id}
-                      checked={hazardId === h.id}
-                      onChange={() => setHazardId(h.id)}
-                      className="mt-1"
-                    />
-                    <div className="min-w-0">
-                      <div className="font-medium text-slate-900 dark:text-slate-100">{h.name}</div>
-                      {h.typeName ? (
-                        <div className="text-xs text-slate-500">{h.typeName}</div>
-                      ) : null}
-                    </div>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
+          <GeneratedValue
+            value={
+              filtered.length === 0 ? (
+                <div className="px-3 py-6 text-center text-sm text-slate-500">
+                  <GeneratedText id="m_0c5c7559170aa0" />
+                </div>
+              ) : (
+                <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <GeneratedValue
+                    value={filtered.map((h) => (
+                      <li key={h.id}>
+                        <label
+                          className={`flex cursor-pointer items-start gap-3 px-3 py-2 text-sm hover:bg-slate-50 dark:bg-slate-800/50 ${hazardId === h.id ? 'bg-teal-50' : ''}`}
+                        >
+                          <input
+                            type="radio"
+                            name="hazardId"
+                            value={h.id}
+                            checked={hazardId === h.id}
+                            onChange={() => setHazardId(h.id)}
+                            className="mt-1"
+                          />
+                          <div className="min-w-0">
+                            <div className="font-medium text-slate-900 dark:text-slate-100">
+                              <GeneratedValue value={h.name} />
+                            </div>
+                            <GeneratedValue
+                              value={
+                                h.typeName ? (
+                                  <div className="text-xs text-slate-500">
+                                    <GeneratedValue value={h.typeName} />
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          </div>
+                        </label>
+                      </li>
+                    ))}
+                  />
+                </ul>
+              )
+            }
+          />
         </div>
-        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+        <GeneratedValue
+          value={
+            err ? (
+              <div className="text-sm text-red-600">
+                <GeneratedValue value={err} />
+              </div>
+            ) : null
+          }
+        />
       </div>
       <DrawerSubmitHandle
         pending={pending}
         onSubmit={submit}
         closeHref={closeHref}
-        submitLabel="Add hazard"
+        submitLabel={tGenerated('m_1302603dc58ef5')}
       />
     </>
   )
@@ -390,6 +501,7 @@ export function AddHazardSetDrawerBody({
   closeHref: string
   addSetAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const close = useDrawerClose(closeHref)
   const [setId, setSetId] = useState<string>('')
   const [pending, start] = useTransition()
@@ -414,50 +526,69 @@ export function AddHazardSetDrawerBody({
     <>
       <div className="space-y-4">
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          Hazard sets bulk-add a curated list of hazards in one shot. Existing hazards on this
-          assessment are not deduplicated.
+          <GeneratedText id="m_17ba1e4ba95d23" />
         </p>
         <div className="space-y-1.5">
-          <Label>Hazard set</Label>
-          {hazardSets.length === 0 ? (
-            <div className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-500 dark:bg-slate-800/50">
-              No hazard sets configured. Create one under the hazard library admin.
-            </div>
-          ) : (
-            <ul className="space-y-1.5">
-              {hazardSets.map((s) => (
-                <li key={s.id}>
-                  <label
-                    className={`flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm hover:bg-slate-50 dark:bg-slate-800/50 ${setId === s.id ? 'border-teal-600 bg-teal-50' : 'border-slate-200 dark:border-slate-800'}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="setId"
-                        value={s.id}
-                        checked={setId === s.id}
-                        onChange={() => setSetId(s.id)}
-                      />
-                      <span className="font-medium text-slate-900 dark:text-slate-100">
-                        {s.name}
-                      </span>
-                    </div>
-                    <span className="text-xs text-slate-500">
-                      {s.count} hazard{s.count === 1 ? '' : 's'}
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
+          <Label>
+            <GeneratedText id="m_148930df26b358" />
+          </Label>
+          <GeneratedValue
+            value={
+              hazardSets.length === 0 ? (
+                <div className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-500 dark:bg-slate-800/50">
+                  <GeneratedText id="m_086a17af5daaea" />
+                </div>
+              ) : (
+                <ul className="space-y-1.5">
+                  <GeneratedValue
+                    value={hazardSets.map((s) => (
+                      <li key={s.id}>
+                        <label
+                          className={`flex cursor-pointer items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm hover:bg-slate-50 dark:bg-slate-800/50 ${setId === s.id ? 'border-teal-600 bg-teal-50' : 'border-slate-200 dark:border-slate-800'}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="setId"
+                              value={s.id}
+                              checked={setId === s.id}
+                              onChange={() => setSetId(s.id)}
+                            />
+                            <span className="font-medium text-slate-900 dark:text-slate-100">
+                              <GeneratedValue value={s.name} />
+                            </span>
+                          </div>
+                          <span className="text-xs text-slate-500">
+                            <GeneratedValue value={s.count} />{' '}
+                            <GeneratedText id="m_1f4e6f2368a144" />
+                            <GeneratedValue
+                              value={s.count === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+                            />
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  />
+                </ul>
+              )
+            }
+          />
         </div>
-        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+        <GeneratedValue
+          value={
+            err ? (
+              <div className="text-sm text-red-600">
+                <GeneratedValue value={err} />
+              </div>
+            ) : null
+          }
+        />
       </div>
       <DrawerSubmitHandle
         pending={pending}
         onSubmit={submit}
         closeHref={closeHref}
-        submitLabel="Add set"
+        submitLabel={tGenerated('m_130c47677645f8')}
       />
     </>
   )
@@ -472,6 +603,7 @@ export function AddHazardDrawerBody({
   closeHref: string
   addAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const close = useDrawerClose(closeHref)
   const [name, setName] = useState<string>('')
   const [pending, start] = useTransition()
@@ -496,24 +628,33 @@ export function AddHazardDrawerBody({
     <>
       <div className="space-y-4">
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          Add an ad-hoc hazard for this job only. To save it for future assessments, add it to the
-          hazard library instead.
+          <GeneratedText id="m_035c0272757ccb" />
         </p>
         <div className="space-y-1.5">
-          <Label>Hazard name</Label>
+          <Label>
+            <GeneratedText id="m_04ecd25c7edb2f" />
+          </Label>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Sun exposure, low overhead beam"
+            placeholder={tGenerated('m_0b9a3a5d75eb5c')}
           />
         </div>
-        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+        <GeneratedValue
+          value={
+            err ? (
+              <div className="text-sm text-red-600">
+                <GeneratedValue value={err} />
+              </div>
+            ) : null
+          }
+        />
       </div>
       <DrawerSubmitHandle
         pending={pending}
         onSubmit={submit}
         closeHref={closeHref}
-        submitLabel="Add hazard"
+        submitLabel={tGenerated('m_1302603dc58ef5')}
       />
     </>
   )
@@ -544,6 +685,7 @@ export function EditHazardDrawerBody({
   libraryName: string | null
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const close = useDrawerClose(closeHref)
   const [name, setName] = useState<string>(row.name ?? '')
   const [standard, setStandard] = useState<string>(row.standardControls ?? '')
@@ -590,21 +732,31 @@ export function EditHazardDrawerBody({
   return (
     <>
       <div className="space-y-4">
-        {libraryName ? (
-          <div className="rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
-            <div className="text-xs tracking-wide text-slate-500 uppercase">From library</div>
-            <div className="font-medium text-slate-900 dark:text-slate-100">{libraryName}</div>
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            <Label>Hazard name</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ad-hoc hazard name"
-            />
-          </div>
-        )}
+        <GeneratedValue
+          value={
+            libraryName ? (
+              <div className="rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
+                <div className="text-xs tracking-wide text-slate-500 uppercase">
+                  <GeneratedText id="m_1ea86ac5ad7afa" />
+                </div>
+                <div className="font-medium text-slate-900 dark:text-slate-100">
+                  <GeneratedValue value={libraryName} />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_04ecd25c7edb2f" />
+                </Label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={tGenerated('m_1a6bcfd6e8ddff')}
+                />
+              </div>
+            )
+          }
+        />
 
         {/* ---------------------------------------------------------------- */}
         {/* Risk-rating block — pre-control 5×5 matrix, controls textarea,  */}
@@ -613,7 +765,7 @@ export function EditHazardDrawerBody({
         {/* ---------------------------------------------------------------- */}
         <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">
           <RiskMatrixField
-            label="Pre-control risk (before mitigations)"
+            label={tGenerated('m_0db23760897db4')}
             likelihoodName="preLikelihood"
             severityName="preSeverity"
             defaultLikelihood={row.preLikelihood}
@@ -626,18 +778,20 @@ export function EditHazardDrawerBody({
         </div>
 
         <div className="space-y-1.5">
-          <Label>Controls applied</Label>
+          <Label>
+            <GeneratedText id="m_19b78594439f75" />
+          </Label>
           <Textarea
             value={controls}
             onChange={(e) => setControls(e.target.value)}
             rows={3}
-            placeholder="What controls reduce this risk? e.g. lockout/tagout, barricades, signage"
+            placeholder={tGenerated('m_08eb3f746c12fb')}
           />
         </div>
 
         <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">
           <RiskMatrixField
-            label="Post-control risk (after mitigations)"
+            label={tGenerated('m_05dbd720c56577')}
             likelihoodName="postLikelihood"
             severityName="postSeverity"
             defaultLikelihood={row.postLikelihood}
@@ -654,21 +808,25 @@ export function EditHazardDrawerBody({
         {/* and library snapshots remain editable. Optional for new hazards.*/}
         {/* ---------------------------------------------------------------- */}
         <div className="space-y-1.5">
-          <Label>Standard controls (library snapshot)</Label>
+          <Label>
+            <GeneratedText id="m_19993dfe7ce042" />
+          </Label>
           <Textarea
             value={standard}
             onChange={(e) => setStandard(e.target.value)}
             rows={2}
-            placeholder="From the library; editable for this job"
+            placeholder={tGenerated('m_1053eecb672045')}
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Specific controls (this job)</Label>
+          <Label>
+            <GeneratedText id="m_1d748b07675565" />
+          </Label>
           <Textarea
             value={specific}
             onChange={(e) => setSpecific(e.target.value)}
             rows={2}
-            placeholder="Site-specific controls"
+            placeholder={tGenerated('m_0ddf30e0532923')}
           />
         </div>
         <label className="flex items-center gap-2 text-sm">
@@ -677,14 +835,14 @@ export function EditHazardDrawerBody({
             checked={applicable}
             onChange={(e) => setApplicable(e.target.checked)}
           />
-          Applies to this job
+          <GeneratedText id="m_1178b70bd65edc" />
         </label>
       </div>
       <DrawerSubmitHandle
         pending={pending}
         onSubmit={submit}
         closeHref={closeHref}
-        submitLabel="Save"
+        submitLabel={tGenerated('m_19e6bff894c3c7')}
       />
     </>
   )
@@ -732,11 +890,29 @@ export function HazardRow({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs tracking-wide text-slate-500 uppercase">
-            Hazard #{index + 1}
-            {row.applicable ? null : <span className="ml-2 text-slate-400">(not applicable)</span>}
+            <GeneratedText id="m_109851c20ddcba" />
+            <GeneratedValue value={index + 1} />
+            <GeneratedValue
+              value={
+                row.applicable ? null : (
+                  <span className="ml-2 text-slate-400">
+                    <GeneratedText id="m_170d7555e9e90d" />
+                  </span>
+                )
+              }
+            />
           </div>
           <div className="font-medium text-slate-900 dark:text-slate-100">
-            {libraryName ?? row.name ?? <span className="text-slate-400">— ad-hoc —</span>}
+            <GeneratedValue
+              value={
+                libraryName ??
+                row.name ?? (
+                  <span className="text-slate-400">
+                    <GeneratedText id="m_11cfcdae5a47de" />
+                  </span>
+                )
+              }
+            />
           </div>
           <div className="mt-1.5">
             <RiskDelta
@@ -747,53 +923,80 @@ export function HazardRow({
             />
           </div>
         </div>
-        {disabled ? null : (
-          <div className="flex items-center gap-1">
-            <EditLinkButton href={`${basePath}?drawer=edit-hazard&hazardId=${row.id}`} />
-            <MoveButton
-              id={row.id}
-              assessmentId={assessmentId}
-              direction="up"
-              disabled={index === 0}
-              action={moveAction}
-            />
-            <MoveButton
-              id={row.id}
-              assessmentId={assessmentId}
-              direction="down"
-              disabled={index >= totalCount - 1}
-              action={moveAction}
-            />
-            <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
-          </div>
-        )}
+        <GeneratedValue
+          value={
+            disabled ? null : (
+              <div className="flex items-center gap-1">
+                <EditLinkButton href={`${basePath}?drawer=edit-hazard&hazardId=${row.id}`} />
+                <MoveButton
+                  id={row.id}
+                  assessmentId={assessmentId}
+                  direction="up"
+                  disabled={index === 0}
+                  action={moveAction}
+                />
+                <MoveButton
+                  id={row.id}
+                  assessmentId={assessmentId}
+                  direction="down"
+                  disabled={index >= totalCount - 1}
+                  action={moveAction}
+                />
+                <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
+              </div>
+            )
+          }
+        />
       </div>
 
       {/* Controls applied to buy the risk down */}
       <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
-        {row.controls ? (
-          <>
-            <span className="font-medium tracking-wide text-slate-500 uppercase">Controls:</span>{' '}
-            {row.controls}
-          </>
-        ) : (
-          <span className="text-slate-400 italic">No controls captured.</span>
-        )}
+        <GeneratedValue
+          value={
+            row.controls ? (
+              <>
+                <span className="font-medium tracking-wide text-slate-500 uppercase">
+                  <GeneratedText id="m_1cf9abb5566412" />
+                </span>
+                <GeneratedValue value={' '} />
+                <GeneratedValue value={row.controls} />
+              </>
+            ) : (
+              <span className="text-slate-400 italic">
+                <GeneratedText id="m_0447c23bd275b8" />
+              </span>
+            )
+          }
+        />
       </div>
 
       {/* Legacy standard/specific control snapshots — kept for parity. */}
-      {row.standardControls ? (
-        <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
-          <span className="font-medium tracking-wide text-slate-500 uppercase">Standard:</span>{' '}
-          {row.standardControls}
-        </div>
-      ) : null}
-      {row.specificControls ? (
-        <div className="rounded bg-amber-50 px-2 py-1 text-xs text-slate-700 dark:bg-amber-950/40 dark:text-slate-300">
-          <span className="font-medium tracking-wide text-slate-500 uppercase">Specific:</span>{' '}
-          {row.specificControls}
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          row.standardControls ? (
+            <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
+              <span className="font-medium tracking-wide text-slate-500 uppercase">
+                <GeneratedText id="m_0807af7d2f1773" />
+              </span>
+              <GeneratedValue value={' '} />
+              <GeneratedValue value={row.standardControls} />
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          row.specificControls ? (
+            <div className="rounded bg-amber-50 px-2 py-1 text-xs text-slate-700 dark:bg-amber-950/40 dark:text-slate-300">
+              <span className="font-medium tracking-wide text-slate-500 uppercase">
+                <GeneratedText id="m_0b2e8dbe0d0825" />
+              </span>
+              <GeneratedValue value={' '} />
+              <GeneratedValue value={row.specificControls} />
+            </div>
+          ) : null
+        }
+      />
     </li>
   )
 }
@@ -811,6 +1014,7 @@ export function AddPPEDrawerBody({
   closeHref: string
   addAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const close = useDrawerClose(closeHref)
   const [name, setName] = useState<string>('')
   const [description, setDescription] = useState<string>('')
@@ -839,20 +1043,24 @@ export function AddPPEDrawerBody({
     <>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>PPE name</Label>
+          <Label>
+            <GeneratedText id="m_0985c7b921de77" />
+          </Label>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Hard hat, FR coveralls"
+            placeholder={tGenerated('m_0c81eb734829ba')}
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Description</Label>
+          <Label>
+            <GeneratedText id="m_14d923495cf14c" />
+          </Label>
           <Textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            placeholder="When / why this PPE is needed"
+            placeholder={tGenerated('m_0cdecffb780f14')}
           />
         </div>
         <label className="flex items-center gap-2 text-sm">
@@ -861,15 +1069,23 @@ export function AddPPEDrawerBody({
             checked={required}
             onChange={(e) => setRequired(e.target.checked)}
           />
-          Required (must be answered before assessment completes)
+          <GeneratedText id="m_0c3d22a4f5a477" />
         </label>
-        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+        <GeneratedValue
+          value={
+            err ? (
+              <div className="text-sm text-red-600">
+                <GeneratedValue value={err} />
+              </div>
+            ) : null
+          }
+        />
       </div>
       <DrawerSubmitHandle
         pending={pending}
         onSubmit={submit}
         closeHref={closeHref}
-        submitLabel="Add PPE"
+        submitLabel={tGenerated('m_0068c6e22ca766')}
       />
     </>
   )
@@ -886,6 +1102,7 @@ export function EditPPEDrawerBody({
   row: { id: string; name: string; description: string | null; required: boolean }
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const close = useDrawerClose(closeHref)
   const [name, setName] = useState<string>(row.name)
   const [description, setDescription] = useState<string>(row.description ?? '')
@@ -909,11 +1126,15 @@ export function EditPPEDrawerBody({
     <>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>PPE name</Label>
+          <Label>
+            <GeneratedText id="m_0985c7b921de77" />
+          </Label>
           <Input value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label>Description</Label>
+          <Label>
+            <GeneratedText id="m_14d923495cf14c" />
+          </Label>
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
         </div>
         <label className="flex items-center gap-2 text-sm">
@@ -922,14 +1143,14 @@ export function EditPPEDrawerBody({
             checked={required}
             onChange={(e) => setRequired(e.target.checked)}
           />
-          Required
+          <GeneratedText id="m_12fe2fe7a9ddad" />
         </label>
       </div>
       <DrawerSubmitHandle
         pending={pending}
         onSubmit={submit}
         closeHref={closeHref}
-        submitLabel="Save"
+        submitLabel={tGenerated('m_19e6bff894c3c7')}
       />
     </>
   )
@@ -976,46 +1197,66 @@ export function PPERow({
     <li className="grid grid-cols-1 items-center gap-2 rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_auto_auto] dark:border-slate-800 dark:bg-slate-900">
       <div>
         <div className="font-medium text-slate-900 dark:text-slate-100">
-          {row.name}
-          {row.required ? (
-            <span className="ml-2 text-xs tracking-wide text-red-600 uppercase">required</span>
-          ) : null}
+          <GeneratedValue value={row.name} />
+          <GeneratedValue
+            value={
+              row.required ? (
+                <span className="ml-2 text-xs tracking-wide text-red-600 uppercase">
+                  <GeneratedText id="m_07ca2266909f33" />
+                </span>
+              ) : null
+            }
+          />
         </div>
-        {row.description ? <div className="text-xs text-slate-500">{row.description}</div> : null}
+        <GeneratedValue
+          value={
+            row.description ? (
+              <div className="text-xs text-slate-500">
+                <GeneratedValue value={row.description} />
+              </div>
+            ) : null
+          }
+        />
       </div>
       <div className="flex items-center gap-1.5 text-sm sm:text-xs">
-        {(['yes', 'no', 'na'] as const).map((v) => (
-          <button
-            key={v}
-            type="button"
-            disabled={pending || disabled}
-            onClick={() => answer(v)}
-            className={`min-h-10 flex-1 rounded-full border px-4 font-medium sm:min-h-0 sm:flex-none sm:px-2.5 sm:py-0.5 sm:font-normal ${row.answer === v ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'}`}
-          >
-            {v.toUpperCase()}
-          </button>
-        ))}
+        <GeneratedValue
+          value={(['yes', 'no', 'na'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              disabled={pending || disabled}
+              onClick={() => answer(v)}
+              className={`min-h-10 flex-1 rounded-full border px-4 font-medium sm:min-h-0 sm:flex-none sm:px-2.5 sm:py-0.5 sm:font-normal ${row.answer === v ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'}`}
+            >
+              <GeneratedValue value={v.toUpperCase()} />
+            </button>
+          ))}
+        />
       </div>
-      {disabled ? null : (
-        <div className="flex items-center gap-1">
-          <EditLinkButton href={`${basePath}?drawer=edit-ppe&ppeId=${row.id}`} />
-          <MoveButton
-            id={row.id}
-            assessmentId={assessmentId}
-            direction="up"
-            disabled={index === 0}
-            action={moveAction}
-          />
-          <MoveButton
-            id={row.id}
-            assessmentId={assessmentId}
-            direction="down"
-            disabled={index >= totalCount - 1}
-            action={moveAction}
-          />
-          <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
-        </div>
-      )}
+      <GeneratedValue
+        value={
+          disabled ? null : (
+            <div className="flex items-center gap-1">
+              <EditLinkButton href={`${basePath}?drawer=edit-ppe&ppeId=${row.id}`} />
+              <MoveButton
+                id={row.id}
+                assessmentId={assessmentId}
+                direction="up"
+                disabled={index === 0}
+                action={moveAction}
+              />
+              <MoveButton
+                id={row.id}
+                assessmentId={assessmentId}
+                direction="down"
+                disabled={index >= totalCount - 1}
+                action={moveAction}
+              />
+              <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
+            </div>
+          )
+        }
+      />
     </li>
   )
 }
@@ -1033,6 +1274,7 @@ export function AddQuestionDrawerBody({
   closeHref: string
   addAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const close = useDrawerClose(closeHref)
   const [question, setQuestion] = useState<string>('')
   const [questionType, setQuestionType] = useState<'yes_no' | 'text' | 'multi_select'>('yes_no')
@@ -1067,44 +1309,72 @@ export function AddQuestionDrawerBody({
     <>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>Question</Label>
+          <Label>
+            <GeneratedText id="m_1a895b5691321b" />
+          </Label>
           <Input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder="e.g. Are all permits posted?"
+            placeholder={tGenerated('m_0ebf65c61b6d2b')}
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Answer type</Label>
+          <Label>
+            <GeneratedText id="m_10fb4d4125aba0" />
+          </Label>
           <Select value={questionType} onChange={(e) => setQuestionType(e.target.value as any)}>
-            <option value="yes_no">Yes / No</option>
-            <option value="text">Free text</option>
-            <option value="multi_select">Multi-select</option>
+            <option value="yes_no">
+              <GeneratedText id="m_0bf8b14108bd13" />
+            </option>
+            <option value="text">
+              <GeneratedText id="m_1510e6eb6b18ad" />
+            </option>
+            <option value="multi_select">
+              <GeneratedText id="m_1bee29efec322c" />
+            </option>
           </Select>
         </div>
-        {questionType === 'multi_select' ? (
-          <div className="space-y-1.5">
-            <Label>Options (one per line)</Label>
-            <Textarea value={answers} onChange={(e) => setAnswers(e.target.value)} rows={5} />
-          </div>
-        ) : null}
-        {questionType === 'yes_no' ? (
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={requiresYes}
-              onChange={(e) => setRequiresYes(e.target.checked)}
-            />
-            Requires "Yes" for completion
-          </label>
-        ) : null}
-        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+        <GeneratedValue
+          value={
+            questionType === 'multi_select' ? (
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_02057adc77a443" />
+                </Label>
+                <Textarea value={answers} onChange={(e) => setAnswers(e.target.value)} rows={5} />
+              </div>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            questionType === 'yes_no' ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={requiresYes}
+                  onChange={(e) => setRequiresYes(e.target.checked)}
+                />
+                <GeneratedText id="m_01b4f1b5df17f0" />
+              </label>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            err ? (
+              <div className="text-sm text-red-600">
+                <GeneratedValue value={err} />
+              </div>
+            ) : null
+          }
+        />
       </div>
       <DrawerSubmitHandle
         pending={pending}
         onSubmit={submit}
         closeHref={closeHref}
-        submitLabel="Add question"
+        submitLabel={tGenerated('m_029dffafbff34b')}
       />
     </>
   )
@@ -1127,6 +1397,7 @@ export function EditQuestionDrawerBody({
   }
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const close = useDrawerClose(closeHref)
   const [question, setQuestion] = useState<string>(row.question)
   const [requiresYes, setRequiresYes] = useState<boolean>(row.requiresYes)
@@ -1148,44 +1419,62 @@ export function EditQuestionDrawerBody({
     <>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label>Question</Label>
+          <Label>
+            <GeneratedText id="m_1a895b5691321b" />
+          </Label>
           <Input value={question} onChange={(e) => setQuestion(e.target.value)} />
         </div>
         <div className="rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
-          <div className="text-xs tracking-wide text-slate-500 uppercase">Answer type</div>
+          <div className="text-xs tracking-wide text-slate-500 uppercase">
+            <GeneratedText id="m_10fb4d4125aba0" />
+          </div>
           <div className="text-slate-900 dark:text-slate-100">
-            {row.questionType.replace('_', ' ')}
+            <GeneratedValue value={row.questionType.replace('_', ' ')} />
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Changing the answer type would invalidate existing answers — delete and re-add instead.
+            <GeneratedText id="m_1292ce6c839323" />
           </p>
         </div>
-        {row.questionType === 'multi_select' && row.answers.length > 0 ? (
-          <div className="rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
-            <div className="text-xs tracking-wide text-slate-500 uppercase">Options</div>
-            <ul className="mt-1 list-inside list-disc text-slate-700 dark:text-slate-300">
-              {row.answers.map((a) => (
-                <li key={a}>{a}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {row.questionType === 'yes_no' ? (
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={requiresYes}
-              onChange={(e) => setRequiresYes(e.target.checked)}
-            />
-            Requires "Yes" for completion
-          </label>
-        ) : null}
+        <GeneratedValue
+          value={
+            row.questionType === 'multi_select' && row.answers.length > 0 ? (
+              <div className="rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
+                <div className="text-xs tracking-wide text-slate-500 uppercase">
+                  <GeneratedText id="m_0e69ebb67d27c2" />
+                </div>
+                <ul className="mt-1 list-inside list-disc text-slate-700 dark:text-slate-300">
+                  <GeneratedValue
+                    value={row.answers.map((a) => (
+                      <li key={a}>
+                        <GeneratedValue value={a} />
+                      </li>
+                    ))}
+                  />
+                </ul>
+              </div>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            row.questionType === 'yes_no' ? (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={requiresYes}
+                  onChange={(e) => setRequiresYes(e.target.checked)}
+                />
+                <GeneratedText id="m_01b4f1b5df17f0" />
+              </label>
+            ) : null
+          }
+        />
       </div>
       <DrawerSubmitHandle
         pending={pending}
         onSubmit={submit}
         closeHref={closeHref}
-        submitLabel="Save"
+        submitLabel={tGenerated('m_19e6bff894c3c7')}
       />
     </>
   )
@@ -1235,81 +1524,105 @@ export function QuestionRow({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="font-medium text-slate-900 dark:text-slate-100">
-            {row.question}
-            {row.requiresYes ? (
-              <span className="ml-2 text-xs text-red-600">requires yes</span>
-            ) : null}
-          </div>
-          <div className="text-xs text-slate-500">{row.questionType.replace('_', ' ')}</div>
-        </div>
-        {disabled ? null : (
-          <div className="flex items-center gap-1">
-            <EditLinkButton href={`${basePath}?drawer=edit-question&questionId=${row.id}`} />
-            <MoveButton
-              id={row.id}
-              assessmentId={assessmentId}
-              direction="up"
-              disabled={index === 0}
-              action={moveAction}
+            <GeneratedValue value={row.question} />
+            <GeneratedValue
+              value={
+                row.requiresYes ? (
+                  <span className="ml-2 text-xs text-red-600">
+                    <GeneratedText id="m_1579cafa005687" />
+                  </span>
+                ) : null
+              }
             />
-            <MoveButton
-              id={row.id}
-              assessmentId={assessmentId}
-              direction="down"
-              disabled={index >= totalCount - 1}
-              action={moveAction}
-            />
-            <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
           </div>
-        )}
-      </div>
-      {row.questionType === 'yes_no' ? (
-        <div className="flex items-center gap-2">
-          {['Yes', 'No', 'N/A'].map((v) => (
-            <button
-              key={v}
-              type="button"
-              disabled={pending || disabled}
-              onClick={() => {
-                setAnswer(v)
-                const fd = new FormData()
-                fd.set('id', row.id)
-                fd.set('assessmentId', assessmentId)
-                fd.set('answer', v)
-                start(async () => {
-                  await answerAction(fd)
-                })
-              }}
-              className={`min-h-10 flex-1 rounded-full border px-4 text-sm font-medium sm:min-h-0 sm:flex-none sm:px-3 sm:py-1 sm:text-xs sm:font-normal ${(row.answer ?? answer) === v ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'}`}
-            >
-              {v}
-            </button>
-          ))}
+          <div className="text-xs text-slate-500">
+            <GeneratedValue value={row.questionType.replace('_', ' ')} />
+          </div>
         </div>
-      ) : row.questionType === 'multi_select' ? (
-        <Select value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={disabled}>
-          <option value="">—</option>
-          {row.answers.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </Select>
-      ) : (
-        <Textarea
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          rows={3}
-          disabled={disabled}
+        <GeneratedValue
+          value={
+            disabled ? null : (
+              <div className="flex items-center gap-1">
+                <EditLinkButton href={`${basePath}?drawer=edit-question&questionId=${row.id}`} />
+                <MoveButton
+                  id={row.id}
+                  assessmentId={assessmentId}
+                  direction="up"
+                  disabled={index === 0}
+                  action={moveAction}
+                />
+                <MoveButton
+                  id={row.id}
+                  assessmentId={assessmentId}
+                  direction="down"
+                  disabled={index >= totalCount - 1}
+                  action={moveAction}
+                />
+                <DeleteButton id={row.id} assessmentId={assessmentId} action={deleteAction} />
+              </div>
+            )
+          }
         />
-      )}
-      {row.questionType !== 'yes_no' && !disabled ? (
-        <div className="flex items-center justify-end">
-          <Button type="button" size="sm" onClick={save} disabled={pending}>
-            Save answer
-          </Button>
-        </div>
-      ) : null}
+      </div>
+      <GeneratedValue
+        value={
+          row.questionType === 'yes_no' ? (
+            <div className="flex items-center gap-2">
+              <GeneratedValue
+                value={['Yes', 'No', 'N/A'].map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    disabled={pending || disabled}
+                    onClick={() => {
+                      setAnswer(v)
+                      const fd = new FormData()
+                      fd.set('id', row.id)
+                      fd.set('assessmentId', assessmentId)
+                      fd.set('answer', v)
+                      start(async () => {
+                        await answerAction(fd)
+                      })
+                    }}
+                    className={`min-h-10 flex-1 rounded-full border px-4 text-sm font-medium sm:min-h-0 sm:flex-none sm:px-3 sm:py-1 sm:text-xs sm:font-normal ${(row.answer ?? answer) === v ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'}`}
+                  >
+                    <GeneratedValue value={v} />
+                  </button>
+                ))}
+              />
+            </div>
+          ) : row.questionType === 'multi_select' ? (
+            <Select value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={disabled}>
+              <option value="">—</option>
+              <GeneratedValue
+                value={row.answers.map((a) => (
+                  <option key={a} value={a}>
+                    <GeneratedValue value={a} />
+                  </option>
+                ))}
+              />
+            </Select>
+          ) : (
+            <Textarea
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              rows={3}
+              disabled={disabled}
+            />
+          )
+        }
+      />
+      <GeneratedValue
+        value={
+          row.questionType !== 'yes_no' && !disabled ? (
+            <div className="flex items-center justify-end">
+              <Button type="button" size="sm" onClick={save} disabled={pending}>
+                <GeneratedText id="m_1c4c76f00e3b16" />
+              </Button>
+            </div>
+          ) : null
+        }
+      />
     </li>
   )
 }
@@ -1331,6 +1644,7 @@ function MoveButton({
   disabled?: boolean
   action: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const [pending, start] = useTransition()
   function go() {
     const fd = new FormData()
@@ -1347,9 +1661,11 @@ function MoveButton({
       disabled={disabled || pending}
       onClick={go}
       className="inline-flex min-h-9 min-w-9 items-center justify-center rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30 sm:min-h-0 sm:min-w-0 dark:hover:bg-slate-800"
-      aria-label={`Move ${direction}`}
+      aria-label={tGenerated('m_1c4d1fdc0a5204', { value0: direction })}
     >
-      {direction === 'up' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      <GeneratedValue
+        value={direction === 'up' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      />
     </button>
   )
 }
@@ -1363,6 +1679,7 @@ function DeleteButton({
   assessmentId: string
   action: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const [pending, start] = useTransition()
   function go() {
     const fd = new FormData()
@@ -1378,7 +1695,7 @@ function DeleteButton({
       disabled={pending}
       onClick={go}
       className="inline-flex min-h-9 min-w-9 items-center justify-center rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-30 sm:min-h-0 sm:min-w-0"
-      aria-label="Delete"
+      aria-label={tGenerated('m_11773f3c3f7558')}
     >
       <Trash2 size={16} />
     </button>
@@ -1386,11 +1703,12 @@ function DeleteButton({
 }
 
 function EditLinkButton({ href }: { href: string }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <Link
       href={href as any}
       className="inline-flex min-h-9 min-w-9 items-center justify-center rounded p-1 text-slate-500 hover:bg-slate-100 sm:min-h-0 sm:min-w-0 dark:hover:bg-slate-800"
-      aria-label="Edit"
+      aria-label={tGenerated('m_03a66f9d34ac7b')}
     >
       <Pencil size={16} />
     </Link>
@@ -1427,11 +1745,11 @@ function DrawerSubmitHandle({
     <div className="sticky bottom-0 -mx-6 mt-6 -mb-5 flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3 dark:border-slate-800 dark:bg-slate-800/50">
       <Link href={closeHref as any}>
         <Button type="button" variant="outline">
-          Cancel
+          <GeneratedText id="m_112e2e8ecda428" />
         </Button>
       </Link>
       <Button type="button" onClick={onSubmit} disabled={pending}>
-        {pending ? 'Saving…' : submitLabel}
+        <GeneratedValue value={pending ? <GeneratedText id="m_106811f2aac664" /> : submitLabel} />
       </Button>
     </div>
   )

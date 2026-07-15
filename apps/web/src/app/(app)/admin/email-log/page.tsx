@@ -1,9 +1,13 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { can } from '@beaconhs/tenant'
 import { EmailLogListView } from '@/components/email-log/list-view'
 import { requireRequestContext } from '@/lib/auth'
 
-export const metadata = { title: 'Email log' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0d39bd3942858a') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function EmailLogPage({

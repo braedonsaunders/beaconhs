@@ -1,6 +1,10 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { ModuleFlowsPage } from '@/components/flows/module-flows-page'
 
-export const metadata = { title: 'Inspection automations' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1d42910f6695c2') }
+}
 export const dynamic = 'force-dynamic'
 
 export default function InspectionsFlowsPage() {

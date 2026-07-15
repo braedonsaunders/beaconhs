@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Shared designer page for tenant-defined custom fields. One component, mounted
 // by a thin route per entity kind (equipment / ppe / people / locations). Lists
 // the kind's field definitions and drives the create/edit drawer + delete.
@@ -59,6 +63,8 @@ export async function CustomFieldsAdminPage({
   kind: CustomFieldEntityKind
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const cfg = entityConfig(kind)
   const ctx = await requireRequestContext()
   if (!ctx.isSuperAdmin && !can(ctx, cfg.permission)) redirect(cfg.list)
@@ -129,165 +135,243 @@ export async function CustomFieldsAdminPage({
       header={
         <>
           <PageHeader
-            title={`${cfg.label} custom fields`}
-            description={`Extra attributes captured on each ${cfg.singular}. Values save inline on the record.`}
+            title={tGenerated('m_1f49fdf67f272f', { value0: cfg.label })}
+            description={tGenerated('m_1a6a5af5965659', { value0: cfg.singular })}
             back={{ href: cfg.list, label: `Back to ${cfg.label}` }}
             actions={
               <Link href={newHref as never} scroll={false}>
                 <Button>
-                  <Plus size={14} /> New field
+                  <Plus size={14} /> <GeneratedText id="m_10786c33e03a3f" />
                 </Button>
               </Link>
             }
           />
-          {cfg.moduleKey ? <ModuleNav moduleKey={cfg.moduleKey} active="custom-fields" /> : null}
-          {blockedDependencies &&
-          (blockedDependencies.reports > 0 || blockedDependencies.cards > 0) ? (
-            <Alert variant="destructive">
-              <AlertDescription className="flex items-center justify-between gap-3">
-                <span>{customFieldDependencyMessage(blockedDependencies)}</span>
-                <Link className="shrink-0 font-medium underline" href={dismissErrorHref as never}>
-                  Dismiss
-                </Link>
-              </AlertDescription>
-            </Alert>
-          ) : null}
+          <GeneratedValue
+            value={
+              cfg.moduleKey ? <ModuleNav moduleKey={cfg.moduleKey} active="custom-fields" /> : null
+            }
+          />
+          <GeneratedValue
+            value={
+              blockedDependencies &&
+              (blockedDependencies.reports > 0 || blockedDependencies.cards > 0) ? (
+                <Alert variant="destructive">
+                  <AlertDescription className="flex items-center justify-between gap-3">
+                    <span>
+                      <GeneratedValue value={customFieldDependencyMessage(blockedDependencies)} />
+                    </span>
+                    <Link
+                      className="shrink-0 font-medium underline"
+                      href={dismissErrorHref as never}
+                    >
+                      <GeneratedText id="m_024331c508a2cd" />
+                    </Link>
+                  </AlertDescription>
+                </Alert>
+              ) : null
+            }
+          />
           <TableToolbar>
-            <SearchInput placeholder="Search custom fields…" />
+            <SearchInput placeholder={tGenerated('m_063276a6256476')} />
             <FilterChips
               basePath={base}
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={[...STATUS_OPTIONS]}
             />
           </TableToolbar>
         </>
       }
     >
-      {defs.length === 0 ? (
-        <EmptyState
-          icon={<SlidersHorizontal size={32} />}
-          title={
-            listParams.q || status ? 'No custom fields match these filters' : 'No custom fields yet'
-          }
-          description={
-            listParams.q || status
-              ? 'Clear the search or status filter to see other fields.'
-              : `Add a field to capture extra information on every ${cfg.singular}.`
-          }
-          action={
-            <Link href={newHref as never} scroll={false}>
-              <Button>New field</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Field</TableHead>
-                  <TableHead>Type</TableHead>
-                  {cfg.hasSubtype ? <TableHead>Scope</TableHead> : null}
-                  <TableHead>Group</TableHead>
-                  <TableHead>Required</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {defs.map((d) => {
-                  const editHref = mergeHref(base, sp, { drawer: d.id })
-                  return (
-                    <TableRow key={d.id}>
-                      <TableCell>
-                        <Link
-                          href={editHref as never}
-                          scroll={false}
-                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                        >
-                          {d.label}
-                        </Link>
-                        <div className="mt-0.5 font-mono text-xs text-slate-400 dark:text-slate-500">
-                          {d.key}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-slate-600 dark:text-slate-400">
-                        {CUSTOM_FIELD_TYPE_META[d.fieldType].label}
-                      </TableCell>
-                      {cfg.hasSubtype ? (
-                        <TableCell className="text-slate-600 dark:text-slate-400">
-                          {d.subtypeId ? (
-                            (subtypeName.get(d.subtypeId) ?? '—')
-                          ) : (
-                            <span className="text-slate-400">All</span>
-                          )}
-                        </TableCell>
-                      ) : null}
-                      <TableCell className="text-slate-600 dark:text-slate-400">
-                        {d.groupKey ? (
-                          <Badge variant="secondary">
-                            {nativeGroupLabel.get(d.groupKey) ?? d.groupKey}
-                          </Badge>
-                        ) : (
-                          (d.groupLabel ?? <span className="text-slate-400">—</span>)
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {d.required ? (
-                          <Badge variant="secondary">Required</Badge>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {d.isActive ? (
-                          <Badge variant="success">Active</Badge>
-                        ) : (
-                          <Badge variant="outline">Hidden</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="inline-flex items-center gap-1">
-                          <Link
-                            href={editHref as never}
-                            scroll={false}
-                            className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
-                          >
-                            Edit
-                          </Link>
-                          <form action={deleteCustomFieldDefAction} className="inline">
-                            <input type="hidden" name="kind" value={kind} />
-                            <input type="hidden" name="id" value={d.id} />
-                            <ConfirmButton
-                              variant="ghost"
-                              size="icon"
-                              message={`Delete the "${d.label}" field and permanently remove its captured values from every ${cfg.singular}?`}
-                              className="h-7 w-7 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-                            >
-                              <Trash2 size={14} />
-                              <span className="sr-only">Delete field</span>
-                            </ConfirmButton>
-                          </form>
-                        </div>
-                      </TableCell>
+      <GeneratedValue
+        value={
+          defs.length === 0 ? (
+            <EmptyState
+              icon={<SlidersHorizontal size={32} />}
+              title={tGeneratedValue(
+                listParams.q || status
+                  ? tGenerated('m_1432422b8b9c9f')
+                  : tGenerated('m_1c755534bff299'),
+              )}
+              description={tGeneratedValue(
+                listParams.q || status
+                  ? tGenerated('m_0e2ee0e5d3b685')
+                  : tGenerated('m_041233d5d7d84a', { value0: cfg.singular }),
+              )}
+              action={
+                <Link href={newHref as never} scroll={false}>
+                  <Button>
+                    <GeneratedText id="m_10786c33e03a3f" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <GeneratedText id="m_1dfe960eaa6224" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_074ba2f160c506" />
+                      </TableHead>
+                      <GeneratedValue
+                        value={
+                          cfg.hasSubtype ? (
+                            <TableHead>
+                              <GeneratedText id="m_1f10a46fc1db73" />
+                            </TableHead>
+                          ) : null
+                        }
+                      />
+                      <TableHead>
+                        <GeneratedText id="m_0d06af9d4c7f60" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_12fe2fe7a9ddad" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_0b9da892d6faf0" />
+                      </TableHead>
+                      <TableHead className="text-right">
+                        <GeneratedText id="m_0a7f1858f2ec46" />
+                      </TableHead>
                     </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </div>
-          <Pagination
-            basePath={base}
-            currentParams={sp}
-            total={total}
-            page={listParams.page}
-            perPage={listParams.perPage}
-          />
-        </div>
-      )}
+                  </TableHeader>
+                  <TableBody>
+                    <GeneratedValue
+                      value={defs.map((d) => {
+                        const editHref = mergeHref(base, sp, { drawer: d.id })
+                        return (
+                          <TableRow key={d.id}>
+                            <TableCell>
+                              <Link
+                                href={editHref as never}
+                                scroll={false}
+                                className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                              >
+                                <GeneratedValue value={d.label} />
+                              </Link>
+                              <div className="mt-0.5 font-mono text-xs text-slate-400 dark:text-slate-500">
+                                <GeneratedValue value={d.key} />
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-slate-600 dark:text-slate-400">
+                              <GeneratedValue value={CUSTOM_FIELD_TYPE_META[d.fieldType].label} />
+                            </TableCell>
+                            <GeneratedValue
+                              value={
+                                cfg.hasSubtype ? (
+                                  <TableCell className="text-slate-600 dark:text-slate-400">
+                                    <GeneratedValue
+                                      value={
+                                        d.subtypeId ? (
+                                          (subtypeName.get(d.subtypeId) ?? '—')
+                                        ) : (
+                                          <span className="text-slate-400">
+                                            <GeneratedText id="m_17201516610431" />
+                                          </span>
+                                        )
+                                      }
+                                    />
+                                  </TableCell>
+                                ) : null
+                              }
+                            />
+                            <TableCell className="text-slate-600 dark:text-slate-400">
+                              <GeneratedValue
+                                value={
+                                  d.groupKey ? (
+                                    <Badge variant="secondary">
+                                      <GeneratedValue
+                                        value={nativeGroupLabel.get(d.groupKey) ?? d.groupKey}
+                                      />
+                                    </Badge>
+                                  ) : (
+                                    (d.groupLabel ?? <span className="text-slate-400">—</span>)
+                                  )
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <GeneratedValue
+                                value={
+                                  d.required ? (
+                                    <Badge variant="secondary">
+                                      <GeneratedText id="m_12fe2fe7a9ddad" />
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-slate-400">—</span>
+                                  )
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <GeneratedValue
+                                value={
+                                  d.isActive ? (
+                                    <Badge variant="success">
+                                      <GeneratedText id="m_1e1b1fdb7dd78e" />
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline">
+                                      <GeneratedText id="m_01cb6961ee0ba3" />
+                                    </Badge>
+                                  )
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="inline-flex items-center gap-1">
+                                <Link
+                                  href={editHref as never}
+                                  scroll={false}
+                                  className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
+                                >
+                                  <GeneratedText id="m_03a66f9d34ac7b" />
+                                </Link>
+                                <form action={deleteCustomFieldDefAction} className="inline">
+                                  <input type="hidden" name="kind" value={kind} />
+                                  <input type="hidden" name="id" value={d.id} />
+                                  <ConfirmButton
+                                    variant="ghost"
+                                    size="icon"
+                                    message={tGenerated('m_12888ae5874f1b', {
+                                      value0: d.label,
+                                      value1: cfg.singular,
+                                    })}
+                                    className="h-7 w-7 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                                  >
+                                    <Trash2 size={14} />
+                                    <span className="sr-only">
+                                      <GeneratedText id="m_04b43efef2bd7b" />
+                                    </span>
+                                  </ConfirmButton>
+                                </form>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    />
+                  </TableBody>
+                </Table>
+              </div>
+              <Pagination
+                basePath={base}
+                currentParams={sp}
+                total={total}
+                page={listParams.page}
+                perPage={listParams.perPage}
+              />
+            </div>
+          )
+        }
+      />
 
       <CustomFieldsDesignerDrawer
         mode={mode}

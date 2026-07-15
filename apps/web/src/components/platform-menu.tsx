@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -12,6 +14,7 @@ import { Popover, cn } from '@beaconhs/ui'
 // Platform also swaps the whole left sidebar to the platform nav (see
 // use-platform-nav.ts); the dropdown itself is just the two modes, not a page list.
 export function PlatformMenu() {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [open, setOpen] = useState(false)
   const t = useTranslations('Shell')
   const onPlatform = (usePathname() ?? '').startsWith('/platform')
@@ -45,7 +48,7 @@ export function PlatformMenu() {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label={t('switchWorkspace')}
+          aria-label={tGeneratedValue(t('switchWorkspace'))}
           aria-expanded={open}
           aria-haspopup="menu"
           className={cn(
@@ -56,36 +59,53 @@ export function PlatformMenu() {
           )}
         >
           <Shield size={14} className="shrink-0" />
-          <span className="hidden sm:inline">{t('platform')}</span>
+          <span className="hidden sm:inline">
+            <GeneratedValue value={t('platform')} />
+          </span>
           <ChevronDown size={14} className="shrink-0 text-amber-500 dark:text-amber-400/70" />
         </button>
       }
     >
       <div className="border-b border-slate-100 px-3 py-2 text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-        {t('switchWorkspace')}
+        <GeneratedValue value={t('switchWorkspace')} />
       </div>
       <ul className="py-1" role="menu">
-        {options.map((o) => (
-          <li key={o.key}>
-            <Link
-              href={o.href as never}
-              role="menuitem"
-              onClick={() => setOpen(false)}
-              className="flex items-center justify-between gap-2.5 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/60"
-            >
-              <span className="flex items-start gap-2.5">
-                <span className="mt-0.5 text-slate-500 dark:text-slate-400">{o.icon}</span>
-                <span className="flex flex-col">
-                  <span className="font-medium text-slate-900 dark:text-slate-100">{o.label}</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{o.desc}</span>
+        <GeneratedValue
+          value={options.map((o) => (
+            <li key={o.key}>
+              <Link
+                href={o.href as never}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="flex items-center justify-between gap-2.5 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/60"
+              >
+                <span className="flex items-start gap-2.5">
+                  <span className="mt-0.5 text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={o.icon} />
+                  </span>
+                  <span className="flex flex-col">
+                    <span className="font-medium text-slate-900 dark:text-slate-100">
+                      <GeneratedValue value={o.label} />
+                    </span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedValue value={o.desc} />
+                    </span>
+                  </span>
                 </span>
-              </span>
-              {o.active ? (
-                <Check size={14} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
-              ) : null}
-            </Link>
-          </li>
-        ))}
+                <GeneratedValue
+                  value={
+                    o.active ? (
+                      <Check
+                        size={14}
+                        className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"
+                      />
+                    ) : null
+                  }
+                />
+              </Link>
+            </li>
+          ))}
+        />
       </ul>
     </Popover>
   )

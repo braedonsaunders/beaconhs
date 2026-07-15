@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 import { useEffect, type ReactNode } from 'react'
 
@@ -11,7 +12,7 @@ export function BrowserPrintButton({
 }) {
   return (
     <button type="button" className={className} onClick={() => window.print()}>
-      {children}
+      <GeneratedValue value={children} />
     </button>
   )
 }

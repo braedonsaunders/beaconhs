@@ -1,3 +1,4 @@
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, type SelectOption } from '@beaconhs/ui'
 import { LiveField, LiveRemoteSelect } from '@/components/live-field'
@@ -34,41 +35,48 @@ export function SkillDetailFields({
   personHref?: string | null
   updateAction: (formData: FormData) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Skill details</CardTitle>
+        <CardTitle>
+          <GeneratedText id="m_0726401650a205" />
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1">
           <LiveRemoteSelect
             id={id}
             field="personId"
-            label="Person"
+            label={tGenerated('m_12e926c9216094')}
             initialValue={initial.personId}
             initialOption={initialOptions.person}
             lookup="training-skill-assignment-people"
-            emptyLabel="Select a person…"
+            emptyLabel={tGenerated('m_0be39d3a196b5b')}
             disabled={disabled}
             updateAction={updateAction}
           />
-          {personHref ? (
-            <Link
-              href={personHref as never}
-              className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-            >
-              Open person page →
-            </Link>
-          ) : null}
+          <GeneratedValue
+            value={
+              personHref ? (
+                <Link
+                  href={personHref as never}
+                  className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                >
+                  <GeneratedText id="m_158274742d32f3" />
+                </Link>
+              ) : null
+            }
+          />
         </div>
         <LiveRemoteSelect
           id={id}
           field="skillTypeId"
-          label="Skill / certification"
+          label={tGenerated('m_0f4481ed349502')}
           initialValue={initial.skillTypeId}
           initialOption={initialOptions.skillType}
           lookup="training-skill-assignment-types"
-          emptyLabel="Select a skill / certification…"
+          emptyLabel={tGenerated('m_1ac86a66a34aae')}
           disabled={disabled}
           updateAction={updateAction}
         />
@@ -76,7 +84,7 @@ export function SkillDetailFields({
           <LiveField
             id={id}
             field="grantedOn"
-            label="Granted on"
+            label={tGenerated('m_06ff18f1003d06')}
             type="date"
             initialValue={initial.grantedOn}
             disabled={disabled}
@@ -85,7 +93,7 @@ export function SkillDetailFields({
           <LiveField
             id={id}
             field="expiresOn"
-            label="Expires on"
+            label={tGenerated('m_001b29133dcb72')}
             type="date"
             initialValue={initial.expiresOn}
             disabled={disabled}
@@ -95,7 +103,7 @@ export function SkillDetailFields({
         <LiveField
           id={id}
           field="notes"
-          label="Notes"
+          label={tGenerated('m_0b8dadcb78cd08')}
           initialValue={initial.notes}
           multiline
           rows={3}

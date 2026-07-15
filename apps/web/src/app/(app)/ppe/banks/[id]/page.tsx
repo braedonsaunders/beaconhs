@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import { asc, eq } from 'drizzle-orm'
 import { Badge, DetailHeader } from '@beaconhs/ui'
@@ -12,11 +15,13 @@ import { PpeBankBuilder } from './_bank-builder'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `PPE bank · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_12ae3d44d2209c', { value0: id.slice(0, 8) }) }
 }
 
 export default async function PpeBankDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -53,11 +58,19 @@ export default async function PpeBankDetailPage({ params }: { params: Promise<{ 
       header={
         <DetailHeader
           back={{ href: '/ppe/banks', label: 'Back to criteria banks' }}
-          title={bank.name}
-          subtitle={bank.category ? bank.category.replace(/_/g, ' ') : undefined}
+          title={tGeneratedValue(bank.name)}
+          subtitle={tGeneratedValue(bank.category ? bank.category.replace(/_/g, ' ') : undefined)}
           badge={
             <Badge variant={bank.isPublished ? 'success' : 'secondary'}>
-              {bank.isPublished ? 'Published' : 'Draft'}
+              <GeneratedValue
+                value={
+                  bank.isPublished ? (
+                    <GeneratedText id="m_0a65097103ae1b" />
+                  ) : (
+                    <GeneratedText id="m_13f3db1d0ca2fe" />
+                  )
+                }
+              />
             </Badge>
           }
         />

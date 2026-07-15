@@ -1,3 +1,7 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { getGeneratedTranslations } from '@/i18n/generated.server'
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Archive, FileText, IdCard, Printer, Trash2, Users } from 'lucide-react'
@@ -33,8 +37,9 @@ export const dynamic = 'force-dynamic'
 const TABS = ['description', 'people', 'tasks'] as const
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Title · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_072ab3e0c31269', { value0: id.slice(0, 8) }) }
 }
 
 export default async function TitleDetailPage({
@@ -44,6 +49,8 @@ export default async function TitleDetailPage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -122,53 +129,75 @@ export default async function TitleDetailPage({
       <div className="space-y-5">
         <DetailHeader
           back={{ href: '/people/titles', label: 'Back to titles' }}
-          title={row.name}
-          subtitle={row.description ?? undefined}
+          title={tGeneratedValue(row.name)}
+          subtitle={tGeneratedValue(row.description ?? undefined)}
           badge={
             <span className="flex items-center gap-2">
-              {row.deletedAt ? <Badge variant="secondary">Archived</Badge> : null}
-              <Badge variant="secondary">{assignmentCount} assigned</Badge>
+              <GeneratedValue
+                value={
+                  row.deletedAt ? (
+                    <Badge variant="secondary">
+                      <GeneratedText id="m_12a687134482ba" />
+                    </Badge>
+                  ) : null
+                }
+              />
+              <Badge variant="secondary">
+                <GeneratedValue value={assignmentCount} /> <GeneratedText id="m_1ad9a6529af849" />
+              </Badge>
             </span>
           }
           actions={
             <>
-              {row.deletedAt ? null : (
-                <Link href={`${basePath}/pdf`} target="_blank">
-                  <Button variant="outline">
-                    <Printer size={14} />
-                    Job Description PDF
-                  </Button>
-                </Link>
-              )}
-              {row.deletedAt ? (
-                <form action={restoreTitle}>
-                  <input type="hidden" name="id" value={row.id} />
-                  <Button type="submit" variant="outline">
-                    Restore
-                  </Button>
-                </form>
-              ) : (
-                <form action={archiveTitle}>
-                  <input type="hidden" name="id" value={row.id} />
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                  >
-                    <Archive size={14} />
-                    Archive
-                  </Button>
-                </form>
-              )}
+              <GeneratedValue
+                value={
+                  row.deletedAt ? null : (
+                    <Link href={`${basePath}/pdf`} target="_blank">
+                      <Button variant="outline">
+                        <Printer size={14} />
+                        <GeneratedText id="m_19bacf0b200481" />
+                      </Button>
+                    </Link>
+                  )
+                }
+              />
+              <GeneratedValue
+                value={
+                  row.deletedAt ? (
+                    <form action={restoreTitle}>
+                      <input type="hidden" name="id" value={row.id} />
+                      <Button type="submit" variant="outline">
+                        <GeneratedText id="m_19500e41842c99" />
+                      </Button>
+                    </form>
+                  ) : (
+                    <form action={archiveTitle}>
+                      <input type="hidden" name="id" value={row.id} />
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                      >
+                        <Archive size={14} />
+                        <GeneratedText id="m_019c0a64030688" />
+                      </Button>
+                    </form>
+                  )
+                }
+              />
             </>
           }
         />
 
-        {errorMessage ? (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
-            {errorMessage}
-          </p>
-        ) : null}
+        <GeneratedValue
+          value={
+            errorMessage ? (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300">
+                <GeneratedValue value={errorMessage} />
+              </p>
+            ) : null
+          }
+        />
 
         <TabNav
           basePath={basePath}
@@ -181,178 +210,252 @@ export default async function TitleDetailPage({
           ]}
         />
 
-        {active === 'description' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <IdCard size={16} />
-                Job Description
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form action={updateTitle} className="space-y-4">
-                <input type="hidden" name="id" value={row.id} />
-                <div className="space-y-1.5">
-                  <Label htmlFor="name">Name *</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    defaultValue={row.name}
-                    required
-                    disabled={Boolean(row.deletedAt)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="description">Scope</Label>
-                  <Textarea
-                    id="description"
-                    name="description"
-                    rows={3}
-                    defaultValue={row.description ?? ''}
-                    disabled={Boolean(row.deletedAt)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="responsibilities">Responsibilities</Label>
-                  <Textarea
-                    id="responsibilities"
-                    name="responsibilities"
-                    rows={6}
-                    defaultValue={row.responsibilities ?? ''}
-                    disabled={Boolean(row.deletedAt)}
-                  />
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="education">Education</Label>
-                    <Textarea
-                      id="education"
-                      name="education"
-                      rows={4}
-                      defaultValue={row.education ?? ''}
-                      disabled={Boolean(row.deletedAt)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="experience">Experience</Label>
-                    <Textarea
-                      id="experience"
-                      name="experience"
-                      rows={4}
-                      defaultValue={row.experience ?? ''}
-                      disabled={Boolean(row.deletedAt)}
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button type="submit" disabled={Boolean(row.deletedAt)}>
-                    Save Job Description
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        ) : null}
+        <GeneratedValue
+          value={
+            active === 'description' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <IdCard size={16} />
+                    <GeneratedText id="m_02a4fc25a429a2" />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form action={updateTitle} className="space-y-4">
+                    <input type="hidden" name="id" value={row.id} />
+                    <div className="space-y-1.5">
+                      <Label htmlFor="name">
+                        <GeneratedText id="m_1a9978900838e6" />
+                      </Label>
+                      <Input
+                        id="name"
+                        name="name"
+                        defaultValue={row.name}
+                        required
+                        disabled={Boolean(row.deletedAt)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="description">
+                        <GeneratedText id="m_1f10a46fc1db73" />
+                      </Label>
+                      <Textarea
+                        id="description"
+                        name="description"
+                        rows={3}
+                        defaultValue={row.description ?? ''}
+                        disabled={Boolean(row.deletedAt)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="responsibilities">
+                        <GeneratedText id="m_10db3552a638bc" />
+                      </Label>
+                      <Textarea
+                        id="responsibilities"
+                        name="responsibilities"
+                        rows={6}
+                        defaultValue={row.responsibilities ?? ''}
+                        disabled={Boolean(row.deletedAt)}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="education">
+                          <GeneratedText id="m_01f50b9a132c18" />
+                        </Label>
+                        <Textarea
+                          id="education"
+                          name="education"
+                          rows={4}
+                          defaultValue={row.education ?? ''}
+                          disabled={Boolean(row.deletedAt)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="experience">
+                          <GeneratedText id="m_054359abce46c6" />
+                        </Label>
+                        <Textarea
+                          id="experience"
+                          name="experience"
+                          rows={4}
+                          defaultValue={row.experience ?? ''}
+                          disabled={Boolean(row.deletedAt)}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button type="submit" disabled={Boolean(row.deletedAt)}>
+                        <GeneratedText id="m_1db2d11fc2f63f" />
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            ) : null
+          }
+        />
 
-        {active === 'people' ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Users size={16} />
-                People assigned this title
-                <Badge variant="secondary">{assignments.length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <SearchInput
-                placeholder="Search assigned people…"
-                paramKey="personQ"
-                pageParamKey="personPage"
-              />
-              {assignments.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  {personParams.q
-                    ? 'No assigned people match your search.'
-                    : "No one assigned. Assign this title from a person's Overview tab."}
-                </p>
-              ) : (
-                <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {assignments.map(({ assignment, person }) => (
-                    <li
-                      key={assignment.id}
-                      className="flex items-center justify-between gap-2 rounded border border-slate-200 px-3 py-2"
-                    >
-                      <Link href={`/people/${person.id}`} className="flex-1 hover:underline">
-                        <span className="block text-sm font-medium">
-                          {person.lastName}, {person.firstName}
-                        </span>
-                        {person.employeeNo ? (
-                          <span className="text-xs text-slate-500">{person.employeeNo}</span>
-                        ) : null}
-                      </Link>
-                      {assignment.isPrimary ? <Badge variant="success">Primary</Badge> : null}
-                      <form action={unassignTitleFromPerson}>
-                        <input type="hidden" name="titleId" value={row.id} />
-                        <input type="hidden" name="personId" value={person.id} />
-                        <Button
-                          type="submit"
-                          size="sm"
-                          variant="ghost"
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 size={12} />
+        <GeneratedValue
+          value={
+            active === 'people' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Users size={16} />
+                    <GeneratedText id="m_1d0e403edd7f5a" />
+                    <Badge variant="secondary">
+                      <GeneratedValue value={assignments.length} />
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <SearchInput
+                    placeholder={tGenerated('m_10e9a56b2c55ef')}
+                    paramKey="personQ"
+                    pageParamKey="personPage"
+                  />
+                  <GeneratedValue
+                    value={
+                      assignments.length === 0 ? (
+                        <p className="text-sm text-slate-500">
+                          <GeneratedValue
+                            value={
+                              personParams.q ? (
+                                <GeneratedText id="m_153be2ed250b6f" />
+                              ) : (
+                                <GeneratedText id="m_031b590513e3cc" />
+                              )
+                            }
+                          />
+                        </p>
+                      ) : (
+                        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          <GeneratedValue
+                            value={assignments.map(({ assignment, person }) => (
+                              <li
+                                key={assignment.id}
+                                className="flex items-center justify-between gap-2 rounded border border-slate-200 px-3 py-2"
+                              >
+                                <Link
+                                  href={`/people/${person.id}`}
+                                  className="flex-1 hover:underline"
+                                >
+                                  <span className="block text-sm font-medium">
+                                    <GeneratedValue value={person.lastName} />,{' '}
+                                    <GeneratedValue value={person.firstName} />
+                                  </span>
+                                  <GeneratedValue
+                                    value={
+                                      person.employeeNo ? (
+                                        <span className="text-xs text-slate-500">
+                                          {person.employeeNo}
+                                        </span>
+                                      ) : null
+                                    }
+                                  />
+                                </Link>
+                                <GeneratedValue
+                                  value={
+                                    assignment.isPrimary ? (
+                                      <Badge variant="success">
+                                        <GeneratedText id="m_18aec830eeb5e0" />
+                                      </Badge>
+                                    ) : null
+                                  }
+                                />
+                                <form action={unassignTitleFromPerson}>
+                                  <input type="hidden" name="titleId" value={row.id} />
+                                  <input type="hidden" name="personId" value={person.id} />
+                                  <Button
+                                    type="submit"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="text-red-500 hover:text-red-700"
+                                  >
+                                    <Trash2 size={12} />
+                                  </Button>
+                                </form>
+                              </li>
+                            ))}
+                          />
+                        </ul>
+                      )
+                    }
+                  />
+                  <Pagination
+                    basePath={basePath}
+                    currentParams={sp}
+                    total={filteredAssignmentCount}
+                    page={personParams.page}
+                    perPage={personParams.perPage}
+                    pageParamKey="personPage"
+                  />
+                </CardContent>
+              </Card>
+            ) : null
+          }
+        />
+
+        <GeneratedValue
+          value={
+            active === 'tasks' ? (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <FileText size={16} />
+                    <GeneratedText id="m_0aeddda6c35547" />
+                    <Badge variant="secondary">
+                      <GeneratedValue value={taskCount} />
+                    </Badge>
+                  </CardTitle>
+                  <GeneratedValue
+                    value={
+                      row.deletedAt ? (
+                        <Button size="sm" variant="outline" disabled>
+                          <GeneratedText id="m_1b7194f0ac00a0" />
                         </Button>
-                      </form>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Pagination
-                basePath={basePath}
-                currentParams={sp}
-                total={filteredAssignmentCount}
-                page={personParams.page}
-                perPage={personParams.perPage}
-                pageParamKey="personPage"
-              />
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {active === 'tasks' ? (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <FileText size={16} />
-                Job-description tasks
-                <Badge variant="secondary">{taskCount}</Badge>
-              </CardTitle>
-              {row.deletedAt ? (
-                <Button size="sm" variant="outline" disabled>
-                  Restore title to manage tasks
-                </Button>
-              ) : (
-                <Link href={`${basePath}/tasks`}>
-                  <Button size="sm" variant="outline">
-                    Manage task list →
-                  </Button>
-                </Link>
-              )}
-            </CardHeader>
-            <CardContent>
-              {taskCount === 0 ? (
-                <p className="text-sm text-slate-500">
-                  No tasks. Open the task manager to add tasks and capture per-person sign-offs.
-                </p>
-              ) : (
-                <p className="text-sm text-slate-600 dark:text-slate-300">
-                  {taskCount} active {taskCount === 1 ? 'task' : 'tasks'}. Open the task manager to
-                  search, edit, reorder, archive, and review acknowledgements.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        ) : null}
+                      ) : (
+                        <Link href={`${basePath}/tasks`}>
+                          <Button size="sm" variant="outline">
+                            <GeneratedText id="m_0a252ab0b9cb98" />
+                          </Button>
+                        </Link>
+                      )
+                    }
+                  />
+                </CardHeader>
+                <CardContent>
+                  <GeneratedValue
+                    value={
+                      taskCount === 0 ? (
+                        <p className="text-sm text-slate-500">
+                          <GeneratedText id="m_07c3d34b0d33e6" />
+                        </p>
+                      ) : (
+                        <p className="text-sm text-slate-600 dark:text-slate-300">
+                          <GeneratedValue value={taskCount} />{' '}
+                          <GeneratedText id="m_0af64d5dc843c0" />{' '}
+                          <GeneratedValue
+                            value={
+                              taskCount === 1 ? (
+                                <GeneratedText id="m_0bec4d9de7885e" />
+                              ) : (
+                                <GeneratedText id="m_08416244f157a0" />
+                              )
+                            }
+                          />
+                          <GeneratedText id="m_17f017ae36c7fc" />
+                        </p>
+                      )
+                    }
+                  />
+                </CardContent>
+              </Card>
+            ) : null
+          }
+        />
       </div>
     </PageContainer>
   )

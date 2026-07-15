@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound, redirect } from 'next/navigation'
 import { DetailHeader } from '@beaconhs/ui'
 import { REPORT_OPERATORS } from '@beaconhs/reports'
@@ -9,7 +10,10 @@ import { updateCustomDefinition } from '../../../_studio/actions'
 import { loadReportStudioEntities } from '../../../_studio/entities'
 import { isUuid } from '@/lib/list-params'
 
-export const metadata = { title: 'Edit report' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_186e85e2d4fd61') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function EditCustomDefinitionPage({
@@ -17,6 +21,7 @@ export default async function EditCustomDefinitionPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -37,8 +42,8 @@ export default async function EditCustomDefinitionPage({
       header={
         <DetailHeader
           back={{ href: `/reports/definitions/${id}`, label: 'Back to report' }}
-          title={`Edit: ${definition.name}`}
-          subtitle="Changes apply to every schedule subscribed to this report."
+          title={tGenerated('m_1c5d935f08d2c3', { value0: definition.name })}
+          subtitle={tGenerated('m_047089b0ab0adf')}
         />
       }
       className="h-full max-w-none p-0"

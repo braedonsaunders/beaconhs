@@ -1,3 +1,6 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // /admin/integrations — one hub for all integrations. Sync data IN (poll an
 // external source into People/Locations/Equipment) and push data OUT when an
 // event happens (e.g. post training time to payroll) live together: a
@@ -32,7 +35,10 @@ import { DirectionPill, StatusPill } from './_pills'
 import { IntegrationCatalog, type CatalogItem } from './_catalog.client'
 import { DeleteIntegrationButton } from './_delete-integration-button'
 
-export const metadata = { title: 'Integrations' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1cff4ed9a7e699') }
+}
 export const dynamic = 'force-dynamic'
 
 const ICONS: Record<string, LucideIcon> = {
@@ -177,81 +183,99 @@ export default async function IntegrationsPage() {
           <div className="flex items-center gap-2">
             <Plug size={22} className="text-teal-600" />
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">
-              Integrations
+              <GeneratedText id="m_1cff4ed9a7e699" />
             </h1>
           </div>
           <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-            Connect your other systems. <strong>Sync in</strong> to pull People, Locations &amp;
-            Projects, and Equipment from an external source, or <strong>push out</strong> to send
-            data elsewhere when something happens here — like posting training time to payroll.
+            <GeneratedText id="m_1b9edee39425a9" />{' '}
+            <strong>
+              <GeneratedText id="m_1cdce60ecabce0" />
+            </strong>{' '}
+            <GeneratedText id="m_1ba396958daf36" />{' '}
+            <strong>
+              <GeneratedText id="m_0912221f179725" />
+            </strong>{' '}
+            <GeneratedText id="m_030d0e813977cf" />
           </p>
         </header>
 
         <section className="space-y-3">
           <div className="flex items-baseline gap-2">
             <h2 className="text-sm font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
-              Connected
+              <GeneratedText id="m_061faebf66749d" />
             </h2>
-            <span className="text-xs text-slate-400">{connected.length}</span>
+            <span className="text-xs text-slate-400">
+              <GeneratedValue value={connected.length} />
+            </span>
           </div>
-          {connected.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 px-5 py-8 text-sm text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              Nothing connected yet. Add an integration from the catalog below.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              {connected.map((c) => {
-                const Icon = ICONS[c.iconKey] ?? Database
-                return (
-                  <div
-                    key={`${c.dir}-${c.id}`}
-                    className="group relative flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
-                  >
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-50 text-slate-500 ring-1 ring-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
-                      <Icon size={18} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link
-                          href={c.href}
-                          className="font-semibold text-slate-900 after:absolute after:inset-0 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-400"
+          <GeneratedValue
+            value={
+              connected.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 px-5 py-8 text-sm text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <GeneratedText id="m_0ae576e58173ac" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  <GeneratedValue
+                    value={connected.map((c) => {
+                      const Icon = ICONS[c.iconKey] ?? Database
+                      return (
+                        <div
+                          key={`${c.dir}-${c.id}`}
+                          className="group relative flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
                         >
-                          {c.title}
-                        </Link>
-                        <DirectionPill dir={c.dir} />
-                        <StatusPill status={c.status} />
-                        {c.badge ? (
-                          <Badge variant="secondary" className="text-[10px]">
-                            {c.badge}
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
-                        {c.subtitle}
-                      </p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-400 dark:text-slate-500">
-                        {c.meta}
-                      </p>
-                    </div>
-                    <div className="relative z-10 flex items-center gap-1 self-center text-slate-300 transition group-hover:text-slate-400">
-                      <ArrowUpRight size={15} className="hidden sm:block" />
-                      <DeleteIntegrationButton
-                        id={c.id}
-                        name={c.title}
-                        kind={c.dir === 'out' ? 'automation' : 'connection'}
-                        deleteAction={c.deleteAction}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-50 text-slate-500 ring-1 ring-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
+                            <Icon size={18} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Link
+                                href={c.href}
+                                className="font-semibold text-slate-900 after:absolute after:inset-0 hover:text-teal-700 dark:text-slate-100 dark:hover:text-teal-400"
+                              >
+                                <GeneratedValue value={c.title} />
+                              </Link>
+                              <DirectionPill dir={c.dir} />
+                              <StatusPill status={c.status} />
+                              <GeneratedValue
+                                value={
+                                  c.badge ? (
+                                    <Badge variant="secondary" className="text-[10px]">
+                                      <GeneratedValue value={c.badge} />
+                                    </Badge>
+                                  ) : null
+                                }
+                              />
+                            </div>
+                            <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
+                              <GeneratedValue value={c.subtitle} />
+                            </p>
+                            <p className="mt-0.5 truncate text-[11px] text-slate-400 dark:text-slate-500">
+                              <GeneratedValue value={c.meta} />
+                            </p>
+                          </div>
+                          <div className="relative z-10 flex items-center gap-1 self-center text-slate-300 transition group-hover:text-slate-400">
+                            <ArrowUpRight size={15} className="hidden sm:block" />
+                            <DeleteIntegrationButton
+                              id={c.id}
+                              name={c.title}
+                              kind={c.dir === 'out' ? 'automation' : 'connection'}
+                              deleteAction={c.deleteAction}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  />
+                </div>
+              )
+            }
+          />
         </section>
 
         <section className="space-y-3">
           <h2 className="text-sm font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
-            Browse integrations
+            <GeneratedText id="m_1d163d33f3ba04" />
           </h2>
           <IntegrationCatalog items={catalog} />
         </section>

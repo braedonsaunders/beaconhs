@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Hazard-assessment TYPE builder — 1/3 settings rail + 2/3 build surface with
 // three drag-reorderable lists (attached apps, default PPE, default questions),
 // each edited in a drawer. Same look as the inspection type builder.
@@ -104,6 +111,8 @@ export function HazardTypeBuilder({
   hazardSets: Ref[]
   groups: Ref[]
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [, startTransition] = React.useTransition()
   const [ppe, setPPE] = useReseededState(initialPPE, initialPPE)
@@ -119,12 +128,14 @@ export function HazardTypeBuilder({
         try {
           await fn()
         } catch (e) {
-          toast.error(e instanceof Error ? e.message : 'Something went wrong')
+          toast.error(
+            tGeneratedValue(e instanceof Error ? e.message : tGenerated('m_036ddb5b822740')),
+          )
           router.refresh()
         }
       })
     },
-    [router],
+    [router, tGenerated, tGeneratedValue],
   )
 
   const persistPPE = useDebouncedCallback((ids: string[]) =>
@@ -263,60 +274,63 @@ export function HazardTypeBuilder({
           <>
             <BuilderRailHeader
               icon={<Settings2 size={15} />}
-              title={type.name}
-              subtitle="Assessment type"
+              title={tGeneratedValue(type.name)}
+              subtitle={tGenerated('m_169ce2294296b8')}
             />
             <BuilderRailTabs>
               <BuilderRailTab
                 active={leftTab === 'build'}
                 onClick={() => setLeftTab('build')}
                 icon={<ListChecks size={14} />}
-                label="Build"
+                label={tGenerated('m_0adae4a94c7be3')}
               />
               <BuilderRailTab
                 active={leftTab === 'settings'}
                 onClick={() => setLeftTab('settings')}
                 icon={<Settings2 size={14} />}
-                label="Settings"
+                label={tGenerated('m_151769a9fde954')}
               />
             </BuilderRailTabs>
             <BuilderScroll>
-              {leftTab === 'build' ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Compose what new assessments of this type start with. Attach Builder apps, and
-                    seed default PPE and intake questions — drag to reorder.
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => setEditor({ kind: 'app', mode: 'add' })}
-                  >
-                    <Boxes size={14} /> Attach app
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => setEditor({ kind: 'ppe', mode: 'add' })}
-                  >
-                    <Package size={14} /> Add PPE
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start"
-                    onClick={() => setEditor({ kind: 'question', mode: 'add' })}
-                  >
-                    <ListChecks size={14} /> Add question
-                  </Button>
-                </div>
-              ) : (
-                <SettingsPanel
-                  type={type}
-                  hazardSets={hazardSets}
-                  groups={groups}
-                  onDeleted={() => router.push('/hazard-assessments/types')}
-                />
-              )}
+              <GeneratedValue
+                value={
+                  leftTab === 'build' ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_00f539e210a735" />
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start"
+                        onClick={() => setEditor({ kind: 'app', mode: 'add' })}
+                      >
+                        <Boxes size={14} /> <GeneratedText id="m_047fb1ff03fd59" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start"
+                        onClick={() => setEditor({ kind: 'ppe', mode: 'add' })}
+                      >
+                        <Package size={14} /> <GeneratedText id="m_0068c6e22ca766" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start"
+                        onClick={() => setEditor({ kind: 'question', mode: 'add' })}
+                      >
+                        <ListChecks size={14} /> <GeneratedText id="m_029dffafbff34b" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <SettingsPanel
+                      type={type}
+                      hazardSets={hazardSets}
+                      groups={groups}
+                      onDeleted={() => router.push('/hazard-assessments/types')}
+                    />
+                  )
+                }
+              />
             </BuilderScroll>
           </>
         }
@@ -324,144 +338,173 @@ export function HazardTypeBuilder({
           <>
             <BuilderSurfaceHeader
               icon={<Boxes size={15} />}
-              title="Build surface"
+              title={tGenerated('m_0b120bda8434d5')}
               actions={
                 <>
-                  <Badge variant="secondary">Apps {apps.length}</Badge>
-                  <Badge variant="secondary">PPE {ppe.length}</Badge>
-                  <Badge variant="secondary">Questions {questions.length}</Badge>
+                  <Badge variant="secondary">
+                    <GeneratedText id="m_0bdfc62977f9d0" /> <GeneratedValue value={apps.length} />
+                  </Badge>
+                  <Badge variant="secondary">
+                    <GeneratedText id="m_18391e161b9ed6" /> <GeneratedValue value={ppe.length} />
+                  </Badge>
+                  <Badge variant="secondary">
+                    <GeneratedText id="m_06d84b0874d447" />{' '}
+                    <GeneratedValue value={questions.length} />
+                  </Badge>
                 </>
               }
             />
             <BuilderScroll className="space-y-4 lg:p-6">
               <ListSection
-                title="Builder apps"
-                subtitle="Published Builder apps embedded as assessment sections."
+                title={tGenerated('m_0c770d55914bfa')}
+                subtitle={tGenerated('m_121829a2cc68e2')}
                 count={apps.length}
                 addLabel="Attach"
                 onAdd={() => setEditor({ kind: 'app', mode: 'add' })}
                 empty={apps.length === 0 ? 'No apps attached.' : null}
               >
                 <SortableList items={sortedApps} onReorder={reorderApps}>
-                  {sortedApps.map((a, i) => (
-                    <SortableRow
-                      key={a.id}
-                      value={a}
-                      selected={selectedId === a.id}
-                      onSelect={() => {
-                        setSelectedId(a.id)
-                        setEditor({ kind: 'app', mode: 'edit', item: a })
-                      }}
-                      onMoveUp={() => moveApp(a, -1)}
-                      onMoveDown={() => moveApp(a, 1)}
-                      onDelete={() => {
-                        setApps((all) => all.filter((x) => x.id !== a.id))
-                        run(() => deleteTypeApp({ typeId: type.id, id: a.id }))
-                      }}
-                      canUp={i > 0}
-                      canDown={i < sortedApps.length - 1}
-                    >
-                      <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                        {a.label}
-                      </span>
-                      <span className="hidden shrink-0 text-[11px] text-slate-400 sm:inline">
-                        {a.templateName}
-                      </span>
-                      {a.required ? (
-                        <Badge variant="outline" className="text-[10px]">
-                          required
-                        </Badge>
-                      ) : null}
-                      {a.autoCreate ? (
-                        <Badge variant="secondary" className="text-[10px]">
-                          auto
-                        </Badge>
-                      ) : null}
-                    </SortableRow>
-                  ))}
+                  <GeneratedValue
+                    value={sortedApps.map((a, i) => (
+                      <SortableRow
+                        key={a.id}
+                        value={a}
+                        selected={selectedId === a.id}
+                        onSelect={() => {
+                          setSelectedId(a.id)
+                          setEditor({ kind: 'app', mode: 'edit', item: a })
+                        }}
+                        onMoveUp={() => moveApp(a, -1)}
+                        onMoveDown={() => moveApp(a, 1)}
+                        onDelete={() => {
+                          setApps((all) => all.filter((x) => x.id !== a.id))
+                          run(() => deleteTypeApp({ typeId: type.id, id: a.id }))
+                        }}
+                        canUp={i > 0}
+                        canDown={i < sortedApps.length - 1}
+                      >
+                        <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                          <GeneratedValue value={a.label} />
+                        </span>
+                        <span className="hidden shrink-0 text-[11px] text-slate-400 sm:inline">
+                          <GeneratedValue value={a.templateName} />
+                        </span>
+                        <GeneratedValue
+                          value={
+                            a.required ? (
+                              <Badge variant="outline" className="text-[10px]">
+                                <GeneratedText id="m_07ca2266909f33" />
+                              </Badge>
+                            ) : null
+                          }
+                        />
+                        <GeneratedValue
+                          value={
+                            a.autoCreate ? (
+                              <Badge variant="secondary" className="text-[10px]">
+                                <GeneratedText id="m_0e4a54b8ee5d61" />
+                              </Badge>
+                            ) : null
+                          }
+                        />
+                      </SortableRow>
+                    ))}
+                  />
                 </SortableList>
               </ListSection>
 
               <ListSection
-                title="Default PPE"
-                subtitle="Seed PPE rows into new assessments of this type."
+                title={tGenerated('m_00208cf63d88c8')}
+                subtitle={tGenerated('m_1f87aa91a93382')}
                 count={ppe.length}
                 addLabel="Add"
                 onAdd={() => setEditor({ kind: 'ppe', mode: 'add' })}
                 empty={ppe.length === 0 ? 'No default PPE.' : null}
               >
                 <SortableList items={sortedPPE} onReorder={reorderPPE}>
-                  {sortedPPE.map((p, i) => (
-                    <SortableRow
-                      key={p.id}
-                      value={p}
-                      selected={selectedId === p.id}
-                      onSelect={() => {
-                        setSelectedId(p.id)
-                        setEditor({ kind: 'ppe', mode: 'edit', item: p })
-                      }}
-                      onMoveUp={() => movePPE(p, -1)}
-                      onMoveDown={() => movePPE(p, 1)}
-                      onDelete={() => {
-                        setPPE((all) => all.filter((x) => x.id !== p.id))
-                        run(() => deleteTypePPE({ typeId: type.id, id: p.id }))
-                      }}
-                      canUp={i > 0}
-                      canDown={i < sortedPPE.length - 1}
-                    >
-                      <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                        {p.name}
-                      </span>
-                      {p.required ? (
-                        <Badge variant="outline" className="text-[10px]">
-                          required
-                        </Badge>
-                      ) : null}
-                    </SortableRow>
-                  ))}
+                  <GeneratedValue
+                    value={sortedPPE.map((p, i) => (
+                      <SortableRow
+                        key={p.id}
+                        value={p}
+                        selected={selectedId === p.id}
+                        onSelect={() => {
+                          setSelectedId(p.id)
+                          setEditor({ kind: 'ppe', mode: 'edit', item: p })
+                        }}
+                        onMoveUp={() => movePPE(p, -1)}
+                        onMoveDown={() => movePPE(p, 1)}
+                        onDelete={() => {
+                          setPPE((all) => all.filter((x) => x.id !== p.id))
+                          run(() => deleteTypePPE({ typeId: type.id, id: p.id }))
+                        }}
+                        canUp={i > 0}
+                        canDown={i < sortedPPE.length - 1}
+                      >
+                        <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                          <GeneratedValue value={p.name} />
+                        </span>
+                        <GeneratedValue
+                          value={
+                            p.required ? (
+                              <Badge variant="outline" className="text-[10px]">
+                                <GeneratedText id="m_07ca2266909f33" />
+                              </Badge>
+                            ) : null
+                          }
+                        />
+                      </SortableRow>
+                    ))}
+                  />
                 </SortableList>
               </ListSection>
 
               <ListSection
-                title="Default questions"
-                subtitle="Intake and verification questions seeded on each assessment."
+                title={tGenerated('m_1c55c8b42e9776')}
+                subtitle={tGenerated('m_0e850280ab682a')}
                 count={questions.length}
                 addLabel="Add"
                 onAdd={() => setEditor({ kind: 'question', mode: 'add' })}
                 empty={questions.length === 0 ? 'No default questions.' : null}
               >
                 <SortableList items={sortedQuestions} onReorder={reorderQuestions}>
-                  {sortedQuestions.map((q, i) => (
-                    <SortableRow
-                      key={q.id}
-                      value={q}
-                      selected={selectedId === q.id}
-                      onSelect={() => {
-                        setSelectedId(q.id)
-                        setEditor({ kind: 'question', mode: 'edit', item: q })
-                      }}
-                      onMoveUp={() => moveQuestion(q, -1)}
-                      onMoveDown={() => moveQuestion(q, 1)}
-                      onDelete={() => {
-                        setQuestions((all) => all.filter((x) => x.id !== q.id))
-                        run(() => deleteTypeQuestion({ typeId: type.id, id: q.id }))
-                      }}
-                      canUp={i > 0}
-                      canDown={i < sortedQuestions.length - 1}
-                    >
-                      <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                        {q.question}
-                      </span>
-                      <span className="hidden shrink-0 text-[11px] text-slate-400 sm:inline">
-                        {QUESTION_TYPE_LABELS[q.questionType]}
-                      </span>
-                      {q.requiresYes ? (
-                        <Badge variant="outline" className="text-[10px]">
-                          requires yes
-                        </Badge>
-                      ) : null}
-                    </SortableRow>
-                  ))}
+                  <GeneratedValue
+                    value={sortedQuestions.map((q, i) => (
+                      <SortableRow
+                        key={q.id}
+                        value={q}
+                        selected={selectedId === q.id}
+                        onSelect={() => {
+                          setSelectedId(q.id)
+                          setEditor({ kind: 'question', mode: 'edit', item: q })
+                        }}
+                        onMoveUp={() => moveQuestion(q, -1)}
+                        onMoveDown={() => moveQuestion(q, 1)}
+                        onDelete={() => {
+                          setQuestions((all) => all.filter((x) => x.id !== q.id))
+                          run(() => deleteTypeQuestion({ typeId: type.id, id: q.id }))
+                        }}
+                        canUp={i > 0}
+                        canDown={i < sortedQuestions.length - 1}
+                      >
+                        <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                          <GeneratedValue value={q.question} />
+                        </span>
+                        <span className="hidden shrink-0 text-[11px] text-slate-400 sm:inline">
+                          <GeneratedValue value={QUESTION_TYPE_LABELS[q.questionType]} />
+                        </span>
+                        <GeneratedValue
+                          value={
+                            q.requiresYes ? (
+                              <Badge variant="outline" className="text-[10px]">
+                                <GeneratedText id="m_1579cafa005687" />
+                              </Badge>
+                            ) : null
+                          }
+                        />
+                      </SortableRow>
+                    ))}
+                  />
                 </SortableList>
               </ListSection>
             </BuilderScroll>
@@ -501,22 +544,31 @@ function ListSection({
       <header className="flex items-start justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-            {title} <Badge variant="secondary">{count}</Badge>
+            <GeneratedValue value={title} />{' '}
+            <Badge variant="secondary">
+              <GeneratedValue value={count} />
+            </Badge>
           </h2>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            <GeneratedValue value={subtitle} />
+          </p>
         </div>
         <Button size="sm" variant="outline" onClick={onAdd}>
-          <Plus size={13} /> {addLabel}
+          <Plus size={13} /> <GeneratedValue value={addLabel} />
         </Button>
       </header>
       <div className="p-2">
-        {empty ? (
-          <p className="px-2 py-3 text-center text-xs text-slate-400 dark:text-slate-500">
-            {empty}
-          </p>
-        ) : (
-          children
-        )}
+        <GeneratedValue
+          value={
+            empty ? (
+              <p className="px-2 py-3 text-center text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedValue value={empty} />
+              </p>
+            ) : (
+              children
+            )
+          }
+        />
       </div>
     </section>
   )
@@ -535,6 +587,8 @@ function EditorDrawer({
   onClose: () => void
   onSave: (data: Record<string, unknown>) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   // PPE
   const [name, setName] = useReseededState(
     editor,
@@ -642,126 +696,186 @@ function EditorDrawer({
     <Drawer
       open={!!editor}
       onClose={onClose}
-      title={title}
+      title={tGeneratedValue(title)}
       size="sm"
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            <GeneratedText id="m_112e2e8ecda428" />
           </Button>
           <Button disabled={!canSave} onClick={submit}>
-            {isAdd ? 'Add' : 'Save'}
+            <GeneratedValue
+              value={
+                isAdd ? (
+                  <GeneratedText id="m_16c8592e5020a4" />
+                ) : (
+                  <GeneratedText id="m_19e6bff894c3c7" />
+                )
+              }
+            />
           </Button>
         </>
       }
     >
-      {kind === 'ppe' ? (
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Name</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Hard hat"
-              autoFocus
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Description</Label>
-            <Input
-              value={ppeDesc}
-              onChange={(e) => setPpeDesc(e.target.value)}
-              placeholder="When / why"
-            />
-          </div>
-          <CheckRow label="Required" checked={ppeRequired} onChange={setPpeRequired} />
-        </div>
-      ) : kind === 'question' ? (
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Question</Label>
-            <Textarea
-              rows={2}
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="e.g. Are permits posted?"
-              autoFocus
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Type</Label>
-            <Select
-              value={questionType}
-              onChange={(e) => setQuestionType(e.target.value as QuestionType)}
-            >
-              {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((t) => (
-                <option key={t} value={t}>
-                  {QUESTION_TYPE_LABELS[t]}
-                </option>
-              ))}
-            </Select>
-          </div>
-          {questionType === 'multi_select' ? (
-            <div className="space-y-1.5">
-              <Label>Options (one per line)</Label>
-              <Textarea rows={3} value={answers} onChange={(e) => setAnswers(e.target.value)} />
-            </div>
-          ) : null}
-          <CheckRow
-            label='Requires "Yes" for completion'
-            checked={requiresYes}
-            onChange={setRequiresYes}
-          />
-        </div>
-      ) : kind === 'app' ? (
-        <div className="space-y-4">
-          {isAdd ? (
-            <div className="space-y-1.5">
-              <Label>Published app</Label>
-              <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-                <option value="">Select an app…</option>
-                {appTemplates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          ) : null}
-          <div className="space-y-1.5">
-            <Label>Label</Label>
-            <Input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="Defaults to app name"
-            />
-          </div>
-          {isAdd ? (
-            <div className="space-y-1.5">
-              <Label>Key</Label>
-              <Input
-                value={appKey}
-                onChange={(e) => setAppKey(e.target.value)}
-                placeholder="e.g. confined_space"
+      <GeneratedValue
+        value={
+          kind === 'ppe' ? (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_02b18d5c7f6f2d" />
+                </Label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={tGenerated('m_04f8a80faaa9d2')}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_14d923495cf14c" />
+                </Label>
+                <Input
+                  value={ppeDesc}
+                  onChange={(e) => setPpeDesc(e.target.value)}
+                  placeholder={tGenerated('m_140a30a86c0ace')}
+                />
+              </div>
+              <CheckRow
+                label={tGenerated('m_12fe2fe7a9ddad')}
+                checked={ppeRequired}
+                onChange={setPpeRequired}
               />
             </div>
-          ) : null}
-          <div className="space-y-1.5">
-            <Label>Description</Label>
-            <Input
-              value={appDesc}
-              onChange={(e) => setAppDesc(e.target.value)}
-              placeholder="Shown on the app card"
-            />
-          </div>
-          <CheckRow label="Required" checked={appRequired} onChange={setAppRequired} />
-          <CheckRow
-            label="Create draft on new assessments"
-            checked={autoCreate}
-            onChange={setAutoCreate}
-          />
-        </div>
-      ) : null}
+          ) : kind === 'question' ? (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_1a895b5691321b" />
+                </Label>
+                <Textarea
+                  rows={2}
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  placeholder={tGenerated('m_1441acb202be91')}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_074ba2f160c506" />
+                </Label>
+                <Select
+                  value={questionType}
+                  onChange={(e) => setQuestionType(e.target.value as QuestionType)}
+                >
+                  <GeneratedValue
+                    value={(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((t) => (
+                      <option key={t} value={t}>
+                        <GeneratedValue value={QUESTION_TYPE_LABELS[t]} />
+                      </option>
+                    ))}
+                  />
+                </Select>
+              </div>
+              <GeneratedValue
+                value={
+                  questionType === 'multi_select' ? (
+                    <div className="space-y-1.5">
+                      <Label>
+                        <GeneratedText id="m_02057adc77a443" />
+                      </Label>
+                      <Textarea
+                        rows={3}
+                        value={answers}
+                        onChange={(e) => setAnswers(e.target.value)}
+                      />
+                    </div>
+                  ) : null
+                }
+              />
+              <CheckRow
+                label={tGenerated('m_01b4f1b5df17f0')}
+                checked={requiresYes}
+                onChange={setRequiresYes}
+              />
+            </div>
+          ) : kind === 'app' ? (
+            <div className="space-y-4">
+              <GeneratedValue
+                value={
+                  isAdd ? (
+                    <div className="space-y-1.5">
+                      <Label>
+                        <GeneratedText id="m_13554479175be8" />
+                      </Label>
+                      <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+                        <option value="">
+                          <GeneratedText id="m_0dbb32383dd60f" />
+                        </option>
+                        <GeneratedValue
+                          value={appTemplates.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              <GeneratedValue value={t.name} />
+                            </option>
+                          ))}
+                        />
+                      </Select>
+                    </div>
+                  ) : null
+                }
+              />
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_1d088977412efb" />
+                </Label>
+                <Input
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  placeholder={tGenerated('m_1a6aced2ae215f')}
+                />
+              </div>
+              <GeneratedValue
+                value={
+                  isAdd ? (
+                    <div className="space-y-1.5">
+                      <Label>
+                        <GeneratedText id="m_169ff65a3cfc14" />
+                      </Label>
+                      <Input
+                        value={appKey}
+                        onChange={(e) => setAppKey(e.target.value)}
+                        placeholder={tGenerated('m_17c9b4e6f7a6bc')}
+                      />
+                    </div>
+                  ) : null
+                }
+              />
+              <div className="space-y-1.5">
+                <Label>
+                  <GeneratedText id="m_14d923495cf14c" />
+                </Label>
+                <Input
+                  value={appDesc}
+                  onChange={(e) => setAppDesc(e.target.value)}
+                  placeholder={tGenerated('m_1444f72a8fb9d4')}
+                />
+              </div>
+              <CheckRow
+                label={tGenerated('m_12fe2fe7a9ddad')}
+                checked={appRequired}
+                onChange={setAppRequired}
+              />
+              <CheckRow
+                label={tGenerated('m_1a3414cf0c5f06')}
+                checked={autoCreate}
+                onChange={setAutoCreate}
+              />
+            </div>
+          ) : null
+        }
+      />
     </Drawer>
   )
 }
@@ -779,6 +893,8 @@ function SettingsPanel({
   groups: Ref[]
   onDeleted: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [, start] = React.useTransition()
   const [name, setName] = React.useState(type.name)
   const [description, setDescription] = React.useState(type.description ?? '')
@@ -805,9 +921,11 @@ function SettingsPanel({
           hasQuestions,
           availableToGroupIds: groupIds,
         })
-        toast.success('Saved')
+        toast.success(tGenerated('m_0a0569b726b225'))
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Failed to save')
+        toast.error(
+          tGeneratedValue(e instanceof Error ? e.message : tGenerated('m_084d4d5382264e')),
+        )
       }
     })
   }
@@ -824,7 +942,9 @@ function SettingsPanel({
         await deleteAssessmentType({ id: type.id })
         onDeleted()
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Failed to delete')
+        toast.error(
+          tGeneratedValue(e instanceof Error ? e.message : tGenerated('m_1ac2672da698ce')),
+        )
       }
     })
   }
@@ -832,75 +952,109 @@ function SettingsPanel({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label>Name *</Label>
+        <Label>
+          <GeneratedText id="m_1a9978900838e6" />
+        </Label>
         <Input value={name} onChange={(e) => setName(e.target.value)} required />
       </div>
       <div className="space-y-1.5">
-        <Label>Description</Label>
+        <Label>
+          <GeneratedText id="m_14d923495cf14c" />
+        </Label>
         <Textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
       <div className="space-y-1.5">
-        <Label>Style</Label>
+        <Label>
+          <GeneratedText id="m_03cf3a97d03fef" />
+        </Label>
         <Select value={style} onChange={(e) => setStyle(e.target.value as Style)}>
-          <option value="task_based">Task-based</option>
-          <option value="hazard_based">Hazard-based</option>
+          <option value="task_based">
+            <GeneratedText id="m_09d335688e31af" />
+          </option>
+          <option value="hazard_based">
+            <GeneratedText id="m_0f250d076f1225" />
+          </option>
         </Select>
       </div>
-      {isHazardBased ? (
-        <div className="space-y-1.5">
-          <Label>Default hazard set</Label>
-          <Select
-            value={defaultHazardSetId}
-            onChange={(e) => setDefaultHazardSetId(e.target.value)}
-          >
-            <option value="">— none —</option>
-            {hazardSets.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          isHazardBased ? (
+            <div className="space-y-1.5">
+              <Label>
+                <GeneratedText id="m_14b0cc3abaca8d" />
+              </Label>
+              <Select
+                value={defaultHazardSetId}
+                onChange={(e) => setDefaultHazardSetId(e.target.value)}
+              >
+                <option value="">
+                  <GeneratedText id="m_0206c945814606" />
+                </option>
+                <GeneratedValue
+                  value={hazardSets.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      <GeneratedValue value={s.name} />
+                    </option>
+                  ))}
+                />
+              </Select>
+            </div>
+          ) : null
+        }
+      />
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
-        <legend className="px-1 text-xs font-medium text-slate-500">Optional sections</legend>
-        <CheckRow label="PPE" checked={hasPPE} onChange={setHasPPE} />
-        <CheckRow label="Questions & Answers" checked={hasQuestions} onChange={setHasQuestions} />
+        <legend className="px-1 text-xs font-medium text-slate-500">
+          <GeneratedText id="m_0715227000cfd5" />
+        </legend>
+        <CheckRow label={tGenerated('m_18391e161b9ed6')} checked={hasPPE} onChange={setHasPPE} />
+        <CheckRow
+          label={tGenerated('m_049fefa2074149')}
+          checked={hasQuestions}
+          onChange={setHasQuestions}
+        />
       </fieldset>
-      {groups.length > 0 ? (
-        <div className="space-y-1.5">
-          <Label>Available to (person groups)</Label>
-          <p className="text-xs text-slate-500">
-            Leave all unchecked to offer this type to everyone.
-          </p>
-          <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2 dark:border-slate-800">
-            {groups.map((g) => (
-              <CheckRow
-                key={g.id}
-                label={g.name}
-                checked={groupIds.includes(g.id)}
-                onChange={() => toggleGroup(g.id)}
-              />
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          groups.length > 0 ? (
+            <div className="space-y-1.5">
+              <Label>
+                <GeneratedText id="m_05d7dad9d61d38" />
+              </Label>
+              <p className="text-xs text-slate-500">
+                <GeneratedText id="m_1adf81e42e1cda" />
+              </p>
+              <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2 dark:border-slate-800">
+                <GeneratedValue
+                  value={groups.map((g) => (
+                    <CheckRow
+                      key={g.id}
+                      label={tGeneratedValue(g.name)}
+                      checked={groupIds.includes(g.id)}
+                      onChange={() => toggleGroup(g.id)}
+                    />
+                  ))}
+                />
+              </div>
+            </div>
+          ) : null
+        }
+      />
       <div className="flex justify-end">
         <Button onClick={save}>
-          <Save size={14} /> Save
+          <Save size={14} /> <GeneratedText id="m_19e6bff894c3c7" />
         </Button>
       </div>
 
       <div className="mt-4 rounded-md border border-rose-200 bg-rose-50/60 p-3 dark:border-rose-950 dark:bg-rose-950/20">
         <h3 className="text-sm font-semibold text-rose-700 dark:text-rose-300">
-          Delete assessment type
+          <GeneratedText id="m_0c1907b9a5392f" />
         </h3>
         <p className="mt-0.5 text-xs text-rose-700/80 dark:text-rose-300/80">
-          Removes this type from the library.
+          <GeneratedText id="m_16047894db0315" />
         </p>
         <div className="mt-2 flex justify-end">
           <Button variant="outline" className="text-rose-600 hover:bg-rose-50" onClick={del}>
-            Delete type
+            <GeneratedText id="m_12fda1066d2e96" />
           </Button>
         </div>
       </div>
@@ -925,7 +1079,9 @@ function CheckRow({
         onChange={(e) => onChange(e.target.checked)}
         className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
       />
-      <span>{label}</span>
+      <span>
+        <GeneratedValue value={label} />
+      </span>
     </label>
   )
 }

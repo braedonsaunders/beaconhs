@@ -1,3 +1,5 @@
+import { GeneratedText } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Reports hub — a fit-to-viewport master-detail split. LEFT: the searchable,
 // filterable catalogue of every report (built-in + custom, grouped by
 // category). RIGHT: a live paginated print preview of the selected report
@@ -17,7 +19,10 @@ import { ReportsSubNav } from './_nav'
 import { DefinitionList } from './_hub/definition-list'
 import { PreviewPane } from './_hub/preview-pane'
 
-export const metadata = { title: 'Reports' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_09bb00824b733b') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function ReportsPage({
@@ -25,6 +30,7 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   const sp = await searchParams
   const kind = typeof sp.kind === 'string' ? sp.kind : undefined
@@ -66,20 +72,20 @@ export default async function ReportsPage({
       <div className="border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
         <FadeInHeader className="mx-auto max-w-screen-2xl space-y-2 sm:space-y-2.5">
           <PageHeader
-            title="Reports"
-            description="Print-ready documents from your records — preview, export, and schedule PDF delivery."
+            title={tGenerated('m_09bb00824b733b')}
+            description={tGenerated('m_12fd5f7b139d2f')}
             actions={
               <div className="flex gap-2">
                 <Link href={'/reports/definitions/new' as never}>
                   <Button variant="outline">
                     <Sparkles size={14} className="mr-1.5" />
-                    New report
+                    <GeneratedText id="m_084b76c7fa79df" />
                   </Button>
                 </Link>
                 <Link href="/reports/schedules/new">
                   <Button>
                     <Plus size={14} className="mr-1.5" />
-                    New schedule
+                    <GeneratedText id="m_0f2dd0043302a1" />
                   </Button>
                 </Link>
               </div>
@@ -88,12 +94,12 @@ export default async function ReportsPage({
           <div className="flex flex-wrap items-center gap-2">
             <ReportsSubNav active="reports" />
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <SearchInput placeholder="Search reports…" />
+              <SearchInput placeholder={tGenerated('m_0224c155374ff8')} />
               <FilterChips
                 basePath="/reports"
                 currentParams={sp}
                 paramKey="kind"
-                label="Kind"
+                label={tGenerated('m_1e578efe1574cd')}
                 options={[
                   { value: 'built_in', label: 'Built-in' },
                   { value: 'custom', label: 'Custom' },
@@ -103,7 +109,7 @@ export default async function ReportsPage({
                 basePath="/reports"
                 currentParams={sp}
                 paramKey="category"
-                label="Category"
+                label={tGenerated('m_108b41637f364f')}
                 options={categories.map((c) => ({ value: c, label: c.replace(/_/g, ' ') }))}
               />
             </div>

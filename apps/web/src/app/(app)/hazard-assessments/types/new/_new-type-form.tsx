@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 import { useState } from 'react'
 import { Button, Card, CardContent, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { MultiPicker } from '../../_multipicker'
@@ -16,6 +18,7 @@ export function NewAssessmentTypeForm({
   groups: Ref[]
   action: (formData: FormData) => void | Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const [style, setStyle] = useState<Style>('task_based')
 
   return (
@@ -23,53 +26,82 @@ export function NewAssessmentTypeForm({
       <CardContent className="pt-6">
         <form action={action} className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Name *</Label>
-            <Input name="name" required placeholder="e.g. Standard hazard assessment" />
+            <Label>
+              <GeneratedText id="m_1a9978900838e6" />
+            </Label>
+            <Input name="name" required placeholder={tGenerated('m_0b0658ec2d4c22')} />
           </div>
           <div className="space-y-1.5">
-            <Label>Description</Label>
+            <Label>
+              <GeneratedText id="m_14d923495cf14c" />
+            </Label>
             <Textarea name="description" rows={2} />
           </div>
           <div className="space-y-1.5">
-            <Label>Style</Label>
+            <Label>
+              <GeneratedText id="m_03cf3a97d03fef" />
+            </Label>
             <Select name="style" value={style} onChange={(e) => setStyle(e.target.value as Style)}>
-              <option value="task_based">Task-based</option>
-              <option value="hazard_based">Hazard-based</option>
+              <option value="task_based">
+                <GeneratedText id="m_09d335688e31af" />
+              </option>
+              <option value="hazard_based">
+                <GeneratedText id="m_0f250d076f1225" />
+              </option>
             </Select>
           </div>
-          {style === 'hazard_based' ? (
-            <div className="space-y-1.5">
-              <Label>Default hazard set</Label>
-              <Select name="defaultHazardSetId" defaultValue="">
-                <option value="">— none —</option>
-                {sets.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              style === 'hazard_based' ? (
+                <div className="space-y-1.5">
+                  <Label>
+                    <GeneratedText id="m_14b0cc3abaca8d" />
+                  </Label>
+                  <Select name="defaultHazardSetId" defaultValue="">
+                    <option value="">
+                      <GeneratedText id="m_0206c945814606" />
+                    </option>
+                    <GeneratedValue
+                      value={sets.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          <GeneratedValue value={s.name} />
+                        </option>
+                      ))}
+                    />
+                  </Select>
+                </div>
+              ) : null
+            }
+          />
           <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
-            <legend className="px-1 text-xs font-medium text-slate-500">Optional sections</legend>
-            <CheckRow name="hasPPE" label="PPE" defaultChecked />
-            <CheckRow name="hasQuestions" label="Questions & Answers" defaultChecked />
+            <legend className="px-1 text-xs font-medium text-slate-500">
+              <GeneratedText id="m_0715227000cfd5" />
+            </legend>
+            <CheckRow name="hasPPE" label={tGenerated('m_18391e161b9ed6')} defaultChecked />
+            <CheckRow name="hasQuestions" label={tGenerated('m_049fefa2074149')} defaultChecked />
           </fieldset>
-          {groups.length > 0 ? (
-            <div className="space-y-1.5">
-              <Label>Available to (person groups)</Label>
-              <p className="text-xs text-slate-500">
-                Leave empty to offer this type to everyone; pick groups to restrict who can start
-                one.
-              </p>
-              <MultiPicker
-                name="availableToGroupIds"
-                options={groups.map((g) => ({ value: g.id, label: g.name }))}
-              />
-            </div>
-          ) : null}
+          <GeneratedValue
+            value={
+              groups.length > 0 ? (
+                <div className="space-y-1.5">
+                  <Label>
+                    <GeneratedText id="m_05d7dad9d61d38" />
+                  </Label>
+                  <p className="text-xs text-slate-500">
+                    <GeneratedText id="m_05b6b53cd5c67a" />
+                  </p>
+                  <MultiPicker
+                    name="availableToGroupIds"
+                    options={groups.map((g) => ({ value: g.id, label: g.name }))}
+                  />
+                </div>
+              ) : null
+            }
+          />
           <div className="flex items-center justify-end">
-            <Button type="submit">Create type</Button>
+            <Button type="submit">
+              <GeneratedText id="m_043fe9fe859dff" />
+            </Button>
           </div>
         </form>
       </CardContent>
@@ -94,7 +126,7 @@ function CheckRow({
         defaultChecked={defaultChecked}
         className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
       />
-      {label}
+      <GeneratedValue value={label} />
     </label>
   )
 }

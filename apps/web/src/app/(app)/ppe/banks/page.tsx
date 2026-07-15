@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
 import { Library } from 'lucide-react'
@@ -29,7 +32,10 @@ import { FilterChips } from '@/components/filter-bar'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
 import { PpeBanksDrawers } from './_drawers'
 
-export const metadata = { title: 'PPE criteria banks' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_17d1f0b9fab4d0') }
+}
 export const dynamic = 'force-dynamic'
 
 async function createBankAction(input: {
@@ -81,6 +87,8 @@ export default async function PpeBanksPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const statusFilter = pickString(sp.status)
@@ -147,107 +155,143 @@ export default async function PpeBanksPage({
         <>
           <PpeSubNav active="banks" />
           <PageHeader
-            title="PPE criteria banks"
-            description="Reusable, severity-aware criteria templates — drop one into a PPE type as a section instead of rewriting the checklist."
+            title={tGenerated('m_17d1f0b9fab4d0')}
+            description={tGenerated('m_03bf7faae069d6')}
             actions={
               <Link href="/ppe/banks?drawer=new-bank" scroll={false}>
-                <Button>New bank</Button>
+                <Button>
+                  <GeneratedText id="m_0b211bf8765d07" />
+                </Button>
               </Link>
             }
           />
           <TableToolbar>
-            <SearchInput placeholder="Search by bank name" />
+            <SearchInput placeholder={tGenerated('m_0a377ecaa4554e')} />
             <FilterChips
               basePath="/ppe/banks"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Library size={32} />}
-          title={params.q ? `No banks match "${params.q}"` : 'No criteria banks'}
-          description="Create a bank, add criteria, and reuse it across PPE types."
-          action={
-            <Link href="/ppe/banks?drawer=new-bank" scroll={false}>
-              <Button>New bank</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                    Name
-                  </SortableTh>
-                  <SortableTh {...sortProps} column="category" active={params.sort === 'category'}>
-                    Category
-                  </SortableTh>
-                  <TableHead>Criteria</TableHead>
-                  <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                    Status
-                  </SortableTh>
-                  <SortableTh
-                    {...sortProps}
-                    column="created_at"
-                    active={params.sort === 'created_at'}
-                  >
-                    Created
-                  </SortableTh>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map(({ bank, criteriaCount }) => (
-                  <TableRow key={bank.id}>
-                    <TableCell>
-                      <Link
-                        href={`/ppe/banks/${bank.id}`}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Library size={32} />}
+              title={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_1f2f294558529d', { value0: params.q })
+                  : tGenerated('m_04d25c096f1bd0'),
+              )}
+              description={tGenerated('m_1b0b8146b73a97')}
+              action={
+                <Link href="/ppe/banks?drawer=new-bank" scroll={false}>
+                  <Button>
+                    <GeneratedText id="m_0b211bf8765d07" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                        <GeneratedText id="m_02b18d5c7f6f2d" />
+                      </SortableTh>
+                      <SortableTh
+                        {...sortProps}
+                        column="category"
+                        active={params.sort === 'category'}
                       >
-                        {bank.name}
-                      </Link>
-                      {bank.description ? (
-                        <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
-                          {bank.description}
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">
-                      {bank.category ? bank.category.replace(/_/g, ' ') : '—'}
-                    </TableCell>
-                    <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
-                      {criteriaCount}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={bank.isPublished ? 'success' : 'secondary'}>
-                        {bank.isPublished ? 'Published' : 'Draft'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-400">
-                      {formatDate(new Date(bank.createdAt), ctx.timezone, ctx.locale)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <Pagination
-            basePath="/ppe/banks"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                        <GeneratedText id="m_108b41637f364f" />
+                      </SortableTh>
+                      <TableHead>
+                        <GeneratedText id="m_1a1ce62686f0b8" />
+                      </TableHead>
+                      <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                        <GeneratedText id="m_0b9da892d6faf0" />
+                      </SortableTh>
+                      <SortableTh
+                        {...sortProps}
+                        column="created_at"
+                        active={params.sort === 'created_at'}
+                      >
+                        <GeneratedText id="m_10cbe051fb5e05" />
+                      </SortableTh>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <GeneratedValue
+                      value={rows.map(({ bank, criteriaCount }) => (
+                        <TableRow key={bank.id}>
+                          <TableCell>
+                            <Link
+                              href={`/ppe/banks/${bank.id}`}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={bank.name} />
+                            </Link>
+                            <GeneratedValue
+                              value={
+                                bank.description ? (
+                                  <div className="mt-0.5 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">
+                                    <GeneratedValue value={bank.description} />
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            <GeneratedValue
+                              value={bank.category ? bank.category.replace(/_/g, ' ') : '—'}
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-600 tabular-nums dark:text-slate-400">
+                            <GeneratedValue value={criteriaCount} />
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={bank.isPublished ? 'success' : 'secondary'}>
+                              <GeneratedValue
+                                value={
+                                  bank.isPublished ? (
+                                    <GeneratedText id="m_0a65097103ae1b" />
+                                  ) : (
+                                    <GeneratedText id="m_13f3db1d0ca2fe" />
+                                  )
+                                }
+                              />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-400">
+                            <GeneratedValue
+                              value={formatDate(new Date(bank.createdAt), ctx.timezone, ctx.locale)}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    />
+                  </TableBody>
+                </Table>
+              </div>
+              <Pagination
+                basePath="/ppe/banks"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
       <PpeBanksDrawers
         openDrawer={openDrawer}
         closeHref="/ppe/banks"

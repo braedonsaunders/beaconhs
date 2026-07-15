@@ -1,8 +1,14 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Card, CardContent } from '@beaconhs/ui'
 import { Logo } from '@/components/brand-logo'
 
-export const metadata = { title: 'Invitation' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_169f74488b92ec') }
+}
 
 const COPY = {
   expired: {
@@ -51,14 +57,16 @@ export default async function InviteStatusPage({
         <Card>
           <CardContent className="space-y-4 pt-6 text-center">
             <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-              {copy.title}
+              <GeneratedValue value={copy.title} />
             </h1>
-            <p className="text-sm text-slate-600 dark:text-slate-300">{copy.body}</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              <GeneratedValue value={copy.body} />
+            </p>
             <Link
               href="/auth/continue"
               className="inline-flex rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
             >
-              Continue
+              <GeneratedText id="m_0f3baa7dcc6267" />
             </Link>
           </CardContent>
         </Card>

@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Composes one entry's full editing surface: header (date · status · save state ·
 // AI · submit), a full-width metadata/controls strip, AI summary, the rich
 // editor, and photos. Owns autosave (debounced) and the per-entry mutations.
@@ -51,6 +58,8 @@ export function EditorPane({
   /** Open the entries drawer (mobile only — desktop shows the tree inline). */
   onBrowse: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const locale = useLocale() as AppLocale
   const editable = !entry.locked
   const [saveState, setSaveState] = useState<SaveState>('saved')
@@ -88,7 +97,7 @@ export function EditorPane({
           // same field authoritative. The visible retry can now persist it.
           pending.current = { ...patch, ...pending.current }
           setSaveState('error')
-          toast.error(result.error)
+          toast.error(tGeneratedValue(result.error))
           return false
         }
       }
@@ -141,11 +150,11 @@ export function EditorPane({
       if (!(await flush())) return
       const r = await submitEntry(entry.id)
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
       onLocalPatch({ status: 'submitted' })
-      toast.success('Journal submitted.')
+      toast.success(tGenerated('m_071487076d53a9'))
       onMutated()
     })
   }
@@ -154,8 +163,11 @@ export function EditorPane({
     setMenuOpen(false)
     startSubmit(async () => {
       const r = await emailEntry(entry.id)
-      if (!r.ok) toast.error(r.error)
-      else toast.success(`Emailed ${r.sent} recipient${r.sent === 1 ? '' : 's'}.`)
+      if (!r.ok) toast.error(tGeneratedValue(r.error))
+      else
+        toast.success(
+          tGenerated('m_0e8679dd3d4685', { value0: r.sent, value1: r.sent === 1 ? '' : 's' }),
+        )
     })
   }
 
@@ -171,10 +183,10 @@ export function EditorPane({
     startSubmit(async () => {
       const r = await deleteEntry(entry.id)
       if (!r.ok) {
-        toast.error(r.error)
+        toast.error(tGeneratedValue(r.error))
         return
       }
-      toast.success('Entry deleted.')
+      toast.success(tGenerated('m_1ead6199ff95ad'))
       onDeleted()
     })
   }
@@ -194,7 +206,7 @@ export function EditorPane({
         <button
           type="button"
           onClick={onBrowse}
-          aria-label="Browse journals"
+          aria-label={tGenerated('m_1f9e7f2245df92')}
           className="-ml-1 grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-500 hover:bg-slate-100 lg:hidden dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <NotebookPen size={18} />
@@ -203,7 +215,7 @@ export function EditorPane({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
-              {entry.authorName ?? 'Unassigned'}
+              <GeneratedValue value={entry.authorName ?? <GeneratedText id="m_10d1d0d92a9aaa" />} />
             </h1>
             <span
               className={cn(
@@ -211,32 +223,50 @@ export function EditorPane({
                 status.className,
               )}
             >
-              {status.label}
+              <GeneratedValue value={status.label} />
             </span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-400 dark:text-slate-500">
             <span className="font-medium whitespace-nowrap text-slate-600 dark:text-slate-300">
-              {isToday(entry.entryDate)
-                ? new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(0, 'day')
-                : formatDate(entry.entryDate, locale)}
+              <GeneratedValue
+                value={
+                  isToday(entry.entryDate)
+                    ? new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(0, 'day')
+                    : formatDate(entry.entryDate, locale)
+                }
+              />
             </span>
-            <span className="hidden font-mono sm:inline">· {entry.reference}</span>
+            <span className="hidden font-mono sm:inline">
+              · <GeneratedValue value={entry.reference} />
+            </span>
             <SaveBadge state={saveState} onRetry={() => void flush()} />
           </div>
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
-          {entry.status === 'draft' ? (
-            <button
-              type="button"
-              onClick={submit}
-              disabled={submitting}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-xs font-medium text-white transition-colors hover:bg-teal-800 disabled:opacity-60"
-            >
-              {submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-              Submit
-            </button>
-          ) : null}
+          <GeneratedValue
+            value={
+              entry.status === 'draft' ? (
+                <button
+                  type="button"
+                  onClick={submit}
+                  disabled={submitting}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-xs font-medium text-white transition-colors hover:bg-teal-800 disabled:opacity-60"
+                >
+                  <GeneratedValue
+                    value={
+                      submitting ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <Send size={13} />
+                      )
+                    }
+                  />
+                  <GeneratedText id="m_09ee2ce911f04f" />
+                </button>
+              ) : null
+            }
+          />
 
           <div className="relative">
             <button
@@ -247,33 +277,37 @@ export function EditorPane({
             >
               <MoreHorizontal size={15} />
             </button>
-            {menuOpen ? (
-              <div className="absolute top-9 right-0 z-30 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                <a
-                  href={`/journals/${entry.id}/pdf`}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60"
-                >
-                  <FileText size={14} /> PDF
-                </a>
-                <button
-                  type="button"
-                  onClick={emailRecap}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60"
-                >
-                  <Mail size={14} /> Email recap
-                </button>
-                <button
-                  type="button"
-                  onClick={del}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15"
-                >
-                  <Trash2 size={14} /> Delete entry
-                </button>
-              </div>
-            ) : null}
+            <GeneratedValue
+              value={
+                menuOpen ? (
+                  <div className="absolute top-9 right-0 z-30 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                    <a
+                      href={`/journals/${entry.id}/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60"
+                    >
+                      <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={emailRecap}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60"
+                    >
+                      <Mail size={14} /> <GeneratedText id="m_0821ba1fc57ddc" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={del}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/15"
+                    >
+                      <Trash2 size={14} /> <GeneratedText id="m_09e43e4c97a243" />
+                    </button>
+                  </div>
+                ) : null
+              }
+            />
           </div>
         </div>
       </div>
@@ -292,14 +326,20 @@ export function EditorPane({
         </div>
 
         {/* AI summary — full width */}
-        {entry.summary ? (
-          <div className="border-b border-slate-100 px-4 py-3 sm:px-6 dark:border-slate-800">
-            <div className="flex gap-2 rounded-lg border border-teal-100 bg-teal-50/50 p-3 text-sm text-slate-600 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-slate-300">
-              <Sparkles size={15} className="mt-0.5 shrink-0 text-teal-600" />
-              <p className="leading-relaxed">{entry.summary}</p>
-            </div>
-          </div>
-        ) : null}
+        <GeneratedValue
+          value={
+            entry.summary ? (
+              <div className="border-b border-slate-100 px-4 py-3 sm:px-6 dark:border-slate-800">
+                <div className="flex gap-2 rounded-lg border border-teal-100 bg-teal-50/50 p-3 text-sm text-slate-600 dark:border-teal-500/20 dark:bg-teal-500/10 dark:text-slate-300">
+                  <Sparkles size={15} className="mt-0.5 shrink-0 text-teal-600" />
+                  <p className="leading-relaxed">
+                    <GeneratedValue value={entry.summary} />
+                  </p>
+                </div>
+              </div>
+            ) : null
+          }
+        />
 
         {/* Editor — internally centered for readable line length */}
         <JournalEditor
@@ -341,6 +381,7 @@ const AVATAR_COLORS = [
 
 /** Initials avatar for the journal's author (who the entry belongs to). */
 function AuthorAvatar({ name }: { name: string | null }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const label = name?.trim() || 'Unassigned'
   const parts = label.split(/\s+/)
   const init =
@@ -352,13 +393,13 @@ function AuthorAvatar({ name }: { name: string | null }) {
   const color = name ? AVATAR_COLORS[h % AVATAR_COLORS.length] : 'bg-slate-300 dark:bg-slate-600'
   return (
     <span
-      title={label}
+      title={tGeneratedValue(label)}
       className={cn(
         'grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white',
         color,
       )}
     >
-      {init}
+      <GeneratedValue value={init} />
     </span>
   )
 }
@@ -367,13 +408,13 @@ function SaveBadge({ state, onRetry }: { state: SaveState; onRetry: () => void }
   if (state === 'saving')
     return (
       <span className="inline-flex items-center gap-1 text-amber-600">
-        <CloudUpload size={11} /> Saving…
+        <CloudUpload size={11} /> <GeneratedText id="m_106811f2aac664" />
       </span>
     )
   if (state === 'saved')
     return (
       <span className="inline-flex items-center gap-1 text-teal-600">
-        <Check size={11} /> Saved
+        <Check size={11} /> <GeneratedText id="m_0a0569b726b225" />
       </span>
     )
   return (
@@ -382,7 +423,7 @@ function SaveBadge({ state, onRetry }: { state: SaveState; onRetry: () => void }
       onClick={onRetry}
       className="inline-flex items-center gap-1 font-medium text-red-600 hover:underline"
     >
-      <AlertCircle size={11} /> Not saved — retry
+      <AlertCircle size={11} /> <GeneratedText id="m_13b78c61dbb517" />
     </button>
   )
 }

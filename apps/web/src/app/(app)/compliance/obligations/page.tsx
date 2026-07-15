@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import {
   Badge,
@@ -24,7 +26,10 @@ import { ComplianceSubNav } from '../_sub-nav'
 import { listObligations } from './_data'
 import { OBLIGATION_KINDS, type ObligationKind, kindLabel } from './_meta'
 
-export const metadata = { title: 'Compliance · Obligations' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_193c5c1cb110b3') }
+}
 export const dynamic = 'force-dynamic'
 
 const KIND_FILTER_OPTIONS = OBLIGATION_KINDS.map((k) => ({ value: k, label: kindLabel(k) }))
@@ -35,6 +40,7 @@ export default async function ObligationsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const ctx = await requireRequestContext()
   assertCan(ctx, 'compliance.read')
@@ -62,97 +68,127 @@ export default async function ObligationsPage({
       header={
         <>
           <PageHeader
-            title="Obligations"
-            description="All recurring obligations in one place — kind, audience, and cadence."
+            title={tGenerated('m_1b97e9ccfe9667')}
+            description={tGenerated('m_146371a6a81e59')}
             actions={
               canAssign ? (
                 <Link href="/compliance/obligations/new">
-                  <Button>New obligation</Button>
+                  <Button>
+                    <GeneratedText id="m_01ea7b508d9390" />
+                  </Button>
                 </Link>
               ) : undefined
             }
           />
           <ComplianceSubNav active="obligations" />
           <TableToolbar>
-            <SearchInput placeholder="Search obligations by title…" />
+            <SearchInput placeholder={tGenerated('m_16e4ca6d191db6')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="kind"
-              label="Kind"
+              label={tGenerated('m_1e578efe1574cd')}
               options={KIND_FILTER_OPTIONS}
             />
           </TableToolbar>
         </>
       }
     >
-      {total === 0 && !hasFilters ? (
-        <EmptyState
-          icon={<ListChecks size={32} />}
-          title="No obligations"
-          description="Create a recurring obligation to assign required work on a schedule."
-          action={
-            canAssign ? (
-              <Link href="/compliance/obligations/new">
-                <Button>New obligation</Button>
-              </Link>
-            ) : undefined
-          }
-        />
-      ) : rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
-          No obligations match your search or filter.
-        </div>
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Kind</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Audience</TableHead>
-                <TableHead>Cadence</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={`${r.kind}:${r.id}`}>
-                  <TableCell>
-                    <Badge variant="secondary">{kindLabel(r.kind)}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/compliance/obligations/${r.id}`}
-                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                    >
-                      {r.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                    {r.audience}
-                  </TableCell>
-                  <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                    {r.cadence}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={r.enabled ? 'success' : 'secondary'}>
-                      {r.enabled ? 'Active' : 'Disabled'}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath={BASE}
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          total === 0 && !hasFilters ? (
+            <EmptyState
+              icon={<ListChecks size={32} />}
+              title={tGenerated('m_0a25a9112d2079')}
+              description={tGenerated('m_116b2fdc6cce4f')}
+              action={
+                canAssign ? (
+                  <Link href="/compliance/obligations/new">
+                    <Button>
+                      <GeneratedText id="m_01ea7b508d9390" />
+                    </Button>
+                  </Link>
+                ) : undefined
+              }
+            />
+          ) : rows.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
+              <GeneratedText id="m_097c83cbd088ee" />
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <GeneratedText id="m_1e578efe1574cd" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0decefd558c355" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_1d6e21e94d2295" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_1151ed0308b6d1" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((r) => (
+                      <TableRow key={`${r.kind}:${r.id}`}>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            <GeneratedValue value={kindLabel(r.kind)} />
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Link
+                            href={`/compliance/obligations/${r.id}`}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                          >
+                            <GeneratedValue value={r.title} />
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={r.audience} />
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={r.cadence} />
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={r.enabled ? 'success' : 'secondary'}>
+                            <GeneratedValue
+                              value={
+                                r.enabled ? (
+                                  <GeneratedText id="m_1e1b1fdb7dd78e" />
+                                ) : (
+                                  <GeneratedText id="m_0ea7ffe3f671e7" />
+                                )
+                              }
+                            />
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath={BASE}
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

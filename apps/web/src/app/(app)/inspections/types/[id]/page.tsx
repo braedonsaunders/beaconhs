@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { ClipboardCheck } from 'lucide-react'
@@ -20,8 +23,9 @@ import { startInspection } from '../../records/_actions'
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const tGenerated = await getGeneratedTranslations()
   const { id } = await params
-  return { title: `Inspection type · ${id.slice(0, 8)}` }
+  return { title: tGenerated('m_1e5671738ef480', { value0: id.slice(0, 8) }) }
 }
 
 export default async function InspectionTypeDetailPage({
@@ -29,6 +33,7 @@ export default async function InspectionTypeDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -88,17 +93,25 @@ export default async function InspectionTypeDetailPage({
       header={
         <DetailHeader
           back={{ href: '/inspections/types', label: 'Back to inspection types' }}
-          title={type.name}
+          title={tGeneratedValue(type.name)}
           badge={
             <Badge variant={type.isPublished ? 'success' : 'secondary'}>
-              {type.isPublished ? 'Published' : 'Draft'}
+              <GeneratedValue
+                value={
+                  type.isPublished ? (
+                    <GeneratedText id="m_0a65097103ae1b" />
+                  ) : (
+                    <GeneratedText id="m_13f3db1d0ca2fe" />
+                  )
+                }
+              />
             </Badge>
           }
           actions={
             <form action={startInspection}>
               <input type="hidden" name="typeId" value={id} />
               <Button variant="outline" type="submit">
-                <ClipboardCheck size={14} /> Start inspection
+                <ClipboardCheck size={14} /> <GeneratedText id="m_050ae31d3122aa" />
               </Button>
             </form>
           }

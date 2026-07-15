@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, inArray, isNull, or, type SQL } from 'drizzle-orm'
@@ -16,7 +19,10 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { listIncidentClassifications } from './_actions'
 import { IncidentsRecordsTable, type IncidentsTableRow } from './_records-table'
 
-export const metadata = { title: 'Incidents' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1f0a25de4c8df0') }
+}
 
 const SORTS = ['reference', 'occurred_at', 'severity', 'status', 'type', 'title', 'site'] as const
 
@@ -42,6 +48,8 @@ export default async function IncidentsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'occurred_at',
@@ -176,17 +184,25 @@ export default async function IncidentsPage({
       header={
         <>
           <PageHeader
-            title="Incidents"
-            description="Reports, investigations, and closeouts."
+            title={tGenerated('m_1f0a25de4c8df0')}
+            description={tGenerated('m_107986fea3849b')}
             actions={
               <div className="flex items-center gap-2">
-                {canExport ? (
-                  <a href={buildExportHref('/incidents/export.csv', sp)}>
-                    <Button variant="outline">Export CSV</Button>
-                  </a>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    canExport ? (
+                      <a href={buildExportHref('/incidents/export.csv', sp)}>
+                        <Button variant="outline">
+                          <GeneratedText id="m_14c6440eca1edc" />
+                        </Button>
+                      </a>
+                    ) : null
+                  }
+                />
                 <Link href="/incidents/new">
-                  <Button>Report incident</Button>
+                  <Button>
+                    <GeneratedText id="m_0f2b150c1cc651" />
+                  </Button>
                 </Link>
               </div>
             }
@@ -194,61 +210,67 @@ export default async function IncidentsPage({
           <IncidentsSubNav active="records" />
 
           <TableToolbar>
-            <SearchInput placeholder="Search reference, title, description…" />
+            <SearchInput placeholder={tGenerated('m_1ae990361ad66e')} />
             <FilterChips
               basePath="/incidents"
               currentParams={sp}
               paramKey="type"
-              label="Type"
+              label={tGenerated('m_074ba2f160c506')}
               options={TYPE_OPTIONS.map((o) => ({ ...o, count: typeCounts[o.value] }))}
             />
             <FilterChips
               basePath="/incidents"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<AlertTriangle size={32} />}
-          title={
-            params.q || typeFilter || statusFilter
-              ? 'No matching incidents'
-              : 'No incidents reported'
-          }
-          description="Reported injuries, illnesses, and near-misses appear here."
-          action={
-            <Link href="/incidents/new">
-              <Button>Report an incident</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <IncidentsRecordsTable
-            rows={tableRows}
-            classifications={classifications}
-            canUpdate={canUpdate}
-            canExport={canExport}
-            basePath="/incidents"
-            currentParams={sp}
-            sort={params.sort}
-            dir={params.dir}
-          />
-          <Pagination
-            basePath="/incidents"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<AlertTriangle size={32} />}
+              title={tGeneratedValue(
+                params.q || typeFilter || statusFilter
+                  ? tGenerated('m_0e824ceddf80db')
+                  : tGenerated('m_149d389668b794'),
+              )}
+              description={tGenerated('m_1bc0139c722216')}
+              action={
+                <Link href="/incidents/new">
+                  <Button>
+                    <GeneratedText id="m_0f672c0489dd6d" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <IncidentsRecordsTable
+                rows={tableRows}
+                classifications={classifications}
+                canUpdate={canUpdate}
+                canExport={canExport}
+                basePath="/incidents"
+                currentParams={sp}
+                sort={params.sort}
+                dir={params.dir}
+              />
+              <Pagination
+                basePath="/incidents"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

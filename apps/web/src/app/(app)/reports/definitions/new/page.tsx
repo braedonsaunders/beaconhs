@@ -1,3 +1,4 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 import { DetailHeader } from '@beaconhs/ui'
 import { REPORT_OPERATORS } from '@beaconhs/reports'
 import { requireRequestContext } from '@/lib/auth'
@@ -8,7 +9,10 @@ import { createCustomDefinition } from '../../_studio/actions'
 import { builtInSeedQuery } from '../../_studio/built-in-seed'
 import { loadReportStudioEntities } from '../../_studio/entities'
 
-export const metadata = { title: 'New report' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_084b76c7fa79df') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function NewCustomDefinitionPage({
@@ -16,6 +20,8 @@ export default async function NewCustomDefinitionPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   const sp = await searchParams
   const presetEntity = typeof sp.entity === 'string' ? sp.entity : null
@@ -33,8 +39,12 @@ export default async function NewCustomDefinitionPage({
       header={
         <DetailHeader
           back={{ href: '/reports', label: 'Back to reports' }}
-          title={cloneFrom ? `Edit a copy of "${cloneFrom.name}"` : 'New report'}
-          subtitle="Choose a data source, shape the data, and set up the printed page."
+          title={tGeneratedValue(
+            cloneFrom
+              ? tGenerated('m_06ac1201e04b80', { value0: cloneFrom.name })
+              : tGenerated('m_084b76c7fa79df'),
+          )}
+          subtitle={tGenerated('m_0fb456e5417b3a')}
         />
       }
       className="h-full max-w-none p-0"

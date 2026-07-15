@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations } from '@/i18n/generated'
+
 // Shared table-editing tools for the GrapesJS builders (email + pdf). The plain
 // HTML tables authored in the builders need real structural editing — add/remove
 // columns + rows and set per-column width — which GrapesJS doesn't expose out of
@@ -161,6 +163,7 @@ const BTN =
 
 // Floats at the top of the canvas whenever a table cell is selected.
 export function TableToolbar({ editor }: { editor: Editor | null }) {
+  const tGenerated = useGeneratedTranslations()
   const [active, setActive] = useState(false)
   const [width, setWidth] = useState('')
 
@@ -191,29 +194,44 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
   return (
     <div className="absolute top-2 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-800/95">
       <span className="px-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-        Table
+        <GeneratedText id="m_1ccaefc0402329" />
       </span>
-      <button type="button" className={BTN} onClick={() => addColumn(editor)} title="Add column">
-        + Col
+      <button
+        type="button"
+        className={BTN}
+        onClick={() => addColumn(editor)}
+        title={tGenerated('m_059cd549852b55')}
+      >
+        <GeneratedText id="m_1792a2fde54c1c" />
       </button>
       <button
         type="button"
         className={BTN}
         onClick={() => removeColumn(editor)}
-        title="Remove column"
+        title={tGenerated('m_0605fd789eea1e')}
       >
-        − Col
+        <GeneratedText id="m_173569351d7bf3" />
       </button>
       <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-600" />
-      <button type="button" className={BTN} onClick={() => addRow(editor)} title="Add row">
-        + Row
+      <button
+        type="button"
+        className={BTN}
+        onClick={() => addRow(editor)}
+        title={tGenerated('m_1eabd71bbc0199')}
+      >
+        <GeneratedText id="m_0d067cf371aad1" />
       </button>
-      <button type="button" className={BTN} onClick={() => removeRow(editor)} title="Remove row">
-        − Row
+      <button
+        type="button"
+        className={BTN}
+        onClick={() => removeRow(editor)}
+        title={tGenerated('m_12b310a027b08a')}
+      >
+        <GeneratedText id="m_18e6c9418cc728" />
       </button>
       <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-600" />
       <label className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-        Col width
+        <GeneratedText id="m_086b61a81c41e5" />
         <input
           type="number"
           min={0}
@@ -223,10 +241,10 @@ export function TableToolbar({ editor }: { editor: Editor | null }) {
           onKeyDown={(e) => {
             if (e.key === 'Enter') applyWidth((e.target as HTMLInputElement).value)
           }}
-          placeholder="auto"
+          placeholder={tGenerated('m_0e4a54b8ee5d61')}
           className="h-6 w-16 rounded border border-slate-300 bg-white px-1.5 text-xs text-slate-800 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
         />
-        px
+        <GeneratedText id="m_012e5f02cc6ee0" />
       </label>
     </div>
   )

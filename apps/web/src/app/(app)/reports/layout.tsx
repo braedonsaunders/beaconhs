@@ -1,3 +1,4 @@
+import { GeneratedValue } from '@/i18n/generated'
 // Gate the whole /reports area in one place. The nav already hides it for users
 // without a reports permission, but the pages loaded org-wide report data with no
 // page-level check — a self-only user hitting the URL directly got in. Any
@@ -17,5 +18,9 @@ export default async function ReportsLayout({ children }: { children: ReactNode 
     can(ctx, 'reports.builder') ||
     can(ctx, 'reports.schedule')
   if (!allowed) redirect('/dashboard')
-  return <>{children}</>
+  return (
+    <>
+      <GeneratedValue value={children} />
+    </>
+  )
 }

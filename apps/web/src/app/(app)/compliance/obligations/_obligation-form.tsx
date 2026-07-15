@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // The unified obligation form — one form for every compliance kind, used by
 // both the create page (no `initial`) and the edit page (`initial` set). The
 // kind is fixed after creation: it determines the subject shape, target picker
@@ -86,6 +93,8 @@ export function ObligationForm({
   // cancel the form calls this instead of navigating to the detail page itself.
   onClose?: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
   const editing = Boolean(initial)
@@ -126,7 +135,7 @@ export function ObligationForm({
     setPendingType(KIND_META[next].audienceTypes[0] ?? 'everyone')
     setPendingValue('')
     setRecurrence(defaultRecurrence(next))
-    setError(null)
+    setError(tGeneratedValue(null))
   }
 
   const showRecurrence = Object.values(meta.recurrence).some(Boolean)
@@ -134,9 +143,9 @@ export function ObligationForm({
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
-    setError(null)
+    setError(tGeneratedValue(null))
     if (kind === 'journal' && !title.trim()) {
-      setError('Give the journal obligation a name.')
+      setError(tGenerated('m_0fe4ce5672c759'))
       return
     }
     const input: ObligationInput = {
@@ -174,7 +183,10 @@ export function ObligationForm({
         }
       } else {
         setError(
-          res.error || (editing ? 'Failed to save obligation' : 'Failed to create obligation'),
+          tGeneratedValue(
+            res.error ||
+              (editing ? tGenerated('m_07fd3686ec112e') : tGenerated('m_097ae1482033f8')),
+          ),
         )
       }
     })
@@ -184,43 +196,58 @@ export function ObligationForm({
     <form onSubmit={submit} className={embedded ? 'space-y-5' : 'mt-6 space-y-5'}>
       <Card>
         <CardHeader>
-          <CardTitle>Obligation</CardTitle>
+          <CardTitle>
+            <GeneratedText id="m_186a52fb889daf" />
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="ob-kind">Kind *</Label>
+            <Label htmlFor="ob-kind">
+              <GeneratedText id="m_177f2cd709878a" />
+            </Label>
             <Select
               id="ob-kind"
               value={kind}
               disabled={editing}
               onChange={(e) => changeKind(e.target.value as ObligationKind)}
             >
-              {OBLIGATION_KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {kindLabel(k)}
-                </option>
-              ))}
+              <GeneratedValue
+                value={OBLIGATION_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    <GeneratedValue value={kindLabel(k)} />
+                  </option>
+                ))}
+              />
             </Select>
             <p className="text-xs text-slate-500">
-              {editing
-                ? 'The kind is fixed after creation — delete and recreate to change it.'
-                : meta.hint}
+              <GeneratedValue
+                value={editing ? <GeneratedText id="m_012f19ff613100" /> : meta.hint}
+              />
             </p>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="ob-title">Title {kind === 'journal' ? '*' : '(optional)'}</Label>
+              <Label htmlFor="ob-title">
+                <GeneratedText id="m_0decefd558c355" />{' '}
+                <GeneratedValue
+                  value={kind === 'journal' ? '*' : <GeneratedText id="m_1f61ed87b795bd" />}
+                />
+              </Label>
               <Input
                 id="ob-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={
-                  kind === 'journal' ? 'e.g. Daily field journal' : 'Falls back to the kind name'
-                }
+                placeholder={tGeneratedValue(
+                  kind === 'journal'
+                    ? tGenerated('m_1157a96b290c11')
+                    : tGenerated('m_053fb966c03797'),
+                )}
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="ob-notes">Notes</Label>
+              <Label htmlFor="ob-notes">
+                <GeneratedText id="m_0b8dadcb78cd08" />
+              </Label>
               <Textarea
                 id="ob-notes"
                 rows={2}
@@ -232,171 +259,259 @@ export function ObligationForm({
         </CardContent>
       </Card>
 
-      {meta.target !== 'journalName' && meta.target !== 'none' ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>What to require</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {meta.target === 'inspectionType' ? (
-              <TargetSelect
-                lookup="compliance-obligation-inspection-types"
-                value={inspectionTypeId}
-                onChange={setInspectionTypeId}
-                placeholder="inspection type"
-                options={targets.inspectionTypes.map((t) => ({ id: t.id, label: t.name }))}
-              />
-            ) : null}
-            {meta.target === 'document' ? (
-              <TargetSelect
-                lookup="compliance-obligation-documents"
-                value={documentId}
-                onChange={setDocumentId}
-                placeholder="document"
-                options={targets.documents.map((d) => ({ id: d.id, label: d.title }))}
-              />
-            ) : null}
-            {meta.target === 'cert' ? (
-              <div className="space-y-3">
-                <Select
-                  value={certItemKind}
-                  onChange={(e) => setCertItemKind(e.target.value as 'course' | 'skill')}
-                >
-                  <option value="course">Certification (course)</option>
-                  <option value="skill">Skill type</option>
-                </Select>
-                {certItemKind === 'course' ? (
-                  <TargetSelect
-                    lookup="compliance-obligation-courses"
-                    value={courseId}
-                    onChange={setCourseId}
-                    placeholder="certification (course)"
-                    options={targets.courses.map((c) => ({ id: c.id, label: c.label }))}
-                  />
-                ) : (
-                  <TargetSelect
-                    lookup="compliance-obligation-skill-types"
-                    value={skillTypeId}
-                    onChange={setSkillTypeId}
-                    placeholder="skill type"
-                    options={targets.skillTypes.map((s) => ({ id: s.id, label: s.name }))}
-                  />
-                )}
-              </div>
-            ) : null}
-            {meta.target === 'formTemplate' ? (
-              <TargetSelect
-                lookup="compliance-obligation-form-templates"
-                value={formTemplateId}
-                onChange={setFormTemplateId}
-                placeholder="app / form template"
-                options={targets.formTemplates.map((t) => ({ id: t.id, label: t.name }))}
-              />
-            ) : null}
-            {meta.target === 'equipmentType' ? (
-              <TargetSelect
-                lookup="compliance-obligation-equipment-types"
-                value={equipmentTypeId}
-                onChange={setEquipmentTypeId}
-                placeholder="equipment type"
-                options={targets.equipmentTypes.map((t) => ({ id: t.id, label: t.name }))}
-              />
-            ) : null}
-            {meta.target === 'ppeType' ? (
-              <TargetSelect
-                lookup="compliance-obligation-ppe-types"
-                value={ppeTypeId}
-                onChange={setPpeTypeId}
-                placeholder="PPE type"
-                options={targets.ppeTypes.map((t) => ({ id: t.id, label: t.name }))}
-              />
-            ) : null}
-            {meta.target === 'jobTitle' ? (
-              <TargetSelect
-                lookup="compliance-obligation-job-titles"
-                value={jobTitleId}
-                onChange={setJobTitleId}
-                placeholder="job title"
-                options={targets.jobTitles.map((t) => ({ id: t.id, label: t.name }))}
-              />
-            ) : null}
-            {meta.target === 'trainingItem' ? (
-              <div className="space-y-3">
-                <Select
-                  value={trainingItemKind}
-                  onChange={(e) =>
-                    setTrainingItemKind(e.target.value as 'course' | 'assessment_type')
+      <GeneratedValue
+        value={
+          meta.target !== 'journalName' && meta.target !== 'none' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <GeneratedText id="m_1f502396ce15e2" />
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <GeneratedValue
+                  value={
+                    meta.target === 'inspectionType' ? (
+                      <TargetSelect
+                        lookup="compliance-obligation-inspection-types"
+                        value={inspectionTypeId}
+                        onChange={setInspectionTypeId}
+                        placeholder={tGenerated('m_05d2f6e00eb8b5')}
+                        options={targets.inspectionTypes.map((t) => ({ id: t.id, label: t.name }))}
+                      />
+                    ) : null
                   }
-                >
-                  <option value="course">Course</option>
-                  <option value="assessment_type">Assessment (graded quiz)</option>
-                </Select>
-                {trainingItemKind === 'course' ? (
-                  <TargetSelect
-                    lookup="compliance-obligation-courses"
-                    value={courseId}
-                    onChange={setCourseId}
-                    placeholder="course"
-                    options={targets.courses.map((c) => ({ id: c.id, label: c.label }))}
-                  />
-                ) : (
-                  <TargetSelect
-                    lookup="compliance-obligation-assessment-types"
-                    value={assessmentTypeId}
-                    onChange={setAssessmentTypeId}
-                    placeholder="assessment type"
-                    options={targets.assessmentTypes.map((t) => ({ id: t.id, label: t.name }))}
-                  />
-                )}
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-      ) : null}
+                />
+                <GeneratedValue
+                  value={
+                    meta.target === 'document' ? (
+                      <TargetSelect
+                        lookup="compliance-obligation-documents"
+                        value={documentId}
+                        onChange={setDocumentId}
+                        placeholder={tGenerated('m_08927559ee23e3')}
+                        options={targets.documents.map((d) => ({ id: d.id, label: d.title }))}
+                      />
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    meta.target === 'cert' ? (
+                      <div className="space-y-3">
+                        <Select
+                          value={certItemKind}
+                          onChange={(e) => setCertItemKind(e.target.value as 'course' | 'skill')}
+                        >
+                          <option value="course">
+                            <GeneratedText id="m_0dec824473c3c4" />
+                          </option>
+                          <option value="skill">
+                            <GeneratedText id="m_0d77c6bf9fe7a3" />
+                          </option>
+                        </Select>
+                        <GeneratedValue
+                          value={
+                            certItemKind === 'course' ? (
+                              <TargetSelect
+                                lookup="compliance-obligation-courses"
+                                value={courseId}
+                                onChange={setCourseId}
+                                placeholder={tGenerated('m_1c702dc1690d62')}
+                                options={targets.courses.map((c) => ({ id: c.id, label: c.label }))}
+                              />
+                            ) : (
+                              <TargetSelect
+                                lookup="compliance-obligation-skill-types"
+                                value={skillTypeId}
+                                onChange={setSkillTypeId}
+                                placeholder={tGenerated('m_0517043c1615d8')}
+                                options={targets.skillTypes.map((s) => ({
+                                  id: s.id,
+                                  label: s.name,
+                                }))}
+                              />
+                            )
+                          }
+                        />
+                      </div>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    meta.target === 'formTemplate' ? (
+                      <TargetSelect
+                        lookup="compliance-obligation-form-templates"
+                        value={formTemplateId}
+                        onChange={setFormTemplateId}
+                        placeholder={tGenerated('m_0e039a5f33b261')}
+                        options={targets.formTemplates.map((t) => ({ id: t.id, label: t.name }))}
+                      />
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    meta.target === 'equipmentType' ? (
+                      <TargetSelect
+                        lookup="compliance-obligation-equipment-types"
+                        value={equipmentTypeId}
+                        onChange={setEquipmentTypeId}
+                        placeholder={tGenerated('m_0bfe8ba4c03426')}
+                        options={targets.equipmentTypes.map((t) => ({ id: t.id, label: t.name }))}
+                      />
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    meta.target === 'ppeType' ? (
+                      <TargetSelect
+                        lookup="compliance-obligation-ppe-types"
+                        value={ppeTypeId}
+                        onChange={setPpeTypeId}
+                        placeholder={tGenerated('m_0bdc13fe741bfd')}
+                        options={targets.ppeTypes.map((t) => ({ id: t.id, label: t.name }))}
+                      />
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    meta.target === 'jobTitle' ? (
+                      <TargetSelect
+                        lookup="compliance-obligation-job-titles"
+                        value={jobTitleId}
+                        onChange={setJobTitleId}
+                        placeholder={tGenerated('m_185066327b7459')}
+                        options={targets.jobTitles.map((t) => ({ id: t.id, label: t.name }))}
+                      />
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    meta.target === 'trainingItem' ? (
+                      <div className="space-y-3">
+                        <Select
+                          value={trainingItemKind}
+                          onChange={(e) =>
+                            setTrainingItemKind(e.target.value as 'course' | 'assessment_type')
+                          }
+                        >
+                          <option value="course">
+                            <GeneratedText id="m_14fc1e0739b60e" />
+                          </option>
+                          <option value="assessment_type">
+                            <GeneratedText id="m_07c3c257b72ebf" />
+                          </option>
+                        </Select>
+                        <GeneratedValue
+                          value={
+                            trainingItemKind === 'course' ? (
+                              <TargetSelect
+                                lookup="compliance-obligation-courses"
+                                value={courseId}
+                                onChange={setCourseId}
+                                placeholder={tGenerated('m_10c061343d4223')}
+                                options={targets.courses.map((c) => ({ id: c.id, label: c.label }))}
+                              />
+                            ) : (
+                              <TargetSelect
+                                lookup="compliance-obligation-assessment-types"
+                                value={assessmentTypeId}
+                                onChange={setAssessmentTypeId}
+                                placeholder={tGenerated('m_0c8e079fa860f7')}
+                                options={targets.assessmentTypes.map((t) => ({
+                                  id: t.id,
+                                  label: t.name,
+                                }))}
+                              />
+                            )
+                          }
+                        />
+                      </div>
+                    ) : null
+                  }
+                />
+              </CardContent>
+            </Card>
+          ) : null
+        }
+      />
 
-      {meta.audience ? (
-        <AudiencePicker
-          value={audience}
-          onChange={setAudience}
-          options={audienceOptions}
-          allowedTypes={meta.audienceTypes}
-          pendingType={pendingType}
-          onPendingTypeChange={setPendingType}
-          pendingValue={pendingValue}
-          onPendingValueChange={setPendingValue}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          meta.audience ? (
+            <AudiencePicker
+              value={audience}
+              onChange={setAudience}
+              options={audienceOptions}
+              allowedTypes={meta.audienceTypes}
+              pendingType={pendingType}
+              onPendingTypeChange={setPendingType}
+              pendingValue={pendingValue}
+              onPendingValueChange={setPendingValue}
+            />
+          ) : null
+        }
+      />
 
-      {showRecurrence ? (
-        <RecurrencePicker value={recurrence} onChange={setRecurrence} fields={meta.recurrence} />
-      ) : null}
+      <GeneratedValue
+        value={
+          showRecurrence ? (
+            <RecurrencePicker
+              value={recurrence}
+              onChange={setRecurrence}
+              fields={meta.recurrence}
+            />
+          ) : null
+        }
+      />
 
-      {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          error ? (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <GeneratedValue value={error} />
+            </div>
+          ) : null
+        }
+      />
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-        {embedded ? (
-          <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
-            Cancel
-          </Button>
-        ) : (
-          <Link href={cancelHref}>
-            <Button type="button" variant="outline" disabled={pending}>
-              Cancel
-            </Button>
-          </Link>
-        )}
+        <GeneratedValue
+          value={
+            embedded ? (
+              <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
+                <GeneratedText id="m_112e2e8ecda428" />
+              </Button>
+            ) : (
+              <Link href={cancelHref}>
+                <Button type="button" variant="outline" disabled={pending}>
+                  <GeneratedText id="m_112e2e8ecda428" />
+                </Button>
+              </Link>
+            )
+          }
+        />
         <Button type="submit" disabled={pending}>
-          {pending
-            ? editing
-              ? 'Saving…'
-              : 'Creating…'
-            : editing
-              ? 'Save changes'
-              : 'Create obligation'}
+          <GeneratedValue
+            value={
+              pending ? (
+                editing ? (
+                  <GeneratedText id="m_106811f2aac664" />
+                ) : (
+                  <GeneratedText id="m_14edc14616e78d" />
+                )
+              ) : editing ? (
+                <GeneratedText id="m_1ab9025ed1067c" />
+              ) : (
+                <GeneratedText id="m_091151509dd3fd" />
+              )
+            }
+          />
         </Button>
       </div>
     </form>
@@ -416,6 +531,7 @@ function TargetSelect({
   placeholder: string
   options: { id: string; label: string }[]
 }) {
+  const tGenerated = useGeneratedTranslations()
   const initialOption = options.find((candidate) => candidate.id === value)
   return (
     <RemoteSearchSelect
@@ -425,12 +541,12 @@ function TargetSelect({
       initialOption={
         initialOption ? { value: initialOption.id, label: initialOption.label } : undefined
       }
-      placeholder={`— Pick a ${placeholder} —`}
-      searchPlaceholder={`Search ${placeholder}s…`}
+      placeholder={tGenerated('m_1c66e8f32eb556', { value0: placeholder })}
+      searchPlaceholder={tGenerated('m_13a874065f07f8', { value0: placeholder })}
       sheetTitle={`Pick a ${placeholder}`}
       ariaLabel={`Pick a ${placeholder}`}
       clearable
-      emptyLabel={`— Pick a ${placeholder} —`}
+      emptyLabel={tGenerated('m_1c66e8f32eb556', { value0: placeholder })}
     />
   )
 }

@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedValue } from '@/i18n/generated'
+
 import { useActionState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import type { AppLocale } from '@beaconhs/i18n'
@@ -48,30 +50,44 @@ export function ProfileForm({
   return (
     <form action={action} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="acc-name">{t('name')}</Label>
+        <Label htmlFor="acc-name">
+          <GeneratedValue value={t('name')} />
+        </Label>
         <Input id="acc-name" name="name" defaultValue={name} required />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="acc-email">{t('email')}</Label>
+        <Label htmlFor="acc-email">
+          <GeneratedValue value={t('email')} />
+        </Label>
         <Input id="acc-email" value={email} disabled readOnly />
-        <p className="text-xs text-slate-500 dark:text-slate-400">{t('emailHelp')}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          <GeneratedValue value={t('emailHelp')} />
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="acc-tz">{t('timeZone')}</Label>
+          <Label htmlFor="acc-tz">
+            <GeneratedValue value={t('timeZone')} />
+          </Label>
           <Select id="acc-tz" name="timezone" defaultValue={timezone} searchable>
-            {timezones.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
+            <GeneratedValue
+              value={timezones.map((t) => (
+                <option key={t} value={t}>
+                  <GeneratedValue value={t} />
+                </option>
+              ))}
+            />
           </Select>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('timeZoneHelp')}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            <GeneratedValue value={t('timeZoneHelp')} />
+          </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="acc-locale">{t('language')}</Label>
+          <Label htmlFor="acc-locale">
+            <GeneratedValue value={t('language')} />
+          </Label>
           <Select
             id="acc-locale"
             name="locale"
@@ -79,31 +95,49 @@ export function ProfileForm({
             disabled={!canOverrideLocale}
           >
             <option value="">
-              {common('useTenantDefault', { language: languages(defaultLocale) })}
+              <GeneratedValue
+                value={common('useTenantDefault', { language: languages(defaultLocale) })}
+              />
             </option>
-            {enabledLocales.map((supportedLocale) => (
-              <option key={supportedLocale} value={supportedLocale}>
-                {languages(supportedLocale)}
-              </option>
-            ))}
+            <GeneratedValue
+              value={enabledLocales.map((supportedLocale) => (
+                <option key={supportedLocale} value={supportedLocale}>
+                  <GeneratedValue value={languages(supportedLocale)} />
+                </option>
+              ))}
+            />
           </Select>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{t('languageHelp')}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            <GeneratedValue value={t('languageHelp')} />
+          </p>
         </div>
       </div>
 
-      {state?.error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
-        </Alert>
-      ) : null}
-      {state?.ok ? (
-        <Alert variant="success">
-          <AlertDescription>{t('profileUpdated')}</AlertDescription>
-        </Alert>
-      ) : null}
+      <GeneratedValue
+        value={
+          state?.error ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                <GeneratedValue value={state.error} />
+              </AlertDescription>
+            </Alert>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          state?.ok ? (
+            <Alert variant="success">
+              <AlertDescription>
+                <GeneratedValue value={t('profileUpdated')} />
+              </AlertDescription>
+            </Alert>
+          ) : null
+        }
+      />
 
       <Button type="submit" disabled={pending}>
-        {pending ? common('saving') : t('saveChanges')}
+        <GeneratedValue value={pending ? common('saving') : t('saveChanges')} />
       </Button>
     </form>
   )

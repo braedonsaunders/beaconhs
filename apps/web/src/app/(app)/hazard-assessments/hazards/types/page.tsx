@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Hazard types (color-coded categories) — full table with search + usage
 // counts. Legacy showed name / color / icon / description plus the
 // hazard-count per type so admins know which categories actually get used.
@@ -30,7 +33,10 @@ import { HazidSubNav } from '../../_subnav'
 import { createHazardType, deleteHazardType, updateHazardType } from '../../_actions'
 import { HazardTypeDrawers, type EditHazardTypeDefaults } from './_drawers'
 
-export const metadata = { title: 'Hazard types' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_11ddfb30da31c5') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'created', 'hazards'] as const
@@ -58,6 +64,8 @@ export default async function HazardTypesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'name',
@@ -144,118 +152,151 @@ export default async function HazardTypesPage({
         <>
           <HazidSubNav pathname="/hazard-assessments/hazards/types" />
           <PageHeader
-            title="Hazard types"
-            description="Categories for organizing the hazard bank."
+            title={tGenerated('m_11ddfb30da31c5')}
+            description={tGenerated('m_1254c8c78f5534')}
             actions={
               <Link href="/hazard-assessments/hazards/types?drawer=new-hazard-type" scroll={false}>
-                <Button>New hazard type</Button>
+                <Button>
+                  <GeneratedText id="m_06403bdc5b1377" />
+                </Button>
               </Link>
             }
           />
           <div className="flex items-center gap-3">
-            <SearchInput placeholder="Search hazard types…" />
+            <SearchInput placeholder={tGenerated('m_1e88f4afb9d57e')} />
           </div>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Palette size={32} />}
-          title={params.q ? `No types match "${params.q}"` : 'No hazard types'}
-          description="Start with common categories — chemical, mechanical, electrical, biological, ergonomic."
-          action={
-            <Link href="/hazard-assessments/hazards/types?drawer=new-hazard-type" scroll={false}>
-              <Button>Add a type</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                  Name
-                </SortableTh>
-                <TableHead className="w-32">Color</TableHead>
-                <TableHead className="w-24">Icon key</TableHead>
-                <TableHead>Description</TableHead>
-                <SortableTh {...sortProps} column="hazards" active={params.sort === 'hazards'}>
-                  Hazards
-                </SortableTh>
-                <SortableTh {...sortProps} column="created" active={params.sort === 'created'}>
-                  Created
-                </SortableTh>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ type, hazardCount }) => (
-                <TableRow key={type.id}>
-                  <TableCell>
-                    <Link
-                      href={`/hazard-assessments/hazards/types?drawer=edit-hazard-type&id=${type.id}`}
-                      scroll={false}
-                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                    >
-                      {type.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="inline-block h-4 w-4 rounded border border-slate-200 dark:border-slate-800"
-                        style={{ background: type.color }}
-                        aria-hidden
-                      />
-                      <code className="text-xs text-slate-600 dark:text-slate-400">
-                        {type.color}
-                      </code>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {type.iconKey ? (
-                      <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                        {type.iconKey}
-                      </code>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="line-clamp-2 max-w-md text-xs text-slate-600 dark:text-slate-400">
-                    {type.description ?? '—'}
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    <Badge variant="secondary">{Number(hazardCount ?? 0)}</Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-slate-500 tabular-nums">
-                    {type.createdAt
-                      ? formatDate(new Date(type.createdAt), ctx.timezone, ctx.locale)
-                      : '—'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link
-                      href={`/hazard-assessments/hazards/types?drawer=edit-hazard-type&id=${type.id}`}
-                      scroll={false}
-                      aria-label={`Edit ${type.name}`}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-                    >
-                      <Pencil size={14} />
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/hazard-assessments/hazards/types"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Palette size={32} />}
+              title={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_0f9cefd4725839', { value0: params.q })
+                  : tGenerated('m_15311146fc7946'),
+              )}
+              description={tGenerated('m_070730998e97d9')}
+              action={
+                <Link
+                  href="/hazard-assessments/hazards/types?drawer=new-hazard-type"
+                  scroll={false}
+                >
+                  <Button>
+                    <GeneratedText id="m_14df422e6bfe41" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <TableHead className="w-32">
+                      <GeneratedText id="m_0a2f5a489b59e4" />
+                    </TableHead>
+                    <TableHead className="w-24">
+                      <GeneratedText id="m_1f22a0ff1d938c" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_14d923495cf14c" />
+                    </TableHead>
+                    <SortableTh {...sortProps} column="hazards" active={params.sort === 'hazards'}>
+                      <GeneratedText id="m_168fba897c5202" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="created" active={params.sort === 'created'}>
+                      <GeneratedText id="m_10cbe051fb5e05" />
+                    </SortableTh>
+                    <TableHead className="w-10" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ type, hazardCount }) => (
+                      <TableRow key={type.id}>
+                        <TableCell>
+                          <Link
+                            href={`/hazard-assessments/hazards/types?drawer=edit-hazard-type&id=${type.id}`}
+                            scroll={false}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                          >
+                            <GeneratedValue value={type.name} />
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block h-4 w-4 rounded border border-slate-200 dark:border-slate-800"
+                              style={{ background: type.color }}
+                              aria-hidden
+                            />
+                            <code className="text-xs text-slate-600 dark:text-slate-400">
+                              {type.color}
+                            </code>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <GeneratedValue
+                            value={
+                              type.iconKey ? (
+                                <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                  {type.iconKey}
+                                </code>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="line-clamp-2 max-w-md text-xs text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={type.description ?? '—'} />
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          <Badge variant="secondary">
+                            <GeneratedValue value={Number(hazardCount ?? 0)} />
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-500 tabular-nums">
+                          <GeneratedValue
+                            value={
+                              type.createdAt
+                                ? formatDate(new Date(type.createdAt), ctx.timezone, ctx.locale)
+                                : '—'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Link
+                            href={`/hazard-assessments/hazards/types?drawer=edit-hazard-type&id=${type.id}`}
+                            scroll={false}
+                            aria-label={tGenerated('m_0a45a3f047a285', { value0: type.name })}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                          >
+                            <Pencil size={14} />
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/hazard-assessments/hazards/types"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
       <HazardTypeDrawers
         openDrawer={
           drawer === 'new-hazard-type'

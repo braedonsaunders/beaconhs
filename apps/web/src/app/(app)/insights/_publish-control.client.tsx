@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 // Shared publish/unpublish control for Insights cards and dashboards. Publishing
 // opens a role picker so the publisher can restrict the published asset to
 // specific roles (allowedRoles); leaving every role unchecked shares it with
@@ -44,12 +46,16 @@ export function PublishControl({
         disabled={pending}
         className={buttonClassName}
       >
-        {pending ? (
-          <Loader2 size={13} className="mr-1 animate-spin" />
-        ) : (
-          <Lock size={13} className="mr-1" />
-        )}
-        Unpublish
+        <GeneratedValue
+          value={
+            pending ? (
+              <Loader2 size={13} className="mr-1 animate-spin" />
+            ) : (
+              <Lock size={13} className="mr-1" />
+            )
+          }
+        />
+        <GeneratedText id="m_0d6976fc2d60c8" />
       </Button>
     )
   }
@@ -76,12 +82,16 @@ export function PublishControl({
           disabled={pending}
           className={buttonClassName}
         >
-          {pending ? (
-            <Loader2 size={13} className="mr-1 animate-spin" />
-          ) : (
-            <Globe size={13} className="mr-1" />
-          )}
-          Publish
+          <GeneratedValue
+            value={
+              pending ? (
+                <Loader2 size={13} className="mr-1 animate-spin" />
+              ) : (
+                <Globe size={13} className="mr-1" />
+              )
+            }
+          />
+          <GeneratedText id="m_0c072fb8baf115" />
         </Button>
       }
       className="w-72 p-3"
@@ -89,11 +99,10 @@ export function PublishControl({
       <div className="space-y-2.5">
         <div>
           <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Publish to library
+            <GeneratedText id="m_12ab47c364c4db" />
           </h4>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            Restrict access to specific roles, or leave all unchecked to share with everyone.
-            Publishers always have access.
+            <GeneratedText id="m_0854ce0ec48eb9" />
           </p>
         </div>
         <div
@@ -103,30 +112,47 @@ export function PublishControl({
               : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
           }`}
         >
-          {restricted
-            ? `Restricted to ${selected.size} role${selected.size === 1 ? '' : 's'}`
-            : 'Visible to everyone'}
+          <GeneratedValue
+            value={
+              restricted ? (
+                <GeneratedText
+                  id="m_1f688129a274f7"
+                  values={{ value0: selected.size, value1: selected.size === 1 ? '' : 's' }}
+                />
+              ) : (
+                <GeneratedText id="m_1452f24ba8370a" />
+              )
+            }
+          />
         </div>
-        {roles.length === 0 ? (
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            No roles defined for this tenant.
-          </p>
-        ) : (
-          <ul className="app-scroll max-h-52 space-y-1 overflow-y-auto">
-            {roles.map((r) => (
-              <li key={r.key}>
-                <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800/60">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(r.key)}
-                    onChange={() => toggle(r.key)}
-                  />
-                  <span className="flex-1 truncate">{r.name}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        )}
+        <GeneratedValue
+          value={
+            roles.length === 0 ? (
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_008f5a3d7812ab" />
+              </p>
+            ) : (
+              <ul className="app-scroll max-h-52 space-y-1 overflow-y-auto">
+                <GeneratedValue
+                  value={roles.map((r) => (
+                    <li key={r.key}>
+                      <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800/60">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(r.key)}
+                          onChange={() => toggle(r.key)}
+                        />
+                        <span className="flex-1 truncate">
+                          <GeneratedValue value={r.name} />
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                />
+              </ul>
+            )
+          }
+        />
         <Button
           type="button"
           onClick={() => {
@@ -136,7 +162,7 @@ export function PublishControl({
           disabled={pending}
           className="h-8 w-full text-xs"
         >
-          <Globe size={13} className="mr-1" /> Publish
+          <Globe size={13} className="mr-1" /> <GeneratedText id="m_0c072fb8baf115" />
         </Button>
       </div>
     </Popover>

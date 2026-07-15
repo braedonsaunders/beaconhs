@@ -111,7 +111,7 @@ describe('production-scale picker contract', () => {
     const picker = source('../app/(app)/training/classes/[id]/_attendee-picker.tsx')
     expect(picker).toContain('lookup="training-class-attendee-candidates"')
     expect(picker).toContain('contextId={classId}')
-    expect(picker).toContain('placeholder="Add a person to the roster…"')
+    expect(picker).toContain("placeholder={tGenerated('m_0cfc77616ec7e7')}")
   })
 
   it('uses the canonical primary title in every shared people picker', () => {
@@ -178,8 +178,8 @@ describe('production-scale picker contract', () => {
   it('makes every Insights expression field discoverable without rendering a giant palette', () => {
     const palette = source('../app/(app)/insights/cards/_studio/expression-field.client.tsx')
     expect(palette).toContain('filterInsightsExpressionFields')
-    expect(palette).toContain('Search fields or related tables…')
-    expect(palette).toContain('Type a field or related-table name to search all')
+    expect(palette).toContain("placeholder={tGenerated('m_1908587deafbfa')}")
+    expect(palette).toContain('<GeneratedText id="m_091e83de9853e7" />')
     expect(palette).not.toContain('fields.slice(0, 80)')
   })
 })

@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedValue } from '@/i18n/generated'
+
 // Plain-HTML GrapesJS builder for PDF documents — same editable-HTML model as
 // the email builder (Content blocks + Record-field tokens + drag-in data tables
 // via data-each), but the canvas is styled as a real PAPER SHEET: the body is
@@ -214,11 +216,15 @@ export default function PdfBuilder({
             <BlocksProvider>{(props) => <TemplateBuilderBlockPalette {...props} />}</BlocksProvider>
           </aside>
           <div className="relative col-span-2 min-h-0 overflow-hidden bg-[#3f4856]">
-            {paperLabel ? (
-              <span className="pointer-events-none absolute top-2 right-3 z-10 rounded-full bg-black/35 px-2.5 py-1 text-[11px] font-medium tracking-wide text-white/90 uppercase backdrop-blur-sm">
-                {paperLabel}
-              </span>
-            ) : null}
+            <GeneratedValue
+              value={
+                paperLabel ? (
+                  <span className="pointer-events-none absolute top-2 right-3 z-10 rounded-full bg-black/35 px-2.5 py-1 text-[11px] font-medium tracking-wide text-white/90 uppercase backdrop-blur-sm">
+                    <GeneratedValue value={paperLabel} />
+                  </span>
+                ) : null
+              }
+            />
             <TableToolbar editor={editor} />
             <Canvas className="h-full" />
           </div>

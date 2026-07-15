@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // Cadence picker for equipment maintenance — "Pre-use / On demand / Every N
 // day|week|month|year". Shared by the inspection-type drawer + builder, the
 // per-unit schedule drawer, and the reminder repeat control, so every cadence
@@ -40,6 +42,7 @@ export function IntervalPicker({
   disabled?: boolean
   idPrefix?: string
 }) {
+  const tGenerated = useGeneratedTranslations()
   // When neither pre-use nor on-demand is allowed, the cadence is mandatory —
   // skip the mode select entirely and render just the value + unit inputs.
   const onlyEvery = !allowPreUse && !allowOnDemand
@@ -59,62 +62,102 @@ export function IntervalPicker({
 
   return (
     <div className="space-y-1.5">
-      {label ? <Label htmlFor={`${idPrefix}-mode`}>{label}</Label> : null}
+      <GeneratedValue
+        value={
+          label ? (
+            <Label htmlFor={`${idPrefix}-mode`}>
+              <GeneratedValue value={label} />
+            </Label>
+          ) : null
+        }
+      />
       <div className="flex flex-wrap items-center gap-2">
-        {onlyEvery ? (
-          <span className="text-sm text-slate-600 dark:text-slate-300">Every</span>
-        ) : (
-          <Select
-            id={`${idPrefix}-mode`}
-            value={mode}
-            disabled={disabled}
-            onChange={(e) => setMode(e.currentTarget.value as Mode)}
-            className="w-36"
-          >
-            {allowOnDemand ? <option value="on_demand">{onDemandLabel}</option> : null}
-            {allowPreUse ? <option value="pre_use">Pre-use</option> : null}
-            <option value="every">Every…</option>
-          </Select>
-        )}
-        {mode === 'every' ? (
-          <>
-            <Input
-              id={`${idPrefix}-value`}
-              type="number"
-              min={1}
-              max={120}
-              step={1}
-              disabled={disabled}
-              value={value.intervalValue ?? 1}
-              onChange={(e) => {
-                const n = Math.max(1, Math.trunc(Number(e.currentTarget.value) || 1))
-                onChange({ ...value, isPreUse: false, intervalValue: n })
-              }}
-              className="w-20"
-              aria-label="Interval value"
-            />
-            <Select
-              id={`${idPrefix}-unit`}
-              disabled={disabled}
-              value={value.intervalUnit ?? 'month'}
-              onChange={(e) =>
-                onChange({
-                  ...value,
-                  isPreUse: false,
-                  intervalUnit: e.currentTarget.value as EquipmentIntervalUnit,
-                })
-              }
-              className="w-32"
-              aria-label="Interval unit"
-            >
-              {EQUIPMENT_INTERVAL_UNITS.map((u) => (
-                <option key={u.value} value={u.value}>
-                  {(value.intervalValue ?? 1) === 1 ? u.singular : u.plural}
+        <GeneratedValue
+          value={
+            onlyEvery ? (
+              <span className="text-sm text-slate-600 dark:text-slate-300">
+                <GeneratedText id="m_1a812a9a9de996" />
+              </span>
+            ) : (
+              <Select
+                id={`${idPrefix}-mode`}
+                value={mode}
+                disabled={disabled}
+                onChange={(e) => setMode(e.currentTarget.value as Mode)}
+                className="w-36"
+              >
+                <GeneratedValue
+                  value={
+                    allowOnDemand ? (
+                      <option value="on_demand">
+                        <GeneratedValue value={onDemandLabel} />
+                      </option>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    allowPreUse ? (
+                      <option value="pre_use">
+                        <GeneratedText id="m_0169e159d93a5b" />
+                      </option>
+                    ) : null
+                  }
+                />
+                <option value="every">
+                  <GeneratedText id="m_185ca90e8a0046" />
                 </option>
-              ))}
-            </Select>
-          </>
-        ) : null}
+              </Select>
+            )
+          }
+        />
+        <GeneratedValue
+          value={
+            mode === 'every' ? (
+              <>
+                <Input
+                  id={`${idPrefix}-value`}
+                  type="number"
+                  min={1}
+                  max={120}
+                  step={1}
+                  disabled={disabled}
+                  value={value.intervalValue ?? 1}
+                  onChange={(e) => {
+                    const n = Math.max(1, Math.trunc(Number(e.currentTarget.value) || 1))
+                    onChange({ ...value, isPreUse: false, intervalValue: n })
+                  }}
+                  className="w-20"
+                  aria-label={tGenerated('m_1845d41fa99dae')}
+                />
+                <Select
+                  id={`${idPrefix}-unit`}
+                  disabled={disabled}
+                  value={value.intervalUnit ?? 'month'}
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      isPreUse: false,
+                      intervalUnit: e.currentTarget.value as EquipmentIntervalUnit,
+                    })
+                  }
+                  className="w-32"
+                  aria-label={tGenerated('m_0ddb550df9618d')}
+                >
+                  <GeneratedValue
+                    value={EQUIPMENT_INTERVAL_UNITS.map((u) => (
+                      <option key={u.value} value={u.value}>
+                        <GeneratedValue
+                          value={(value.intervalValue ?? 1) === 1 ? u.singular : u.plural}
+                        />
+                      </option>
+                    ))}
+                  />
+                </Select>
+              </>
+            ) : null
+          }
+        />
       </div>
     </div>
   )

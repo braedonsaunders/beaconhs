@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+
 // "New PDF template" trigger + slide-in Drawer form (matches the app's flyout
 // pattern for create forms). On submit it calls the createPdfTemplate action,
 // closes, and refreshes the list.
@@ -19,6 +21,7 @@ export function NewPdfTemplateFlyout({
   modules: SubjectOpt[]
   apps: SubjectOpt[]
 }) {
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [open, setOpen] = React.useState(false)
   const [pending, startTransition] = React.useTransition()
@@ -36,67 +39,107 @@ export function NewPdfTemplateFlyout({
   return (
     <>
       <Button onClick={() => setOpen(true)}>
-        <Plus size={14} /> New PDF template
+        <Plus size={14} /> <GeneratedText id="m_05098faf9f246b" />
       </Button>
-      <Drawer open={open} onClose={() => setOpen(false)} title="New PDF template" size="md">
+      <Drawer
+        open={open}
+        onClose={() => setOpen(false)}
+        title={tGenerated('m_05098faf9f246b')}
+        size="md"
+      >
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="name">Name *</Label>
+            <Label htmlFor="name">
+              <GeneratedText id="m_1a9978900838e6" />
+            </Label>
             <Input
               id="name"
               name="name"
               required
               maxLength={200}
-              placeholder="e.g. Incident report"
+              placeholder={tGenerated('m_0494f21f6d8385')}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="recordSubject">Record type *</Label>
+            <Label htmlFor="recordSubject">
+              <GeneratedText id="m_0f9634263f05a3" />
+            </Label>
             <Select id="recordSubject" name="recordSubject" required defaultValue="">
               <option value="" disabled>
-                Choose a record type…
+                <GeneratedText id="m_1cd3fce117c91f" />
               </option>
-              <optgroup label="Native modules">
-                {modules.map((s) => (
-                  <option key={`module:${s.key}`} value={`module:${s.key}`}>
-                    {s.label}
-                  </option>
-                ))}
-              </optgroup>
-              {apps.length > 0 ? (
-                <optgroup label="Builder apps">
-                  {apps.map((s) => (
-                    <option key={`form_template:${s.key}`} value={`form_template:${s.key}`}>
-                      {s.label}
+              <optgroup label={tGenerated('m_1e649a5a75a0e0')}>
+                <GeneratedValue
+                  value={modules.map((s) => (
+                    <option key={`module:${s.key}`} value={`module:${s.key}`}>
+                      <GeneratedValue value={s.label} />
                     </option>
                   ))}
-                </optgroup>
-              ) : null}
+                />
+              </optgroup>
+              <GeneratedValue
+                value={
+                  apps.length > 0 ? (
+                    <optgroup label={tGenerated('m_0c770d55914bfa')}>
+                      <GeneratedValue
+                        value={apps.map((s) => (
+                          <option key={`form_template:${s.key}`} value={`form_template:${s.key}`}>
+                            <GeneratedValue value={s.label} />
+                          </option>
+                        ))}
+                      />
+                    </optgroup>
+                  ) : null
+                }
+              />
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="paperSize">Paper</Label>
+              <Label htmlFor="paperSize">
+                <GeneratedText id="m_0ccb1fd4550a71" />
+              </Label>
               <Select id="paperSize" name="paperSize" defaultValue="letter">
-                <option value="letter">Letter</option>
-                <option value="a4">A4</option>
-                <option value="legal">Legal</option>
+                <option value="letter">
+                  <GeneratedText id="m_1715837106bbe7" />
+                </option>
+                <option value="a4">
+                  <GeneratedText id="m_0df1bca66cc814" />
+                </option>
+                <option value="legal">
+                  <GeneratedText id="m_13bc02323e35ae" />
+                </option>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="orientation">Orientation</Label>
+              <Label htmlFor="orientation">
+                <GeneratedText id="m_0af3bf11ca2a12" />
+              </Label>
               <Select id="orientation" name="orientation" defaultValue="portrait">
-                <option value="portrait">Portrait</option>
-                <option value="landscape">Landscape</option>
+                <option value="portrait">
+                  <GeneratedText id="m_062e481bc6e988" />
+                </option>
+                <option value="landscape">
+                  <GeneratedText id="m_0e9e90da7290dd" />
+                </option>
               </Select>
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              <GeneratedText id="m_112e2e8ecda428" />
             </Button>
             <Button type="submit" disabled={pending}>
-              <Plus size={14} /> {pending ? 'Creating…' : 'Create'}
+              <Plus size={14} />{' '}
+              <GeneratedValue
+                value={
+                  pending ? (
+                    <GeneratedText id="m_14edc14616e78d" />
+                  ) : (
+                    <GeneratedText id="m_017309f0f9f564" />
+                  )
+                }
+              />
             </Button>
           </div>
         </form>

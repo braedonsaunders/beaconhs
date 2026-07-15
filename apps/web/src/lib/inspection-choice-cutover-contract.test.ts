@@ -11,7 +11,7 @@ describe('inspection configured response cutover contract', () => {
     const bankActions = source('../app/(app)/inspections/banks/_actions.ts')
     const typeActions = source('../app/(app)/inspections/types/_actions.ts')
 
-    expect(editor).toContain('Options (one per line)')
+    expect(editor).toContain('<GeneratedText id="m_02057adc77a443" />')
     expect(editor).toContain('parseInspectionChoiceOptionsText')
     expect(bankActions).toContain('parseInspectionResponseConfig')
     expect(typeActions).toContain('choiceOptions: c.choiceOptions')

@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 // The dispatcher: given a viz type + a query result + settings, validate and
 // render the right component. Chart types go through buildChartSpec → VizChart;
 // table/pivot/scalar/progress render directly. Used by dashboard cells AND the
@@ -81,11 +83,12 @@ export function VizRenderer({
   settings?: VizSettings
   label?: string
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const check = validateRenderable(vizType, result, settings)
   if (!check.ok) {
     return (
       <div className="grid h-full place-items-center rounded-lg border border-dashed border-amber-300 bg-amber-50/40 px-4 text-center text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/5 dark:text-amber-400">
-        {check.message}
+        <GeneratedValue value={check.message} />
       </div>
     )
   }
@@ -101,17 +104,29 @@ export function VizRenderer({
     return <DataTable result={result as FlatResult} settings={settings} />
   }
   if (vizType === 'scalar') {
-    return <ScalarCard result={result as FlatResult} settings={settings} label={label} />
+    return (
+      <ScalarCard
+        result={result as FlatResult}
+        settings={settings}
+        label={tGeneratedValue(label)}
+      />
+    )
   }
   if (vizType === 'progress') {
-    return <ProgressCard result={result as FlatResult} settings={settings} label={label} />
+    return (
+      <ProgressCard
+        result={result as FlatResult}
+        settings={settings}
+        label={tGeneratedValue(label)}
+      />
+    )
   }
   if (CHART_KEYS.has(vizType) && result.shape === 'flat') {
     const spec = buildChartSpec(result, vizType, settings)
     if (!spec) {
       return (
         <div className="grid h-full place-items-center text-xs text-slate-400 dark:text-slate-500">
-          Nothing to chart.
+          <GeneratedText id="m_096291afafa073" />
         </div>
       )
     }
@@ -121,7 +136,7 @@ export function VizRenderer({
 
   return (
     <div className="grid h-full place-items-center text-xs text-slate-400 dark:text-slate-500">
-      Unsupported visualization.
+      <GeneratedText id="m_0b577be447249e" />
     </div>
   )
 }

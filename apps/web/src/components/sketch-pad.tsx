@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText } from '@/i18n/generated'
+
 // SketchPad — a comprehensive freehand drawing / diagram canvas built on
 // Excalidraw (shapes, arrows, text, freehand, images). Used by the form
 // `sketch` element (e.g. a lift-plan diagram). Outputs a PNG data-url plus the
@@ -20,7 +22,7 @@ const Excalidraw = dynamic<ExcalidrawProps>(
     ssr: false,
     loading: () => (
       <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
-        Loading canvas…
+        <GeneratedText id="m_0839e554b28c58" />
       </div>
     ),
   },

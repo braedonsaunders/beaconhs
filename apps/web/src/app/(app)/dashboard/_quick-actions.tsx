@@ -1,5 +1,7 @@
 'use client'
 
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
@@ -50,7 +52,7 @@ export function QuickActions({
             <Zap size={14} />
           </span>
           <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-            Quick actions
+            <GeneratedText id="m_05968e045e405d" />
           </h3>
         </div>
         <button
@@ -59,35 +61,43 @@ export function QuickActions({
           className="no-drag inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-teal-300"
         >
           <Settings2 size={13} />
-          Customize
+          <GeneratedText id="m_0259e837087d9b" />
         </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        {items.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 py-6 text-center">
-            <p className="text-xs text-slate-500 dark:text-slate-400">No quick actions yet.</p>
-            <button
-              type="button"
-              onClick={() => setEditorOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-100 dark:border-teal-800/60 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-900/40"
-            >
-              <Settings2 size={13} />
-              Add actions
-            </button>
-          </div>
-        ) : (
-          <div
-            className="grid h-full min-h-0 auto-rows-fr gap-2 p-2.5"
-            // `min(100%, …)` keeps a single column from overflowing on very narrow
-            // cards; otherwise auto-fit packs as many ~10rem tiles as the width allows.
-            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 10rem), 1fr))' }}
-          >
-            {items.map((a, i) => (
-              <ActionTile key={a.id} action={a} index={i} />
-            ))}
-          </div>
-        )}
+        <GeneratedValue
+          value={
+            items.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 px-4 py-6 text-center">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <GeneratedText id="m_1b3e4c93cad8d7" />
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setEditorOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-100 dark:border-teal-800/60 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-900/40"
+                >
+                  <Settings2 size={13} />
+                  <GeneratedText id="m_1e4dd737605a31" />
+                </button>
+              </div>
+            ) : (
+              <div
+                className="grid h-full min-h-0 auto-rows-fr gap-2 p-2.5"
+                // `min(100%, …)` keeps a single column from overflowing on very narrow
+                // cards; otherwise auto-fit packs as many ~10rem tiles as the width allows.
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 10rem), 1fr))' }}
+              >
+                <GeneratedValue
+                  value={items.map((a, i) => (
+                    <ActionTile key={a.id} action={a} index={i} />
+                  ))}
+                />
+              </div>
+            )
+          }
+        />
       </div>
 
       <QuickActionsEditor
@@ -117,7 +127,7 @@ function ActionTile({ action, index }: { action: QuickAction; index: number }) {
       <span
         className={`min-w-0 flex-1 text-left text-[13px] leading-snug font-medium transition-colors ${t.label}`}
       >
-        {action.label}
+        <GeneratedValue value={action.label} />
       </span>
       <ArrowUpRight
         size={14}
@@ -138,15 +148,19 @@ function ActionTile({ action, index }: { action: QuickAction; index: number }) {
       animate={{ y: 0 }}
       transition={{ delay: 0.04 + index * 0.035, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
     >
-      {external ? (
-        <a href={action.href} target="_blank" rel="noopener noreferrer" className={className}>
-          {inner}
-        </a>
-      ) : (
-        <Link href={action.href as any} className={className}>
-          {inner}
-        </Link>
-      )}
+      <GeneratedValue
+        value={
+          external ? (
+            <a href={action.href} target="_blank" rel="noopener noreferrer" className={className}>
+              <GeneratedValue value={inner} />
+            </a>
+          ) : (
+            <Link href={action.href as any} className={className}>
+              <GeneratedValue value={inner} />
+            </Link>
+          )
+        }
+      />
     </motion.div>
   )
 }

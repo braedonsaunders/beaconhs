@@ -1,3 +1,5 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+import { GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import Image from 'next/image'
 import { redirect } from 'next/navigation'
@@ -27,7 +29,10 @@ import { levelLabel } from '@/lib/org-hierarchy'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { PageContainer } from '@/components/page-layout'
 
-export const metadata = { title: 'Tenant settings' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_03121a3f188759') }
+}
 export const dynamic = 'force-dynamic'
 
 const LEVELS = ['customer', 'project', 'site', 'area'] as const
@@ -142,6 +147,8 @@ async function saveSettings(formData: FormData) {
 }
 
 export default async function AdminSettingsPage() {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireSettingsAdmin()
   const [t, languages] = await Promise.all([
     getTranslations('TenantSettings'),
@@ -166,20 +173,22 @@ export default async function AdminSettingsPage() {
       <div className="space-y-5">
         <DetailHeader
           back={{ href: '/admin', label: t('backToAdmin') }}
-          title={t('title')}
-          subtitle={t('subtitle')}
+          title={tGeneratedValue(t('title'))}
+          subtitle={tGeneratedValue(t('subtitle'))}
         />
 
         <form action={saveSettings} className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>{t('identity')}</CardTitle>
+              <CardTitle>
+                <GeneratedValue value={t('identity')} />
+              </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label={t('name')}>
+              <Field label={tGeneratedValue(t('name'))}>
                 <Input name="name" defaultValue={tenant.name} />
               </Field>
-              <Field label={t('slug')}>
+              <Field label={tGeneratedValue(t('slug'))}>
                 <Input name="slug" defaultValue={tenant.slug} className="font-mono" />
               </Field>
             </CardContent>
@@ -187,132 +196,168 @@ export default async function AdminSettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{t('peopleKiosk')}</CardTitle>
-              <CardDescription>{t('peopleKioskDescription')}</CardDescription>
+              <CardTitle>
+                <GeneratedValue value={t('peopleKiosk')} />
+              </CardTitle>
+              <CardDescription>
+                <GeneratedValue value={t('peopleKioskDescription')} />
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Field label={t('kioskPin')} className="max-w-xs">
+              <Field label={tGeneratedValue(t('kioskPin'))} className="max-w-xs">
                 <Input
                   name="kioskPin"
                   type="password"
                   inputMode="numeric"
                   pattern="[0-9]{4,12}"
                   maxLength={12}
-                  placeholder={tenant.kioskPin ? t('keepKioskPin') : t('kioskPinExample')}
+                  placeholder={tGeneratedValue(
+                    tenant.kioskPin ? t('keepKioskPin') : t('kioskPinExample'),
+                  )}
                   className="font-mono tracking-widest"
                 />
-                {tenant.kioskPin ? (
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    {t('kioskConfigured')}
-                  </p>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    tenant.kioskPin ? (
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedValue value={t('kioskConfigured')} />
+                      </p>
+                    ) : null
+                  }
+                />
               </Field>
-              {tenant.kioskPin ? (
-                <label className="flex max-w-xs items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                  <input
-                    type="checkbox"
-                    name="clearKioskPin"
-                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  {t('disableKiosk')}
-                </label>
-              ) : null}
-              {kioskUrl ? (
-                <div className="max-w-xl rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
-                  <code className="block truncate font-mono text-xs text-slate-600 dark:text-slate-300">
-                    {kioskUrl}
-                  </code>
-                </div>
-              ) : null}
+              <GeneratedValue
+                value={
+                  tenant.kioskPin ? (
+                    <label className="flex max-w-xs items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                      <input
+                        type="checkbox"
+                        name="clearKioskPin"
+                        className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                      />
+                      <GeneratedValue value={t('disableKiosk')} />
+                    </label>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  kioskUrl ? (
+                    <div className="max-w-xl rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
+                      <code className="block truncate font-mono text-xs text-slate-600 dark:text-slate-300">
+                        {kioskUrl}
+                      </code>
+                    </div>
+                  ) : null
+                }
+              />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>{t('branding')}</CardTitle>
-              <CardDescription>{t('brandingDescription')}</CardDescription>
+              <CardTitle>
+                <GeneratedValue value={t('branding')} />
+              </CardTitle>
+              <CardDescription>
+                <GeneratedValue value={t('brandingDescription')} />
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label={t('logoUrl')}>
+              <Field label={tGeneratedValue(t('logoUrl'))}>
                 <Input
                   name="logoUrl"
                   defaultValue={tenant.branding.logoUrl ?? ''}
                   placeholder="https://…"
                 />
               </Field>
-              <Field label={t('primaryColor')}>
+              <Field label={tGeneratedValue(t('primaryColor'))}>
                 <Input
                   name="primaryColor"
                   defaultValue={tenant.branding.primaryColor ?? ''}
-                  placeholder="#0f766e"
+                  placeholder={tGenerated('m_15e421af604eae')}
                 />
               </Field>
-              <Field label={t('pdfLetterhead')} className="sm:col-span-2">
+              <Field label={tGeneratedValue(t('pdfLetterhead'))} className="sm:col-span-2">
                 <Input
                   name="pdfLetterhead"
                   defaultValue={tenant.branding.pdfLetterhead ?? ''}
-                  placeholder="Acme Industrial · Health & Safety"
+                  placeholder={tGenerated('m_0a8cab85b1e5ec')}
                 />
               </Field>
-              {tenantLogoUrl ? (
-                <div className="sm:col-span-2">
-                  <Label className="text-xs">{t('preview')}</Label>
-                  <div className="mt-1 flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-                    <Image
-                      src={tenantLogoUrl}
-                      alt=""
-                      width={160}
-                      height={32}
-                      unoptimized
-                      className="h-8 w-auto"
-                    />
-                    <span
-                      className="font-semibold"
-                      style={{ color: tenant.branding.primaryColor ?? '#0f766e' }}
-                    >
-                      {tenant.name}
-                    </span>
-                  </div>
-                </div>
-              ) : null}
+              <GeneratedValue
+                value={
+                  tenantLogoUrl ? (
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs">
+                        <GeneratedValue value={t('preview')} />
+                      </Label>
+                      <div className="mt-1 flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                        <Image
+                          src={tenantLogoUrl}
+                          alt=""
+                          width={160}
+                          height={32}
+                          unoptimized
+                          className="h-8 w-auto"
+                        />
+                        <span
+                          className="font-semibold"
+                          style={{ color: tenant.branding.primaryColor ?? '#0f766e' }}
+                        >
+                          <GeneratedValue value={tenant.name} />
+                        </span>
+                      </div>
+                    </div>
+                  ) : null
+                }
+              />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>{t('languages')}</CardTitle>
-              <CardDescription>{t('languagesDescription')}</CardDescription>
+              <CardTitle>
+                <GeneratedValue value={t('languages')} />
+              </CardTitle>
+              <CardDescription>
+                <GeneratedValue value={t('languagesDescription')} />
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-3 gap-2">
-                {LOCALE_OPTIONS.map((l) => (
-                  <label
-                    key={l.value}
-                    className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"
-                  >
-                    <input
-                      type="checkbox"
-                      name={`lang_${l.value}`}
-                      defaultChecked={enabled.has(l.value)}
-                    />
-                    {languages(l.value)}
-                  </label>
-                ))}
+                <GeneratedValue
+                  value={LOCALE_OPTIONS.map((l) => (
+                    <label
+                      key={l.value}
+                      className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"
+                    >
+                      <input
+                        type="checkbox"
+                        name={`lang_${l.value}`}
+                        defaultChecked={enabled.has(l.value)}
+                      />
+                      <GeneratedValue value={languages(l.value)} />
+                    </label>
+                  ))}
+                />
               </div>
-              <Field label={t('defaultLanguage')}>
+              <Field label={tGeneratedValue(t('defaultLanguage'))}>
                 <Select
                   name="defaultLanguage"
                   defaultValue={tenant.defaultLanguage}
                   className="h-10 w-32 pl-3 text-sm"
                 >
-                  {LOCALE_OPTIONS.map((l) => (
-                    <option key={l.value} value={l.value}>
-                      {languages(l.value)}
-                    </option>
-                  ))}
+                  <GeneratedValue
+                    value={LOCALE_OPTIONS.map((l) => (
+                      <option key={l.value} value={l.value}>
+                        <GeneratedValue value={languages(l.value)} />
+                      </option>
+                    ))}
+                  />
                 </Select>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  {t('defaultLanguageHelp')}
+                  <GeneratedValue value={t('defaultLanguageHelp')} />
                 </p>
               </Field>
             </CardContent>
@@ -320,35 +365,46 @@ export default async function AdminSettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{t('hierarchyDepth')}</CardTitle>
-              <CardDescription>{t('hierarchyDescription')}</CardDescription>
+              <CardTitle>
+                <GeneratedValue value={t('hierarchyDepth')} />
+              </CardTitle>
+              <CardDescription>
+                <GeneratedValue value={t('hierarchyDescription')} />
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {LEVELS.map((lvl) => (
-                <label
-                  key={lvl}
-                  className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"
-                >
-                  <input type="checkbox" name={`lvl_${lvl}`} defaultChecked={hierarchy[lvl]} />
-                  {levelLabel(lvl)}
-                </label>
-              ))}
+              <GeneratedValue
+                value={LEVELS.map((lvl) => (
+                  <label
+                    key={lvl}
+                    className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"
+                  >
+                    <input type="checkbox" name={`lvl_${lvl}`} defaultChecked={hierarchy[lvl]} />
+                    <GeneratedValue value={levelLabel(lvl)} />
+                  </label>
+                ))}
+              />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>{t('riskMatrix')}</CardTitle>
-              <CardDescription>{t('riskMatrixDescription')}</CardDescription>
+              <CardTitle>
+                <GeneratedValue value={t('riskMatrix')} />
+              </CardTitle>
+              <CardDescription>
+                <GeneratedValue value={t('riskMatrixDescription')} />
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                {t('riskMatrixBody')}{' '}
+                <GeneratedValue value={t('riskMatrixBody')} />
+                <GeneratedValue value={' '} />
                 <Link
                   href="/hazard-assessments/risk-matrix"
                   className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                 >
-                  {t('riskMatrixLink')}
+                  <GeneratedValue value={t('riskMatrixLink')} />
                 </Link>
                 .
               </p>
@@ -356,7 +412,9 @@ export default async function AdminSettingsPage() {
           </Card>
 
           <div className="flex justify-end">
-            <Button type="submit">{t('saveSettings')}</Button>
+            <Button type="submit">
+              <GeneratedValue value={t('saveSettings')} />
+            </Button>
           </div>
         </form>
       </div>
@@ -375,8 +433,10 @@ function Field({
 }) {
   return (
     <div className={`space-y-1.5 ${className ?? ''}`}>
-      <Label>{label}</Label>
-      {children}
+      <Label>
+        <GeneratedValue value={label} />
+      </Label>
+      <GeneratedValue value={children} />
     </div>
   )
 }

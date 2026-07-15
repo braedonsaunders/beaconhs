@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 import * as React from 'react'
 import { Reorder, useDragControls } from 'framer-motion'
 import { Boxes, GripVertical, LayoutList, ListChecks, Plus, Trash2 } from 'lucide-react'
@@ -123,6 +130,7 @@ function useChecklistState<G extends ChecklistGroup, C extends ChecklistCriterio
 
 /** Runs a server mutation in a transition and restores server truth on error. */
 export function useBuilderActionRunner(defaultError = 'Something went wrong') {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const router = useRouter()
   const [, startTransition] = React.useTransition()
 
@@ -132,12 +140,12 @@ export function useBuilderActionRunner(defaultError = 'Something went wrong') {
         try {
           await action()
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : errorMessage)
+          toast.error(tGeneratedValue(error instanceof Error ? error.message : errorMessage))
           router.refresh()
         }
       })
     },
-    [defaultError, router],
+    [defaultError, router, tGeneratedValue],
   )
 }
 
@@ -380,17 +388,22 @@ export function ChecklistSections<G extends ChecklistGroup, C extends ChecklistC
   onAddGroup: () => void
   renderCriterion: (criterion: C) => React.ReactNode
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const isEmpty = groups.length === 0 && ungrouped.length === 0
 
   return (
     <>
-      {isEmpty ? (
-        <EmptyState
-          icon={<ListChecks size={24} />}
-          title={emptyTitle}
-          description={emptyDescription}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          isEmpty ? (
+            <EmptyState
+              icon={<ListChecks size={24} />}
+              title={tGeneratedValue(emptyTitle)}
+              description={tGeneratedValue(emptyDescription)}
+            />
+          ) : null
+        }
+      />
 
       <Reorder.Group
         axis="y"
@@ -399,39 +412,45 @@ export function ChecklistSections<G extends ChecklistGroup, C extends ChecklistC
         as="div"
         className="space-y-3"
       >
-        {groups.map((group) => (
-          <ChecklistGroupCard
-            key={group.id}
-            group={group}
-            criteria={criteriaFor(group.id)}
-            selectedId={selectedId}
-            onRename={onRenameGroup}
-            onAddCriterion={onAddCriterion}
-            onDeleteGroup={onDeleteGroup}
-            onReorder={onCriteriaReorder}
-            onSelect={onSelectCriterion}
-            onMove={onMoveCriterion}
-            onDeleteCriterion={onDeleteCriterion}
-            renderCriterion={renderCriterion}
-          />
-        ))}
+        <GeneratedValue
+          value={groups.map((group) => (
+            <ChecklistGroupCard
+              key={group.id}
+              group={group}
+              criteria={criteriaFor(group.id)}
+              selectedId={selectedId}
+              onRename={onRenameGroup}
+              onAddCriterion={onAddCriterion}
+              onDeleteGroup={onDeleteGroup}
+              onReorder={onCriteriaReorder}
+              onSelect={onSelectCriterion}
+              onMove={onMoveCriterion}
+              onDeleteCriterion={onDeleteCriterion}
+              renderCriterion={renderCriterion}
+            />
+          ))}
+        />
       </Reorder.Group>
 
-      {ungrouped.length > 0 ? (
-        <ChecklistUngroupedSection
-          criteria={ungrouped}
-          selectedId={selectedId}
-          onAddCriterion={() => onAddCriterion(null)}
-          onReorder={(next) => onCriteriaReorder(null, next)}
-          onSelect={onSelectCriterion}
-          onMove={onMoveCriterion}
-          onDeleteCriterion={onDeleteCriterion}
-          renderCriterion={renderCriterion}
-        />
-      ) : null}
+      <GeneratedValue
+        value={
+          ungrouped.length > 0 ? (
+            <ChecklistUngroupedSection
+              criteria={ungrouped}
+              selectedId={selectedId}
+              onAddCriterion={() => onAddCriterion(null)}
+              onReorder={(next) => onCriteriaReorder(null, next)}
+              onSelect={onSelectCriterion}
+              onMove={onMoveCriterion}
+              onDeleteCriterion={onDeleteCriterion}
+              renderCriterion={renderCriterion}
+            />
+          ) : null
+        }
+      />
 
       <Button variant="outline" className="w-full" onClick={onAddGroup}>
-        <Plus size={14} /> Add section
+        <Plus size={14} /> <GeneratedText id="m_0cfd5e4e441158" />
       </Button>
     </>
   )
@@ -462,6 +481,7 @@ function ChecklistGroupCard<G extends ChecklistGroup, C extends ChecklistCriteri
   onDeleteCriterion: (criterion: C) => void
   renderCriterion: (criterion: C) => React.ReactNode
 }) {
+  const tGenerated = useGeneratedTranslations()
   const controls = useDragControls()
 
   return (
@@ -475,7 +495,7 @@ function ChecklistGroupCard<G extends ChecklistGroup, C extends ChecklistCriteri
       <header className="flex items-center gap-2 border-b border-slate-100 px-2 py-1.5 dark:border-slate-800">
         <button
           type="button"
-          aria-label={`Drag section ${group.label}`}
+          aria-label={tGenerated('m_199f4fdb73903e', { value0: group.label })}
           onPointerDown={(event) => controls.start(event)}
           className="cursor-grab touch-none rounded p-0.5 text-slate-300 hover:text-slate-500 active:cursor-grabbing dark:text-slate-600"
         >
@@ -483,7 +503,7 @@ function ChecklistGroupCard<G extends ChecklistGroup, C extends ChecklistCriteri
         </button>
         <input
           defaultValue={group.label}
-          aria-label="Section name"
+          aria-label={tGenerated('m_007d422ef3c04c')}
           onBlur={(event) => {
             const label = event.target.value.trim() || 'Section'
             if (label !== group.label) onRename(group.id, label)
@@ -493,13 +513,15 @@ function ChecklistGroupCard<G extends ChecklistGroup, C extends ChecklistCriteri
           }}
           className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-1 text-sm font-semibold text-slate-900 hover:border-slate-200 focus:border-slate-300 focus:bg-white focus:outline-none dark:text-slate-100 dark:hover:border-slate-700 dark:focus:bg-slate-950"
         />
-        <Badge variant="secondary">{criteria.length}</Badge>
+        <Badge variant="secondary">
+          <GeneratedValue value={criteria.length} />
+        </Badge>
         <Button size="sm" variant="ghost" onClick={() => onAddCriterion(group.id)}>
-          <Plus size={13} /> Question
+          <Plus size={13} /> <GeneratedText id="m_1a895b5691321b" />
         </Button>
         <button
           type="button"
-          aria-label={`Delete section ${group.label}`}
+          aria-label={tGenerated('m_0c24f3e3d43f86', { value0: group.label })}
           onClick={() => onDeleteGroup(group.id)}
           className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-950/40"
         >
@@ -507,21 +529,25 @@ function ChecklistGroupCard<G extends ChecklistGroup, C extends ChecklistCriteri
         </button>
       </header>
       <div className="p-2">
-        {criteria.length === 0 ? (
-          <p className="px-2 py-3 text-center text-xs text-slate-400 dark:text-slate-500">
-            No questions yet — add one or drag criteria here.
-          </p>
-        ) : (
-          <ChecklistCriterionList
-            criteria={criteria}
-            selectedId={selectedId}
-            onReorder={(next) => onReorder(group.id, next)}
-            onSelect={onSelect}
-            onMove={onMove}
-            onDelete={onDeleteCriterion}
-            renderCriterion={renderCriterion}
-          />
-        )}
+        <GeneratedValue
+          value={
+            criteria.length === 0 ? (
+              <p className="px-2 py-3 text-center text-xs text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_16ade5ab3df0cc" />
+              </p>
+            ) : (
+              <ChecklistCriterionList
+                criteria={criteria}
+                selectedId={selectedId}
+                onReorder={(next) => onReorder(group.id, next)}
+                onSelect={onSelect}
+                onMove={onMove}
+                onDelete={onDeleteCriterion}
+                renderCriterion={renderCriterion}
+              />
+            )
+          }
+        />
       </div>
     </Reorder.Item>
   )
@@ -550,11 +576,13 @@ function ChecklistUngroupedSection<C extends ChecklistCriterion>({
     <div className="overflow-hidden rounded-lg border border-dashed border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
       <header className="flex items-center gap-2 border-b border-slate-100 px-3 py-1.5 dark:border-slate-800">
         <span className="flex-1 text-sm font-semibold text-slate-500 dark:text-slate-400">
-          Ungrouped
+          <GeneratedText id="m_124ee6c18e0195" />
         </span>
-        <Badge variant="secondary">{criteria.length}</Badge>
+        <Badge variant="secondary">
+          <GeneratedValue value={criteria.length} />
+        </Badge>
         <Button size="sm" variant="ghost" onClick={onAddCriterion}>
-          <Plus size={13} /> Question
+          <Plus size={13} /> <GeneratedText id="m_1a895b5691321b" />
         </Button>
       </header>
       <div className="p-2">
@@ -591,21 +619,23 @@ function ChecklistCriterionList<C extends ChecklistCriterion>({
 }) {
   return (
     <SortableList items={criteria} onReorder={onReorder}>
-      {criteria.map((criterion, index) => (
-        <SortableRow
-          key={criterion.id}
-          value={criterion}
-          selected={selectedId === criterion.id}
-          onSelect={() => onSelect(criterion)}
-          onMoveUp={() => onMove(criterion, -1)}
-          onMoveDown={() => onMove(criterion, 1)}
-          onDelete={() => onDelete(criterion)}
-          canUp={index > 0}
-          canDown={index < criteria.length - 1}
-        >
-          {renderCriterion(criterion)}
-        </SortableRow>
-      ))}
+      <GeneratedValue
+        value={criteria.map((criterion, index) => (
+          <SortableRow
+            key={criterion.id}
+            value={criterion}
+            selected={selectedId === criterion.id}
+            onSelect={() => onSelect(criterion)}
+            onMoveUp={() => onMove(criterion, -1)}
+            onMoveDown={() => onMove(criterion, 1)}
+            onDelete={() => onDelete(criterion)}
+            canUp={index > 0}
+            canDown={index < criteria.length - 1}
+          >
+            <GeneratedValue value={renderCriterion(criterion)} />
+          </SortableRow>
+        ))}
+      />
     </SortableList>
   )
 }
@@ -625,19 +655,25 @@ export function ChecklistBuildMenu({
 }) {
   return (
     <div className="space-y-3">
-      {before}
-      <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>
+      <GeneratedValue value={before} />
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        <GeneratedValue value={description} />
+      </p>
       <Button variant="outline" className="w-full justify-start" onClick={onAddGroup}>
-        <Plus size={14} /> Add section
+        <Plus size={14} /> <GeneratedText id="m_0cfd5e4e441158" />
       </Button>
       <Button variant="outline" className="w-full justify-start" onClick={onAddCriterion}>
-        <ListChecks size={14} /> Add question
+        <ListChecks size={14} /> <GeneratedText id="m_029dffafbff34b" />
       </Button>
-      {onImport ? (
-        <Button variant="outline" className="w-full justify-start" onClick={onImport}>
-          <Boxes size={14} /> Import from bank
-        </Button>
-      ) : null}
+      <GeneratedValue
+        value={
+          onImport ? (
+            <Button variant="outline" className="w-full justify-start" onClick={onImport}>
+              <Boxes size={14} /> <GeneratedText id="m_1dbc4eef588fd4" />
+            </Button>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -655,27 +691,52 @@ export function ChecklistSurfaceHeader({
   published?: boolean
   onTogglePublished?: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <BuilderSurfaceHeader
       icon={<LayoutList size={15} />}
-      title={title}
+      title={tGeneratedValue(title)}
       actions={
         <>
           <Badge variant="secondary">
-            {sectionCount} section{sectionCount === 1 ? '' : 's'}
+            <GeneratedValue value={sectionCount} /> <GeneratedText id="m_02f67a0e8ba5ce" />
+            <GeneratedValue
+              value={sectionCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+            />
           </Badge>
           <Badge variant="secondary">
-            {criterionCount} criteri{criterionCount === 1 ? 'on' : 'a'}
+            <GeneratedValue value={criterionCount} /> <GeneratedText id="m_0267cb8c0ed520" />
+            <GeneratedValue
+              value={
+                criterionCount === 1 ? (
+                  <GeneratedText id="m_17414f59d8f567" />
+                ) : (
+                  <GeneratedText id="m_1c2ba782c97901" />
+                )
+              }
+            />
           </Badge>
-          {published !== undefined && onTogglePublished ? (
-            <Button
-              size="sm"
-              variant={published ? 'outline' : 'default'}
-              onClick={onTogglePublished}
-            >
-              {published ? 'Unpublish' : 'Publish'}
-            </Button>
-          ) : null}
+          <GeneratedValue
+            value={
+              published !== undefined && onTogglePublished ? (
+                <Button
+                  size="sm"
+                  variant={published ? 'outline' : 'default'}
+                  onClick={onTogglePublished}
+                >
+                  <GeneratedValue
+                    value={
+                      published ? (
+                        <GeneratedText id="m_0d6976fc2d60c8" />
+                      ) : (
+                        <GeneratedText id="m_0c072fb8baf115" />
+                      )
+                    }
+                  />
+                </Button>
+              ) : null
+            }
+          />
         </>
       }
     />
@@ -697,8 +758,12 @@ export function BuilderDangerZone({
 }) {
   return (
     <div className="mt-4 rounded-md border border-rose-200 bg-rose-50/60 p-3 dark:border-rose-950 dark:bg-rose-950/20">
-      <h3 className="text-sm font-semibold text-rose-700 dark:text-rose-300">{title}</h3>
-      <p className="mt-0.5 text-xs text-rose-700/80 dark:text-rose-300/80">{description}</p>
+      <h3 className="text-sm font-semibold text-rose-700 dark:text-rose-300">
+        <GeneratedValue value={title} />
+      </h3>
+      <p className="mt-0.5 text-xs text-rose-700/80 dark:text-rose-300/80">
+        <GeneratedValue value={description} />
+      </p>
       <div className="mt-2 flex justify-end">
         <Button
           variant="outline"
@@ -706,7 +771,7 @@ export function BuilderDangerZone({
           onClick={onDelete}
           disabled={disabled}
         >
-          <Trash2 size={14} /> {buttonLabel}
+          <Trash2 size={14} /> <GeneratedValue value={buttonLabel} />
         </Button>
       </div>
     </div>
@@ -723,6 +788,8 @@ export function useConfirmedBuilderDelete({
   action: () => Promise<unknown>
   onDeleted: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [, startTransition] = React.useTransition()
 
   return React.useCallback(async () => {
@@ -732,10 +799,12 @@ export function useConfirmedBuilderDelete({
         await action()
         onDeleted()
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Failed to delete')
+        toast.error(
+          tGeneratedValue(error instanceof Error ? error.message : tGenerated('m_1ac2672da698ce')),
+        )
       }
     })
-  }, [action, confirmMessage, onDeleted])
+  }, [action, confirmMessage, onDeleted, tGenerated, tGeneratedValue])
 }
 
 export function BuilderCheckboxRow({
@@ -757,7 +826,9 @@ export function BuilderCheckboxRow({
         onChange={(event) => onChange(event.target.checked)}
         className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-700"
       />
-      <span>{children ?? label}</span>
+      <span>
+        <GeneratedValue value={children ?? label} />
+      </span>
     </label>
   )
 }
@@ -784,39 +855,61 @@ export function ImportCriteriaBankDrawer({
   onClose: () => void
   onImport: (bankId: string) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   return (
     <Drawer
       open={open}
       onClose={onClose}
-      title="Import from a bank"
-      description={description}
+      title={tGenerated('m_00dd8f5d88a8a3')}
+      description={tGeneratedValue(description)}
       size="sm"
     >
-      {banks.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{emptyMessage}</p>
-      ) : (
-        <ul className="space-y-2">
-          {banks.map((bank) => (
-            <li
-              key={bank.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-slate-200 p-3 dark:border-slate-800"
-            >
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {bank.name}
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  {bank.category ? `${bank.category.replace(/_/g, ' ')} · ` : ''}
-                  {bank.criteriaCount} criteri{bank.criteriaCount === 1 ? 'on' : 'a'}
-                </div>
-              </div>
-              <Button size="sm" onClick={() => onImport(bank.id)}>
-                Import
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <GeneratedValue
+        value={
+          banks.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              <GeneratedValue value={emptyMessage} />
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              <GeneratedValue
+                value={banks.map((bank) => (
+                  <li
+                    key={bank.id}
+                    className="flex items-center justify-between gap-3 rounded-md border border-slate-200 p-3 dark:border-slate-800"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                        <GeneratedValue value={bank.name} />
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedValue
+                          value={bank.category ? `${bank.category.replace(/_/g, ' ')} · ` : ''}
+                        />
+                        <GeneratedValue value={bank.criteriaCount} />{' '}
+                        <GeneratedText id="m_0267cb8c0ed520" />
+                        <GeneratedValue
+                          value={
+                            bank.criteriaCount === 1 ? (
+                              <GeneratedText id="m_17414f59d8f567" />
+                            ) : (
+                              <GeneratedText id="m_1c2ba782c97901" />
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                    <Button size="sm" onClick={() => onImport(bank.id)}>
+                      <GeneratedText id="m_0df79ee8347c6b" />
+                    </Button>
+                  </li>
+                ))}
+              />
+            </ul>
+          )
+        }
+      />
     </Drawer>
   )
 }

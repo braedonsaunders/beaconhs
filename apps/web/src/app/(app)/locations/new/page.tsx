@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import {
@@ -17,7 +19,10 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { PageContainer } from '@/components/page-layout'
 
-export const metadata = { title: 'New location' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0a5c0609036e6b') }
+}
 
 async function createLocation(formData: FormData) {
   'use server'
@@ -59,6 +64,7 @@ async function createLocation(formData: FormData) {
 }
 
 export default async function NewLocationPage() {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
   if (!can(ctx, 'admin.org.manage')) redirect('/locations')
   return (
@@ -66,56 +72,59 @@ export default async function NewLocationPage() {
       <div className="mx-auto max-w-2xl space-y-6">
         <DetailHeader
           back={{ href: '/locations', label: 'Back to locations' }}
-          title="Add location"
+          title={tGenerated('m_132e3f8e42438c')}
         />
         <Card>
           <CardContent className="pt-6">
             <form action={createLocation} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Location name" required className="sm:col-span-2">
+                <Field label={tGenerated('m_01661ece5c876e')} required className="sm:col-span-2">
                   <Input name="name" required autoComplete="organization" />
                 </Field>
-                <Field label="Location code">
-                  <Input name="code" placeholder="e.g. ACME-01" />
+                <Field label={tGenerated('m_19b1f755da0a4c')}>
+                  <Input name="code" placeholder={tGenerated('m_183f551bd7d694')} />
                 </Field>
               </div>
 
               <div className="pt-2">
                 <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                  Mailing address
+                  <GeneratedText id="m_0c6e19aa34bf2a" />
                 </h2>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="Address line 1" className="sm:col-span-2">
+                  <Field label={tGenerated('m_13c9eb2e75e0da')} className="sm:col-span-2">
                     <Input name="addressLine1" autoComplete="address-line1" />
                   </Field>
-                  <Field label="Address line 2" className="sm:col-span-2">
+                  <Field label={tGenerated('m_0abb02292d9133')} className="sm:col-span-2">
                     <Input name="addressLine2" autoComplete="address-line2" />
                   </Field>
-                  <Field label="City">
+                  <Field label={tGenerated('m_0f8706f757eeb9')}>
                     <Input name="addressCity" autoComplete="address-level2" />
                   </Field>
-                  <Field label="Region / Province">
+                  <Field label={tGenerated('m_1f186e5abd90ed')}>
                     <Input name="addressRegion" autoComplete="address-level1" />
                   </Field>
-                  <Field label="Postal / Zip">
+                  <Field label={tGenerated('m_0a022396d35be5')}>
                     <Input name="addressPostal" autoComplete="postal-code" />
                   </Field>
-                  <Field label="Country">
+                  <Field label={tGenerated('m_1bcca98c4d6c29')}>
                     <Input name="addressCountry" autoComplete="country-name" />
                   </Field>
                 </div>
               </div>
 
               <Alert variant="info">
-                <AlertTitle>Hierarchy</AlertTitle>
+                <AlertTitle>
+                  <GeneratedText id="m_0a5e0819e9c536" />
+                </AlertTitle>
                 <AlertDescription>
-                  Locations sit at the top of the org tree. Add projects and sites underneath from
-                  the location's detail page.
+                  <GeneratedText id="m_0c1a7bbd60a7dd" />
                 </AlertDescription>
               </Alert>
 
               <div className="flex items-center justify-end gap-2">
-                <Button type="submit">Create location</Button>
+                <Button type="submit">
+                  <GeneratedText id="m_0fe4cdc30bb478" />
+                </Button>
               </div>
             </form>
           </CardContent>
@@ -139,10 +148,10 @@ function Field({
   return (
     <div className={`space-y-1.5 ${className ?? ''}`}>
       <Label>
-        {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        <GeneratedValue value={label} />
+        <GeneratedValue value={required ? <span className="text-red-600"> *</span> : null} />
       </Label>
-      {children}
+      <GeneratedValue value={children} />
     </div>
   )
 }

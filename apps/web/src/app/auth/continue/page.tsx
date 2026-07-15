@@ -1,3 +1,6 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { redirect } from 'next/navigation'
 import { Card, CardContent } from '@beaconhs/ui'
 import { Logo } from '@/components/brand-logo'
@@ -5,7 +8,10 @@ import { getRequestContext, getSignedInAccessSummary } from '@/lib/auth'
 import { SignOutButton } from './sign-out-button'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Account access' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0ad6384c56063e') }
+}
 
 export default async function AuthContinuePage() {
   const ctx = await getRequestContext()
@@ -34,14 +40,23 @@ export default async function AuthContinuePage() {
         <Logo className="mx-auto h-10 w-auto" />
         <Card>
           <CardContent className="space-y-4 pt-6 text-center">
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{title}</h1>
-            <p className="text-sm text-slate-600 dark:text-slate-300">{body}</p>
-            {pending.length > 1 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                You have {pending.length} pending invitations. Each email activates only its own
-                workspace.
-              </p>
-            ) : null}
+            <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+              <GeneratedValue value={title} />
+            </h1>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              <GeneratedValue value={body} />
+            </p>
+            <GeneratedValue
+              value={
+                pending.length > 1 ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedText id="m_12c62b481a49ac" />{' '}
+                    <GeneratedValue value={pending.length} />{' '}
+                    <GeneratedText id="m_0b083343614163" />
+                  </p>
+                ) : null
+              }
+            />
             <div className="flex justify-center">
               <SignOutButton />
             </div>

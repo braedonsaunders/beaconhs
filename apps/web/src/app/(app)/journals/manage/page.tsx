@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // /journals/manage — the Journals administration hub (reference implementation of
 // the unified module-admin pattern). Tiles for Records, Tags, and Compliance,
 // driven by the module-admin registry. Gated to managers; self-only users go to
@@ -10,7 +11,10 @@ import { moduleAdminByKey } from '@/lib/module-admin/registry'
 import { ModuleManageHub } from '@/components/module-admin/module-manage-hub'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Journal administration' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_15682e6daef5d6') }
+}
 
 export default async function JournalsManagePage() {
   const ctx = await requireRequestContext()

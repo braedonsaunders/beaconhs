@@ -1,3 +1,4 @@
+import { useGeneratedTranslations } from '@/i18n/generated'
 import { PageHeader, Skeleton } from '@beaconhs/ui'
 import { ListPageLayout } from '@/components/page-layout'
 import { RecordsSkeleton } from '@/components/records-skeleton'
@@ -7,14 +8,15 @@ import { RecordsSkeleton } from '@/components/records-skeleton'
  * navigation feels instant — the title appears before the DB-bound table.
  */
 export default function Loading() {
+  const tGenerated = useGeneratedTranslations()
   return (
     <ListPageLayout
       header={
         <>
           <PageHeader
             back={{ href: '/my', label: 'Workspace' }}
-            title="My inspections"
-            description="Inspection records you carried out as the inspector."
+            title={tGenerated('m_1c7449eea10aa1')}
+            description={tGenerated('m_08798427ccca06')}
             actions={<Skeleton className="h-9 w-56" />}
           />
           <div className="flex flex-wrap items-center gap-3">

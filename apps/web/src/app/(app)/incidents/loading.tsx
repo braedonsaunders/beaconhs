@@ -1,3 +1,4 @@
+import { useGeneratedTranslations } from '@/i18n/generated'
 import { PageHeader, Skeleton } from '@beaconhs/ui'
 import { ListPageLayout } from '@/components/page-layout'
 import { RecordsSkeleton } from '@/components/records-skeleton'
@@ -9,13 +10,14 @@ import { RecordsSkeleton } from '@/components/records-skeleton'
  * round-trip.
  */
 export default function Loading() {
+  const tGenerated = useGeneratedTranslations()
   return (
     <ListPageLayout
       header={
         <>
           <PageHeader
-            title="Incidents"
-            description="Reports, investigations, and closeouts."
+            title={tGenerated('m_1f0a25de4c8df0')}
+            description={tGenerated('m_107986fea3849b')}
             actions={<Skeleton className="h-9 w-44" />}
           />
           <div className="flex flex-wrap items-center gap-3">

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { LinkIcon, ListChecks } from 'lucide-react'
 import { and, count, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
@@ -14,7 +17,10 @@ import { SortTh } from '@/components/sortable-th'
 import { TableToolbar } from '@/components/table-toolbar'
 import { parseListParams, pickString } from '@/lib/list-params'
 
-export const metadata = { title: 'Corrective actions by source' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_08aa0c5fc7cee4') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/corrective-actions/reports/by-source'
@@ -42,6 +48,8 @@ export default async function BySourceReport({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'total',
@@ -172,26 +180,28 @@ export default async function BySourceReport({
         <>
           <CorrectiveActionsSubNav active="by-source" />
           <PageHeader
-            title="Corrective actions by source"
-            description="Sources producing the most corrective actions."
+            title={tGenerated('m_08aa0c5fc7cee4')}
+            description={tGenerated('m_1a2d5139205245')}
             back={{ href: '/corrective-actions', label: 'Back to records' }}
           />
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            {Array.from(typeTotals.entries())
-              .sort((a, b) => b[1] - a[1])
-              .map(([t, n]) => (
-                <Badge key={t} variant="secondary">
-                  {t.replace(/_/g, ' ')}: {n}
-                </Badge>
-              ))}
+            <GeneratedValue
+              value={Array.from(typeTotals.entries())
+                .sort((a, b) => b[1] - a[1])
+                .map(([t, n]) => (
+                  <Badge key={t} variant="secondary">
+                    <GeneratedValue value={t.replace(/_/g, ' ')} />: <GeneratedValue value={n} />
+                  </Badge>
+                ))}
+            />
           </div>
           <TableToolbar>
-            <SearchInput placeholder="Search source type or record…" />
+            <SearchInput placeholder={tGenerated('m_116426146ca054')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="sourceType"
-              label="Source type"
+              label={tGenerated('m_17b9aa451a75d1')}
               options={Array.from(typeTotals.entries()).map(([type, total]) => ({
                 value: type,
                 label: type.replace(/_/g, ' '),
@@ -202,123 +212,141 @@ export default async function BySourceReport({
         </>
       }
     >
-      {pageRows.length === 0 ? (
-        <EmptyState
-          icon={<ListChecks size={32} />}
-          title={rows.length === 0 ? 'No source-linked corrective actions' : 'No matching sources'}
-          description={
-            rows.length === 0
-              ? "CAs created without a source record won't appear here."
-              : 'Adjust the search or source-type filter.'
-          }
-        />
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="type"
-                >
-                  Source type
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="source"
-                >
-                  Source
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="total"
-                  align="right"
-                  className="text-right"
-                >
-                  Total
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="open"
-                  align="right"
-                  className="text-right"
-                >
-                  Open
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="closed"
-                  align="right"
-                  className="text-right"
-                >
-                  Closed
-                </SortTh>
-                <SortTh
-                  basePath={BASE}
-                  currentParams={sp}
-                  sort={params.sort}
-                  dir={params.dir}
-                  column="cost"
-                  align="right"
-                  className="text-right"
-                >
-                  Cost impact
-                </SortTh>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {pageRows.map((r) => (
-                <tr
-                  key={`${r.sourceEntityType}:${r.sourceEntityId ?? '_'}`}
-                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60"
-                >
-                  <td className="px-4 py-2">
-                    <Badge variant="outline">{r.sourceEntityType.replace(/_/g, ' ')}</Badge>
-                  </td>
-                  <td className="px-4 py-2">
-                    {r.sourceHref ? (
-                      <Link
-                        href={r.sourceHref as any}
-                        className="inline-flex items-center gap-1 text-teal-700 hover:underline dark:text-teal-400"
+      <GeneratedValue
+        value={
+          pageRows.length === 0 ? (
+            <EmptyState
+              icon={<ListChecks size={32} />}
+              title={tGeneratedValue(
+                rows.length === 0 ? tGenerated('m_1e6b0df6bf715f') : tGenerated('m_0d339805a348fb'),
+              )}
+              description={tGeneratedValue(
+                rows.length === 0 ? tGenerated('m_1d5a5b6bf7531c') : tGenerated('m_1e060014badd7e'),
+              )}
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="type"
+                    >
+                      <GeneratedText id="m_17b9aa451a75d1" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="source"
+                    >
+                      <GeneratedText id="m_1d05fa7a091a9b" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="total"
+                      align="right"
+                      className="text-right"
+                    >
+                      <GeneratedText id="m_13829da903be72" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="open"
+                      align="right"
+                      className="text-right"
+                    >
+                      <GeneratedText id="m_107ab58c3c38bc" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="closed"
+                      align="right"
+                      className="text-right"
+                    >
+                      <GeneratedText id="m_003ea77d773d2d" />
+                    </SortTh>
+                    <SortTh
+                      basePath={BASE}
+                      currentParams={sp}
+                      sort={params.sort}
+                      dir={params.dir}
+                      column="cost"
+                      align="right"
+                      className="text-right"
+                    >
+                      <GeneratedText id="m_08d00ceb0352a5" />
+                    </SortTh>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  <GeneratedValue
+                    value={pageRows.map((r) => (
+                      <tr
+                        key={`${r.sourceEntityType}:${r.sourceEntityId ?? '_'}`}
+                        className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60"
                       >
-                        <LinkIcon size={11} />
-                        {r.sourceLabel}
-                      </Link>
-                    ) : (
-                      <span className="text-slate-700 dark:text-slate-300">{r.sourceLabel}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-right font-mono text-xs">{r.total}</td>
-                  <td className="px-4 py-2 text-right font-mono text-xs text-amber-700 dark:text-amber-400">
-                    {r.open}
-                  </td>
-                  <td className="px-4 py-2 text-right font-mono text-xs text-emerald-700 dark:text-emerald-400">
-                    {r.closed}
-                  </td>
-                  <td className="px-4 py-2 text-right font-mono text-xs text-slate-700 dark:text-slate-300">
-                    {r.costImpact > 0 ? formatMoney(r.costImpact, ctx.locale) : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                        <td className="px-4 py-2">
+                          <Badge variant="outline">
+                            <GeneratedValue value={r.sourceEntityType.replace(/_/g, ' ')} />
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2">
+                          <GeneratedValue
+                            value={
+                              r.sourceHref ? (
+                                <Link
+                                  href={r.sourceHref as any}
+                                  className="inline-flex items-center gap-1 text-teal-700 hover:underline dark:text-teal-400"
+                                >
+                                  <LinkIcon size={11} />
+                                  <GeneratedValue value={r.sourceLabel} />
+                                </Link>
+                              ) : (
+                                <span className="text-slate-700 dark:text-slate-300">
+                                  <GeneratedValue value={r.sourceLabel} />
+                                </span>
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-xs">
+                          <GeneratedValue value={r.total} />
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-xs text-amber-700 dark:text-amber-400">
+                          <GeneratedValue value={r.open} />
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-xs text-emerald-700 dark:text-emerald-400">
+                          <GeneratedValue value={r.closed} />
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-xs text-slate-700 dark:text-slate-300">
+                          <GeneratedValue
+                            value={r.costImpact > 0 ? formatMoney(r.costImpact, ctx.locale) : '—'}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  />
+                </tbody>
+              </table>
+            </div>
+          )
+        }
+      />
       <Pagination
         basePath={BASE}
         currentParams={sp}

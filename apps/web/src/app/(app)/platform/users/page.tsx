@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import {
@@ -27,7 +30,10 @@ import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
 import { parseListParams, pickString } from '@/lib/list-params'
 
-export const metadata = { title: 'Users · Platform' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_085349772ad460') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'email', 'tenants', 'created'] as const
@@ -53,14 +59,21 @@ function tenantStatusVariant(status: TenantBadge['status']) {
 }
 
 function TenantChips({ tenants: list }: { tenants: TenantBadge[] }) {
-  if (list.length === 0) return <span className="text-xs text-slate-400">No tenants</span>
+  if (list.length === 0)
+    return (
+      <span className="text-xs text-slate-400">
+        <GeneratedText id="m_06b223bea455fa" />
+      </span>
+    )
   return (
     <div className="flex flex-wrap gap-1">
-      {list.map((t) => (
-        <Badge key={t.name} variant={tenantStatusVariant(t.status)} className="text-[10px]">
-          {t.name}
-        </Badge>
-      ))}
+      <GeneratedValue
+        value={list.map((t) => (
+          <Badge key={t.name} variant={tenantStatusVariant(t.status)} className="text-[10px]">
+            <GeneratedValue value={t.name} />
+          </Badge>
+        ))}
+      />
     </div>
   )
 }
@@ -70,6 +83,8 @@ export default async function PlatformUsersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   // The /platform layout already gates super-admin; this just needs a session.
   const userId = await getCurrentUserId()
   if (!userId) redirect('/login')
@@ -201,113 +216,146 @@ export default async function PlatformUsersPage({
       <div className="space-y-5">
         <DetailHeader
           back={{ href: '/platform', label: 'Back to platform' }}
-          title="Users"
-          subtitle={`${identityCount} global identit${identityCount === 1 ? 'y' : 'ies'} · ${multiCount} in more than one tenant`}
+          title={tGenerated('m_1324d0c784a75e')}
+          subtitle={tGenerated('m_033e369e6bf375', {
+            value0: identityCount,
+            value1: identityCount === 1 ? 'y' : 'ies',
+            value2: multiCount,
+          })}
         />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <SearchInput placeholder="Search name, email, or tenant…" />
+          <SearchInput placeholder={tGenerated('m_0a689eba633ed6')} />
           <FilterChips
             basePath={basePath}
             currentParams={sp}
             paramKey="view"
-            label="View"
+            label={tGenerated('m_1c586ede56112d')}
             options={VIEW_FILTERS.filter((filter) => filter.value !== 'all')}
           />
         </div>
 
-        {rows.length === 0 ? (
-          <EmptyState
-            title="No users match"
-            description={
-              listParams.q
-                ? 'No users match your search. Try a different term or filter.'
-                : 'New users appear here once they’re invited into a tenant from its Users page.'
-            }
-          />
-        ) : (
-          <>
-            {/* Phones: tappable cards. */}
-            <MobileCardList>
-              {rows.map((r) => (
-                <ListCard
-                  key={r.id}
-                  href={`/platform/users/${r.id}`}
-                  avatarName={r.name}
-                  title={
-                    <span className="flex items-center gap-1.5">
-                      {r.name}
-                      {r.isSuperAdmin ? (
-                        <Badge variant="warning" className="text-[10px]">
-                          super-admin
-                        </Badge>
-                      ) : null}
-                    </span>
-                  }
-                  status={
-                    <Badge variant="outline">
-                      {r.tenants.length} tenant{r.tenants.length === 1 ? '' : 's'}
-                    </Badge>
-                  }
-                  meta={r.email}
-                  footer={<TenantChips tenants={r.tenants} />}
-                />
-              ))}
-            </MobileCardList>
-
-            {/* Tablet/desktop: sortable table. */}
-            <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white sm:block dark:border-slate-800 dark:bg-slate-900">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
-                    <SortTh column="name" {...sortProps}>
-                      Name
-                    </SortTh>
-                    <SortTh column="email" {...sortProps}>
-                      Email
-                    </SortTh>
-                    <SortTh column="tenants" {...sortProps}>
-                      Tenants
-                    </SortTh>
-                    <th className="px-3 py-2">Memberships</th>
-                    <SortTh column="created" {...sortProps}>
-                      Created
-                    </SortTh>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {rows.map((r) => (
-                    <tr key={r.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60">
-                      <td className="px-3 py-2">
-                        <Link
-                          href={`/platform/users/${r.id}` as any}
-                          className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                        >
-                          {r.name}
-                        </Link>
-                        {r.isSuperAdmin ? (
-                          <Badge variant="warning" className="ml-2 text-[10px]">
-                            super-admin
+        <GeneratedValue
+          value={
+            rows.length === 0 ? (
+              <EmptyState
+                title={tGenerated('m_089a3b8f5a7494')}
+                description={tGeneratedValue(
+                  listParams.q ? tGenerated('m_0bc539bdcfce5b') : tGenerated('m_01b395e7932326'),
+                )}
+              />
+            ) : (
+              <>
+                {/* Phones: tappable cards. */}
+                <MobileCardList>
+                  <GeneratedValue
+                    value={rows.map((r) => (
+                      <ListCard
+                        key={r.id}
+                        href={`/platform/users/${r.id}`}
+                        avatarName={r.name}
+                        title={tGeneratedValue(
+                          <span className="flex items-center gap-1.5">
+                            {r.name}
+                            {r.isSuperAdmin ? (
+                              <Badge variant="warning" className="text-[10px]">
+                                super-admin
+                              </Badge>
+                            ) : null}
+                          </span>,
+                        )}
+                        status={
+                          <Badge variant="outline">
+                            <GeneratedValue value={r.tenants.length} />{' '}
+                            <GeneratedText id="m_1cbe33a8175e7b" />
+                            <GeneratedValue
+                              value={
+                                r.tenants.length === 1 ? (
+                                  ''
+                                ) : (
+                                  <GeneratedText id="m_00ded356f0f424" />
+                                )
+                              }
+                            />
                           </Badge>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{r.email}</td>
-                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                        {r.tenants.length}
-                      </td>
-                      <td className="px-3 py-2">
-                        <TenantChips tenants={r.tenants} />
-                      </td>
-                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                        {formatDate(new Date(r.createdAt), timeZone, locale)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+                        }
+                        meta={r.email}
+                        footer={<TenantChips tenants={r.tenants} />}
+                      />
+                    ))}
+                  />
+                </MobileCardList>
+
+                {/* Tablet/desktop: sortable table. */}
+                <div className="hidden overflow-x-auto rounded-lg border border-slate-200 bg-white sm:block dark:border-slate-800 dark:bg-slate-900">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/60 text-left text-xs tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
+                        <SortTh column="name" {...sortProps}>
+                          <GeneratedText id="m_02b18d5c7f6f2d" />
+                        </SortTh>
+                        <SortTh column="email" {...sortProps}>
+                          <GeneratedText id="m_00a0ba9938bdff" />
+                        </SortTh>
+                        <SortTh column="tenants" {...sortProps}>
+                          <GeneratedText id="m_16d803d2e7bbf3" />
+                        </SortTh>
+                        <th className="px-3 py-2">
+                          <GeneratedText id="m_1e4c74d78e5d05" />
+                        </th>
+                        <SortTh column="created" {...sortProps}>
+                          <GeneratedText id="m_10cbe051fb5e05" />
+                        </SortTh>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      <GeneratedValue
+                        value={rows.map((r) => (
+                          <tr
+                            key={r.id}
+                            className="hover:bg-slate-50/50 dark:hover:bg-slate-800/60"
+                          >
+                            <td className="px-3 py-2">
+                              <Link
+                                href={`/platform/users/${r.id}` as any}
+                                className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                              >
+                                <GeneratedValue value={r.name} />
+                              </Link>
+                              <GeneratedValue
+                                value={
+                                  r.isSuperAdmin ? (
+                                    <Badge variant="warning" className="ml-2 text-[10px]">
+                                      <GeneratedText id="m_1ee09be62a0f9f" />
+                                    </Badge>
+                                  ) : null
+                                }
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                              <GeneratedValue value={r.email} />
+                            </td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                              <GeneratedValue value={r.tenants.length} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <TenantChips tenants={r.tenants} />
+                            </td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                              <GeneratedValue
+                                value={formatDate(new Date(r.createdAt), timeZone, locale)}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      />
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )
+          }
+        />
         <Pagination
           basePath={basePath}
           currentParams={sp}

@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 // Risk matrix editor — lives in the Hazard Assessments Manage hub. Gated by the
 // hazid module permission; loads the tenant's saved matrix (or the default) and
 // hands it to the client editor. Saving flows back to every assessment via the
@@ -13,10 +14,14 @@ import { DEFAULT_RISK_MATRIX } from '@/components/risk-matrix'
 import { HazidSubNav } from '../_subnav'
 import { RiskMatrixEditor } from './_editor'
 
-export const metadata = { title: 'Risk matrix' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_0813de4dcd849e') }
+}
 export const dynamic = 'force-dynamic'
 
 export default async function RiskMatrixPage() {
+  const tGenerated = await getGeneratedTranslations()
   const ctx = await requireModuleManage('hazid')
 
   const saved = await withSuperAdmin(db, async (tx) => {
@@ -41,8 +46,8 @@ export default async function RiskMatrixPage() {
       <div className="space-y-4">
         <HazidSubNav pathname="/hazard-assessments/risk-matrix" />
         <PageHeader
-          title="Risk matrix"
-          description="The severity × likelihood scale, bands and colours used to score every hazard assessment."
+          title={tGenerated('m_0813de4dcd849e')}
+          description={tGenerated('m_021d77600c13a0')}
         />
         <RiskMatrixEditor initial={initial} />
       </div>

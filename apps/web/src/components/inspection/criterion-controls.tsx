@@ -1,5 +1,9 @@
 'use client'
 
+import { useGeneratedTranslations } from '@/i18n/generated'
+
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2 } from 'lucide-react'
@@ -79,7 +83,17 @@ export function CriterionSaveIndicator({ state }: { state: CriterionSaveState })
         state === 'error' && 'text-red-600',
       )}
     >
-      {state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved ✓' : 'Not saved — retry'}
+      <GeneratedValue
+        value={
+          state === 'saving' ? (
+            <GeneratedText id="m_106811f2aac664" />
+          ) : state === 'saved' ? (
+            <GeneratedText id="m_0a3bcf685192f1" />
+          ) : (
+            <GeneratedText id="m_13b78c61dbb517" />
+          )
+        }
+      />
     </span>
   )
 }
@@ -99,6 +113,7 @@ export function AutosaveTextarea({
   disabled?: boolean
   onCommit: (value: string) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [value, setValue] = React.useState(initial ?? '')
   const baseline = React.useRef(initial ?? '')
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -127,11 +142,13 @@ export function AutosaveTextarea({
 
   return (
     <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
+      <Label className="text-xs">
+        <GeneratedValue value={label} />
+      </Label>
       <Textarea
         rows={rows}
         value={value}
-        placeholder={placeholder}
+        placeholder={tGeneratedValue(placeholder)}
         disabled={disabled}
         onChange={(event) => {
           const next = event.target.value
@@ -186,29 +203,33 @@ export function CriterionSeverityPicker({
 }) {
   return (
     <div className="space-y-1">
-      <Label className="text-xs">Severity</Label>
+      <Label className="text-xs">
+        <GeneratedText id="m_168b365cc671bf" />
+      </Label>
       <div className="flex items-center gap-1.5">
-        {CRITERION_SEVERITY_OPTIONS.map((option) => {
-          const active = severity === option.value
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onPick(option.value)}
-              aria-pressed={active}
-              className={cn(
-                'min-h-10 flex-1 rounded-lg border text-xs font-semibold transition-colors sm:min-h-0 sm:py-1.5',
-                active
-                  ? option.active
-                  : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500',
-              )}
-            >
-              {option.label}
-            </button>
-          )
-        })}
+        <GeneratedValue
+          value={CRITERION_SEVERITY_OPTIONS.map((option) => {
+            const active = severity === option.value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onPick(option.value)}
+                aria-pressed={active}
+                className={cn(
+                  'min-h-10 flex-1 rounded-lg border text-xs font-semibold transition-colors sm:min-h-0 sm:py-1.5',
+                  active
+                    ? option.active
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500',
+                )}
+              >
+                <GeneratedValue value={option.label} />
+              </button>
+            )
+          })}
+        />
       </div>
-      {helper}
+      <GeneratedValue value={helper} />
     </div>
   )
 }
@@ -224,6 +245,8 @@ function CriterionPhotoUploader({
   addPhotos: (formData: FormData) => Promise<void>
   onDone: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const [pending, startTransition] = React.useTransition()
   const [staged, setStaged] = React.useState<AttachedFile[]>([])
 
@@ -239,7 +262,9 @@ function CriterionPhotoUploader({
         setStaged([])
         onDone()
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Failed to attach photos')
+        toast.error(
+          tGeneratedValue(error instanceof Error ? error.message : tGenerated('m_135b02e62854c3')),
+        )
       }
     })
   }
@@ -247,18 +272,30 @@ function CriterionPhotoUploader({
   return (
     <div className="space-y-2">
       <FileUpload variant="photo" value={staged} onChange={setStaged} />
-      {staged.length > 0 ? (
-        <Button type="button" size="sm" onClick={attach} disabled={pending}>
-          {pending ? (
-            'Attaching…'
-          ) : (
-            <>
-              <CheckCircle2 size={14} /> Attach {staged.length} photo
-              {staged.length === 1 ? '' : 's'}
-            </>
-          )}
-        </Button>
-      ) : null}
+      <GeneratedValue
+        value={
+          staged.length > 0 ? (
+            <Button type="button" size="sm" onClick={attach} disabled={pending}>
+              <GeneratedValue
+                value={
+                  pending ? (
+                    <GeneratedText id="m_1a0172e9314d7c" />
+                  ) : (
+                    <>
+                      <CheckCircle2 size={14} /> <GeneratedText id="m_0acd5c1caaf69c" />{' '}
+                      <GeneratedValue value={staged.length} />{' '}
+                      <GeneratedText id="m_07cb1cfb72cff4" />
+                      <GeneratedValue
+                        value={staged.length === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+                      />
+                    </>
+                  )
+                }
+              />
+            </Button>
+          ) : null
+        }
+      />
     </div>
   )
 }
@@ -278,36 +315,47 @@ export function CriterionPhotosPanel({
   addPhotos: (formData: FormData) => Promise<void>
   onDone: () => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
-      {photoPreviews.length > 0 ? (
-        <div className="mb-2 flex flex-wrap gap-2">
-          {photoPreviews.map((photo) => (
-            <a
-              key={photo.id}
-              href={photo.url}
-              target="_blank"
-              rel="noreferrer"
-              className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
-            >
-              <RawImage
-                src={photo.url}
-                alt={photo.filename}
-                optimizationReason="authenticated"
-                className="h-full w-full object-cover"
+      <GeneratedValue
+        value={
+          photoPreviews.length > 0 ? (
+            <div className="mb-2 flex flex-wrap gap-2">
+              <GeneratedValue
+                value={photoPreviews.map((photo) => (
+                  <a
+                    key={photo.id}
+                    href={photo.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
+                  >
+                    <RawImage
+                      src={photo.url}
+                      alt={tGeneratedValue(photo.filename)}
+                      optimizationReason="authenticated"
+                      className="h-full w-full object-cover"
+                    />
+                  </a>
+                ))}
               />
-            </a>
-          ))}
-        </div>
-      ) : null}
-      {editable ? (
-        <CriterionPhotoUploader
-          recordId={recordId}
-          rowId={rowId}
-          addPhotos={addPhotos}
-          onDone={onDone}
-        />
-      ) : null}
+            </div>
+          ) : null
+        }
+      />
+      <GeneratedValue
+        value={
+          editable ? (
+            <CriterionPhotoUploader
+              recordId={recordId}
+              rowId={rowId}
+              addPhotos={addPhotos}
+              onDone={onDone}
+            />
+          ) : null
+        }
+      />
     </div>
   )
 }

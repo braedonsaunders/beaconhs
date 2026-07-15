@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Clock } from 'lucide-react'
@@ -27,7 +29,10 @@ import { parseDatetimeLocal } from '@/lib/datetime'
 import { todayISO } from '../journals/_lib'
 import { DayPicker } from './day-picker'
 
-export const metadata = { title: 'Kiosk history' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_178b118d7d751d') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['scanned_at', 'person', 'kind'] as const
@@ -49,6 +54,7 @@ export default async function KioskHistoryPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'scanned_at',
@@ -132,96 +138,122 @@ export default async function KioskHistoryPage({
       header={
         <>
           <PageHeader
-            title="Kiosk history"
-            description="Sign-in / sign-out events captured at jobsite kiosk tablets."
+            title={tGenerated('m_178b118d7d751d')}
+            description={tGenerated('m_00f454b848b592')}
           />
           <TableToolbar>
-            <SearchInput placeholder="Search by name" />
+            <SearchInput placeholder={tGenerated('m_1b322e3fb7f53f')} />
             <DayPicker value={dayFilter} />
             <FilterChips
               basePath="/kiosk-history"
               currentParams={sp}
               paramKey="kind"
-              label="Kind"
+              label={tGenerated('m_1e578efe1574cd')}
               options={KIND_OPTIONS.map((o) => ({ ...o, count: kindCounts[o.value] }))}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Clock size={32} />}
-          title={`No kiosk scans on ${dayFilter}`}
-          description="Kiosk sign-in and sign-out scans appear here."
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh
-                  {...sortProps}
-                  column="scanned_at"
-                  active={params.sort === 'scanned_at'}
-                >
-                  When
-                </SortableTh>
-                <SortableTh {...sortProps} column="person" active={params.sort === 'person'}>
-                  Person
-                </SortableTh>
-                <SortableTh {...sortProps} column="kind" active={params.sort === 'kind'}>
-                  Kind
-                </SortableTh>
-                <TableHead>Site</TableHead>
-                <TableHead>Crew</TableHead>
-                <TableHead>Device</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.scan.id}>
-                  <TableCell className="text-slate-600 dark:text-slate-300">
-                    {new Date(row.scan.scannedAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      timeZone: tz,
-                    })}
-                  </TableCell>
-                  <TableCell>
-                    <Link href={`/people/${row.person.id}`} className="font-medium hover:underline">
-                      {row.person.lastName}, {row.person.firstName}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    {row.scan.kind === 'in' ? (
-                      <Badge variant="success">Sign-in</Badge>
-                    ) : (
-                      <Badge variant="warning">Sign-out</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-300">
-                    {row.site?.name ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-300">
-                    {row.crew?.name ?? '—'}
-                  </TableCell>
-                  <TableCell className="max-w-xs truncate text-xs text-slate-400 dark:text-slate-500">
-                    {row.scan.deviceLabel ?? '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/kiosk-history"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Clock size={32} />}
+              title={tGenerated('m_01aa506542a59d', { value0: dayFilter })}
+              description={tGenerated('m_13e6f797e9abdf')}
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      {...sortProps}
+                      column="scanned_at"
+                      active={params.sort === 'scanned_at'}
+                    >
+                      <GeneratedText id="m_13cc128f69897c" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="person" active={params.sort === 'person'}>
+                      <GeneratedText id="m_12e926c9216094" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="kind" active={params.sort === 'kind'}>
+                      <GeneratedText id="m_1e578efe1574cd" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_020146dd3d3d5a" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_13fc63a82a07d0" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_0fec61376a2da2" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((row) => (
+                      <TableRow key={row.scan.id}>
+                        <TableCell className="text-slate-600 dark:text-slate-300">
+                          <GeneratedValue
+                            value={new Date(row.scan.scannedAt).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              timeZone: tz,
+                            })}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Link
+                            href={`/people/${row.person.id}`}
+                            className="font-medium hover:underline"
+                          >
+                            <GeneratedValue value={row.person.lastName} />,{' '}
+                            <GeneratedValue value={row.person.firstName} />
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <GeneratedValue
+                            value={
+                              row.scan.kind === 'in' ? (
+                                <Badge variant="success">
+                                  <GeneratedText id="m_020d16509a2e09" />
+                                </Badge>
+                              ) : (
+                                <Badge variant="warning">
+                                  <GeneratedText id="m_0e5e4d921070a1" />
+                                </Badge>
+                              )
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-300">
+                          <GeneratedValue value={row.site?.name ?? '—'} />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-300">
+                          <GeneratedValue value={row.crew?.name ?? '—'} />
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate text-xs text-slate-400 dark:text-slate-500">
+                          <GeneratedValue value={row.scan.deviceLabel ?? '—'} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/kiosk-history"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

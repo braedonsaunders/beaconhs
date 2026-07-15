@@ -1,3 +1,4 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound, redirect } from 'next/navigation'
 import { requireRequestContext } from '@/lib/auth'
 import { canCreateInsights } from '../../../_access'
@@ -6,7 +7,10 @@ import { CardStudio } from '../../_studio/card-studio.client'
 import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Edit card · Insights' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1d2eeab4cb3c29') }
+}
 
 export default async function EditCardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params

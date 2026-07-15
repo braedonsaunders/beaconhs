@@ -1,4 +1,5 @@
 'use client'
+import { GeneratedValue } from '@/i18n/generated'
 
 // The injected back-link implementation. Resolves a record page's back target,
 // in priority order:
@@ -32,7 +33,7 @@ export function SmartBackLink({ href, label, className }: BackLinkProps) {
 
   return (
     <UiLink href={target.href} className={className}>
-      ← {target.label}
+      ← <GeneratedValue value={target.label} />
     </UiLink>
   )
 }
@@ -43,7 +44,7 @@ export function BackNavProviders({ children }: { children: React.ReactNode }) {
   return (
     <UiBackLinkProvider backLink={SmartBackLink}>
       <NavHistoryTracker />
-      {children}
+      <GeneratedValue value={children} />
     </UiBackLinkProvider>
   )
 }

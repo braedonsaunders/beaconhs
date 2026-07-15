@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Wrench } from 'lucide-react'
 import { and, asc, count, desc, eq, gte, ilike, isNull, lt, or, sql, type SQL } from 'drizzle-orm'
@@ -34,7 +37,10 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { RemoteSearchFilter } from '@/components/remote-search-select'
 
-export const metadata = { title: 'Work orders' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_093050a92d0364') }
+}
 
 const SORTS = [
   'reference',
@@ -82,6 +88,8 @@ export default async function WorkOrdersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const renderedAtMs = new Date().getTime()
   const sp = await searchParams
   const params = parseListParams(sp, {
@@ -256,30 +264,34 @@ export default async function WorkOrdersPage({
       header={
         <>
           <PageHeader
-            title="Work orders"
-            description="Track repairs and scheduled service against equipment."
+            title={tGenerated('m_093050a92d0364')}
+            description={tGenerated('m_025b94aa834f1a')}
             actions={
               <div className="flex items-center gap-2">
                 <Link href={'/equipment/work-orders/new' as any}>
-                  <Button>New work order</Button>
+                  <Button>
+                    <GeneratedText id="m_028792f1fdc70a" />
+                  </Button>
                 </Link>
               </div>
             }
           />
           <EquipmentSubNav active="work-orders" />
           <TableToolbar>
-            <SearchInput placeholder="Search reference, summary, asset tag…" />
+            <SearchInput placeholder={tGenerated('m_19d399832e6aa6')} />
             <form className="flex items-center gap-1 text-xs">
               {/* Preserve the other active filters — a bare GET form replaces
                   the whole query string. */}
-              {(['q', 'status', 'priority', 'assignee', 'type', 'age', 'sort', 'dir'] as const).map(
-                (key) => {
+              <GeneratedValue
+                value={(
+                  ['q', 'status', 'priority', 'assignee', 'type', 'age', 'sort', 'dir'] as const
+                ).map((key) => {
                   const value = pickString(sp[key])
                   return value ? <input key={key} type="hidden" name={key} value={value} /> : null
-                },
-              )}
+                })}
+              />
               <label className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                Opened
+                <GeneratedText id="m_10fb4212cee361" />
                 <input
                   type="date"
                   name="openedFrom"
@@ -287,7 +299,9 @@ export default async function WorkOrdersPage({
                   className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:[color-scheme:dark]"
                 />
               </label>
-              <span className="text-slate-400 dark:text-slate-500">to</span>
+              <span className="text-slate-400 dark:text-slate-500">
+                <GeneratedText id="m_02d4f83ff8f11c" />
+              </span>
               <input
                 type="date"
                 name="openedTo"
@@ -298,14 +312,14 @@ export default async function WorkOrdersPage({
                 type="submit"
                 className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
               >
-                Apply
+                <GeneratedText id="m_01185cdc1c20a5" />
               </button>
             </form>
             <FilterChips
               basePath="/equipment/work-orders"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               allLabel="All statuses"
               defaultValue="open"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
@@ -314,14 +328,14 @@ export default async function WorkOrdersPage({
               basePath="/equipment/work-orders"
               currentParams={sp}
               paramKey="priority"
-              label="Priority"
+              label={tGenerated('m_00f0e2904a371c')}
               options={PRIORITY_OPTIONS.map((o) => ({ ...o, count: priorityCounts[o.value] }))}
             />
             <FilterChips
               basePath="/equipment/work-orders"
               currentParams={sp}
               paramKey="age"
-              label="Aging"
+              label={tGenerated('m_13f84c9a65c7c9')}
               options={[
                 { value: 'open7', label: 'Open 7d+' },
                 { value: 'open30', label: 'Open 30d+' },
@@ -333,163 +347,226 @@ export default async function WorkOrdersPage({
               basePath="/equipment/work-orders"
               currentParams={sp}
               paramKey="assignee"
-              placeholder="All assignees"
+              placeholder={tGenerated('m_1243e909f70da5')}
               allLabel="All assignees"
-              searchPlaceholder="Search visible assignees…"
+              searchPlaceholder={tGenerated('m_0a2863fa877d51')}
             />
             <RemoteSearchFilter
               lookup="equipment-work-order-filter-types"
               basePath="/equipment/work-orders"
               currentParams={sp}
               paramKey="type"
-              placeholder="All equipment types"
+              placeholder={tGenerated('m_154abecfa0f430')}
               allLabel="All equipment types"
-              searchPlaceholder="Search visible equipment types…"
+              searchPlaceholder={tGenerated('m_1c552a0e7a59f2')}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Wrench size={32} />}
-          title={
-            params.q ||
-            statusFilter ||
-            priorityFilter ||
-            assigneeFilter ||
-            typeFilter ||
-            ageBucketFilter ||
-            openedFromRaw ||
-            openedToRaw
-              ? 'No work orders match these filters'
-              : 'No work orders'
-          }
-          description="Open a work order to track repairs against equipment."
-          action={
-            <Link href={'/equipment/work-orders/new' as any}>
-              <Button>New work order</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="reference" active={params.sort === 'reference'}>
-                  Ref
-                </SortableTh>
-                <SortableTh {...sortProps} column="summary" active={params.sort === 'summary'}>
-                  Summary
-                </SortableTh>
-                <TableHead>Equipment</TableHead>
-                <TableHead>Type</TableHead>
-                <SortableTh {...sortProps} column="priority" active={params.sort === 'priority'}>
-                  Priority
-                </SortableTh>
-                <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
-                  Status
-                </SortableTh>
-                <TableHead>Assignee</TableHead>
-                <SortableTh {...sortProps} column="opened_at" active={params.sort === 'opened_at'}>
-                  Reported
-                </SortableTh>
-                <SortableTh {...sortProps} column="closed_at" active={params.sort === 'closed_at'}>
-                  Closed
-                </SortableTh>
-                <SortableTh {...sortProps} column="aging" active={params.sort === 'aging'}>
-                  Aging
-                </SortableTh>
-                <SortableTh {...sortProps} column="cost" active={params.sort === 'cost'}>
-                  Cost
-                </SortableTh>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ wo, item, type, assignee, assigneeUser }) => {
-                const openedMs = new Date(wo.openedAt).getTime()
-                const closedMs = wo.closedAt ? new Date(wo.closedAt).getTime() : renderedAtMs
-                const ageDays = Math.max(0, Math.round((closedMs - openedMs) / 86_400_000))
-                const ageVariant: 'success' | 'warning' | 'destructive' | 'secondary' = wo.closedAt
-                  ? 'secondary'
-                  : ageDays > 30
-                    ? 'destructive'
-                    : ageDays > 7
-                      ? 'warning'
-                      : 'success'
-                return (
-                  <TableRow key={wo.id}>
-                    <TableCell className="font-mono text-xs">
-                      <Link
-                        href={`/equipment/work-orders/${wo.id}` as any}
-                        className="hover:underline"
-                      >
-                        {wo.reference}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Link
-                        href={`/equipment/work-orders/${wo.id}` as any}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {htmlToSnippet(wo.summary)}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {item ? (
-                        <Link href={`/equipment/${item.id}`} className="hover:underline">
-                          <span className="font-mono text-xs">{item.assetTag}</span>{' '}
-                          <span>{item.name}</span>
-                        </Link>
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600 dark:text-slate-300">
-                      {type?.name ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={priorityBadgeVariant(wo.priority)}>{wo.priority}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusBadgeVariant(wo.status)}>
-                        {wo.status === 'closed' ? 'completed' : wo.status.replace('_', ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {assigneeUser?.name ?? assignee?.displayName ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
-                      {formatDate(new Date(wo.openedAt), ctx.timezone, ctx.locale)}
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
-                      {wo.closedAt ? (
-                        formatDate(new Date(wo.closedAt), ctx.timezone, ctx.locale)
-                      ) : (
-                        <span className="text-slate-400 dark:text-slate-500">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="tabular-nums">
-                      <Badge variant={ageVariant}>{ageDays}d</Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
-                      {wo.cost ? `$${Number(wo.cost).toLocaleString()}` : '—'}
-                    </TableCell>
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Wrench size={32} />}
+              title={tGeneratedValue(
+                params.q ||
+                  statusFilter ||
+                  priorityFilter ||
+                  assigneeFilter ||
+                  typeFilter ||
+                  ageBucketFilter ||
+                  openedFromRaw ||
+                  openedToRaw
+                  ? tGenerated('m_09ec3dd217a373')
+                  : tGenerated('m_191befd5e4ff41'),
+              )}
+              description={tGenerated('m_1dcafbb5ff60db')}
+              action={
+                <Link href={'/equipment/work-orders/new' as any}>
+                  <Button>
+                    <GeneratedText id="m_028792f1fdc70a" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh
+                      {...sortProps}
+                      column="reference"
+                      active={params.sort === 'reference'}
+                    >
+                      <GeneratedText id="m_036b564bb88dfe" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="summary" active={params.sort === 'summary'}>
+                      <GeneratedText id="m_031c356c80b70f" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_17f17df74f7e69" />
+                    </TableHead>
+                    <TableHead>
+                      <GeneratedText id="m_074ba2f160c506" />
+                    </TableHead>
+                    <SortableTh
+                      {...sortProps}
+                      column="priority"
+                      active={params.sort === 'priority'}
+                    >
+                      <GeneratedText id="m_00f0e2904a371c" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
+                      <GeneratedText id="m_0b9da892d6faf0" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_03a84b76ec2cd1" />
+                    </TableHead>
+                    <SortableTh
+                      {...sortProps}
+                      column="opened_at"
+                      active={params.sort === 'opened_at'}
+                    >
+                      <GeneratedText id="m_14dedf0d22e940" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="closed_at"
+                      active={params.sort === 'closed_at'}
+                    >
+                      <GeneratedText id="m_003ea77d773d2d" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="aging" active={params.sort === 'aging'}>
+                      <GeneratedText id="m_13f84c9a65c7c9" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="cost" active={params.sort === 'cost'}>
+                      <GeneratedText id="m_139ff0f789d1fa" />
+                    </SortableTh>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/equipment/work-orders"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ wo, item, type, assignee, assigneeUser }) => {
+                      const openedMs = new Date(wo.openedAt).getTime()
+                      const closedMs = wo.closedAt ? new Date(wo.closedAt).getTime() : renderedAtMs
+                      const ageDays = Math.max(0, Math.round((closedMs - openedMs) / 86_400_000))
+                      const ageVariant: 'success' | 'warning' | 'destructive' | 'secondary' =
+                        wo.closedAt
+                          ? 'secondary'
+                          : ageDays > 30
+                            ? 'destructive'
+                            : ageDays > 7
+                              ? 'warning'
+                              : 'success'
+                      return (
+                        <TableRow key={wo.id}>
+                          <TableCell className="font-mono text-xs">
+                            <Link
+                              href={`/equipment/work-orders/${wo.id}` as any}
+                              className="hover:underline"
+                            >
+                              <GeneratedValue value={wo.reference} />
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            <Link
+                              href={`/equipment/work-orders/${wo.id}` as any}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={htmlToSnippet(wo.summary)} />
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue
+                              value={
+                                item ? (
+                                  <Link href={`/equipment/${item.id}`} className="hover:underline">
+                                    <span className="font-mono text-xs">
+                                      <GeneratedValue value={item.assetTag} />
+                                    </span>
+                                    <GeneratedValue value={' '} />
+                                    <span>
+                                      <GeneratedValue value={item.name} />
+                                    </span>
+                                  </Link>
+                                ) : (
+                                  '—'
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600 dark:text-slate-300">
+                            <GeneratedValue value={type?.name ?? '—'} />
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={priorityBadgeVariant(wo.priority)}>
+                              <GeneratedValue value={wo.priority} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={statusBadgeVariant(wo.status)}>
+                              <GeneratedValue
+                                value={
+                                  wo.status === 'closed' ? (
+                                    <GeneratedText id="m_18366de1d27889" />
+                                  ) : (
+                                    wo.status.replace('_', ' ')
+                                  )
+                                }
+                              />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue
+                              value={assigneeUser?.name ?? assignee?.displayName ?? '—'}
+                            />
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
+                            <GeneratedValue
+                              value={formatDate(new Date(wo.openedAt), ctx.timezone, ctx.locale)}
+                            />
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
+                            <GeneratedValue
+                              value={
+                                wo.closedAt ? (
+                                  formatDate(new Date(wo.closedAt), ctx.timezone, ctx.locale)
+                                ) : (
+                                  <span className="text-slate-400 dark:text-slate-500">—</span>
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="tabular-nums">
+                            <Badge variant={ageVariant}>
+                              <GeneratedValue value={ageDays} />
+                              <GeneratedText id="m_113dda91012a7a" />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
+                            <GeneratedValue
+                              value={wo.cost ? `$${Number(wo.cost).toLocaleString()}` : '—'}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/equipment/work-orders"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

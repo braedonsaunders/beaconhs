@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { MapPin } from 'lucide-react'
 import {
@@ -38,7 +41,10 @@ import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
 import { LocationsSubNav } from '@/components/locations-sub-nav'
 
-export const metadata = { title: 'Locations' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1c045021411277') }
+}
 
 const SORTS = ['name', 'code'] as const
 
@@ -47,6 +53,8 @@ export default async function LocationsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   const statusFilter = pickString(sp.status) ?? 'active'
@@ -170,30 +178,42 @@ export default async function LocationsPage({
         <>
           <LocationsSubNav active="locations" />
           <PageHeader
-            title="Locations"
-            description="Your locations, plus the projects and sites beneath them. Add on-site contacts (non-employee site managers, client reps) here."
+            title={tGenerated('m_1c045021411277')}
+            description={tGenerated('m_109888cfb5cab9')}
             actions={
               <div className="flex items-center gap-2">
-                {canExport ? (
-                  <a href={buildExportHref('/locations/export.csv', sp)}>
-                    <Button variant="outline">Export CSV</Button>
-                  </a>
-                ) : null}
-                {canManage ? (
-                  <Link href="/locations/new">
-                    <Button>Add location</Button>
-                  </Link>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    canExport ? (
+                      <a href={buildExportHref('/locations/export.csv', sp)}>
+                        <Button variant="outline">
+                          <GeneratedText id="m_14c6440eca1edc" />
+                        </Button>
+                      </a>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    canManage ? (
+                      <Link href="/locations/new">
+                        <Button>
+                          <GeneratedText id="m_132e3f8e42438c" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
               </div>
             }
           />
           <div className="flex flex-wrap items-center gap-3">
-            <SearchInput placeholder="Search by name or code" />
+            <SearchInput placeholder={tGenerated('m_1b2c753f4c06fa')} />
             <FilterChips
               basePath="/locations"
               currentParams={sp}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               defaultValue="active"
               options={[
                 { value: 'active', label: 'Active', count: activeCount },
@@ -204,86 +224,136 @@ export default async function LocationsPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<MapPin size={32} />}
-          title={
-            params.q
-              ? `No locations match "${params.q}"`
-              : statusFilter === 'archived'
-                ? 'No archived locations'
-                : 'No locations'
-          }
-          description={
-            statusFilter === 'archived'
-              ? 'Archived locations appear here once you archive them from a location page.'
-              : 'Add a location to track projects, sites, and on-site contacts.'
-          }
-          action={
-            statusFilter === 'archived' || !canManage ? null : (
-              <Link href="/locations/new">
-                <Button>Add location</Button>
-              </Link>
-            )
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                  Location
-                </SortableTh>
-                <SortableTh {...sortProps} column="code" active={params.sort === 'code'}>
-                  Code
-                </SortableTh>
-                <TableHead>Address</TableHead>
-                {hierarchy.project ? <TableHead className="text-right">Projects</TableHead> : null}
-                {hierarchy.site ? <TableHead className="text-right">Sites</TableHead> : null}
-                <TableHead className="text-right">Contacts</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map(({ unit, projects, sites, contacts }) => (
-                <TableRow key={unit.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/locations/${unit.id}`}
-                        className="font-medium text-slate-900 hover:underline dark:text-slate-100"
-                      >
-                        {unit.name}
-                      </Link>
-                      {unit.deletedAt ? <Badge variant="warning">Archived</Badge> : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
-                    {unit.code ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {formatAddressLine(unit.address) ?? '—'}
-                  </TableCell>
-                  {hierarchy.project ? (
-                    <TableCell className="text-right tabular-nums">{projects}</TableCell>
-                  ) : null}
-                  {hierarchy.site ? (
-                    <TableCell className="text-right tabular-nums">{sites}</TableCell>
-                  ) : null}
-                  <TableCell className="text-right tabular-nums">{contacts}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/locations"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<MapPin size={32} />}
+              title={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_0ffe4aacc52802', { value0: params.q })
+                  : statusFilter === 'archived'
+                    ? tGenerated('m_123281dab9c5cc')
+                    : tGenerated('m_0b7f31c484a633'),
+              )}
+              description={tGeneratedValue(
+                statusFilter === 'archived'
+                  ? tGenerated('m_0ac30a8b281393')
+                  : tGenerated('m_0099b21be6fb9e'),
+              )}
+              action={
+                statusFilter === 'archived' || !canManage ? null : (
+                  <Link href="/locations/new">
+                    <Button>
+                      <GeneratedText id="m_132e3f8e42438c" />
+                    </Button>
+                  </Link>
+                )
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                      <GeneratedText id="m_055f11420b2da4" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="code" active={params.sort === 'code'}>
+                      <GeneratedText id="m_0570e24c85cf95" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_02d326d09a4cc1" />
+                    </TableHead>
+                    <GeneratedValue
+                      value={
+                        hierarchy.project ? (
+                          <TableHead className="text-right">
+                            <GeneratedText id="m_010a52fe2eef41" />
+                          </TableHead>
+                        ) : null
+                      }
+                    />
+                    <GeneratedValue
+                      value={
+                        hierarchy.site ? (
+                          <TableHead className="text-right">
+                            <GeneratedText id="m_00ad936e0bb2f2" />
+                          </TableHead>
+                        ) : null
+                      }
+                    />
+                    <TableHead className="text-right">
+                      <GeneratedText id="m_06eb3e5402e452" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map(({ unit, projects, sites, contacts }) => (
+                      <TableRow key={unit.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/locations/${unit.id}`}
+                              className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                            >
+                              <GeneratedValue value={unit.name} />
+                            </Link>
+                            <GeneratedValue
+                              value={
+                                unit.deletedAt ? (
+                                  <Badge variant="warning">
+                                    <GeneratedText id="m_12a687134482ba" />
+                                  </Badge>
+                                ) : null
+                              }
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={unit.code ?? '—'} />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={formatAddressLine(unit.address) ?? '—'} />
+                        </TableCell>
+                        <GeneratedValue
+                          value={
+                            hierarchy.project ? (
+                              <TableCell className="text-right tabular-nums">
+                                <GeneratedValue value={projects} />
+                              </TableCell>
+                            ) : null
+                          }
+                        />
+                        <GeneratedValue
+                          value={
+                            hierarchy.site ? (
+                              <TableCell className="text-right tabular-nums">
+                                <GeneratedValue value={sites} />
+                              </TableCell>
+                            ) : null
+                          }
+                        />
+                        <TableCell className="text-right tabular-nums">
+                          <GeneratedValue value={contacts} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/locations"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

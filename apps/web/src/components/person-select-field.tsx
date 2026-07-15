@@ -1,4 +1,5 @@
 'use client'
+import { useGeneratedValueTranslations } from '@/i18n/generated'
 
 // Single-select person/user picker for server-rendered forms. Wraps the
 // SearchSelect typeahead from @beaconhs/ui and mirrors the chosen id into a
@@ -43,6 +44,7 @@ export function PersonSelectField({
   /** Observe selection changes (client forms that submit typed actions). */
   onValueChange?: (value: string) => void
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
   const [value, setValue] = useState(defaultValue)
   return (
     <>
@@ -54,12 +56,12 @@ export function PersonSelectField({
           onValueChange?.(v)
         }}
         options={options}
-        placeholder={placeholder}
-        searchPlaceholder={searchPlaceholder}
+        placeholder={tGeneratedValue(placeholder)}
+        searchPlaceholder={tGeneratedValue(searchPlaceholder)}
         sheetTitle={sheetTitle}
         ariaLabel={ariaLabel ?? placeholder}
         clearable={clearable}
-        emptyLabel={emptyLabel}
+        emptyLabel={tGeneratedValue(emptyLabel)}
         disabled={disabled}
         className={className}
       />

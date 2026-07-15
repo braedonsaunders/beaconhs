@@ -1,3 +1,5 @@
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import {
@@ -22,7 +24,10 @@ import { FilterChips } from '@/components/filter-bar'
 import { PageContainer } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 
-export const metadata = { title: 'Audit log' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_19635ea35a756a') }
+}
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['occurred_at'] as const
@@ -40,6 +45,7 @@ export default async function AuditLogPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'occurred_at',
@@ -89,72 +95,98 @@ export default async function AuditLogPage({
       <div className="space-y-4">
         <DetailHeader
           back={{ href: '/admin', label: 'Back to admin' }}
-          title="Audit log"
-          subtitle="Every write to a tenant-scoped record"
+          title={tGenerated('m_19635ea35a756a')}
+          subtitle={tGenerated('m_1d95d3a826b700')}
         />
         <TableToolbar>
-          <SearchInput placeholder="Search entity type or summary" />
+          <SearchInput placeholder={tGenerated('m_0548446a641230')} />
           <FilterChips
             basePath="/admin/audit"
             currentParams={sp}
             paramKey="action"
-            label="Action"
+            label={tGenerated('m_0bad495a7046e9')}
             options={ACTION_OPTIONS}
           />
           <FilterChips
             basePath="/admin/audit"
             currentParams={sp}
             paramKey="entityType"
-            label="Entity"
+            label={tGenerated('m_1c23275efe6385')}
             options={entityTypes.map((t) => ({ value: t, label: t }))}
           />
         </TableToolbar>
-        {rows.length === 0 ? (
-          <EmptyState title="No audit entries" />
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Actor</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Entity</TableHead>
-                  <TableHead>Summary</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map(({ log, actor }) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="text-slate-600 dark:text-slate-300">
-                      {formatDateTime(new Date(log.occurredAt), ctx.timezone, ctx.locale)}
-                    </TableCell>
-                    <TableCell className="text-slate-700 dark:text-slate-200">
-                      {actor?.name ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{log.action}</Badge>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-300">
-                      {log.entityType}
-                      {log.entityId ? ` · ${log.entityId.slice(0, 8)}` : ''}
-                    </TableCell>
-                    <TableCell className="text-slate-900 dark:text-slate-100">
-                      {log.summary ?? '—'}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Pagination
-              basePath="/admin/audit"
-              currentParams={sp}
-              total={total}
-              page={params.page}
-              perPage={params.perPage}
-            />
-          </>
-        )}
+        <GeneratedValue
+          value={
+            rows.length === 0 ? (
+              <EmptyState title={tGenerated('m_1f7f13a484a2d6')} />
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <GeneratedText id="m_13cc128f69897c" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_163dfc4f85857d" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_0bad495a7046e9" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_1c23275efe6385" />
+                      </TableHead>
+                      <TableHead>
+                        <GeneratedText id="m_031c356c80b70f" />
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <GeneratedValue
+                      value={rows.map(({ log, actor }) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="text-slate-600 dark:text-slate-300">
+                            <GeneratedValue
+                              value={formatDateTime(
+                                new Date(log.occurredAt),
+                                ctx.timezone,
+                                ctx.locale,
+                              )}
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-700 dark:text-slate-200">
+                            <GeneratedValue value={actor?.name ?? '—'} />
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              <GeneratedValue value={log.action} />
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-300">
+                            <GeneratedValue value={log.entityType} />
+                            <GeneratedValue
+                              value={log.entityId ? ` · ${log.entityId.slice(0, 8)}` : ''}
+                            />
+                          </TableCell>
+                          <TableCell className="text-slate-900 dark:text-slate-100">
+                            <GeneratedValue value={log.summary ?? '—'} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    />
+                  </TableBody>
+                </Table>
+                <Pagination
+                  basePath="/admin/audit"
+                  currentParams={sp}
+                  total={total}
+                  page={params.page}
+                  perPage={params.perPage}
+                />
+              </>
+            )
+          }
+        />
       </div>
     </PageContainer>
   )

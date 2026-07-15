@@ -1,5 +1,12 @@
 'use client'
 
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
+
 // Right-pane PDF surface with two modes:
 //   • file-only documents — the uploaded PDF is the document; this pane is the
 //     primary view (managers can upload/replace the source here).
@@ -33,6 +40,8 @@ export function DocumentPdfPane({
   /** Authored document, manage surface: render the CURRENT working draft. */
   draft?: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const requestKey = `${documentId}:${draft ? 'draft' : 'published'}`
   const [resource, setResource] = useState<{
@@ -103,11 +112,11 @@ export function DocumentPdfPane({
     void (async () => {
       const res = await attachFileVersion({ documentId, attachmentId })
       if (res.ok) {
-        toast.success('PDF source updated.')
+        toast.success(tGenerated('m_1151d7f1aaef1c'))
         await requestPdf()
         router.refresh()
       } else {
-        toast.error(res.error ?? 'Upload failed')
+        toast.error(tGeneratedValue(res.error ?? tGenerated('m_0d520cff4c0719')))
       }
     })()
   }
@@ -115,125 +124,164 @@ export function DocumentPdfPane({
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-100 dark:bg-slate-950">
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-900">
-        {!readOnly && mode && onModeChange ? (
-          <ModeSwitch mode={mode} onChange={onModeChange} />
-        ) : (
-          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Document</span>
-        )}
-        {draft && !readOnly ? (
-          <span className="hidden text-[11px] text-slate-500 sm:inline dark:text-slate-400">
-            Generated from the current draft
-          </span>
-        ) : null}
+        <GeneratedValue
+          value={
+            !readOnly && mode && onModeChange ? (
+              <ModeSwitch mode={mode} onChange={onModeChange} />
+            ) : (
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <GeneratedText id="m_18ce070374179f" />
+              </span>
+            )
+          }
+        />
+        <GeneratedValue
+          value={
+            draft && !readOnly ? (
+              <span className="hidden text-[11px] text-slate-500 sm:inline dark:text-slate-400">
+                <GeneratedText id="m_0c75ff145748a1" />
+              </span>
+            ) : null
+          }
+        />
         <div className="ml-auto flex items-center gap-1.5">
-          {draft && !readOnly ? (
-            <button
-              type="button"
-              onClick={reload}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
-            >
-              <RefreshCw size={13} /> Regenerate
-            </button>
-          ) : null}
-          {!readOnly && !draft && url ? (
-            <button
-              type="button"
-              onClick={() => setUploadOpen((v) => !v)}
-              className={cn(
-                'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors',
-                uploadOpen
-                  ? 'border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-300'
-                  : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60',
-              )}
-            >
-              <UploadCloud size={13} /> Replace
-            </button>
-          ) : null}
-          {url ? (
-            <>
-              <a
-                href={url}
-                download
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
-              >
-                <Download size={13} /> Download
-              </a>
-              <a
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
-              >
-                <ExternalLink size={13} /> New tab
-              </a>
-            </>
-          ) : null}
+          <GeneratedValue
+            value={
+              draft && !readOnly ? (
+                <button
+                  type="button"
+                  onClick={reload}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                >
+                  <RefreshCw size={13} /> <GeneratedText id="m_0df0ba2bbd0a3e" />
+                </button>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              !readOnly && !draft && url ? (
+                <button
+                  type="button"
+                  onClick={() => setUploadOpen((v) => !v)}
+                  className={cn(
+                    'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors',
+                    uploadOpen
+                      ? 'border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-300'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60',
+                  )}
+                >
+                  <UploadCloud size={13} /> <GeneratedText id="m_05b540acc16fd1" />
+                </button>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              url ? (
+                <>
+                  <a
+                    href={url}
+                    download
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                  >
+                    <Download size={13} /> <GeneratedText id="m_0fcb9c63d263d1" />
+                  </a>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60"
+                  >
+                    <ExternalLink size={13} /> <GeneratedText id="m_10b8b9a1a3c87b" />
+                  </a>
+                </>
+              ) : null
+            }
+          />
         </div>
       </div>
 
-      {!readOnly && !draft && uploadOpen ? (
-        <div className="border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-          <FileUploader
-            requestUploadAction={requestUpload}
-            finalizeUploadAction={finalizeUpload}
-            kind="document"
-            accept=".pdf"
-            label="Drop a PDF here or click to choose — it becomes this document's source"
-            onUploaded={(f) => onUploaded(f.attachmentId)}
-          />
-        </div>
-      ) : null}
+      <GeneratedValue
+        value={
+          !readOnly && !draft && uploadOpen ? (
+            <div className="border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+              <FileUploader
+                requestUploadAction={requestUpload}
+                finalizeUploadAction={finalizeUpload}
+                kind="document"
+                accept=".pdf"
+                label={tGenerated('m_0e3b8a26b88d46')}
+                onUploaded={(f) => onUploaded(f.attachmentId)}
+              />
+            </div>
+          ) : null
+        }
+      />
 
       <div className={cn('min-h-0 flex-1', status !== 'ready' && 'app-scroll overflow-y-auto')}>
-        {status === 'ready' && url ? (
-          <PdfViewer url={url} className="h-full" />
-        ) : status === 'error' && noSource && !readOnly && !draft ? (
-          // No PDF yet — the same centered card the Write tab uses for a new
-          // document, with the uploader front and center.
-          <div className="mx-auto w-full max-w-xl px-5 py-10">
-            <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                No PDF yet
-              </h3>
-              <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-                Upload a PDF to make it this document&apos;s source. Authored documents are written
-                on the Write tab instead.
-              </p>
-              <div className="mt-4 text-left">
-                <FileUploader
-                  requestUploadAction={requestUpload}
-                  finalizeUploadAction={finalizeUpload}
-                  kind="document"
-                  accept=".pdf"
-                  label="Drop a PDF here or click to choose"
-                  onUploaded={(f) => onUploaded(f.attachmentId)}
+        <GeneratedValue
+          value={
+            status === 'ready' && url ? (
+              <PdfViewer url={url} className="h-full" />
+            ) : status === 'error' && noSource && !readOnly && !draft ? (
+              // No PDF yet — the same centered card the Write tab uses for a new
+              // document, with the uploader front and center.
+              <div className="mx-auto w-full max-w-xl px-5 py-10">
+                <div className="rounded-lg border border-slate-200 bg-white p-6 text-center dark:border-slate-800 dark:bg-slate-900">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    <GeneratedText id="m_0dc27d3fdd4051" />
+                  </h3>
+                  <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+                    <GeneratedText id="m_1506c45e9a69f1" />
+                  </p>
+                  <div className="mt-4 text-left">
+                    <FileUploader
+                      requestUploadAction={requestUpload}
+                      finalizeUploadAction={finalizeUpload}
+                      kind="document"
+                      accept=".pdf"
+                      label={tGenerated('m_1aa3103f37882b')}
+                      onUploaded={(f) => onUploaded(f.attachmentId)}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-slate-600 dark:text-slate-300">
+                <GeneratedValue
+                  value={
+                    status === 'error' ? (
+                      <>
+                        <p className={noSource ? '' : 'text-rose-600 dark:text-rose-400'}>
+                          <GeneratedValue
+                            value={error ?? <GeneratedText id="m_18d93ca1591807" />}
+                          />
+                        </p>
+                        <Button variant="outline" onClick={reload}>
+                          <RefreshCw size={14} /> <GeneratedText id="m_060f1ed88b3989" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Loader2 size={20} className="animate-spin text-slate-400" />
+                        <GeneratedValue
+                          value={
+                            draft && !readOnly ? (
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                <GeneratedText id="m_10de289f7727be" />
+                              </p>
+                            ) : null
+                          }
+                        />
+                      </>
+                    )
+                  }
                 />
               </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-slate-600 dark:text-slate-300">
-            {status === 'error' ? (
-              <>
-                <p className={noSource ? '' : 'text-rose-600 dark:text-rose-400'}>
-                  {error ?? 'Could not load the PDF.'}
-                </p>
-                <Button variant="outline" onClick={reload}>
-                  <RefreshCw size={14} /> Retry
-                </Button>
-              </>
-            ) : (
-              <>
-                <Loader2 size={20} className="animate-spin text-slate-400" />
-                {draft && !readOnly ? (
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Generating a PDF of the current draft…
-                  </p>
-                ) : null}
-              </>
-            )}
-          </div>
-        )}
+            )
+          }
+        />
       </div>
     </div>
   )

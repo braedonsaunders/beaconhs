@@ -1,3 +1,11 @@
+import { getGeneratedTranslations } from '@/i18n/generated.server'
+
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
@@ -28,7 +36,10 @@ import { formCategoryLabel } from '../../_lib/category-label'
 import { slugify } from '../../_lib/slug'
 import { generatedTemplateKey } from '../../_lib/template-key.server'
 
-export const metadata = { title: 'New app' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1a050bcb668962') }
+}
 
 const CANONICAL_ICONS: Record<
   string,
@@ -231,7 +242,7 @@ function CanonicalCard({
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
               <h3 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
-                {name}
+                <GeneratedValue value={name} />
               </h3>
               <ArrowRight
                 size={16}
@@ -239,15 +250,23 @@ function CanonicalCard({
               />
             </div>
             <p className="mt-1 line-clamp-3 text-xs text-slate-600 dark:text-slate-400">
-              {description}
+              <GeneratedValue value={description} />
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <Badge variant="secondary">{formCategoryLabel(category)}</Badge>
-              <Badge variant="outline">
-                {sectionCount} section{sectionCount === 1 ? '' : 's'}
+              <Badge variant="secondary">
+                <GeneratedValue value={formCategoryLabel(category)} />
               </Badge>
               <Badge variant="outline">
-                {fieldCount} field{fieldCount === 1 ? '' : 's'}
+                <GeneratedValue value={sectionCount} /> <GeneratedText id="m_02f67a0e8ba5ce" />
+                <GeneratedValue
+                  value={sectionCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+                />
+              </Badge>
+              <Badge variant="outline">
+                <GeneratedValue value={fieldCount} /> <GeneratedText id="m_1d6aa8702d3fac" />
+                <GeneratedValue
+                  value={fieldCount === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
+                />
               </Badge>
             </div>
           </div>
@@ -264,12 +283,14 @@ function countFields(canonicalKey: string): number {
 }
 
 export default function NewTemplatePage() {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const tGenerated = useGeneratedTranslations()
   return (
     <PageContainer>
       <div className="mx-auto max-w-4xl space-y-8">
         <PageHeader
-          title="New app"
-          description="Select an app type to open the designer pre-configured for it, clone a canonical template, or build from scratch."
+          title={tGenerated('m_1a050bcb668962')}
+          description={tGenerated('m_03ab06b42f789e')}
           back={{ href: '/apps', label: 'Back to Builder' }}
         />
 
@@ -277,10 +298,10 @@ export default function NewTemplatePage() {
         <section className="space-y-3">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Choose an app type
+              <GeneratedText id="m_032194ff2b3504" />
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              Form, multi-step Wizard, Checklist, tabular Register, or a composed Mini-app.
+              <GeneratedText id="m_0996a8f51ca267" />
             </p>
           </div>
           <AppTypePicker />
@@ -291,27 +312,31 @@ export default function NewTemplatePage() {
           <div className="flex items-end justify-between gap-2">
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                Start from a template
+                <GeneratedText id="m_057d952e47b935" />
               </h2>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                The four big modules from the legacy app — now shipped as form templates. Pick one
-                and tweak.
+                <GeneratedText id="m_0af747ddf9578d" />
               </p>
             </div>
-            <Badge variant="secondary">{CANONICAL_TEMPLATES.length} canonical templates</Badge>
+            <Badge variant="secondary">
+              <GeneratedValue value={CANONICAL_TEMPLATES.length} />{' '}
+              <GeneratedText id="m_097d1eaad6fbc4" />
+            </Badge>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {CANONICAL_TEMPLATES.map((c) => (
-              <CanonicalCard
-                key={c.key}
-                canonicalKey={c.key}
-                name={c.name}
-                description={c.description}
-                sectionCount={c.schema.sections.length}
-                fieldCount={countFields(c.key)}
-                category={c.category}
-              />
-            ))}
+            <GeneratedValue
+              value={CANONICAL_TEMPLATES.map((c) => (
+                <CanonicalCard
+                  key={c.key}
+                  canonicalKey={c.key}
+                  name={c.name}
+                  description={tGeneratedValue(c.description)}
+                  sectionCount={c.schema.sections.length}
+                  fieldCount={countFields(c.key)}
+                  category={c.category}
+                />
+              ))}
+            />
           </div>
         </section>
 
@@ -319,60 +344,69 @@ export default function NewTemplatePage() {
         <section className="space-y-3">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-              Or build from scratch
+              <GeneratedText id="m_068aaa150aa4bb" />
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              Create an empty template and add sections, fields, and conditional logic in the
-              designer.
+              <GeneratedText id="m_08b4fa7fae76cb" />
             </p>
           </div>
           <Card>
             <CardHeader>
-              <CardTitle>Blank template</CardTitle>
+              <CardTitle>
+                <GeneratedText id="m_16e8eec88287bd" />
+              </CardTitle>
               <CardDescription>
-                You'll land in the visual designer with one empty section. Publish to v1 when ready.
+                <GeneratedText id="m_167887992204cb" />
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form action={createTemplate} className="space-y-5">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name">Name *</Label>
+                  <Label htmlFor="name">
+                    <GeneratedText id="m_1a9978900838e6" />
+                  </Label>
                   <Input
                     id="name"
                     name="name"
                     required
-                    placeholder="e.g. Daily site walk inspection"
+                    placeholder={tGenerated('m_0258a2c065a9ce')}
                   />
                   <p className="text-xs text-slate-500">
-                    Shown in lists, on PDFs, and as the form heading.
+                    <GeneratedText id="m_1deb339cc3e627" />
                   </p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="key">Key (optional)</Label>
-                  <Input id="key" name="key" placeholder="auto-generated from name if blank" />
+                  <Label htmlFor="key">
+                    <GeneratedText id="m_12d4a2a912f384" />
+                  </Label>
+                  <Input id="key" name="key" placeholder={tGenerated('m_17cc2d73812072')} />
                   <p className="text-xs text-slate-500">
-                    Stable slug that survives across versions. Lowercase letters, numbers, _, -.
+                    <GeneratedText id="m_179fc4c123d1c4" />
                   </p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="description">Description</Label>
+                  <Label htmlFor="description">
+                    <GeneratedText id="m_14d923495cf14c" />
+                  </Label>
                   <Textarea
                     id="description"
                     name="description"
                     rows={3}
-                    placeholder="Purpose and audience"
+                    placeholder={tGenerated('m_074251897a5932')}
                   />
                 </div>
 
                 <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
                   <Link href="/apps">
                     <Button type="button" variant="outline">
-                      Cancel
+                      <GeneratedText id="m_112e2e8ecda428" />
                     </Button>
                   </Link>
-                  <Button type="submit">Create blank + open designer</Button>
+                  <Button type="submit">
+                    <GeneratedText id="m_05e241cea42acb" />
+                  </Button>
                 </div>
               </form>
             </CardContent>

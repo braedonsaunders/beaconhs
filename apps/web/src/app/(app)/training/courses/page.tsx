@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { GraduationCap } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
@@ -27,7 +30,10 @@ import { TrainingSubNav } from '../_components/training-sub-nav'
 import { DELIVERY_OPTIONS, deliveryLabel } from '../_lib/delivery'
 import { startCourse } from './[id]/studio/_actions'
 
-export const metadata = { title: 'Training courses' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_19deda31dd415b') }
+}
 
 const SORTS = ['name', 'code', 'delivery_type', 'valid_for_months'] as const
 
@@ -36,6 +42,8 @@ export default async function TrainingCoursesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'name',
@@ -106,114 +114,160 @@ export default async function TrainingCoursesPage({
       header={
         <>
           <PageHeader
-            title="Training courses"
-            description="Courses across classroom, self-paced, on-the-job, and external formats."
+            title={tGenerated('m_19deda31dd415b')}
+            description={tGenerated('m_18d499ef1e1bba')}
             actions={
               <div className="flex items-center gap-2">
-                {canExport ? (
-                  <Link href={buildExportHref('/training/courses/export.csv', sp)}>
-                    <Button variant="outline">Export CSV</Button>
-                  </Link>
-                ) : null}
-                {canManage ? (
-                  <form action={startCourse}>
-                    <Button type="submit">New course</Button>
-                  </form>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    canExport ? (
+                      <Link href={buildExportHref('/training/courses/export.csv', sp)}>
+                        <Button variant="outline">
+                          <GeneratedText id="m_14c6440eca1edc" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    canManage ? (
+                      <form action={startCourse}>
+                        <Button type="submit">
+                          <GeneratedText id="m_12e35163505050" />
+                        </Button>
+                      </form>
+                    ) : null
+                  }
+                />
               </div>
             }
           />
           <TrainingSubNav active="courses" />
           <TableToolbar>
-            <SearchInput placeholder="Search by name or code" />
+            <SearchInput placeholder={tGenerated('m_1b2c753f4c06fa')} />
             <FilterChips
               basePath="/training/courses"
               currentParams={sp}
               paramKey="delivery"
-              label="Delivery"
+              label={tGenerated('m_03db87cb2e7846')}
               options={DELIVERY_OPTIONS.map((o) => ({ ...o, count: deliveryCounts[o.value] }))}
             />
           </TableToolbar>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<GraduationCap size={32} />}
-          title={params.q ? 'No matching courses' : 'No courses'}
-          description="Add a course to start tracking competencies."
-          action={
-            canManage ? (
-              <form action={startCourse}>
-                <Button type="submit">New course</Button>
-              </form>
-            ) : undefined
-          }
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
-                  Name
-                </SortableTh>
-                <SortableTh {...sortProps} column="code" active={params.sort === 'code'}>
-                  Code
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="delivery_type"
-                  active={params.sort === 'delivery_type'}
-                >
-                  Delivery
-                </SortableTh>
-                <SortableTh
-                  {...sortProps}
-                  column="valid_for_months"
-                  active={params.sort === 'valid_for_months'}
-                >
-                  Validity
-                </SortableTh>
-                <TableHead>Duration</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell>
-                    <Link
-                      href={`/training/courses/${c.id}`}
-                      className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<GraduationCap size={32} />}
+              title={tGeneratedValue(
+                params.q ? tGenerated('m_0ce129695bc756') : tGenerated('m_0a005e20869528'),
+              )}
+              description={tGenerated('m_15b0aadbd3c47d')}
+              action={
+                canManage ? (
+                  <form action={startCourse}>
+                    <Button type="submit">
+                      <GeneratedText id="m_12e35163505050" />
+                    </Button>
+                  </form>
+                ) : undefined
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTh {...sortProps} column="name" active={params.sort === 'name'}>
+                      <GeneratedText id="m_02b18d5c7f6f2d" />
+                    </SortableTh>
+                    <SortableTh {...sortProps} column="code" active={params.sort === 'code'}>
+                      <GeneratedText id="m_0570e24c85cf95" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="delivery_type"
+                      active={params.sort === 'delivery_type'}
                     >
-                      {c.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
-                    {c.code}
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {deliveryLabel(c.deliveryType)}
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {c.validForMonths ? `${c.validForMonths} months` : 'No expiry'}
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {c.durationMinutes ? `${c.durationMinutes} min` : '—'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pagination
-            basePath="/training/courses"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+                      <GeneratedText id="m_03db87cb2e7846" />
+                    </SortableTh>
+                    <SortableTh
+                      {...sortProps}
+                      column="valid_for_months"
+                      active={params.sort === 'valid_for_months'}
+                    >
+                      <GeneratedText id="m_18eaa7e8f340b7" />
+                    </SortableTh>
+                    <TableHead>
+                      <GeneratedText id="m_0ec97074401d0f" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <GeneratedValue
+                    value={rows.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell>
+                          <Link
+                            href={`/training/courses/${c.id}`}
+                            className="font-medium text-slate-900 hover:underline dark:text-slate-100"
+                          >
+                            <GeneratedValue value={c.name} />
+                          </Link>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={c.code} />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue value={deliveryLabel(c.deliveryType)} />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue
+                            value={
+                              c.validForMonths ? (
+                                <GeneratedText
+                                  id="m_1fa77753c09829"
+                                  values={{ value0: c.validForMonths }}
+                                />
+                              ) : (
+                                <GeneratedText id="m_1bbc44c1ce26a7" />
+                              )
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue
+                            value={
+                              c.durationMinutes ? (
+                                <GeneratedText
+                                  id="m_190be45ec6aa0b"
+                                  values={{ value0: c.durationMinutes }}
+                                />
+                              ) : (
+                                '—'
+                              )
+                            }
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  />
+                </TableBody>
+              </Table>
+              <Pagination
+                basePath="/training/courses"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Users } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
@@ -16,7 +19,10 @@ import { PeopleSubNav } from './_components/people-sub-nav'
 import { listPersonDepartmentsForBulk, listPersonGroupsForBulk } from './_actions/bulk'
 import { PeopleRecordsTable, type PeopleTableRow } from './_records-table'
 
-export const metadata = { title: 'People' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_1e9ca6c7397706') }
+}
 
 const SORTS = [
   'name',
@@ -35,6 +41,8 @@ export default async function PeoplePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: SORTS })
   // people.status is a Postgres enum — validate the param so a hand-edited URL
@@ -145,31 +153,43 @@ export default async function PeoplePage({
       header={
         <>
           <PageHeader
-            title="People"
-            description="Your organization's directory of workers, contractors, and supervisors."
+            title={tGenerated('m_1e9ca6c7397706')}
+            description={tGenerated('m_0670df2653c458')}
             actions={
               <div className="flex items-center gap-2">
-                {canExport ? (
-                  <a href={buildExportHref('/people/export.csv', sp)}>
-                    <Button variant="outline">Export CSV</Button>
-                  </a>
-                ) : null}
-                {canManage ? (
-                  <Link href="/people/new">
-                    <Button>Add person</Button>
-                  </Link>
-                ) : null}
+                <GeneratedValue
+                  value={
+                    canExport ? (
+                      <a href={buildExportHref('/people/export.csv', sp)}>
+                        <Button variant="outline">
+                          <GeneratedText id="m_14c6440eca1edc" />
+                        </Button>
+                      </a>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    canManage ? (
+                      <Link href="/people/new">
+                        <Button>
+                          <GeneratedText id="m_12634c941f2fb6" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
               </div>
             }
           />
           <PeopleSubNav active="directory" />
           <div className="flex flex-wrap items-center gap-3">
-            <SearchInput placeholder="Search by name, employee #, or job title" />
+            <SearchInput placeholder={tGenerated('m_1561c55102f953')} />
             <FilterChips
               basePath="/people"
               currentParams={{ ...sp, status: statusFilter }}
               paramKey="status"
-              label="Status"
+              label={tGenerated('m_0b9da892d6faf0')}
               options={[
                 { value: 'active', label: 'Active', count: statusCounts.active ?? 0 },
                 { value: 'inactive', label: 'Inactive', count: statusCounts.inactive ?? 0 },
@@ -181,56 +201,71 @@ export default async function PeoplePage({
                 { value: 'all', label: 'All', count: allCount },
               ]}
             />
-            {activeDepartmentName ? (
-              <Link
-                href={mergeHref('/people', sp, { department: undefined, page: 1 }) as any}
-                className="inline-flex items-center gap-1.5 rounded-full bg-teal-50 py-1 pr-2 pl-3 text-xs font-medium text-teal-800 hover:bg-teal-100 dark:bg-teal-950/50 dark:text-teal-300 dark:hover:bg-teal-900"
-              >
-                Department: {activeDepartmentName}
-                <span aria-hidden className="text-teal-600 dark:text-teal-400">
-                  ✕
-                </span>
-              </Link>
-            ) : null}
+            <GeneratedValue
+              value={
+                activeDepartmentName ? (
+                  <Link
+                    href={mergeHref('/people', sp, { department: undefined, page: 1 }) as any}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-teal-50 py-1 pr-2 pl-3 text-xs font-medium text-teal-800 hover:bg-teal-100 dark:bg-teal-950/50 dark:text-teal-300 dark:hover:bg-teal-900"
+                  >
+                    <GeneratedText id="m_1a405689014fdf" />{' '}
+                    <GeneratedValue value={activeDepartmentName} />
+                    <span aria-hidden className="text-teal-600 dark:text-teal-400">
+                      ✕
+                    </span>
+                  </Link>
+                ) : null
+              }
+            />
           </div>
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Users size={32} />}
-          title={params.q ? `No people match "${params.q}"` : 'No people'}
-          description="Add people individually, or bring them in through a data import."
-          action={
-            canManage ? (
-              <Link href="/people/new">
-                <Button>Add person</Button>
-              </Link>
-            ) : null
-          }
-        />
-      ) : (
-        <>
-          <PeopleRecordsTable
-            rows={tableRows}
-            groups={groups}
-            departments={departmentOptions}
-            basePath="/people"
-            currentParams={sp}
-            sort={params.sort}
-            dir={params.dir}
-            canManage={canManage}
-            canExport={canExport}
-          />
-          <Pagination
-            basePath="/people"
-            currentParams={sp}
-            total={total}
-            page={params.page}
-            perPage={params.perPage}
-          />
-        </>
-      )}
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Users size={32} />}
+              title={tGeneratedValue(
+                params.q
+                  ? tGenerated('m_095a16654a31f4', { value0: params.q })
+                  : tGenerated('m_1038b241626b2d'),
+              )}
+              description={tGenerated('m_0f568be312d6e7')}
+              action={
+                canManage ? (
+                  <Link href="/people/new">
+                    <Button>
+                      <GeneratedText id="m_12634c941f2fb6" />
+                    </Button>
+                  </Link>
+                ) : null
+              }
+            />
+          ) : (
+            <>
+              <PeopleRecordsTable
+                rows={tableRows}
+                groups={groups}
+                departments={departmentOptions}
+                basePath="/people"
+                currentParams={sp}
+                sort={params.sort}
+                dir={params.dir}
+                canManage={canManage}
+                canExport={canExport}
+              />
+              <Pagination
+                basePath="/people"
+                currentParams={sp}
+                total={total}
+                page={params.page}
+                perPage={params.perPage}
+              />
+            </>
+          )
+        }
+      />
     </ListPageLayout>
   )
 }

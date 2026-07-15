@@ -1,3 +1,6 @@
+import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // /incidents/hours — periodic hours-worked tracker. Drives every frequency-rate
 // calc (TRIR / DART / LTIR).
 //
@@ -34,7 +37,10 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { IncidentsSubNav } from '../_sub-nav'
 import { HoursDrawer, type HoursEditing } from './_drawers'
 
-export const metadata = { title: 'Hours worked' }
+export async function generateMetadata() {
+  const tGenerated = await getGeneratedTranslations()
+  return { title: tGenerated('m_04dae76323fbd5') }
+}
 export const dynamic = 'force-dynamic'
 
 const BASE = '/incidents/hours'
@@ -160,6 +166,8 @@ export default async function HoursPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const tGeneratedValue = await getGeneratedValueTranslations()
+  const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'period',
@@ -263,28 +271,28 @@ export default async function HoursPage({
       header={
         <>
           <PageHeader
-            title="Hours worked"
-            description="Periodic hours-worked tally. Every frequency-rate report (TRIR, DART, LTIR) divides into the sum of these windows: rate = recordable count × 200 000 / total hours."
+            title={tGenerated('m_04dae76323fbd5')}
+            description={tGenerated('m_0206cae9049c31')}
             actions={
               <Link href={mergeHref(BASE, sp, { drawer: 'new' }) as any} scroll={false}>
                 <Button>
-                  <Plus size={14} /> Add period
+                  <Plus size={14} /> <GeneratedText id="m_1f98e43ebaf016" />
                 </Button>
               </Link>
             }
           />
           <IncidentsSubNav active="hours" />
           <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
-            <Stat label="Periods logged" value={total.toLocaleString()} />
-            <Stat label="Hours total" value={totalHours.toLocaleString()} />
+            <Stat label={tGenerated('m_150e10bc14ef29')} value={total.toLocaleString()} />
+            <Stat label={tGenerated('m_19256885a442f5')} value={totalHours.toLocaleString()} />
           </div>
           <TableToolbar>
-            <SearchInput placeholder="Search period, date, or site…" />
+            <SearchInput placeholder={tGenerated('m_09fb5ab487381c')} />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
               paramKey="site"
-              label="Site"
+              label={tGenerated('m_020146dd3d3d5a')}
               options={[
                 ...sites.map((site) => ({ value: site.id, label: site.name })),
                 { value: 'unassigned', label: 'All-sites entries' },
@@ -294,104 +302,134 @@ export default async function HoursPage({
         </>
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Plus size={32} />}
-          title={hasFilters ? 'No periods match your filters' : 'No periods logged'}
-          description={
-            hasFilters
-              ? 'Clear the search or site filter to see other hours entries.'
-              : 'Add a period — typically one per site per month — to supply the worked hours behind frequency-rate reports.'
-          }
-          action={
-            <Link href={mergeHref(BASE, sp, { drawer: 'new' }) as any} scroll={false}>
-              <Button>Add period</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortableTh {...sortProps} column="period" active={params.sort === 'period'}>
-                Period
-              </SortableTh>
-              <TableHead>Label</TableHead>
-              <TableHead>Site</TableHead>
-              <SortableTh
-                {...sortProps}
-                column="hours"
-                active={params.sort === 'hours'}
-                align="right"
-                className="text-right"
-              >
-                Hours
-              </SortableTh>
-              <SortableTh
-                {...sortProps}
-                column="employees"
-                active={params.sort === 'employees'}
-                align="right"
-                className="text-right"
-              >
-                Employees
-              </SortableTh>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map(({ period, site }) => {
-              const editHref = mergeHref(BASE, sp, { drawer: period.id })
-              return (
-                <TableRow key={period.id}>
-                  <TableCell className="text-sm">
-                    <Link href={editHref as any} scroll={false} className="hover:underline">
-                      <span className="font-mono text-xs">{period.periodStart}</span>
-                      <span className="text-slate-400"> → </span>
-                      <span className="font-mono text-xs">{period.periodEnd}</span>
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {period.periodLabel ?? <span className="text-slate-400">—</span>}
-                  </TableCell>
-                  <TableCell className="text-slate-600 dark:text-slate-400">
-                    {site ? (
-                      <Badge variant="secondary">{site.name}</Badge>
-                    ) : (
-                      <span className="text-xs text-slate-400">All sites</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {Number(period.totalHours).toLocaleString()}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{period.employeeCount}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <Link
-                        href={editHref as any}
-                        scroll={false}
-                        className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
-                      >
-                        Edit
-                      </Link>
-                      <form action={deletePeriod} className="inline">
-                        <input type="hidden" name="id" value={period.id} />
-                        <button
-                          type="submit"
-                          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </form>
-                    </div>
-                  </TableCell>
+      <GeneratedValue
+        value={
+          rows.length === 0 ? (
+            <EmptyState
+              icon={<Plus size={32} />}
+              title={tGeneratedValue(
+                hasFilters ? tGenerated('m_1a061432335e88') : tGenerated('m_10ebafd50a190c'),
+              )}
+              description={tGeneratedValue(
+                hasFilters ? tGenerated('m_1369998269c756') : tGenerated('m_0c8a85fa04fec4'),
+              )}
+              action={
+                <Link href={mergeHref(BASE, sp, { drawer: 'new' }) as any} scroll={false}>
+                  <Button>
+                    <GeneratedText id="m_1f98e43ebaf016" />
+                  </Button>
+                </Link>
+              }
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortableTh {...sortProps} column="period" active={params.sort === 'period'}>
+                    <GeneratedText id="m_1ec8c0e767ebe2" />
+                  </SortableTh>
+                  <TableHead>
+                    <GeneratedText id="m_1d088977412efb" />
+                  </TableHead>
+                  <TableHead>
+                    <GeneratedText id="m_020146dd3d3d5a" />
+                  </TableHead>
+                  <SortableTh
+                    {...sortProps}
+                    column="hours"
+                    active={params.sort === 'hours'}
+                    align="right"
+                    className="text-right"
+                  >
+                    <GeneratedText id="m_192ca43bd9c999" />
+                  </SortableTh>
+                  <SortableTh
+                    {...sortProps}
+                    column="employees"
+                    active={params.sort === 'employees'}
+                    align="right"
+                    className="text-right"
+                  >
+                    <GeneratedText id="m_0302a7e2443143" />
+                  </SortableTh>
+                  <TableHead className="text-right">
+                    <GeneratedText id="m_0a7f1858f2ec46" />
+                  </TableHead>
                 </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      )}
+              </TableHeader>
+              <TableBody>
+                <GeneratedValue
+                  value={rows.map(({ period, site }) => {
+                    const editHref = mergeHref(BASE, sp, { drawer: period.id })
+                    return (
+                      <TableRow key={period.id}>
+                        <TableCell className="text-sm">
+                          <Link href={editHref as any} scroll={false} className="hover:underline">
+                            <span className="font-mono text-xs">
+                              <GeneratedValue value={period.periodStart} />
+                            </span>
+                            <span className="text-slate-400"> → </span>
+                            <span className="font-mono text-xs">
+                              <GeneratedValue value={period.periodEnd} />
+                            </span>
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue
+                            value={period.periodLabel ?? <span className="text-slate-400">—</span>}
+                          />
+                        </TableCell>
+                        <TableCell className="text-slate-600 dark:text-slate-400">
+                          <GeneratedValue
+                            value={
+                              site ? (
+                                <Badge variant="secondary">
+                                  <GeneratedValue value={site.name} />
+                                </Badge>
+                              ) : (
+                                <span className="text-xs text-slate-400">
+                                  <GeneratedText id="m_1f5ad6ec6b5d2a" />
+                                </span>
+                              )
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          <GeneratedValue value={Number(period.totalHours).toLocaleString()} />
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          <GeneratedValue value={period.employeeCount} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="inline-flex items-center gap-1">
+                            <Link
+                              href={editHref as any}
+                              scroll={false}
+                              className="rounded px-2 py-1 text-xs text-teal-700 hover:bg-teal-50 hover:underline dark:text-teal-400 dark:hover:bg-teal-500/10"
+                            >
+                              <GeneratedText id="m_03a66f9d34ac7b" />
+                            </Link>
+                            <form action={deletePeriod} className="inline">
+                              <input type="hidden" name="id" value={period.id} />
+                              <button
+                                type="submit"
+                                className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                                title={tGenerated('m_11773f3c3f7558')}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </form>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                />
+              </TableBody>
+            </Table>
+          )
+        }
+      />
 
       <Pagination
         basePath={BASE}
@@ -417,9 +455,11 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-800 dark:bg-slate-900">
       <span className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-        {label}:{' '}
+        <GeneratedValue value={label} />:<GeneratedValue value={' '} />
       </span>
-      <span className="font-medium tabular-nums">{value}</span>
+      <span className="font-medium tabular-nums">
+        <GeneratedValue value={value} />
+      </span>
     </span>
   )
 }
