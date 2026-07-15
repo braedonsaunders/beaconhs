@@ -13,6 +13,7 @@ import {
 // locally and saved as one batch; a sticky bar tracks unsaved changes.
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useMemo, useState, useTransition } from 'react'
 import { Plus, X } from 'lucide-react'
 import { Button, Label, SearchSelect, Select, cn } from '@beaconhs/ui'
@@ -413,9 +414,10 @@ export function NotificationSettingsForm({
     return out
   }, [categories, initial])
 
+  const router = useRouter()
   const [config, setConfig] = useState<InitialMap>(seed)
   const [pol, setPol] = useState<PolicyInput>(policy)
-  const [baseline] = useState(() => JSON.stringify({ c: seed, p: policy }))
+  const [baseline, setBaseline] = useState(() => JSON.stringify({ c: seed, p: policy }))
   const [pending, startTransition] = useTransition()
 
   const dirty = JSON.stringify({ c: config, p: pol }) !== baseline
@@ -455,7 +457,12 @@ export function NotificationSettingsForm({
     startTransition(async () => {
       try {
         await saveNotificationConfiguration(items, pol)
-        window.location.reload()
+        // Soft refresh: the action revalidates /admin/notifications, so this
+        // re-pulls the saved server state without a full document reload (which
+        // would replay the boot splash). Clear dirty against the just-saved snapshot.
+        setBaseline(JSON.stringify({ c: config, p: pol }))
+        router.refresh()
+        toast.success(tGenerated('m_0ad43d07863768'))
       } catch (err) {
         toast.error(
           tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_1b8a56cc7a479e')),

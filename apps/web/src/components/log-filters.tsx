@@ -81,9 +81,15 @@ function TextParamFilterControl({
     return () => clearTimeout(handle)
   }, [paramKey, pathname, router, search, value])
 
+  // Inline label so every toolbar control is a single row of h-8 height — the
+  // toolbar aligns them all on one line (stacked labels made the label-less
+  // search box and filter chips float out of alignment).
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={paramKey} className="text-xs">
+    <div className="flex items-center gap-1.5">
+      <Label
+        htmlFor={paramKey}
+        className="text-xs whitespace-nowrap text-slate-500 dark:text-slate-400"
+      >
         <GeneratedValue value={label} />
       </Label>
       <Input
@@ -116,17 +122,22 @@ export function DateRangeFilter() {
     router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
 
+  // Inline labels keep the whole range on one h-8 row, aligned with the other
+  // toolbar controls.
   return (
     <>
-      <div className="space-y-1.5">
-        <Label htmlFor="from" className="text-xs">
+      <div className="flex items-center gap-1.5">
+        <Label
+          htmlFor="from"
+          className="text-xs whitespace-nowrap text-slate-500 dark:text-slate-400"
+        >
           <GeneratedText id="m_154c9d7a784dda" />
         </Label>
         <Input
           key={`from:${from}`}
           id="from"
           type="date"
-          className="h-8 w-44"
+          className="h-8 w-40"
           defaultValue={from}
           onChange={(e) => {
             const v = e.target.value
@@ -134,15 +145,18 @@ export function DateRangeFilter() {
           }}
         />
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="to" className="text-xs">
+      <div className="flex items-center gap-1.5">
+        <Label
+          htmlFor="to"
+          className="text-xs whitespace-nowrap text-slate-500 dark:text-slate-400"
+        >
           <GeneratedText id="m_0ea10a854847b2" />
         </Label>
         <Input
           key={`to:${to}`}
           id="to"
           type="date"
-          className="h-8 w-44"
+          className="h-8 w-40"
           defaultValue={to}
           onChange={(e) => {
             const v = e.target.value
