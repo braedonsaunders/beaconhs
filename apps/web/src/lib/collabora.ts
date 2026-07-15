@@ -144,10 +144,43 @@ function attributeValue(tag: SaxesTagNS, name: string): string | undefined {
 function cleanDiscoveryActionUrl(value: string): string | null {
   const queryIndex = value.indexOf('?')
   const beforeQuery = queryIndex === -1 ? value : value.slice(0, queryIndex)
-  if (/[<>]/.test(beforeQuery)) return null
+  if (beforeQuery.includes('<') || beforeQuery.includes('>')) return null
+  if (queryIndex === -1) return value
 
-  const cleaned = value.replace(/<[^<>]*>/g, '')
-  return /[<>]/.test(cleaned) ? null : cleaned
+  let cleaned = beforeQuery
+  for (let index = queryIndex; index < value.length; index += 1) {
+    const character = value[index]!
+    if (character === '>') return null
+    if (character !== '<') {
+      cleaned += character
+      continue
+    }
+
+    let end = index + 1
+    let identifiesPlaceholder = false
+    for (; end < value.length && end - index <= 128; end += 1) {
+      const placeholderCharacter = value[end]!
+      if (placeholderCharacter === '>') break
+      if (placeholderCharacter === '<') return null
+      const code = placeholderCharacter.charCodeAt(0)
+      const allowed =
+        (code >= 48 && code <= 57) ||
+        (code >= 65 && code <= 90) ||
+        (code >= 97 && code <= 122) ||
+        placeholderCharacter === '_' ||
+        placeholderCharacter === '=' ||
+        placeholderCharacter === '&' ||
+        placeholderCharacter === '.' ||
+        placeholderCharacter === '-'
+      if (!allowed) return null
+      if (placeholderCharacter === '_' || placeholderCharacter === '=') {
+        identifiesPlaceholder = true
+      }
+    }
+    if (end >= value.length || value[end] !== '>' || !identifiesPlaceholder) return null
+    index = end
+  }
+  return cleaned
 }
 
 function isLoopbackHost(hostname: string): boolean {

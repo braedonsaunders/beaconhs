@@ -69,8 +69,8 @@ export async function savePushSubscription(input: unknown) {
           },
         }),
     )
-  } catch (err) {
-    console.warn('[push] failed to save subscription:', err)
+  } catch {
+    console.warn('[push] failed to save subscription')
     return { ok: false as const, error: 'Could not save the subscription.' }
   }
 
@@ -173,7 +173,7 @@ export async function sendTestPush() {
         )
         removed++
       } else {
-        console.warn('[push] test send failed:', err)
+        console.warn('[push] test send failed')
       }
     }
   }

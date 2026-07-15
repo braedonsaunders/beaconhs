@@ -184,7 +184,7 @@ export const GOLD = {
 // Interlocking-ring security lattice, tiled as a data-URI background. Subtle
 // at the suggested opacities (certificate ~0.05 ink, wallet back ~0.07 white).
 export function ringLattice(strokeHex: string, opacity: number): string {
-  const c = strokeHex.replace('#', '%23')
+  const c = strokeHex.replaceAll('#', '%23')
   const svg =
     `<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'>` +
     `<g fill='none' stroke='${c}' stroke-opacity='${opacity}' stroke-width='0.7'>` +

@@ -465,11 +465,24 @@ export function safeColor(value: string | null | undefined, fallback: string): s
 }
 
 export function slugId(value: string | null | undefined, fallback: string): string {
-  const id = (value ?? fallback)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return (id || fallback).slice(0, DESIGN_DOCUMENT_LIMITS.idLength)
+  let id = ''
+  let separatorPending = false
+  for (const character of (value ?? fallback).toLowerCase()) {
+    const code = character.charCodeAt(0)
+    const isAsciiLetter = code >= 97 && code <= 122
+    const isDigit = code >= 48 && code <= 57
+    if (isAsciiLetter || isDigit) {
+      if (separatorPending && id.length > 0 && id.length < DESIGN_DOCUMENT_LIMITS.idLength) {
+        id += '-'
+      }
+      if (id.length < DESIGN_DOCUMENT_LIMITS.idLength) id += character
+      separatorPending = false
+      if (id.length >= DESIGN_DOCUMENT_LIMITS.idLength) break
+    } else if (id.length > 0) {
+      separatorPending = true
+    }
+  }
+  return id || fallback.slice(0, DESIGN_DOCUMENT_LIMITS.idLength)
 }
 
 export function clampNumber(

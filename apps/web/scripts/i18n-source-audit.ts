@@ -104,17 +104,20 @@ export function hasWords(value: string): boolean {
   return Boolean(normalized) && /[A-Za-zÀ-ÿ]/.test(normalized) && !/^https?:\/\//.test(normalized)
 }
 
-function normalizeProse(value: string): string {
-  return value
-    .replaceAll('&apos;', "'")
-    .replaceAll('&#39;', "'")
-    .replaceAll('&quot;', '"')
-    .replaceAll('&amp;', '&')
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&nbsp;', ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+export function normalizeProse(value: string): string {
+  return (
+    value
+      .replaceAll('&apos;', "'")
+      .replaceAll('&#39;', "'")
+      .replaceAll('&quot;', '"')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&nbsp;', ' ')
+      // Decode ampersands last so double-encoded text is not decoded twice.
+      .replaceAll('&amp;', '&')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
 }
 
 function elementName(node: ts.JsxElement | ts.JsxSelfClosingElement): string {

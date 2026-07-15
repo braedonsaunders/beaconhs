@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { pdfResourceDecision } from './util'
+import { injectPdfBase, pdfResourceDecision } from './util'
+
+describe('PDF document base injection', () => {
+  it('inserts after a real head tag and falls back to a safe prefix', () => {
+    expect(
+      injectPdfBase('<html><head data-x="1"><title>X</title></head></html>', 'https://app.test'),
+    ).toBe('<html><head data-x="1"><base href="https://app.test/"><title>X</title></head></html>')
+    expect(injectPdfBase('<html><header>Not head</header></html>', 'https://app.test')).toBe(
+      '<base href="https://app.test/"><html><header>Not head</header></html>',
+    )
+    expect(
+      injectPdfBase(`<${'headless'.repeat(20_000)}>`, 'https://app.test').startsWith(
+        '<base href="https://app.test/">',
+      ),
+    ).toBe(true)
+  })
+})
 
 describe('PDF resource policy', () => {
   const storageOrigin = 'http://minio.internal:9000'

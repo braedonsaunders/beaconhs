@@ -350,9 +350,13 @@ function toArray(v: string | string[]): string[] {
 
 /** Split a `Name <email>` address into its parts (SendGrid/Postmark want them apart). */
 function parseAddress(addr: string): { email: string; name?: string } {
-  const m = addr.match(/^\s*(.*?)\s*<([^>]+)>\s*$/)
-  if (m) return { email: m[2]!.trim(), name: m[1] ? m[1].trim() : undefined }
-  return { email: addr.trim() }
+  const trimmed = addr.trim()
+  if (!trimmed.endsWith('>')) return { email: trimmed }
+  const opening = trimmed.lastIndexOf('<')
+  if (opening === -1) return { email: trimmed }
+  const email = trimmed.slice(opening + 1, -1).trim()
+  const name = trimmed.slice(0, opening).trim()
+  return { email, name: name || undefined }
 }
 
 type HttpProvider = 'Resend' | 'SendGrid' | 'Mailgun' | 'Postmark'

@@ -28,8 +28,32 @@ export type WebPushVapidDetails = {
 }
 
 function decodeBase64Url(value: string, label: string, expectedBytes: number): string {
-  const normalized = value.trim().replace(/=+$/, '')
-  if (!/^[A-Za-z0-9_-]+$/.test(normalized)) {
+  const maxEncodedLength = Math.ceil((expectedBytes * 4) / 3) + 2
+  if (value.length > maxEncodedLength) {
+    throw new Error(`${label} has an invalid length or encoding.`)
+  }
+  let normalized = value.trim()
+  let padding = 0
+  while (normalized.endsWith('=')) {
+    padding += 1
+    if (padding > 2) throw new Error(`${label} is not valid base64url data.`)
+    normalized = normalized.slice(0, -1)
+  }
+  let valid = normalized.length > 0
+  for (const character of normalized) {
+    const code = character.charCodeAt(0)
+    if (!(
+      (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      character === '_' ||
+      character === '-'
+    )) {
+      valid = false
+      break
+    }
+  }
+  if (!valid) {
     throw new Error(`${label} is not valid base64url data.`)
   }
   const decoded = Buffer.from(normalized, 'base64url')

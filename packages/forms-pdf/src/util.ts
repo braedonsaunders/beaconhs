@@ -319,16 +319,39 @@ export async function setPdfContent(
   if (Buffer.byteLength(html) > MAX_DOCUMENT_HTML_BYTES) {
     throw new Error('PDF HTML exceeds the 16 MiB render limit')
   }
-  const base = `<base href="${escapeHtml(configuredAppOrigin())}/">`
-  const documentHtml = /<head(?:\s[^>]*)?>/i.test(html)
-    ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${base}`)
-    : `${base}${html}`
+  const documentHtml = injectPdfBase(html, configuredAppOrigin())
   await page.setContent(documentHtml, { waitUntil: 'load', timeout: 30_000 })
   if (options.waitForFonts) await page.evaluateHandle('document.fonts.ready')
   const state = resourceStates.get(page)
   if (state && state.errors.length > 0) {
     throw new AggregateError(state.errors, 'One or more PDF resources could not be loaded safely')
   }
+}
+
+/** Insert the application base URL after the first real `<head>` opening tag. */
+export function injectPdfBase(html: string, appOrigin: string): string {
+  const base = `<base href="${escapeHtml(appOrigin)}/">`
+  const lower = html.toLowerCase()
+  let cursor = 0
+  while (cursor < lower.length) {
+    const start = lower.indexOf('<head', cursor)
+    if (start === -1) break
+    const boundary = lower[start + 5]
+    const isHeadTag =
+      boundary === '>' ||
+      boundary === ' ' ||
+      boundary === '\t' ||
+      boundary === '\r' ||
+      boundary === '\n' ||
+      boundary === '\f'
+    if (isHeadTag) {
+      const end = lower.indexOf('>', start + 5)
+      if (end !== -1) return `${html.slice(0, end + 1)}${base}${html.slice(end + 1)}`
+      break
+    }
+    cursor = start + 5
+  }
+  return `${base}${html}`
 }
 
 export function escapeHtml(s: string): string {

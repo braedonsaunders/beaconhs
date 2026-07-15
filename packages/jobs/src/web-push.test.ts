@@ -53,6 +53,28 @@ describe('Web Push delivery policy', () => {
     ).toThrow(/base64url/)
   })
 
+  it('normalizes canonical padding and rejects unbounded or interior padding', () => {
+    const valid = subscription()
+    expect(
+      validateWebPushSubscription({
+        ...valid,
+        keys: { p256dh: `${valid.keys.p256dh}=`, auth: `${valid.keys.auth}==` },
+      }),
+    ).toEqual(valid)
+    expect(() =>
+      validateWebPushSubscription({
+        ...valid,
+        keys: { ...valid.keys, auth: `${valid.keys.auth}${'='.repeat(200)}` },
+      }),
+    ).toThrow(/length|base64url/)
+    expect(() =>
+      validateWebPushSubscription({
+        ...valid,
+        keys: { ...valid.keys, auth: `${valid.keys.auth.slice(0, 4)}=${valid.keys.auth.slice(4)}` },
+      }),
+    ).toThrow(/base64url/)
+  })
+
   it('checks public DNS before persistence', async () => {
     const valid = subscription()
     await expect(validateWebPushSubscriptionForPersistence(valid)).resolves.toEqual(valid)

@@ -31,6 +31,29 @@ describe('resolveCollaboraEditUrl', () => {
     expect(resolveCollaboraEditUrl(xml, ORIGIN)).toBe(`${ORIGIN}/browser/hash/cool.html?ui=`)
   })
 
+  it('accepts only bounded Collabora placeholders in the query string', () => {
+    const action = (url: string) =>
+      discovery(
+        `<app name="${PPTX}"><action name="edit" urlsrc="${url.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}" /></app>`,
+      )
+
+    expect(
+      resolveCollaboraEditUrl(action(`${ORIGIN}/browser/cool.html?src=<WOPI_SRC>`), ORIGIN),
+    ).toBe(`${ORIGIN}/browser/cool.html?src=`)
+    expect(
+      resolveCollaboraEditUrl(action(`${ORIGIN}/browser/cool.html?src=<script>`), ORIGIN),
+    ).toBeNull()
+    expect(
+      resolveCollaboraEditUrl(
+        action(`${ORIGIN}/browser/cool.html?src=<${`A_`.repeat(70)}>`),
+        ORIGIN,
+      ),
+    ).toBeNull()
+    expect(
+      resolveCollaboraEditUrl(action(`${ORIGIN}/browser/cool.html?src=<WOPI_<SRC>>`), ORIGIN),
+    ).toBeNull()
+  })
+
   it('fails closed when the first MIME edit action is off-origin', () => {
     const xml = discovery(`
       <app name="${PPTX}">
