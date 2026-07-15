@@ -26,7 +26,7 @@ function decorate(col: ReportEntityColumn): AnalyticsColumn {
 
 /** Discovered entities with the tenant's active custom-field columns appended.
  *  Only the four custom-field-bearing base tables incur a DB read. */
-export async function discoverEntitiesWithCustomFields(tx: Database): Promise<AnalyticsEntity[]> {
+async function discoverEntitiesWithCustomFields(tx: Database): Promise<AnalyticsEntity[]> {
   const base = discoverEntities()
   const out: AnalyticsEntity[] = []
   for (const entity of base) {

@@ -1,4 +1,4 @@
-export type AttachmentTenantReference = {
+type AttachmentTenantReference = {
   table: string
   column: string
   onDelete: 'cascade' | 'set null'

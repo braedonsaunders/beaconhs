@@ -13,9 +13,9 @@ import { magicLinkClient } from 'better-auth/client/plugins'
 const originFromGlobal = (globalThis as { location?: { origin?: string } }).location?.origin
 const baseURL = process.env.NEXT_PUBLIC_APP_URL ?? originFromGlobal ?? 'http://localhost:3000'
 
-export const authClient = createAuthClient({
+const authClient = createAuthClient({
   baseURL,
   plugins: [magicLinkClient()],
 })
 
-export const { signIn, signOut, useSession } = authClient
+export const { signIn, signOut } = authClient

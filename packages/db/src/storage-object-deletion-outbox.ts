@@ -4,9 +4,9 @@ import { storageObjectDeletionOutbox } from './schema'
 
 const INITIAL_RETRY_MS = 15_000
 const MAX_RETRY_MS = 60 * 60_000
-export const STORAGE_OBJECT_DELETION_CLAIM_TIMEOUT_MS = 5 * 60_000
+const STORAGE_OBJECT_DELETION_CLAIM_TIMEOUT_MS = 5 * 60_000
 
-export type ClaimedStorageObjectDeletion = {
+type ClaimedStorageObjectDeletion = {
   id: string
   tenantId: string
   attachmentId: string

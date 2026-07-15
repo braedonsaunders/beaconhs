@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '@beaconhs/ui/styles.css';
 @config '../../tailwind.config.ts';
 
 /* Class-based dark mode: `dark:` variants respond to a `.dark` class on <html>
@@ -14,28 +15,6 @@
   ::backdrop,
   ::file-selector-button {
     border-color: var(--color-gray-200, currentColor);
-  }
-
-  :root {
-    --color-bg: 255 255 255;
-    --color-fg: 17 24 39;
-    --color-muted: 107 114 128;
-    --color-border: 229 231 235;
-    --color-primary: 15 118 110;
-    --color-primary-fg: 255 255 255;
-    --color-danger: 220 38 38;
-    --color-warning: 217 119 6;
-    --color-success: 22 163 74;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --color-bg: 17 24 39;
-    --color-fg: 243 244 246;
-    --color-muted: 156 163 175;
-    --color-border: 55 65 81;
-    --color-primary: 20 184 166;
-    --color-primary-fg: 17 24 39;
   }
 
   html,

@@ -9,6 +9,7 @@ const config: KnipConfig = {
     'apps/web': {
       entry: [
         'public/sw.js',
+        'scripts/start-standalone.mjs',
         'scripts/backfill-credential-outputs.ts',
         'scripts/backfill-private-attachment-urls.ts',
         'scripts/backfill-signatures-to-storage.ts',
@@ -18,10 +19,16 @@ const config: KnipConfig = {
       ],
     },
     'apps/worker': {
-      entry: ['src/health.ts', 'src/storage-init.ts'],
+      entry: [
+        'build.mjs',
+        'src/health.ts',
+        'src/scheduler.ts',
+        'src/scripts/check-email-config.ts',
+        'src/storage-init.ts',
+      ],
     },
     'packages/db': {
-      entry: ['src/scripts/reseed-lift-plan.ts'],
+      entry: ['src/migrate.ts', 'src/scripts/reseed-lift-plan.ts', 'src/seed.ts'],
     },
     'packages/sync': {
       ignoreDependencies: ['mssql'],

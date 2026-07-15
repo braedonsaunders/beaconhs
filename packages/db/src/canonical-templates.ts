@@ -8,7 +8,7 @@
 
 import type { FormSchemaV1 } from './schema/forms'
 
-export type CanonicalTemplate = {
+type CanonicalTemplate = {
   key: string
   name: string
   category: string

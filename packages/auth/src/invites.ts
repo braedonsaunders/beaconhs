@@ -12,7 +12,7 @@ const MAX_GRANT_LENGTH = 4096
 /** Keep this aligned with the Better Auth magic-link expiry. */
 export const INVITE_LINK_TTL_SECONDS = 15 * 60
 
-export type InviteGrantInput = {
+type InviteGrantInput = {
   membershipId: string
   tenantId: string
   userId: string
@@ -29,7 +29,7 @@ export type InviteGrantPayload = {
   expiresAt: number
 }
 
-export type InviteGrantVerification =
+type InviteGrantVerification =
   { ok: true; payload: InviteGrantPayload } | { ok: false; reason: 'invalid' | 'expired' }
 
 export type InviteAccessState =
@@ -45,7 +45,7 @@ type InviteRecord = {
   tenantStatus: 'active' | 'suspended' | 'archived'
 }
 
-export type InviteInspection = {
+type InviteInspection = {
   state: InviteAccessState
   tenantId: string | null
   tenantName: string | null

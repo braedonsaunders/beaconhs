@@ -7,7 +7,7 @@ import { systemMessageKey } from './system-key'
 export { systemMessageKey } from './system-key'
 
 export type AppMessages = typeof en
-export type SystemMessageValues = Readonly<Record<string, unknown>>
+type SystemMessageValues = Readonly<Record<string, unknown>>
 
 const messagesByLocale = { en, es, fr } as const
 

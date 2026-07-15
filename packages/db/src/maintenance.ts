@@ -9,7 +9,7 @@
 // to live operations. Defaults below are conservative HSE retention windows; a
 // super-admin can lengthen them or set "keep forever" (null) per table.
 
-export type MaintenanceTable = {
+type MaintenanceTable = {
   /** Physical table name. */
   table: string
   /** Timestamp column the retention window is measured against. */

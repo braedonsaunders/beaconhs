@@ -12,7 +12,7 @@ import {
 const WEB_ROOT = resolve(process.env.I18N_AUDIT_WEB_ROOT ?? resolve(import.meta.dirname, '..'))
 const SOURCE_ROOT = resolve(WEB_ROOT, 'src')
 
-export const USER_FACING_PROPERTIES = new Set([
+const USER_FACING_PROPERTIES = new Set([
   'actionLabel',
   'bodyText',
   'buttonLabel',
@@ -65,7 +65,7 @@ const USER_FACING_CALLS = new Set([
   'window.confirm',
 ])
 
-export interface RuntimeI18nCandidate {
+interface RuntimeI18nCandidate {
   container?: string
   containerAsync?: boolean
   file: string

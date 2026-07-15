@@ -49,7 +49,7 @@ export function normalizeKioskPin(value: string | null | undefined): string | nu
   return pin
 }
 
-export function isKioskPinHash(value: string | null | undefined): boolean {
+function isKioskPinHash(value: string | null | undefined): boolean {
   return Boolean(value?.startsWith(`${FORMAT}$`))
 }
 

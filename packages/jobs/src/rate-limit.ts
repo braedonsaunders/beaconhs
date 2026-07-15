@@ -48,7 +48,7 @@ async function incrementCounter(key: string, windowSeconds: number): Promise<num
   return Number(count)
 }
 
-export type RateLimitStatus = {
+type RateLimitStatus = {
   allowed: boolean
   count: number
   remaining: number

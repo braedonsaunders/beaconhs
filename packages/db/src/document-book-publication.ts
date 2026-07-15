@@ -1,6 +1,6 @@
 export const MAX_DOCUMENT_BOOK_ITEMS = 200
 
-export type DocumentBookSnapshotMode = 'publish' | 'published-render' | 'draft-render'
+type DocumentBookSnapshotMode = 'publish' | 'published-render' | 'draft-render'
 
 export type DocumentBookSnapshotItem = {
   itemId: string
@@ -28,7 +28,7 @@ export type DocumentBookSnapshotAttachment = {
   key: string
 }
 
-export type ResolvedDocumentBookItem = {
+type ResolvedDocumentBookItem = {
   itemId: string
   documentId: string
   documentTitle: string

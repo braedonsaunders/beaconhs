@@ -5,7 +5,7 @@ import ts from 'typescript'
 const WEB_ROOT = resolve(process.env.I18N_AUDIT_WEB_ROOT ?? resolve(import.meta.dirname, '..'))
 const SOURCE_ROOTS = [resolve(WEB_ROOT, 'src/app'), resolve(WEB_ROOT, 'src/components')]
 
-export const USER_FACING_ATTRIBUTES = new Set([
+const USER_FACING_ATTRIBUTES = new Set([
   'actionLabel',
   'alt',
   'aria-label',
@@ -39,11 +39,11 @@ export const USER_FACING_ATTRIBUTES = new Set([
   'tooltip',
 ])
 
-export const NON_PROSE_ELEMENTS = new Set(['code', 'kbd', 'pre', 'samp', 'script', 'style'])
+const NON_PROSE_ELEMENTS = new Set(['code', 'kbd', 'pre', 'samp', 'script', 'style'])
 
-export type I18nCandidateKind = 'attribute' | 'expression' | 'jsx-text' | 'mixed-jsx' | 'template'
+type I18nCandidateKind = 'attribute' | 'expression' | 'jsx-text' | 'mixed-jsx' | 'template'
 
-export interface I18nCandidate {
+interface I18nCandidate {
   container?: string
   containerAsync?: boolean
   file: string
@@ -104,7 +104,7 @@ export function hasWords(value: string): boolean {
   return Boolean(normalized) && /[A-Za-zÀ-ÿ]/.test(normalized) && !/^https?:\/\//.test(normalized)
 }
 
-export function normalizeProse(value: string): string {
+function normalizeProse(value: string): string {
   return value
     .replaceAll('&apos;', "'")
     .replaceAll('&#39;', "'")
@@ -117,12 +117,12 @@ export function normalizeProse(value: string): string {
     .trim()
 }
 
-export function elementName(node: ts.JsxElement | ts.JsxSelfClosingElement): string {
+function elementName(node: ts.JsxElement | ts.JsxSelfClosingElement): string {
   const name = ts.isJsxElement(node) ? node.openingElement.tagName : node.tagName
   return name.getText()
 }
 
-export function containingElement(node: ts.Node): ts.JsxElement | ts.JsxSelfClosingElement | null {
+function containingElement(node: ts.Node): ts.JsxElement | ts.JsxSelfClosingElement | null {
   let current: ts.Node | undefined = node.parent
   while (current) {
     if (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current)) return current
