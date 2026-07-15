@@ -1,3 +1,5 @@
+'use client'
+
 import * as React from 'react'
 import { useUiText } from './text-context'
 import { cn } from './utils'

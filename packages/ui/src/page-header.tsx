@@ -1,3 +1,5 @@
+'use client'
+
 // UiLink rather than a bare <a>: back-links are in-app routes, and a plain
 // anchor forces a full document reload — which replays the boot splash and
 // refetches the whole shell on every record → list hop. The app injects its
