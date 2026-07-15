@@ -1,6 +1,6 @@
 {
-  "id": "1a322713-1558-47c9-8308-62fde276c88c",
-  "prevId": "f58cbe66-4346-421a-b142-9c844d2dde50",
+  "id": "7fd81351-f4da-4b7a-961b-e014270010e7",
+  "prevId": "1a322713-1558-47c9-8308-62fde276c88c",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -349,6 +349,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "locale_override": {
+          "name": "locale_override",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "tenant_user_status",
@@ -508,7 +514,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "tenant_users_locale_override_supported_check": {
+          "name": "tenant_users_locale_override_supported_check",
+          "value": "\"tenant_users\".\"locale_override\" is null or \"tenant_users\".\"locale_override\" in ('en', 'fr', 'es')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.tenants": {
@@ -632,7 +643,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "tenants_default_language_supported_check": {
+          "name": "tenants_default_language_supported_check",
+          "value": "\"tenants\".\"default_language\" in ('en', 'fr', 'es')"
+        },
+        "tenants_enabled_languages_valid_check": {
+          "name": "tenants_enabled_languages_valid_check",
+          "value": "jsonb_typeof(\"tenants\".\"enabled_languages\") = 'array'\n          and \"tenants\".\"enabled_languages\" <@ '[\"en\", \"fr\", \"es\"]'::jsonb\n          and \"tenants\".\"enabled_languages\" ? \"tenants\".\"default_language\""
+        }
+      },
       "isRLSEnabled": false
     },
     "public.user": {
@@ -676,13 +696,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "locale": {
-          "name": "locale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'en'"
         },
         "timezone": {
           "name": "timezone",

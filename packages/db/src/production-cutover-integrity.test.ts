@@ -6,7 +6,10 @@ const drizzleFolder = new URL('../drizzle/', import.meta.url)
 const metaFolder = new URL('../drizzle/meta/', import.meta.url)
 const cutoverSql = readFileSync(new URL('0005_production_cutover.sql', drizzleFolder), 'utf8')
 const finalSection = readProductionCutoverSection('0023_flaky_squirrel_girl.sql')
-const languageSection = readProductionCutoverSection('0035_tenant_language_policy.sql')
+const languageSection = readFileSync(
+  new URL('0006_tenant_language_policy.sql', drizzleFolder),
+  'utf8',
+)
 
 function position(fragment: string): number {
   const value = finalSection.indexOf(fragment)
@@ -15,7 +18,7 @@ function position(fragment: string): number {
 }
 
 describe('production cutover migration integrity', () => {
-  it('keeps one linear post-baseline migration and snapshot', () => {
+  it('keeps a linear post-baseline migration and snapshot chain', () => {
     const migrations = readdirSync(drizzleFolder)
       .filter((name) => name.endsWith('.sql'))
       .sort()
@@ -26,6 +29,7 @@ describe('production cutover migration integrity', () => {
       '0003_converge_dev_schema.sql',
       '0004_flawless_boomer.sql',
       '0005_production_cutover.sql',
+      '0006_tenant_language_policy.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -38,12 +42,13 @@ describe('production cutover migration integrity', () => {
       { idx: 3, tag: '0003_converge_dev_schema' },
       { idx: 4, tag: '0004_flawless_boomer' },
       { idx: 5, tag: '0005_production_cutover' },
+      { idx: 6, tag: '0006_tenant_language_policy' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)
     }
 
-    const snapshots = [4, 5].map(
+    const snapshots = [4, 5, 6].map(
       (index) =>
         JSON.parse(
           readFileSync(
@@ -56,7 +61,7 @@ describe('production cutover migration integrity', () => {
       expect(snapshots[index]!.prevId).toBe(snapshots[index - 1]!.id)
       expect(snapshots[index]!.id).not.toBe(snapshots[index]!.prevId)
     }
-    expect([...cutoverSql.matchAll(/^-- Squashed source:/gm)]).toHaveLength(31)
+    expect([...cutoverSql.matchAll(/^-- Squashed source:/gm)]).toHaveLength(30)
   })
 
   it('preflights and backfills training owners before removing legacy columns', () => {

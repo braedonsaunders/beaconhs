@@ -43,6 +43,13 @@
       "when": 1783956236047,
       "tag": "0005_production_cutover",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784091600000,
+      "tag": "0006_tenant_language_policy",
+      "breakpoints": true
     }
   ]
 }
