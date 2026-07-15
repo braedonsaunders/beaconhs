@@ -86,7 +86,17 @@ export function SearchSelect({
   const [highlight, setHighlight] = useState(0)
   const [isDesktop, setIsDesktop] = useState(true)
   const [mounted, setMounted] = useState(false)
+  // Viewport coordinates for the portaled desktop menu. Anchored `top` when the
+  // menu opens below the trigger, `bottom` when it flips above (bottom-anchoring
+  // avoids measuring the menu's own height before the first paint).
+  const [menuPos, setMenuPos] = useState<{
+    left: number
+    width: number
+    top?: number
+    bottom?: number
+  } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -160,14 +170,49 @@ export function SearchSelect({
     setOpen(false)
   }
 
-  // Click-outside (desktop).
+  // Click-outside (desktop). The menu is portaled to document.body, so a click
+  // inside it is NOT inside wrapRef — check both containers.
   useEffect(() => {
     if (!open || !isDesktop) return
     function onDoc(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (wrapRef.current?.contains(target) || menuRef.current?.contains(target)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
+  }, [open, isDesktop])
+
+  // Anchor the portaled desktop menu to the trigger. Fixed viewport coordinates
+  // escape both overflow-hidden ancestors and the app shell's framer-motion
+  // transforms (which would capture position:fixed rendered in place), and the
+  // scroll/resize listeners keep the menu glued to the trigger. Flip above the
+  // trigger when the space below can't fit the menu and above is roomier.
+  useEffect(() => {
+    if (!open || !isDesktop) return
+    const GAP = 6
+    const MENU_MAX_HEIGHT = 320 // search box + max-h-64 list + status row
+    const update = () => {
+      const rect = wrapRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const width = rect.width
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - Math.max(width, 192) - 8))
+      const spaceBelow = window.innerHeight - rect.bottom
+      const openUp = spaceBelow < MENU_MAX_HEIGHT + GAP && rect.top > spaceBelow
+      setMenuPos(
+        openUp
+          ? { left, width, bottom: window.innerHeight - rect.top + GAP }
+          : { left, width, top: rect.bottom + GAP },
+      )
+    }
+    update()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+      setMenuPos(null)
+    }
   }, [open, isDesktop])
 
   // Keyboard nav + scroll-lock on the mobile sheet.
@@ -352,13 +397,28 @@ export function SearchSelect({
         />
       </button>
 
-      {/* Desktop dropdown */}
-      {open && isDesktop ? (
-        <div className="absolute top-full left-0 z-50 mt-1.5 w-full min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
-          {showSearch ? searchBox(false) : null}
-          <div className={cn('max-h-64 overflow-y-auto', showSearch && 'mt-1')}>{optionList}</div>
-        </div>
-      ) : null}
+      {/* Desktop dropdown — portaled to document.body so no overflow-hidden
+          ancestor can clip it (see the positioning effect above). */}
+      {mounted && open && isDesktop && menuPos
+        ? createPortal(
+            <div
+              ref={menuRef}
+              style={{
+                left: menuPos.left,
+                width: menuPos.width,
+                top: menuPos.top,
+                bottom: menuPos.bottom,
+              }}
+              className="fixed z-50 min-w-[12rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
+            >
+              {showSearch ? searchBox(false) : null}
+              <div className={cn('max-h-64 overflow-y-auto', showSearch && 'mt-1')}>
+                {optionList}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       {/* Mobile bottom sheet */}
       {mounted && !isDesktop
