@@ -3012,6 +3012,57 @@ EXECUTE FUNCTION "guard_attachment_storage_object_key"();
 -- credential artifacts. Migration 0019 must precede this file so deleting an
 -- attachment durably records its object-store cleanup intent.
 
+-- The migration owner is intentionally NOBYPASSRLS. The cleanup below scans
+-- every attachment FK child plus the legacy JSON/pending-FK references across
+-- every tenant. Keep RLS enabled for application roles while temporarily
+-- allowing the table owner to see the complete, transactionally locked data
+-- set. The storage outbox must be visible too because the attachment DELETE
+-- trigger writes and verifies deletion intents in the same transaction.
+ALTER TABLE "attachment_upload_reservations" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "attachments" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "audit_log" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "ca_complete_steps" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "ca_photos" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "document_acknowledgments" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "document_references" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "document_versions" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "documents" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "equipment_inspection_record_attachments" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "equipment_inspection_record_criteria" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "equipment_items" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "equipment_log_entries" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "flow_gates" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "form_response_steps" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "form_responses" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "hazid_assessment_photos" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "hazid_assessment_signatures" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "hazid_hazards" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "incident_attachments" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "inspection_record_attachments" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "inspection_record_criteria" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "inspection_records" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "job_title_task_acknowledgments" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "journal_entry_photos" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "people" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "person_files" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "ppe_annual_records" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "ppe_inspection_attachments" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "ppe_issues" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "report_runs" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "safe_distance_records" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "storage_object_deletion_outbox" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_certificates" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_class_attendees" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_content_items" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_course_files" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_courses" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_lesson_progress" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_lessons" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_records" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_skill_assignment_files" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_skill_assignments" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_skill_certificates" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+
 DO $$
 DECLARE
   candidate_count bigint;
@@ -3148,7 +3199,10 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- These legacy JSON arrays are attachment references without database FKs.
+  -- These legacy JSON arrays and the newly introduced PPE join table are
+  -- attachment references without database FKs at this point in the linear
+  -- migration. The post-migration reconciler installs the PPE composite FK,
+  -- so its rows must be protected explicitly during this earlier cleanup.
   IF EXISTS (
     SELECT 1
     FROM training_generated_attachment_cleanup AS candidate
@@ -3176,8 +3230,14 @@ BEGIN
     JOIN form_responses AS response ON response.tenant_id = candidate.tenant_id
     WHERE position(candidate.attachment_id::text IN response.data::text) > 0
        OR position(candidate.attachment_id::text IN coalesce(response.draft_data::text, '')) > 0
+  ) OR EXISTS (
+    SELECT 1
+    FROM training_generated_attachment_cleanup AS candidate
+    JOIN ppe_inspection_attachments AS ppe_attachment
+      ON ppe_attachment.tenant_id = candidate.tenant_id
+     AND ppe_attachment.attachment_id = candidate.attachment_id
   ) THEN
-    RAISE EXCEPTION 'Training artifact cleanup preflight failed: a candidate is reused in JSON data';
+    RAISE EXCEPTION 'Training artifact cleanup preflight failed: a candidate is reused outside its generated credential';
   END IF;
 
   SELECT count(*) INTO candidate_count FROM training_generated_attachment_cleanup;
@@ -3208,6 +3268,51 @@ BEGIN
       queued_count;
   END IF;
 END $$;
+--> statement-breakpoint
+ALTER TABLE "attachment_upload_reservations" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "attachments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "audit_log" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "ca_complete_steps" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "ca_photos" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "document_acknowledgments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "document_references" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "document_versions" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "documents" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "equipment_inspection_record_attachments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "equipment_inspection_record_criteria" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "equipment_items" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "equipment_log_entries" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "flow_gates" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "form_response_steps" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "form_responses" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "hazid_assessment_photos" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "hazid_assessment_signatures" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "hazid_hazards" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "incident_attachments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "inspection_record_attachments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "inspection_record_criteria" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "inspection_records" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "job_title_task_acknowledgments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "journal_entry_photos" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "people" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "person_files" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "ppe_annual_records" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "ppe_inspection_attachments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "ppe_issues" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "report_runs" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "safe_distance_records" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "storage_object_deletion_outbox" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_certificates" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_class_attendees" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_content_items" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_course_files" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_courses" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_lesson_progress" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_lessons" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_records" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_skill_assignment_files" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_skill_assignments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_skill_certificates" FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE "training_class_attendees" ADD COLUMN "completion_attended" boolean;
 --> statement-breakpoint
@@ -3276,6 +3381,12 @@ ALTER TABLE "training_class_attendees"
 --> statement-breakpoint
 
 -- Squashed source: packages/db/drizzle/0021_training_record_value_guards.sql
+-- These are all-tenant value preflights run by the NOBYPASSRLS migration
+-- owner. Keep RLS enabled while making the complete locked data set visible,
+-- then restore FORCE before installing the physical constraints.
+ALTER TABLE "training_records" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_skill_assignment_files" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+
 DO $$
 DECLARE
   invalid_count bigint;
@@ -3307,6 +3418,9 @@ BEGIN
       invalid_count;
   END IF;
 END $$;--> statement-breakpoint
+ALTER TABLE "training_records" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_skill_assignment_files" FORCE ROW LEVEL SECURITY;
+--> statement-breakpoint
 ALTER TABLE "training_records"
   ADD CONSTRAINT "training_records_grade_ck"
   CHECK ("training_records"."grade" IS NULL OR ("training_records"."grade" >= 0 AND "training_records"."grade" <= 100))
@@ -3483,14 +3597,6 @@ BEGIN
 END
 $$;--> statement-breakpoint
 
-ALTER TABLE "corrective_actions" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-ALTER TABLE "form_responses" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-ALTER TABLE "documents" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-ALTER TABLE "training_extra_fields" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-ALTER TABLE "training_skill_assignments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-ALTER TABLE "training_skill_types" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-ALTER TABLE "training_skill_authorities" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
-
 DROP INDEX "documents_key_idx";--> statement-breakpoint
 DROP INDEX "training_extra_fields_owner_idx";--> statement-breakpoint
 DROP INDEX "ai_messages_conversation_idx";--> statement-breakpoint
@@ -3534,6 +3640,19 @@ CREATE INDEX "ai_messages_conversation_idx" ON "ai_messages" USING btree ("conve
 ALTER TABLE "training_extra_fields" DROP COLUMN "owner_type";--> statement-breakpoint
 ALTER TABLE "training_extra_fields" DROP COLUMN "owner_id";--> statement-breakpoint
 DROP TYPE "public"."training_extra_field_owner_type";
+
+-- The migration owner is intentionally not BYPASSRLS. Keep FORCE relaxed
+-- through the cross-tenant owner backfill and its physical constraints; if it
+-- is restored earlier, the three UPDATEs see zero rows without an app tenant
+-- context and the exactly-one-owner validation fails. RLS remains enabled for
+-- every non-owner throughout this transaction.
+ALTER TABLE "corrective_actions" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "form_responses" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "documents" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_extra_fields" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_skill_assignments" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_skill_types" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_skill_authorities" FORCE ROW LEVEL SECURITY;
 
 -- Squashed source: packages/db/drizzle/0024_incident_injury_taxonomy_cutover.sql
 -- The legacy injury row stored two different concepts in overlapping columns:
@@ -8320,6 +8439,12 @@ ALTER TABLE "document_books" DROP COLUMN "name";--> statement-breakpoint
 ALTER TABLE "document_books" DROP COLUMN "category";--> statement-breakpoint
 ALTER TABLE "document_books" DROP COLUMN "contents";--> statement-breakpoint
 ALTER TABLE "documents" DROP COLUMN "category";--> statement-breakpoint
+-- report_equipment_fleet is installed after migrations and its pre-cutover
+-- definition reads equipment_types.category. Retire that derived projection
+-- inside this migration transaction before removing the source column; the
+-- migrator recreates the canonical category_id-backed definition immediately
+-- after the migration ledger commits.
+DROP VIEW IF EXISTS "report_equipment_fleet";--> statement-breakpoint
 ALTER TABLE "equipment_types" DROP COLUMN "category";--> statement-breakpoint
 ALTER TABLE "incidents" DROP COLUMN "classification";--> statement-breakpoint
 ALTER TABLE "incidents" DROP COLUMN "ems_notified";--> statement-breakpoint

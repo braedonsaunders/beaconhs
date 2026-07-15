@@ -85,7 +85,6 @@ describe('production cutover migration integrity', () => {
       relax,
       orphanPreflight,
       duplicatePreflight,
-      restore,
       addColumn,
       backfill,
       addForeignKey,
@@ -93,6 +92,7 @@ describe('production cutover migration integrity', () => {
       addCheck,
       validateCheck,
       dropOwnerType,
+      restore,
     ]
     expect(orderedPositions).toEqual([...orderedPositions].sort((left, right) => left - right))
   })
@@ -108,14 +108,14 @@ describe('production cutover migration integrity', () => {
     const documentUniqueIndex = position('CREATE UNIQUE INDEX "documents_tenant_key_live_ux"')
 
     expect(relax).toBeLessThan(correctivePreflight)
-    expect(correctivePreflight).toBeLessThan(restore)
     expect(correctivePreflight).toBeLessThan(correctiveForeignKey)
+    expect(correctiveForeignKey).toBeLessThan(restore)
     expect(relax).toBeLessThan(documentPreflight)
-    expect(documentPreflight).toBeLessThan(restore)
     expect(documentPreflight).toBeLessThan(documentUniqueIndex)
+    expect(documentUniqueIndex).toBeLessThan(restore)
   })
 
-  it('makes every final preflight table visible, then restores FORCE RLS before DDL', () => {
+  it('keeps every final preflight table visible through owner-role backfills, then restores FORCE RLS', () => {
     const expectedTables = [
       'corrective_actions',
       'documents',
@@ -144,6 +144,12 @@ describe('production cutover migration integrity', () => {
     expect(firstRestore).toBeGreaterThan(
       finalSection.indexOf('training additional-field cutover blocked'),
     )
-    expect(finalSection.indexOf('DROP INDEX "documents_key_idx"')).toBeGreaterThan(firstRestore)
+    expect(firstRestore).toBeGreaterThan(
+      finalSection.indexOf('SET "skill_assignment_id" = "owner_id"'),
+    )
+    expect(firstRestore).toBeGreaterThan(
+      finalSection.indexOf('ALTER TABLE "training_extra_fields" DROP COLUMN "owner_id"'),
+    )
+    expect(firstRestore).toBeGreaterThan(finalSection.indexOf('DROP INDEX "documents_key_idx"'))
   })
 })

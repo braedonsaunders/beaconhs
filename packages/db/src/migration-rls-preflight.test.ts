@@ -11,6 +11,8 @@ const migrations = {
   documents: readProductionCutoverSection('0011_famous_hammerhead.sql'),
   sourceOnlyTemplates: readProductionCutoverSection('0014_natural_captain_marvel.sql'),
   storageDeletionOutbox: readProductionCutoverSection('0019_storage_object_deletion_outbox.sql'),
+  trainingCompletion: readProductionCutoverSection('0020_training_completion_cutover.sql'),
+  trainingValueGuards: readProductionCutoverSection('0021_training_record_value_guards.sql'),
   incidentInjuries: readProductionCutoverSection('0024_incident_injury_taxonomy_cutover.sql'),
   orphanColumns: readProductionCutoverSection('0026_orphan_column_cutover.sql'),
   unifiedAssignments: readProductionCutoverSection(
@@ -83,6 +85,31 @@ describe('migration all-tenant visibility under FORCE RLS', () => {
     expect(policyAt).toBeGreaterThan(enableAt)
     expect(forceAt).toBeGreaterThan(policyAt)
     expect(triggerFunctionAt).toBeGreaterThan(forceAt)
+  })
+
+  it('makes training value preflights visible before installing their constraints', () => {
+    const sql = migrations.trainingValueGuards
+    expect(sql).not.toContain('DISABLE ROW LEVEL SECURITY')
+    expect(rlsTables(sql, 'relax')).toEqual(['training_records', 'training_skill_assignment_files'])
+    expect(rlsTables(sql, 'restore')).toEqual(rlsTables(sql, 'relax'))
+
+    const lastRelaxAt = sql.lastIndexOf('NO FORCE ROW LEVEL SECURITY')
+    const invalidGradeAt = sql.indexOf('have a grade outside 0..100')
+    const invalidKindAt = sql.indexOf('have an unsupported kind')
+    const firstRestoreAt = sql.indexOf(
+      'FORCE ROW LEVEL SECURITY',
+      lastRelaxAt + 'NO FORCE ROW LEVEL SECURITY'.length,
+    )
+    const firstConstraintAt = sql.indexOf('ADD CONSTRAINT "training_records_grade_ck"')
+    const orderedPositions = [
+      lastRelaxAt,
+      invalidGradeAt,
+      invalidKindAt,
+      firstRestoreAt,
+      firstConstraintAt,
+    ]
+    expect(orderedPositions.every((position) => position >= 0)).toBe(true)
+    expect(orderedPositions).toEqual([...orderedPositions].sort((left, right) => left - right))
   })
 
   it('preserves legacy job titles without overriding structured primaries', () => {

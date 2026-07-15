@@ -12,6 +12,14 @@ import { readProductionCutoverSection } from './test/read-production-cutover-sec
 
 const migrationSql = readProductionCutoverSection('0020_training_completion_cutover.sql')
 
+function rlsTables(force: 'relax' | 'restore'): string[] {
+  const expression =
+    force === 'relax'
+      ? /^ALTER TABLE "([^"]+)" NO FORCE ROW LEVEL SECURITY;.*$/gm
+      : /^ALTER TABLE "([^"]+)" FORCE ROW LEVEL SECURITY;.*$/gm
+  return [...migrationSql.matchAll(expression)].map((match) => match[1]!).sort()
+}
+
 function indexColumns(table: Parameters<typeof getTableConfig>[0], name: string): string[] {
   const index = getTableConfig(table).indexes.find((candidate) => candidate.config.name === name)
   if (!index) throw new Error(`Missing index ${name}`)
@@ -94,7 +102,8 @@ describe('training completion clean cutover', () => {
     expect(migrationSql).toContain("audit.metadata ->> 'walletAttachmentId'")
     expect(migrationSql).not.toMatch(/filename\s+(?:LIKE|~)/i)
     expect(migrationSql).toContain("fk.confrelid = 'public.attachments'::regclass")
-    expect(migrationSql).toContain('candidate is reused in JSON data')
+    expect(migrationSql).toContain('candidate is reused outside its generated credential')
+    expect(migrationSql).toContain('ppe_inspection_attachments AS ppe_attachment')
     expect(migrationSql).toContain('DELETE FROM attachments AS attachment')
     expect(migrationSql).toContain('storage_object_deletion_outbox AS deletion')
     expect(migrationSql).toContain('expected % durable deletion intents')
@@ -105,6 +114,50 @@ describe('training completion clean cutover', () => {
     expect(deleteAt).toBeGreaterThan(0)
     expect(queueProofAt).toBeGreaterThan(deleteAt)
     expect(firstDropAt).toBeGreaterThan(queueProofAt)
+  })
+
+  it('keeps every cross-tenant cleanup reader and trigger target visible to the owner', () => {
+    const expectedTables = [
+      ...new Set([
+        ...ATTACHMENT_TENANT_REFERENCES.map(({ table }) => table),
+        'attachments',
+        'audit_log',
+        // This legacy FK exists at the 0020 boundary and is retired later in
+        // the same squashed migration, so it is absent from the final manifest.
+        'document_references',
+        'equipment_inspection_record_criteria',
+        'inspection_record_criteria',
+        'safe_distance_records',
+        'storage_object_deletion_outbox',
+        'training_certificates',
+        'training_courses',
+        'training_skill_certificates',
+      ]),
+    ].sort()
+
+    expect(migrationSql).not.toContain('DISABLE ROW LEVEL SECURITY')
+    expect(rlsTables('relax')).toEqual(expectedTables)
+    expect(rlsTables('restore')).toEqual(expectedTables)
+
+    const lastRelaxAt = migrationSql.lastIndexOf('NO FORCE ROW LEVEL SECURITY')
+    const deleteAt = migrationSql.indexOf('DELETE FROM attachments AS attachment')
+    const queueProofAt = migrationSql.indexOf('expected % durable deletion intents')
+    const firstRestoreAt = migrationSql.indexOf(
+      'FORCE ROW LEVEL SECURITY',
+      lastRelaxAt + 'NO FORCE ROW LEVEL SECURITY'.length,
+    )
+    const firstDurableDdlAt = migrationSql.indexOf(
+      'ALTER TABLE "training_class_attendees" ADD COLUMN "completion_attended"',
+    )
+    const orderedPositions = [
+      lastRelaxAt,
+      deleteAt,
+      queueProofAt,
+      firstRestoreAt,
+      firstDurableDdlAt,
+    ]
+    expect(orderedPositions.every((position) => position >= 0)).toBe(true)
+    expect(orderedPositions).toEqual([...orderedPositions].sort((left, right) => left - right))
   })
 
   it('adds new relationships and checks without an unvalidated cutover window', () => {
