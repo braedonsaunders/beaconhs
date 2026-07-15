@@ -9,13 +9,6 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      operation:
-        description: Audited maintenance operation to run after this exact commit passes CI
-        required: true
-        type: choice
-        options:
-          - deploy-and-cutover
 
 jobs:
   ci:
@@ -90,10 +83,7 @@ jobs:
       - run: pnpm deadcode:check
       - name: Test deployment host safeguards
         run: |
-          scripts/cluster/acquire-swarm-scheduling-fence.test.sh
-          scripts/cluster/assert-cutover-isolation.test.sh
           scripts/cluster/dokploy-curl.test.sh
-          scripts/cluster/traefik-routes.test.sh
           scripts/ci/require-current-main.test.sh
           scripts/ci/workflow-repository-immutability.test.sh
       - name: Apply the production migration path
@@ -112,6 +102,5 @@ jobs:
       packages: write
     uses: ./.github/workflows/deploy-dev.yml
     with:
-      operation: ${{ github.event_name == 'workflow_dispatch' && inputs.operation || 'deploy' }}
       ci_gate_completed: true
     secrets: inherit
