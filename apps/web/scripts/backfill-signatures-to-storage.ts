@@ -27,6 +27,10 @@ import {
 } from './cutover-target'
 
 const APPLY = process.argv.includes('--apply')
+const VERIFY_COMPLETE = process.argv.includes('--verify-complete')
+if (APPLY && VERIFY_COMPLETE) {
+  throw new Error('--apply and --verify-complete cannot be combined')
+}
 const DATABASE_URL = requireCutoverDatabaseTarget(APPLY)
 const STORAGE_TARGET = requireCutoverStorageTarget()
 const BATCH_SIZE = 250
@@ -728,7 +732,17 @@ async function applyCutover(): Promise<void> {
 
 async function main(): Promise<void> {
   await assertCutoverDatabaseSession(sql)
-  if ((await legacyColumnState()) === 'retired') {
+  const state = await legacyColumnState()
+  if (VERIFY_COMPLETE) {
+    if (state !== 'retired') {
+      throw new Error(
+        'Stored-signature cutover is not complete; run the explicit cutover operation',
+      )
+    }
+    console.log('[signature-cutover] verified complete from database schema; storage audit skipped')
+    return
+  }
+  if (state === 'retired') {
     console.log('[signature-cutover] complete: legacy columns are already retired')
     return
   }

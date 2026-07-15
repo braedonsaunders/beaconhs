@@ -22,6 +22,14 @@ const restoreVerifyScript = readFileSync(
   fileURLToPath(new URL('../../../scripts/cluster/restore-verify.sh', import.meta.url)),
   'utf8',
 )
+const signatureCutoverScript = readFileSync(
+  fileURLToPath(new URL('./backfill-signatures-to-storage.ts', import.meta.url)),
+  'utf8',
+)
+const tenantStorageCutoverScript = readFileSync(
+  fileURLToPath(new URL('./backfill-tenant-storage-keys.ts', import.meta.url)),
+  'utf8',
+)
 const webPackage = JSON.parse(
   readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
 ) as {
@@ -148,6 +156,33 @@ describe('dev deployment cutover order', () => {
     )
     expect(requiredPosition(drainStep, 'BEACONHS_SCHEMA_CUTOVER_STARTED=true')).toBeGreaterThan(
       tenantKeys,
+    )
+  })
+
+  it('keeps routine deploys database-only after one-time storage cutovers complete', () => {
+    expect(drainStep).toContain('DEPLOY_OPERATION: ${{ inputs.operation }}')
+    expect(drainStep).toContain('if [ "$DEPLOY_OPERATION" = deploy-and-cutover ]; then')
+    expect(drainStep).toContain(
+      'verify_completed_cutover "Stored signatures" scripts/backfill-signatures-to-storage.ts',
+    )
+    expect(drainStep).toContain(
+      'verify_completed_cutover "Tenant storage keys" scripts/backfill-tenant-storage-keys.ts',
+    )
+    expect(drainStep).toContain('run cutover:run "$script" --verify-complete')
+
+    const databaseCheck = tenantStorageCutoverScript.slice(
+      requiredPosition(tenantStorageCutoverScript, 'async function assertDatabaseComplete()'),
+      requiredPosition(tenantStorageCutoverScript, 'async function assertComplete()'),
+    )
+    expect(databaseCheck).not.toContain('storage.')
+    expect(databaseCheck).not.toContain('headObject')
+    expect(databaseCheck).not.toContain('existingObjectSnapshot')
+
+    const signatureMain = signatureCutoverScript.slice(
+      requiredPosition(signatureCutoverScript, 'async function main()'),
+    )
+    expect(requiredPosition(signatureMain, 'if (VERIFY_COMPLETE)')).toBeLessThan(
+      requiredPosition(signatureMain, "storage = await import('@beaconhs/storage')"),
     )
   })
 

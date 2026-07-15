@@ -1152,6 +1152,7 @@ jobs:
           DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
           COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
           APP_URL: ${{ secrets.DEV_APP_URL }}
+          DEPLOY_OPERATION: ${{ inputs.operation }}
         run: |
           set -euo pipefail
           umask 077
@@ -1527,9 +1528,26 @@ jobs:
             assert_pre_schema_cutover_fence
           }
 
+          verify_completed_cutover() {
+            local label="$1"
+            local script="$2"
+
+            assert_pre_schema_cutover_fence
+            echo "::group::${label}: database completion check"
+            SUPERADMIN_DATABASE_URL="$cutover_superadmin_url" \
+              pnpm --filter @beaconhs/web run cutover:run "$script" --verify-complete
+            echo "::endgroup::"
+            assert_pre_schema_cutover_fence
+          }
+
           echo 'BEACONHS_PRE_SCHEMA_CUTOVER_STARTED=true' >> "$GITHUB_ENV"
-          run_pre_schema_cutover "Stored signatures" scripts/backfill-signatures-to-storage.ts
-          run_pre_schema_cutover "Tenant storage keys" scripts/backfill-tenant-storage-keys.ts
+          if [ "$DEPLOY_OPERATION" = deploy-and-cutover ]; then
+            run_pre_schema_cutover "Stored signatures" scripts/backfill-signatures-to-storage.ts
+            run_pre_schema_cutover "Tenant storage keys" scripts/backfill-tenant-storage-keys.ts
+          else
+            verify_completed_cutover "Stored signatures" scripts/backfill-signatures-to-storage.ts
+            verify_completed_cutover "Tenant storage keys" scripts/backfill-tenant-storage-keys.ts
+          fi
           echo 'BEACONHS_PRE_SCHEMA_CUTOVER_COMMITTED=true' >> "$GITHUB_ENV"
 
           echo "All target writers are drained; Swarm scheduling, routes, and Dokploy metadata remain fenced"

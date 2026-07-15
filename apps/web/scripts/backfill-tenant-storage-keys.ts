@@ -17,10 +17,22 @@ import {
 } from './cutover-target'
 
 const APPLY = process.argv.includes('--apply')
+const VERIFY_COMPLETE = process.argv.includes('--verify-complete')
+if (APPLY && VERIFY_COMPLETE) {
+  throw new Error('--apply and --verify-complete cannot be combined')
+}
 const DATABASE_URL = requireCutoverDatabaseTarget(APPLY)
-const STORAGE_TARGET = requireCutoverStorageTarget()
-const storage = await import('@beaconhs/storage')
-if (storage.BUCKET !== STORAGE_TARGET.bucket) {
+const STORAGE_TARGET = VERIFY_COMPLETE
+  ? { endpoint: '', bucket: '' }
+  : requireCutoverStorageTarget()
+const storage = VERIFY_COMPLETE
+  ? new Proxy({} as typeof import('@beaconhs/storage'), {
+      get() {
+        throw new Error('Storage access is forbidden in --verify-complete mode')
+      },
+    })
+  : await import('@beaconhs/storage')
+if (!VERIFY_COMPLETE && storage.BUCKET !== STORAGE_TARGET.bucket) {
   throw new Error('Storage package bucket does not match the audited cutover target')
 }
 
@@ -745,6 +757,29 @@ async function assertExactAttachmentKeyScope(): Promise<void> {
   }
 }
 
+async function assertDatabaseComplete(): Promise<void> {
+  await assertExactAttachmentKeyScope()
+  const auditRows = await manifestAuditRows()
+  const seen = new Set<string>()
+  for (const auditRow of auditRows) {
+    const manifest = manifestFromAudit(auditRow)
+    if (seen.has(manifest.attachment.id)) {
+      throw new Error(`Duplicate manifests exist for attachment ${manifest.attachment.id}`)
+    }
+    seen.add(manifest.attachment.id)
+    const [row] = await attachmentRows([manifest.attachment.id])
+    if (!row) throw new Error(`Manifest attachment ${manifest.attachment.id} is missing`)
+    assertRowMatchesManifest(row, manifest)
+    if (row.r2_key !== manifest.destination.key) {
+      throw new Error(`Manifest attachment ${row.id} was not reconciled to its destination`)
+    }
+    await assertUpdateAudit(manifest)
+  }
+  console.log(
+    `[tenant-key-cutover] verified complete from database state; manifests=${auditRows.length}; storage audit skipped`,
+  )
+}
+
 async function assertComplete(): Promise<void> {
   await assertExactAttachmentKeyScope()
   await assertAllAttachmentObjects()
@@ -844,6 +879,7 @@ async function applyCutover(): Promise<void> {
 
 async function main(): Promise<void> {
   await assertCutoverDatabaseSession(sql)
+  if (VERIFY_COMPLETE) return assertDatabaseComplete()
   if (APPLY) await applyCutover()
   else await auditOnly()
 }
