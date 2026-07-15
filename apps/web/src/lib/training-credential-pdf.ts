@@ -17,7 +17,7 @@ import {
   renderDesignDocumentPdf,
   renderWalletCardPdf,
 } from '@beaconhs/forms-pdf'
-import { presignGet } from '@beaconhs/storage'
+import { presignGet, resolveTenantLogoUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { appBaseUrl } from '@/lib/app-base-url'
 import {
@@ -109,7 +109,10 @@ export async function renderTrainingCredentialPdf(
   if (!data) return null
 
   const { cert, record, person, course, tenant } = data
-  const photoUrl = await photoUrlForPerson(ctx, person.photoAttachmentId)
+  const [photoUrl, tenantLogoUrl] = await Promise.all([
+    photoUrlForPerson(ctx, person.photoAttachmentId),
+    resolveTenantLogoUrl({ tenantId: tenant.id, logoUrl: tenant.branding.logoUrl }),
+  ])
   const verifyUrl = `${appBaseUrl()}/verify/${cert.verifyToken}`
   const qrDataUrl = await makeVerifyQr(verifyUrl)
   const fullName = `${person.firstName} ${person.lastName}`
@@ -117,7 +120,7 @@ export async function renderTrainingCredentialPdf(
   const output = resolveCourseCredentialOutput(course.metadata, tenant.settings, request)
   const certificateInput = {
     tenantName: tenant.name,
-    tenantLogoUrl: tenant.branding.logoUrl,
+    tenantLogoUrl: tenantLogoUrl ?? undefined,
     primaryColor: tenant.branding.primaryColor,
     design: output,
     variant: 'completion',
@@ -135,7 +138,7 @@ export async function renderTrainingCredentialPdf(
   } as const
   const walletInput = {
     tenantName: tenant.name,
-    tenantLogoUrl: tenant.branding.logoUrl,
+    tenantLogoUrl: tenantLogoUrl ?? undefined,
     primaryColor: tenant.branding.primaryColor,
     design: output,
     variant: 'completion',
@@ -152,7 +155,7 @@ export async function renderTrainingCredentialPdf(
     output,
     documentData: {
       tenantName: tenant.name,
-      tenantLogoUrl: tenant.branding.logoUrl,
+      tenantLogoUrl,
       recipientFullName: fullName,
       recipientEmployeeNo: person.employeeNo,
       recipientPhotoUrl: photoUrl,
@@ -217,14 +220,17 @@ export async function renderSkillCredentialPdf(
   if (!data) return null
 
   const { cert, assignment, skillType, authority, person, tenant } = data
-  const photoUrl = await photoUrlForPerson(ctx, person.photoAttachmentId)
+  const [photoUrl, tenantLogoUrl] = await Promise.all([
+    photoUrlForPerson(ctx, person.photoAttachmentId),
+    resolveTenantLogoUrl({ tenantId: tenant.id, logoUrl: tenant.branding.logoUrl }),
+  ])
   const verifyUrl = `${appBaseUrl()}/verify/${cert.verifyToken}`
   const qrDataUrl = await makeVerifyQr(verifyUrl)
   const fullName = `${person.firstName} ${person.lastName}`
   const output = resolveCredentialOutput(tenant.settings, request)
   const certificateInput = {
     tenantName: tenant.name,
-    tenantLogoUrl: tenant.branding.logoUrl,
+    tenantLogoUrl: tenantLogoUrl ?? undefined,
     primaryColor: tenant.branding.primaryColor,
     design: output,
     variant: 'qualification',
@@ -241,7 +247,7 @@ export async function renderSkillCredentialPdf(
   } as const
   const walletInput = {
     tenantName: tenant.name,
-    tenantLogoUrl: tenant.branding.logoUrl,
+    tenantLogoUrl: tenantLogoUrl ?? undefined,
     primaryColor: tenant.branding.primaryColor,
     design: output,
     variant: 'qualification',
@@ -259,7 +265,7 @@ export async function renderSkillCredentialPdf(
     output,
     documentData: {
       tenantName: tenant.name,
-      tenantLogoUrl: tenant.branding.logoUrl,
+      tenantLogoUrl,
       recipientFullName: fullName,
       recipientEmployeeNo: person.employeeNo,
       recipientPhotoUrl: photoUrl,

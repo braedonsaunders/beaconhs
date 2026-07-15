@@ -31,6 +31,7 @@ import {
   renderDesignDocumentHtml,
   type CredentialDesignData,
 } from '@beaconhs/design-studio'
+import { resolveTenantLogoUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
@@ -340,7 +341,10 @@ export default async function MyWalletPage({
 
   const base = appBaseUrl()
   const tenantName = tenant?.name ?? 'Credential'
-  const tenantLogoUrl = tenant?.branding?.logoUrl ?? null
+  const tenantLogoUrl = await resolveTenantLogoUrl({
+    tenantId: ctx.tenantId,
+    logoUrl: tenant?.branding?.logoUrl,
+  })
   const recipientFullName = `${person.firstName} ${person.lastName}`
 
   const tokenByRecord = new Map(recordCerts.map((c) => [c.recordId, c.token]))

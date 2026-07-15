@@ -17,6 +17,7 @@ import {
 } from '@beaconhs/ui'
 import { db, hashKioskPin, normalizeKioskPin, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
+import { resolveTenantLogoUrl } from '@beaconhs/storage'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -137,6 +138,10 @@ export default async function AdminSettingsPage() {
   const enabled = new Set(tenant.enabledLanguages)
   const hierarchy = tenant.hierarchy
   const kioskUrl = tenant.kioskPin ? `${appBaseUrl()}/kiosk?t=${tenant.slug}` : null
+  const tenantLogoUrl = await resolveTenantLogoUrl({
+    tenantId: tenant.id,
+    logoUrl: tenant.branding.logoUrl,
+  })
 
   return (
     <PageContainer>
@@ -233,12 +238,12 @@ export default async function AdminSettingsPage() {
                   placeholder="Acme Industrial · Health & Safety"
                 />
               </Field>
-              {tenant.branding.logoUrl ? (
+              {tenantLogoUrl ? (
                 <div className="sm:col-span-2">
                   <Label className="text-xs">Preview</Label>
                   <div className="mt-1 flex items-center gap-3 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
                     <Image
-                      src={tenant.branding.logoUrl}
+                      src={tenantLogoUrl}
                       alt=""
                       width={160}
                       height={32}

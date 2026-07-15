@@ -7,6 +7,7 @@ import QRCode from 'qrcode'
 import { tenants } from '@beaconhs/db/schema'
 import { renderDesignDocumentPdf } from '@beaconhs/forms-pdf'
 import { type CredentialDesignData } from '@beaconhs/design-studio'
+import { resolveTenantLogoUrl } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import {
   CREDENTIAL_OUTPUT_LIMITS,
@@ -90,7 +91,10 @@ export async function POST(request: Request) {
   // they will on real credentials.
   const data: CredentialDesignData = {
     tenantName: tenant?.name ?? 'Your organization',
-    tenantLogoUrl: tenant?.branding?.logoUrl ?? null,
+    tenantLogoUrl: await resolveTenantLogoUrl({
+      tenantId: ctx.tenantId,
+      logoUrl: tenant?.branding?.logoUrl,
+    }),
     recipientFullName: 'Avery Chen',
     recipientEmployeeNo: 'BH-1048',
     recipientPhotoUrl: null,

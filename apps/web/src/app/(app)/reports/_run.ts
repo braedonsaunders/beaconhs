@@ -6,6 +6,7 @@
 import { eq } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
+import { resolveTenantLogoUrl } from '@beaconhs/storage'
 import {
   augmentEntityMapWithCustomFields,
   refineEntityMapForDocuments,
@@ -99,7 +100,10 @@ export async function loadTenantBranding(ctx: RequestContext): Promise<TenantBra
   )
   return {
     name: tenant?.name ?? 'BeaconHS',
-    logoUrl: tenant?.branding?.logoUrl ?? null,
+    logoUrl: await resolveTenantLogoUrl({
+      tenantId: ctx.tenantId!,
+      logoUrl: tenant?.branding?.logoUrl,
+    }),
     primaryColor: tenant?.branding?.primaryColor ?? null,
   }
 }

@@ -15,7 +15,7 @@ import {
   trainingSkillAssignments,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
-import { presignGet } from '@beaconhs/storage'
+import { presignGet, resolveTenantLogoUrl } from '@beaconhs/storage'
 import { RawImage } from '@/components/raw-image'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { activeTenantPredicate } from '@/lib/active-tenant'
@@ -115,7 +115,11 @@ async function resolveToken(token: string): Promise<Resolved | null> {
         ? await presignGet({ key: row.photoKey, expiresInSeconds: 300 })
         : null,
       tenantName: row.tenant.name,
-      tenantLogoUrl: row.tenant.branding.logoUrl ?? null,
+      tenantLogoUrl: await resolveTenantLogoUrl({
+        tenantId: row.tenant.id,
+        logoUrl: row.tenant.branding.logoUrl,
+        expiresInSeconds: 300,
+      }),
       credentials: records,
       skills,
     }

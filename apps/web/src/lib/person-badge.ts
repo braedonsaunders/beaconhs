@@ -11,7 +11,7 @@ import QRCode from 'qrcode'
 import { primaryPersonTitleName } from '@beaconhs/db'
 import { attachments, departments, people, tenants } from '@beaconhs/db/schema'
 import { renderDesignDocumentPdf } from '@beaconhs/forms-pdf'
-import { presignGet } from '@beaconhs/storage'
+import { presignGet, resolveTenantLogoUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { PersonBadgeDesignData } from '@beaconhs/design-studio'
 import { appBaseUrl } from '@/lib/app-base-url'
@@ -78,7 +78,10 @@ export async function renderPersonBadgePdf(
 
   const data: PersonBadgeDesignData = {
     tenantName: row.tenant.name,
-    tenantLogoUrl: row.tenant.branding.logoUrl,
+    tenantLogoUrl: await resolveTenantLogoUrl({
+      tenantId: row.tenant.id,
+      logoUrl: row.tenant.branding.logoUrl,
+    }),
     recipientFullName: `${row.person.firstName} ${row.person.lastName}`,
     recipientEmployeeNo: row.person.employeeNo,
     recipientPhotoUrl: row.photoKey

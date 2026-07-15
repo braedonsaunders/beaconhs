@@ -363,6 +363,113 @@ export async function presignGet(args: {
   return getSignedUrl(client, cmd, { expiresIn: args.expiresInSeconds ?? 600 })
 }
 
+function decodedUrlPathParts(url: URL): string[] | null {
+  const encodedParts = url.pathname.split('/').slice(1)
+  if (encodedParts.at(-1) === '') encodedParts.pop()
+  const parts: string[] = []
+  for (const encodedPart of encodedParts) {
+    if (!encodedPart) return null
+    let part: string
+    try {
+      part = decodeURIComponent(encodedPart)
+    } catch {
+      return null
+    }
+    if (
+      !part ||
+      part === '.' ||
+      part === '..' ||
+      part.includes('/') ||
+      part.includes('\\') ||
+      /[\u0000-\u001f\u007f]/.test(part)
+    ) {
+      return null
+    }
+    parts.push(part)
+  }
+  return parts
+}
+
+/**
+ * Recover an object key only when a URL points at the configured path-style
+ * S3 endpoint and bucket. Other origins are deliberately left to their caller
+ * so legitimate public branding URLs continue to work.
+ */
+export function objectKeyFromStorageUrl(args: {
+  url: string
+  endpoint: string
+  bucket: string
+}): string | null {
+  let candidate: URL
+  let configuredEndpoint: URL
+  try {
+    candidate = new URL(args.url)
+    configuredEndpoint = new URL(args.endpoint)
+  } catch {
+    return null
+  }
+  if (
+    !['http:', 'https:'].includes(candidate.protocol) ||
+    !['http:', 'https:'].includes(configuredEndpoint.protocol) ||
+    candidate.username ||
+    candidate.password ||
+    configuredEndpoint.username ||
+    configuredEndpoint.password ||
+    candidate.origin !== configuredEndpoint.origin
+  ) {
+    return null
+  }
+
+  const candidateParts = decodedUrlPathParts(candidate)
+  const endpointParts = decodedUrlPathParts(configuredEndpoint)
+  if (!candidateParts || !endpointParts) return null
+  if (endpointParts.some((part, index) => candidateParts[index] !== part)) return null
+  const bucketIndex = endpointParts.length
+  if (candidateParts[bucketIndex] !== args.bucket) return null
+  const keyParts = candidateParts.slice(bucketIndex + 1)
+  const key = keyParts.join('/')
+  return key && key.length <= 1_024 ? key : null
+}
+
+export function assertTenantLogoObjectKey(args: { tenantId: string; key: string }): void {
+  if (!UUID_RE.test(args.tenantId)) throw new Error('Tenant id must be a UUID')
+  if (!args.key || args.key.length > 1_024 || args.key.includes('\\')) {
+    throw new Error('Tenant branding object key is invalid')
+  }
+  const tenantId = args.tenantId.toLowerCase()
+  const parts = args.key.split('/')
+  const hasValidParts = parts.every(
+    (part) => OBJECT_KEY_PART_RE.test(part) && part !== '.' && part !== '..',
+  )
+  const ownedBrandingKey =
+    hasValidParts &&
+    (parts[0] === 'tenants' || parts[0] === 't') &&
+    parts[1] === tenantId &&
+    parts[2] === 'branding' &&
+    parts.length >= 4
+  if (!ownedBrandingKey) {
+    throw new Error('Tenant branding URL does not belong to the active tenant')
+  }
+}
+
+/**
+ * Return a short-lived URL for a tenant logo stored in BeaconHS private
+ * storage. Public HTTPS logo URLs pass through unchanged. Internal keys are
+ * tenant-checked before signing so branding cannot become a cross-tenant read.
+ */
+export async function resolveTenantLogoUrl(args: {
+  tenantId: string
+  logoUrl: string | null | undefined
+  expiresInSeconds?: number
+}): Promise<string | null> {
+  const logoUrl = args.logoUrl?.trim()
+  if (!logoUrl) return null
+  const key = objectKeyFromStorageUrl({ url: logoUrl, endpoint, bucket })
+  if (!key) return logoUrl
+  assertTenantLogoObjectKey({ tenantId: args.tenantId, key })
+  return presignGet({ key, expiresInSeconds: args.expiresInSeconds ?? 900 })
+}
+
 export type StoredObjectMetadata = {
   contentLength: number
   contentType: string | null

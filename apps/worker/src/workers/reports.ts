@@ -54,6 +54,7 @@ import {
   newAttachmentKey,
   presignGet,
   putObject,
+  resolveTenantLogoUrl,
 } from '@beaconhs/storage'
 import { appBaseUrl } from '../lib/app-base-url'
 import { escapeHtml } from '../lib/escape-html'
@@ -135,7 +136,10 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
       })
       const pdf = await renderReportPdf({
         tenantName: ctx.tenant.name,
-        tenantLogoUrl: ctx.tenant.branding.logoUrl ?? null,
+        tenantLogoUrl: await resolveTenantLogoUrl({
+          tenantId,
+          logoUrl: ctx.tenant.branding.logoUrl,
+        }),
         primaryColor: ctx.tenant.branding.primaryColor ?? null,
         reportName: snapshot.scheduleName || snapshot.definition.name,
         dateRangeLabel: range.label,

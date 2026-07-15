@@ -15,7 +15,7 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import { createWalletDesignDocument, renderDesignDocumentHtml } from '@beaconhs/design-studio'
-import { presignGet } from '@beaconhs/storage'
+import { presignGet, resolveTenantLogoUrl } from '@beaconhs/storage'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { resolveCourseCredentialOutput } from '@/lib/credential-designs'
 import { activeTenantPredicate } from '@/lib/active-tenant'
@@ -92,7 +92,11 @@ export default async function VerifyPersonRecordPage({
   const document = output.document ?? createWalletDesignDocument(output)
   const cardData = {
     tenantName: data.tenant.name,
-    tenantLogoUrl: data.tenant.branding.logoUrl,
+    tenantLogoUrl: await resolveTenantLogoUrl({
+      tenantId: data.tenant.id,
+      logoUrl: data.tenant.branding.logoUrl,
+      expiresInSeconds: 300,
+    }),
     recipientFullName: `${data.person.firstName} ${data.person.lastName}`,
     recipientEmployeeNo: data.person.employeeNo,
     recipientPhotoUrl: data.photoKey
