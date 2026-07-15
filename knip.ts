@@ -1,5 +1,10 @@
 import type { KnipConfig } from 'knip'
 
+// Knip 5.88 resolves package-script entrypoints on Linux, but not on macOS.
+// Keep the same strict dead-code result on both developer machines and CI
+// without making Linux report the inferred entries as redundant hints.
+const needsExplicitPackageScriptEntries = process.platform === 'darwin'
+
 const config: KnipConfig = {
   $schema: 'https://unpkg.com/knip@5/schema.json',
   workspaces: {
@@ -9,7 +14,7 @@ const config: KnipConfig = {
     'apps/web': {
       entry: [
         'public/sw.js',
-        'scripts/start-standalone.mjs',
+        ...(needsExplicitPackageScriptEntries ? ['scripts/start-standalone.mjs'] : []),
         'scripts/backfill-credential-outputs.ts',
         'scripts/backfill-private-attachment-urls.ts',
         'scripts/backfill-signatures-to-storage.ts',
@@ -20,15 +25,18 @@ const config: KnipConfig = {
     },
     'apps/worker': {
       entry: [
-        'build.mjs',
+        ...(needsExplicitPackageScriptEntries
+          ? ['build.mjs', 'src/scheduler.ts', 'src/scripts/check-email-config.ts']
+          : []),
         'src/health.ts',
-        'src/scheduler.ts',
-        'src/scripts/check-email-config.ts',
         'src/storage-init.ts',
       ],
     },
     'packages/db': {
-      entry: ['src/migrate.ts', 'src/scripts/reseed-lift-plan.ts', 'src/seed.ts'],
+      entry: [
+        ...(needsExplicitPackageScriptEntries ? ['src/migrate.ts', 'src/seed.ts'] : []),
+        'src/scripts/reseed-lift-plan.ts',
+      ],
     },
     'packages/sync': {
       ignoreDependencies: ['mssql'],
