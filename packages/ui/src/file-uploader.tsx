@@ -10,6 +10,7 @@
 // and per-file error states inline.
 
 import { useCallback, useRef, useState } from 'react'
+import { defaultMaxUploadBytes, formatUploadSizeLimit, type AttachmentKind } from './upload-limits'
 import { cn } from './utils'
 
 export type UploadRequestResult =
@@ -39,8 +40,6 @@ export type RequestUploadAction = (input: {
 export type FinalizeUploadAction = (
   input: FinalizeUploadInput,
 ) => Promise<{ ok: true; attachmentId: string; url: string } | { ok: false; error: string }>
-
-export type AttachmentKind = 'image' | 'document' | 'video' | 'audio' | 'signature' | 'other'
 
 export type UploadedFile = {
   attachmentId: string
@@ -77,17 +76,6 @@ type Item = {
   status: 'queued' | 'uploading' | 'finalising' | 'done' | 'error'
   error?: string
   progress?: number
-}
-
-// Client-side mirror of the server's per-kind ceilings (apps/web requestUpload)
-// so oversized files fail fast with a clear message instead of a server error.
-const DEFAULT_MAX_BY_KIND: Record<AttachmentKind, number> = {
-  image: 50 * 1024 * 1024,
-  signature: 10 * 1024 * 1024,
-  audio: 200 * 1024 * 1024,
-  document: 500 * 1024 * 1024,
-  video: 500 * 1024 * 1024,
-  other: 500 * 1024 * 1024,
 }
 
 function uploadWithXhr(args: {
@@ -158,7 +146,7 @@ export function FileUploader({
   label = 'Drop files here or click to select',
   hint,
 }: FileUploaderProps) {
-  const effectiveMaxSize = maxSize ?? DEFAULT_MAX_BY_KIND[kind] ?? 50 * 1024 * 1024
+  const effectiveMaxSize = maxSize ?? defaultMaxUploadBytes(kind)
   const inputRef = useRef<HTMLInputElement>(null)
   const [items, setItems] = useState<Item[]>([])
   const [dragOver, setDragOver] = useState(false)
@@ -171,7 +159,7 @@ export function FileUploader({
       if (file.size > effectiveMaxSize) {
         updateItem({
           status: 'error',
-          error: `File exceeds ${Math.round(effectiveMaxSize / 1024 / 1024)} MB limit`,
+          error: `File exceeds ${formatUploadSizeLimit(effectiveMaxSize)} limit`,
         })
         return
       }

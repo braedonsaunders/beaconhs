@@ -77,8 +77,8 @@ export function SlideDeckEditor({
         label="Drop a .pptx or click to choose"
         hint={
           master
-            ? 'Replaces the current PowerPoint file. Maximum 1 GB.'
-            : 'PowerPoint features and speaker notes are preserved. Maximum 1 GB.'
+            ? 'Replaces the current PowerPoint file. Maximum 1 GiB.'
+            : 'PowerPoint features and speaker notes are preserved. Maximum 1 GiB.'
         }
       />
     </div>

@@ -228,7 +228,7 @@ Open **Training** in the left menu, then **Courses**. Open a course, add or open
 ## Start a deck
 
 1. Open a slideshow lesson. A new deck offers two choices.
-2. **Import PowerPoint** — drop in a .pptx file that is 1 GB or smaller. It becomes the deck's working copy, with speaker notes carried over.
+2. **Import PowerPoint** — drop in a .pptx file that is 1 GiB (1,024 MiB) or smaller. It becomes the deck's working copy, with speaker notes carried over.
 3. **Start blank** — creates a new empty PowerPoint deck.
 4. The PowerPoint editor opens the file directly. There is no conversion wait.
 

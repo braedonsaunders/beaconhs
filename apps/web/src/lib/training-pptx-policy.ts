@@ -15,6 +15,6 @@ export function assertTrainingPptxAttachment(attachment: TrainingPptxAttachment)
     attachment.sizeBytes <= 0 ||
     attachment.sizeBytes > MAX_PPTX_FILE_BYTES
   ) {
-    throw new Error('PowerPoint files must be no larger than 1 GB.')
+    throw new Error('PowerPoint files must be no larger than 1 GiB.')
   }
 }

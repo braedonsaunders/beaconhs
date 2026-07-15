@@ -7,6 +7,14 @@ const workflow = readFileSync(
   fileURLToPath(new URL('../../../.github/workflows/deploy-dev.yml', import.meta.url)),
   'utf8',
 )
+const localCompose = readFileSync(
+  fileURLToPath(new URL('../../../docker-compose.yml', import.meta.url)),
+  'utf8',
+)
+const devCompose = readFileSync(
+  fileURLToPath(new URL('../../../deploy/dokploy-dev.compose.yaml', import.meta.url)),
+  'utf8',
+)
 const directDatabaseUrlScript = fileURLToPath(
   new URL('../../../scripts/cluster/direct-maintenance-database-url.mjs', import.meta.url),
 )
@@ -68,6 +76,17 @@ describe('dev deployment cutover order', () => {
 
   it('uses retry flags supported by the self-hosted runner curl', () => {
     expect(workflow).not.toContain('--retry-all-errors')
+  })
+
+  it('pins Collabora WOPI loads to the exact 1 GiB PowerPoint ceiling', () => {
+    const override = '--o:storage.wopi.max_file_size=1073741824'
+
+    expect(localCompose).toContain(override)
+    expect(devCompose).toContain(override)
+    expect(workflow).toContain(override)
+    expect(localCompose).not.toContain('--o:storage.wopi.max_file_size=0')
+    expect(devCompose).not.toContain('--o:storage.wopi.max_file_size=0')
+    expect(workflow).not.toContain('--o:storage.wopi.max_file_size=0')
   })
 
   it('recreates an archive-owned public schema during a disposable restore', () => {

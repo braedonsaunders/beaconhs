@@ -156,8 +156,9 @@ services:
       aliasgroup1: ${APP_URL}
       server_name: ${COLLABORA_SERVER_NAME}
       # TLS terminates at Traefik; frame_ancestors lets the app iframe the
-      # editor; welcome dialogs are noise inside an embedded editor.
-      extra_params: --o:ssl.enable=false --o:ssl.termination=true --o:net.frame_ancestors=${APP_URL} --o:welcome.enable=false --o:home_mode.enable=true
+      # editor; welcome dialogs are noise inside an embedded editor. The WOPI
+      # load ceiling matches MAX_PPTX_FILE_BYTES (exactly 1 GiB).
+      extra_params: --o:ssl.enable=false --o:ssl.termination=true --o:net.frame_ancestors=${APP_URL} --o:welcome.enable=false --o:home_mode.enable=true --o:storage.wopi.max_file_size=1073741824
     volumes:
       # BeaconHS theme via the sanctioned branding.js hook. The deploy workflow
       # writes this file onto the swarm manager before deploying the stack.

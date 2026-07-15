@@ -72,7 +72,8 @@ services:
       - aliasgroup1=http://host.docker.internal:3000
       # Plain http locally + let the app's origin iframe the editor. Welcome
       # ("Explore the new version") dialogs are noise inside an embedded editor.
-      - extra_params=--o:ssl.enable=false --o:ssl.termination=false --o:net.frame_ancestors=http://localhost:3000 --o:welcome.enable=false --o:home_mode.enable=true
+      # Keep WOPI loads aligned with MAX_PPTX_FILE_BYTES (exactly 1 GiB).
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=false --o:net.frame_ancestors=http://localhost:3000 --o:welcome.enable=false --o:home_mode.enable=true --o:storage.wopi.max_file_size=1073741824
     ports:
       - '9980:9980'
     extra_hosts:
