@@ -119,7 +119,6 @@ export type TagSuggestion = { name: string; color: string | null }
 type WorkspaceCounts = {
   total: number
   drafts: number
-  mine: number
 }
 
 export type WorkspaceData = {
@@ -145,7 +144,6 @@ export type JournalFilters = {
   tag?: string
   status?: JournalStatus
   definition?: JournalDefinition
-  mine?: boolean
   from?: string
   to?: string
 }

@@ -40,10 +40,7 @@ import type {
   AuthorRef,
   EntryMetaResult,
   EntryPatch,
-  GroupBy,
   JournalEntryDetail,
-  JournalFilters,
-  TreeCursor,
   TreePage,
   WorkspaceData,
 } from './_types'
@@ -56,9 +53,24 @@ import {
   journalMutationScope,
   type JournalMutation,
 } from './_mutation-policy'
+import { normalizeJournalFilters, normalizeJournalGroupBy } from './_query-input'
 
 type ActionOk<T = {}> = { ok: true } & T
 type ActionErr = { ok: false; error: string }
+
+function actionRecord(input: unknown): Record<string, unknown> {
+  return input && typeof input === 'object' && !Array.isArray(input)
+    ? (input as Record<string, unknown>)
+    : {}
+}
+
+function authorRefFromEntry(entry: JournalEntryDetail): AuthorRef {
+  return {
+    personId: entry.personId,
+    tenantUserId: entry.createdByTenantUserId,
+    name: entry.authorName,
+  }
+}
 
 /** Visibility-scoped WHERE for a single live entry (tenant + author/site/self).
  *  Always excludes soft-deleted entries — a deleted journal is not editable. */
@@ -584,28 +596,27 @@ export async function describeJournalPhoto(
 
 // ---- data fetch wrappers (client refetch on interaction) --------------------
 
-export async function fetchWorkspace(input: {
-  groupBy: GroupBy
-  filters: JournalFilters
-}): Promise<WorkspaceData> {
+export async function fetchWorkspace(input: unknown): Promise<WorkspaceData> {
   const ctx = await requireRequestContext()
-  return getWorkspaceData(ctx, input.groupBy, input.filters)
+  const raw = actionRecord(input)
+  return getWorkspaceData(
+    ctx,
+    normalizeJournalGroupBy(raw.groupBy),
+    normalizeJournalFilters(raw.filters),
+  )
 }
 
-export async function fetchTree(input: {
-  groupBy: GroupBy
-  filters: JournalFilters
-  cursor?: TreeCursor | null
-}): Promise<TreePage> {
+export async function fetchTree(input: unknown): Promise<TreePage> {
   const ctx = await requireRequestContext()
+  const raw = actionRecord(input)
   // Workspace tree is always personal — self-scoped.
   return buildTree(
     ctx,
-    input.groupBy,
-    input.filters,
+    normalizeJournalGroupBy(raw.groupBy),
+    normalizeJournalFilters(raw.filters),
     true,
     null,
-    isTreeCursor(input.cursor) ? input.cursor : null,
+    isTreeCursor(raw.cursor) ? raw.cursor : null,
   )
 }
 
@@ -625,48 +636,47 @@ export async function fetchEntry(id: string): Promise<JournalEntryDetail | null>
 export async function fetchAuthorWorkspace(entryId: string): Promise<{
   data: WorkspaceData
   entry: JournalEntryDetail
-  author: AuthorRef
 } | null> {
   const ctx = await requireRequestContext()
   if (!journalCanBrowseAll(ctx)) return null
   const entry = await getEntry(ctx, entryId)
   if (!entry) return null
-  const author: AuthorRef = {
-    personId: entry.personId,
-    tenantUserId: entry.createdByTenantUserId,
-    name: entry.authorName,
-  }
+  const author = authorRefFromEntry(entry)
   const data = await getWorkspaceData(ctx, 'date', {}, author)
-  return { data, entry, author }
+  return { data, entry }
 }
 
 /** Refetch the author workspace sidebar (filters/group change). */
-export async function fetchAuthorWorkspaceData(input: {
-  author: AuthorRef
-  groupBy: GroupBy
-  filters: JournalFilters
-}): Promise<WorkspaceData | null> {
+export async function fetchAuthorWorkspaceData(input: unknown): Promise<WorkspaceData | null> {
   const ctx = await requireRequestContext()
   if (!journalCanBrowseAll(ctx)) return null
-  return getWorkspaceData(ctx, input.groupBy, input.filters, input.author)
+  const raw = actionRecord(input)
+  const entry = await getEntry(ctx, typeof raw.entryId === 'string' ? raw.entryId : '')
+  if (!entry) return null
+  const author = authorRefFromEntry(entry)
+  return getWorkspaceData(
+    ctx,
+    normalizeJournalGroupBy(raw.groupBy),
+    normalizeJournalFilters(raw.filters),
+    author,
+  )
 }
 
 /** Refetch only the author workspace tree (group-by change). */
-export async function fetchAuthorTree(input: {
-  author: AuthorRef
-  groupBy: GroupBy
-  filters: JournalFilters
-  cursor?: TreeCursor | null
-}): Promise<TreePage> {
+export async function fetchAuthorTree(input: unknown): Promise<TreePage> {
   const ctx = await requireRequestContext()
   if (!journalCanBrowseAll(ctx)) return { nodes: [], hasMore: false, nextCursor: null }
+  const raw = actionRecord(input)
+  const entry = await getEntry(ctx, typeof raw.entryId === 'string' ? raw.entryId : '')
+  if (!entry) return { nodes: [], hasMore: false, nextCursor: null }
+  const author = authorRefFromEntry(entry)
   return buildTree(
     ctx,
-    input.groupBy,
-    input.filters,
+    normalizeJournalGroupBy(raw.groupBy),
+    normalizeJournalFilters(raw.filters),
     false,
-    input.author,
-    isTreeCursor(input.cursor) ? input.cursor : null,
+    author,
+    isTreeCursor(raw.cursor) ? raw.cursor : null,
   )
 }
 

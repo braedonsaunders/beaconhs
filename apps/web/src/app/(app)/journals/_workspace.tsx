@@ -23,20 +23,14 @@ import {
   fetchTree,
   fetchWorkspace,
 } from './_actions'
-import type {
-  AuthorRef,
-  GroupBy,
-  JournalEntryDetail,
-  JournalFilters,
-  WorkspaceData,
-} from './_types'
+import type { GroupBy, JournalEntryDetail, JournalFilters, WorkspaceData } from './_types'
 import { mergeTreePages } from './_tree-pages'
 
 export function JournalWorkspace({
   initialData,
   initialEntry,
   initialGroupBy,
-  author = null,
+  authorEntryId = null,
 }: {
   initialData: WorkspaceData
   initialEntry: JournalEntryDetail | null
@@ -44,7 +38,7 @@ export function JournalWorkspace({
   /** When set, this is the records "Open full entry" flyout: the tree is scoped
    *  to this author's journals, the address bar is left alone, and create
    *  affordances are hidden. Omitted for the personal /journals workspace. */
-  author?: AuthorRef | null
+  authorEntryId?: string | null
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
@@ -62,23 +56,23 @@ export function JournalWorkspace({
   const setUrl = useCallback(
     (id: string | null) => {
       // The author flyout lives over /journals/records — don't hijack the URL.
-      if (author) return
+      if (authorEntryId) return
       if (typeof window === 'undefined') return
       window.history.replaceState(null, '', id ? `/journals/${id}` : '/journals')
     },
-    [author],
+    [authorEntryId],
   )
 
   const reloadSidebar = useCallback(async () => {
     const requestId = ++treeRequestId.current
-    if (author) {
-      const d = await fetchAuthorWorkspaceData({ author, groupBy, filters })
+    if (authorEntryId) {
+      const d = await fetchAuthorWorkspaceData({ entryId: authorEntryId, groupBy, filters })
       if (d && requestId === treeRequestId.current) setData(d)
       return
     }
     const next = await fetchWorkspace({ groupBy, filters })
     if (requestId === treeRequestId.current) setData(next)
-  }, [author, groupBy, filters])
+  }, [authorEntryId, groupBy, filters])
 
   // Refetch the tree/sidebar whenever filters change. The explicit key guard
   // avoids a duplicate fetch when groupBy changes the reload callback; that
@@ -117,8 +111,8 @@ export function JournalWorkspace({
     setTreeLoading(true)
     const requestId = ++treeRequestId.current
     try {
-      const page = author
-        ? await fetchAuthorTree({ author, groupBy: g, filters })
+      const page = authorEntryId
+        ? await fetchAuthorTree({ entryId: authorEntryId, groupBy: g, filters })
         : await fetchTree({ groupBy: g, filters })
       if (requestId !== treeRequestId.current) return
       setData((d) => ({
@@ -137,9 +131,9 @@ export function JournalWorkspace({
     setTreeLoadingMore(true)
     const requestId = ++treeRequestId.current
     try {
-      const page = author
+      const page = authorEntryId
         ? await fetchAuthorTree({
-            author,
+            entryId: authorEntryId,
             groupBy,
             filters,
             cursor: data.treeNextCursor,
@@ -162,7 +156,7 @@ export function JournalWorkspace({
   }, [])
 
   function newEntry() {
-    if (author) return // author flyout is review/edit only — no create-as-other
+    if (authorEntryId) return // author flyout is review/edit only — no create-as-other
     startNav(async () => {
       const r = await createTodayEntry()
       if (!r.ok) {
@@ -174,7 +168,7 @@ export function JournalWorkspace({
   }
 
   function pickDate(dateISO: string) {
-    if (author) return
+    if (authorEntryId) return
     startNav(async () => {
       const r = await createEntryForDate(dateISO)
       if (!r.ok) {
@@ -218,7 +212,7 @@ export function JournalWorkspace({
       selectedId={entry?.id ?? null}
       loading={treeLoading}
       loadingMore={treeLoadingMore}
-      authorMode={!!author}
+      authorMode={!!authorEntryId}
       onGroupByChange={changeGroupBy}
       onFiltersChange={changeFilters}
       onSelect={selectEntry}

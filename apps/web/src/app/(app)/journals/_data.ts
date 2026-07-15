@@ -143,13 +143,6 @@ function entryWhere(
       sql`exists (select 1 from ${journalEntryTags} t where t.entry_id = ${journalEntries.id} and t.tag = ${filters.tag})`,
     )
   }
-  if (filters.mine && authorPersonId) {
-    const mineConds: SQL[] = [eq(journalEntries.personId, authorPersonId)]
-    // authorTenantUserId guards the super-admin sentinel (never a uuid).
-    const tenantUserId = authorTenantUserId(ctx)
-    if (tenantUserId) mineConds.push(eq(journalEntries.createdByTenantUserId, tenantUserId))
-    conds.push(mineConds.length === 1 ? mineConds[0]! : or(...mineConds)!)
-  }
   return conds.length === 0 ? undefined : and(...conds)
 }
 
@@ -690,9 +683,6 @@ export async function getWorkspaceData(
         .select({
           total: sql<number>`count(*)::int`,
           drafts: sql<number>`count(*) filter (where ${journalEntries.status} = 'draft')::int`,
-          mine: authorPersonId
-            ? sql<number>`count(*) filter (where ${journalEntries.personId} = ${authorPersonId})::int`
-            : sql<number>`0`,
         })
         .from(journalEntries)
         .where(where)
@@ -709,7 +699,6 @@ export async function getWorkspaceData(
     counts: {
       total: Number(counts?.total ?? 0),
       drafts: Number(counts?.drafts ?? 0),
-      mine: Number(counts?.mine ?? 0),
     },
     tagSuggestions,
     canReadAll: journalCanReadAll(ctx),

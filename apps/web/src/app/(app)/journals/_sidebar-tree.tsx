@@ -147,7 +147,7 @@ export function SidebarTree({
         <div className="flex flex-wrap gap-1">
           <Chip
             active={activeQuick === 'all'}
-            onClick={() => onFiltersChange({ mine: undefined, status: undefined })}
+            onClick={() => onFiltersChange({ status: undefined })}
           >
             <GeneratedText id="m_17201516610431" />{' '}
             <GeneratedValue
@@ -162,7 +162,7 @@ export function SidebarTree({
           </Chip>
           <Chip
             active={activeQuick === 'drafts'}
-            onClick={() => onFiltersChange({ status: 'draft', mine: undefined })}
+            onClick={() => onFiltersChange({ status: 'draft' })}
           >
             <GeneratedText id="m_1de545a5ec2dc8" />{' '}
             <GeneratedValue

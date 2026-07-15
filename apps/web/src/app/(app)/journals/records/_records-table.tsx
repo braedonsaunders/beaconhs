@@ -28,13 +28,7 @@ import { formatLongDate, statusMeta } from '../_format'
 import { fetchAuthorWorkspace, fetchEntry } from '../_actions'
 import { JournalWorkspace } from '../_workspace'
 import { JournalView } from './_journal-view'
-import type {
-  AuthorRef,
-  JournalEntryDetail,
-  JournalListItem,
-  JournalStatus,
-  WorkspaceData,
-} from '../_types'
+import type { JournalEntryDetail, JournalListItem, JournalStatus, WorkspaceData } from '../_types'
 
 type SortProps = {
   basePath: string
@@ -70,7 +64,6 @@ export function JournalRecordsTable({
   const [ws, setWs] = useState<{
     data: WorkspaceData
     entry: JournalEntryDetail
-    author: AuthorRef
   } | null>(null)
 
   function openRead(id: string) {
@@ -289,7 +282,7 @@ export function JournalRecordsTable({
         bodyClassName="overflow-hidden"
         title={tGeneratedValue(
           ws
-            ? tGenerated('m_16e19a3c2841e4', { value0: ws.author.name ?? 'Journal' })
+            ? tGenerated('m_16e19a3c2841e4', { value0: ws.entry.authorName ?? 'Journal' })
             : tGenerated('m_10c742aace3a46'),
         )}
         description={tGeneratedValue(ws ? tGenerated('m_12444fa23f4d7a') : undefined)}
@@ -303,7 +296,7 @@ export function JournalRecordsTable({
                 initialData={ws.data}
                 initialEntry={ws.entry}
                 initialGroupBy="date"
-                author={ws.author}
+                authorEntryId={ws.entry.id}
               />
             ) : (
               <Unavailable />
