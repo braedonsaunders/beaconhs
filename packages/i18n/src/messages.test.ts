@@ -42,6 +42,12 @@ describe('application message catalogs', () => {
     }
   })
 
+  it('preserves the BeaconHS brand name in every locale', () => {
+    for (const catalog of [en, fr, es]) {
+      expect(catalog.Generated.m_1721f79d9a7f66).toBe('BeaconHS')
+    }
+  })
+
   it('translates known system copy and leaves tenant-authored copy intact', () => {
     expect(translateSystemCopy('fr', 'No data.')).not.toBe('No data.')
     expect(createSystemTranslator('es')('No data.')).not.toBe('No data.')

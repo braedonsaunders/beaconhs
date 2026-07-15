@@ -1,4 +1,5 @@
-import { useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+import { GeneratedValue } from '@/i18n/generated'
+import { PRODUCT_NAME } from '@/lib/brand'
 // BeaconHS brand logo — hand-drawn SVG recreation of the lighthouse lockup.
 // All ink strokes use `currentColor` (navy in light mode, near-white in dark);
 // the beacon rays and "HS" stay brand amber in both themes. Every shape is a
@@ -217,13 +218,12 @@ type LogoProps = SVGProps<SVGSVGElement> & {
 }
 
 export function LogoMark({ animated, draw, className, ...rest }: LogoProps) {
-  const tGenerated = useGeneratedTranslations()
   const mode: Mode = draw ? 'draw' : animated ? 'loop' : 'static'
   return (
     <svg
       viewBox="0 0 48 106"
       role="img"
-      aria-label={tGenerated('m_1721f79d9a7f66')}
+      aria-label={PRODUCT_NAME}
       className={cn('h-8 w-auto', INK_CLASS, className)}
       {...rest}
     >
@@ -233,13 +233,12 @@ export function LogoMark({ animated, draw, className, ...rest }: LogoProps) {
 }
 
 export function Logo({ animated, draw, className, ...rest }: LogoProps) {
-  const tGenerated = useGeneratedTranslations()
   const mode: Mode = draw ? 'draw' : animated ? 'loop' : 'static'
   return (
     <svg
       viewBox={`0 0 ${LOCKUP_W} 116`}
       role="img"
-      aria-label={tGenerated('m_1721f79d9a7f66')}
+      aria-label={PRODUCT_NAME}
       className={cn('h-8 w-auto', INK_CLASS, className)}
       {...rest}
     >

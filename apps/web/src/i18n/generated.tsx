@@ -53,6 +53,11 @@ export function GeneratedText({
 
 /** Translate a registry/config value when it is known system copy. */
 export function GeneratedValue({ value }: { value: ReactNode }) {
+  if (typeof value !== 'string') return <>{value}</>
+  return <TranslatedGeneratedValue value={value} />
+}
+
+function TranslatedGeneratedValue({ value }: { value: string }) {
   const translateValue = useGeneratedValueTranslations()
   return <>{translateValue(value)}</>
 }
