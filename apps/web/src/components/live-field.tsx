@@ -18,7 +18,7 @@ import {
 // canonical single-page-form recipe.
 
 import { useEffect, useRef, useState, useTransition } from 'react'
-import { normalizeDocumentHref, sanitizeDocumentHtml } from '@beaconhs/forms-core'
+import { htmlToText, normalizeDocumentHref, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
   Input,
   RichTextEditor,
@@ -783,12 +783,7 @@ export function LiveSeverityRating({
 
 // Is this HTML effectively blank? (fresh TipTap doc, stray tags, &nbsp; only)
 function htmlIsEmpty(html: string): boolean {
-  return (
-    html
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .trim().length === 0
-  )
+  return htmlToText(html).length === 0
 }
 
 /**

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { User } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
+import { htmlToText } from '@beaconhs/forms-core'
 
 // Shared mobile list pattern. Pair a <MobileCardList> (phones only) with a
 // `hidden sm:block` wrapper around the existing <Table>/<table> so phones get
@@ -65,16 +66,7 @@ function Avatar({ name }: { name: string | null }) {
 function toPlain(node: ReactNode): ReactNode {
   if (typeof node !== 'string') return node
   if (!/[<&]/.test(node)) return node
-  return node
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#3[49];/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim()
+  return htmlToText(node).replace(/\s+/g, ' ').trim()
 }
 
 /** One record as a premium, tappable card. Slots mirror a typical list row. */

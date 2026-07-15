@@ -6,6 +6,7 @@ import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { journalEntries, people } from '@beaconhs/db/schema'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import type { Database } from '@beaconhs/db'
+export { htmlToText } from '@beaconhs/forms-core'
 import { nextReference } from '@/lib/reference'
 
 /** Can this context read every journal in the tenant (vs site/self scope)? */
@@ -136,24 +137,6 @@ export function todayISO(timeZone: string): string {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date())
-}
-
-/** Flatten TipTap HTML into readable plaintext for search + AI + snippets. */
-export function htmlToText(html: string | null | undefined): string {
-  if (!html) return ''
-  return html
-    .replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/blockquote)\s*>/gi, '$&\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#3[49];/g, "'")
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .replace(/[ \t]{2,}/g, ' ')
-    .trim()
 }
 
 /** Short single-line preview for list cards. */

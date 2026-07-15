@@ -1,7 +1,9 @@
+import { htmlToText } from '@beaconhs/forms-core'
+
 /** Convert a text-only header/footer template to a safe CSS `content` value. */
 export function pdfPageCssContent(tpl: string, sample: Record<string, unknown>): string {
   if (!tpl.trim()) return '""'
-  const text = tpl.replace(/<[^>]+>/g, '')
+  const text = htmlToText(tpl)
   const out: string[] = []
   let literal = ''
   let cursor = 0

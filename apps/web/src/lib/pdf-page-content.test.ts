@@ -15,4 +15,10 @@ describe('pdfPageCssContent', () => {
     expect(content).toBe('"Page " counter(page) " "')
     expect(content).not.toContain('\0')
   })
+
+  it('does not expose executable content hidden in malformed markup', () => {
+    const content = pdfPageCssContent('<p>Page {{page}}</p><script>steal()</script>', {})
+    expect(content).toBe('"Page " counter(page)')
+    expect(content).not.toContain('steal')
+  })
 })
