@@ -6,6 +6,10 @@
 </p>
 
 <p align="center">
+  <img src=".github/codeflow-card.svg" alt="CodeFlow card — codebase scale and structure snapshot" width="100%" />
+</p>
+
+<p align="center">
   <strong>The open-source Health, Safety &amp; Environment platform for industrial construction.</strong><br />
   Incidents, inspections, training, equipment, permits — and a form engine powerful
   enough to model your entire safety program.
