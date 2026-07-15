@@ -113,12 +113,8 @@ export function LogicBuilder({
           value={combinator}
           onChange={(e) => setCombinator(e.target.value as 'and' | 'or')}
         >
-          <option value="and">
-            <GeneratedText id="m_08e225d31bbb92" />
-          </option>
-          <option value="or">
-            <GeneratedText id="m_18655a7ba036e7" />
-          </option>
+          <option value="and">{'all of'}</option>
+          <option value="or">{'any of'}</option>
         </Select>
       </div>
       <GeneratedValue
@@ -140,13 +136,11 @@ export function LogicBuilder({
                         value={clause.field}
                         onChange={(e) => updateClause(i, { field: e.target.value })}
                       >
-                        <GeneratedValue
-                          value={availableFields.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              <GeneratedValue value={f.label} /> (<GeneratedValue value={f.id} />)
-                            </option>
-                          ))}
-                        />
+                        {availableFields.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.label} ({f.id})
+                          </option>
+                        ))}
                       </Select>
                       <Select
                         className="h-8 w-28 text-xs"
@@ -161,13 +155,11 @@ export function LogicBuilder({
                           })
                         }}
                       >
-                        <GeneratedValue
-                          value={OPS.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              <GeneratedValue value={o.label} />
-                            </option>
-                          ))}
-                        />
+                        {OPS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
                       </Select>
                       <GeneratedValue
                         value={

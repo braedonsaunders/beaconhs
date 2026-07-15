@@ -132,15 +132,9 @@ export function BulkPpeBar({
           className="h-8 min-w-[10rem]"
           disabled={pending}
         >
-          <option value="issue">
-            <GeneratedText id="m_10b50a35e0953a" />
-          </option>
-          <option value="discard">
-            <GeneratedText id="m_056c8c15d77140" />
-          </option>
-          <option value="export">
-            <GeneratedText id="m_1d9f291cfeb56f" />
-          </option>
+          <option value="issue">{'Issue to person'}</option>
+          <option value="discard">{'Discard'}</option>
+          <option value="export">{'Export selected to CSV'}</option>
         </Select>
 
         <GeneratedValue

@@ -171,13 +171,11 @@ function RecipientsEditor({
                     )
                   }
                 >
-                  <GeneratedValue
-                    value={(Object.keys(RECIPIENT_LABEL) as EmailTarget['type'][]).map((k) => (
-                      <option key={k} value={k}>
-                        <GeneratedValue value={RECIPIENT_LABEL[k]} />
-                      </option>
-                    ))}
-                  />
+                  {(Object.keys(RECIPIENT_LABEL) as EmailTarget['type'][]).map((k) => (
+                    <option key={k} value={k}>
+                      {RECIPIENT_LABEL[k]}
+                    </option>
+                  ))}
                 </Select>
                 <GeneratedValue
                   value={
@@ -242,16 +240,12 @@ function RecipientsEditor({
                         disabled={readOnly}
                         onChange={(e) => update(i, { type: 'role', role: e.target.value })}
                       >
-                        <option value="">
-                          <GeneratedText id="m_1c317a2811e740" />
-                        </option>
-                        <GeneratedValue
-                          value={options.roles.map((r) => (
-                            <option key={r.key} value={r.key}>
-                              <GeneratedValue value={r.name} />
-                            </option>
-                          ))}
-                        />
+                        <option value="">{'— choose a role —'}</option>
+                        {options.roles.map((r) => (
+                          <option key={r.key} value={r.key}>
+                            {r.name}
+                          </option>
+                        ))}
                       </Select>
                     ) : (
                       <Input
@@ -284,13 +278,11 @@ function RecipientsEditor({
                       disabled={readOnly}
                       onChange={(e) => update(i, { type: 'field', field: e.target.value })}
                     >
-                      <GeneratedValue
-                        value={fieldIds.map((f) => (
-                          <option key={f} value={f}>
-                            <GeneratedValue value={f} />
-                          </option>
-                        ))}
-                      />
+                      {fieldIds.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
                     </Select>
                   ) : null
                 }
@@ -1553,13 +1545,11 @@ function NodeInspector({
               })
             }}
           >
-            <GeneratedValue
-              value={profile.triggers.map((tk) => (
-                <option key={tk} value={tk}>
-                  <GeneratedValue value={TRIGGER_LABEL[tk]} />
-                </option>
-              ))}
-            />
+            {profile.triggers.map((tk) => (
+              <option key={tk} value={tk}>
+                {TRIGGER_LABEL[tk]}
+              </option>
+            ))}
           </Select>
         </Field>
         <GeneratedValue
@@ -1597,13 +1587,11 @@ function NodeInspector({
                     })
                   }
                 >
-                  <GeneratedValue
-                    value={(profile.statusValues ?? ['submitted']).map((s) => (
-                      <option key={s} value={s}>
-                        <GeneratedValue value={s.replace(/_/g, ' ')} />
-                      </option>
-                    ))}
-                  />
+                  {(profile.statusValues ?? ['submitted']).map((s) => (
+                    <option key={s} value={s}>
+                      {s.replace(/_/g, ' ')}
+                    </option>
+                  ))}
                 </Select>
               </Field>
             ) : null
@@ -1659,18 +1647,10 @@ function NodeInspector({
                         })
                       }
                     >
-                      <option value="default">
-                        <GeneratedText id="m_18aec830eeb5e0" />
-                      </option>
-                      <option value="outline">
-                        <GeneratedText id="m_1d2c6011d3c6c5" />
-                      </option>
-                      <option value="secondary">
-                        <GeneratedText id="m_03ddba55e48f99" />
-                      </option>
-                      <option value="destructive">
-                        <GeneratedText id="m_1d429c73b00a17" />
-                      </option>
+                      <option value="default">{'Primary'}</option>
+                      <option value="outline">{'Outline'}</option>
+                      <option value="secondary">{'Secondary'}</option>
+                      <option value="destructive">{'Destructive'}</option>
                     </Select>
                   </Field>
                   <Field label={tGenerated('m_158279b74f9a6e')}>
@@ -1798,12 +1778,8 @@ function NodeInspector({
               })
             }
           >
-            <option value="submitter">
-              <GeneratedText id="m_0843afdac467b3" />
-            </option>
-            <option value="role">
-              <GeneratedText id="m_129ae26b80600c" />
-            </option>
+            <option value="submitter">{'The submitter'}</option>
+            <option value="role">{'A role'}</option>
           </Select>
         </Field>
         <GeneratedValue
@@ -1955,13 +1931,11 @@ function ActionInspector({
           disabled={readOnly}
           onChange={(e) => set(defaultAction(e.target.value as ActionData['action'], actionFields))}
         >
-          <GeneratedValue
-            value={actionChoices.map((k) => (
-              <option key={k} value={k}>
-                <GeneratedValue value={ACTION_LABEL[k]} />
-              </option>
-            ))}
-          />
+          {actionChoices.map((k) => (
+            <option key={k} value={k}>
+              {ACTION_LABEL[k]}
+            </option>
+          ))}
         </Select>
       </Field>
 
@@ -1984,15 +1958,9 @@ function ActionInspector({
                     set({ ...a, channel: e.target.value as 'email' | 'sms' | 'in_app' })
                   }
                 >
-                  <option value="email">
-                    <GeneratedText id="m_00a0ba9938bdff" />
-                  </option>
-                  <option value="sms">
-                    <GeneratedText id="m_17bd56c098516e" />
-                  </option>
-                  <option value="in_app">
-                    <GeneratedText id="m_0a215b3bc9f35d" />
-                  </option>
+                  <option value="email">{'Email'}</option>
+                  <option value="sms">{'SMS (text)'}</option>
+                  <option value="in_app">{'In-app notification'}</option>
                 </Select>
               </Field>
               <Field
@@ -2009,15 +1977,9 @@ function ActionInspector({
                     set({ ...a, mode: e.target.value as 'inline' | 'template' | 'design' })
                   }
                 >
-                  <option value="inline">
-                    <GeneratedText id="m_18f3929cd2537c" />
-                  </option>
-                  <option value="template">
-                    <GeneratedText id="m_0e09fff41d755b" />
-                  </option>
-                  <option value="design">
-                    <GeneratedText id="m_13c13756195a75" />
-                  </option>
+                  <option value="inline">{'Write it here'}</option>
+                  <option value="template">{'Use a saved template'}</option>
+                  <option value="design">{'Design one (drag & drop)'}</option>
                 </Select>
               </Field>
               <GeneratedValue
@@ -2069,16 +2031,12 @@ function ActionInspector({
                           disabled={readOnly}
                           onChange={(e) => set({ ...a, templateId: e.target.value })}
                         >
-                          <option value="">
-                            <GeneratedText id="m_0bb019e960f98f" />
-                          </option>
-                          <GeneratedValue
-                            value={emailTemplates.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                <GeneratedValue value={t.name} />
-                              </option>
-                            ))}
-                          />
+                          <option value="">{'— choose a template —'}</option>
+                          {emailTemplates.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
                         </Select>
                       </Field>
                       <GeneratedValue
@@ -2157,27 +2115,21 @@ function ActionInspector({
                       >
                         <optgroup label={tGenerated('m_09bfd82959f8d2')}>
                           <option value="builtin:auto">
-                            <GeneratedText id="m_108ad7daade605" />
+                            {'Assigned PDF template (falls back to the field summary)'}
                           </option>
                           <option value="builtin:summary">
-                            <GeneratedText id="m_1e176804fc9121" />
+                            {'Field summary (key / value table)'}
                           </option>
                         </optgroup>
-                        <GeneratedValue
-                          value={
-                            pdfTemplates.length > 0 ? (
-                              <optgroup label={tGenerated('m_1bf56760eea2b5')}>
-                                <GeneratedValue
-                                  value={pdfTemplates.map((t) => (
-                                    <option key={t.id} value={`tpl:${t.id}`}>
-                                      {t.name}
-                                    </option>
-                                  ))}
-                                />
-                              </optgroup>
-                            ) : null
-                          }
-                        />
+                        {pdfTemplates.length > 0 ? (
+                          <optgroup label={tGenerated('m_1bf56760eea2b5')}>
+                            {pdfTemplates.map((t) => (
+                              <option key={t.id} value={`tpl:${t.id}`}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null}
                       </Select>
                     </Field>
                   ) : null
@@ -2210,13 +2162,11 @@ function ActionInspector({
                     })
                   }
                 >
-                  <GeneratedValue
-                    value={['low', 'medium', 'high', 'critical'].map((s) => (
-                      <option key={s} value={s}>
-                        <GeneratedValue value={s} />
-                      </option>
-                    ))}
-                  />
+                  {['low', 'medium', 'high', 'critical'].map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
                 </Select>
               </Field>
               <Field label={tGenerated('m_0b8592c90b3997')}>
@@ -2284,16 +2234,12 @@ function ActionInspector({
                   disabled={readOnly}
                   onChange={(e) => set({ ...a, field: e.target.value })}
                 >
-                  <option value="">
-                    <GeneratedText id="m_032878135217ad" />
-                  </option>
-                  <GeneratedValue
-                    value={actionFields.writable.map((f) => (
-                      <option key={f} value={f}>
-                        <GeneratedValue value={f} />
-                      </option>
-                    ))}
-                  />
+                  <option value="">{'— pick a field —'}</option>
+                  {actionFields.writable.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
                 </Select>
               </Field>
               <Field label={tGenerated('m_1cc0e5e7b5f442')}>
@@ -2339,12 +2285,8 @@ function ActionInspector({
                   disabled={readOnly}
                   onChange={(e) => set({ ...a, method: e.target.value as 'POST' | 'PUT' })}
                 >
-                  <option value="POST">
-                    <GeneratedText id="m_159218c6d22874" />
-                  </option>
-                  <option value="PUT">
-                    <GeneratedText id="m_1fea6a0197a12d" />
-                  </option>
+                  <option value="POST">{'POST'}</option>
+                  <option value="PUT">{'PUT'}</option>
                 </Select>
               </Field>
             </>
@@ -2383,16 +2325,12 @@ function ActionInspector({
                   disabled={readOnly}
                   onChange={(e) => set({ ...a, fieldId: e.target.value })}
                 >
-                  <option value="">
-                    <GeneratedText id="m_032878135217ad" />
-                  </option>
-                  <GeneratedValue
-                    value={actionFields.photoSources.map((f) => (
-                      <option key={f} value={f}>
-                        <GeneratedValue value={f} />
-                      </option>
-                    ))}
-                  />
+                  <option value="">{'— pick a field —'}</option>
+                  {actionFields.photoSources.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
                 </Select>
               </Field>
               <Field label={tGenerated('m_108b4cbe4ba75e')}>
@@ -2401,16 +2339,12 @@ function ActionInspector({
                   disabled={readOnly}
                   onChange={(e) => set({ ...a, storeInField: e.target.value || undefined })}
                 >
-                  <option value="">
-                    <GeneratedText id="m_0206c945814606" />
-                  </option>
-                  <GeneratedValue
-                    value={actionFields.textOutputs.map((f) => (
-                      <option key={f} value={f}>
-                        <GeneratedValue value={f} />
-                      </option>
-                    ))}
-                  />
+                  <option value="">{'— none —'}</option>
+                  {actionFields.textOutputs.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
                 </Select>
               </Field>
               <label className="flex items-center gap-2 text-xs">
@@ -2433,15 +2367,9 @@ function ActionInspector({
                           set({ ...a, minSeverity: e.target.value as 'low' | 'medium' | 'high' })
                         }
                       >
-                        <option value="low">
-                          <GeneratedText id="m_1ccf901a8121fe" />
-                        </option>
-                        <option value="medium">
-                          <GeneratedText id="m_1afce6ddb08ea6" />
-                        </option>
-                        <option value="high">
-                          <GeneratedText id="m_0f4dbfdc81213e" />
-                        </option>
+                        <option value="low">{'Low and above'}</option>
+                        <option value="medium">{'Medium and above'}</option>
+                        <option value="high">{'High only'}</option>
                       </Select>
                     </Field>
                   ) : null
@@ -2543,16 +2471,12 @@ function MonitorNum({
           disabled={readOnly}
           onChange={(e) => onField(e.target.value || undefined)}
         >
-          <option value="">
-            <GeneratedText id="m_196dad6c0c06ea" />
-          </option>
-          <GeneratedValue
-            value={fieldIds.map((f) => (
-              <option key={f} value={f}>
-                <GeneratedText id="m_07260ef1b27100" /> <GeneratedValue value={f} />
-              </option>
-            ))}
-          />
+          <option value="">{'— fixed value —'}</option>
+          {fieldIds.map((f) => (
+            <option key={f} value={f}>
+              {'bind:'} {f}
+            </option>
+          ))}
         </Select>
       </div>
     </Field>

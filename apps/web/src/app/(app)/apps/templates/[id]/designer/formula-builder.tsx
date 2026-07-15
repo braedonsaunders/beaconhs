@@ -361,22 +361,16 @@ function Node({
         value=""
         onChange={(e) => onChange(makeDefault(e.target.value as FormulaExpression['kind']))}
       >
-        <option value="">
-          <GeneratedText id="m_0b6d9aa275a131" />
-        </option>
-        <GeneratedValue
-          value={GROUPS.map((g) => (
-            <optgroup key={g.label} label={tGeneratedValue(g.label)}>
-              <GeneratedValue
-                value={OPS.filter((op) => op.group === g.kind).map((op) => (
-                  <option key={op.kind} value={op.kind}>
-                    <GeneratedValue value={op.label} />
-                  </option>
-                ))}
-              />
-            </optgroup>
-          ))}
-        />
+        <option value="">{'— pick an operator —'}</option>
+        {GROUPS.map((g) => (
+          <optgroup key={g.label} label={tGeneratedValue(g.label)}>
+            {OPS.filter((op) => op.group === g.kind).map((op) => (
+              <option key={op.kind} value={op.kind}>
+                {op.label}
+              </option>
+            ))}
+          </optgroup>
+        ))}
       </Select>
     )
   }
@@ -389,19 +383,15 @@ function Node({
           value={value.kind}
           onChange={(e) => onChange(makeDefault(e.target.value as FormulaExpression['kind']))}
         >
-          <GeneratedValue
-            value={GROUPS.map((g) => (
-              <optgroup key={g.label} label={tGeneratedValue(g.label)}>
-                <GeneratedValue
-                  value={OPS.filter((op) => op.group === g.kind).map((op) => (
-                    <option key={op.kind} value={op.kind}>
-                      <GeneratedValue value={op.label} />
-                    </option>
-                  ))}
-                />
-              </optgroup>
-            ))}
-          />
+          {GROUPS.map((g) => (
+            <optgroup key={g.label} label={tGeneratedValue(g.label)}>
+              {OPS.filter((op) => op.group === g.kind).map((op) => (
+                <option key={op.kind} value={op.kind}>
+                  {op.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
         </Select>
         <GeneratedValue
           value={
@@ -463,16 +453,12 @@ function NodeBody({
           value={value.fieldKey}
           onChange={(e) => onChange({ kind: 'field_ref', fieldKey: e.target.value })}
         >
-          <option value="">
-            <GeneratedText id="m_013296217bd0ea" />
-          </option>
-          <GeneratedValue
-            value={allFields.map((f) => (
-              <option key={f.id} value={f.id}>
-                <GeneratedValue value={f.label} /> (<GeneratedValue value={f.id} />)
-              </option>
-            ))}
-          />
+          <option value="">{'— pick field —'}</option>
+          {allFields.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.label} ({f.id})
+            </option>
+          ))}
         </Select>
       )
 
@@ -652,16 +638,12 @@ function NodeBody({
             value={value.sectionKey}
             onChange={(e) => onChange({ ...value, sectionKey: e.target.value, rowFieldKey: '' })}
           >
-            <option value="">
-              <GeneratedText id="m_14e9585fa8e12d" />
-            </option>
-            <GeneratedValue
-              value={repeatingSections.map((s) => (
-                <option key={s.id} value={s.id}>
-                  <GeneratedValue value={s.label} />
-                </option>
-              ))}
-            />
+            <option value="">{'— pick section —'}</option>
+            {repeatingSections.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
           </Select>
           <Select
             className="h-7 text-xs"
@@ -669,16 +651,12 @@ function NodeBody({
             onChange={(e) => onChange({ ...value, rowFieldKey: e.target.value })}
             disabled={!sec}
           >
-            <option value="">
-              <GeneratedText id="m_125aac439d6c75" />
-            </option>
-            <GeneratedValue
-              value={sec?.fields.map((f) => (
-                <option key={f.id} value={f.id}>
-                  <GeneratedValue value={f.label} />
-                </option>
-              ))}
-            />
+            <option value="">{'— pick row field —'}</option>
+            {sec?.fields.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
           </Select>
         </div>
       )
@@ -691,16 +669,12 @@ function NodeBody({
           value={value.sectionKey}
           onChange={(e) => onChange({ ...value, sectionKey: e.target.value })}
         >
-          <option value="">
-            <GeneratedText id="m_14e9585fa8e12d" />
-          </option>
-          <GeneratedValue
-            value={repeatingSections.map((s) => (
-              <option key={s.id} value={s.id}>
-                <GeneratedValue value={s.label} />
-              </option>
-            ))}
-          />
+          <option value="">{'— pick section —'}</option>
+          {repeatingSections.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
         </Select>
       )
 
@@ -774,16 +748,12 @@ function NodeBody({
                     })
                   }
                 >
-                  <option value="">
-                    <GeneratedText id="m_12a2068b6d7120" />
-                  </option>
-                  <GeneratedValue
-                    value={pickerFields.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        <GeneratedValue value={p.label} /> (<GeneratedValue value={p.kind} />)
-                      </option>
-                    ))}
-                  />
+                  <option value="">{'— pick picker field —'}</option>
+                  {pickerFields.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label} ({p.kind})
+                    </option>
+                  ))}
                 </Select>
               )
             }
@@ -794,16 +764,12 @@ function NodeBody({
             onChange={(e) => onChange({ ...value, attrKey: e.target.value })}
             disabled={!picker}
           >
-            <option value="">
-              <GeneratedText id="m_11fc7f034f88ce" />
-            </option>
-            <GeneratedValue
-              value={attrs.map((a) => (
-                <option key={a.key} value={a.key}>
-                  <GeneratedValue value={a.label} />
-                </option>
-              ))}
-            />
+            <option value="">{'— pick attribute —'}</option>
+            {attrs.map((a) => (
+              <option key={a.key} value={a.key}>
+                {a.label}
+              </option>
+            ))}
           </Select>
         </div>
       )

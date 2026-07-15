@@ -369,87 +369,83 @@ export function DashboardGrid({
             onDragStop={(next: Layout) => commitLayout(next)}
             onResizeStop={(next: Layout) => commitLayout(next)}
           >
-            <GeneratedValue
-              value={layout.map((w) => {
-                const node =
-                  w.id === 'personal-actions' && quickActionsSaveAction ? (
-                    <QuickActions
-                      key={quickActionsStateKey(initialLayout.quickActions)}
-                      actions={initialLayout.quickActions}
-                      saveAction={quickActionsSaveAction}
-                      saveSuccessMessage={quickActionsSaveSuccessMessage}
-                    />
-                  ) : (
-                    nodes[w.id]
-                  )
-                return (
-                  <div key={w.id} className="group/cell">
-                    <div
-                      className="relative h-full w-full"
-                      // In edit mode, swallow link navigation so finishing a drag
-                      // (or a stray click) never follows a card's link. Capture
-                      // phase + stopPropagation stops it before the Link's own
-                      // onClick. Only anchors are blocked — the remove button and
-                      // any in-card buttons keep working.
-                      onClickCapture={
-                        mode === 'edit'
-                          ? (e) => {
-                              if (!(e.target as HTMLElement).closest('a')) return
-                              e.preventDefault()
-                              e.stopPropagation()
-                            }
-                          : undefined
-                      }
-                    >
-                      <GeneratedValue
-                        value={
-                          mode === 'edit' ? (
-                            <>
-                              <div className="ring-dashed pointer-events-none absolute inset-0 z-10 rounded-xl ring-1 ring-teal-300/0 transition group-hover/cell:ring-teal-400/80" />
-                              <button
-                                type="button"
-                                onClick={() => handleRemove(w.id)}
-                                aria-label={tGenerated('m_0339832246cf9a')}
-                                className="no-drag absolute -top-2 -right-2 z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600 opacity-0 shadow-sm transition group-hover/cell:opacity-100 hover:bg-rose-50 dark:border-rose-800/60 dark:bg-slate-900 dark:hover:bg-rose-950/40"
-                              >
-                                <X size={12} />
-                              </button>
-                            </>
-                          ) : null
-                        }
-                      />
-                      <GeneratedValue
-                        value={
-                          node ??
-                          (isUuid(w.id) ? (
-                            <div className="flex h-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-teal-200 bg-teal-50/40 px-3 text-center dark:border-teal-800/50 dark:bg-teal-950/30">
-                              <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                                <GeneratedValue
-                                  value={
-                                    cardNameById.get(w.id) ?? (
-                                      <GeneratedText id="m_084ab6a2b3afee" />
-                                    )
-                                  }
-                                />
-                              </span>
-                              <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                                <GeneratedText id="m_04803316679abb" />
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
-                              <GeneratedText id="m_00c746ebe202ef" />
-                              <GeneratedValue value={w.id} />
-                              <GeneratedText id="m_11629edbed6269" />
-                            </div>
-                          ))
-                        }
-                      />
-                    </div>
-                  </div>
+            {layout.map((w) => {
+              const node =
+                w.id === 'personal-actions' && quickActionsSaveAction ? (
+                  <QuickActions
+                    key={quickActionsStateKey(initialLayout.quickActions)}
+                    actions={initialLayout.quickActions}
+                    saveAction={quickActionsSaveAction}
+                    saveSuccessMessage={quickActionsSaveSuccessMessage}
+                  />
+                ) : (
+                  nodes[w.id]
                 )
-              })}
-            />
+              return (
+                <div key={w.id} className="group/cell">
+                  <div
+                    className="relative h-full w-full"
+                    // In edit mode, swallow link navigation so finishing a drag
+                    // (or a stray click) never follows a card's link. Capture
+                    // phase + stopPropagation stops it before the Link's own
+                    // onClick. Only anchors are blocked — the remove button and
+                    // any in-card buttons keep working.
+                    onClickCapture={
+                      mode === 'edit'
+                        ? (e) => {
+                            if (!(e.target as HTMLElement).closest('a')) return
+                            e.preventDefault()
+                            e.stopPropagation()
+                          }
+                        : undefined
+                    }
+                  >
+                    <GeneratedValue
+                      value={
+                        mode === 'edit' ? (
+                          <>
+                            <div className="ring-dashed pointer-events-none absolute inset-0 z-10 rounded-xl ring-1 ring-teal-300/0 transition group-hover/cell:ring-teal-400/80" />
+                            <button
+                              type="button"
+                              onClick={() => handleRemove(w.id)}
+                              aria-label={tGenerated('m_0339832246cf9a')}
+                              className="no-drag absolute -top-2 -right-2 z-20 inline-flex h-6 w-6 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600 opacity-0 shadow-sm transition group-hover/cell:opacity-100 hover:bg-rose-50 dark:border-rose-800/60 dark:bg-slate-900 dark:hover:bg-rose-950/40"
+                            >
+                              <X size={12} />
+                            </button>
+                          </>
+                        ) : null
+                      }
+                    />
+                    <GeneratedValue
+                      value={
+                        node ??
+                        (isUuid(w.id) ? (
+                          <div className="flex h-full flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-teal-200 bg-teal-50/40 px-3 text-center dark:border-teal-800/50 dark:bg-teal-950/30">
+                            <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                              <GeneratedValue
+                                value={
+                                  cardNameById.get(w.id) ?? <GeneratedText id="m_084ab6a2b3afee" />
+                                }
+                              />
+                            </span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              <GeneratedText id="m_04803316679abb" />
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400">
+                            <GeneratedText id="m_00c746ebe202ef" />
+                            <GeneratedValue value={w.id} />
+                            <GeneratedText id="m_11629edbed6269" />
+                          </div>
+                        ))
+                      }
+                    />
+                  </div>
+                </div>
+              )
+            })}
           </Responsive>
         </div>
 

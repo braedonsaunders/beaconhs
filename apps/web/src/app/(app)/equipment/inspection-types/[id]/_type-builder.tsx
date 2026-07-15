@@ -362,13 +362,11 @@ function CriterionEditorDrawer({
               <GeneratedText id="m_15eb6eb85b34f2" />
             </Label>
             <Select value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-              <GeneratedValue
-                value={KINDS.map((k) => (
-                  <option key={k} value={k}>
-                    <GeneratedValue value={KIND_LABELS[k]} />
-                  </option>
-                ))}
-              />
+              {KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {KIND_LABELS[k]}
+                </option>
+              ))}
             </Select>
           </div>
           <div className="space-y-1.5">
@@ -376,13 +374,11 @@ function CriterionEditorDrawer({
               <GeneratedText id="m_168b365cc671bf" />
             </Label>
             <Select value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}>
-              <GeneratedValue
-                value={SEVERITIES.map((s) => (
-                  <option key={s} value={s}>
-                    <GeneratedValue value={s[0]!.toUpperCase() + s.slice(1)} />
-                  </option>
-                ))}
-              />
+              {SEVERITIES.map((s) => (
+                <option key={s} value={s}>
+                  {s[0]!.toUpperCase() + s.slice(1)}
+                </option>
+              ))}
             </Select>
           </div>
         </div>
@@ -402,16 +398,12 @@ function CriterionEditorDrawer({
             <GeneratedText id="m_0d513924d97753" />
           </Label>
           <Select value={groupId ?? ''} onChange={(e) => setGroupId(e.target.value || null)}>
-            <option value="">
-              <GeneratedText id="m_124ee6c18e0195" />
-            </option>
-            <GeneratedValue
-              value={groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  <GeneratedValue value={g.label} />
-                </option>
-              ))}
-            />
+            <option value="">{'Ungrouped'}</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.label}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
@@ -501,16 +493,12 @@ function SettingsPanel({
           <GeneratedText id="m_0cd8311e50d877" />
         </Label>
         <Select value={appliesToTypeId} onChange={(e) => setAppliesToTypeId(e.target.value)}>
-          <option value="">
-            <GeneratedText id="m_1130ef09787df0" />
-          </option>
-          <GeneratedValue
-            value={appliesToOptions.map((o) => (
-              <option key={o.id} value={o.id}>
-                <GeneratedValue value={o.name} />
-              </option>
-            ))}
-          />
+          <option value="">{'— Any equipment —'}</option>
+          {appliesToOptions.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
         </Select>
       </div>
       <IntervalPicker

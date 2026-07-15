@@ -524,7 +524,7 @@ export function DbMapper({
                           <GeneratedValue
                             value={cols.map((c) => (
                               <option key={c.name} value={c.name}>
-                                <GeneratedValue value={c.type} />
+                                {c.type}
                               </option>
                             ))}
                           />

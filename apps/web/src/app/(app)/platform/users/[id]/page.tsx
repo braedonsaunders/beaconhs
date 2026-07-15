@@ -307,13 +307,11 @@ export default async function PlatformUserDetailPage({
                     <GeneratedText id="m_18dd6072735a83" />
                   </Label>
                   <Select id="timezone" name="timezone" defaultValue={account.timezone} searchable>
-                    <GeneratedValue
-                      value={timezones.map((t) => (
-                        <option key={t} value={t}>
-                          <GeneratedValue value={t} />
-                        </option>
-                      ))}
-                    />
+                    {timezones.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
                   </Select>
                 </div>
                 <div className="flex justify-end">

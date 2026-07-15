@@ -462,13 +462,11 @@ export default async function DocumentBookPage({
                           disabled={book.status === 'published'}
                         >
                           <option value="">—</option>
-                          <GeneratedValue
-                            value={categories.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                <GeneratedValue value={c.name} />
-                              </option>
-                            ))}
-                          />
+                          {categories.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
                         </Select>
                       </Field>
                       <Field label={tGenerated('m_074ba2f160c506')}>
@@ -478,13 +476,11 @@ export default async function DocumentBookPage({
                           disabled={book.status === 'published'}
                         >
                           <option value="">—</option>
-                          <GeneratedValue
-                            value={types.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                <GeneratedValue value={t.name} />
-                              </option>
-                            ))}
-                          />
+                          {types.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
                         </Select>
                       </Field>
                     </div>

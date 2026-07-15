@@ -364,13 +364,11 @@ export function EmailSettingsForm({
                           aria-label={tGeneratedValue(f.label)}
                           sheetTitle={f.label}
                         >
-                          <GeneratedValue
-                            value={f.options?.map((o) => (
-                              <option key={o.value} value={o.value}>
-                                <GeneratedValue value={o.label} />
-                              </option>
-                            ))}
-                          />
+                          {f.options?.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
                         </Select>
                       </div>
                     )

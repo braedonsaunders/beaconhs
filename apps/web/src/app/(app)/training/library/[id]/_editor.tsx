@@ -137,21 +137,11 @@ export function ContentItemEditor({ item, usedCount }: { item: Item; usedCount: 
                 <GeneratedText id="m_074ba2f160c506" />
               </Label>
               <Select value={kind} onChange={(e) => setKind(e.currentTarget.value as Kind)}>
-                <option value="rich">
-                  <GeneratedText id="m_0c7f4ce2bc6293" />
-                </option>
-                <option value="slides">
-                  <GeneratedText id="m_1c373e80a9436f" />
-                </option>
-                <option value="video">
-                  <GeneratedText id="m_0813322ae97045" />
-                </option>
-                <option value="file">
-                  <GeneratedText id="m_102a42d098d1d2" />
-                </option>
-                <option value="embed">
-                  <GeneratedText id="m_1b25408f216531" />
-                </option>
+                <option value="rich">{'Lesson (rich content)'}</option>
+                <option value="slides">{'Slideshow'}</option>
+                <option value="video">{'Video'}</option>
+                <option value="file">{'File'}</option>
+                <option value="embed">{'Embed'}</option>
               </Select>
             </div>
             <div className="space-y-1.5">

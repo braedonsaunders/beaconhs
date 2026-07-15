@@ -148,33 +148,9 @@ export function BulkIncidentsBar({
           className="h-8 min-w-[10rem]"
           disabled={pending}
         >
-          <GeneratedValue
-            value={
-              canUpdate ? (
-                <option value="archive">
-                  <GeneratedText id="m_019c0a64030688" />
-                </option>
-              ) : null
-            }
-          />
-          <GeneratedValue
-            value={
-              canUpdate ? (
-                <option value="classification">
-                  <GeneratedText id="m_0c5f4a29842def" />
-                </option>
-              ) : null
-            }
-          />
-          <GeneratedValue
-            value={
-              canExport ? (
-                <option value="export">
-                  <GeneratedText id="m_1d9f291cfeb56f" />
-                </option>
-              ) : null
-            }
-          />
+          {canUpdate ? <option value="archive">{'Archive'}</option> : null}
+          {canUpdate ? <option value="classification">{'Set classification'}</option> : null}
+          {canExport ? <option value="export">{'Export selected to CSV'}</option> : null}
         </Select>
 
         <GeneratedValue
@@ -188,17 +164,13 @@ export function BulkIncidentsBar({
                   className="h-8 min-w-[12rem]"
                   disabled={pending}
                 >
-                  <option value="">
-                    <GeneratedText id="m_070a5cef89fc44" />
-                  </option>
-                  <GeneratedValue
-                    value={classifications.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        <GeneratedValue value={c.code ? `${c.code} · ` : ''} />
-                        <GeneratedValue value={c.name} />
-                      </option>
-                    ))}
-                  />
+                  <option value="">{'Select classification…'}</option>
+                  {classifications.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.code ? `${c.code} · ` : ''}
+                      {c.name}
+                    </option>
+                  ))}
                 </Select>
               </div>
             ) : null

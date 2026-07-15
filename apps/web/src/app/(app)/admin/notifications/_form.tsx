@@ -485,8 +485,9 @@ export function NotificationSettingsForm({
         <ChannelStatus label={tGenerated('m_07c0298f965dc6')} status="ready" />
       </div>
 
-      {/* Tenant-wide routing policy */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      {/* Tenant-wide routing policy. No overflow-hidden: Select dropdowns near
+          the card's bottom edge must overlay the boundary, not clip at it. */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
             <GeneratedText id="m_107b4fcf5cad63" />
@@ -507,15 +508,9 @@ export function NotificationSettingsForm({
                   patchPol({ digestMode: e.target.value as PolicyInput['digestMode'] })
                 }
               >
-                <option value="off">
-                  <GeneratedText id="m_0f64f3574b60ab" />
-                </option>
-                <option value="daily">
-                  <GeneratedText id="m_0af2ab44356504" />
-                </option>
-                <option value="weekly">
-                  <GeneratedText id="m_1b72e8564923f7" />
-                </option>
+                <option value="off">{'Off — send immediately'}</option>
+                <option value="daily">{'Daily summary'}</option>
+                <option value="weekly">{'Weekly summary'}</option>
               </Select>
               <GeneratedValue
                 value={
@@ -619,13 +614,11 @@ export function NotificationSettingsForm({
                 onChange={(e) => updateSched({ preset: e.target.value as SchedulePreset })}
                 className="w-40"
               >
-                <GeneratedValue
-                  value={SCHEDULE_PRESETS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      <GeneratedValue value={p.label} />
-                    </option>
-                  ))}
-                />
+                {SCHEDULE_PRESETS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
               </Select>
 
               <GeneratedValue
@@ -659,13 +652,11 @@ export function NotificationSettingsForm({
                       onChange={(e) => updateSched({ weekday: Number(e.target.value) })}
                       className="w-36"
                     >
-                      <GeneratedValue
-                        value={WEEKDAYS.map((d) => (
-                          <option key={d.value} value={d.value}>
-                            <GeneratedValue value={d.label} />
-                          </option>
-                        ))}
-                      />
+                      {WEEKDAYS.map((d) => (
+                        <option key={d.value} value={d.value}>
+                          {d.label}
+                        </option>
+                      ))}
                     </Select>
                   ) : null
                 }
@@ -694,13 +685,11 @@ export function NotificationSettingsForm({
                 onChange={(e) => patchPol({ scanTimezone: e.target.value })}
                 className="w-56"
               >
-                <GeneratedValue
-                  value={tzList.map((tz) => (
-                    <option key={tz} value={tz}>
-                      <GeneratedValue value={tz} />
-                    </option>
-                  ))}
-                />
+                {tzList.map((tz) => (
+                  <option key={tz} value={tz}>
+                    {tz}
+                  </option>
+                ))}
               </Select>
             </div>
             <GeneratedValue
@@ -725,7 +714,7 @@ export function NotificationSettingsForm({
           return (
             <div
               key={cat.key}
-              className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
+              className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
             >
               <div className="flex items-start justify-between gap-3 p-4">
                 <div className="min-w-0">

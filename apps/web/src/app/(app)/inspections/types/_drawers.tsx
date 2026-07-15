@@ -187,13 +187,11 @@ function NewTypeDrawer({
               value={defaultCadence}
               onChange={(e) => setDefaultCadence(e.currentTarget.value)}
             >
-              <GeneratedValue
-                value={CADENCES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    <GeneratedValue value={c.label} />
-                  </option>
-                ))}
-              />
+              {CADENCES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
             </Select>
           </div>
           <div className="space-y-2 pt-7 text-sm">

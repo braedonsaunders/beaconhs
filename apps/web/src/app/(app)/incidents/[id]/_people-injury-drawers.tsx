@@ -174,13 +174,11 @@ export function PersonDrawer({
             <GeneratedText id="m_1099c1fe8b6614" />
           </Label>
           <Select id="ip-role" value={role} onChange={(e) => setRole(e.currentTarget.value)}>
-            <GeneratedValue
-              value={INCIDENT_PERSON_ROLES.map((r) => (
-                <option key={r} value={r} className="capitalize">
-                  <GeneratedValue value={r} />
-                </option>
-              ))}
-            />
+            {INCIDENT_PERSON_ROLES.map((r) => (
+              <option key={r} value={r} className="capitalize">
+                {r}
+              </option>
+            ))}
           </Select>
         </div>
         <GeneratedValue

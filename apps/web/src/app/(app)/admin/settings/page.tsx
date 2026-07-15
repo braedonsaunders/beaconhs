@@ -348,13 +348,11 @@ export default async function AdminSettingsPage() {
                   defaultValue={tenant.defaultLanguage}
                   className="h-10 w-32 pl-3 text-sm"
                 >
-                  <GeneratedValue
-                    value={LOCALE_OPTIONS.map((l) => (
-                      <option key={l.value} value={l.value}>
-                        <GeneratedValue value={languages(l.value)} />
-                      </option>
-                    ))}
-                  />
+                  {LOCALE_OPTIONS.map((l) => (
+                    <option key={l.value} value={l.value}>
+                      {languages(l.value)}
+                    </option>
+                  ))}
                 </Select>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   <GeneratedValue value={t('defaultLanguageHelp')} />

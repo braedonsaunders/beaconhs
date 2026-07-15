@@ -136,18 +136,10 @@ function RecordReviewDrawer({
               setOutcome(e.currentTarget.value as '' | 'approved_no_change' | 'updated' | 'retired')
             }
           >
-            <option value="">
-              <GeneratedText id="m_14c507a6027f7b" />
-            </option>
-            <option value="approved_no_change">
-              <GeneratedText id="m_05af74aa7323c3" />
-            </option>
-            <option value="updated">
-              <GeneratedText id="m_014ca61c68ab13" />
-            </option>
-            <option value="retired">
-              <GeneratedText id="m_092f81e2ac87c2" />
-            </option>
+            <option value="">{'Choose an outcome…'}</option>
+            <option value="approved_no_change">{'Approved — no change'}</option>
+            <option value="updated">{'Updated'}</option>
+            <option value="retired">{'Retired'}</option>
           </Select>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             <GeneratedText id="m_0d4fb74c5bcfd6" />

@@ -364,16 +364,12 @@ function ExportSourceDrawer({ entity }: { entity: ExportEntity }) {
                       name="sort"
                       placeholder={tGenerated('m_184e33c0ff4633')}
                     >
-                      <option value="">
-                        <GeneratedText id="m_184e33c0ff4633" />
-                      </option>
-                      <GeneratedValue
-                        value={entity.sortOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            <GeneratedValue value={option.label} />
-                          </option>
-                        ))}
-                      />
+                      <option value="">{'Default sort'}</option>
+                      {entity.sortOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                     </Select>
                   </div>
                   <div className="space-y-1.5">
@@ -385,16 +381,12 @@ function ExportSourceDrawer({ entity }: { entity: ExportEntity }) {
                       name="dir"
                       placeholder={tGenerated('m_1a98e5887ce38c')}
                     >
-                      <option value="">
-                        <GeneratedText id="m_1a98e5887ce38c" />
-                      </option>
-                      <GeneratedValue
-                        value={EXPORT_SORT_DIRECTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            <GeneratedValue value={option.label} />
-                          </option>
-                        ))}
-                      />
+                      <option value="">{'Default direction'}</option>
+                      {EXPORT_SORT_DIRECTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                     </Select>
                   </div>
                 </div>
@@ -615,16 +607,12 @@ function ExportFilterField({
         name={filter.name}
         placeholder={tGeneratedValue(filter.emptyLabel ?? tGenerated('m_1ec3617d2cde86'))}
       >
-        <option value="">
-          <GeneratedValue value={filter.emptyLabel ?? <GeneratedText id="m_1ec3617d2cde86" />} />
-        </option>
-        <GeneratedValue
-          value={filter.options.map((option) => (
-            <option key={option.value} value={option.value}>
-              <GeneratedValue value={option.label} />
-            </option>
-          ))}
-        />
+        <option value="">{filter.emptyLabel ?? 'Any'}</option>
+        {filter.options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
       </Select>
     </div>
   )

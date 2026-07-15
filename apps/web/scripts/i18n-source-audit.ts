@@ -113,6 +113,13 @@ export function normalizeProse(value: string): string {
       .replaceAll('&lt;', '<')
       .replaceAll('&gt;', '>')
       .replaceAll('&nbsp;', ' ')
+      .replaceAll('&rsquo;', '’')
+      .replaceAll('&lsquo;', '‘')
+      .replaceAll('&ldquo;', '“')
+      .replaceAll('&rdquo;', '”')
+      .replaceAll('&hellip;', '…')
+      .replaceAll('&mdash;', '—')
+      .replaceAll('&ndash;', '–')
       // Decode ampersands last so double-encoded text is not decoded twice.
       .replaceAll('&amp;', '&')
       .replace(/\s+/g, ' ')
@@ -208,7 +215,21 @@ function isMixedJsxText(node: ts.JsxText): boolean {
   return meaningful.length > 1
 }
 
-function inspectFile(path: string, base: string): I18nCandidate[] {
+function inOptionElement(node: ts.Node): boolean {
+  let current: ts.Node | undefined = node.parent
+  while (current) {
+    if (ts.isJsxElement(current) && elementName(current) === 'option') return true
+    current = current.parent
+  }
+  return false
+}
+
+interface FileAudit {
+  candidates: I18nCandidate[]
+  optionLabels: I18nCandidate[]
+}
+
+function inspectFile(path: string, base: string): FileAudit {
   const contents = readFileSync(path, 'utf8')
   const sourceFile = ts.createSourceFile(
     path,
@@ -219,11 +240,17 @@ function inspectFile(path: string, base: string): I18nCandidate[] {
   )
   const file = relative(base, path)
   const candidates: I18nCandidate[] = []
+  const optionLabels: I18nCandidate[] = []
 
-  function add(node: ts.Node, kind: I18nCandidateKind, source: string) {
+  function add(
+    node: ts.Node,
+    kind: I18nCandidateKind,
+    source: string,
+    sink: I18nCandidate[] = candidates,
+  ) {
     const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
     const container = topLevelFunction(node)
-    candidates.push({
+    sink.push({
       ...(container
         ? {
             container: functionName(container),
@@ -245,6 +272,14 @@ function inspectFile(path: string, base: string): I18nCandidate[] {
     if (ts.isJsxText(node) && hasWords(node.text)) {
       const element = containingElement(node)
       if (element && NON_PROSE_ELEMENTS.has(elementName(element))) return
+      // <option> labels are translated at render time by the Select/SearchSelect
+      // primitives (exact-copy lookup), so plain source copy is required here —
+      // wrapper elements would hide the options from Select's children parser.
+      // They still must exist in the catalog; the coverage test enforces that.
+      if (inOptionElement(node)) {
+        add(node, 'jsx-text', node.text, optionLabels)
+        return
+      }
       add(node, isMixedJsxText(node) ? 'mixed-jsx' : 'jsx-text', node.text)
       return
     }
@@ -275,11 +310,13 @@ function inspectFile(path: string, base: string): I18nCandidate[] {
     if (ts.isJsxExpression(node) && node.expression && ts.isJsxElement(node.parent)) {
       const element = containingElement(node)
       if (element && NON_PROSE_ELEMENTS.has(elementName(element))) return
+      const sink = inOptionElement(node) ? optionLabels : candidates
       for (const literal of displayLiterals(node.expression)) {
         add(
           literal,
           ts.isTemplateExpression(literal) ? 'template' : 'expression',
           displayLiteralSource(literal, sourceFile),
+          sink,
         )
       }
       ts.forEachChild(node, visit)
@@ -290,17 +327,27 @@ function inspectFile(path: string, base: string): I18nCandidate[] {
   }
 
   visit(sourceFile)
-  return candidates
+  return { candidates, optionLabels }
 }
 
-export function findUserFacingSourceLiterals({
-  roots = SOURCE_ROOTS,
-  base = WEB_ROOT,
-}: {
+type AuditOptions = {
   roots?: readonly string[]
   base?: string
-} = {}): I18nCandidate[] {
-  return roots.flatMap((root) => sourceFiles(root)).flatMap((path) => inspectFile(path, base))
+}
+
+export function findSourceAudit({ roots = SOURCE_ROOTS, base = WEB_ROOT }: AuditOptions = {}): {
+  violations: I18nCandidate[]
+  optionLabels: I18nCandidate[]
+} {
+  const audits = roots.flatMap((root) => sourceFiles(root)).map((path) => inspectFile(path, base))
+  return {
+    violations: audits.flatMap((audit) => audit.candidates),
+    optionLabels: audits.flatMap((audit) => audit.optionLabels),
+  }
+}
+
+export function findUserFacingSourceLiterals(options: AuditOptions = {}): I18nCandidate[] {
+  return findSourceAudit(options).violations
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {

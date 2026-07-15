@@ -190,13 +190,11 @@ export function AudiencePicker({
                 onPendingValueChange('')
               }}
             >
-              <GeneratedValue
-                value={types.map((t) => (
-                  <option key={t} value={t}>
-                    <GeneratedValue value={TYPE_LABEL[t]} />
-                  </option>
-                ))}
-              />
+              {types.map((t) => (
+                <option key={t} value={t}>
+                  {TYPE_LABEL[t]}
+                </option>
+              ))}
             </Select>
           </div>
           <div className="space-y-1.5">

@@ -156,16 +156,12 @@ export default async function AssessmentTypeDetailPage({
                 </Field>
                 <Field label={tGenerated('m_0a4456ce9a12f5')}>
                   <Select name="courseId" defaultValue={type.courseId ?? '__none__'}>
-                    <option value="__none__">
-                      <GeneratedText id="m_14e7dba9bb1899" />
-                    </option>
-                    <GeneratedValue
-                      value={courses.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          <GeneratedValue value={c.code} /> · <GeneratedValue value={c.name} />
-                        </option>
-                      ))}
-                    />
+                    <option value="__none__">{'— No course —'}</option>
+                    {courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.code} · {c.name}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
               </div>
@@ -284,13 +280,11 @@ export default async function AssessmentTypeDetailPage({
                                 <div className="grid gap-3 sm:grid-cols-3">
                                   <Field label={tGenerated('m_1e578efe1574cd')}>
                                     <Select name="kind" defaultValue={q.kind}>
-                                      <GeneratedValue
-                                        value={Object.entries(KIND_LABELS).map(([v, lbl]) => (
-                                          <option key={v} value={v}>
-                                            <GeneratedValue value={lbl} />
-                                          </option>
-                                        ))}
-                                      />
+                                      {Object.entries(KIND_LABELS).map(([v, lbl]) => (
+                                        <option key={v} value={v}>
+                                          {lbl}
+                                        </option>
+                                      ))}
                                     </Select>
                                   </Field>
                                   <Field label={tGenerated('m_08e7a76c4ab77f')}>
@@ -336,12 +330,8 @@ export default async function AssessmentTypeDetailPage({
                                           name="correctAnswer"
                                           defaultValue={q.correctAnswer ?? 'true'}
                                         >
-                                          <option value="true">
-                                            <GeneratedText id="m_135cfc93a0437b" />
-                                          </option>
-                                          <option value="false">
-                                            <GeneratedText id="m_0e0397bd9d7ef3" />
-                                          </option>
+                                          <option value="true">{'True'}</option>
+                                          <option value="false">{'False'}</option>
                                         </Select>
                                       ) : q.kind === 'text' ? (
                                         <Input
@@ -418,13 +408,11 @@ export default async function AssessmentTypeDetailPage({
               <div className="grid gap-3 sm:grid-cols-3">
                 <Field label={tGenerated('m_1e578efe1574cd')}>
                   <Select name="kind" defaultValue="single_choice">
-                    <GeneratedValue
-                      value={Object.entries(KIND_LABELS).map(([v, lbl]) => (
-                        <option key={v} value={v}>
-                          <GeneratedValue value={lbl} />
-                        </option>
-                      ))}
-                    />
+                    {Object.entries(KIND_LABELS).map(([v, lbl]) => (
+                      <option key={v} value={v}>
+                        {lbl}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
                 <Field label={tGenerated('m_08e7a76c4ab77f')}>

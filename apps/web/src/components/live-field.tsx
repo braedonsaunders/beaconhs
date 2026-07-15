@@ -354,22 +354,12 @@ export function LiveSelect({
           save(e.target.value)
         }}
       >
-        <GeneratedValue
-          value={
-            allowEmpty ? (
-              <option value="">
-                <GeneratedValue value={emptyLabel} />
-              </option>
-            ) : null
-          }
-        />
-        <GeneratedValue
-          value={options.map((o) => (
-            <option key={o.value} value={o.value}>
-              <GeneratedValue value={o.label} />
-            </option>
-          ))}
-        />
+        {allowEmpty ? <option value="">{emptyLabel}</option> : null}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </Select>
     </div>
   )

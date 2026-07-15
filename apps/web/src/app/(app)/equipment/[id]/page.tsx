@@ -3173,21 +3173,11 @@ export default async function EquipmentDetailPage({
           </Field>
           <Field label={tGenerated('m_1e578efe1574cd')} required>
             <Select name="kind" defaultValue="note">
-              <option value="note">
-                <GeneratedText id="m_16d241f76641bb" />
-              </option>
-              <option value="maintenance">
-                <GeneratedText id="m_08fc3f5f377c0d" />
-              </option>
-              <option value="fuel">
-                <GeneratedText id="m_0505d2be4be0f4" />
-              </option>
-              <option value="incident">
-                <GeneratedText id="m_08be8294ed6700" />
-              </option>
-              <option value="modification">
-                <GeneratedText id="m_0b11f285f21b2f" />
-              </option>
+              <option value="note">{'Note'}</option>
+              <option value="maintenance">{'Maintenance'}</option>
+              <option value="fuel">{'Fuel'}</option>
+              <option value="incident">{'Incident'}</option>
+              <option value="modification">{'Modification'}</option>
             </Select>
           </Field>
           <Field label={tGenerated('m_0decefd558c355')} className="sm:col-span-2">
@@ -3463,18 +3453,10 @@ export default async function EquipmentDetailPage({
                 <input type="hidden" name="checkoutId" value={openCheckout.co.id} />
                 <Field label={tGenerated('m_0299a9c737cc7e')}>
                   <Select name="returnedCondition" defaultValue="good">
-                    <option value="good">
-                      <GeneratedText id="m_08ecbc5495e971" />
-                    </option>
-                    <option value="fair">
-                      <GeneratedText id="m_02f16dedf3c570" />
-                    </option>
-                    <option value="damaged">
-                      <GeneratedText id="m_16d172eabbfe82" />
-                    </option>
-                    <option value="unusable">
-                      <GeneratedText id="m_15640e98690043" />
-                    </option>
+                    <option value="good">{'Good'}</option>
+                    <option value="fair">{'Fair'}</option>
+                    <option value="damaged">{'Damaged'}</option>
+                    <option value="unusable">{'Unusable'}</option>
                   </Select>
                 </Field>
                 <Field label={tGenerated('m_0b8dadcb78cd08')} className="sm:col-span-2">

@@ -138,16 +138,12 @@ function TypeForm({
           value={categoryId}
           onChange={(e) => setCategoryId(e.currentTarget.value)}
         >
-          <option value="">
-            <GeneratedText id="m_0dd5f8a31ce3e1" />
-          </option>
-          <GeneratedValue
-            value={categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                <GeneratedValue value={c.name} />
-              </option>
-            ))}
-          />
+          <option value="">{'— None —'}</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
         </Select>
       </div>
       <div className="space-y-1.5">

@@ -191,16 +191,12 @@ function SelectControl({
         persist(e.target.value)
       }}
     >
-      <option value="">
-        <GeneratedText id="m_0dd5f8a31ce3e1" />
-      </option>
-      <GeneratedValue
-        value={(def.config?.options ?? []).map((o) => (
-          <option key={o.value} value={o.value}>
-            <GeneratedValue value={o.label} />
-          </option>
-        ))}
-      />
+      <option value="">{'— None —'}</option>
+      {(def.config?.options ?? []).map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
     </Select>
   )
 }

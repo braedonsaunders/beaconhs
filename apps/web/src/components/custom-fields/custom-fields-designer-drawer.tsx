@@ -291,13 +291,11 @@ function DesignerForm({
             disabled={!!editing}
             onChange={(e) => setFieldType(e.currentTarget.value as CustomFieldType)}
           >
-            <GeneratedValue
-              value={CUSTOM_FIELD_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  <GeneratedValue value={CUSTOM_FIELD_TYPE_META[t].label} />
-                </option>
-              ))}
-            />
+            {CUSTOM_FIELD_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {CUSTOM_FIELD_TYPE_META[t].label}
+              </option>
+            ))}
           </Select>
           <GeneratedValue
             value={
@@ -321,16 +319,12 @@ function DesignerForm({
                   value={groupKey}
                   onChange={(e) => setGroupKey(e.currentTarget.value)}
                 >
-                  <option value="">
-                    <GeneratedText id="m_1089d5d07815c7" />
-                  </option>
-                  <GeneratedValue
-                    value={nativeGroups.map((g) => (
-                      <option key={g.key} value={g.key}>
-                        <GeneratedValue value={g.label} />
-                      </option>
-                    ))}
-                  />
+                  <option value="">{'Its own section'}</option>
+                  {nativeGroups.map((g) => (
+                    <option key={g.key} value={g.key}>
+                      {g.label}
+                    </option>
+                  ))}
                 </Select>
               </div>
             ) : null
@@ -372,18 +366,13 @@ function DesignerForm({
                 onChange={(e) => setSubtypeId(e.currentTarget.value)}
               >
                 <option value="">
-                  <GeneratedText id="m_17201516610431" />{' '}
-                  <GeneratedValue
-                    value={subtypeLabel?.toLowerCase() ?? <GeneratedText id="m_19c3cf830db44c" />}
-                  />
+                  {'All'} {subtypeLabel?.toLowerCase() ?? 'types'}
                 </option>
-                <GeneratedValue
-                  value={subtypeOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      <GeneratedValue value={o.name} />
-                    </option>
-                  ))}
-                />
+                {subtypeOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
               </Select>
               <p className="text-xs text-slate-400 dark:text-slate-500">
                 <GeneratedText id="m_0190e7556a98d5" />{' '}

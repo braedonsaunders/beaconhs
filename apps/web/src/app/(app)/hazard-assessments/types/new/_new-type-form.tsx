@@ -42,12 +42,8 @@ export function NewAssessmentTypeForm({
               <GeneratedText id="m_03cf3a97d03fef" />
             </Label>
             <Select name="style" value={style} onChange={(e) => setStyle(e.target.value as Style)}>
-              <option value="task_based">
-                <GeneratedText id="m_09d335688e31af" />
-              </option>
-              <option value="hazard_based">
-                <GeneratedText id="m_0f250d076f1225" />
-              </option>
+              <option value="task_based">{'Task-based'}</option>
+              <option value="hazard_based">{'Hazard-based'}</option>
             </Select>
           </div>
           <GeneratedValue
@@ -58,16 +54,12 @@ export function NewAssessmentTypeForm({
                     <GeneratedText id="m_14b0cc3abaca8d" />
                   </Label>
                   <Select name="defaultHazardSetId" defaultValue="">
-                    <option value="">
-                      <GeneratedText id="m_0206c945814606" />
-                    </option>
-                    <GeneratedValue
-                      value={sets.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          <GeneratedValue value={s.name} />
-                        </option>
-                      ))}
-                    />
+                    <option value="">{'— none —'}</option>
+                    {sets.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
                   </Select>
                 </div>
               ) : null

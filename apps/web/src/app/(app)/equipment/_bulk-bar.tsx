@@ -169,42 +169,10 @@ export function BulkEquipmentBar({
           className="h-8 min-w-[11rem]"
           disabled={pending}
         >
-          <GeneratedValue
-            value={
-              canManage ? (
-                <option value="site">
-                  <GeneratedText id="m_1ae517acfedbc1" />
-                </option>
-              ) : null
-            }
-          />
-          <GeneratedValue
-            value={
-              canManage ? (
-                <option value="holder">
-                  <GeneratedText id="m_1d6946d1e8f0b4" />
-                </option>
-              ) : null
-            }
-          />
-          <GeneratedValue
-            value={
-              canManage ? (
-                <option value="status">
-                  <GeneratedText id="m_00da005ac443be" />
-                </option>
-              ) : null
-            }
-          />
-          <GeneratedValue
-            value={
-              canExport ? (
-                <option value="export">
-                  <GeneratedText id="m_1d9f291cfeb56f" />
-                </option>
-              ) : null
-            }
-          />
+          {canManage ? <option value="site">{'Transfer to site'}</option> : null}
+          {canManage ? <option value="holder">{'Assign to holder'}</option> : null}
+          {canManage ? <option value="status">{'Set status'}</option> : null}
+          {canExport ? <option value="export">{'Export selected to CSV'}</option> : null}
         </Select>
 
         <GeneratedValue
@@ -262,13 +230,11 @@ export function BulkEquipmentBar({
                   className="h-8 min-w-[11rem]"
                   disabled={pending}
                 >
-                  <GeneratedValue
-                    value={(Object.keys(STATUS_LABELS) as EquipmentStatus[]).map((s) => (
-                      <option key={s} value={s}>
-                        <GeneratedValue value={STATUS_LABELS[s]} />
-                      </option>
-                    ))}
-                  />
+                  {(Object.keys(STATUS_LABELS) as EquipmentStatus[]).map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABELS[s]}
+                    </option>
+                  ))}
                 </Select>
               </div>
             ) : null

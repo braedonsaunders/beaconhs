@@ -173,13 +173,11 @@ export function ScopePicker({
           <GeneratedText id="m_1e9292e2d1eeca" />
         </Label>
         <Select value={type} onChange={(e) => setType(e.target.value as ScopeType)}>
-          <GeneratedValue
-            value={TYPE_OPTIONS.map((t) => (
-              <option key={t.value} value={t.value}>
-                <GeneratedValue value={t.label} />
-              </option>
-            ))}
-          />
+          {TYPE_OPTIONS.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
         </Select>
         <GeneratedValue
           value={

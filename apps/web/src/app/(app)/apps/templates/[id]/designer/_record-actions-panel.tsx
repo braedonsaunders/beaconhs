@@ -353,13 +353,11 @@ function AddButtonForm({ templateId, nextOrder }: { templateId: string; nextOrde
           <GeneratedText id="m_142e7fa174a9b9" />
         </Label>
         <Select value={actionKind} onChange={(e) => setActionKind(e.target.value as QuickAction)}>
-          <GeneratedValue
-            value={QUICK_ACTIONS.map((k) => (
-              <option key={k} value={k}>
-                <GeneratedValue value={ACTION_LABEL[k]} />
-              </option>
-            ))}
-          />
+          {QUICK_ACTIONS.map((k) => (
+            <option key={k} value={k}>
+              {ACTION_LABEL[k]}
+            </option>
+          ))}
         </Select>
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -368,13 +366,11 @@ function AddButtonForm({ templateId, nextOrder }: { templateId: string; nextOrde
             <GeneratedText id="m_03cf3a97d03fef" />
           </Label>
           <Select value={variant} onChange={(e) => setVariant(e.target.value as ButtonVariant)}>
-            <GeneratedValue
-              value={VARIANTS.map((v) => (
-                <option key={v.value} value={v.value}>
-                  <GeneratedValue value={v.label} />
-                </option>
-              ))}
-            />
+            {VARIANTS.map((v) => (
+              <option key={v.value} value={v.value}>
+                {v.label}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="space-y-1">

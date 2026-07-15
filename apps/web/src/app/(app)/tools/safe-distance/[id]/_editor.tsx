@@ -218,13 +218,11 @@ export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEdit
                   value={method}
                   onChange={(e) => setMethod(e.target.value as SafeDistanceMethod)}
                 >
-                  <GeneratedValue
-                    value={(['nasa', 'asme', 'lloyds'] as const).map((m) => (
-                      <option key={m} value={m}>
-                        <GeneratedValue value={SAFE_DISTANCE_METHOD_LABELS[m]} />
-                      </option>
-                    ))}
-                  />
+                  {(['nasa', 'asme', 'lloyds'] as const).map((m) => (
+                    <option key={m} value={m}>
+                      {SAFE_DISTANCE_METHOD_LABELS[m]}
+                    </option>
+                  ))}
                 </Select>
               </div>
               <div className="space-y-2">
@@ -236,12 +234,8 @@ export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEdit
                   value={unit}
                   onChange={(e) => onUnitChange(e.target.value as SafeDistanceUnit)}
                 >
-                  <option value="imperial">
-                    <GeneratedText id="m_123d11e20247fd" />
-                  </option>
-                  <option value="metric">
-                    <GeneratedText id="m_068618eb97f2fe" />
-                  </option>
+                  <option value="imperial">{'Imperial (psi / ft³ / ft)'}</option>
+                  <option value="metric">{'Metric (bar / m³ / m)'}</option>
                 </Select>
               </div>
               <div className="space-y-2">
@@ -401,13 +395,11 @@ export function SafeDistanceEditor({ record, initialSegments }: SafeDistanceEdit
                                 })
                               }
                             >
-                              <GeneratedValue
-                                value={SEGMENT_UNITS.map((u) => (
-                                  <option key={u} value={u}>
-                                    <GeneratedValue value={SEGMENT_UNIT_LABELS[u]} />
-                                  </option>
-                                ))}
-                              />
+                              {SEGMENT_UNITS.map((u) => (
+                                <option key={u} value={u}>
+                                  {SEGMENT_UNIT_LABELS[u]}
+                                </option>
+                              ))}
                             </Select>
                           </div>
                           <div className="grid grid-cols-2 gap-2">

@@ -293,18 +293,10 @@ function StyleSelect({ editor }: { editor: Editor | null }) {
       }}
       className="h-7 px-1.5 text-xs font-medium text-slate-700 disabled:opacity-40 dark:text-slate-200"
     >
-      <option value="p">
-        <GeneratedText id="m_19862da7cdac1d" />
-      </option>
-      <option value="h1">
-        <GeneratedText id="m_05a59f16978305" />
-      </option>
-      <option value="h2">
-        <GeneratedText id="m_0b5fa291a5a72a" />
-      </option>
-      <option value="h3">
-        <GeneratedText id="m_1e90df2a72ca42" />
-      </option>
+      <option value="p">{'Normal'}</option>
+      <option value="h1">{'Heading 1'}</option>
+      <option value="h2">{'Heading 2'}</option>
+      <option value="h3">{'Heading 3'}</option>
     </Select>
   )
 }

@@ -164,21 +164,11 @@ export default async function ContentLibraryPage({
                   className="h-8 w-44"
                 />
                 <Select name="kind" defaultValue="rich" className="h-8 w-28">
-                  <option value="rich">
-                    <GeneratedText id="m_167a70293e1237" />
-                  </option>
-                  <option value="slides">
-                    <GeneratedText id="m_1c373e80a9436f" />
-                  </option>
-                  <option value="video">
-                    <GeneratedText id="m_0813322ae97045" />
-                  </option>
-                  <option value="file">
-                    <GeneratedText id="m_102a42d098d1d2" />
-                  </option>
-                  <option value="embed">
-                    <GeneratedText id="m_1b25408f216531" />
-                  </option>
+                  <option value="rich">{'Lesson'}</option>
+                  <option value="slides">{'Slideshow'}</option>
+                  <option value="video">{'Video'}</option>
+                  <option value="file">{'File'}</option>
+                  <option value="embed">{'Embed'}</option>
                 </Select>
                 <Button type="submit" size="sm">
                   <GeneratedText id="m_16c8592e5020a4" />

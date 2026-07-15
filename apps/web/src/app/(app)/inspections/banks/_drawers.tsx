@@ -154,13 +154,11 @@ function NewBankDrawer({
             value={category}
             onChange={(e) => setCategory(e.currentTarget.value)}
           >
-            <GeneratedValue
-              value={CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>
-                  <GeneratedValue value={c.label} />
-                </option>
-              ))}
-            />
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="flex items-center gap-2">

@@ -204,13 +204,11 @@ export function DataTable({
             }}
             className="h-7 text-xs"
           >
-            <GeneratedValue
-              value={PAGE_SIZES.map((s) => (
-                <option key={s} value={s}>
-                  <GeneratedValue value={s} /> <GeneratedText id="m_0f439c799f9bf5" />
-                </option>
-              ))}
-            />
+            {PAGE_SIZES.map((s) => (
+              <option key={s} value={s}>
+                {s} {'/ page'}
+              </option>
+            ))}
           </Select>
           <div className="flex items-center gap-1">
             <button

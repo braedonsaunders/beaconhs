@@ -63,13 +63,11 @@ export function RecurrencePicker({
                   value={value.kind}
                   onChange={(e) => set({ kind: e.target.value as RecurrenceKind })}
                 >
-                  <GeneratedValue
-                    value={kinds.map((k) => (
-                      <option key={k.value} value={k.value}>
-                        <GeneratedValue value={k.label} />
-                      </option>
-                    ))}
-                  />
+                  {kinds.map((k) => (
+                    <option key={k.value} value={k.value}>
+                      {k.label}
+                    </option>
+                  ))}
                 </Select>
               </div>
             ) : null
@@ -101,13 +99,11 @@ export function RecurrencePicker({
                     value={value.frequency ?? 'week'}
                     onChange={(e) => set({ frequency: e.target.value as Frequency })}
                   >
-                    <GeneratedValue
-                      value={FREQUENCIES.map((f) => (
-                        <option key={f.value} value={f.value}>
-                          <GeneratedValue value={f.label} /> (<GeneratedValue value={f.cron} />)
-                        </option>
-                      ))}
-                    />
+                    {FREQUENCIES.map((f) => (
+                      <option key={f.value} value={f.value}>
+                        {f.label} ({f.cron})
+                      </option>
+                    ))}
                   </Select>
                 </div>
                 <div className="space-y-1.5">

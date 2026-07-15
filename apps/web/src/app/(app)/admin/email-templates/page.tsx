@@ -190,35 +190,24 @@ export default async function EmailTemplatesPage() {
                     </Label>
                     <Select id="recordSubject" name="recordSubject" required defaultValue="">
                       <option value="" disabled>
-                        <GeneratedText id="m_1cd3fce117c91f" />
+                        {'Choose a record type…'}
                       </option>
                       <optgroup label={tGenerated('m_1e649a5a75a0e0')}>
-                        <GeneratedValue
-                          value={subjects.modules.map((s) => (
-                            <option key={`module:${s.key}`} value={`module:${s.key}`}>
-                              <GeneratedValue value={s.label} />
+                        {subjects.modules.map((s) => (
+                          <option key={`module:${s.key}`} value={`module:${s.key}`}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                      {subjects.apps.length > 0 ? (
+                        <optgroup label={tGenerated('m_0c770d55914bfa')}>
+                          {subjects.apps.map((s) => (
+                            <option key={`form_template:${s.key}`} value={`form_template:${s.key}`}>
+                              {s.label}
                             </option>
                           ))}
-                        />
-                      </optgroup>
-                      <GeneratedValue
-                        value={
-                          subjects.apps.length > 0 ? (
-                            <optgroup label={tGenerated('m_0c770d55914bfa')}>
-                              <GeneratedValue
-                                value={subjects.apps.map((s) => (
-                                  <option
-                                    key={`form_template:${s.key}`}
-                                    value={`form_template:${s.key}`}
-                                  >
-                                    <GeneratedValue value={s.label} />
-                                  </option>
-                                ))}
-                              />
-                            </optgroup>
-                          ) : null
-                        }
-                      />
+                        </optgroup>
+                      ) : null}
                     </Select>
                     <p className="text-[11px] text-slate-400">
                       <GeneratedText id="m_01d1bbc9241d07" />
@@ -229,24 +218,12 @@ export default async function EmailTemplatesPage() {
                       <GeneratedText id="m_108b41637f364f" />
                     </Label>
                     <Select id="category" name="category" defaultValue="notification">
-                      <option value="general">
-                        <GeneratedText id="m_1086584d9aca6a" />
-                      </option>
-                      <option value="notification">
-                        <GeneratedText id="m_15a68787f9c3bc" />
-                      </option>
-                      <option value="reminder">
-                        <GeneratedText id="m_153f06822b566b" />
-                      </option>
-                      <option value="approval">
-                        <GeneratedText id="m_0f7bb45f90ba7e" />
-                      </option>
-                      <option value="digest">
-                        <GeneratedText id="m_094aaec898740b" />
-                      </option>
-                      <option value="marketing">
-                        <GeneratedText id="m_18995973443e47" />
-                      </option>
+                      <option value="general">{'General'}</option>
+                      <option value="notification">{'Notification'}</option>
+                      <option value="reminder">{'Reminder'}</option>
+                      <option value="approval">{'Approval'}</option>
+                      <option value="digest">{'Digest'}</option>
+                      <option value="marketing">{'Marketing'}</option>
                     </Select>
                   </div>
                   <div className="flex justify-end">

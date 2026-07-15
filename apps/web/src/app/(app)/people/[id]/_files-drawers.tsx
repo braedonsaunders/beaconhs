@@ -136,13 +136,11 @@ function UploadFileDrawer({
             <GeneratedText id="m_1e578efe1574cd" />
           </Label>
           <Select id="kind" value={kind} onChange={(e) => setKind(e.currentTarget.value)}>
-            <GeneratedValue
-              value={FILE_KINDS.map((k) => (
-                <option key={k.value} value={k.value}>
-                  <GeneratedValue value={k.label} />
-                </option>
-              ))}
-            />
+            {FILE_KINDS.map((k) => (
+              <option key={k.value} value={k.value}>
+                {k.label}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="space-y-1.5">

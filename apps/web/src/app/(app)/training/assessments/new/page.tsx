@@ -112,17 +112,15 @@ export default async function NewAssessmentAttemptPage({
                 </Label>
                 <Select name="typeId" required defaultValue={defaultTypeId ?? ''}>
                   <option value="" disabled>
-                    <GeneratedText id="m_14e679efd24fb2" />
+                    {'Choose an assessment type…'}
                   </option>
-                  <GeneratedValue
-                    value={types
-                      .filter((t) => t.active)
-                      .map((t) => (
-                        <option key={t.id} value={t.id}>
-                          <GeneratedValue value={t.name} />
-                        </option>
-                      ))}
-                  />
+                  {types
+                    .filter((t) => t.active)
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
                 </Select>
               </div>
               <div className="flex justify-end">

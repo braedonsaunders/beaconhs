@@ -463,16 +463,12 @@ function ReminderForm({
                       onChange={(e) => setEquipmentItemId(e.currentTarget.value)}
                       required
                     >
-                      <option value="">
-                        <GeneratedText id="m_09f3931b085f5c" />
-                      </option>
-                      <GeneratedValue
-                        value={(itemOptions ?? []).map((o) => (
-                          <option key={o.value} value={o.value}>
-                            <GeneratedValue value={o.label} />
-                          </option>
-                        ))}
-                      />
+                      <option value="">{'— Select a unit —'}</option>
+                      {(itemOptions ?? []).map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
                     </Select>
                   )
                 }

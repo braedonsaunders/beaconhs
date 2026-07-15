@@ -225,13 +225,11 @@ function SpawnCAPADrawer({
               value={severity}
               onChange={(e) => setSeverity(e.currentTarget.value as (typeof SEVERITIES)[number])}
             >
-              <GeneratedValue
-                value={SEVERITIES.map((s) => (
-                  <option key={s} value={s}>
-                    <GeneratedValue value={s} />
-                  </option>
-                ))}
-              />
+              {SEVERITIES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </Select>
             <p className="text-[11px] text-slate-500">
               <GeneratedText id="m_15766056173fb4" />
@@ -381,13 +379,11 @@ function SpawnIncidentDrawer({
               value={type}
               onChange={(e) => setType(e.currentTarget.value as (typeof INCIDENT_TYPES)[number])}
             >
-              <GeneratedValue
-                value={INCIDENT_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    <GeneratedValue value={t.replace(/_/g, ' ')} />
-                  </option>
-                ))}
-              />
+              {INCIDENT_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t.replace(/_/g, ' ')}
+                </option>
+              ))}
             </Select>
           </div>
           <div className="space-y-1.5">
@@ -401,13 +397,11 @@ function SpawnIncidentDrawer({
                 setSeverity(e.currentTarget.value as (typeof INCIDENT_SEVERITIES)[number])
               }
             >
-              <GeneratedValue
-                value={INCIDENT_SEVERITIES.map((s) => (
-                  <option key={s} value={s}>
-                    <GeneratedValue value={s.replace(/_/g, ' ')} />
-                  </option>
-                ))}
-              />
+              {INCIDENT_SEVERITIES.map((s) => (
+                <option key={s} value={s}>
+                  {s.replace(/_/g, ' ')}
+                </option>
+              ))}
             </Select>
           </div>
           <div className="space-y-1.5">

@@ -56,15 +56,13 @@ export function AddMembershipForm({
             }}
           >
             <option value="" disabled>
-              <GeneratedText id="m_1a53f4c5dcddc6" />
+              {'Select a tenant…'}
             </option>
-            <GeneratedValue
-              value={tenants.map((t) => (
-                <option key={t.id} value={t.id}>
-                  <GeneratedValue value={t.name} />
-                </option>
-              ))}
-            />
+            {tenants.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="space-y-1.5">
@@ -79,16 +77,12 @@ export function AddMembershipForm({
             value={roleId}
             onChange={(e) => setRoleId(e.currentTarget.value)}
           >
-            <option value="">
-              <GeneratedText id="m_0f222c2787326f" />
-            </option>
-            <GeneratedValue
-              value={roleOptions.map((r) => (
-                <option key={r.id} value={r.id}>
-                  <GeneratedValue value={r.name} />
-                </option>
-              ))}
-            />
+            <option value="">{'No role'}</option>
+            {roleOptions.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
           </Select>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             <GeneratedText id="m_049ce663104999" />

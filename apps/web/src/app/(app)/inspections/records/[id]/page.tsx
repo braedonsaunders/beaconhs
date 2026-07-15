@@ -1701,13 +1701,11 @@ export default async function InspectionRecordDetailPage({
                     <GeneratedText id="m_1e8891cb78e5a3" />
                   </Label>
                   <Select name="status" defaultValue={record.status} disabled={recordImmutable}>
-                    <GeneratedValue
-                      value={STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          <GeneratedValue value={s.replace(/_/g, ' ')} />
-                        </option>
-                      ))}
-                    />
+                    {STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace(/_/g, ' ')}
+                      </option>
+                    ))}
                   </Select>
                 </div>
                 <Button type="submit" disabled={recordImmutable}>

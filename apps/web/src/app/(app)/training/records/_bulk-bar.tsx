@@ -153,13 +153,11 @@ export function BulkTrainingRecordsBar({
           className="h-8 min-w-[10rem]"
           disabled={pending}
         >
-          <GeneratedValue
-            value={actionOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                <GeneratedValue value={o.label} />
-              </option>
-            ))}
-          />
+          {actionOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </Select>
 
         <GeneratedValue

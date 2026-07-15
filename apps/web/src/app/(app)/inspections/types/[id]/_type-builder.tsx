@@ -339,13 +339,11 @@ function SettingsPanel({ type, onDeleted }: { type: BuilderType; onDeleted: () =
           <GeneratedText id="m_0a1355e9241639" />
         </Label>
         <Select value={defaultCadence} onChange={(e) => setDefaultCadence(e.target.value)}>
-          <GeneratedValue
-            value={CADENCES.map((c) => (
-              <option key={c.value} value={c.value}>
-                <GeneratedValue value={c.label} />
-              </option>
-            ))}
-          />
+          {CADENCES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
         </Select>
       </div>
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">

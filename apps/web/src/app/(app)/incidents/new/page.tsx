@@ -152,24 +152,20 @@ export default async function NewIncidentPage() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label={tGenerated('m_074ba2f160c506')} required>
                   <Select name="type" defaultValue="injury">
-                    <GeneratedValue
-                      value={TYPES.map((t) => (
-                        <option key={t} value={t}>
-                          <GeneratedValue value={t.replace(/_/g, ' ')} />
-                        </option>
-                      ))}
-                    />
+                    {TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t.replace(/_/g, ' ')}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
                 <Field label={tGenerated('m_168b365cc671bf')} required>
                   <Select name="severity" defaultValue="no_injury">
-                    <GeneratedValue
-                      value={SEVERITIES.map((s) => (
-                        <option key={s} value={s}>
-                          <GeneratedValue value={s.replace(/_/g, ' ')} />
-                        </option>
-                      ))}
-                    />
+                    {SEVERITIES.map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace(/_/g, ' ')}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
                 <Field label={tGenerated('m_03f174df92cf82')} required className="sm:col-span-1">

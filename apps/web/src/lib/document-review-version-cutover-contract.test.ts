@@ -36,7 +36,9 @@ describe('document review version cutover contract', () => {
     const drawer = source('../app/(app)/documents/[id]/_drawers.tsx')
     expect(drawer).toContain("| 'approved_no_change'")
     expect(drawer).toContain("useState<'' | 'approved_no_change' | 'updated' | 'retired'>('')")
-    expect(drawer).toContain('<GeneratedText id="m_14c507a6027f7b" />')
+    // Plain source copy: <option> labels stay unwrapped so Select's children
+    // parser can read them; SearchSelect translates them at render time.
+    expect(drawer).toContain(`<option value="">{'Choose an outcome…'}</option>`)
     expect(drawer).toContain("setError(tGenerated('m_0be53dcc37f11a'))")
   })
 })

@@ -268,13 +268,11 @@ export function FactorDrawer({
             value={category}
             onChange={(e) => setCategory(e.currentTarget.value as FactorCategory)}
           >
-            <GeneratedValue
-              value={FACTOR_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  <GeneratedValue value={c.charAt(0).toUpperCase() + c.slice(1)} />
-                </option>
-              ))}
-            />
+            {FACTOR_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c.charAt(0).toUpperCase() + c.slice(1)}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="space-y-1.5">
@@ -411,14 +409,12 @@ export function WhyDrawer({
             value={String(ordinal)}
             onChange={(e) => setOrdinal(Number(e.currentTarget.value))}
           >
-            <GeneratedValue
-              value={[1, 2, 3, 4, 5].map((n) => (
-                <option key={n} value={n}>
-                  <GeneratedText id="m_11ba5ccd975250" />
-                  <GeneratedValue value={n} />
-                </option>
-              ))}
-            />
+            {[1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>
+                {'Why #'}
+                {n}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="space-y-1.5">
@@ -604,13 +600,11 @@ export function PrevStepDrawer({
               value={status}
               onChange={(e) => setStatus(e.currentTarget.value as PrevStepStatus)}
             >
-              <GeneratedValue
-                value={PREV_STEP_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    <GeneratedValue value={s.replace(/_/g, ' ')} />
-                  </option>
-                ))}
-              />
+              {PREV_STEP_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s.replace(/_/g, ' ')}
+                </option>
+              ))}
             </Select>
           </div>
         </div>

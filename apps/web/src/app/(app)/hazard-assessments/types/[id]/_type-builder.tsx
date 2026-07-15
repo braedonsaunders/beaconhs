@@ -770,13 +770,11 @@ function EditorDrawer({
                   value={questionType}
                   onChange={(e) => setQuestionType(e.target.value as QuestionType)}
                 >
-                  <GeneratedValue
-                    value={(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((t) => (
-                      <option key={t} value={t}>
-                        <GeneratedValue value={QUESTION_TYPE_LABELS[t]} />
-                      </option>
-                    ))}
-                  />
+                  {(Object.keys(QUESTION_TYPE_LABELS) as QuestionType[]).map((t) => (
+                    <option key={t} value={t}>
+                      {QUESTION_TYPE_LABELS[t]}
+                    </option>
+                  ))}
                 </Select>
               </div>
               <GeneratedValue
@@ -811,16 +809,12 @@ function EditorDrawer({
                         <GeneratedText id="m_13554479175be8" />
                       </Label>
                       <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-                        <option value="">
-                          <GeneratedText id="m_0dbb32383dd60f" />
-                        </option>
-                        <GeneratedValue
-                          value={appTemplates.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              <GeneratedValue value={t.name} />
-                            </option>
-                          ))}
-                        />
+                        <option value="">{'Select an app…'}</option>
+                        {appTemplates.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
                       </Select>
                     </div>
                   ) : null
@@ -968,12 +962,8 @@ function SettingsPanel({
           <GeneratedText id="m_03cf3a97d03fef" />
         </Label>
         <Select value={style} onChange={(e) => setStyle(e.target.value as Style)}>
-          <option value="task_based">
-            <GeneratedText id="m_09d335688e31af" />
-          </option>
-          <option value="hazard_based">
-            <GeneratedText id="m_0f250d076f1225" />
-          </option>
+          <option value="task_based">{'Task-based'}</option>
+          <option value="hazard_based">{'Hazard-based'}</option>
         </Select>
       </div>
       <GeneratedValue
@@ -987,16 +977,12 @@ function SettingsPanel({
                 value={defaultHazardSetId}
                 onChange={(e) => setDefaultHazardSetId(e.target.value)}
               >
-                <option value="">
-                  <GeneratedText id="m_0206c945814606" />
-                </option>
-                <GeneratedValue
-                  value={hazardSets.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      <GeneratedValue value={s.name} />
-                    </option>
-                  ))}
-                />
+                <option value="">{'— none —'}</option>
+                {hazardSets.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
               </Select>
             </div>
           ) : null

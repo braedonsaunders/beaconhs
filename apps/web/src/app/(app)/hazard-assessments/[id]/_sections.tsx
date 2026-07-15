@@ -91,16 +91,12 @@ export function AddTaskDrawerBody({
             <GeneratedText id="m_1ea86ac5ad7afa" />
           </Label>
           <Select value={taskId} onChange={(e) => setTaskId(e.target.value)}>
-            <option value="">
-              <GeneratedText id="m_168189b204837c" />
-            </option>
-            <GeneratedValue
-              value={taskLibrary.map((t) => (
-                <option key={t.id} value={t.id}>
-                  <GeneratedValue value={t.name} />
-                </option>
-              ))}
-            />
+            <option value="">{'— ad-hoc task —'}</option>
+            {taskLibrary.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
           </Select>
           <p className="text-xs text-slate-500">
             <GeneratedText id="m_0c8805d993d503" />
@@ -1323,15 +1319,9 @@ export function AddQuestionDrawerBody({
             <GeneratedText id="m_10fb4d4125aba0" />
           </Label>
           <Select value={questionType} onChange={(e) => setQuestionType(e.target.value as any)}>
-            <option value="yes_no">
-              <GeneratedText id="m_0bf8b14108bd13" />
-            </option>
-            <option value="text">
-              <GeneratedText id="m_1510e6eb6b18ad" />
-            </option>
-            <option value="multi_select">
-              <GeneratedText id="m_1bee29efec322c" />
-            </option>
+            <option value="yes_no">{'Yes / No'}</option>
+            <option value="text">{'Free text'}</option>
+            <option value="multi_select">{'Multi-select'}</option>
           </Select>
         </div>
         <GeneratedValue
@@ -1594,13 +1584,11 @@ export function QuestionRow({
           ) : row.questionType === 'multi_select' ? (
             <Select value={answer} onChange={(e) => setAnswer(e.target.value)} disabled={disabled}>
               <option value="">—</option>
-              <GeneratedValue
-                value={row.answers.map((a) => (
-                  <option key={a} value={a}>
-                    <GeneratedValue value={a} />
-                  </option>
-                ))}
-              />
+              {row.answers.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
             </Select>
           ) : (
             <Textarea

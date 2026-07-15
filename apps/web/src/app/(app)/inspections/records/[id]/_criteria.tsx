@@ -321,16 +321,12 @@ export function CriterionCard({
                   aria-label={tGenerated('m_136d6440d6732f', { value0: question })}
                   className="max-w-64 min-w-40"
                 >
-                  <option value="">
-                    <GeneratedText id="m_0f4c5a982e8f76" />
-                  </option>
-                  <GeneratedValue
-                    value={choiceOptions.map((option) => (
-                      <option key={option} value={option}>
-                        <GeneratedValue value={option} />
-                      </option>
-                    ))}
-                  />
+                  <option value="">{'Select one…'}</option>
+                  {choiceOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
                 </Select>
               ) : responseType === 'text' ? (
                 <Input

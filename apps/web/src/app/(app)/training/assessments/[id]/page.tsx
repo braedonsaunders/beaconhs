@@ -390,15 +390,9 @@ function AnswerInput({
   if (kind === 'true_false') {
     return (
       <Select name={name} defaultValue={answer ?? ''} disabled={disabled}>
-        <option value="">
-          <GeneratedText id="m_184af7c1f2cebc" />
-        </option>
-        <option value="true">
-          <GeneratedText id="m_135cfc93a0437b" />
-        </option>
-        <option value="false">
-          <GeneratedText id="m_0e0397bd9d7ef3" />
-        </option>
+        <option value="">{'— Pick one —'}</option>
+        <option value="true">{'True'}</option>
+        <option value="false">{'False'}</option>
       </Select>
     )
   }

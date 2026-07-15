@@ -508,15 +508,13 @@ export default async function AdminUserDetailPage({
                         </Label>
                         <Select id="roleId" name="roleId" required defaultValue="">
                           <option value="" disabled>
-                            <GeneratedText id="m_0e809cf3b04b55" />
+                            {'Select a role…'}
                           </option>
-                          <GeneratedValue
-                            value={allRoles.map((r) => (
-                              <option key={r.id} value={r.id}>
-                                <GeneratedValue value={r.name} />
-                              </option>
-                            ))}
-                          />
+                          {allRoles.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name}
+                            </option>
+                          ))}
                         </Select>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           <GeneratedText id="m_0453038ccb73ab" />
@@ -564,21 +562,17 @@ export default async function AdminUserDetailPage({
                         </Label>
                         <Select id="permission" name="permission" required defaultValue="">
                           <option value="" disabled>
-                            <GeneratedText id="m_0bfcf661569a51" />
+                            {'Select a permission…'}
                           </option>
-                          <GeneratedValue
-                            value={PERMISSION_GROUPS.map((g) => (
-                              <optgroup key={g.key} label={tGeneratedValue(g.label)}>
-                                <GeneratedValue
-                                  value={g.permissions.map((p) => (
-                                    <option key={p.key} value={p.key}>
-                                      <GeneratedValue value={p.label} />
-                                    </option>
-                                  ))}
-                                />
-                              </optgroup>
-                            ))}
-                          />
+                          {PERMISSION_GROUPS.map((g) => (
+                            <optgroup key={g.key} label={tGeneratedValue(g.label)}>
+                              {g.permissions.map((p) => (
+                                <option key={p.key} value={p.key}>
+                                  {p.label}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
                         </Select>
                       </div>
                       <div className="space-y-1.5">
@@ -586,12 +580,8 @@ export default async function AdminUserDetailPage({
                           <GeneratedText id="m_08915780ab8677" />
                         </Label>
                         <Select id="effect" name="effect" defaultValue="grant" className="w-32">
-                          <option value="grant">
-                            <GeneratedText id="m_18e71b8872fe55" />
-                          </option>
-                          <option value="deny">
-                            <GeneratedText id="m_0779a6056e2316" />
-                          </option>
+                          <option value="grant">{'Grant'}</option>
+                          <option value="deny">{'Deny'}</option>
                         </Select>
                       </div>
                       <Button type="submit">

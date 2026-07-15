@@ -211,13 +211,11 @@ export function ObligationForm({
               disabled={editing}
               onChange={(e) => changeKind(e.target.value as ObligationKind)}
             >
-              <GeneratedValue
-                value={OBLIGATION_KINDS.map((k) => (
-                  <option key={k} value={k}>
-                    <GeneratedValue value={kindLabel(k)} />
-                  </option>
-                ))}
-              />
+              {OBLIGATION_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {kindLabel(k)}
+                </option>
+              ))}
             </Select>
             <p className="text-xs text-slate-500">
               <GeneratedValue
@@ -303,12 +301,8 @@ export function ObligationForm({
                           value={certItemKind}
                           onChange={(e) => setCertItemKind(e.target.value as 'course' | 'skill')}
                         >
-                          <option value="course">
-                            <GeneratedText id="m_0dec824473c3c4" />
-                          </option>
-                          <option value="skill">
-                            <GeneratedText id="m_0d77c6bf9fe7a3" />
-                          </option>
+                          <option value="course">{'Certification (course)'}</option>
+                          <option value="skill">{'Skill type'}</option>
                         </Select>
                         <GeneratedValue
                           value={
@@ -400,12 +394,8 @@ export function ObligationForm({
                             setTrainingItemKind(e.target.value as 'course' | 'assessment_type')
                           }
                         >
-                          <option value="course">
-                            <GeneratedText id="m_14fc1e0739b60e" />
-                          </option>
-                          <option value="assessment_type">
-                            <GeneratedText id="m_07c3c257b72ebf" />
-                          </option>
+                          <option value="course">{'Course'}</option>
+                          <option value="assessment_type">{'Assessment (graded quiz)'}</option>
                         </Select>
                         <GeneratedValue
                           value={

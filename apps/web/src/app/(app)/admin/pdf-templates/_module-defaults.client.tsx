@@ -87,16 +87,12 @@ function ModuleRow({ row }: { row: ModulePdfDefaultRow }) {
           disabled={pending || noTemplates}
           aria-label={tGenerated('m_195230d2917694', { value0: row.label })}
         >
-          <option value="">
-            <GeneratedText id="m_1e47177b1d2ac3" />
-          </option>
-          <GeneratedValue
-            value={row.options.map((o) => (
-              <option key={o.id} value={o.id}>
-                <GeneratedValue value={o.name} />
-              </option>
-            ))}
-          />
+          <option value="">{'Field summary (no template)'}</option>
+          {row.options.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
         </Select>
       </div>
     </div>

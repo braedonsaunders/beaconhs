@@ -144,15 +144,9 @@ export function BulkDocumentsBar({
           className="h-8 min-w-[11rem]"
           disabled={pending}
         >
-          <option value="archive">
-            <GeneratedText id="m_019c0a64030688" />
-          </option>
-          <option value="addToBook">
-            <GeneratedText id="m_14f77026dd272d" />
-          </option>
-          <option value="delete">
-            <GeneratedText id="m_11773f3c3f7558" />
-          </option>
+          <option value="archive">{'Archive'}</option>
+          <option value="addToBook">{'Add to book'}</option>
+          <option value="delete">{'Delete'}</option>
         </Select>
 
         <GeneratedValue
@@ -166,16 +160,12 @@ export function BulkDocumentsBar({
                   className="h-8 min-w-[14rem]"
                   disabled={pending}
                 >
-                  <option value="">
-                    <GeneratedText id="m_00a0960cda2f8d" />
-                  </option>
-                  <GeneratedValue
-                    value={books.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        <GeneratedValue value={b.label} />
-                      </option>
-                    ))}
-                  />
+                  <option value="">{'Pick book…'}</option>
+                  {books.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.label}
+                    </option>
+                  ))}
                 </Select>
               </div>
             ) : null

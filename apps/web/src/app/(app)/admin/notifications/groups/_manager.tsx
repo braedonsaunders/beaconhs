@@ -501,12 +501,8 @@ function GroupEditor({
                             updateMember(i, { mode: e.target.value as 'include' | 'exclude' })
                           }
                         >
-                          <option value="include">
-                            <GeneratedText id="m_0ad12520e40f09" />
-                          </option>
-                          <option value="exclude">
-                            <GeneratedText id="m_06ec0f75d38049" />
-                          </option>
+                          <option value="include">{'Include'}</option>
+                          <option value="exclude">{'Exclude'}</option>
                         </Select>
                         <Select
                           value={m.kind}
@@ -518,13 +514,11 @@ function GroupEditor({
                             })
                           }
                         >
-                          <GeneratedValue
-                            value={KIND_OPTIONS.map((k) => (
-                              <option key={k} value={k}>
-                                <GeneratedValue value={KIND_LABEL[k]} />
-                              </option>
-                            ))}
-                          />
+                          {KIND_OPTIONS.map((k) => (
+                            <option key={k} value={k}>
+                              {KIND_LABEL[k]}
+                            </option>
+                          ))}
                         </Select>
                         <GeneratedValue
                           value={

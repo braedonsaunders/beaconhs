@@ -223,16 +223,12 @@ function IssueDrawer({
                     value={size}
                     onChange={(e) => setSize(e.currentTarget.value)}
                   >
-                    <option value="">
-                      <GeneratedText id="m_0c4b905e20de49" />
-                    </option>
-                    <GeneratedValue
-                      value={sizeOptions.map((s) => (
-                        <option key={s} value={s}>
-                          <GeneratedValue value={s} />
-                        </option>
-                      ))}
-                    />
+                    <option value="">{'— No size —'}</option>
+                    {sizeOptions.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
                   </Select>
                 ) : (
                   <Input

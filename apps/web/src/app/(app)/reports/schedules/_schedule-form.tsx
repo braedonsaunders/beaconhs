@@ -128,16 +128,12 @@ export function ScheduleForm({
           value={definitionId}
           onChange={(e) => setDefinitionId(e.target.value)}
         >
-          <GeneratedValue
-            value={definitions.map((d) => (
-              <option key={d.id} value={d.id}>
-                <GeneratedValue value={d.name} />
-                <GeneratedValue
-                  value={d.kind === 'custom' ? <GeneratedText id="m_1caf23f629a15c" /> : ''}
-                />
-              </option>
-            ))}
-          />
+          {definitions.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+              {d.kind === 'custom' ? '(custom)' : ''}
+            </option>
+          ))}
         </Select>
         <GeneratedValue
           value={
@@ -180,15 +176,9 @@ export function ScheduleForm({
               value={cadence}
               onChange={(e) => setCadence(e.target.value as typeof cadence)}
             >
-              <option value="daily">
-                <GeneratedText id="m_014f0a55186cc3" />
-              </option>
-              <option value="weekly">
-                <GeneratedText id="m_0f5fe94677f742" />
-              </option>
-              <option value="monthly">
-                <GeneratedText id="m_03da3ce41e10fb" />
-              </option>
+              <option value="daily">{'Daily'}</option>
+              <option value="weekly">{'Weekly'}</option>
+              <option value="monthly">{'Monthly'}</option>
             </Select>
           </div>
           <GeneratedValue
@@ -199,13 +189,11 @@ export function ScheduleForm({
                     <GeneratedText id="m_0738c9c7544385" />
                   </Label>
                   <Select name="dayOfWeek" defaultValue={String(initial?.dayOfWeek ?? 1)}>
-                    <GeneratedValue
-                      value={DOW.map((d, i) => (
-                        <option key={d} value={String(i)}>
-                          <GeneratedValue value={d} />
-                        </option>
-                      ))}
-                    />
+                    {DOW.map((d, i) => (
+                      <option key={d} value={String(i)}>
+                        {d}
+                      </option>
+                    ))}
                   </Select>
                 </div>
               ) : null

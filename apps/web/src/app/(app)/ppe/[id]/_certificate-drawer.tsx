@@ -170,15 +170,9 @@ export function CertificateDrawer({
             value={result}
             onChange={(e) => setResult(e.target.value as 'pass' | 'fail' | 'remediated')}
           >
-            <option value="pass">
-              <GeneratedText id="m_0e4b19568a01bf" />
-            </option>
-            <option value="fail">
-              <GeneratedText id="m_169669494a86f8" />
-            </option>
-            <option value="remediated">
-              <GeneratedText id="m_14efba56076015" />
-            </option>
+            <option value="pass">{'Pass'}</option>
+            <option value="fail">{'Fail'}</option>
+            <option value="remediated">{'Pass after remediation'}</option>
           </Select>
         </div>
         <div className="space-y-1.5 sm:col-span-2">

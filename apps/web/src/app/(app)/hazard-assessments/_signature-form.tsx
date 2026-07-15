@@ -83,12 +83,8 @@ export function AddSignatureDrawerBody({
             <GeneratedText id="m_0eb37b54326290" />
           </Label>
           <Select value={type} onChange={(e) => setType(e.target.value as 'internal' | 'external')}>
-            <option value="internal">
-              <GeneratedText id="m_1ad5bdc61b1e18" />
-            </option>
-            <option value="external">
-              <GeneratedText id="m_017ddded95fdb4" />
-            </option>
+            <option value="internal">{'Internal (employee)'}</option>
+            <option value="external">{'External (visitor / contractor)'}</option>
           </Select>
         </div>
         <GeneratedValue

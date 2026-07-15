@@ -537,19 +537,15 @@ export function ReportStudio({
                     onChange={(e) => changeEntity(e.target.value)}
                     className={selectCls}
                   >
-                    <GeneratedValue
-                      value={entityGroups.map(([cat, ents]) => (
-                        <optgroup key={cat} label={tGeneratedValue(cat)}>
-                          <GeneratedValue
-                            value={ents.map((en) => (
-                              <option key={en.key} value={en.key}>
-                                <GeneratedValue value={en.label} />
-                              </option>
-                            ))}
-                          />
-                        </optgroup>
-                      ))}
-                    />
+                    {entityGroups.map(([cat, ents]) => (
+                      <optgroup key={cat} label={tGeneratedValue(cat)}>
+                        {ents.map((en) => (
+                          <option key={en.key} value={en.key}>
+                            {en.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </Select>
                   <GeneratedValue
                     value={
@@ -733,27 +729,19 @@ export function ReportStudio({
                           <div className="space-y-2">
                             <div className="grid grid-cols-2 gap-2">
                               <Select value={sortCol} onChange={(e) => setSortCol(e.target.value)}>
-                                <option value="">
-                                  <GeneratedText id="m_0470a81f1d91e3" />
-                                </option>
-                                <GeneratedValue
-                                  value={entity.columns.map((c) => (
-                                    <option key={c.key} value={c.key}>
-                                      <GeneratedValue value={c.label} />
-                                    </option>
-                                  ))}
-                                />
+                                <option value="">{'— No sort —'}</option>
+                                {entity.columns.map((c) => (
+                                  <option key={c.key} value={c.key}>
+                                    {c.label}
+                                  </option>
+                                ))}
                               </Select>
                               <Select
                                 value={sortDir}
                                 onChange={(e) => setSortDir(e.target.value as 'asc' | 'desc')}
                               >
-                                <option value="desc">
-                                  <GeneratedText id="m_14a3ccc633a056" />
-                                </option>
-                                <option value="asc">
-                                  <GeneratedText id="m_0027c5891082cf" />
-                                </option>
+                                <option value="desc">{'Descending'}</option>
+                                <option value="asc">{'Ascending'}</option>
                               </Select>
                             </div>
                             <div className="space-y-1">
@@ -761,16 +749,12 @@ export function ReportStudio({
                                 <GeneratedText id="m_1ffa0690b108df" />
                               </Label>
                               <Select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
-                                <option value="">
-                                  <GeneratedText id="m_15f23979c887ab" />
-                                </option>
-                                <GeneratedValue
-                                  value={entity.columns.map((c) => (
-                                    <option key={c.key} value={c.key}>
-                                      <GeneratedValue value={c.label} />
-                                    </option>
-                                  ))}
-                                />
+                                <option value="">{'— No grouping —'}</option>
+                                {entity.columns.map((c) => (
+                                  <option key={c.key} value={c.key}>
+                                    {c.label}
+                                  </option>
+                                ))}
                               </Select>
                             </div>
                             <div className="space-y-1">
@@ -910,13 +894,11 @@ export function ReportStudio({
                           }
                           className={selectCls}
                         >
-                          <GeneratedValue
-                            value={PAPER_CHOICES.map((p) => (
-                              <option key={p.key} value={p.key}>
-                                <GeneratedValue value={p.label} />
-                              </option>
-                            ))}
-                          />
+                          {PAPER_CHOICES.map((p) => (
+                            <option key={p.key} value={p.key}>
+                              {p.label}
+                            </option>
+                          ))}
                         </Select>
                       </div>
                       <div className="space-y-1">
@@ -1170,13 +1152,11 @@ function BreakoutEditor({
         onChange={(e) => onChange({ column: e.target.value, bin: undefined })}
         className={cn(selectCls, 'h-8 text-xs')}
       >
-        <GeneratedValue
-          value={cols.map((c) => (
-            <option key={c.key} value={c.key}>
-              <GeneratedValue value={c.label} />
-            </option>
-          ))}
-        />
+        {cols.map((c) => (
+          <option key={c.key} value={c.key}>
+            {c.label}
+          </option>
+        ))}
       </Select>
       <GeneratedValue
         value={
@@ -1191,16 +1171,12 @@ function BreakoutEditor({
               }
               className={cn(selectCls, 'h-8 text-xs')}
             >
-              <option value="">
-                <GeneratedText id="m_1be6394afb4aea" />
-              </option>
-              <GeneratedValue
-                value={TEMPORAL_BINS.map((u) => (
-                  <option key={u} value={u}>
-                    <GeneratedText id="m_19ec032b95249e" /> <GeneratedValue value={u} />
-                  </option>
-                ))}
-              />
+              <option value="">{'No bucket'}</option>
+              {TEMPORAL_BINS.map((u) => (
+                <option key={u} value={u}>
+                  {'by'} {u}
+                </option>
+              ))}
             </Select>
           ) : null
         }
@@ -1227,13 +1203,11 @@ function MeasureEditor({
         onChange={(e) => onChange({ ...row, fn: e.target.value as ReportAggFn })}
         className={cn(selectCls, 'h-8 text-xs')}
       >
-        <GeneratedValue
-          value={AGG_FNS.map((a) => (
-            <option key={a.value} value={a.value}>
-              <GeneratedValue value={a.label} />
-            </option>
-          ))}
-        />
+        {AGG_FNS.map((a) => (
+          <option key={a.value} value={a.value}>
+            {a.label}
+          </option>
+        ))}
       </Select>
       <GeneratedValue
         value={
@@ -1243,16 +1217,12 @@ function MeasureEditor({
               onChange={(e) => onChange({ ...row, column: e.target.value })}
               className={cn(selectCls, 'h-8 text-xs')}
             >
-              <option value="">
-                <GeneratedText id="m_1cb9e7d2a78b28" />
-              </option>
-              <GeneratedValue
-                value={fieldCols.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    <GeneratedValue value={c.label} />
-                  </option>
-                ))}
-              />
+              <option value="">{'Pick a column…'}</option>
+              {fieldCols.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.label}
+                </option>
+              ))}
             </Select>
           ) : null
         }

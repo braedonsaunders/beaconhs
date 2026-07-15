@@ -505,15 +505,9 @@ export default async function WorkOrderDetailPage({
                           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <Field label={tGenerated('m_00f0e2904a371c')} required>
                               <Select name="priority" defaultValue={wo.priority}>
-                                <option value="low">
-                                  <GeneratedText id="m_0ba423ff31902f" />
-                                </option>
-                                <option value="med">
-                                  <GeneratedText id="m_1bec287326cfa6" />
-                                </option>
-                                <option value="high">
-                                  <GeneratedText id="m_08e161aa889d60" />
-                                </option>
+                                <option value="low">{'Low'}</option>
+                                <option value="med">{'Medium'}</option>
+                                <option value="high">{'High'}</option>
                               </Select>
                             </Field>
                             <Field label={tGenerated('m_0b44d2ea8f2b0f')}>
@@ -622,13 +616,11 @@ export default async function WorkOrderDetailPage({
                       <GeneratedText id="m_1e8891cb78e5a3" />
                     </Label>
                     <Select name="status" defaultValue={wo.status}>
-                      <GeneratedValue
-                        value={STATUSES.map((s) => (
-                          <option key={s} value={s}>
-                            <GeneratedValue value={statusLabel(s)} />
-                          </option>
-                        ))}
-                      />
+                      {STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {statusLabel(s)}
+                        </option>
+                      ))}
                     </Select>
                   </div>
                   <Button type="submit">

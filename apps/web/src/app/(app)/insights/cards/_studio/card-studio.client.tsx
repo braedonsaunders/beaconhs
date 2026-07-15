@@ -818,19 +818,15 @@ export function CardStudio({
               onChange={(e) => setEntityKey(e.target.value)}
               className={selectCls}
             >
-              <GeneratedValue
-                value={entityGroups.map(([cat, ents]) => (
-                  <optgroup key={cat} label={tGeneratedValue(cat)}>
-                    <GeneratedValue
-                      value={ents.map((en) => (
-                        <option key={en.key} value={en.key}>
-                          <GeneratedValue value={en.label} />
-                        </option>
-                      ))}
-                    />
-                  </optgroup>
-                ))}
-              />
+              {entityGroups.map(([cat, ents]) => (
+                <optgroup key={cat} label={tGeneratedValue(cat)}>
+                  {ents.map((en) => (
+                    <option key={en.key} value={en.key}>
+                      {en.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
             </Select>
             <GeneratedValue
               value={
@@ -917,15 +913,9 @@ export function CardStudio({
                             onChange={(e) => setAnalysisOutput(e.target.value as AiCardOutputShape)}
                             className={cn(selectCls, 'h-8 text-xs')}
                           >
-                            <option value="insights">
-                              <GeneratedText id="m_16d1e4944f777d" />
-                            </option>
-                            <option value="summary">
-                              <GeneratedText id="m_01cf7b315e3339" />
-                            </option>
-                            <option value="bullets">
-                              <GeneratedText id="m_1ff8af60832ca8" />
-                            </option>
+                            <option value="insights">{'Findings & insights'}</option>
+                            <option value="summary">{'Short summary'}</option>
+                            <option value="bullets">{'Key bullet points'}</option>
                           </Select>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400">
                             <GeneratedText id="m_0bc218daf4d82c" />
@@ -1356,34 +1346,24 @@ function FieldOptions({
   }
   return (
     <>
-      <GeneratedValue
-        value={
-          placeholder ? (
-            <option value="">
-              <GeneratedValue value={placeholder} />
-            </option>
-          ) : null
-        }
-      />
+      <GeneratedValue value={placeholder ? <option value="">{placeholder}</option> : null} />
       <GeneratedValue
         value={filtered
           .filter((f) => f.group == null)
           .map((f) => (
             <option key={f.value} value={f.value}>
-              <GeneratedValue value={f.label} />
+              {f.label}
             </option>
           ))}
       />
       <GeneratedValue
         value={[...groups.entries()].map(([g, opts]) => (
           <optgroup key={g} label={tGeneratedValue(`→ ${g}`)}>
-            <GeneratedValue
-              value={opts.map((f) => (
-                <option key={f.value} value={f.value}>
-                  <GeneratedValue value={f.label} />
-                </option>
-              ))}
-            />
+            {opts.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
           </optgroup>
         ))}
       />
@@ -1480,16 +1460,12 @@ function BreakoutEditor({
               }
               className={cn(selectCls, 'h-8 text-xs')}
             >
-              <option value="">
-                <GeneratedText id="m_1be6394afb4aea" />
-              </option>
-              <GeneratedValue
-                value={['day', 'week', 'month', 'quarter', 'year'].map((u) => (
-                  <option key={u} value={u}>
-                    <GeneratedText id="m_19ec032b95249e" /> <GeneratedValue value={u} />
-                  </option>
-                ))}
-              />
+              <option value="">{'No bucket'}</option>
+              {['day', 'week', 'month', 'quarter', 'year'].map((u) => (
+                <option key={u} value={u}>
+                  {'by'} {u}
+                </option>
+              ))}
             </Select>
           ) : null
         }
@@ -1509,16 +1485,12 @@ function BreakoutEditor({
               }
               className={cn(selectCls, 'h-8 text-xs')}
             >
-              <option value="">
-                <GeneratedText id="m_1fcc2f20471f53" />
-              </option>
-              <GeneratedValue
-                value={[5, 10, 20, 50].map((n) => (
-                  <option key={n} value={n}>
-                    <GeneratedValue value={n} /> <GeneratedText id="m_1b860f0f997f84" />
-                  </option>
-                ))}
-              />
+              <option value="">{'No buckets'}</option>
+              {[5, 10, 20, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n} {'buckets'}
+                </option>
+              ))}
             </Select>
           ) : null
         }
@@ -1595,13 +1567,11 @@ function ConditionRow({
         onChange={(e) => onChange({ ...where, op: e.target.value as FilterOp })}
         className={cn(selectCls, 'h-7 text-xs')}
       >
-        <GeneratedValue
-          value={FILTER_OPS.map((o) => (
-            <option key={o.value} value={o.value}>
-              <GeneratedValue value={o.label} />
-            </option>
-          ))}
-        />
+        {FILTER_OPS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </Select>
       <GeneratedValue
         value={
@@ -1777,24 +1747,12 @@ function SettingRow({
           onChange={(e) => onChange(e.target.value || undefined)}
           className={cn(selectCls, 'h-8 text-xs')}
         >
-          <option value="">
-            <GeneratedValue
-              value={
-                def.widget === 'field' ? (
-                  <GeneratedText id="m_04be42f1f72c23" />
-                ) : (
-                  <GeneratedText id="m_1f7e78461783a1" />
-                )
-              }
-            />
-          </option>
-          <GeneratedValue
-            value={options.map((o) => (
-              <option key={o.value} value={o.value}>
-                <GeneratedValue value={o.label} />
-              </option>
-            ))}
-          />
+          <option value="">{def.widget === 'field' ? 'None' : 'Default'}</option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </Select>
       </label>
     )
@@ -1899,13 +1857,11 @@ function MeasureEditor({
         onChange={(e) => onChange({ ...row, fn: e.target.value as BhqlAggFn })}
         className={selectCls}
       >
-        <GeneratedValue
-          value={AGG_FNS.map((a) => (
-            <option key={a.value} value={a.value}>
-              <GeneratedValue value={a.label} />
-            </option>
-          ))}
-        />
+        {AGG_FNS.map((a) => (
+          <option key={a.value} value={a.value}>
+            {a.label}
+          </option>
+        ))}
       </Select>
       <GeneratedValue
         value={
@@ -1957,13 +1913,11 @@ function MeasureEditor({
                 onChange={(e) => onChange({ ...row, denFn: e.target.value as BhqlAggFn })}
                 className={cn(selectCls, 'h-8 text-xs')}
               >
-                <GeneratedValue
-                  value={AGG_FNS.map((a) => (
-                    <option key={a.value} value={a.value}>
-                      <GeneratedValue value={a.label} />
-                    </option>
-                  ))}
-                />
+                {AGG_FNS.map((a) => (
+                  <option key={a.value} value={a.value}>
+                    {a.label}
+                  </option>
+                ))}
               </Select>
               <GeneratedValue
                 value={
@@ -2047,13 +2001,11 @@ function CrossMetricEditor({
         onChange={(e) => onChange({ ...row, numFn: e.target.value as BhqlAggFn })}
         className={cn(selectCls, 'h-8 text-xs')}
       >
-        <GeneratedValue
-          value={AGG_FNS.map((a) => (
-            <option key={a.value} value={a.value}>
-              <GeneratedValue value={a.label} />
-            </option>
-          ))}
-        />
+        {AGG_FNS.map((a) => (
+          <option key={a.value} value={a.value}>
+            {a.label}
+          </option>
+        ))}
       </Select>
       <GeneratedValue
         value={
@@ -2094,16 +2046,12 @@ function CrossMetricEditor({
               }}
               className={cn(selectCls, 'h-8 text-xs')}
             >
-              <option value="__inline">
-                <GeneratedText id="m_10a2a576c7e5da" />
-              </option>
-              <GeneratedValue
-                value={metrics.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    ƒ <GeneratedValue value={m.name} /> <GeneratedText id="m_19cf099b62d084" />
-                  </option>
-                ))}
-              />
+              <option value="__inline">{'Build inline (another table)…'}</option>
+              {metrics.map((m) => (
+                <option key={m.id} value={m.id}>
+                  ƒ {m.name} {'(saved metric)'}
+                </option>
+              ))}
             </Select>
           ) : null
         }
@@ -2119,32 +2067,26 @@ function CrossMetricEditor({
                 }
                 className={cn(selectCls, 'h-8 text-xs')}
               >
-                <GeneratedValue
-                  value={entityGroups.map(([cat, ents]) => (
-                    <optgroup key={cat} label={tGeneratedValue(cat)}>
-                      <GeneratedValue
-                        value={ents.map((en) => (
-                          <option key={en.key} value={en.key}>
-                            <GeneratedValue value={en.label} />
-                          </option>
-                        ))}
-                      />
-                    </optgroup>
-                  ))}
-                />
+                {entityGroups.map(([cat, ents]) => (
+                  <optgroup key={cat} label={tGeneratedValue(cat)}>
+                    {ents.map((en) => (
+                      <option key={en.key} value={en.key}>
+                        {en.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
               </Select>
               <Select
                 value={row.denFn}
                 onChange={(e) => onChange({ ...row, denFn: e.target.value as BhqlAggFn })}
                 className={cn(selectCls, 'h-8 text-xs')}
               >
-                <GeneratedValue
-                  value={AGG_FNS.map((a) => (
-                    <option key={a.value} value={a.value}>
-                      <GeneratedValue value={a.label} />
-                    </option>
-                  ))}
-                />
+                {AGG_FNS.map((a) => (
+                  <option key={a.value} value={a.value}>
+                    {a.label}
+                  </option>
+                ))}
               </Select>
               <GeneratedValue
                 value={
@@ -2247,13 +2189,11 @@ function MatrixEditor({
   const entityOptions = () =>
     entityGroups.map(([cat, ents]) => (
       <optgroup key={cat} label={tGeneratedValue(cat)}>
-        <GeneratedValue
-          value={ents.map((en) => (
-            <option key={en.key} value={en.key}>
-              <GeneratedValue value={en.label} />
-            </option>
-          ))}
-        />
+        {ents.map((en) => (
+          <option key={en.key} value={en.key}>
+            {en.label}
+          </option>
+        ))}
       </optgroup>
     ))
   const fieldOptions = (source: string, predicate?: (c: AnalyticsColumn) => boolean) => {
@@ -2262,11 +2202,11 @@ function MatrixEditor({
     )
     return [
       <option key="__" value="">
-        <GeneratedText id="m_0ff98564d477ba" />
+        {'Pick a field…'}
       </option>,
       ...cols.map((c) => (
         <option key={c.key} value={c.key}>
-          <GeneratedValue value={c.label} />
+          {c.label}
         </option>
       )),
     ]
@@ -2293,7 +2233,7 @@ function MatrixEditor({
       .filter((c) => c.semanticType !== 'pk')
       .map((c) => (
         <option key={c.key} value={c.key}>
-          <GeneratedValue value={c.label} />
+          {c.label}
         </option>
       ))
   const filterList = (
@@ -2368,24 +2308,22 @@ function MatrixEditor({
           onChange={(e) => onChange({ ...spec, rowSource: e.target.value, rowLabel: '' })}
           className={sel}
         >
-          <GeneratedValue value={entityOptions()} />
+          {entityOptions()}
         </Select>
         <Select
           value={spec.rowLabel}
           onChange={(e) => onChange({ ...spec, rowLabel: e.target.value })}
           className={sel}
         >
-          <GeneratedValue value={fieldOptions(spec.rowSource)} />
+          {fieldOptions(spec.rowSource)}
         </Select>
         <Select
           value={spec.rowLabel2 ?? ''}
           onChange={(e) => onChange({ ...spec, rowLabel2: e.target.value || undefined })}
           className={cn(sel, 'text-slate-500')}
         >
-          <option value="">
-            <GeneratedText id="m_06b0267d7d18df" />
-          </option>
-          <GeneratedValue value={secondLabelOptions(spec.rowSource)} />
+          <option value="">{'+ second label (optional)'}</option>
+          {secondLabelOptions(spec.rowSource)}
         </Select>
         <GeneratedValue
           value={filterList(spec.rowFilters, rowFields, (r) =>
@@ -2402,24 +2340,22 @@ function MatrixEditor({
           onChange={(e) => onChange({ ...spec, colSource: e.target.value, colLabel: '' })}
           className={sel}
         >
-          <GeneratedValue value={entityOptions()} />
+          {entityOptions()}
         </Select>
         <Select
           value={spec.colLabel}
           onChange={(e) => onChange({ ...spec, colLabel: e.target.value })}
           className={sel}
         >
-          <GeneratedValue value={fieldOptions(spec.colSource)} />
+          {fieldOptions(spec.colSource)}
         </Select>
         <Select
           value={spec.colLabel2 ?? ''}
           onChange={(e) => onChange({ ...spec, colLabel2: e.target.value || undefined })}
           className={cn(sel, 'text-slate-500')}
         >
-          <option value="">
-            <GeneratedText id="m_06b0267d7d18df" />
-          </option>
-          <GeneratedValue value={secondLabelOptions(spec.colSource)} />
+          <option value="">{'+ second label (optional)'}</option>
+          {secondLabelOptions(spec.colSource)}
         </Select>
         <GeneratedValue
           value={filterList(spec.colFilters, colFields, (r) =>
@@ -2446,7 +2382,7 @@ function MatrixEditor({
           }
           className={sel}
         >
-          <GeneratedValue value={entityOptions()} />
+          {entityOptions()}
         </Select>
         <div className={inline}>
           <span className={hint}>
@@ -2457,7 +2393,7 @@ function MatrixEditor({
             onChange={(e) => onChange({ ...spec, factRowKey: e.target.value })}
             className={cn(sel, 'flex-1')}
           >
-            <GeneratedValue value={fieldOptions(spec.factSource)} />
+            {fieldOptions(spec.factSource)}
           </Select>
         </div>
         <div className={inline}>
@@ -2469,7 +2405,7 @@ function MatrixEditor({
             onChange={(e) => onChange({ ...spec, factColKey: e.target.value })}
             className={cn(sel, 'flex-1')}
           >
-            <GeneratedValue value={fieldOptions(spec.factSource)} />
+            {fieldOptions(spec.factSource)}
           </Select>
         </div>
         <div className={inline}>
@@ -2481,7 +2417,7 @@ function MatrixEditor({
             onChange={(e) => onChange({ ...spec, latestBy: e.target.value })}
             className={cn(sel, 'flex-1')}
           >
-            <GeneratedValue value={fieldOptions(spec.factSource)} />
+            {fieldOptions(spec.factSource)}
           </Select>
         </div>
         <GeneratedValue
@@ -2501,12 +2437,8 @@ function MatrixEditor({
           }
           className={sel}
         >
-          <option value="coverage">
-            <GeneratedText id="m_09ffa2398b3430" />
-          </option>
-          <option value="latest">
-            <GeneratedText id="m_128fa5dddcdec7" />
-          </option>
+          <option value="coverage">{'Coverage status (by expiry)'}</option>
+          <option value="latest">{'Latest value of a field'}</option>
         </Select>
         <GeneratedValue
           value={
@@ -2520,12 +2452,10 @@ function MatrixEditor({
                   onChange={(e) => onChange({ ...spec, expiryField: e.target.value })}
                   className={cn(sel, 'flex-1')}
                 >
-                  <GeneratedValue
-                    value={fieldOptions(
-                      spec.factSource,
-                      (c) => c.kind === 'date' || c.kind === 'timestamp',
-                    )}
-                  />
+                  {fieldOptions(
+                    spec.factSource,
+                    (c) => c.kind === 'date' || c.kind === 'timestamp',
+                  )}
                 </Select>
               </div>
             ) : (
@@ -2538,7 +2468,7 @@ function MatrixEditor({
                   onChange={(e) => onChange({ ...spec, latestField: e.target.value })}
                   className={cn(sel, 'flex-1')}
                 >
-                  <GeneratedValue value={fieldOptions(spec.factSource)} />
+                  {fieldOptions(spec.factSource)}
                 </Select>
               </div>
             )
@@ -2574,13 +2504,11 @@ function FilterEditor({
         onChange={(e) => onChange({ ...row, op: e.target.value as FilterOp })}
         className={cn(selectCls, 'h-8 text-xs')}
       >
-        <GeneratedValue
-          value={FILTER_OPS.map((o) => (
-            <option key={o.value} value={o.value}>
-              <GeneratedValue value={o.label} />
-            </option>
-          ))}
-        />
+        {FILTER_OPS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </Select>
       <GeneratedValue
         value={

@@ -170,42 +170,10 @@ export function BulkPeopleBar({
           className="h-8 min-w-[11rem]"
           disabled={pending}
         >
-          <GeneratedValue
-            value={
-              canManage ? (
-                <option value="group">
-                  <GeneratedText id="m_0aa20ac4bb983a" />
-                </option>
-              ) : null
-            }
-          />
-          <GeneratedValue
-            value={
-              canManage ? (
-                <option value="department">
-                  <GeneratedText id="m_0c48b039a6bfcd" />
-                </option>
-              ) : null
-            }
-          />
-          <GeneratedValue
-            value={
-              canManage ? (
-                <option value="status">
-                  <GeneratedText id="m_00da005ac443be" />
-                </option>
-              ) : null
-            }
-          />
-          <GeneratedValue
-            value={
-              canExport ? (
-                <option value="export">
-                  <GeneratedText id="m_1d9f291cfeb56f" />
-                </option>
-              ) : null
-            }
-          />
+          {canManage ? <option value="group">{'Assign to group'}</option> : null}
+          {canManage ? <option value="department">{'Assign to department'}</option> : null}
+          {canManage ? <option value="status">{'Set status'}</option> : null}
+          {canExport ? <option value="export">{'Export selected to CSV'}</option> : null}
         </Select>
 
         <GeneratedValue
@@ -219,16 +187,12 @@ export function BulkPeopleBar({
                   className="h-8 min-w-[12rem]"
                   disabled={pending}
                 >
-                  <option value="">
-                    <GeneratedText id="m_18b7732e04e56b" />
-                  </option>
-                  <GeneratedValue
-                    value={groups.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        <GeneratedValue value={g.name} />
-                      </option>
-                    ))}
-                  />
+                  <option value="">{'Pick group…'}</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
                 </Select>
               </div>
             ) : null
@@ -246,16 +210,12 @@ export function BulkPeopleBar({
                   className="h-8 min-w-[12rem]"
                   disabled={pending}
                 >
-                  <option value="">
-                    <GeneratedText id="m_156def99c798ae" />
-                  </option>
-                  <GeneratedValue
-                    value={departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        <GeneratedValue value={d.name} />
-                      </option>
-                    ))}
-                  />
+                  <option value="">{'Pick department…'}</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
                 </Select>
               </div>
             ) : null
@@ -273,13 +233,11 @@ export function BulkPeopleBar({
                   className="h-8 min-w-[10rem]"
                   disabled={pending}
                 >
-                  <GeneratedValue
-                    value={(['active', 'inactive', 'terminated'] as PeopleStatus[]).map((s) => (
-                      <option key={s} value={s}>
-                        <GeneratedValue value={STATUS_LABELS[s]} />
-                      </option>
-                    ))}
-                  />
+                  {(['active', 'inactive', 'terminated'] as PeopleStatus[]).map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABELS[s]}
+                    </option>
+                  ))}
                 </Select>
               </div>
             ) : null

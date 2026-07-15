@@ -430,30 +430,14 @@ export function LessonSurface({
                     }}
                     className="h-9"
                   >
-                    <option value="rich">
-                      <GeneratedText id="m_1bdff5b191c539" />
-                    </option>
-                    <option value="slides">
-                      <GeneratedText id="m_1c373e80a9436f" />
-                    </option>
-                    <option value="video">
-                      <GeneratedText id="m_0813322ae97045" />
-                    </option>
-                    <option value="file">
-                      <GeneratedText id="m_00e939ca3499e8" />
-                    </option>
-                    <option value="embed">
-                      <GeneratedText id="m_19cf40f40f9d5c" />
-                    </option>
-                    <option value="quiz">
-                      <GeneratedText id="m_024d191d46cb91" />
-                    </option>
-                    <option value="session">
-                      <GeneratedText id="m_1e55110fb452c3" />
-                    </option>
-                    <option value="practical">
-                      <GeneratedText id="m_1885382fde3e61" />
-                    </option>
+                    <option value="rich">{'Text lesson'}</option>
+                    <option value="slides">{'Slideshow'}</option>
+                    <option value="video">{'Video'}</option>
+                    <option value="file">{'File / handout'}</option>
+                    <option value="embed">{'Embedded page'}</option>
+                    <option value="quiz">{'Quiz'}</option>
+                    <option value="session">{'In-person session'}</option>
+                    <option value="practical">{'Practical test'}</option>
                   </Select>
                 </div>
                 <div className="space-y-1">
@@ -489,15 +473,9 @@ export function LessonSurface({
                           }}
                           className="h-9"
                         >
-                          <option value="view">
-                            <GeneratedText id="m_0cd52a420b62c7" />
-                          </option>
-                          <option value="acknowledge">
-                            <GeneratedText id="m_12ef6648f77371" />
-                          </option>
-                          <option value="min_time">
-                            <GeneratedText id="m_02f0b39bc38f33" />
-                          </option>
+                          <option value="view">{'Mark as viewed'}</option>
+                          <option value="acknowledge">{'Acknowledge'}</option>
+                          <option value="min_time">{'Minimum time'}</option>
                         </Select>
                       )
                     }

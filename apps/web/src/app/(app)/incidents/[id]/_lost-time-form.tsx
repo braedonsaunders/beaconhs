@@ -39,13 +39,11 @@ export function LostTimeAddForm({
             className="h-9 w-full pl-2 text-sm"
             disabled={isPending}
           >
-            <GeneratedValue
-              value={STATUSES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  <GeneratedValue value={s.label} />
-                </option>
-              ))}
-            />
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="space-y-1.5">
@@ -59,16 +57,12 @@ export function LostTimeAddForm({
             className="h-9 w-full pl-2 text-sm"
             disabled={isPending}
           >
-            <option value="">
-              <GeneratedText id="m_08dcddefe98bc7" />
-            </option>
-            <GeneratedValue
-              value={injuryOptions.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  <GeneratedValue value={opt.label} />
-                </option>
-              ))}
-            />
+            <option value="">{'— Any —'}</option>
+            {injuryOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
           </Select>
         </div>
       </div>

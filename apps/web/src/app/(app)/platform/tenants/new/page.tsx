@@ -135,15 +135,9 @@ export default function NewTenantPage() {
                 <GeneratedText id="m_1de0752c52bdd4" />
               </Label>
               <Select id="region" name="region" defaultValue="ca-central-1">
-                <option value="ca-central-1">
-                  <GeneratedText id="m_194555df64ff87" />
-                </option>
-                <option value="us-east-1">
-                  <GeneratedText id="m_1afc542df9533e" />
-                </option>
-                <option value="eu-west-1">
-                  <GeneratedText id="m_1daf75e812613a" />
-                </option>
+                <option value="ca-central-1">{'Canada (Central)'}</option>
+                <option value="us-east-1">{'US East'}</option>
+                <option value="eu-west-1">{'EU West'}</option>
               </Select>
             </div>
             <div className="space-y-1.5">
@@ -151,15 +145,9 @@ export default function NewTenantPage() {
                 <GeneratedText id="m_1a07c774d6ca11" />
               </Label>
               <Select id="defaultLanguage" name="defaultLanguage" defaultValue="en">
-                <option value="en">
-                  <GeneratedText id="m_1df218952faf1d" />
-                </option>
-                <option value="fr">
-                  <GeneratedText id="m_1fe7761ebf753b" />
-                </option>
-                <option value="es">
-                  <GeneratedText id="m_1d48a7f948f062" />
-                </option>
+                <option value="en">{'English'}</option>
+                <option value="fr">{'French'}</option>
+                <option value="es">{'Spanish'}</option>
               </Select>
             </div>
           </div>

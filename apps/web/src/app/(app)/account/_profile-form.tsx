@@ -72,13 +72,11 @@ export function ProfileForm({
             <GeneratedValue value={t('timeZone')} />
           </Label>
           <Select id="acc-tz" name="timezone" defaultValue={timezone} searchable>
-            <GeneratedValue
-              value={timezones.map((t) => (
-                <option key={t} value={t}>
-                  <GeneratedValue value={t} />
-                </option>
-              ))}
-            />
+            {timezones.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
           </Select>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             <GeneratedValue value={t('timeZoneHelp')} />
@@ -95,17 +93,13 @@ export function ProfileForm({
             disabled={!canOverrideLocale}
           >
             <option value="">
-              <GeneratedValue
-                value={common('useTenantDefault', { language: languages(defaultLocale) })}
-              />
+              {common('useTenantDefault', { language: languages(defaultLocale) })}
             </option>
-            <GeneratedValue
-              value={enabledLocales.map((supportedLocale) => (
-                <option key={supportedLocale} value={supportedLocale}>
-                  <GeneratedValue value={languages(supportedLocale)} />
-                </option>
-              ))}
-            />
+            {enabledLocales.map((supportedLocale) => (
+              <option key={supportedLocale} value={supportedLocale}>
+                {languages(supportedLocale)}
+              </option>
+            ))}
           </Select>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             <GeneratedValue value={t('languageHelp')} />

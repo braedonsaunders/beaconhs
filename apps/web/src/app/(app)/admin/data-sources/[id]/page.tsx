@@ -1006,18 +1006,10 @@ export default async function DataSourceDetailPage({
                               <GeneratedText id="m_074ba2f160c506" />
                             </Label>
                             <Select name="type" defaultValue="text" className="h-9">
-                              <option value="text">
-                                <GeneratedText id="m_1ca9a0811729da" />
-                              </option>
-                              <option value="number">
-                                <GeneratedText id="m_0eb8e31d1f4abb" />
-                              </option>
-                              <option value="date">
-                                <GeneratedText id="m_0285c38761c540" />
-                              </option>
-                              <option value="boolean">
-                                <GeneratedText id="m_141aa20e69489c" />
-                              </option>
+                              <option value="text">{'Text'}</option>
+                              <option value="number">{'Number'}</option>
+                              <option value="date">{'Date'}</option>
+                              <option value="boolean">{'Yes/No'}</option>
                             </Select>
                           </div>
                         </div>

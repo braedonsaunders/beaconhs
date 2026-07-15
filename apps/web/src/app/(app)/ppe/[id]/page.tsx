@@ -2492,21 +2492,11 @@ export default async function PpeDetailPage({
               name="status"
               defaultValue={item.status === 'issued' ? 'returned' : item.status}
             >
-              <option value="returned">
-                <GeneratedText id="m_0db63ebe793932" />
-              </option>
-              <option value="in_stock">
-                <GeneratedText id="m_04a4449373ab9b" />
-              </option>
-              <option value="damaged">
-                <GeneratedText id="m_16d172eabbfe82" />
-              </option>
-              <option value="discarded">
-                <GeneratedText id="m_06ffdeeb54ee1e" />
-              </option>
-              <option value="expired">
-                <GeneratedText id="m_13f7150c94b182" />
-              </option>
+              <option value="returned">{'Returned'}</option>
+              <option value="in_stock">{'In stock'}</option>
+              <option value="damaged">{'Damaged'}</option>
+              <option value="discarded">{'Discarded'}</option>
+              <option value="expired">{'Expired'}</option>
             </Select>
             <p className="text-xs text-slate-500">
               <GeneratedText id="m_124787d234886f" />

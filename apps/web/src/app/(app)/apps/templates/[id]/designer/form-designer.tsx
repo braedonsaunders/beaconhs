@@ -711,13 +711,11 @@ export function FormDesigner({
               className="h-8 min-w-28 text-xs"
               aria-label={tGenerated('m_104e7b02f49d5e')}
             >
-              <GeneratedValue
-                value={enabledLocales.map((enabledLocale) => (
-                  <option key={enabledLocale} value={enabledLocale}>
-                    <GeneratedValue value={languages(enabledLocale)} />
-                  </option>
-                ))}
-              />
+              {enabledLocales.map((enabledLocale) => (
+                <option key={enabledLocale} value={enabledLocale}>
+                  {languages(enabledLocale)}
+                </option>
+              ))}
             </Select>
           </label>
           <GeneratedValue
@@ -1650,15 +1648,9 @@ function WorkflowEditor({
                             setStep(i, { assignee })
                           }}
                         >
-                          <option value="expression">
-                            <GeneratedText id="m_121285db1a68ad" />
-                          </option>
-                          <option value="role">
-                            <GeneratedText id="m_1099c1fe8b6614" />
-                          </option>
-                          <option value="literal">
-                            <GeneratedText id="m_14d20bc3fdb3de" />
-                          </option>
+                          <option value="expression">{'Expression'}</option>
+                          <option value="role">{'Role'}</option>
+                          <option value="literal">{'Specific user'}</option>
                         </Select>
                       </div>
                       <div>
@@ -1995,21 +1987,11 @@ function FieldBasicTab({
             onChange({ colSpan: e.target.value ? Number(e.target.value) : undefined })
           }
         >
-          <option value="">
-            <GeneratedText id="m_084616b190b17a" />
-          </option>
-          <option value="1">
-            <GeneratedText id="m_1e52a2a939d98d" />
-          </option>
-          <option value="2">
-            <GeneratedText id="m_1bea64a273a741" />
-          </option>
-          <option value="3">
-            <GeneratedText id="m_187f2e9f6a7e22" />
-          </option>
-          <option value="4">
-            <GeneratedText id="m_05625c3d86cd0c" />
-          </option>
+          <option value="">{'Full width'}</option>
+          <option value="1">{'1 column'}</option>
+          <option value="2">{'2 columns'}</option>
+          <option value="3">{'3 columns'}</option>
+          <option value="4">{'4 columns'}</option>
         </Select>
         <p className="text-[10px] text-slate-500">
           <GeneratedText id="m_0f334abe43e80f" />
@@ -2343,24 +2325,12 @@ function DataBindingEditor({
             })
           }
         >
-          <option value="">
-            <GeneratedValue
-              value={
-                loading ? (
-                  <GeneratedText id="m_0e65697ec32c03" />
-                ) : (
-                  <GeneratedText id="m_133fd2d79eb20b" />
-                )
-              }
-            />
-          </option>
-          <GeneratedValue
-            value={sources.map((s) => (
-              <option key={s.id} value={s.key}>
-                <GeneratedValue value={s.name} />
-              </option>
-            ))}
-          />
+          <option value="">{loading ? 'Loading…' : '— pick a data source —'}</option>
+          {sources.map((s) => (
+            <option key={s.id} value={s.key}>
+              {s.name}
+            </option>
+          ))}
         </Select>
         <GeneratedValue
           value={
@@ -2449,16 +2419,12 @@ function LookupBindingFields({
             value={b?.labelColumn ?? ''}
             onChange={(e) => patch({ labelColumn: e.target.value || undefined })}
           >
-            <option value="">
-              <GeneratedText id="m_05f3fa04f45bf8" />
-            </option>
-            <GeneratedValue
-              value={cols.map((c) => (
-                <option key={c.key} value={c.key}>
-                  <GeneratedValue value={c.label} />
-                </option>
-              ))}
-            />
+            <option value="">{'First column'}</option>
+            {cols.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="space-y-1">
@@ -2470,16 +2436,12 @@ function LookupBindingFields({
             value={b?.valueColumn ?? ''}
             onChange={(e) => patch({ valueColumn: e.target.value || undefined })}
           >
-            <option value="">
-              <GeneratedText id="m_09b1bf9aa5d2cc" />
-            </option>
-            <GeneratedValue
-              value={cols.map((c) => (
-                <option key={c.key} value={c.key}>
-                  <GeneratedValue value={c.label} />
-                </option>
-              ))}
-            />
+            <option value="">{'Row id'}</option>
+            {cols.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
           </Select>
         </div>
       </div>
@@ -2544,13 +2506,11 @@ function LookupBindingFields({
                       })
                     }
                   >
-                    <GeneratedValue
-                      value={cols.map((c) => (
-                        <option key={c.key} value={c.key}>
-                          <GeneratedValue value={c.label} />
-                        </option>
-                      ))}
-                    />
+                    {cols.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label}
+                      </option>
+                    ))}
                   </Select>
                   <span className="text-slate-400">→</span>
                   <Select
@@ -2564,13 +2524,11 @@ function LookupBindingFields({
                       })
                     }
                   >
-                    <GeneratedValue
-                      value={autofillFields.map((f) => (
-                        <option key={f.id} value={f.id}>
-                          <GeneratedValue value={f.label} />
-                        </option>
-                      ))}
-                    />
+                    {autofillFields.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.label}
+                      </option>
+                    ))}
                   </Select>
                   <IconButton
                     title={tGenerated('m_1d82f43c88df4c')}
@@ -2620,16 +2578,12 @@ function CascadeBindingFields({
               )
             }
           >
-            <option value="">
-              <GeneratedText id="m_0206c945814606" />
-            </option>
-            <GeneratedValue
-              value={otherFields.map((f) => (
-                <option key={f.id} value={f.id}>
-                  <GeneratedValue value={f.label} />
-                </option>
-              ))}
-            />
+            <option value="">{'— none —'}</option>
+            {otherFields.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="space-y-1">
@@ -2643,13 +2597,11 @@ function CascadeBindingFields({
             onChange={(e) => patch({ filterColumn: e.target.value || undefined })}
           >
             <option value="">—</option>
-            <GeneratedValue
-              value={cols.map((c) => (
-                <option key={c.key} value={c.key}>
-                  <GeneratedValue value={c.label} />
-                </option>
-              ))}
-            />
+            {cols.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
           </Select>
         </div>
       </div>
@@ -2715,15 +2667,9 @@ function DataTableBindingFields({
             value={b?.selectable ?? 'none'}
             onChange={(e) => patch({ selectable: e.target.value as DataBinding['selectable'] })}
           >
-            <option value="none">
-              <GeneratedText id="m_081e61fc5c2c75" />
-            </option>
-            <option value="single">
-              <GeneratedText id="m_13fad263e7e722" />
-            </option>
-            <option value="multi">
-              <GeneratedText id="m_084985ef288213" />
-            </option>
+            <option value="none">{'Display only'}</option>
+            <option value="single">{'Pick one row'}</option>
+            <option value="multi">{'Pick many rows'}</option>
           </Select>
         </div>
         <div className="space-y-1">
@@ -2777,21 +2723,11 @@ function MetricBindingFields({
               setAgg(fn === 'count' ? { fn, column: undefined } : { fn })
             }}
           >
-            <option value="count">
-              <GeneratedText id="m_1842bc939bfcba" />
-            </option>
-            <option value="sum">
-              <GeneratedText id="m_00e3dc04ba481d" />
-            </option>
-            <option value="avg">
-              <GeneratedText id="m_1a72c3bcdfab4a" />
-            </option>
-            <option value="min">
-              <GeneratedText id="m_100639ca393959" />
-            </option>
-            <option value="max">
-              <GeneratedText id="m_1929e34b445f83" />
-            </option>
+            <option value="count">{'Count'}</option>
+            <option value="sum">{'Sum'}</option>
+            <option value="avg">{'Average'}</option>
+            <option value="min">{'Min'}</option>
+            <option value="max">{'Max'}</option>
           </Select>
         </div>
         <div className="space-y-1">
@@ -2804,24 +2740,12 @@ function MetricBindingFields({
             disabled={!needsColumn}
             onChange={(e) => setAgg({ column: e.target.value || undefined })}
           >
-            <option value="">
-              <GeneratedValue
-                value={
-                  needsColumn ? (
-                    <GeneratedText id="m_1e9cb0f49f978f" />
-                  ) : (
-                    <GeneratedText id="m_0e9b9d196d5362" />
-                  )
-                }
-              />
-            </option>
-            <GeneratedValue
-              value={cols.map((c) => (
-                <option key={c.key} value={c.key}>
-                  <GeneratedValue value={c.label} />
-                </option>
-              ))}
-            />
+            <option value="">{needsColumn ? '— pick —' : 'n/a'}</option>
+            {cols.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
           </Select>
         </div>
       </div>
@@ -2841,16 +2765,12 @@ function MetricBindingFields({
               })
             }}
           >
-            <option value="">
-              <GeneratedText id="m_07bdb943825673" />
-            </option>
-            <GeneratedValue
-              value={cols.map((c) => (
-                <option key={c.key} value={c.key}>
-                  <GeneratedValue value={c.label} />
-                </option>
-              ))}
-            />
+            <option value="">{'— no grouping —'}</option>
+            {cols.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="space-y-1">
@@ -2862,24 +2782,14 @@ function MetricBindingFields({
             value={b?.display ?? (agg.groupBy ? 'bar' : 'number')}
             onChange={(e) => patch({ display: e.target.value as DataBinding['display'] })}
           >
-            <GeneratedValue
-              value={
-                agg.groupBy ? (
-                  <>
-                    <option value="bar">
-                      <GeneratedText id="m_1f31687fbad36d" />
-                    </option>
-                    <option value="pie">
-                      <GeneratedText id="m_17150fa51c44cf" />
-                    </option>
-                  </>
-                ) : (
-                  <option value="number">
-                    <GeneratedText id="m_0eb8e31d1f4abb" />
-                  </option>
-                )
-              }
-            />
+            {agg.groupBy ? (
+              <>
+                <option value="bar">{'Bar chart'}</option>
+                <option value="pie">{'Pie chart'}</option>
+              </>
+            ) : (
+              <option value="number">{'Number'}</option>
+            )}
           </Select>
         </div>
       </div>
@@ -3085,24 +2995,12 @@ function FieldDefaultTab({
         <GeneratedText id="m_0de21bd4fd99e9" />
       </p>
       <Select className="h-8 text-xs" value={kind} onChange={(e) => setKind(e.target.value)}>
-        <option value="">
-          <GeneratedText id="m_19cb3d08d7cf8b" />
-        </option>
-        <option value="literal">
-          <GeneratedText id="m_072c403a2888cc" />
-        </option>
-        <option value="today">
-          <GeneratedText id="m_07a34c5793fae3" />
-        </option>
-        <option value="now">
-          <GeneratedText id="m_056ab11e3f02b7" />
-        </option>
-        <option value="current_user_person_id">
-          <GeneratedText id="m_16cbc26a617eaa" />
-        </option>
-        <option value="current_user_name">
-          <GeneratedText id="m_0e286f91bad985" />
-        </option>
+        <option value="">{'— No default —'}</option>
+        <option value="literal">{'Literal value'}</option>
+        <option value="today">{"Today's date"}</option>
+        <option value="now">{'Right now'}</option>
+        <option value="current_user_person_id">{"Current user's person id"}</option>
+        <option value="current_user_name">{"Current user's name"}</option>
       </Select>
       <GeneratedValue
         value={
@@ -3249,12 +3147,8 @@ function TableConfigEditor({
             )
           }}
         >
-          <option value="addable">
-            <GeneratedText id="m_1dfcc576efac56" />
-          </option>
-          <option value="fixed">
-            <GeneratedText id="m_01db033c04b030" />
-          </option>
+          <option value="addable">{'Addable — user adds / removes rows'}</option>
+          <option value="fixed">{'Predefined — fixed list of rows'}</option>
         </Select>
       </div>
 
@@ -3343,21 +3237,11 @@ function TableConfigEditor({
                             )
                           }}
                         >
-                          <option value="text">
-                            <GeneratedText id="m_1ca9a0811729da" />
-                          </option>
-                          <option value="number">
-                            <GeneratedText id="m_0eb8e31d1f4abb" />
-                          </option>
-                          <option value="select">
-                            <GeneratedText id="m_0e0590c996818d" />
-                          </option>
-                          <option value="checkbox">
-                            <GeneratedText id="m_18a52c9dc00328" />
-                          </option>
-                          <option value="date">
-                            <GeneratedText id="m_0285c38761c540" />
-                          </option>
+                          <option value="text">{'Text'}</option>
+                          <option value="number">{'Number'}</option>
+                          <option value="select">{'Dropdown'}</option>
+                          <option value="checkbox">{'Checkbox'}</option>
+                          <option value="date">{'Date'}</option>
                         </Select>
                         <button
                           type="button"
@@ -3596,13 +3480,11 @@ function SectionProperties({
                 value={section.tabId ?? schema.tabs[0]!.id}
                 onChange={(e) => onChange({ tabId: e.target.value })}
               >
-                <GeneratedValue
-                  value={schema.tabs.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      <GeneratedValue value={localizeText(t.title, locale, t.id, defaultLocale)} />
-                    </option>
-                  ))}
-                />
+                {schema.tabs.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {localizeText(t.title, locale, t.id, defaultLocale)}
+                  </option>
+                ))}
               </Select>
             </div>
           ) : null
@@ -3637,16 +3519,12 @@ function SectionProperties({
           value={section.step ?? ''}
           onChange={(e) => onChange({ step: e.target.value || undefined })}
         >
-          <option value="">
-            <GeneratedText id="m_0701b322765356" />
-          </option>
-          <GeneratedValue
-            value={schema.workflow.steps.map((s) => (
-              <option key={s.key} value={s.key}>
-                <GeneratedValue value={localizeText(s.title, locale, s.key, defaultLocale)} />
-              </option>
-            ))}
-          />
+          <option value="">{'— first step (default) —'}</option>
+          {schema.workflow.steps.map((s) => (
+            <option key={s.key} value={s.key}>
+              {localizeText(s.title, locale, s.key, defaultLocale)}
+            </option>
+          ))}
         </Select>
       </div>
       <div className="space-y-1">
@@ -3661,18 +3539,10 @@ function SectionProperties({
             onChange({ layout: n > 1 ? { columns: n, gap: section.layout?.gap } : undefined })
           }}
         >
-          <option value="1">
-            <GeneratedText id="m_1e52a2a939d98d" />
-          </option>
-          <option value="2">
-            <GeneratedText id="m_1bea64a273a741" />
-          </option>
-          <option value="3">
-            <GeneratedText id="m_187f2e9f6a7e22" />
-          </option>
-          <option value="4">
-            <GeneratedText id="m_05625c3d86cd0c" />
-          </option>
+          <option value="1">{'1 column'}</option>
+          <option value="2">{'2 columns'}</option>
+          <option value="3">{'3 columns'}</option>
+          <option value="4">{'4 columns'}</option>
         </Select>
         <p className="text-[10px] text-slate-500">
           <GeneratedText id="m_1e0a540071af99" />

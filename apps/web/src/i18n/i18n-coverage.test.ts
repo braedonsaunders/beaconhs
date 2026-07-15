@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import ts from 'typescript'
 import { getAppMessages, systemMessageKey } from '@beaconhs/i18n/messages'
 import { findRuntimeUserFacingLiterals } from '../../scripts/i18n-runtime-audit'
-import { findUserFacingSourceLiterals } from '../../scripts/i18n-source-audit'
+import { findSourceAudit, findUserFacingSourceLiterals } from '../../scripts/i18n-source-audit'
 import { FRONTLINE_ARTICLES } from '../lib/manual/content/frontline'
 import { GETTING_STARTED_ARTICLES } from '../lib/manual/content/getting-started'
 import { KNOWLEDGE_ASSETS_ARTICLES } from '../lib/manual/content/knowledge-assets'
@@ -56,12 +56,20 @@ function uiTranslationSources(): string[] {
 describe('i18n source coverage', () => {
   const generated = getAppMessages('en').Generated
   const runtimeCandidates = findRuntimeUserFacingLiterals()
+  const sourceAudit = findSourceAudit()
 
   it('contains no untranslated JSX or user-facing attributes', () => {
-    expect(findUserFacingSourceLiterals()).toEqual([])
+    expect(sourceAudit.violations).toEqual([])
     expect(findUserFacingSourceLiterals({ roots: [UI_SOURCE_ROOT], base: UI_SOURCE_ROOT })).toEqual(
       [],
     )
+  }, 20_000)
+
+  it('catalogs every <option> label so Select can translate it at render time', () => {
+    const missing = sourceAudit.optionLabels.filter(
+      (label) => !(systemMessageKey(label.source) in generated),
+    )
+    expect(missing).toEqual([])
   }, 20_000)
 
   it('catalogs every programmatic label, prompt, message, and error', () => {

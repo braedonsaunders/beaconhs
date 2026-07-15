@@ -109,13 +109,11 @@ export default async function NewPpeTypePage() {
                 <GeneratedText id="m_108b41637f364f" />
               </Label>
               <Select id="category" name="category" defaultValue="">
-                <GeneratedValue
-                  value={CATEGORY_OPTIONS.map((c) => (
-                    <option key={c.value} value={c.value}>
-                      <GeneratedValue value={c.label} />
-                    </option>
-                  ))}
-                />
+                {CATEGORY_OPTIONS.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
               </Select>
             </div>
             <div className="space-y-1.5">

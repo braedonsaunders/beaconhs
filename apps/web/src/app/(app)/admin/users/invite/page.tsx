@@ -82,16 +82,12 @@ export default async function InviteUserPage({
                   <GeneratedText id="m_12e16ef485d96c" />
                 </Label>
                 <Select id="roleId" name="roleId" defaultValue="">
-                  <option value="">
-                    <GeneratedText id="m_0bb62460374184" />
-                  </option>
-                  <GeneratedValue
-                    value={allRoles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        <GeneratedValue value={r.name} />
-                      </option>
-                    ))}
-                  />
+                  <option value="">{'— No role yet —'}</option>
+                  {allRoles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
                 </Select>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   <GeneratedText id="m_1024d17dea25f7" />

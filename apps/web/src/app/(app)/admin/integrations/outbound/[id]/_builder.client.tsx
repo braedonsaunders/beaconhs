@@ -136,16 +136,12 @@ export function IntegrationBuilder({
           onChange={(e) => setTriggerKey(e.target.value)}
           aria-label={tGenerated('m_1db1e5c9ca41ce')}
         >
-          <option value="">
-            <GeneratedText id="m_0e5bd7914a50ac" />
-          </option>
-          <GeneratedValue
-            value={triggers.map((t) => (
-              <option key={t.key} value={t.key}>
-                <GeneratedValue value={t.label} />
-              </option>
-            ))}
-          />
+          <option value="">{'Select a trigger…'}</option>
+          {triggers.map((t) => (
+            <option key={t.key} value={t.key}>
+              {t.label}
+            </option>
+          ))}
         </Select>
         <GeneratedValue
           value={
@@ -172,16 +168,12 @@ export function IntegrationBuilder({
           }}
           aria-label={tGenerated('m_0354efc998fbe0')}
         >
-          <option value="">
-            <GeneratedText id="m_10cfae412ca9bf" />
-          </option>
-          <GeneratedValue
-            value={destinations.map((d) => (
-              <option key={d.key} value={d.key}>
-                <GeneratedValue value={d.name} />
-              </option>
-            ))}
-          />
+          <option value="">{'Select a destination…'}</option>
+          {destinations.map((d) => (
+            <option key={d.key} value={d.key}>
+              {d.name}
+            </option>
+          ))}
         </Select>
         <GeneratedValue
           value={
@@ -455,12 +447,8 @@ function SqlMapping({
         </Field>
         <Field label={tGenerated('m_10f5226beae784')}>
           <Select name="map-mode" defaultValue={mapping.mode === 'weekly' ? 'weekly' : 'row'}>
-            <option value="row">
-              <GeneratedText id="m_1d381825d8275d" />
-            </option>
-            <option value="weekly">
-              <GeneratedText id="m_17ca94a16b4e02" />
-            </option>
+            <option value="row">{'One row per item'}</option>
+            <option value="weekly">{'One row per item per ISO week (day1–7 hours)'}</option>
           </Select>
         </Field>
         <Field
@@ -817,13 +805,11 @@ function FieldInput({
             />
           ) : field.type === 'select' ? (
             <Select id={field.key} name={field.key} defaultValue={v}>
-              <GeneratedValue
-                value={(field.options ?? []).map((o) => (
-                  <option key={o.value} value={o.value}>
-                    <GeneratedValue value={o.label} />
-                  </option>
-                ))}
-              />
+              {(field.options ?? []).map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </Select>
           ) : field.type === 'boolean' ? (
             <div className="pt-1">

@@ -486,13 +486,11 @@ function ParamsSettingsBody({
                       onChange={(e) => update(pi, { type: e.target.value as DashboardParamType })}
                       className="h-9"
                     >
-                      <GeneratedValue
-                        value={PARAM_TYPES.map((t) => (
-                          <option key={t.value} value={t.value}>
-                            <GeneratedValue value={t.label} />
-                          </option>
-                        ))}
-                      />
+                      {PARAM_TYPES.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
                     </Select>
                   </div>
                   <div>
@@ -554,16 +552,12 @@ function ParamsSettingsBody({
                                 }
                                 className="flex-1"
                               >
-                                <option value="">
-                                  <GeneratedText id="m_0f1fcbe4c0f7e5" />
-                                </option>
-                                <GeneratedValue
-                                  value={cardOptions.map((c) => (
-                                    <option key={c.value} value={c.value}>
-                                      {c.label}
-                                    </option>
-                                  ))}
-                                />
+                                <option value="">{'Pick a card…'}</option>
+                                {cardOptions.map((c) => (
+                                  <option key={c.value} value={c.value}>
+                                    {c.label}
+                                  </option>
+                                ))}
                               </Select>
                               <Select
                                 value={t.field}
@@ -571,16 +565,12 @@ function ParamsSettingsBody({
                                 className="flex-1"
                                 disabled={!t.cardId}
                               >
-                                <option value="">
-                                  <GeneratedText id="m_0ff98564d477ba" />
-                                </option>
-                                <GeneratedValue
-                                  value={fieldsFor(t.cardId).map((f) => (
-                                    <option key={f.value} value={f.value}>
-                                      {f.label}
-                                    </option>
-                                  ))}
-                                />
+                                <option value="">{'Pick a field…'}</option>
+                                {fieldsFor(t.cardId).map((f) => (
+                                  <option key={f.value} value={f.value}>
+                                    {f.label}
+                                  </option>
+                                ))}
                               </Select>
                               <button
                                 type="button"

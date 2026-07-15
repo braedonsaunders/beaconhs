@@ -425,13 +425,11 @@ function SettingsPanel({
           <GeneratedText id="m_108b41637f364f" />
         </Label>
         <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-          <GeneratedValue
-            value={CATEGORY_OPTIONS.map((c) => (
-              <option key={c.value} value={c.value}>
-                <GeneratedValue value={c.label} />
-              </option>
-            ))}
-          />
+          {CATEGORY_OPTIONS.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
         </Select>
       </div>
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">

@@ -290,47 +290,25 @@ export function RecordListPanel({
             disabled={!canAdd}
             className="flex-1"
           >
-            <option value="">
-              <GeneratedValue
-                value={
-                  canAdd ? (
-                    <GeneratedText id="m_10a2cdb9b25b6b" />
-                  ) : (
-                    <GeneratedText id="m_1643640821919c" />
-                  )
-                }
-              />
-            </option>
-            <GeneratedValue
-              value={
-                addableBuiltins.length ? (
-                  <optgroup label={tGenerated('m_09bfd82959f8d2')}>
-                    <GeneratedValue
-                      value={addableBuiltins.map((k) => (
-                        <option key={`builtin:${k}`} value={`builtin:${k}`}>
-                          <GeneratedValue value={BUILTIN_LABEL[k]} />
-                        </option>
-                      ))}
-                    />
-                  </optgroup>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={
-                addableFields.length ? (
-                  <optgroup label={tGenerated('m_147efea3b670a8')}>
-                    <GeneratedValue
-                      value={addableFields.map((f) => (
-                        <option key={`field:${f.id}`} value={`field:${f.id}`}>
-                          <GeneratedValue value={f.label} />
-                        </option>
-                      ))}
-                    />
-                  </optgroup>
-                ) : null
-              }
-            />
+            <option value="">{canAdd ? 'Add a column…' : 'All columns added'}</option>
+            {addableBuiltins.length ? (
+              <optgroup label={tGenerated('m_09bfd82959f8d2')}>
+                {addableBuiltins.map((k) => (
+                  <option key={`builtin:${k}`} value={`builtin:${k}`}>
+                    {BUILTIN_LABEL[k]}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            {addableFields.length ? (
+              <optgroup label={tGenerated('m_147efea3b670a8')}>
+                {addableFields.map((f) => (
+                  <option key={`field:${f.id}`} value={`field:${f.id}`}>
+                    {f.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
           </Select>
           <Button
             type="button"
@@ -359,13 +337,11 @@ export function RecordListPanel({
             onChange={(e) => setSortKey(e.target.value as typeof sortKey)}
             className="flex-1"
           >
-            <GeneratedValue
-              value={SORT_OPTIONS.map((o) => (
-                <option key={o.key} value={o.key}>
-                  <GeneratedValue value={o.label} />
-                </option>
-              ))}
-            />
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
+              </option>
+            ))}
           </Select>
           <button
             type="button"
@@ -396,13 +372,11 @@ export function RecordListPanel({
           <GeneratedText id="m_1e0e89e45806e4" />
         </Label>
         <Select value={defaultStatus} onChange={(e) => setDefaultStatus(e.target.value)}>
-          <GeneratedValue
-            value={STATUS_OPTIONS.map((o) => (
-              <option key={o.value || 'none'} value={o.value}>
-                <GeneratedValue value={o.label} />
-              </option>
-            ))}
-          />
+          {STATUS_OPTIONS.map((o) => (
+            <option key={o.value || 'none'} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </Select>
         <p className="text-[11px] text-slate-400 dark:text-slate-500">
           <GeneratedText id="m_1191dfec9eacde" />

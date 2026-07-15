@@ -202,45 +202,43 @@ export function InsightsGrid({
                 onDragStop={(n: Layout) => commit(n)}
                 onResizeStop={(n: Layout) => commit(n)}
               >
-                <GeneratedValue
-                  value={widgets.map((w) => (
-                    <div key={w.id} className="group/cell">
-                      <div className="relative h-full w-full">
-                        <GeneratedValue
-                          value={
-                            editing ? (
-                              <button
-                                type="button"
-                                onClick={() => remove(w.id)}
-                                aria-label={tGenerated('m_1a9d8d971b1edb')}
-                                className="no-drag absolute -top-2 -right-2 z-20 grid h-6 w-6 place-items-center rounded-full border border-rose-200 bg-white text-rose-600 opacity-0 shadow-sm transition group-hover/cell:opacity-100 hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900"
-                              >
-                                <X size={12} />
-                              </button>
-                            ) : null
-                          }
-                        />
-                        <GeneratedValue
-                          value={
-                            nodes[w.id] ?? (
-                              <div className="grid h-full place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-3 text-center text-xs text-slate-400 dark:border-slate-800 dark:bg-slate-900/50">
-                                <GeneratedValue
-                                  value={
-                                    editing ? (
-                                      <GeneratedText id="m_1060c4c4bda4ba" />
-                                    ) : (
-                                      <GeneratedText id="m_08b4b47ddb6430" />
-                                    )
-                                  }
-                                />
-                              </div>
-                            )
-                          }
-                        />
-                      </div>
+                {widgets.map((w) => (
+                  <div key={w.id} className="group/cell">
+                    <div className="relative h-full w-full">
+                      <GeneratedValue
+                        value={
+                          editing ? (
+                            <button
+                              type="button"
+                              onClick={() => remove(w.id)}
+                              aria-label={tGenerated('m_1a9d8d971b1edb')}
+                              className="no-drag absolute -top-2 -right-2 z-20 grid h-6 w-6 place-items-center rounded-full border border-rose-200 bg-white text-rose-600 opacity-0 shadow-sm transition group-hover/cell:opacity-100 hover:bg-rose-50 dark:border-rose-500/30 dark:bg-slate-900"
+                            >
+                              <X size={12} />
+                            </button>
+                          ) : null
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          nodes[w.id] ?? (
+                            <div className="grid h-full place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-3 text-center text-xs text-slate-400 dark:border-slate-800 dark:bg-slate-900/50">
+                              <GeneratedValue
+                                value={
+                                  editing ? (
+                                    <GeneratedText id="m_1060c4c4bda4ba" />
+                                  ) : (
+                                    <GeneratedText id="m_08b4b47ddb6430" />
+                                  )
+                                }
+                              />
+                            </div>
+                          )
+                        }
+                      />
                     </div>
-                  ))}
-                />
+                  </div>
+                ))}
               </Responsive>
             )
           }

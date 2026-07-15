@@ -335,13 +335,11 @@ export function CriteriaBankSettings({
           <GeneratedText id="m_108b41637f364f" />
         </Label>
         <Select value={category} onChange={(event) => setCategory(event.target.value)}>
-          <GeneratedValue
-            value={categories.map((option) => (
-              <option key={option.value} value={option.value}>
-                <GeneratedValue value={option.label} />
-              </option>
-            ))}
-          />
+          {categories.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </Select>
       </div>
       <div className="flex justify-end">

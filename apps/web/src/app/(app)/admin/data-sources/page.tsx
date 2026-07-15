@@ -468,12 +468,8 @@ export default async function DataSourcesPage({
                       <GeneratedText id="m_1e578efe1574cd" />
                     </Label>
                     <Select id="kind" name="kind" defaultValue="reference">
-                      <option value="reference">
-                        <GeneratedText id="m_1f6869e6d0f14d" />
-                      </option>
-                      <option value="responses">
-                        <GeneratedText id="m_18e1eb9bd16825" />
-                      </option>
+                      <option value="reference">{'Reference list — curated rows'}</option>
+                      <option value="responses">{"Live — an app's responses"}</option>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
@@ -482,13 +478,11 @@ export default async function DataSourcesPage({
                     </Label>
                     <Select id="templateId" name="templateId" defaultValue="" searchable>
                       <option value="">—</option>
-                      <GeneratedValue
-                        value={templates.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            <GeneratedValue value={t.name} />
-                          </option>
-                        ))}
-                      />
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
                     </Select>
                     <p className="text-xs text-slate-400">
                       <GeneratedText id="m_0c34299f39bfc2" />{' '}

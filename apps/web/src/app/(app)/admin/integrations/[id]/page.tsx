@@ -231,13 +231,11 @@ export default async function ConnectionPage({
                                         defaultValue={current != null ? String(current) : ''}
                                       >
                                         <option value="">—</option>
-                                        <GeneratedValue
-                                          value={(f.options ?? []).map((o) => (
-                                            <option key={o.value} value={o.value}>
-                                              {o.label}
-                                            </option>
-                                          ))}
-                                        />
+                                        {(f.options ?? []).map((o) => (
+                                          <option key={o.value} value={o.value}>
+                                            {o.label}
+                                          </option>
+                                        ))}
                                       </Select>
                                     ) : f.type === 'boolean' ? (
                                       <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -357,13 +355,11 @@ export default async function ConnectionPage({
                             name="entity"
                             defaultValue={String(config.entity ?? 'people')}
                           >
-                            <GeneratedValue
-                              value={(summary?.entities ?? []).map((e) => (
-                                <option key={e} value={e}>
-                                  <GeneratedValue value={ENTITY_LABELS[e] ?? e} />
-                                </option>
-                              ))}
-                            />
+                            {(summary?.entities ?? []).map((e) => (
+                              <option key={e} value={e}>
+                                {ENTITY_LABELS[e] ?? e}
+                              </option>
+                            ))}
                           </Select>
                         </div>
                         <div className="space-y-1.5">
@@ -572,24 +568,12 @@ export default async function ConnectionPage({
                       <GeneratedText id="m_146102309d92b9" />
                     </Label>
                     <Select id="schedule" name="schedule" defaultValue={conn.schedule ?? 'manual'}>
-                      <option value="manual">
-                        <GeneratedText id="m_1697f1ad5a43b8" />
-                      </option>
-                      <option value="15min">
-                        <GeneratedText id="m_0f82a27c0ce443" />
-                      </option>
-                      <option value="hourly">
-                        <GeneratedText id="m_181110e085ca9a" />
-                      </option>
-                      <option value="6h">
-                        <GeneratedText id="m_02a3c95fdee4c2" />
-                      </option>
-                      <option value="daily">
-                        <GeneratedText id="m_014f0a55186cc3" />
-                      </option>
-                      <option value="weekly">
-                        <GeneratedText id="m_0f5fe94677f742" />
-                      </option>
+                      <option value="manual">{'Manual only'}</option>
+                      <option value="15min">{'Every 15 minutes'}</option>
+                      <option value="hourly">{'Hourly'}</option>
+                      <option value="6h">{'Every 6 hours'}</option>
+                      <option value="daily">{'Daily'}</option>
+                      <option value="weekly">{'Weekly'}</option>
                     </Select>
                   </div>
                   <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -666,12 +650,8 @@ export default async function ConnectionPage({
                         syncPolicy.ownership === 'manual_wins' ? 'manual_wins' : 'source_wins'
                       }
                     >
-                      <option value="source_wins">
-                        <GeneratedText id="m_11a01c0617b07f" />
-                      </option>
-                      <option value="manual_wins">
-                        <GeneratedText id="m_0c8a8491e1be8e" />
-                      </option>
+                      <option value="source_wins">{'Source updates mapped fields'}</option>
+                      <option value="manual_wins">{'Flag local edits as conflicts'}</option>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
@@ -683,12 +663,8 @@ export default async function ConnectionPage({
                       name="missing"
                       defaultValue={syncPolicy.missing === 'archive' ? 'archive' : 'keep'}
                     >
-                      <option value="keep">
-                        <GeneratedText id="m_1f14e28f79f3fa" />
-                      </option>
-                      <option value="archive">
-                        <GeneratedText id="m_0d550cdebb2bff" />
-                      </option>
+                      <option value="keep">{'Keep BeaconHS rows'}</option>
+                      <option value="archive">{'Archive after safe full pulls'}</option>
                     </Select>
                   </div>
                   <div className="flex justify-end">

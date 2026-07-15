@@ -49,16 +49,12 @@ function CriterionGroupSelect({
         <GeneratedText id="m_0d513924d97753" />
       </Label>
       <Select value={groupId ?? ''} onChange={(event) => onChange(event.target.value || null)}>
-        <option value="">
-          <GeneratedText id="m_124ee6c18e0195" />
-        </option>
-        <GeneratedValue
-          value={groups.map((group) => (
-            <option key={group.id} value={group.id}>
-              <GeneratedValue value={group.label} />
-            </option>
-          ))}
-        />
+        <option value="">{'Ungrouped'}</option>
+        {groups.map((group) => (
+          <option key={group.id} value={group.id}>
+            {group.label}
+          </option>
+        ))}
       </Select>
     </div>
   )
@@ -188,13 +184,11 @@ export function InspectionCriterionEditorDrawer<C extends InspectionCriterion>({
             value={responseType}
             onChange={(event) => setResponseType(event.target.value as InspectionResponseType)}
           >
-            <GeneratedValue
-              value={INSPECTION_RESPONSE_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  <GeneratedValue value={INSPECTION_RESPONSE_LABELS[type]} />
-                </option>
-              ))}
-            />
+            {INSPECTION_RESPONSE_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {INSPECTION_RESPONSE_LABELS[type]}
+              </option>
+            ))}
           </Select>
         </div>
         <GeneratedValue
@@ -366,13 +360,11 @@ export function SeverityCriterionEditorDrawer<C extends SeverityCriterion>({
             value={severity}
             onChange={(event) => setSeverity(event.target.value as InspectionSeverity)}
           >
-            <GeneratedValue
-              value={INSPECTION_SEVERITIES.map((option) => (
-                <option key={option} value={option}>
-                  <GeneratedValue value={INSPECTION_SEVERITY_LABELS[option]} />
-                </option>
-              ))}
-            />
+            {INSPECTION_SEVERITIES.map((option) => (
+              <option key={option} value={option}>
+                {INSPECTION_SEVERITY_LABELS[option]}
+              </option>
+            ))}
           </Select>
         </div>
         <GeneratedValue

@@ -187,24 +187,20 @@ export default async function NewCAPage({
                 </Field>
                 <Field label={tGenerated('m_168b365cc671bf')} required>
                   <Select name="severity" defaultValue="medium">
-                    <GeneratedValue
-                      value={SEVERITIES.map((s) => (
-                        <option key={s} value={s}>
-                          <GeneratedValue value={s} />
-                        </option>
-                      ))}
-                    />
+                    {SEVERITIES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
                 <Field label={tGenerated('m_1d05fa7a091a9b')}>
                   <Select name="source" defaultValue={presetSourceType ?? 'observation'}>
-                    <GeneratedValue
-                      value={SOURCES.map((s) => (
-                        <option key={s} value={s}>
-                          <GeneratedValue value={s.replace('_', ' ')} />
-                        </option>
-                      ))}
-                    />
+                    {SOURCES.map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace('_', ' ')}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
                 <Field label={tGenerated('m_020146dd3d3d5a')}>

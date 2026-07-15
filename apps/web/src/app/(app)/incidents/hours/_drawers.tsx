@@ -199,16 +199,12 @@ function HoursForm({
           value={siteOrgUnitId}
           onChange={(e) => setSiteOrgUnitId(e.currentTarget.value)}
         >
-          <option value="">
-            <GeneratedText id="m_0d7d2607673c79" />
-          </option>
-          <GeneratedValue
-            value={sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                <GeneratedValue value={s.name} />
-              </option>
-            ))}
-          />
+          <option value="">{'All sites (tenant-wide)'}</option>
+          {sites.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
         </Select>
       </div>
 

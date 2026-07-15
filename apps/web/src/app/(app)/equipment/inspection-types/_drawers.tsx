@@ -122,16 +122,12 @@ export function NewTypeDrawer({
             value={appliesToTypeId}
             onChange={(e) => setAppliesToTypeId(e.currentTarget.value)}
           >
-            <option value="">
-              <GeneratedText id="m_1130ef09787df0" />
-            </option>
-            <GeneratedValue
-              value={types.map((t) => (
-                <option key={t.id} value={t.id}>
-                  <GeneratedValue value={t.name} />
-                </option>
-              ))}
-            />
+            <option value="">{'— Any equipment —'}</option>
+            {types.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
           </Select>
         </div>
         <IntervalPicker

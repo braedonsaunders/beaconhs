@@ -843,13 +843,11 @@ export function InspectorPanel({
                     } as Partial<DesignElement>)
                   }
                 >
-                  <GeneratedValue
-                    value={catalog.options.map((field) => (
-                      <option key={field.value} value={field.value}>
-                        <GeneratedValue value={field.label} />
-                      </option>
-                    ))}
-                  />
+                  {catalog.options.map((field) => (
+                    <option key={field.value} value={field.value}>
+                      {field.label}
+                    </option>
+                  ))}
                 </Select>
               </Field>
               <div className="rounded-md border border-teal-100 bg-teal-50/60 px-2.5 py-2 text-xs text-teal-900 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-200">
@@ -904,18 +902,10 @@ export function InspectorPanel({
                       } as Partial<DesignElement>)
                     }
                   >
-                    <option value="none">
-                      <GeneratedText id="m_010faf405829a4" />
-                    </option>
-                    <option value="uppercase">
-                      <GeneratedText id="m_00f3b16bbcf76e" />
-                    </option>
-                    <option value="date-long">
-                      <GeneratedText id="m_0c99c9ba644d36" />
-                    </option>
-                    <option value="date-short">
-                      <GeneratedText id="m_1561c322acbb37" />
-                    </option>
+                    <option value="none">{'As is'}</option>
+                    <option value="uppercase">{'UPPERCASE'}</option>
+                    <option value="date-long">{'Date — June 11, 2026'}</option>
+                    <option value="date-short">{'Date — Jun 11, 2026'}</option>
                   </Select>
                 </Field>
               </div>
@@ -937,13 +927,11 @@ export function InspectorPanel({
                     } as Partial<DesignElement>)
                   }
                 >
-                  <GeneratedValue
-                    value={catalog.imageSources.map((source) => (
-                      <option key={source.value} value={source.value}>
-                        <GeneratedValue value={source.label} />
-                      </option>
-                    ))}
-                  />
+                  {catalog.imageSources.map((source) => (
+                    <option key={source.value} value={source.value}>
+                      {source.label}
+                    </option>
+                  ))}
                 </Select>
               </Field>
               <GeneratedValue
@@ -1146,13 +1134,11 @@ export function PrintPanel({
             })
           }
         >
-          <GeneratedValue
-            value={PRINT_PROVIDERS.map((provider) => (
-              <option key={provider.id} value={provider.id}>
-                <GeneratedValue value={provider.label} />
-              </option>
-            ))}
-          />
+          {PRINT_PROVIDERS.map((provider) => (
+            <option key={provider.id} value={provider.id}>
+              {provider.label}
+            </option>
+          ))}
         </Select>
       </Field>
       <Field label={tGenerated('m_09db70b9dfd3ed')}>
@@ -1164,15 +1150,9 @@ export function PrintPanel({
             })
           }
         >
-          <option value="letter">
-            <GeneratedText id="m_1715837106bbe7" />
-          </option>
-          <option value="cr80">
-            <GeneratedText id="m_19dd6efbf62fcd" />
-          </option>
-          <option value="custom">
-            <GeneratedText id="m_1721ac81d2a5c0" />
-          </option>
+          <option value="letter">{'Letter'}</option>
+          <option value="cr80">{'CR80 card'}</option>
+          <option value="custom">{'Custom'}</option>
         </Select>
       </Field>
       <LayerToggle

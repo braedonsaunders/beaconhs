@@ -56,13 +56,11 @@ export function CaHeaderActions({
       onChange={(e) => onStatusChange(e.target.value)}
       className="w-auto min-w-36 capitalize"
     >
-      <GeneratedValue
-        value={statuses.map((s) => (
-          <option key={s} value={s} className="capitalize">
-            <GeneratedValue value={s.replace(/_/g, ' ')} />
-          </option>
-        ))}
-      />
+      {statuses.map((s) => (
+        <option key={s} value={s} className="capitalize">
+          {s.replace(/_/g, ' ')}
+        </option>
+      ))}
     </Select>
   )
 

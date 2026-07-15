@@ -1386,16 +1386,12 @@ export function FormRenderer({
                         <GeneratedText id="m_020146dd3d3d5a" />
                       </Label>
                       <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
-                        <option value="">
-                          <GeneratedText id="m_0a4ceaaee570cc" />
-                        </option>
-                        <GeneratedValue
-                          value={sites.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              <GeneratedValue value={s.name} />
-                            </option>
-                          ))}
-                        />
+                        <option value="">{'— select —'}</option>
+                        {sites.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
                       </Select>
                     </div>
                   </PremiumSection>
@@ -2304,13 +2300,11 @@ function FieldInput({
       return (
         <Select value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)}>
           <option value="">—</option>
-          <GeneratedValue
-            value={opts.map((o) => (
-              <option key={o.value} value={o.value}>
-                <GeneratedValue value={localizeText(o.label, locale, o.value)} />
-              </option>
-            ))}
-          />
+          {opts.map((o) => (
+            <option key={o.value} value={o.value}>
+              {localizeText(o.label, locale, o.value)}
+            </option>
+          ))}
         </Select>
       )
     }
@@ -3109,13 +3103,11 @@ function TableCell({
           onChange={(e) => onChange(e.target.value)}
         >
           <option value="">—</option>
-          <GeneratedValue
-            value={(column.options ?? []).map((o) => (
-              <option key={o.value} value={o.value}>
-                <GeneratedValue value={o.label || o.value} />
-              </option>
-            ))}
-          />
+          {(column.options ?? []).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label || o.value}
+            </option>
+          ))}
         </Select>
       )
     default:
@@ -3372,9 +3364,7 @@ function LookupInput({
   if (!sourceKey) {
     return (
       <Select disabled>
-        <option>
-          <GeneratedText id="m_08824e0636c702" />
-        </option>
+        <option>{'Configure a data source…'}</option>
       </Select>
     )
   }

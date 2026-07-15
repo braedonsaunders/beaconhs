@@ -206,13 +206,11 @@ export function BulkRoleAssignmentForm({
                   onChange={(event) => setRoleId(event.target.value)}
                   required
                 >
-                  <GeneratedValue
-                    value={roles.map((role) => (
-                      <option key={role.id} value={role.id}>
-                        <GeneratedValue value={role.name} />
-                      </option>
-                    ))}
-                  />
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
                 </Select>
               </div>
 

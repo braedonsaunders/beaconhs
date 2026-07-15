@@ -86,27 +86,9 @@ export function IntervalPicker({
                 onChange={(e) => setMode(e.currentTarget.value as Mode)}
                 className="w-36"
               >
-                <GeneratedValue
-                  value={
-                    allowOnDemand ? (
-                      <option value="on_demand">
-                        <GeneratedValue value={onDemandLabel} />
-                      </option>
-                    ) : null
-                  }
-                />
-                <GeneratedValue
-                  value={
-                    allowPreUse ? (
-                      <option value="pre_use">
-                        <GeneratedText id="m_0169e159d93a5b" />
-                      </option>
-                    ) : null
-                  }
-                />
-                <option value="every">
-                  <GeneratedText id="m_185ca90e8a0046" />
-                </option>
+                {allowOnDemand ? <option value="on_demand">{onDemandLabel}</option> : null}
+                {allowPreUse ? <option value="pre_use">{'Pre-use'}</option> : null}
+                <option value="every">{'Every…'}</option>
               </Select>
             )
           }
@@ -144,15 +126,11 @@ export function IntervalPicker({
                   className="w-32"
                   aria-label={tGenerated('m_0ddb550df9618d')}
                 >
-                  <GeneratedValue
-                    value={EQUIPMENT_INTERVAL_UNITS.map((u) => (
-                      <option key={u.value} value={u.value}>
-                        <GeneratedValue
-                          value={(value.intervalValue ?? 1) === 1 ? u.singular : u.plural}
-                        />
-                      </option>
-                    ))}
-                  />
+                  {EQUIPMENT_INTERVAL_UNITS.map((u) => (
+                    <option key={u.value} value={u.value}>
+                      {(value.intervalValue ?? 1) === 1 ? u.singular : u.plural}
+                    </option>
+                  ))}
                 </Select>
               </>
             ) : null

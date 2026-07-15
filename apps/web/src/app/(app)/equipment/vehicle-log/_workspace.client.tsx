@@ -721,17 +721,13 @@ export function VehicleLogWorkspaceClient({
               sheetTitle="Driver"
               searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
             >
-              <option value="">
-                <GeneratedText id="m_0dc30f377778f9" />
-              </option>
-              <GeneratedValue
-                value={workspace.drivers.map((driver) => (
-                  <option key={driver.id} value={driver.id}>
-                    <GeneratedValue value={driver.label} />
-                    <GeneratedValue value={driver.hint ? ` · ${driver.hint}` : ''} />
-                  </option>
-                ))}
-              />
+              <option value="">{'Choose driver'}</option>
+              {workspace.drivers.map((driver) => (
+                <option key={driver.id} value={driver.id}>
+                  {driver.label}
+                  {driver.hint ? ` · ${driver.hint}` : ''}
+                </option>
+              ))}
             </Select>
           </div>
           <div className="space-y-1">
@@ -744,17 +740,13 @@ export function VehicleLogWorkspaceClient({
               sheetTitle="Vehicle"
               searchPlaceholder={tGenerated('m_0bf444b94a202f')}
             >
-              <option value="">
-                <GeneratedText id="m_0825fffcb2cb01" />
-              </option>
-              <GeneratedValue
-                value={workspace.vehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    <GeneratedValue value={vehicle.hint ? `${vehicle.hint} · ` : ''} />
-                    <GeneratedValue value={vehicle.label} />
-                  </option>
-                ))}
-              />
+              <option value="">{'Choose vehicle'}</option>
+              {workspace.vehicles.map((vehicle) => (
+                <option key={vehicle.id} value={vehicle.id}>
+                  {vehicle.hint ? `${vehicle.hint} · ` : ''}
+                  {vehicle.label}
+                </option>
+              ))}
             </Select>
           </div>
           <GeneratedValue
@@ -1288,16 +1280,12 @@ export function VehicleLogWorkspaceClient({
                                   searchPlaceholder={tGenerated('m_1931aa93098220')}
                                   triggerClassName="h-11 text-base"
                                 >
-                                  <option value="">
-                                    <GeneratedText id="m_09ec32e549824e" />
-                                  </option>
-                                  <GeneratedValue
-                                    value={workspace.sites.map((site) => (
-                                      <option key={site.id} value={site.id}>
-                                        {site.label}
-                                      </option>
-                                    ))}
-                                  />
+                                  <option value="">{'Customer / site'}</option>
+                                  {workspace.sites.map((site) => (
+                                    <option key={site.id} value={site.id}>
+                                      {site.label}
+                                    </option>
+                                  ))}
                                 </Select>
                                 <TextCell
                                   value={draft.otherDestination ?? ''}
@@ -1507,13 +1495,11 @@ function VehicleLogTableRow({
                     )}
                   >
                     <option value="">—</option>
-                    <GeneratedValue
-                      value={sites.map((site) => (
-                        <option key={site.id} value={site.id}>
-                          <GeneratedValue value={site.label} />
-                        </option>
-                      ))}
-                    />
+                    {sites.map((site) => (
+                      <option key={site.id} value={site.id}>
+                        {site.label}
+                      </option>
+                    ))}
                   </Select>
                 </td>
                 <td className="px-1 py-1">

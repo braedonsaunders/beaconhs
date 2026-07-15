@@ -111,13 +111,11 @@ function NewHazardDrawer({
             </Label>
             <Select id="hazard-type" name="hazardTypeId" defaultValue="">
               <option value="">—</option>
-              <GeneratedValue
-                value={types.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    <GeneratedValue value={t.name} />
-                  </option>
-                ))}
-              />
+              {types.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
             </Select>
           </div>
           <div className="space-y-1.5">
@@ -213,13 +211,11 @@ function EditHazardDrawer({
                     defaultValue={defaults.hazardTypeId ?? ''}
                   >
                     <option value="">—</option>
-                    <GeneratedValue
-                      value={types.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          <GeneratedValue value={t.name} />
-                        </option>
-                      ))}
-                    />
+                    {types.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
                   </Select>
                 </div>
                 <div className="space-y-1.5">

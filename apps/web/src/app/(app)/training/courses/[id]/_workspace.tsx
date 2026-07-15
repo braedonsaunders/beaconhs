@@ -1083,13 +1083,11 @@ function OverviewPanel({
           value={delivery}
           onChange={(e) => onDeliveryChange(e.target.value)}
         >
-          <GeneratedValue
-            value={DELIVERY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                <GeneratedValue value={o.label} />
-              </option>
-            ))}
-          />
+          {DELIVERY_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </Select>
         <p className="text-[11px] text-slate-400 dark:text-slate-500">
           <GeneratedValue value={deliveryMeta(delivery).hint} />

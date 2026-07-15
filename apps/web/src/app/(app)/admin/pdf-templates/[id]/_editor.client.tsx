@@ -191,15 +191,9 @@ export function PdfTemplateEditor({
             className="h-9 w-24"
             aria-label={tGenerated('m_185f497c899c62')}
           >
-            <option value="letter">
-              <GeneratedText id="m_1715837106bbe7" />
-            </option>
-            <option value="a4">
-              <GeneratedText id="m_0df1bca66cc814" />
-            </option>
-            <option value="legal">
-              <GeneratedText id="m_13bc02323e35ae" />
-            </option>
+            <option value="letter">{'Letter'}</option>
+            <option value="a4">{'A4'}</option>
+            <option value="legal">{'Legal'}</option>
           </Select>
           <Select
             value={orientation}
@@ -207,12 +201,8 @@ export function PdfTemplateEditor({
             className="h-9 w-28"
             aria-label={tGenerated('m_0af3bf11ca2a12')}
           >
-            <option value="portrait">
-              <GeneratedText id="m_062e481bc6e988" />
-            </option>
-            <option value="landscape">
-              <GeneratedText id="m_0e9e90da7290dd" />
-            </option>
+            <option value="portrait">{'Portrait'}</option>
+            <option value="landscape">{'Landscape'}</option>
           </Select>
           <Input
             type="number"

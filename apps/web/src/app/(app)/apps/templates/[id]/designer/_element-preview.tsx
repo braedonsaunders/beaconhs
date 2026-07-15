@@ -123,9 +123,7 @@ function ElementInput({
     case 'multi_person_picker':
       return (
         <Select disabled className="bg-white">
-          <option>
-            <GeneratedValue value={labels[0] ?? <GeneratedText id="m_1129f239fbb89a" />} />
-          </option>
+          <option>{labels[0] ?? 'Select…'}</option>
         </Select>
       )
     case 'radio':
@@ -431,9 +429,7 @@ function ElementInput({
       return (
         <div className="space-y-1">
           <Select disabled className="bg-white">
-            <option>
-              <GeneratedText id="m_1129f239fbb89a" />
-            </option>
+            <option>{'Select…'}</option>
           </Select>
           <GeneratedValue
             value={

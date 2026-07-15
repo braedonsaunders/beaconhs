@@ -126,13 +126,11 @@ export function EquipmentFileDrawer({
             <GeneratedText id="m_108b41637f364f" />
           </Label>
           <Select id="file-kind" value={kind} onChange={(e) => setKind(e.currentTarget.value)}>
-            <GeneratedValue
-              value={EQUIPMENT_FILE_KINDS.map((k) => (
-                <option key={k.value} value={k.value}>
-                  <GeneratedValue value={k.label} />
-                </option>
-              ))}
-            />
+            {EQUIPMENT_FILE_KINDS.map((k) => (
+              <option key={k.value} value={k.value}>
+                {k.label}
+              </option>
+            ))}
           </Select>
         </div>
         <div className="space-y-1.5">

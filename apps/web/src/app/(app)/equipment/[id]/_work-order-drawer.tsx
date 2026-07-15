@@ -145,15 +145,9 @@ export function NewWorkOrderDrawer({
               value={priority}
               onChange={(e) => setPriority(e.currentTarget.value as 'low' | 'med' | 'high')}
             >
-              <option value="low">
-                <GeneratedText id="m_0ba423ff31902f" />
-              </option>
-              <option value="med">
-                <GeneratedText id="m_1bec287326cfa6" />
-              </option>
-              <option value="high">
-                <GeneratedText id="m_08e161aa889d60" />
-              </option>
+              <option value="low">{'Low'}</option>
+              <option value="med">{'Medium'}</option>
+              <option value="high">{'High'}</option>
             </Select>
           </div>
           <div className="space-y-1.5">

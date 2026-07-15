@@ -162,13 +162,11 @@ export default async function NewPersonPage() {
                 <Field label={tGenerated('m_1a4bbe2908d1a5')}>
                   <Select name="primaryTitleId" defaultValue="">
                     <option value="">—</option>
-                    <GeneratedValue
-                      value={allTitles.map((title) => (
-                        <option key={title.id} value={title.id}>
-                          <GeneratedValue value={title.name} />
-                        </option>
-                      ))}
-                    />
+                    {allTitles.map((title) => (
+                      <option key={title.id} value={title.id}>
+                        {title.name}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
                 <Field label={tGenerated('m_00a0ba9938bdff')}>
@@ -180,37 +178,31 @@ export default async function NewPersonPage() {
                 <Field label={tGenerated('m_1af68228b8305a')}>
                   <Select name="departmentId" defaultValue="">
                     <option value="">—</option>
-                    <GeneratedValue
-                      value={depts.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          <GeneratedValue value={d.name} />
-                        </option>
-                      ))}
-                    />
+                    {depts.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
                 <Field label={tGenerated('m_1f1e634a4380dc')}>
                   <Select name="tradeId" defaultValue="">
                     <option value="">—</option>
-                    <GeneratedValue
-                      value={allTrades.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          <GeneratedValue value={t.name} />
-                        </option>
-                      ))}
-                    />
+                    {allTrades.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
                 <Field label={tGenerated('m_13fc63a82a07d0')}>
                   <Select name="crewId" defaultValue="">
                     <option value="">—</option>
-                    <GeneratedValue
-                      value={allCrews.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          <GeneratedValue value={c.name} />
-                        </option>
-                      ))}
-                    />
+                    {allCrews.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
                   </Select>
                 </Field>
               </div>

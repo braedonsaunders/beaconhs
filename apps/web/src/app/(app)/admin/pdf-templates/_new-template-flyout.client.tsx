@@ -66,32 +66,24 @@ export function NewPdfTemplateFlyout({
             </Label>
             <Select id="recordSubject" name="recordSubject" required defaultValue="">
               <option value="" disabled>
-                <GeneratedText id="m_1cd3fce117c91f" />
+                {'Choose a record type…'}
               </option>
               <optgroup label={tGenerated('m_1e649a5a75a0e0')}>
-                <GeneratedValue
-                  value={modules.map((s) => (
-                    <option key={`module:${s.key}`} value={`module:${s.key}`}>
-                      <GeneratedValue value={s.label} />
+                {modules.map((s) => (
+                  <option key={`module:${s.key}`} value={`module:${s.key}`}>
+                    {s.label}
+                  </option>
+                ))}
+              </optgroup>
+              {apps.length > 0 ? (
+                <optgroup label={tGenerated('m_0c770d55914bfa')}>
+                  {apps.map((s) => (
+                    <option key={`form_template:${s.key}`} value={`form_template:${s.key}`}>
+                      {s.label}
                     </option>
                   ))}
-                />
-              </optgroup>
-              <GeneratedValue
-                value={
-                  apps.length > 0 ? (
-                    <optgroup label={tGenerated('m_0c770d55914bfa')}>
-                      <GeneratedValue
-                        value={apps.map((s) => (
-                          <option key={`form_template:${s.key}`} value={`form_template:${s.key}`}>
-                            <GeneratedValue value={s.label} />
-                          </option>
-                        ))}
-                      />
-                    </optgroup>
-                  ) : null
-                }
-              />
+                </optgroup>
+              ) : null}
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -100,15 +92,9 @@ export function NewPdfTemplateFlyout({
                 <GeneratedText id="m_0ccb1fd4550a71" />
               </Label>
               <Select id="paperSize" name="paperSize" defaultValue="letter">
-                <option value="letter">
-                  <GeneratedText id="m_1715837106bbe7" />
-                </option>
-                <option value="a4">
-                  <GeneratedText id="m_0df1bca66cc814" />
-                </option>
-                <option value="legal">
-                  <GeneratedText id="m_13bc02323e35ae" />
-                </option>
+                <option value="letter">{'Letter'}</option>
+                <option value="a4">{'A4'}</option>
+                <option value="legal">{'Legal'}</option>
               </Select>
             </div>
             <div className="space-y-1.5">
@@ -116,12 +102,8 @@ export function NewPdfTemplateFlyout({
                 <GeneratedText id="m_0af3bf11ca2a12" />
               </Label>
               <Select id="orientation" name="orientation" defaultValue="portrait">
-                <option value="portrait">
-                  <GeneratedText id="m_062e481bc6e988" />
-                </option>
-                <option value="landscape">
-                  <GeneratedText id="m_0e9e90da7290dd" />
-                </option>
+                <option value="portrait">{'Portrait'}</option>
+                <option value="landscape">{'Landscape'}</option>
               </Select>
             </div>
           </div>

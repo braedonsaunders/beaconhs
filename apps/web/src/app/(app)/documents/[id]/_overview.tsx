@@ -141,13 +141,11 @@ export function DocumentOverview({
               onBlur={() => void flush()}
             >
               <option value="">—</option>
-              <GeneratedValue
-                value={categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    <GeneratedValue value={c.name} />
-                  </option>
-                ))}
-              />
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
             </Select>
           </div>
           <div className="space-y-1.5">
@@ -161,13 +159,11 @@ export function DocumentOverview({
               onBlur={() => void flush()}
             >
               <option value="">—</option>
-              <GeneratedValue
-                value={types.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    <GeneratedValue value={t.name} />
-                  </option>
-                ))}
-              />
+              {types.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
             </Select>
           </div>
         </div>

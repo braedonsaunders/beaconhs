@@ -111,13 +111,11 @@ function OrgUnitForm({
           <GeneratedText id="m_1cc321f2024ad6" />
         </Label>
         <Select id="org-level" value={level} onChange={(e) => setLevel(e.currentTarget.value)}>
-          <GeneratedValue
-            value={levels.map((l) => (
-              <option key={l.value} value={l.value}>
-                <GeneratedValue value={l.label} />
-              </option>
-            ))}
-          />
+          {levels.map((l) => (
+            <option key={l.value} value={l.value}>
+              {l.label}
+            </option>
+          ))}
         </Select>
       </div>
 
