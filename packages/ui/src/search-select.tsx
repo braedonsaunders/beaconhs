@@ -113,7 +113,7 @@ export function SearchSelect({
   const localizedSearchPlaceholder = t(searchPlaceholder ?? 'Search…')
   const localizedSheetTitle = sheetTitle ? t(sheetTitle) : undefined
   const localizedStatusMessage = statusMessage ? t(statusMessage) : undefined
-  const allOptions = useMemo(
+  const allOptions = useMemo<SelectOption[]>(
     () =>
       clearable
         ? [{ value: '', label: localizedEmptyLabel }, ...localizedOptions]

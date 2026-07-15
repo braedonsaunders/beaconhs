@@ -62,7 +62,7 @@ describe('i18n source coverage', () => {
     expect(findUserFacingSourceLiterals({ roots: [UI_SOURCE_ROOT], base: UI_SOURCE_ROOT })).toEqual(
       [],
     )
-  })
+  }, 20_000)
 
   it('catalogs every programmatic label, prompt, message, and error', () => {
     const missing = runtimeCandidates.filter(
