@@ -68,7 +68,22 @@ if [ -f "$checksum_file" ]; then
 fi
 
 pg_restore --list "$archive" >/dev/null
-createdb --maintenance-db="$admin_database" --owner="$owner_role" "$database"
+archive_creates_public_schema=$(
+  pg_restore --list "$archive" |
+    awk '$4 == "SCHEMA" && $5 == "-" && $6 == "public" { print "true"; exit }'
+)
+
+createdb --maintenance-db="$admin_database" --template=template0 --owner="$owner_role" "$database"
+# PostgreSQL creates public in every new database. A pg_dump archive also owns
+# that schema when BeaconHS has transferred it to the dedicated owner, so the
+# restore would otherwise fail with "schema public already exists". Drop only
+# the empty schema in this brand-new disposable database, and only when the
+# validated archive declares that it will recreate it.
+if [ "$archive_creates_public_schema" = 'true' ]; then
+  PGDATABASE="$database" psql -X -v ON_ERROR_STOP=1 <<'SQL'
+DROP SCHEMA public;
+SQL
+fi
 PGDATABASE="$database" pg_restore \
   --exit-on-error \
   --single-transaction \

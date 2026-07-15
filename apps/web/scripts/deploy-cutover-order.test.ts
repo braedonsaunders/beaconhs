@@ -10,6 +10,10 @@ const workflow = readFileSync(
 const directDatabaseUrlScript = fileURLToPath(
   new URL('../../../scripts/cluster/direct-maintenance-database-url.mjs', import.meta.url),
 )
+const restoreVerifyScript = readFileSync(
+  fileURLToPath(new URL('../../../scripts/cluster/restore-verify.sh', import.meta.url)),
+  'utf8',
+)
 const webPackage = JSON.parse(
   readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
 ) as {
@@ -64,6 +68,37 @@ describe('dev deployment cutover order', () => {
 
   it('uses retry flags supported by the self-hosted runner curl', () => {
     expect(workflow).not.toContain('--retry-all-errors')
+  })
+
+  it('recreates an archive-owned public schema during a disposable restore', () => {
+    const archiveValidationAt = requiredPosition(
+      restoreVerifyScript,
+      'pg_restore --list "$archive" >/dev/null',
+    )
+    const archiveSchemaCheckAt = requiredPosition(
+      restoreVerifyScript,
+      '$4 == "SCHEMA" && $5 == "-" && $6 == "public"',
+    )
+    const databaseCreateAt = requiredPosition(
+      restoreVerifyScript,
+      'createdb --maintenance-db="$admin_database" --template=template0',
+    )
+    const conditionalDropAt = requiredPosition(
+      restoreVerifyScript,
+      'if [ "$archive_creates_public_schema" = \'true\' ]; then',
+    )
+    const publicDropAt = requiredPosition(restoreVerifyScript, 'DROP SCHEMA public;')
+    const restoreAt = requiredPosition(restoreVerifyScript, 'PGDATABASE="$database" pg_restore')
+    const orderedPositions = [
+      archiveValidationAt,
+      archiveSchemaCheckAt,
+      databaseCreateAt,
+      conditionalDropAt,
+      publicDropAt,
+      restoreAt,
+    ]
+
+    expect(orderedPositions).toEqual([...orderedPositions].sort((left, right) => left - right))
   })
 
   it('normalizes the registry field removed by newer Dokploy releases', () => {
