@@ -2109,7 +2109,6 @@ jobs:
           fi
           assert_final_compose_state
           scripts/cluster/assert-swarm-scheduling-paused.sh
-          scripts/cluster/assert-cutover-isolation.sh
           echo "Dokploy deployment ${deployment_id} completed successfully while Swarm scheduling remained paused"
 
       - name: Verify exact deployment specs and resume Swarm scheduling
@@ -2320,7 +2319,6 @@ jobs:
 
           assert_control_plane_idle_and_exact
           scripts/cluster/assert-swarm-scheduling-paused.sh
-          scripts/cluster/assert-cutover-isolation.sh
           if ! assert_exact_stack; then
             echo "::error::Dokploy did not materialize the exact reviewed five-service deployment contract"
             exit 1
@@ -2354,7 +2352,8 @@ jobs:
           # pre-existing drain/pause states remain untouched.
           assert_control_plane_idle_and_exact
           scripts/cluster/assert-swarm-scheduling-paused.sh
-          scripts/cluster/assert-cutover-isolation.sh
+          BEACONHS_CUTOVER_MATERIALIZED_PENDING_WRITERS=true \
+            scripts/cluster/assert-cutover-isolation.sh
           assert_exact_stack
           scripts/cluster/release-swarm-scheduling-fence.sh
           echo "Exact-digest service specs were materialized before Swarm scheduling resumed"

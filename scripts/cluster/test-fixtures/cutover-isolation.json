@@ -76,6 +76,456 @@
       }
     ]
   },
+  "materialized-safe": {
+    "localNodeId": "node-primary",
+    "nodes": [
+      {
+        "ID": "node-primary",
+        "Spec": { "Availability": "pause" },
+        "Status": { "State": "ready" },
+        "ManagerStatus": { "Leader": true, "Reachability": "reachable" }
+      }
+    ],
+    "services": [
+      {
+        "ID": "service-target-web",
+        "Spec": {
+          "Name": "beaconhs_web",
+          "Labels": { "com.docker.stack.namespace": "beaconhs" },
+          "TaskTemplate": {
+            "ContainerSpec": {
+              "Image": "ghcr.io/braedonsaunders/beaconhs@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "Env": [
+                "APP_ROLE=web",
+                "DATABASE_URL=postgres://runtime:runtime-secret@db.internal:5432/beaconhs?sslmode=require"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ID": "service-target-worker",
+        "Spec": {
+          "Name": "beaconhs_worker",
+          "Labels": { "com.docker.stack.namespace": "beaconhs" },
+          "TaskTemplate": {
+            "ContainerSpec": {
+              "Image": "ghcr.io/braedonsaunders/beaconhs@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "Env": [
+                "APP_ROLE=worker",
+                "DATABASE_URL=postgres://runtime:runtime-secret@db.internal:5432/beaconhs?sslmode=require"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ID": "service-target-scheduler",
+        "Spec": {
+          "Name": "beaconhs_scheduler",
+          "Labels": { "com.docker.stack.namespace": "beaconhs" },
+          "TaskTemplate": {
+            "ContainerSpec": {
+              "Image": "ghcr.io/braedonsaunders/beaconhs@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "Env": [
+                "APP_ROLE=scheduler",
+                "DATABASE_URL=postgres://runtime:runtime-secret@db.internal:5432/beaconhs?sslmode=require"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ID": "service-unrelated",
+        "Spec": {
+          "Name": "other_stack_cache",
+          "Labels": { "com.docker.stack.namespace": "other_stack" },
+          "TaskTemplate": {
+            "ContainerSpec": { "Image": "redis:8-alpine", "Env": [] }
+          }
+        }
+      }
+    ],
+    "tasks": [
+      {
+        "ID": "task-target-web-current",
+        "ServiceID": "service-target-web",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-worker-current",
+        "ServiceID": "service-target-worker",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-scheduler-current",
+        "ServiceID": "service-target-scheduler",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-web-history",
+        "ServiceID": "service-target-web",
+        "DesiredState": "shutdown",
+        "NodeID": "node-primary",
+        "Status": {
+          "State": "shutdown",
+          "ContainerStatus": { "ContainerID": "container-target-web-history" }
+        }
+      }
+    ],
+    "containers": [
+      {
+        "Id": "container-unrelated",
+        "Name": "/unrelated",
+        "State": { "Running": true },
+        "Config": {
+          "Image": "redis:8-alpine",
+          "Env": [],
+          "Labels": {}
+        }
+      }
+    ]
+  },
+  "materialized-pending-assigned": {
+    "extends": "materialized-safe",
+    "replaceTasks": [
+      {
+        "ID": "task-target-web-current",
+        "ServiceID": "service-target-web",
+        "DesiredState": "running",
+        "NodeID": "node-primary",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-worker-current",
+        "ServiceID": "service-target-worker",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-scheduler-current",
+        "ServiceID": "service-target-scheduler",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      }
+    ]
+  },
+  "materialized-pending-container-backed": {
+    "extends": "materialized-safe",
+    "replaceTasks": [
+      {
+        "ID": "task-target-web-current",
+        "ServiceID": "service-target-web",
+        "DesiredState": "running",
+        "Status": {
+          "State": "pending",
+          "ContainerStatus": { "ContainerID": "container-target-web-current" }
+        }
+      },
+      {
+        "ID": "task-target-worker-current",
+        "ServiceID": "service-target-worker",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-scheduler-current",
+        "ServiceID": "service-target-scheduler",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      }
+    ]
+  },
+  "materialized-assigned": {
+    "extends": "materialized-safe",
+    "replaceTasks": [
+      {
+        "ID": "task-target-web-current",
+        "ServiceID": "service-target-web",
+        "DesiredState": "running",
+        "NodeID": "node-primary",
+        "Status": { "State": "assigned", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-worker-current",
+        "ServiceID": "service-target-worker",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-scheduler-current",
+        "ServiceID": "service-target-scheduler",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      }
+    ]
+  },
+  "materialized-preparing": {
+    "extends": "materialized-safe",
+    "replaceTasks": [
+      {
+        "ID": "task-target-web-current",
+        "ServiceID": "service-target-web",
+        "DesiredState": "running",
+        "NodeID": "node-primary",
+        "Status": { "State": "preparing", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-worker-current",
+        "ServiceID": "service-target-worker",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-scheduler-current",
+        "ServiceID": "service-target-scheduler",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      }
+    ]
+  },
+  "materialized-starting": {
+    "extends": "materialized-safe",
+    "replaceTasks": [
+      {
+        "ID": "task-target-web-current",
+        "ServiceID": "service-target-web",
+        "DesiredState": "running",
+        "NodeID": "node-primary",
+        "Status": {
+          "State": "starting",
+          "ContainerStatus": { "ContainerID": "container-target-web-current" }
+        }
+      },
+      {
+        "ID": "task-target-worker-current",
+        "ServiceID": "service-target-worker",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-scheduler-current",
+        "ServiceID": "service-target-scheduler",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      }
+    ]
+  },
+  "materialized-running": {
+    "extends": "materialized-safe",
+    "replaceTasks": [
+      {
+        "ID": "task-target-web-current",
+        "ServiceID": "service-target-web",
+        "DesiredState": "running",
+        "NodeID": "node-primary",
+        "Status": {
+          "State": "running",
+          "ContainerStatus": { "ContainerID": "container-target-web-current" }
+        }
+      },
+      {
+        "ID": "task-target-worker-current",
+        "ServiceID": "service-target-worker",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-scheduler-current",
+        "ServiceID": "service-target-scheduler",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      }
+    ]
+  },
+  "materialized-duplicate-current": {
+    "extends": "materialized-safe",
+    "tasks": [
+      {
+        "ID": "task-target-web-current-duplicate",
+        "ServiceID": "service-target-web",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      }
+    ]
+  },
+  "materialized-nonterminal-history": {
+    "extends": "materialized-safe",
+    "tasks": [
+      {
+        "ID": "task-target-worker-history",
+        "ServiceID": "service-target-worker",
+        "DesiredState": "shutdown",
+        "NodeID": "node-primary",
+        "Status": { "State": "assigned", "ContainerStatus": {} }
+      }
+    ]
+  },
+  "materialized-task-transition": {
+    "extends": "materialized-safe",
+    "tasksAfter": [
+      {
+        "ID": "task-target-web-current",
+        "ServiceID": "service-target-web",
+        "DesiredState": "running",
+        "NodeID": "node-primary",
+        "Status": { "State": "assigned", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-worker-current",
+        "ServiceID": "service-target-worker",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-scheduler-current",
+        "ServiceID": "service-target-scheduler",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-web-history",
+        "ServiceID": "service-target-web",
+        "DesiredState": "shutdown",
+        "NodeID": "node-primary",
+        "Status": {
+          "State": "shutdown",
+          "ContainerStatus": { "ContainerID": "container-target-web-history" }
+        }
+      }
+    ]
+  },
+  "materialized-task-generation-change": {
+    "extends": "materialized-safe",
+    "tasksAfter": [
+      {
+        "ID": "task-target-web-replacement",
+        "ServiceID": "service-target-web",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-web-current",
+        "ServiceID": "service-target-web",
+        "DesiredState": "shutdown",
+        "Status": { "State": "shutdown", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-worker-current",
+        "ServiceID": "service-target-worker",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-scheduler-current",
+        "ServiceID": "service-target-scheduler",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-web-history",
+        "ServiceID": "service-target-web",
+        "DesiredState": "shutdown",
+        "NodeID": "node-primary",
+        "Status": {
+          "State": "shutdown",
+          "ContainerStatus": { "ContainerID": "container-target-web-history" }
+        }
+      }
+    ]
+  },
+  "materialized-active-node": {
+    "extends": "materialized-safe",
+    "nodes": [
+      {
+        "ID": "node-secondary",
+        "Spec": { "Availability": "active" },
+        "Status": { "State": "ready" }
+      }
+    ]
+  },
+  "materialized-drained-node": {
+    "extends": "materialized-safe",
+    "nodes": [
+      {
+        "ID": "node-secondary",
+        "Spec": { "Availability": "drain" },
+        "Status": { "State": "ready" }
+      }
+    ]
+  },
+  "materialized-missing-current-role": {
+    "extends": "materialized-safe",
+    "replaceTasks": [
+      {
+        "ID": "task-target-web-current",
+        "ServiceID": "service-target-web",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-worker-current",
+        "ServiceID": "service-target-worker",
+        "DesiredState": "running",
+        "Status": { "State": "pending", "ContainerStatus": {} }
+      },
+      {
+        "ID": "task-target-web-history",
+        "ServiceID": "service-target-web",
+        "DesiredState": "shutdown",
+        "NodeID": "node-primary",
+        "Status": { "State": "shutdown", "ContainerStatus": {} }
+      }
+    ]
+  },
+  "materialized-no-tasks": {
+    "extends": "materialized-safe",
+    "replaceTasks": []
+  },
+  "materialized-missing-writer-service": {
+    "extends": "materialized-safe",
+    "replaceServices": [
+      {
+        "ID": "service-target-web",
+        "Spec": {
+          "Name": "beaconhs_web",
+          "Labels": { "com.docker.stack.namespace": "beaconhs" },
+          "TaskTemplate": {
+            "ContainerSpec": {
+              "Image": "ghcr.io/braedonsaunders/beaconhs@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "Env": ["APP_ROLE=web"]
+            }
+          }
+        }
+      },
+      {
+        "ID": "service-target-worker",
+        "Spec": {
+          "Name": "beaconhs_worker",
+          "Labels": { "com.docker.stack.namespace": "beaconhs" },
+          "TaskTemplate": {
+            "ContainerSpec": {
+              "Image": "ghcr.io/braedonsaunders/beaconhs@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "Env": ["APP_ROLE=worker"]
+            }
+          }
+        }
+      },
+      {
+        "ID": "service-unrelated",
+        "Spec": {
+          "Name": "other_stack_cache",
+          "Labels": { "com.docker.stack.namespace": "other_stack" },
+          "TaskTemplate": {
+            "ContainerSpec": { "Image": "redis:8-alpine", "Env": [] }
+          }
+        }
+      }
+    ]
+  },
   "external-migrator": {
     "extends": "safe",
     "services": [

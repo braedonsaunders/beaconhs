@@ -19,6 +19,20 @@ case "${BEACONHS_CUTOVER_WRITERS_DRAINED:-false}" in
     ;;
 esac
 
+case "${BEACONHS_CUTOVER_MATERIALIZED_PENDING_WRITERS:-false}" in
+  true) materialized_pending_writers=true ;;
+  false) materialized_pending_writers=false ;;
+  *)
+    echo '::error::BEACONHS_CUTOVER_MATERIALIZED_PENDING_WRITERS must be exactly true or false' >&2
+    exit 1
+    ;;
+esac
+
+if [ "$materialized_pending_writers" = true ] && [ "$writers_drained" != true ]; then
+  echo '::error::Materialized pending writers are valid only after target writers have been drained' >&2
+  exit 1
+fi
+
 fail() {
   echo "::error::$*" >&2
   exit 1
@@ -291,8 +305,74 @@ report_service_violations() {
   fi
 }
 
+select_writer_services() {
+  jq -c --arg stack "$DOKPLOY_TARGET_STACK" '
+    [.[]
+      | select(((.Spec.Labels // {})["com.docker.stack.namespace"] // "") == $stack)
+      | .Spec.Name as $name
+      | select([$stack+"_web", $stack+"_worker", $stack+"_scheduler"]
+          | index($name) != null)
+      | {
+          id: .ID,
+          name: $name,
+          role: (if $name == ($stack+"_web") then "web"
+            elif $name == ($stack+"_worker") then "worker"
+            else "scheduler"
+            end)
+        }]'
+}
+
+materialized_writer_services_are_canonical() {
+  jq -e --arg stack "$DOKPLOY_TARGET_STACK" '
+    length == 3
+      and ([.[].id] | all(.[]; type == "string" and length > 0))
+      and ([.[].id] | length == (unique | length))
+      and ([.[].name] | sort)
+        == ([$stack+"_scheduler", $stack+"_web", $stack+"_worker"] | sort)
+      and ([.[].role] | sort) == ["scheduler", "web", "worker"]' \
+    >/dev/null
+}
+
+materialized_writer_tasks_are_safe() {
+  local writer_services_json
+  writer_services_json="$1"
+  jq -e --argjson writers "$writer_services_json" '
+    def terminal:
+      (.Status.State // "") as $state
+      | ($state == "complete" or $state == "shutdown"
+        or $state == "failed" or $state == "rejected"
+        or $state == "remove" or $state == "orphaned");
+    . as $tasks
+    | type == "array"
+      and ([.[].ID] | all(.[]; type == "string" and length > 0))
+      and ([.[].ID] | length == (unique | length))
+      and all($tasks[];
+        .ServiceID as $service_id
+        | any($writers[]; .id == $service_id))
+      and all($writers[];
+        . as $writer
+        | [$tasks[]
+            | select(.ServiceID == $writer.id
+              and (.DesiredState // "") == "running")] as $current
+        | ($current | length) == 1
+          and ($current[0].Status.State // "") == "pending"
+          and ($current[0].NodeID // "") == ""
+          and ($current[0].Status.ContainerStatus.ContainerID // "") == ""
+          and ([$tasks[]
+            | select(.ServiceID == $writer.id
+              and .ID != $current[0].ID)]
+            | all(.[]; terminal)))' \
+    >/dev/null
+}
+
 verify_healthy_swarm_topology
 initial_topology="$verified_topology"
+if [ "$materialized_pending_writers" = true ] \
+  && ! jq -e 'all(.[];
+      .availability == "pause" or .availability == "drain")' \
+    <<<"$initial_topology" >/dev/null; then
+  fail 'Materialized pending writers require every Swarm node to remain unavailable for scheduling'
+fi
 
 services="$(read_services)"
 report_service_violations "$services"
@@ -340,13 +420,15 @@ if [ "$writers_drained" = true ]; then
   # restarted during the cutover cannot hide behind its Swarm service identity.
   target_task_container_ids='[]'
 
-  writer_service_ids="$(jq -r --arg stack "$DOKPLOY_TARGET_STACK" '
-    .[]
-    | select(((.Spec.Labels // {})["com.docker.stack.namespace"] // "") == $stack)
-    | .Spec.Name as $name
-    | select([$stack+"_web", $stack+"_worker", $stack+"_scheduler"]
-        | index($name) != null)
-    | .ID' <<<"$services")"
+  writer_services="$(select_writer_services <<<"$services")" \
+    || fail 'Unable to identify target writer services'
+
+  if [ "$materialized_pending_writers" = true ] \
+    && ! materialized_writer_services_are_canonical <<<"$writer_services"; then
+    fail 'Materialized pending-writer phase requires exactly the canonical web, worker, and scheduler services'
+  fi
+
+  writer_service_ids="$(jq -r '.[].id' <<<"$writer_services")"
   if [ -n "$writer_service_ids" ]; then
     mapfile -t writer_service_id_list <<<"$writer_service_ids"
     writer_task_ids="$(docker service ps -q --no-trunc "${writer_service_id_list[@]}")" \
@@ -355,7 +437,14 @@ if [ "$writers_drained" = true ]; then
       mapfile -t writer_task_id_list <<<"$writer_task_ids"
       writer_tasks="$(docker inspect "${writer_task_id_list[@]}")" \
         || fail 'Unable to inspect drained writer tasks across the Swarm'
-      if ! jq -e '
+      if [ "$materialized_pending_writers" = true ]; then
+        if ! materialized_writer_tasks_are_safe "$writer_services" \
+          <<<"$writer_tasks"; then
+          fail 'Materialized target writers must be exactly one unassigned, containerless Pending task per role with only terminal history'
+        fi
+        materialized_writer_task_ids="$(jq -cS '[.[].ID] | sort' \
+          <<<"$writer_tasks")"
+      elif ! jq -e '
           type == "array"
             and all(.[];
               (.Status.State // "") as $state
@@ -365,7 +454,11 @@ if [ "$writers_drained" = true ]; then
           <<<"$writer_tasks" >/dev/null; then
         fail 'A target writer task remains nonterminal somewhere in the Swarm after writer drain'
       fi
+    elif [ "$materialized_pending_writers" = true ]; then
+      fail 'Materialized target writers must be exactly one unassigned, containerless Pending task per role with only terminal history'
     fi
+  elif [ "$materialized_pending_writers" = true ]; then
+    fail 'Materialized pending-writer phase requires exactly the canonical web, worker, and scheduler services'
   fi
 else
   target_task_container_ids="$(jq -c '
@@ -416,6 +509,36 @@ fi
 verify_healthy_swarm_topology
 if [ "$verified_topology" != "$initial_topology" ]; then
   fail 'The Swarm topology changed during the cutover-isolation check'
+fi
+
+if [ "$materialized_pending_writers" = true ]; then
+  writer_services_after="$(select_writer_services <<<"$services_after")" \
+    || fail 'Unable to re-identify target writer services'
+  if ! materialized_writer_services_are_canonical <<<"$writer_services_after" \
+    || [ "$(jq -cS 'sort_by(.id)' <<<"$writer_services_after")" \
+      != "$(jq -cS 'sort_by(.id)' <<<"$writer_services")" ]; then
+    fail 'The canonical target writer service set changed during the cutover-isolation check'
+  fi
+
+  writer_service_ids_after="$(jq -r '.[].id' <<<"$writer_services_after")"
+  mapfile -t writer_service_id_list_after <<<"$writer_service_ids_after"
+  writer_task_ids_after="$(docker service ps -q --no-trunc \
+    "${writer_service_id_list_after[@]}")" \
+    || fail 'Unable to re-enumerate materialized writer tasks across the Swarm'
+  if [ -z "$writer_task_ids_after" ]; then
+    fail 'Materialized target writer tasks disappeared during the cutover-isolation check'
+  fi
+  mapfile -t writer_task_id_list_after <<<"$writer_task_ids_after"
+  writer_tasks_after="$(docker inspect "${writer_task_id_list_after[@]}")" \
+    || fail 'Unable to re-inspect materialized writer tasks across the Swarm'
+  if [ "$(jq -cS '[.[].ID] | sort' <<<"$writer_tasks_after")" \
+    != "$materialized_writer_task_ids" ]; then
+    fail 'The materialized target writer task set changed during the cutover-isolation check'
+  fi
+  if ! materialized_writer_tasks_are_safe "$writer_services_after" \
+    <<<"$writer_tasks_after"; then
+    fail 'Materialized target writer task state changed during the cutover-isolation check'
+  fi
 fi
 
 if [ "$writers_drained" = true ]; then

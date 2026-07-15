@@ -224,6 +224,42 @@ describe('dev deployment cutover order', () => {
     expect(releaseStep).not.toContain('docker node update --availability active')
   })
 
+  it('allows only explicitly materialized, scheduler-fenced Pending writers before release', () => {
+    const deployStepStart = requiredPosition(
+      workflow,
+      '- name: Redeploy reconciled compose on Dokploy',
+    )
+    const releaseStepStart = requiredPosition(
+      workflow,
+      '- name: Verify exact deployment specs and resume Swarm scheduling',
+    )
+    const convergenceStepStart = requiredPosition(
+      workflow,
+      '- name: Wait for Swarm convergence and external readiness',
+    )
+    const deployStep = workflow.slice(deployStepStart, releaseStepStart)
+    const releaseStep = workflow.slice(releaseStepStart, convergenceStepStart)
+    const pendingProof = requiredPosition(
+      releaseStep,
+      'BEACONHS_CUTOVER_MATERIALIZED_PENDING_WRITERS=true',
+    )
+    const exactPendingWait = requiredPosition(releaseStep, "grep -Eq '^Pending '")
+    const release = requiredPosition(
+      releaseStep,
+      'scripts/cluster/release-swarm-scheduling-fence.sh',
+    )
+
+    expect(deployStep).not.toContain('BEACONHS_CUTOVER_MATERIALIZED_PENDING_WRITERS')
+    expect(deployStep.trimEnd()).toMatch(
+      /assert_final_compose_state\n\s+scripts\/cluster\/assert-swarm-scheduling-paused\.sh\n\s+echo/u,
+    )
+    expect(exactPendingWait).toBeLessThan(pendingProof)
+    expect(pendingProof).toBeLessThan(release)
+    expect(releaseStep.match(/BEACONHS_CUTOVER_MATERIALIZED_PENDING_WRITERS=true/gu)).toHaveLength(
+      1,
+    )
+  })
+
   it('derives the unpooled maintenance URL without changing its database identity', () => {
     const result = spawnSync(process.execPath, [directDatabaseUrlScript], {
       encoding: 'utf8',
