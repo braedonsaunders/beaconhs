@@ -166,6 +166,7 @@ function RecipientsEditor({
   options: RecipientOptions
 }) {
   const tGenerated = useGeneratedTranslations()
+  const tGeneratedValue = useGeneratedValueTranslations()
   const rows = to.length > 0 ? to : [{ type: 'submitter' } as EmailTarget]
   const update = (i: number, t: EmailTarget) => onChange(rows.map((x, j) => (j === i ? t : x)))
   const peopleOpts = options.people.map((p) => ({ value: p.id, label: p.name }))
@@ -325,8 +326,12 @@ function RecipientsEditor({
                             })
                           }
                         >
-                          <option value="person">{'A specific person'}</option>
-                          <option value="literal">{'Specific email address(es)'}</option>
+                          <option value="person">
+                            <GeneratedValue value="A specific person" />
+                          </option>
+                          <option value="literal">
+                            <GeneratedValue value="Specific email address(es)" />
+                          </option>
                         </Select>
                         {t.recipient.type === 'person' ? (
                           <SearchSelect
@@ -342,7 +347,7 @@ function RecipientsEditor({
                           <Input
                             value={t.recipient.email}
                             disabled={readOnly}
-                            placeholder="name@example.com"
+                            placeholder={tGeneratedValue('name@example.com')}
                             onChange={(event) =>
                               update(i, {
                                 ...t,

@@ -13,8 +13,10 @@ import {
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { useRegulatoryTerminology } from '@/components/regulatory-terminology'
 
 type InjuryTypeEditing = {
   id: string
@@ -81,6 +83,8 @@ function InjuryTypeForm({
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
+  const regulatory = useRegulatoryTerminology()
+  const regulatoryT = useTranslations('Regulatory')
   const [name, setName] = useState(editing?.name ?? '')
   const [oshaCode, setOshaCode] = useState(editing?.oshaCode ?? '')
   const [description, setDescription] = useState(editing?.description ?? '')
@@ -129,7 +133,11 @@ function InjuryTypeForm({
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="it-osha">
-          <GeneratedText id="m_1321e20f44dd66" />
+          <GeneratedValue
+            value={regulatoryT('legislationCode', {
+              abbreviation: regulatory.legislationAbbreviation,
+            })}
+          />
         </Label>
         <Input
           id="it-osha"

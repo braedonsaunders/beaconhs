@@ -14,7 +14,7 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
-import type { RequestContext } from '@beaconhs/tenant'
+import { getRegulatoryTerminology, type RequestContext } from '@beaconhs/tenant'
 import { formatDateTime } from '@/lib/datetime'
 import { recordAudit } from '@/lib/audit'
 
@@ -23,6 +23,7 @@ export async function sendIncidentEmail(
   incidentId: string,
   options?: { recipients?: string[]; subjectPrefix?: string; messageOverride?: string },
 ): Promise<{ recipientCount: number } | null> {
+  const regulatory = getRegulatoryTerminology(ctx)
   const data = await ctx.db(async (tx) => {
     const [inc] = await tx
       .select({
@@ -133,7 +134,7 @@ export async function sendIncidentEmail(
     `  First aid: ${yn(data.i.firstAidGiven)}`,
     `  Medical attention: ${yn(data.i.medicalAttentionReceived)}`,
     `  Hospital: ${data.i.hospitalName ?? '—'}`,
-    `  MOL notified: ${yn(data.i.ministryOfLabourNotified)}${data.i.molReportNumber ? ` (${data.i.molReportNumber})` : ''}`,
+    `  ${regulatory.authorityAbbreviation} notified: ${yn(data.i.ministryOfLabourNotified)}${data.i.molReportNumber ? ` (${data.i.molReportNumber})` : ''}`,
     `  Police notified: ${yn(data.i.policeNotified)}${data.i.policeReportNumber ? ` (${data.i.policeReportNumber})` : ''}`,
     `  Insurance claim: ${data.i.insuranceClaimNumber ?? '—'}`,
     ``,
@@ -198,7 +199,7 @@ export async function sendIncidentEmail(
             <td>${yn(data.i.medicalAttentionReceived)}</td></tr>
         <tr><td style="padding:2px 12px 2px 0;color:#64748b;">Hospital</td>
             <td>${escapeHtml(data.i.hospitalName ?? '—')}</td></tr>
-        <tr><td style="padding:2px 12px 2px 0;color:#64748b;">MOL notified</td>
+        <tr><td style="padding:2px 12px 2px 0;color:#64748b;">${escapeHtml(regulatory.authorityAbbreviation)} notified</td>
             <td>${yn(data.i.ministryOfLabourNotified)}${
               data.i.molReportNumber ? ` (${escapeHtml(data.i.molReportNumber)})` : ''
             }</td></tr>

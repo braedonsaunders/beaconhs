@@ -83,6 +83,10 @@ If you manage training, class changes can send emails on their own — for examp
 4. Choose **Preview PDF** to check the current design with sample data.
 5. Choose **Save designs**. BeaconHS checks names, colours, dimensions, fields, links, and design size before saving. If it finds a problem, it shows the exact design, artboard, or element to fix and leaves the saved designs unchanged.
 
+For a CR80 design, open **Print** and choose **cardPresso Web Print Server**. After the platform administrator connects cardPresso XXL WPS, each issued wallet card shows **Print with cardPresso** beside **Open PDF**. BeaconHS renders the saved front and back at 300 DPI, sends them to the configured cardPresso card and printer, confirms the accepted job, and records it in the audit log. The cardPresso .card file must contain the configured full-card front and back image items.
+
+The same wallet-card templates render both BeaconHS course completions and externally issued skill or certification records. External qualifications appear in **My Workspace → Wallet** with their issuing authority and verification link.
+
 ## Review skill authorities and holders (managers)
 
 Open **Training** → **Authorities** and choose an authority. On **Skill types**, search by name, code, or description and use **Next** or **Prev** to move through the list. Open a skill type and choose **Holders** to search people or filter the list by **Valid**, **Expiring**, **Expired**, or **No expiry**.
@@ -448,6 +452,7 @@ Open the **Versions** tab. Every published version keeps its own PDF and Word fi
 - **PDF** — read or print that exact version.
 - **DOCX** — download the Word snapshot.
 - **Open read-only** — view the old version in the editor without changing anything.
+- **View changes** — compare the extracted text with the preceding version. Added and removed lines include their old and new line numbers, and long comparisons are paged. For native Writer redlines, use **Open read-only**; tracked changes and comments remain inside that version's Word file.
 
 Use **Search versions or changes**, **Status**, and **Order** to work through a long version history. The **Reviews**, **Compliance**, and **Activity** tabs have the same search, relevant filters, and **Next** / **Prev** paging, so older records stay available instead of disappearing from the page.
 

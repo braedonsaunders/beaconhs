@@ -268,7 +268,7 @@ const INCIDENT = wrap(
     heading('Medical & regulatory') +
     grid([
       pIf('critical_injury', 'Critical injury', 'Yes'),
-      pIf('ministry_of_labour_notified', 'Ministry of Labour notified', 'Yes'),
+      pIf('ministry_of_labour_notified', '{{regulatory_authority_name}} notified', 'Yes'),
       pIf('ems_notified', 'EMS notified', 'Yes'),
       pIf('externally_reportable', 'Externally reportable', 'Yes'),
       pIf('first_aid_received', 'First aid received', 'Yes — provider: {{first_aid_provider}}'),

@@ -16,10 +16,12 @@ import {
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { RemoteMultiSelect } from '@/components/remote-multi-select'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
+import { useRegulatoryTerminology } from '@/components/regulatory-terminology'
 
 // Body parts remain descriptive free text; injury types are managed taxonomy
 // assignments and never pass through this comma-list helper.
@@ -239,6 +241,8 @@ export function InjuryDrawer({
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
+  const regulatory = useRegulatoryTerminology()
+  const regulatoryT = useTranslations('Regulatory')
   const router = useRouter()
   const [personId, setPersonId] = useState(defaults?.personId ?? '')
   const [personName, setPersonName] = useState(defaults?.personName ?? '')
@@ -367,7 +371,9 @@ export function InjuryDrawer({
             value={selectedTypes}
             onChange={setSelectedTypes}
             placeholder={tGenerated('m_080311834cbd3f')}
-            searchPlaceholder={tGenerated('m_1870ae271f2c89')}
+            searchPlaceholder={regulatoryT('injuryTypeSearch', {
+              abbreviation: regulatory.legislationAbbreviation,
+            })}
             sheetTitle="Add injury type"
             ariaLabel="Add injury type"
             emptyLabel={tGenerated('m_1de81608882780')}

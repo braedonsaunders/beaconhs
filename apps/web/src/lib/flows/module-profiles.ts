@@ -194,7 +194,24 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'classification_labels', label: 'Classification', kind: 'text' },
       // Medical / regulatory flags (booleans — use {{#if …}} to gate sections).
       { key: 'critical_injury', label: 'Critical injury', kind: 'bool' },
-      { key: 'ministry_of_labour_notified', label: 'Ministry of Labour notified', kind: 'bool' },
+      { key: 'regulatory_authority_name', label: 'Regulatory authority name', kind: 'text' },
+      {
+        key: 'regulatory_authority_abbreviation',
+        label: 'Regulatory authority abbreviation',
+        kind: 'text',
+      },
+      { key: 'regulatory_legislation_name', label: 'Regulatory legislation name', kind: 'text' },
+      {
+        key: 'regulatory_legislation_abbreviation',
+        label: 'Regulatory legislation abbreviation',
+        kind: 'text',
+      },
+      {
+        key: 'other_applicable_legislation',
+        label: 'Other applicable legislation',
+        kind: 'text',
+      },
+      { key: 'ministry_of_labour_notified', label: 'Regulatory authority notified', kind: 'bool' },
       { key: 'ems_notified', label: 'EMS notified', kind: 'bool' },
       { key: 'first_aid_received', label: 'First aid received', kind: 'bool' },
       { key: 'first_aid_provider', label: 'First aid provider', kind: 'text' },

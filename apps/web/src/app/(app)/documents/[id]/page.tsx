@@ -1164,6 +1164,18 @@ export default async function DocumentDetailPage({
                                             ) : null
                                           }
                                         />
+                                        <GeneratedValue
+                                          value={
+                                            v.textContent !== null ? (
+                                              <Link
+                                                href={`${basePath}/versions/${v.id}/changes`}
+                                                className="text-teal-700 hover:underline dark:text-teal-300"
+                                              >
+                                                <GeneratedValue value="View changes" />
+                                              </Link>
+                                            ) : null
+                                          }
+                                        />
                                       </div>
                                     </li>
                                   ))}

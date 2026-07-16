@@ -12,11 +12,7 @@ import {
   trainingSkillCertificates,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
-import {
-  renderCertificatePagePdf,
-  renderDesignDocumentPdf,
-  renderWalletCardPdf,
-} from '@beaconhs/forms-pdf'
+import { renderDesignDocumentPdf, renderDesignDocumentPngs } from '@beaconhs/forms-pdf'
 import { presignGet, resolveTenantLogoUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { appBaseUrl } from '@/lib/app-base-url'
@@ -60,34 +56,18 @@ async function photoUrlForPerson(ctx: RequestContext, photoAttachmentId: string 
 
 type CredentialOutput = Parameters<typeof credentialOutputPdfFormat>[0]
 type DesignDocumentData = Parameters<typeof renderDesignDocumentPdf>[0]['data']
-type CertificatePageInput = Parameters<typeof renderCertificatePagePdf>[0]
-type WalletCardInput = Parameters<typeof renderWalletCardPdf>[0]
 
-async function renderCredentialOutputPdf(args: {
+type PreparedCredential = {
   output: CredentialOutput
   documentData: DesignDocumentData
-  certificateInput: CertificatePageInput
-  walletInput: WalletCardInput
-}): Promise<{ bytes: Buffer; pdfFormat: 'cert' | 'wallet' }> {
-  const pdfFormat = credentialOutputPdfFormat(args.output)
-  const bytes =
-    args.output.document != null
-      ? await renderDesignDocumentPdf({
-          document: args.output.document,
-          data: args.documentData,
-          title: args.output.name,
-        })
-      : pdfFormat === 'wallet'
-        ? await renderWalletCardPdf(args.walletInput)
-        : await renderCertificatePagePdf(args.certificateInput)
-  return { bytes, pdfFormat }
+  filename: string
 }
 
-export async function renderTrainingCredentialPdf(
+async function prepareTrainingCredential(
   ctx: RequestContext,
   certificateId: string,
   request: CredentialOutputRequest,
-): Promise<RenderedCredentialPdf | null> {
+): Promise<PreparedCredential | null> {
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
@@ -118,40 +98,11 @@ export async function renderTrainingCredentialPdf(
   const fullName = `${person.firstName} ${person.lastName}`
   // Honor the course's pinned Card Studio designs; fall back to tenant defaults.
   const output = resolveCourseCredentialOutput(course.metadata, tenant.settings, request)
-  const certificateInput = {
-    tenantName: tenant.name,
-    tenantLogoUrl: tenantLogoUrl ?? undefined,
-    primaryColor: tenant.branding.primaryColor,
-    design: output,
-    variant: 'completion',
-    recipient: { fullName, employeeNo: person.employeeNo },
-    credential: { code: course.code, name: course.name },
-    completedOn: record.completedOn,
-    expiresOn: record.expiresOn,
-    instructor: record.instructor,
-    grade: record.grade,
-    verifyUrl,
-    verifyToken: cert.verifyToken,
-    qrDataUrl,
-    certificateId: cert.id,
-    generatedAt: new Date(),
-  } as const
-  const walletInput = {
-    tenantName: tenant.name,
-    tenantLogoUrl: tenantLogoUrl ?? undefined,
-    primaryColor: tenant.branding.primaryColor,
-    design: output,
-    variant: 'completion',
-    recipient: { fullName, employeeNo: person.employeeNo, photoUrl },
-    credential: { code: course.code, name: course.name },
-    completedOn: record.completedOn,
-    expiresOn: record.expiresOn,
-    verifyUrl,
-    verifyToken: cert.verifyToken,
-    qrDataUrl,
-    cardId: cert.id,
-  } as const
-  const { bytes, pdfFormat } = await renderCredentialOutputPdf({
+  const pdfFormat = credentialOutputPdfFormat(output)
+  const coursePart = safeName(course.code, 'course')
+  const personPart = safeName(person.lastName, 'person')
+  const outputPart = safeName(output.name, pdfFormat === 'wallet' ? 'wallet' : 'certificate')
+  return {
     output,
     documentData: {
       tenantName: tenant.name,
@@ -170,24 +121,15 @@ export async function renderTrainingCredentialPdf(
       qrDataUrl,
       issuedAt: cert.createdAt,
     },
-    certificateInput,
-    walletInput,
-  })
-
-  const coursePart = safeName(course.code, 'course')
-  const personPart = safeName(person.lastName, 'person')
-  const outputPart = safeName(output.name, pdfFormat === 'wallet' ? 'wallet' : 'certificate')
-  return {
-    bytes,
     filename: `${outputPart}-${coursePart}-${personPart}.pdf`,
   }
 }
 
-export async function renderSkillCredentialPdf(
+async function prepareSkillCredential(
   ctx: RequestContext,
   certificateId: string,
   request: CredentialOutputRequest,
-): Promise<RenderedCredentialPdf | null> {
+): Promise<PreparedCredential | null> {
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
@@ -228,40 +170,11 @@ export async function renderSkillCredentialPdf(
   const qrDataUrl = await makeVerifyQr(verifyUrl)
   const fullName = `${person.firstName} ${person.lastName}`
   const output = resolveCredentialOutput(tenant.settings, request)
-  const certificateInput = {
-    tenantName: tenant.name,
-    tenantLogoUrl: tenantLogoUrl ?? undefined,
-    primaryColor: tenant.branding.primaryColor,
-    design: output,
-    variant: 'qualification',
-    recipient: { fullName, employeeNo: person.employeeNo },
-    credential: { code: skillType.code, name: skillType.name },
-    authorityName: authority.name,
-    completedOn: assignment.grantedOn,
-    expiresOn: assignment.expiresOn,
-    verifyUrl,
-    verifyToken: cert.verifyToken,
-    qrDataUrl,
-    certificateId: cert.id,
-    generatedAt: new Date(),
-  } as const
-  const walletInput = {
-    tenantName: tenant.name,
-    tenantLogoUrl: tenantLogoUrl ?? undefined,
-    primaryColor: tenant.branding.primaryColor,
-    design: output,
-    variant: 'qualification',
-    recipient: { fullName, employeeNo: person.employeeNo, photoUrl },
-    credential: { code: skillType.code, name: skillType.name },
-    authorityName: authority.name,
-    completedOn: assignment.grantedOn,
-    expiresOn: assignment.expiresOn,
-    verifyUrl,
-    verifyToken: cert.verifyToken,
-    qrDataUrl,
-    cardId: cert.id,
-  } as const
-  const { bytes, pdfFormat } = await renderCredentialOutputPdf({
+  const pdfFormat = credentialOutputPdfFormat(output)
+  const skillPart = safeName(skillType.code || skillType.name, 'skill')
+  const personPart = safeName(person.lastName, 'person')
+  const outputPart = safeName(output.name, pdfFormat === 'wallet' ? 'wallet' : 'certificate')
+  return {
     output,
     documentData: {
       tenantName: tenant.name,
@@ -279,17 +192,70 @@ export async function renderSkillCredentialPdf(
       qrDataUrl,
       issuedAt: cert.createdAt,
     },
-    certificateInput,
-    walletInput,
-  })
-
-  const skillPart = safeName(skillType.code || skillType.name, 'skill')
-  const personPart = safeName(person.lastName, 'person')
-  const outputPart = safeName(output.name, pdfFormat === 'wallet' ? 'wallet' : 'certificate')
-  return {
-    bytes,
     filename: `skill-${outputPart}-${skillPart}-${personPart}.pdf`,
   }
+}
+
+async function renderPreparedCredentialPdf(
+  prepared: PreparedCredential | null,
+): Promise<RenderedCredentialPdf | null> {
+  if (!prepared?.output.document) return null
+  const bytes = await renderDesignDocumentPdf({
+    document: prepared.output.document,
+    data: prepared.documentData,
+    title: prepared.output.name,
+  })
+  return { bytes, filename: prepared.filename }
+}
+
+async function renderPreparedCredentialPngs(
+  prepared: PreparedCredential | null,
+): Promise<Buffer[] | null> {
+  if (
+    !prepared?.output.document ||
+    prepared.output.format !== 'wallet' ||
+    !prepared.output.document.artboards.some(
+      (artboard) => artboard.printProfile?.provider === 'cardpresso-wps',
+    )
+  )
+    return null
+  return renderDesignDocumentPngs({
+    document: prepared.output.document,
+    data: prepared.documentData,
+    dpi: 300,
+  })
+}
+
+export async function renderTrainingCredentialPdf(
+  ctx: RequestContext,
+  certificateId: string,
+  request: CredentialOutputRequest,
+): Promise<RenderedCredentialPdf | null> {
+  return renderPreparedCredentialPdf(await prepareTrainingCredential(ctx, certificateId, request))
+}
+
+export async function renderSkillCredentialPdf(
+  ctx: RequestContext,
+  certificateId: string,
+  request: CredentialOutputRequest,
+): Promise<RenderedCredentialPdf | null> {
+  return renderPreparedCredentialPdf(await prepareSkillCredential(ctx, certificateId, request))
+}
+
+export async function renderTrainingCredentialPngs(
+  ctx: RequestContext,
+  certificateId: string,
+  request: CredentialOutputRequest,
+): Promise<Buffer[] | null> {
+  return renderPreparedCredentialPngs(await prepareTrainingCredential(ctx, certificateId, request))
+}
+
+export async function renderSkillCredentialPngs(
+  ctx: RequestContext,
+  certificateId: string,
+  request: CredentialOutputRequest,
+): Promise<Buffer[] | null> {
+  return renderPreparedCredentialPngs(await prepareSkillCredential(ctx, certificateId, request))
 }
 
 export function pdfResponse(rendered: RenderedCredentialPdf): Response {

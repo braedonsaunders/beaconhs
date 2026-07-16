@@ -241,7 +241,7 @@ function validatePrintProfile(value: unknown, path: string): void {
   exactKeys(profile, ['provider', 'media', 'duplex', 'edgeToEdge', 'orientation'], path)
   enumValue(
     profile.provider,
-    ['browser-pdf', 'zebra-browser-print', 'evolis-sdk', 'hid-fargo-sdk'],
+    ['browser-pdf', 'cardpresso-wps', 'zebra-browser-print', 'evolis-sdk', 'hid-fargo-sdk'],
     `${path} provider`,
   )
   enumValue(profile.media, ['letter', 'cr80', 'custom'], `${path} media`)

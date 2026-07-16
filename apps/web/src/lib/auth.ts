@@ -18,6 +18,7 @@ import {
   assertCan,
   assertNotImpersonating,
   makeTenantContext,
+  resolveRegulatoryTerminology,
   type RequestContext,
 } from '@beaconhs/tenant'
 import { actorMayImpersonate, resolveMembershipPerms } from './impersonation'
@@ -230,6 +231,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
         isSuperAdmin: true,
         timezone: u.timezone,
         ...localeContext(tenant, m?.localeOverride),
+        regulatory: resolveRegulatoryTerminology(tenant.settings),
         membership: m ? { id: m.id, displayName: m.displayName ?? u.name } : null,
         personId: await resolvePersonId(tx as unknown as Database, userId, tenant.id),
         permissions,
@@ -281,6 +283,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
       isSuperAdmin: false,
       timezone: u.timezone,
       ...localeContext(active.tenant, active.membership.localeOverride),
+      regulatory: resolveRegulatoryTerminology(active.tenant.settings),
       membership: {
         id: active.membership.id,
         displayName: active.membership.displayName ?? u.name,
@@ -325,6 +328,7 @@ async function resolveImpersonation(
       id: tenants.id,
       defaultLanguage: tenants.defaultLanguage,
       enabledLanguages: tenants.enabledLanguages,
+      settings: tenants.settings,
     })
     .from(tenants)
     .where(activeTenantPredicate(s.tenantId))
@@ -365,6 +369,7 @@ async function resolveImpersonation(
     isSuperAdmin: false,
     timezone: target.timezone,
     ...localeContext(activeTenant, m.localeOverride),
+    regulatory: resolveRegulatoryTerminology(activeTenant.settings),
     membership: { id: m.id, displayName: m.displayName ?? target.name },
     personId: await resolvePersonId(tx, target.id, s.tenantId),
     permissions,

@@ -23,7 +23,7 @@ import {
   users,
 } from '@beaconhs/db/schema'
 import { presignGet } from '@beaconhs/storage'
-import type { RequestContext } from '@beaconhs/tenant'
+import { getRegulatoryTerminology, type RequestContext } from '@beaconhs/tenant'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { fmtDate, fmtDateTime, personName, titleize } from '../format'
@@ -33,6 +33,7 @@ export function createIncidentFlowAdapter(
   ctx: RequestContext,
   incidentId: string,
 ): FlowSubjectAdapter {
+  const regulatory = getRegulatoryTerminology(ctx)
   return {
     subjectType: 'module',
     subjectKey: 'incidents',
@@ -223,6 +224,11 @@ export function createIncidentFlowAdapter(
         // Medical / regulatory flags — raw booleans so templates can gate
         // sections with {{#if …}} (falsy = false, per the block engine).
         critical_injury: i.criticalInjury ?? false,
+        regulatory_authority_name: regulatory.authorityName,
+        regulatory_authority_abbreviation: regulatory.authorityAbbreviation,
+        regulatory_legislation_name: regulatory.legislationName,
+        regulatory_legislation_abbreviation: regulatory.legislationAbbreviation,
+        other_applicable_legislation: regulatory.otherApplicableLegislation,
         ministry_of_labour_notified: i.ministryOfLabourNotified ?? false,
         ems_notified: i.emsCalled ?? false,
         first_aid_received: i.firstAidGiven ?? false,

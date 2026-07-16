@@ -3,6 +3,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { randomUUID } from 'node:crypto'
+import { getTranslations } from 'next-intl/server'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
@@ -83,7 +84,7 @@ import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { nextReference } from '@/lib/reference'
-import { assertCan, can } from '@beaconhs/tenant'
+import { assertCan, can, getRegulatoryTerminology } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit, recordAuditInTransaction } from '@/lib/audit'
@@ -1331,6 +1332,7 @@ export default async function IncidentDetailPage({
 }) {
   const tGeneratedValue = await getGeneratedValueTranslations()
   const tGenerated = await getGeneratedTranslations()
+  const regulatoryT = await getTranslations('Regulatory')
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -1338,6 +1340,7 @@ export default async function IncidentDetailPage({
   const drawer = pickString(sp.drawer)
   const editId = pickString(sp.editId)
   const ctx = await requireRequestContext()
+  const regulatory = getRegulatoryTerminology(ctx)
   const pendingGates = await getPendingFlowGatesForSubject(
     ctx,
     'module',
@@ -1649,7 +1652,11 @@ export default async function IncidentDetailPage({
                     <GeneratedValue
                       value={
                         incident.ministryOfLabourNotified ? (
-                          <GeneratedText id="m_0ac35b49f43ba2" />
+                          <GeneratedValue
+                            value={regulatoryT('authorityWasNotified', {
+                              authority: regulatory.authorityName,
+                            })}
+                          />
                         ) : (
                           ''
                         )
@@ -2027,7 +2034,9 @@ export default async function IncidentDetailPage({
                 <LiveToggle
                   id={id}
                   field="ministryOfLabourNotified"
-                  label={tGenerated('m_0f55cca1ee4a56')}
+                  label={regulatoryT('authorityNotified', {
+                    authority: regulatory.authorityName,
+                  })}
                   initialValue={incident.ministryOfLabourNotified}
                   disabled={locked}
                   updateAction={updateTextField}
@@ -2202,11 +2211,13 @@ export default async function IncidentDetailPage({
               <GeneratedValue
                 value={
                   incident.ministryOfLabourNotified ? (
-                    <SubBlock title={tGenerated('m_095993560b800c')} tone="orange">
+                    <SubBlock title={regulatory.authorityName} tone="orange">
                       <LiveDateTime
                         id={id}
                         field="molNotifiedAt"
-                        label={tGenerated('m_028d14c41392b3')}
+                        label={regulatoryT('authorityNotifiedAt', {
+                          abbreviation: regulatory.authorityAbbreviation,
+                        })}
                         initialValue={
                           incident.molNotifiedAt ? toLocalDatetime(incident.molNotifiedAt) : ''
                         }
@@ -2216,7 +2227,9 @@ export default async function IncidentDetailPage({
                       <LiveField
                         id={id}
                         field="molReportNumber"
-                        label={tGenerated('m_0b210d9f15cb01')}
+                        label={regulatoryT('authorityReportNumber', {
+                          abbreviation: regulatory.authorityAbbreviation,
+                        })}
                         initialValue={incident.molReportNumber}
                         disabled={locked}
                         updateAction={updateTextField}

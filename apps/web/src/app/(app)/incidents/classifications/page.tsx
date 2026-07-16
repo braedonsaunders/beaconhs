@@ -1,4 +1,5 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+import { getTranslations } from 'next-intl/server'
 
 import {
   GeneratedText,
@@ -34,6 +35,7 @@ import {
 } from '@beaconhs/ui'
 import { incidentClassifications, incidents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { getRegulatoryTerminology } from '@beaconhs/tenant'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
@@ -301,6 +303,7 @@ export default async function ClassificationsPage({
 }) {
   const tGeneratedValue = await getGeneratedValueTranslations()
   const tGenerated = await getGeneratedTranslations()
+  const regulatoryT = await getTranslations('Regulatory')
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'taxonomy',
@@ -313,6 +316,7 @@ export default async function ClassificationsPage({
   const statusFilter =
     statusParam === 'active' || statusParam === 'archived' ? statusParam : undefined
   const ctx = await requireModuleManage('incidents')
+  const regulatory = getRegulatoryTerminology(ctx)
 
   const { rows, total, usageById, childCountById } = await ctx.db(async (tx) => {
     const parent = alias(incidentClassifications, 'incident_classification_parent')
@@ -409,7 +413,9 @@ export default async function ClassificationsPage({
         <>
           <PageHeader
             title={tGenerated('m_01ac1d8290d0a4')}
-            description={tGenerated('m_1b03f1af1622ea')}
+            description={regulatoryT('classificationDescription', {
+              abbreviation: regulatory.legislationAbbreviation,
+            })}
             actions={
               <Link href={newHref as any} scroll={false}>
                 <Button>

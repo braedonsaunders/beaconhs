@@ -11,7 +11,7 @@ import {
 //
 // Three-pane layout:
 //   - Left: field palette (categorized, with icons), section list + workflow step editor
-//   - Middle: canvas — sections and fields, drag-free reorder via arrows, click-to-select
+//   - Middle: canvas — sections and fields, palette drops, drag reorder, click-to-select
 //   - Right: properties panel for the current selection (form / section / field) with
 //            tabs for Basic / Validation / Logic / Default / Calc
 //
@@ -350,6 +350,7 @@ export function FormDesigner({
   // The element type currently being dragged from the left palette — read by the
   // canvas on drop. (HTML5 dataTransfer is also set, for the browser's drag UX.)
   const dragElementRef = useRef<FieldType | null>(null)
+  const [dropSectionId, setDropSectionId] = useState<string | null>(null)
   const [selection, setSelection] = useState<
     | { kind: 'form' }
     | { kind: 'section'; sectionId: string }
@@ -859,6 +860,10 @@ export function FormDesigner({
                           onDragType={(t) => {
                             dragElementRef.current = t
                           }}
+                          onDragEnd={() => {
+                            dragElementRef.current = null
+                            setDropSectionId(null)
+                          }}
                           onAdd={(t) => {
                             const targetSection =
                               selection.kind === 'section' || selection.kind === 'field'
@@ -1041,7 +1046,43 @@ export function FormDesigner({
                           return (
                             <Card
                               key={sec.id}
-                              className={`border ${active ? 'border-teal-500 ring-1 ring-teal-500' : 'border-slate-200 dark:border-slate-800'}`}
+                              onDragEnter={
+                                sec.canvas
+                                  ? undefined
+                                  : (event) => {
+                                      if (!dragElementRef.current) return
+                                      event.preventDefault()
+                                      setDropSectionId(sec.id)
+                                    }
+                              }
+                              onDragOver={
+                                sec.canvas
+                                  ? undefined
+                                  : (event) => {
+                                      if (!dragElementRef.current) return
+                                      event.preventDefault()
+                                      event.dataTransfer.dropEffect = 'copy'
+                                    }
+                              }
+                              onDrop={
+                                sec.canvas
+                                  ? undefined
+                                  : (event) => {
+                                      event.preventDefault()
+                                      event.stopPropagation()
+                                      const type = dragElementRef.current
+                                      dragElementRef.current = null
+                                      setDropSectionId(null)
+                                      if (type) addField(sec.id, type)
+                                    }
+                              }
+                              className={`border transition-colors ${
+                                dropSectionId === sec.id
+                                  ? 'border-teal-500 bg-teal-50/70 ring-2 ring-teal-500/40 dark:bg-teal-950/30'
+                                  : active
+                                    ? 'border-teal-500 ring-1 ring-teal-500'
+                                    : 'border-slate-200 dark:border-slate-800'
+                              }`}
                             >
                               <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                                 <button
@@ -1359,11 +1400,13 @@ function FieldPaletteGroup({
   group,
   onAdd,
   onDragType,
+  onDragEnd,
 }: {
   group: { label: string; types: FieldType[] }
   onAdd: (t: FieldType) => void
   // Set when a palette item starts dragging, so the canvas drop knows the type.
   onDragType?: (t: FieldType) => void
+  onDragEnd?: () => void
 }) {
   const tGenerated = useGeneratedTranslations()
   return (
@@ -1385,6 +1428,7 @@ function FieldPaletteGroup({
                   e.dataTransfer.setData('text/plain', t)
                   e.dataTransfer.effectAllowed = 'copy'
                 }}
+                onDragEnd={onDragEnd}
                 onClick={() => onAdd(t)}
                 className="flex cursor-grab items-center gap-2 rounded border border-slate-200 px-2 py-1 text-left text-xs hover:border-teal-500 hover:bg-teal-50 active:cursor-grabbing dark:border-slate-700 dark:hover:border-teal-600 dark:hover:bg-teal-950/40"
                 title={tGenerated('m_1b1fa20684f949')}

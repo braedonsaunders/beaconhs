@@ -1,4 +1,5 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+import { getTranslations } from 'next-intl/server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // /incidents/injury-types — flat CRUD over the tenant's injury-type taxonomy.
@@ -25,6 +26,7 @@ import {
 } from '@beaconhs/ui'
 import { incidentInjuryTypeAssignments, incidentInjuryTypes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { getRegulatoryTerminology } from '@beaconhs/tenant'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
@@ -170,6 +172,7 @@ export default async function InjuryTypesPage({
 }) {
   const tGeneratedValue = await getGeneratedValueTranslations()
   const tGenerated = await getGeneratedTranslations()
+  const regulatoryT = await getTranslations('Regulatory')
   const sp = await searchParams
   const params = parseListParams(sp, {
     sort: 'name',
@@ -182,6 +185,7 @@ export default async function InjuryTypesPage({
   const statusFilter =
     statusParam === 'active' || statusParam === 'archived' ? statusParam : undefined
   const ctx = await requireModuleManage('incidents')
+  const regulatory = getRegulatoryTerminology(ctx)
 
   const dir = params.dir === 'asc' ? asc : desc
   const orderBy =
@@ -251,7 +255,11 @@ export default async function InjuryTypesPage({
           />
           <IncidentsSubNav active="injury-types" />
           <TableToolbar>
-            <SearchInput placeholder={tGenerated('m_146d2788d2f568')} />
+            <SearchInput
+              placeholder={regulatoryT('injuryTypeAdminSearch', {
+                abbreviation: regulatory.legislationAbbreviation,
+              })}
+            />
             <FilterChips
               basePath={BASE}
               currentParams={sp}
@@ -297,7 +305,11 @@ export default async function InjuryTypesPage({
                     <GeneratedText id="m_02b18d5c7f6f2d" />
                   </SortableTh>
                   <SortableTh {...sortProps} column="osha" active={params.sort === 'osha'}>
-                    <GeneratedText id="m_1321e20f44dd66" />
+                    <GeneratedValue
+                      value={regulatoryT('legislationCode', {
+                        abbreviation: regulatory.legislationAbbreviation,
+                      })}
+                    />
                   </SortableTh>
                   <SortableTh {...sortProps} column="status" active={params.sort === 'status'}>
                     <GeneratedText id="m_0b9da892d6faf0" />

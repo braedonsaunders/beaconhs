@@ -54,6 +54,40 @@ export async function renderDesignDocumentPdf(input: {
   return printDesignHtmlPdf(html, input.document.artboards[0])
 }
 
+/** Render each design artboard as a full-bleed PNG for physical-card bridges. */
+export async function renderDesignDocumentPngs(input: {
+  document: DesignDocument
+  data: DesignDocumentData
+  dpi?: number
+}): Promise<Buffer[]> {
+  const dpi = Math.max(72, Math.min(600, Math.round(input.dpi ?? input.document.dpi ?? 300)))
+  const b = await browser()
+  const rendered: Buffer[] = []
+
+  for (const artboard of input.document.artboards) {
+    const page = await newPdfPage(b)
+    try {
+      const width = Math.max(1, Math.ceil(artboard.width * 96))
+      const height = Math.max(1, Math.ceil(artboard.height * 96))
+      await page.setViewport({ width, height, deviceScaleFactor: dpi / 96 })
+      const html = renderDesignDocumentHtml(input.document, input.data, {
+        artboardId: artboard.id,
+        title: input.document.name,
+      })
+      await setPdfContent(page, html, { waitForFonts: true })
+      const png = await page.screenshot({
+        type: 'png',
+        clip: { x: 0, y: 0, width, height },
+        captureBeyondViewport: false,
+      })
+      rendered.push(Buffer.from(png))
+    } finally {
+      await page.close()
+    }
+  }
+  return rendered
+}
+
 /**
  * N design documents printed back-to-back as ONE multi-page PDF — one page per
  * artboard, each rendered against its own data (bulk label runs). All pages

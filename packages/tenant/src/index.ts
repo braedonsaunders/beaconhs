@@ -8,6 +8,9 @@ import {
   userPermissionOverrides,
   type RoleScope,
 } from '@beaconhs/db/schema'
+import { DEFAULT_REGULATORY_TERMINOLOGY, type RegulatoryTerminology } from './regulatory'
+
+export * from './regulatory'
 
 /**
  * Resolved auth + tenant context for a request. Built by the web app's
@@ -46,6 +49,7 @@ export type RequestContext = {
   defaultLocale: AppLocale
   enabledLocales: readonly AppLocale[]
   localeOverride: AppLocale | null
+  regulatory?: RegulatoryTerminology
   // The active tenant_user membership (id, display name)
   membership: { id: string; displayName: string } | null
   // The active user's linked person record in this tenant, resolved once at
@@ -77,10 +81,11 @@ export type SuperAdminContext = {
 
 export function makeTenantContext(
   baseDb: Database,
-  args: Omit<RequestContext, 'db'>,
+  args: Omit<RequestContext, 'db' | 'regulatory'> & { regulatory?: RegulatoryTerminology },
 ): RequestContext {
   return {
     ...args,
+    regulatory: args.regulatory ?? DEFAULT_REGULATORY_TERMINOLOGY,
     db: <T>(fn: (tx: Database) => Promise<T>) => withTenant(baseDb, args.tenantId, fn),
   }
 }

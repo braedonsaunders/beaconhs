@@ -5,17 +5,20 @@ import { CreditCard, FileText, Settings } from 'lucide-react'
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@beaconhs/ui'
 import type { CredentialOutput } from '../lib/credential-designs'
 import { credentialFormatLabel, credentialOutputActions } from '../lib/credential-output-actions'
+import { CardPressoPrintButton } from './cardpresso-print-button'
 
 export function CredentialOutputsCard({
   outputs,
   endpoint,
   canDesign,
   unavailable = false,
+  cardPressoAvailable = false,
 }: {
   outputs: CredentialOutput[]
   endpoint: string
   canDesign: boolean
   unavailable?: boolean
+  cardPressoAvailable?: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
   return (
@@ -85,7 +88,7 @@ export function CredentialOutputsCard({
                 <p className="mt-3 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
                   <GeneratedValue value={output.description} />
                 </p>
-                <div className="mt-auto pt-4">
+                <div className="mt-auto flex flex-wrap gap-2 pt-4">
                   <GeneratedValue
                     value={
                       unavailable ? (
@@ -110,6 +113,20 @@ export function CredentialOutputsCard({
                           </Link>
                         </Button>
                       )
+                    }
+                  />
+                  <GeneratedValue
+                    value={
+                      output.format === 'wallet' &&
+                      output.document?.artboards.some(
+                        (artboard) => artboard.printProfile?.provider === 'cardpresso-wps',
+                      ) ? (
+                        <CardPressoPrintButton
+                          endpoint={`${endpoint}/print`}
+                          outputId={output.id}
+                          disabled={unavailable || !cardPressoAvailable}
+                        />
+                      ) : null
                     }
                   />
                 </div>

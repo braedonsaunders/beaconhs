@@ -49,7 +49,8 @@ export type DesignArtboard = {
   elements: DesignElement[]
 }
 
-export type PrintProvider = 'browser-pdf' | 'zebra-browser-print' | 'evolis-sdk' | 'hid-fargo-sdk'
+export type PrintProvider =
+  'browser-pdf' | 'cardpresso-wps' | 'zebra-browser-print' | 'evolis-sdk' | 'hid-fargo-sdk'
 
 export type PrintProfile = {
   provider: PrintProvider
@@ -341,9 +342,13 @@ function normalizePrintProfile(
   fallback: PrintProfile | undefined,
 ): PrintProfile | undefined {
   if (!input) return fallback
-  const provider = ['browser-pdf', 'zebra-browser-print', 'evolis-sdk', 'hid-fargo-sdk'].includes(
-    input.provider,
-  )
+  const provider = [
+    'browser-pdf',
+    'cardpresso-wps',
+    'zebra-browser-print',
+    'evolis-sdk',
+    'hid-fargo-sdk',
+  ].includes(input.provider)
     ? input.provider
     : (fallback?.provider ?? 'browser-pdf')
   const media = ['letter', 'cr80', 'custom'].includes(input.media)

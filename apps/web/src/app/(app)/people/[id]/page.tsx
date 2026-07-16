@@ -55,6 +55,7 @@ import {
   ppeItems,
   ppeTypes,
   tenantUsers,
+  tenants,
   trades,
   trainingCourses,
   trainingRecords,
@@ -88,6 +89,11 @@ import {
   SYNC_OWNED_PERSON_RELATIONSHIPS,
 } from '@/lib/people-sync'
 import { PageContainer } from '@/components/page-layout'
+import { CardPressoPrintButton } from '@/components/cardpresso-print-button'
+import { cardPressoConfigured } from '@/lib/cardpresso'
+import { normalizePersonBadgeDesign } from '@/lib/person-badge-design'
+import { renderPersonBadgePreview } from '@/lib/person-badge'
+import { CredentialFlipCard } from '@/components/credential-flip-card'
 import { setPersonGroups } from '../_actions/groups'
 import { setPersonTitles, setPrimaryPersonTitle } from '../_actions/titles'
 import { deletePersonFile } from '../_actions/files'
@@ -254,12 +260,14 @@ export default async function PersonDetailPage({
         trade: trades,
         crew: crews,
         photoKey: attachments.r2Key,
+        tenantSettings: tenants.settings,
       })
       .from(people)
       .leftJoin(departments, eq(departments.id, people.departmentId))
       .leftJoin(trades, eq(trades.id, people.tradeId))
       .leftJoin(crews, eq(crews.id, people.crewId))
       .leftJoin(attachments, eq(attachments.id, people.photoAttachmentId))
+      .innerJoin(tenants, eq(tenants.id, people.tenantId))
       .where(and(eq(people.id, id), isNull(people.deletedAt)))
       .limit(1)
     if (!row) return null
@@ -604,8 +612,12 @@ export default async function PersonDetailPage({
   )
 
   const activity = active === 'activity' ? await recentActivityForEntity(ctx, 'person', id, 50) : []
+  const badgePreview = canEdit ? await renderPersonBadgePreview(ctx, id) : null
 
   const basePath = `/people/${id}`
+  const badgeUsesCardPresso = normalizePersonBadgeDesign(data.tenantSettings).artboards.some(
+    (artboard) => artboard.printProfile?.provider === 'cardpresso-wps',
+  )
   return (
     <PageContainer>
       <div className="space-y-5">
@@ -619,11 +631,23 @@ export default async function PersonDetailPage({
           }
           actions={
             canEdit ? (
-              <Button asChild variant="outline" size="sm">
-                <a href={`${basePath}/badge`} target="_blank" rel="noreferrer">
-                  <IdCard size={14} /> <GeneratedText id="m_1036403447ff0f" />
-                </a>
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <a href={`${basePath}/badge`} target="_blank" rel="noreferrer">
+                    <IdCard size={14} /> <GeneratedText id="m_1036403447ff0f" />
+                  </a>
+                </Button>
+                <GeneratedValue
+                  value={
+                    badgeUsesCardPresso ? (
+                      <CardPressoPrintButton
+                        endpoint={`${basePath}/badge/print`}
+                        disabled={!cardPressoConfigured()}
+                      />
+                    ) : null
+                  }
+                />
+              </div>
             ) : undefined
           }
         />
@@ -746,6 +770,22 @@ export default async function PersonDetailPage({
                 />
               </CardContent>
             </Card>
+            <GeneratedValue
+              value={
+                badgePreview ? (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">
+                        <GeneratedValue value="ID badge preview" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <CredentialFlipCard {...badgePreview} />
+                    </CardContent>
+                  </Card>
+                ) : null
+              }
+            />
             <GeneratedValue
               value={
                 person.emergencyContactName || person.emergencyContactPhone ? (

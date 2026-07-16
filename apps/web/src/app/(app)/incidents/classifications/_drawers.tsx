@@ -16,9 +16,11 @@ import {
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
+import { useRegulatoryTerminology } from '@/components/regulatory-terminology'
 
 export type ClassificationEditing = {
   id: string
@@ -93,6 +95,8 @@ function ClassificationForm({
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
+  const regulatory = useRegulatoryTerminology()
+  const regulatoryT = useTranslations('Regulatory')
   const [parentId, setParentId] = useState(defaultParentId)
   const [name, setName] = useState(editing?.name ?? '')
   const [code, setCode] = useState(editing?.code ?? '')
@@ -189,7 +193,11 @@ function ClassificationForm({
           onChange={(e) => setIsRecordable(e.currentTarget.checked)}
           className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
         />
-        <GeneratedText id="m_12020f802ae6e8" />
+        <GeneratedValue
+          value={regulatoryT('recordableRollup', {
+            abbreviation: regulatory.legislationAbbreviation,
+          })}
+        />
       </label>
 
       <div className="space-y-1.5">

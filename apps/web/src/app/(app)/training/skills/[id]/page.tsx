@@ -70,6 +70,7 @@ import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { enabledCredentialOutputs } from '@/lib/credential-designs'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
+import { cardPressoConfigured } from '@/lib/cardpresso'
 import { ExtraFieldsSection } from '../../_components/extra-fields-section'
 import { addExtraField, deleteExtraField } from '../../_lib/extra-fields-actions'
 import { loadTrainingExtraFieldPage } from '../../_lib/extra-field-query'
@@ -499,6 +500,7 @@ export default async function SkillAssignmentPage({
                 endpoint={`${basePath}/certificate`}
                 canDesign={canDesignCredentials}
                 unavailable={isRevoked}
+                cardPressoAvailable={cardPressoConfigured()}
               />
             ) : null
           }

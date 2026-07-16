@@ -13,6 +13,13 @@ export const PRINT_PROVIDERS: {
     notes: 'Universal PDF/PNG output for any printer driver.',
   },
   {
+    id: 'cardpresso-wps',
+    label: 'cardPresso Web Print Server',
+    requiresLocalBridge: true,
+    notes:
+      'Sends the finished front and back directly to the configured cardPresso card and printer.',
+  },
+  {
     id: 'zebra-browser-print',
     label: 'Zebra Browser Print',
     requiresLocalBridge: true,

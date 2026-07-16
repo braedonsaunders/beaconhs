@@ -6,7 +6,7 @@ import { and, count, eq, isNull } from 'drizzle-orm'
 import { Toaster } from 'sonner'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { notifications, tenants } from '@beaconhs/db/schema'
-import { can } from '@beaconhs/tenant'
+import { can, DEFAULT_REGULATORY_TERMINOLOGY } from '@beaconhs/tenant'
 import {
   getRequestContext,
   getSessionUser,
@@ -24,6 +24,7 @@ import { ConfirmRoot } from '@/lib/confirm'
 import { WalkthroughProvider } from '@/components/walkthrough/provider.client'
 import { resolveNavGroups } from '@/lib/nav/resolve'
 import { resolveWalkthroughs } from '@/lib/walkthroughs/service'
+import { RegulatoryTerminologyProvider } from '@/components/regulatory-terminology'
 
 // Every page in the authenticated app shell requires the per-request context
 // (auth + tenant + RLS-scoped DB), so none can be statically prerendered.
@@ -126,11 +127,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               that whole class of state in one place; the shell/sidebar stay
               mounted and update via fresh props as before. */}
           <RiskMatrixProvider matrix={tenant.riskMatrix}>
-            <BackNavProviders>
-              <Fragment key={`${ctx.tenantId}:${ctx.userId}:${ctx.activeRoleId ?? 'all'}`}>
-                <GeneratedValue value={children} />
-              </Fragment>
-            </BackNavProviders>
+            <RegulatoryTerminologyProvider value={ctx.regulatory ?? DEFAULT_REGULATORY_TERMINOLOGY}>
+              <BackNavProviders>
+                <Fragment key={`${ctx.tenantId}:${ctx.userId}:${ctx.activeRoleId ?? 'all'}`}>
+                  <GeneratedValue value={children} />
+                </Fragment>
+              </BackNavProviders>
+            </RegulatoryTerminologyProvider>
           </RiskMatrixProvider>
           <Toaster richColors position="top-right" />
           <ConfirmRoot />

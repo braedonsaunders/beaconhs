@@ -99,7 +99,9 @@ Every person can have a printed ID badge — a wallet-size card with their photo
 To print a badge:
 
 1. Open the person's page.
-2. Click **ID badge** at the top. A print-ready PDF opens with the front and back of the card.
+2. Flip the **ID badge preview** to check both saved sides.
+3. Click **ID badge** to open a print-ready PDF with the front and back of the card.
+4. If the design uses **cardPresso Web Print Server**, click **Print with cardPresso** to send the finished 300-DPI faces directly to the configured card and printer. BeaconHS confirms the accepted job and audits it.
 
 To change how badges look:
 
@@ -407,7 +409,7 @@ Open [Builder](/apps) from the sidebar. People who can build templates see every
 ## Create and publish a form
 
 1. Open [Builder](/apps) and click **New app**.
-2. In the designer, open the **Build** tab. Under **Add an element**, drag fields onto the canvas or click one to add it to the selected section.
+2. In the designer, open the **Build** tab. Under **Add an element**, drag a field onto the exact section where it belongs. The section highlights before you drop. You can also select a section and click the field to add it there.
 3. Click a field to set its label, whether it is required, and any logic.
 4. Use the other tabs — **Record behaviour**, **Records list**, **Record actions**, and **Access** — to control how records act and who can open them. On **Access**, leave the role list open for everyone or choose the exact roles that may find and use the app.
 5. When it is ready, click **Publish v1**. Until you publish, only builders can preview, edit, or inspect its records. A draft cannot accept live entries.
@@ -614,7 +616,7 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 
 ## Workspace
 
-- **Tenant settings** — branding, languages, risk matrix, hierarchy.
+- **Tenant settings** — branding, languages, regulatory terminology, risk matrix, hierarchy.
 - **Notifications** — who gets automatic alerts and how often reminders repeat.
 - **Navigation** — reorder the sidebar and pin forms as modules.
 - **Data sources** — reference lists and live data your apps bind to. Search by name, key, or description and filter by **Reference** or **Live responses**. Inside a reference source, search its row values and its Builder references separately.
@@ -633,6 +635,14 @@ On **Notifications → Rules**, each delivery channel shows whether its provider
 Members choose their own language under **Account settings**. Their choice applies only to this workspace. If you disable a language, BeaconHS clears member choices for that language and those members return to the workspace default. Tenant-wide generated documents and group recap emails use the workspace default.
 
 ## Build notification groups
+## Set the local authority and legislation
+
+1. Open **Admin**, then **Tenant settings**.
+2. Under **Regulatory terminology**, enter the authority name and abbreviation used in your jurisdiction.
+3. Enter the governing legislation name and abbreviation.
+4. Put any additional acts, regulations, standards, or client requirements under **Other applicable legislation**.
+5. Click **Save settings**. Incident screens, regulatory notices, and compliance labels use the saved terminology.
+
 
 Notification groups are reusable alert audiences. One group can include roles, departments, sites, crews, trades, people groups, named people, or everyone. **Exclude** rows remove matching people from the final audience.
 

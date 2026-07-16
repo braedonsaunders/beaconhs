@@ -10,10 +10,10 @@ import { and, eq, isNull } from 'drizzle-orm'
 import QRCode from 'qrcode'
 import { primaryPersonTitleName } from '@beaconhs/db'
 import { attachments, departments, people, tenants } from '@beaconhs/db/schema'
-import { renderDesignDocumentPdf } from '@beaconhs/forms-pdf'
+import { renderDesignDocumentPdf, renderDesignDocumentPngs } from '@beaconhs/forms-pdf'
 import { presignGet, resolveTenantLogoUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
-import type { PersonBadgeDesignData } from '@beaconhs/design-studio'
+import { renderDesignDocumentHtml, type PersonBadgeDesignData } from '@beaconhs/design-studio'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { normalizePersonBadgeDesign } from '@/lib/person-badge-design'
 import type { RenderedCredentialPdf } from '@/lib/training-credential-pdf'
@@ -42,11 +42,7 @@ function personBadgeVerifyUrl(token: string): string {
   return `${appBaseUrl()}/verify/person/${token}`
 }
 
-/** Assemble the badge design data + render the tenant's badge design to PDF. */
-export async function renderPersonBadgePdf(
-  ctx: RequestContext,
-  personId: string,
-): Promise<RenderedCredentialPdf | null> {
+async function preparePersonBadge(ctx: RequestContext, personId: string) {
   const row = await ctx.db(async (tx) => {
     const [r] = await tx
       .select({
@@ -95,11 +91,58 @@ export async function renderPersonBadgePdf(
   }
 
   const document = normalizePersonBadgeDesign(row.tenant.settings)
-  const bytes = await renderDesignDocumentPdf({
-    document,
-    data,
-    title: `${data.recipientFullName} — ID badge`,
-  })
   const safe = data.recipientFullName.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-  return { bytes, filename: `${safe || 'person'}-id-badge.pdf` }
+  return { document, data, filename: `${safe || 'person'}-id-badge.pdf` }
+}
+
+/** Assemble the badge design data + render the tenant's badge design to PDF. */
+export async function renderPersonBadgePdf(
+  ctx: RequestContext,
+  personId: string,
+): Promise<RenderedCredentialPdf | null> {
+  const prepared = await preparePersonBadge(ctx, personId)
+  if (!prepared) return null
+  const bytes = await renderDesignDocumentPdf({
+    document: prepared.document,
+    data: prepared.data,
+    title: `${prepared.data.recipientFullName} — ID badge`,
+  })
+  return { bytes, filename: prepared.filename }
+}
+
+export async function renderPersonBadgePngs(
+  ctx: RequestContext,
+  personId: string,
+): Promise<Buffer[] | null> {
+  const prepared = await preparePersonBadge(ctx, personId)
+  if (
+    !prepared ||
+    !prepared.document.artboards.some(
+      (artboard) => artboard.printProfile?.provider === 'cardpresso-wps',
+    )
+  )
+    return null
+  return renderDesignDocumentPngs({
+    document: prepared.document,
+    data: prepared.data,
+    dpi: 300,
+  })
+}
+
+export async function renderPersonBadgePreview(ctx: RequestContext, personId: string) {
+  const prepared = await preparePersonBadge(ctx, personId)
+  if (!prepared) return null
+  const front = prepared.document.artboards[0]
+  if (!front) return null
+  const back = prepared.document.artboards[1] ?? front
+  return {
+    frontHtml: renderDesignDocumentHtml(prepared.document, prepared.data, {
+      artboardId: front.id,
+    }),
+    backHtml: renderDesignDocumentHtml(prepared.document, prepared.data, {
+      artboardId: back.id,
+    }),
+    widthIn: front.width,
+    heightIn: front.height,
+  }
 }

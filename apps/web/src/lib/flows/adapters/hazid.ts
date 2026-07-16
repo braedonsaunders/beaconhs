@@ -3,7 +3,7 @@ import 'server-only'
 // Hazard Assessments (HazID) FlowSubjectAdapter. Field-map keys mirror
 // MODULE_FLOW_PROFILES.hazid.
 
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import {
   attachments,
   hazidAssessmentHazards,

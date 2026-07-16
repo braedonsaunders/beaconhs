@@ -17,12 +17,13 @@ import {
   Input,
   Label,
   Select,
+  Textarea,
 } from '@beaconhs/ui'
 import { db, hashKioskPin, normalizeKioskPin, withSuperAdmin } from '@beaconhs/db'
 import { tenantUsers, tenants } from '@beaconhs/db/schema'
 import { LOCALE_OPTIONS, normalizeLocalePolicy } from '@beaconhs/i18n'
 import { resolveTenantLogoUrl } from '@beaconhs/storage'
-import { can } from '@beaconhs/tenant'
+import { can, resolveRegulatoryTerminology } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { levelLabel } from '@/lib/org-hierarchy'
@@ -72,6 +73,15 @@ async function saveSettings(formData: FormData) {
     primaryColor: String(formData.get('primaryColor') ?? '').trim() || undefined,
     pdfLetterhead: String(formData.get('pdfLetterhead') ?? '').trim() || undefined,
   }
+  const regulatoryTerminology = resolveRegulatoryTerminology({
+    regulatoryTerminology: {
+      authorityName: formData.get('authorityName'),
+      authorityAbbreviation: formData.get('authorityAbbreviation'),
+      legislationName: formData.get('legislationName'),
+      legislationAbbreviation: formData.get('legislationAbbreviation'),
+      otherApplicableLegislation: formData.get('otherApplicableLegislation'),
+    },
+  })
   const kioskPinInput = String(formData.get('kioskPin') ?? '').trim()
   const clearKioskPin = formData.get('clearKioskPin') === 'on'
   const normalizedKioskPin = kioskPinInput ? normalizeKioskPin(kioskPinInput) : null
@@ -99,6 +109,7 @@ async function saveSettings(formData: FormData) {
         enabledLanguages: languagePolicy.enabledLocales,
         hierarchy,
         branding,
+        settings: { ...(before?.settings ?? {}), regulatoryTerminology },
         kioskPin,
       })
       .where(eq(tenants.id, ctx.tenantId))
@@ -128,6 +139,7 @@ async function saveSettings(formData: FormData) {
           enabledLanguages: before.enabledLanguages,
           hierarchy: before.hierarchy,
           branding: before.branding,
+          regulatoryTerminology: resolveRegulatoryTerminology(before.settings),
           kioskEnabled: Boolean(before.kioskPin),
         }
       : null,
@@ -138,6 +150,7 @@ async function saveSettings(formData: FormData) {
       enabledLanguages: languagePolicy.enabledLocales,
       hierarchy,
       branding,
+      regulatoryTerminology,
       kioskEnabled: Boolean(kioskPin),
     },
     metadata: { clearedLocaleOverrides: clearedOverrides.length },
@@ -162,6 +175,7 @@ export default async function AdminSettingsPage() {
 
   const enabled = new Set(tenant.enabledLanguages)
   const hierarchy = tenant.hierarchy
+  const regulatory = resolveRegulatoryTerminology(tenant.settings)
   const kioskUrl = tenant.kioskPin ? `${appBaseUrl()}/kiosk?t=${tenant.slug}` : null
   const tenantLogoUrl = await resolveTenantLogoUrl({
     tenantId: tenant.id,
@@ -190,6 +204,63 @@ export default async function AdminSettingsPage() {
               </Field>
               <Field label={tGeneratedValue(t('slug'))}>
                 <Input name="slug" defaultValue={tenant.slug} className="font-mono" />
+              </Field>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <GeneratedValue value={t('regulatoryTerminology')} />
+              </CardTitle>
+              <CardDescription>
+                <GeneratedValue value={t('regulatoryTerminologyDescription')} />
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={tGeneratedValue(t('authorityName'))}>
+                <Input
+                  name="authorityName"
+                  required
+                  maxLength={160}
+                  defaultValue={regulatory.authorityName}
+                />
+              </Field>
+              <Field label={tGeneratedValue(t('authorityAbbreviation'))}>
+                <Input
+                  name="authorityAbbreviation"
+                  required
+                  maxLength={24}
+                  defaultValue={regulatory.authorityAbbreviation}
+                />
+              </Field>
+              <Field label={tGeneratedValue(t('legislationName'))}>
+                <Input
+                  name="legislationName"
+                  required
+                  maxLength={200}
+                  defaultValue={regulatory.legislationName}
+                />
+              </Field>
+              <Field label={tGeneratedValue(t('legislationAbbreviation'))}>
+                <Input
+                  name="legislationAbbreviation"
+                  required
+                  maxLength={24}
+                  defaultValue={regulatory.legislationAbbreviation}
+                />
+              </Field>
+              <Field
+                label={tGeneratedValue(t('otherApplicableLegislation'))}
+                className="sm:col-span-2"
+              >
+                <Textarea
+                  name="otherApplicableLegislation"
+                  rows={3}
+                  maxLength={2000}
+                  defaultValue={regulatory.otherApplicableLegislation}
+                  placeholder={tGeneratedValue(t('otherApplicableLegislationPlaceholder'))}
+                />
               </Field>
             </CardContent>
           </Card>

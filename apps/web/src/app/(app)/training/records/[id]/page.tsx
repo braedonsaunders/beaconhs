@@ -60,6 +60,7 @@ import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
 import { courseCredentialOutputs } from '@/lib/credential-designs'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
+import { cardPressoConfigured } from '@/lib/cardpresso'
 import { RecordDetailFields } from './_fields'
 import { TrainingRecordFilesDrawer } from './_files-drawer'
 import {
@@ -446,6 +447,7 @@ export default async function TrainingRecordPage({
                 endpoint={`${basePath}/certificate`}
                 canDesign={canDesignCredentials}
                 unavailable={isRevoked}
+                cardPressoAvailable={cardPressoConfigured()}
               />
             ) : null
           }
