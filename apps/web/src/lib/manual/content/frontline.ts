@@ -151,7 +151,7 @@ Use **All sites** to search the complete set of sites used by assessments you ar
 ## Starting a new assessment
 
 1. Tap **New assessment**.
-2. Use the search box to find the right assessment type (for example a daily FLHA or a task-specific JSHA) and tap it.
+2. Use the search box to find the right assessment type (for example a daily FLHA or a task-specific JSHA). Each card shows the PPE, questions, and Builder apps that the type includes. Tap the type to start.
 3. Fill in the **General Information** section: who, what, where, and when. Fields save as you type.
 
 ## Tasks, hazards, and risk ratings
@@ -185,9 +185,15 @@ Some assessment types include an **Assessment apps** section for extra company f
 
 Only published apps allowed for the role you are currently using appear. A locked assessment cannot start or continue an unfinished app. Use **View response** to open a completed record.
 
+An app can depend on one of the assessment questions. It appears as soon as the matching answer is saved and hides again if the answer no longer matches. Previously entered app data is retained if the answer changes.
+
 ## Set up assessment types
 
-If your role manages Hazard Assessments, open **Types** to set up the templates crews choose when they start an assessment. Use **Search assessment types…** to find one, and use **Style** to show task-based or hazard-based types.
+If your role manages Hazard Assessments, open **Types** to set up the templates crews choose when they start an assessment. Use **Search assessment types…** to find one, and use **Style** to show task-based or hazard-based types. When you attach a Builder app, use **Show only for an answer** and **Required answer** to make it conditional on a type question.
+
+## Safety review
+
+Safety managers can record an advisory decision in **Safety review**. Add an optional note, then tap **Approve** or **Reject**. The decision does not lock the assessment or stop field work. Use the **Safety review** filter on the list to find pending, approved, or rejected assessments.
 
 ## Finishing up
 
@@ -196,6 +202,7 @@ If your role manages Hazard Assessments, open **Types** to set up the templates 
 
 ## Tips
 
+- Unlocking does not remove signatures. Adding another signature also keeps every signature already collected. If the assessment content changes, BeaconHS clears the existing signatures so the crew signs the revised assessment.
 - Conditions change. If the job changes, unlock and update the assessment, or start a new one.
 - **Copy assessment** starts a new one pre-filled from an old one — handy for repeat work.`,
   },

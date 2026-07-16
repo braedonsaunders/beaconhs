@@ -17,6 +17,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
+import { buildHazidAppConfig } from '@/lib/hazid-app-condition'
 
 async function manageCtx() {
   const ctx = await requireRequestContext()
@@ -277,9 +278,32 @@ export async function updateTypeQuestion(input: {
 
 export async function deleteTypeQuestion(input: { typeId: string; id: string }) {
   const ctx = await manageCtx()
-  await ctx.db((tx) =>
-    tx.delete(hazidAssessmentTypeQuestions).where(eq(hazidAssessmentTypeQuestions.id, input.id)),
-  )
+  await ctx.db(async (tx) => {
+    const [dependentApp] = await tx
+      .select({ id: hazidAssessmentTypeApps.id, label: hazidAssessmentTypeApps.label })
+      .from(hazidAssessmentTypeApps)
+      .where(
+        and(
+          eq(hazidAssessmentTypeApps.typeId, input.typeId),
+          isNull(hazidAssessmentTypeApps.deletedAt),
+          sql`${hazidAssessmentTypeApps.config}->'condition'->>'questionId' = ${input.id}`,
+        ),
+      )
+      .limit(1)
+    if (dependentApp) {
+      throw new Error(
+        `Remove the condition from "${dependentApp.label}" before deleting this question`,
+      )
+    }
+    await tx
+      .delete(hazidAssessmentTypeQuestions)
+      .where(
+        and(
+          eq(hazidAssessmentTypeQuestions.id, input.id),
+          eq(hazidAssessmentTypeQuestions.typeId, input.typeId),
+        ),
+      )
+  })
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_type',
     entityId: input.typeId,
@@ -319,6 +343,8 @@ export async function addTypeApp(input: {
   description: string | null
   required: boolean
   autoCreate: boolean
+  conditionQuestionId: string | null
+  conditionValue: string | null
 }) {
   const ctx = await manageCtx()
   if (!isUuid(input.typeId) || !isUuid(input.templateId)) throw new Error('Pick a published app')
@@ -335,6 +361,20 @@ export async function addTypeApp(input: {
       )
       .limit(1)
     if (!template) throw new Error('App not found')
+    const config = buildHazidAppConfig(input.conditionQuestionId, input.conditionValue)
+    if (config.condition) {
+      const [question] = await tx
+        .select({ id: hazidAssessmentTypeQuestions.id })
+        .from(hazidAssessmentTypeQuestions)
+        .where(
+          and(
+            eq(hazidAssessmentTypeQuestions.id, config.condition.questionId),
+            eq(hazidAssessmentTypeQuestions.typeId, input.typeId),
+          ),
+        )
+        .limit(1)
+      if (!question) throw new Error('Conditional question is not part of this assessment type')
+    }
     const label = input.label?.trim() || template.name
     const key = slugKey(input.key?.trim() || label)
     if (!key) throw new Error('App key is required')
@@ -357,7 +397,7 @@ export async function addTypeApp(input: {
         required: input.required,
         autoCreate: input.autoCreate,
         entityOrder,
-        config: {},
+        config,
       })
       .returning({
         id: hazidAssessmentTypeApps.id,
@@ -369,7 +409,7 @@ export async function addTypeApp(input: {
         entityOrder: hazidAssessmentTypeApps.entityOrder,
         templateName: sql<string>`${template.name}`,
       })
-    return row
+    return row ? { ...row, config } : undefined
   })
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_type',
@@ -389,19 +429,41 @@ export async function updateTypeApp(input: {
   description: string | null
   required: boolean
   autoCreate: boolean
+  conditionQuestionId: string | null
+  conditionValue: string | null
 }) {
   const ctx = await manageCtx()
-  await ctx.db((tx) =>
-    tx
+  await ctx.db(async (tx) => {
+    const config = buildHazidAppConfig(input.conditionQuestionId, input.conditionValue)
+    if (config.condition) {
+      const [question] = await tx
+        .select({ id: hazidAssessmentTypeQuestions.id })
+        .from(hazidAssessmentTypeQuestions)
+        .where(
+          and(
+            eq(hazidAssessmentTypeQuestions.id, config.condition.questionId),
+            eq(hazidAssessmentTypeQuestions.typeId, input.typeId),
+          ),
+        )
+        .limit(1)
+      if (!question) throw new Error('Conditional question is not part of this assessment type')
+    }
+    await tx
       .update(hazidAssessmentTypeApps)
       .set({
         label: input.label.trim() || 'App',
         description: input.description?.trim() || null,
         required: input.required,
         autoCreate: input.autoCreate,
+        config,
       })
-      .where(eq(hazidAssessmentTypeApps.id, input.id)),
-  )
+      .where(
+        and(
+          eq(hazidAssessmentTypeApps.id, input.id),
+          eq(hazidAssessmentTypeApps.typeId, input.typeId),
+        ),
+      )
+  })
   await recordAudit(ctx, {
     entityType: 'hazid_assessment_type',
     entityId: input.typeId,

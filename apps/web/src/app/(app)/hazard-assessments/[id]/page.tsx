@@ -12,6 +12,7 @@ import {
   Badge,
   Button,
   DetailHeader,
+  Textarea,
   UrlDrawer,
 } from '@beaconhs/ui'
 import {
@@ -79,6 +80,7 @@ import { FormRenderer } from '@/app/(app)/apps/templates/[id]/fill/form-renderer
 import type { EntityAttrsByField, FormSchemaV1 } from '@beaconhs/forms-core'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { PremiumSection as Section } from '@/components/premium-section'
+import { hazidAppIsApplicable } from '@/lib/hazid-app-condition'
 import {
   addHazard,
   addHazardSet,
@@ -104,6 +106,7 @@ import {
   moveTask,
   unlockAssessment,
   openAssessmentApp,
+  reviewAssessment,
   updateHazard,
   updatePPE,
   updateQuestion,
@@ -274,7 +277,7 @@ export default async function HazidAssessmentDetailPage({
       .from(hazidAssessmentPhotos)
       .innerJoin(attachments, eq(attachments.id, hazidAssessmentPhotos.attachmentId))
       .where(eq(hazidAssessmentPhotos.assessmentId, id))
-    const typeApps = row.a.assessmentTypeId
+    const allTypeApps = row.a.assessmentTypeId
       ? await tx
           .select({ app: hazidAssessmentTypeApps, template: formTemplates })
           .from(hazidAssessmentTypeApps)
@@ -288,6 +291,16 @@ export default async function HazidAssessmentDetailPage({
           )
           .orderBy(asc(hazidAssessmentTypeApps.entityOrder))
       : []
+    const answersByTypeQuestionId = new Map(
+      questions.flatMap((question) =>
+        question.sourceTypeQuestionId
+          ? [[question.sourceTypeQuestionId, question.answer] as const]
+          : [],
+      ),
+    )
+    const typeApps = allTypeApps.filter(({ app }) =>
+      hazidAppIsApplicable(app.config, answersByTypeQuestionId),
+    )
     const appResponses =
       typeApps.length > 0
         ? await tx
@@ -764,6 +777,17 @@ export default async function HazidAssessmentDetailPage({
                     )
                   }
                 />
+                <Badge
+                  variant={
+                    a.reviewStatus === 'approved'
+                      ? 'success'
+                      : a.reviewStatus === 'rejected'
+                        ? 'destructive'
+                        : 'outline'
+                  }
+                >
+                  <GeneratedText id="m_09dfacfcb5fc80" /> <GeneratedValue value={a.reviewStatus} />
+                </Badge>
               </div>
             }
             actions={
@@ -946,6 +970,78 @@ export default async function HazidAssessmentDetailPage({
                 })}
               />
             </div>
+
+            <Section
+              title={tGenerated('m_039fc01243fb46')}
+              subtitle={tGenerated('m_1dcf53db730123')}
+              icon={<Shield size={20} />}
+              tone="slate"
+            >
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <Badge
+                    variant={
+                      a.reviewStatus === 'approved'
+                        ? 'success'
+                        : a.reviewStatus === 'rejected'
+                          ? 'destructive'
+                          : 'outline'
+                    }
+                  >
+                    <GeneratedValue value={a.reviewStatus} />
+                  </Badge>
+                  <GeneratedValue
+                    value={
+                      a.reviewedAt ? (
+                        <span className="text-slate-500 dark:text-slate-400">
+                          <GeneratedText id="m_08791cd0d5daff" />{' '}
+                          <GeneratedValue
+                            value={formatDateTime(a.reviewedAt, ctx.timezone, ctx.locale)}
+                          />
+                        </span>
+                      ) : null
+                    }
+                  />
+                </div>
+                <GeneratedValue
+                  value={
+                    a.reviewNote ? (
+                      <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+                        <GeneratedValue value={a.reviewNote} />
+                      </p>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    canManage ? (
+                      <form action={reviewAssessment} className="space-y-3">
+                        <input type="hidden" name="id" value={id} />
+                        <Textarea
+                          name="note"
+                          rows={3}
+                          defaultValue={a.reviewNote ?? ''}
+                          placeholder={tGenerated('m_0f5bae5cd10511')}
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="submit" name="decision" value="approved">
+                            <GeneratedText id="m_05194a49d7f46e" />
+                          </Button>
+                          <Button
+                            type="submit"
+                            name="decision"
+                            value="rejected"
+                            variant="destructive"
+                          >
+                            <GeneratedText id="m_0f51548c04b27f" />
+                          </Button>
+                        </div>
+                      </form>
+                    ) : null
+                  }
+                />
+              </div>
+            </Section>
 
             <Section
               title={tGenerated('m_062cdc4673a07a')}

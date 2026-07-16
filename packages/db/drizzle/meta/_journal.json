@@ -57,6 +57,13 @@
       "when": 1784206236857,
       "tag": "0007_compliance_scan_toggle",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784221200000,
+      "tag": "0008_hazid_review_conditions_signatures",
+      "breakpoints": true
     }
   ]
 }

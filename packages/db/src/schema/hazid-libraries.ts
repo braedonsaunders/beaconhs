@@ -271,6 +271,10 @@ export const hazidAssessmentTypeQuestions = pgTable(
     ...timestamps,
   },
   (t) => ({
+    tenantIdIdUx: uniqueIndex('hazid_assessment_type_questions_tenant_id_id_ux').on(
+      t.tenantId,
+      t.id,
+    ),
     typeIdx: index('hazid_assessment_type_questions_type_idx').on(
       t.tenantId,
       t.typeId,

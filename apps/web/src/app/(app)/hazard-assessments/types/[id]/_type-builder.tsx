@@ -18,6 +18,7 @@ import { Badge, Button, Drawer, Input, Label, Select, Textarea } from '@beaconhs
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
 import { useReseededState } from '@/lib/use-reseeded-state'
+import { parseHazidAppConfig, type HazidAppConfig } from '@/lib/hazid-app-condition'
 import {
   BuilderRailHeader,
   BuilderRailTab,
@@ -85,6 +86,7 @@ type AppRow = {
   required: boolean
   autoCreate: boolean
   entityOrder: number
+  config: HazidAppConfig
   templateName: string
 }
 type Ref = { id: string; name: string }
@@ -234,6 +236,8 @@ export function HazardTypeBuilder({
           description: string | null
           required: boolean
           autoCreate: boolean
+          conditionQuestionId: string | null
+          conditionValue: string | null
         }
         run(async () => {
           const res = await addTypeApp({ typeId: type.id, ...d })
@@ -248,6 +252,7 @@ export function HazardTypeBuilder({
                 required: res.required,
                 autoCreate: res.autoCreate,
                 entityOrder: res.entityOrder,
+                config: res.config,
                 templateName: res.templateName,
               },
             ])
@@ -258,9 +263,21 @@ export function HazardTypeBuilder({
           description: string | null
           required: boolean
           autoCreate: boolean
+          conditionQuestionId: string | null
+          conditionValue: string | null
         }
         const id = editor.item.id
-        setApps((all) => all.map((x) => (x.id === id ? { ...x, ...d } : x)))
+        const config: HazidAppConfig =
+          d.conditionQuestionId && d.conditionValue
+            ? {
+                condition: {
+                  questionId: d.conditionQuestionId,
+                  operator: 'equals',
+                  value: d.conditionValue,
+                },
+              }
+            : {}
+        setApps((all) => all.map((x) => (x.id === id ? { ...x, ...d, config } : x)))
         run(() => updateTypeApp({ typeId: type.id, id, ...d }))
       }
     }
@@ -407,6 +424,15 @@ export function HazardTypeBuilder({
                             ) : null
                           }
                         />
+                        <GeneratedValue
+                          value={
+                            parseHazidAppConfig(a.config).condition ? (
+                              <Badge variant="secondary" className="text-[10px]">
+                                <GeneratedText id="m_15e5d313f145cb" />
+                              </Badge>
+                            ) : null
+                          }
+                        />
                       </SortableRow>
                     ))}
                   />
@@ -515,6 +541,7 @@ export function HazardTypeBuilder({
       <EditorDrawer
         editor={editor}
         appTemplates={appTemplates}
+        questions={questions}
         onClose={() => setEditor(null)}
         onSave={saveEditor}
       />
@@ -579,11 +606,13 @@ function ListSection({
 function EditorDrawer({
   editor,
   appTemplates,
+  questions,
   onClose,
   onSave,
 }: {
   editor: Editor | null
   appTemplates: Ref[]
+  questions: Question[]
   onClose: () => void
   onSave: (data: Record<string, unknown>) => void
 }) {
@@ -641,6 +670,17 @@ function EditorDrawer({
     editor,
     editor?.kind === 'app' ? (editor.item?.autoCreate ?? true) : true,
   )
+  const existingCondition =
+    editor?.kind === 'app' ? parseHazidAppConfig(editor.item?.config).condition : undefined
+  const [conditionQuestionId, setConditionQuestionId] = useReseededState(
+    editor,
+    existingCondition?.questionId ?? '',
+  )
+  const [conditionValue, setConditionValue] = useReseededState(
+    editor,
+    existingCondition?.value ?? '',
+  )
+  const conditionQuestion = questions.find((item) => item.id === conditionQuestionId)
 
   const kind = editor?.kind
   const isAdd = editor?.mode === 'add'
@@ -657,9 +697,8 @@ function EditorDrawer({
       ? name.trim().length > 0
       : kind === 'question'
         ? question.trim().length > 0
-        : isAdd
-          ? templateId.length > 0
-          : label.trim().length > 0
+        : (isAdd ? templateId.length > 0 : label.trim().length > 0) &&
+          (!conditionQuestionId || conditionValue.trim().length > 0)
 
   function submit() {
     if (kind === 'ppe') {
@@ -680,6 +719,8 @@ function EditorDrawer({
           description: appDesc.trim() || null,
           required: appRequired,
           autoCreate,
+          conditionQuestionId: conditionQuestionId || null,
+          conditionValue: conditionValue.trim() || null,
         })
       } else {
         onSave({
@@ -687,6 +728,8 @@ function EditorDrawer({
           description: appDesc.trim() || null,
           required: appRequired,
           autoCreate,
+          conditionQuestionId: conditionQuestionId || null,
+          conditionValue: conditionValue.trim() || null,
         })
       }
     }
@@ -865,6 +908,61 @@ function EditorDrawer({
                 label={tGenerated('m_1a3414cf0c5f06')}
                 checked={autoCreate}
                 onChange={setAutoCreate}
+              />
+              <div className="space-y-1.5 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <Label>
+                  <GeneratedText id="m_1ea165939bb6da" />
+                </Label>
+                <Select
+                  value={conditionQuestionId}
+                  onChange={(event) => {
+                    setConditionQuestionId(event.target.value)
+                    setConditionValue('')
+                  }}
+                >
+                  <option value="">{tGenerated('m_15152bdb0ab8ca')}</option>
+                  {questions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.question}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <GeneratedValue
+                value={
+                  conditionQuestion ? (
+                    <div className="space-y-1.5">
+                      <Label>
+                        <GeneratedText id="m_14d46dc4a638d2" />
+                      </Label>
+                      {conditionQuestion.questionType === 'text' ? (
+                        <Input
+                          value={conditionValue}
+                          onChange={(event) => setConditionValue(event.target.value)}
+                          placeholder={tGenerated('m_063410d70890f3')}
+                        />
+                      ) : (
+                        <Select
+                          value={conditionValue}
+                          onChange={(event) => setConditionValue(event.target.value)}
+                        >
+                          <option value="">{tGenerated('m_05ab1ece2e067e')}</option>
+                          {(conditionQuestion.questionType === 'yes_no'
+                            ? ['Yes', 'No']
+                            : conditionQuestion.answers
+                          ).map((answer) => (
+                            <option key={answer} value={answer}>
+                              {answer}
+                            </option>
+                          ))}
+                        </Select>
+                      )}
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedText id="m_1efde6c026df66" />
+                      </p>
+                    </div>
+                  ) : null
+                }
               />
             </div>
           ) : null

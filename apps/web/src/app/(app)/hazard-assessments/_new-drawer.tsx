@@ -19,6 +19,7 @@ export type NewAssessmentType = {
   style: 'task_based' | 'hazard_based'
   hasPPE: boolean
   hasQuestions: boolean
+  builderApps: string[]
 }
 
 function Chip({ label }: { label: string }) {
@@ -102,6 +103,7 @@ export function NewAssessmentDrawer({
                     t.style === 'hazard_based' ? 'Hazard-based' : 'Task-based',
                     t.hasPPE ? 'PPE' : null,
                     t.hasQuestions ? 'Questions' : null,
+                    ...t.builderApps.map((name) => `App: ${name}`),
                   ].filter(Boolean) as string[]
                   return (
                     <li key={t.id}>

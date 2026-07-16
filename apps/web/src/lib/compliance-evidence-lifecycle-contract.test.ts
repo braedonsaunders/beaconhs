@@ -20,6 +20,9 @@ const inspectionPage = source('../app/(app)/inspections/records/[id]/page.tsx')
 const apiWrites = source('./api/write.ts')
 const journalActions = source('../app/(app)/journals/_actions.ts')
 const hazardActions = source('../app/(app)/hazard-assessments/_actions.ts')
+const hazardSignatureMigration = source(
+  '../../../../packages/db/drizzle/0008_hazid_review_conditions_signatures.sql',
+)
 
 describe('immediate compliance evidence lifecycle', () => {
   it('materializes document acknowledgments and signer removals in their write transaction', () => {
@@ -124,7 +127,10 @@ describe('immediate compliance evidence lifecycle', () => {
       expect(mutation).toContain('await materializeEvidenceTargetObligations(tx')
       expect(mutation).toContain("sourceModule: 'hazard_assessment'")
     }
-    expect(unlock).toContain('.delete(attachments)')
+    expect(unlock).not.toContain('.delete(attachments)')
+    expect(unlock).not.toContain('signatureAttachmentId: null')
+    expect(hazardSignatureMigration).toContain('DELETE FROM "attachments" AS attachment')
+    expect(hazardSignatureMigration).toContain('hazid_assessments_invalidate_signatures')
   })
 
   it('keeps hazard signature metadata and private storage deletion in one transaction', () => {

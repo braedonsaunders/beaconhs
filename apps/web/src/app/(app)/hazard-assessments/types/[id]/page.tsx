@@ -16,6 +16,7 @@ import {
 import { requireModuleManage } from '@/lib/module-admin/guard'
 import { DetailPageLayout } from '@/components/page-layout'
 import { isUuid } from '@/lib/list-params'
+import { parseHazidAppConfig } from '@/lib/hazid-app-condition'
 import { HazardTypeBuilder } from './_type-builder'
 
 export const dynamic = 'force-dynamic'
@@ -73,6 +74,7 @@ export default async function AssessmentTypeDetailPage({
         required: hazidAssessmentTypeApps.required,
         autoCreate: hazidAssessmentTypeApps.autoCreate,
         entityOrder: hazidAssessmentTypeApps.entityOrder,
+        config: hazidAssessmentTypeApps.config,
         templateName: formTemplates.name,
       })
       .from(hazidAssessmentTypeApps)
@@ -146,7 +148,7 @@ export default async function AssessmentTypeDetailPage({
         }}
         ppe={ppe}
         questions={questions}
-        apps={apps}
+        apps={apps.map((app) => ({ ...app, config: parseHazidAppConfig(app.config) }))}
         appTemplates={appTemplates}
         hazardSets={hazardSets}
         groups={groups}

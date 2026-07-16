@@ -38,7 +38,9 @@ import {
 } from '@beaconhs/ui'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import {
+  formTemplates,
   hazidAssessmentHazards,
+  hazidAssessmentTypeApps,
   hazidAssessmentTypes,
   hazidAssessments,
   orgUnits,
@@ -89,6 +91,11 @@ export async function AssessmentsListPage({
   const typeFilter = typeParam && isUuid(typeParam) ? typeParam : undefined
   const statusParam = pickString(sp.status)
   const statusFilter = statusParam === 'open' || statusParam === 'locked' ? statusParam : undefined
+  const reviewParam = pickString(sp.review)
+  const reviewFilter =
+    reviewParam === 'pending' || reviewParam === 'approved' || reviewParam === 'rejected'
+      ? reviewParam
+      : undefined
   const siteParam = pickString(sp.site)
   const siteFilter = siteParam && isUuid(siteParam) ? siteParam : undefined
   const dateFromRaw = pickString(sp.dateFrom)
@@ -126,6 +133,7 @@ export async function AssessmentsListPage({
     if (typeFilter) filters.push(eq(hazidAssessments.assessmentTypeId, typeFilter))
     if (statusFilter === 'open') filters.push(eq(hazidAssessments.locked, false))
     if (statusFilter === 'locked') filters.push(eq(hazidAssessments.locked, true))
+    if (reviewFilter) filters.push(eq(hazidAssessments.reviewStatus, reviewFilter))
     if (siteFilter) filters.push(eq(hazidAssessments.siteOrgUnitId, siteFilter))
     // Both range bounds are wall-clock dates in the user's timezone — parse
     // them the same way so From and To never straddle different zones.
@@ -220,7 +228,9 @@ export async function AssessmentsListPage({
 
   const { rows, total, worstRisk, types } = data
   const sortProps = { basePath, currentParams: sp, dir: params.dir }
-  const anyFilter = Boolean(params.q || typeFilter || statusFilter || siteFilter || dateFromRaw)
+  const anyFilter = Boolean(
+    params.q || typeFilter || statusFilter || reviewFilter || siteFilter || dateFromRaw,
+  )
 
   // Type cards for the "Start a hazard assessment" flyout — only loaded while
   // it's open. Mirrors the legacy /new group-availability filter: a type with
@@ -234,6 +244,30 @@ export async function AssessmentsListPage({
             .where(isNull(hazidAssessmentTypes.deletedAt))
             .orderBy(asc(hazidAssessmentTypes.name))
           const restricted = allTypes.some((t) => (t.availableToGroupIds ?? []).length > 0)
+          const attachedApps =
+            allTypes.length > 0
+              ? await tx
+                  .select({
+                    typeId: hazidAssessmentTypeApps.typeId,
+                    label: hazidAssessmentTypeApps.label,
+                    templateName: formTemplates.name,
+                  })
+                  .from(hazidAssessmentTypeApps)
+                  .innerJoin(
+                    formTemplates,
+                    eq(formTemplates.id, hazidAssessmentTypeApps.templateId),
+                  )
+                  .where(
+                    and(
+                      inArray(
+                        hazidAssessmentTypeApps.typeId,
+                        allTypes.map((type) => type.id),
+                      ),
+                      isNull(hazidAssessmentTypeApps.deletedAt),
+                    ),
+                  )
+                  .orderBy(asc(hazidAssessmentTypeApps.entityOrder))
+              : []
           let myGroupIds = new Set<string>()
           if (restricted && !ctx.isSuperAdmin) {
             const [me] = await tx
@@ -263,6 +297,9 @@ export async function AssessmentsListPage({
               style: t.style,
               hasPPE: t.hasPPE,
               hasQuestions: t.hasQuestions,
+              builderApps: attachedApps
+                .filter((app) => app.typeId === t.id)
+                .map((app) => app.label || app.templateName),
             }))
         })
       : []
@@ -298,6 +335,7 @@ export async function AssessmentsListPage({
                     q: params.q,
                     type: typeFilter,
                     status: statusFilter,
+                    review: reviewFilter,
                     site: siteFilter,
                     sort: params.sort !== 'occurred_at' ? params.sort : undefined,
                     dir: params.dir !== 'desc' ? params.dir : undefined,
@@ -338,6 +376,17 @@ export async function AssessmentsListPage({
                 paramKey="type"
                 label={tGenerated('m_074ba2f160c506')}
                 options={types.map((t) => ({ value: t.id, label: t.name }))}
+              />
+              <FilterChips
+                basePath={basePath}
+                currentParams={sp}
+                paramKey="review"
+                label={tGenerated('m_039fc01243fb46')}
+                options={[
+                  { value: 'pending', label: 'Pending' },
+                  { value: 'approved', label: 'Approved' },
+                  { value: 'rejected', label: 'Rejected' },
+                ]}
               />
               <FilterChips
                 basePath={basePath}
@@ -435,6 +484,18 @@ export async function AssessmentsListPage({
                                 <GeneratedValue
                                   value={worst != null ? <RiskScoreChip score={worst} /> : null}
                                 />
+                                <Badge
+                                  variant={
+                                    a.reviewStatus === 'approved'
+                                      ? 'success'
+                                      : a.reviewStatus === 'rejected'
+                                        ? 'destructive'
+                                        : 'outline'
+                                  }
+                                >
+                                  <GeneratedText id="m_0419fd6343482d" />{' '}
+                                  <GeneratedValue value={a.reviewStatus} />
+                                </Badge>
                               </div>
                             </Link>
                           </li>
@@ -482,6 +543,9 @@ export async function AssessmentsListPage({
                           </TableHead>
                           <TableHead>
                             <GeneratedText id="m_0b9da892d6faf0" />
+                          </TableHead>
+                          <TableHead>
+                            <GeneratedText id="m_039fc01243fb46" />
                           </TableHead>
                         </TableRow>
                       </TableHeader>
@@ -557,6 +621,19 @@ export async function AssessmentsListPage({
                                       )
                                     }
                                   />
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      a.reviewStatus === 'approved'
+                                        ? 'success'
+                                        : a.reviewStatus === 'rejected'
+                                          ? 'destructive'
+                                          : 'outline'
+                                    }
+                                  >
+                                    <GeneratedValue value={a.reviewStatus} />
+                                  </Badge>
                                 </TableCell>
                               </TableRow>
                             )

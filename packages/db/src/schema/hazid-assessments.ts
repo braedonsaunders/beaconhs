@@ -47,6 +47,7 @@ import { orgUnits, people } from './org'
 
 export const hazidSignatureType = pgEnum('hazid_signature_type', ['internal', 'external'])
 export const hazidPpeAnswer = pgEnum('hazid_ppe_answer', ['yes', 'no', 'na'])
+export const hazidReviewStatus = pgEnum('hazid_review_status', ['pending', 'approved', 'rejected'])
 
 // ----------------------------------------------------------------------------
 // Assessment header
@@ -91,6 +92,13 @@ export const hazidAssessments = pgTable(
     lockedAt: timestamp('locked_at', { withTimezone: true }),
     lockedByTenantUserId: uuid('locked_by_tenant_user_id'),
 
+    // Safety review is advisory: it never locks the assessment or blocks field
+    // work. Every decision is also written to the audit log for history.
+    reviewStatus: hazidReviewStatus('review_status').default('pending').notNull(),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewedByTenantUserId: uuid('reviewed_by_tenant_user_id'),
+    reviewNote: text('review_note'),
+
     ...timestamps,
     ...softDelete,
   },
@@ -112,9 +120,15 @@ export const hazidAssessments = pgTable(
       t.reportedByTenantUserId,
     ),
     lockedByIdx: index('hazid_assessments_locked_by_idx').on(t.tenantId, t.lockedByTenantUserId),
+    reviewIdx: index('hazid_assessments_review_idx').on(t.tenantId, t.reviewStatus, t.reviewedAt),
     lockedByFk: foreignKey({
       name: 'hazid_assessments_tenant_locked_by_user_fk',
       columns: [t.tenantId, t.lockedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    reviewedByFk: foreignKey({
+      name: 'hazid_assessments_tenant_reviewed_by_user_fk',
+      columns: [t.tenantId, t.reviewedByTenantUserId],
       foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
     }),
   }),
@@ -289,6 +303,8 @@ export const hazidAssessmentQuestions = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     assessmentId: uuid('assessment_id').notNull(),
+    // Physical tenant-aware FK uses partial-column SET NULL in migration SQL.
+    sourceTypeQuestionId: uuid('source_type_question_id'),
     question: text('question').notNull(),
     questionType: hazidQuestionType('question_type').default('yes_no').notNull(),
     answers: jsonb('answers').$type<string[]>().default([]).notNull(),
@@ -304,6 +320,10 @@ export const hazidAssessmentQuestions = pgTable(
       t.entityOrder,
     ),
     tenantIdx: index('hazid_assessment_questions_tenant_idx').on(t.tenantId),
+    sourceQuestionIdx: index('hazid_assessment_questions_source_question_idx').on(
+      t.tenantId,
+      t.sourceTypeQuestionId,
+    ),
     assessmentFk: foreignKey({
       name: 'hazid_assessment_questions_tenant_assessment_fk',
       columns: [t.tenantId, t.assessmentId],

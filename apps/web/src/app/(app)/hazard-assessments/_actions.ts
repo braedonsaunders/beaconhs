@@ -7,7 +7,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { randomUUID } from 'node:crypto'
-import { and, asc, desc, eq, inArray, isNotNull, isNull, max, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, max, sql } from 'drizzle-orm'
 import { assertCan, can, type RequestContext } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
@@ -48,6 +48,7 @@ import { isUuid } from '@/lib/list-params'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { canAccessTemplate, canEditResponsePayload } from '@/app/(app)/apps/_lib/access'
 import { riskRating } from './_risk-scale'
+import { hazidAppIsApplicable } from '@/lib/hazid-app-condition'
 
 // All HazID server actions assume a tenant is active. requireRequestContext
 // types tenantId as string | null because some admin pages run pre-tenant —
@@ -292,17 +293,43 @@ async function createAutoAssessmentApps(
       ),
     )
     .orderBy(asc(hazidAssessmentTypeApps.entityOrder))
-  const apps = rows.filter((row) =>
-    canAccessTemplate(
-      args.ctx,
-      {
-        status: row.templateStatus,
-        allowedRoles: row.templateAllowedRoles,
-        deletedAt: row.templateDeletedAt,
-      },
-      roleKeys,
-      'operate',
+  const [questionRows, existingRows] = await Promise.all([
+    tx
+      .select({
+        sourceTypeQuestionId: hazidAssessmentQuestions.sourceTypeQuestionId,
+        answer: hazidAssessmentQuestions.answer,
+      })
+      .from(hazidAssessmentQuestions)
+      .where(eq(hazidAssessmentQuestions.assessmentId, args.assessmentId)),
+    tx
+      .select({ typeAppId: hazidAssessmentAppResponses.typeAppId })
+      .from(hazidAssessmentAppResponses)
+      .where(eq(hazidAssessmentAppResponses.assessmentId, args.assessmentId)),
+  ])
+  const answers = new Map<string, string | null>(
+    questionRows.flatMap((row: { sourceTypeQuestionId: string | null; answer: string | null }) =>
+      row.sourceTypeQuestionId ? [[row.sourceTypeQuestionId, row.answer] as const] : [],
     ),
+  )
+  const existingTypeAppIds = new Set(
+    existingRows.flatMap((row: { typeAppId: string | null }) =>
+      row.typeAppId ? [row.typeAppId] : [],
+    ),
+  )
+  const apps = rows.filter(
+    (row) =>
+      !existingTypeAppIds.has(row.app.id) &&
+      hazidAppIsApplicable(row.app.config, answers) &&
+      canAccessTemplate(
+        args.ctx,
+        {
+          status: row.templateStatus,
+          allowedRoles: row.templateAllowedRoles,
+          deletedAt: row.templateDeletedAt,
+        },
+        roleKeys,
+        'operate',
+      ),
   )
 
   const links = []
@@ -410,6 +437,7 @@ async function createAssessment(formData: FormData): Promise<{ id: string }> {
               typeQ.map((q) => ({
                 tenantId: ctx.tenantId,
                 assessmentId: row.id,
+                sourceTypeQuestionId: q.id,
                 question: q.question,
                 questionType: q.questionType,
                 answers: q.answers,
@@ -560,6 +588,7 @@ async function createAssessment(formData: FormData): Promise<{ id: string }> {
             srcQ.map((q) => ({
               tenantId: ctx.tenantId,
               assessmentId: row.id,
+              sourceTypeQuestionId: q.sourceTypeQuestionId,
               question: q.question,
               questionType: q.questionType,
               answers: q.answers,
@@ -684,6 +713,22 @@ export async function openAssessmentApp(formData: FormData) {
       )
       .limit(1)
     if (!typeApp) throw new Error('Assessment app is not available for this type')
+
+    const conditionalAnswers = await tx
+      .select({
+        sourceTypeQuestionId: hazidAssessmentQuestions.sourceTypeQuestionId,
+        answer: hazidAssessmentQuestions.answer,
+      })
+      .from(hazidAssessmentQuestions)
+      .where(eq(hazidAssessmentQuestions.assessmentId, assessmentId))
+    const answersByTypeQuestionId = new Map(
+      conditionalAnswers.flatMap((row) =>
+        row.sourceTypeQuestionId ? [[row.sourceTypeQuestionId, row.answer] as const] : [],
+      ),
+    )
+    if (!hazidAppIsApplicable(typeApp.app.config, answersByTypeQuestionId)) {
+      throw new Error('Answer the configured assessment question before opening this app')
+    }
 
     const roleKeys = await getEffectiveRoleKeys(ctx, tx)
     const templateAccess = {
@@ -883,6 +928,39 @@ export async function lockAssessment(formData: FormData) {
   revalidateAssessment(id)
 }
 
+export async function reviewAssessment(formData: FormData) {
+  const ctx = await ctxWithTenant()
+  assertCanManageModule(ctx, 'hazid')
+  const id = String(formData.get('id') ?? '')
+  const decision = String(formData.get('decision') ?? '')
+  const note = String(formData.get('note') ?? '').trim() || null
+  if (!isUuid(id) || (decision !== 'approved' && decision !== 'rejected')) {
+    throw new Error('Choose approve or reject')
+  }
+  await assertCanSeeAssessment(ctx, id)
+  await ctx.db(async (tx) => {
+    await lockVisibleAssessment(ctx, tx, id)
+    const reviewedAt = new Date()
+    await tx
+      .update(hazidAssessments)
+      .set({
+        reviewStatus: decision,
+        reviewedAt,
+        reviewedByTenantUserId: ctx.membership?.id ?? null,
+        reviewNote: note,
+      })
+      .where(eq(hazidAssessments.id, id))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: id,
+      action: 'update',
+      summary: decision === 'approved' ? 'Safety review approved' : 'Safety review rejected',
+      after: { decision, note, reviewedAt: reviewedAt.toISOString() },
+    })
+  })
+  revalidateAssessment(id)
+}
+
 export async function unlockAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
   assertCan(ctx, 'hazid.update')
@@ -891,17 +969,6 @@ export async function unlockAssessment(formData: FormData) {
   await ctx.db(async (tx) => {
     const assessment = await lockVisibleAssessment(ctx, tx, id)
     if (!assessment.locked) throw new Error('This assessment is not locked')
-    const signatureAttachments = await tx
-      .select({ id: hazidAssessmentSignatures.signatureAttachmentId })
-      .from(hazidAssessmentSignatures)
-      .where(
-        and(
-          eq(hazidAssessmentSignatures.tenantId, ctx.tenantId),
-          eq(hazidAssessmentSignatures.assessmentId, id),
-          isNotNull(hazidAssessmentSignatures.signatureAttachmentId),
-        ),
-      )
-      .for('update')
     await tx
       .update(hazidAssessments)
       .set({
@@ -918,25 +985,6 @@ export async function unlockAssessment(formData: FormData) {
       lockedAt: null,
       lockedByTenantUserId: null,
     })
-    // A changed assessment needs fresh attestations from every listed signer.
-    await tx
-      .update(hazidAssessmentSignatures)
-      .set({ signatureAttachmentId: null, signedAt: null })
-      .where(eq(hazidAssessmentSignatures.assessmentId, id))
-    const attachmentIds = signatureAttachments.flatMap((row) => (row.id ? [row.id] : []))
-    if (attachmentIds.length > 0) {
-      // The attachment deletion trigger enqueues durable object removal after
-      // commit, so clearing signatures cannot leak private signature images.
-      await tx
-        .delete(attachments)
-        .where(
-          and(
-            eq(attachments.tenantId, ctx.tenantId),
-            eq(attachments.kind, 'signature'),
-            inArray(attachments.id, attachmentIds),
-          ),
-        )
-    }
     await recordModuleFlowEvent(tx, ctx, {
       subjectId: id,
       moduleKey: 'hazid',
@@ -947,7 +995,7 @@ export async function unlockAssessment(formData: FormData) {
       entityType: 'hazid_assessment',
       entityId: id,
       action: 'update',
-      summary: 'Unlocked (signatures cleared)',
+      summary: 'Unlocked',
     })
     await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
       sourceModule: 'hazard_assessment',
@@ -1128,6 +1176,7 @@ export async function copyAssessment(formData: FormData) {
         srcQ.map((q) => ({
           tenantId: ctx.tenantId,
           assessmentId: row.id,
+          sourceTypeQuestionId: q.sourceTypeQuestionId,
           question: q.question,
           questionType: q.questionType,
           answers: q.answers,
@@ -1645,6 +1694,18 @@ export async function answerQuestion(formData: FormData) {
           eq(hazidAssessmentQuestions.assessmentId, assessmentId),
         ),
       )
+    const [assessment] = await tx
+      .select({ assessmentTypeId: hazidAssessments.assessmentTypeId })
+      .from(hazidAssessments)
+      .where(eq(hazidAssessments.id, assessmentId))
+      .limit(1)
+    await createAutoAssessmentApps(tx, {
+      ctx,
+      tenantId: ctx.tenantId,
+      assessmentId,
+      assessmentTypeId: assessment?.assessmentTypeId ?? null,
+      submittedBy: ctx.membership?.id ?? null,
+    })
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'hazid_assessment_question',
       entityId: id,
