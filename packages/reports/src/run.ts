@@ -4,12 +4,15 @@
 // routes to the whitelisted custom executor.
 
 import type { Database } from '@beaconhs/db'
-import type { ReportCustomQuery } from '@beaconhs/db/schema'
+import type { ReportCustomQuery, ReportRule, ReportRuleGroup } from '@beaconhs/db/schema'
 import type { ReportEntity } from './entities'
 import {
+  queryComplianceByEntity,
+  queryComplianceByPerson,
   queryCorrectiveActionsOpen,
   queryDocumentComplianceSnapshot,
   queryDocumentsOverdueReview,
+  queryHazidSignatures,
   queryIncidentsSummary,
   queryIncidentsTrend12m,
   queryInspectionsCompleted,
@@ -18,6 +21,7 @@ import {
   queryOverdueRollup,
   querySafetyKpiSummary,
   querySiteScorecard,
+  querySkillsMissing,
   queryTrainingComplianceSnapshot,
   queryTrainingExpiring,
 } from './built-ins'
@@ -61,19 +65,56 @@ export async function runReport(tx: Database, input: RunReportInput): Promise<Re
       return queryTrainingComplianceSnapshot(tx, filters)
     case 'document_compliance_snapshot':
       return queryDocumentComplianceSnapshot(tx, filters)
+    case 'compliance_by_entity':
+      return queryComplianceByEntity(tx, filters)
+    case 'compliance_by_person':
+      return queryComplianceByPerson(tx, filters)
+    case 'skills_missing':
+      return querySkillsMissing(tx, filters)
+    case 'hazid_signatures':
+      return queryHazidSignatures(tx, filters)
     case 'incidents_trend_12m':
       return queryIncidentsTrend12m(tx, filters)
     case 'osha_300_log':
       return queryOsha300Log(tx, filters, range)
     case 'custom_query': {
       if (!input.entityMap) throw new Error('Custom query requires an authorized entity map')
-      return runCustomQuery(tx, customQuery ?? null, {
+      return runCustomQuery(tx, applyRuntimeCustomFilters(customQuery ?? null, filters), {
         maxRows: input.maxRows,
         entityMap: input.entityMap,
       })
     }
     default:
       throw new Error(`Unknown queryKind: ${queryKind}`)
+  }
+}
+
+function applyRuntimeCustomFilters(
+  customQuery: ReportCustomQuery | null,
+  filters: Record<string, unknown>,
+): ReportCustomQuery | null {
+  if (!customQuery) return null
+  const rules: Array<ReportRule | ReportRuleGroup> = []
+  const statuses = Array.isArray(filters.statuses)
+    ? filters.statuses.filter((value): value is string => typeof value === 'string' && value !== '')
+    : []
+  if (statuses.length > 0 && customQuery.entity === 'corrective_actions') {
+    rules.push({ field: 'status', op: 'in', value: statuses })
+  }
+  if (
+    customQuery.entity === 'skill_assignments' &&
+    typeof filters.cwbStandard === 'string' &&
+    filters.cwbStandard.trim()
+  ) {
+    rules.push({ field: 'cwb_standard', op: 'eq', value: filters.cwbStandard.trim() })
+  }
+  if (rules.length === 0) return customQuery
+  return {
+    ...customQuery,
+    filters: {
+      combinator: 'and',
+      rules: [...(customQuery.filters ? [customQuery.filters] : []), ...rules],
+    },
   }
 }
 
@@ -89,6 +130,10 @@ export function rangeModeFor(queryKind: string): 'lookback' | 'lookahead' | 'as_
     queryKind === 'overdue_rollup' ||
     queryKind === 'training_compliance_snapshot' ||
     queryKind === 'document_compliance_snapshot' ||
+    queryKind === 'compliance_by_entity' ||
+    queryKind === 'compliance_by_person' ||
+    queryKind === 'skills_missing' ||
+    queryKind === 'hazid_signatures' ||
     queryKind === 'incidents_trend_12m' ||
     queryKind === 'custom_query'
   ) {

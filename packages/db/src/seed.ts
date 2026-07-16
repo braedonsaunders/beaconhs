@@ -229,6 +229,33 @@ async function main() {
         // corrective_actions). The matrix views pre-compute coverage_status on
         // a 90-day "expiring" window — matching the legacy reports exactly.
         {
+          slug: 'compliance_by_entity',
+          kind: 'built_in',
+          name: 'Compliance — By Entity',
+          description:
+            'Every subject covered by selected compliance requirements, with completion, expected count, percentage, period, and due date. Replaces the legacy assignment-specific report across all modules.',
+          category: 'cross_module',
+          queryKind: 'compliance_by_entity',
+        },
+        {
+          slug: 'compliance_by_person',
+          kind: 'built_in',
+          name: 'Compliance — By Person',
+          description:
+            'All current compliance requirements grouped by person across journals, inspections, documents, training, skills, hazard assessments, equipment, PPE, and corrective actions.',
+          category: 'cross_module',
+          queryKind: 'compliance_by_person',
+        },
+        {
+          slug: 'hazid_signatures',
+          kind: 'built_in',
+          name: 'Hazard ID — Signatures',
+          description:
+            'Hazard-assessment creation and signature compliance by person for the current materialized periods, including expected and completed counts.',
+          category: 'hazid',
+          queryKind: 'hazid_signatures',
+        },
+        {
           slug: 'training_certificate_matrix',
           kind: 'built_in',
           name: 'Training — Certificate Matrix',
@@ -382,6 +409,15 @@ async function main() {
           },
         },
         {
+          slug: 'skills_missing',
+          kind: 'built_in',
+          name: 'Skills — Missing & Expired',
+          description:
+            'Active people who are missing or overdue for a required externally-issued skill, based on certification compliance assignments.',
+          category: 'training',
+          queryKind: 'skills_missing',
+        },
+        {
           slug: 'skills_cwb',
           kind: 'built_in',
           name: 'Skills — CWB (Welding)',
@@ -399,6 +435,11 @@ async function main() {
               'trade',
               'certification_code',
               'certification_name',
+              'cwb_standard',
+              'cwb_type',
+              'cwb_process',
+              'cwb_position',
+              'cwb_level',
               'granted_on',
               'expires_on',
               'status',

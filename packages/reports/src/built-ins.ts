@@ -12,6 +12,7 @@ import {
   complianceObligations,
   complianceStatus,
   correctiveActions,
+  departments,
   documentCategories,
   documents,
   equipmentInspectionSchedules,
@@ -28,6 +29,8 @@ import {
   people,
   ppeItems,
   tenantUsers,
+  trainingSkillAuthorities,
+  trainingSkillTypes,
 } from '@beaconhs/db/schema'
 import { extractRows } from './custom-query'
 import {
@@ -40,6 +43,45 @@ import {
 } from './types'
 
 type Filters = Record<string, unknown>
+
+const COMPLIANCE_SOURCE_MODULES = [
+  'inspection',
+  'document',
+  'training',
+  'form',
+  'journal',
+  'cert_requirement',
+  'equipment_inspection',
+  'ppe_inspection',
+  'job_title_signoff',
+  'corrective_action',
+  'hazard_assessment',
+] as const
+
+const COMPLIANCE_STATUS_VALUES = [
+  'pending',
+  'in_progress',
+  'completed',
+  'overdue',
+  'expiring',
+  'waived',
+  'not_applicable',
+] as const
+
+function pickUuidList(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : []
+  return [...new Set(values.map(pickUuid).filter((id): id is string => id !== null))]
+}
+
+function pickEnumList<const T extends readonly string[]>(value: unknown, allowed: T): T[number][] {
+  const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : []
+  const allowedSet = new Set<string>(allowed)
+  return [
+    ...new Set(
+      values.filter((item): item is T[number] => typeof item === 'string' && allowedSet.has(item)),
+    ),
+  ]
+}
 
 /** Normalise a raw date value (postgres-js returns `date` columns as strings,
  *  drizzle-mapped ones as Date) to YYYY-MM-DD for display. */
@@ -1021,6 +1063,318 @@ export async function queryDocumentComplianceSnapshot(
     ],
     rowCount: rows.length,
   }
+}
+
+// --- compliance_by_entity / compliance_by_person -------------------------------
+
+type ComplianceDetailRow = {
+  obligationId: string
+  obligation: string
+  sourceModule: (typeof COMPLIANCE_SOURCE_MODULES)[number]
+  personId: string | null
+  personName: string
+  employeeNo: string | null
+  department: string | null
+  status: (typeof COMPLIANCE_STATUS_VALUES)[number]
+  count: number
+  expected: number
+  percent: number
+  periodStart: string | null
+  periodEnd: string | null
+  dueOn: string | null
+  completedOn: string | null
+}
+
+async function queryComplianceDetailRows(
+  tx: Database,
+  filters: Filters,
+  fixedSourceModule?: (typeof COMPLIANCE_SOURCE_MODULES)[number],
+): Promise<ComplianceDetailRow[]> {
+  const obligationIds = pickUuidList(filters.obligationIds ?? filters.obligationId)
+  const personIds = pickUuidList(filters.personIds ?? filters.personId)
+  const departmentIds = pickUuidList(filters.departmentIds ?? filters.departmentId)
+  const sourceModules = fixedSourceModule
+    ? [fixedSourceModule]
+    : pickEnumList(filters.sourceModules ?? filters.sourceModule, COMPLIANCE_SOURCE_MODULES)
+  const statuses = pickEnumList(filters.statuses ?? filters.status, COMPLIANCE_STATUS_VALUES)
+
+  const rows = await tx
+    .select({
+      obligationId: complianceObligations.id,
+      obligation: complianceObligations.title,
+      sourceModule: complianceObligations.sourceModule,
+      personId: complianceStatus.personId,
+      personName: sql<string>`coalesce(nullif(concat_ws(', ', ${people.lastName}, ${people.firstName}), ''), ${complianceStatus.subjectKey})`,
+      employeeNo: people.employeeNo,
+      department: departments.name,
+      status: complianceStatus.status,
+      count: complianceStatus.count,
+      expected: complianceStatus.expected,
+      percent: complianceStatus.percent,
+      periodStart: complianceStatus.periodStart,
+      periodEnd: complianceStatus.periodEnd,
+      dueOn: complianceStatus.dueOn,
+      completedOn: complianceStatus.completedOn,
+    })
+    .from(complianceStatus)
+    .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
+    .leftJoin(people, eq(people.id, complianceStatus.personId))
+    .leftJoin(departments, eq(departments.id, people.departmentId))
+    .where(
+      and(
+        isNull(complianceObligations.deletedAt),
+        eq(complianceObligations.status, 'active'),
+        obligationIds.length ? inArray(complianceObligations.id, obligationIds) : undefined,
+        personIds.length ? inArray(complianceStatus.personId, personIds) : undefined,
+        departmentIds.length ? inArray(people.departmentId, departmentIds) : undefined,
+        sourceModules.length
+          ? inArray(complianceObligations.sourceModule, sourceModules)
+          : undefined,
+        statuses.length ? inArray(complianceStatus.status, statuses) : undefined,
+      ),
+    )
+    .orderBy(
+      asc(complianceObligations.title),
+      asc(people.lastName),
+      asc(people.firstName),
+      asc(complianceStatus.subjectKey),
+    )
+
+  return rows
+}
+
+function complianceSummary(rows: ComplianceDetailRow[]) {
+  const satisfied = rows.filter((row) =>
+    ['completed', 'waived', 'not_applicable'].includes(row.status),
+  ).length
+  const overdue = rows.filter((row) => row.status === 'overdue').length
+  return [
+    { label: 'Subjects', value: rows.length },
+    { label: 'Satisfied', value: satisfied },
+    { label: 'Overdue', value: overdue },
+    {
+      label: 'Compliance',
+      value: rows.length === 0 ? '—' : `${Math.round((satisfied / rows.length) * 100)}%`,
+    },
+  ]
+}
+
+export async function queryComplianceByEntity(
+  tx: Database,
+  filters: Filters,
+): Promise<ReportRunResult> {
+  const rows = await queryComplianceDetailRows(tx, filters)
+  const groupsByObligation = new Map<string, ComplianceDetailRow[]>()
+  for (const row of rows) {
+    const list = groupsByObligation.get(row.obligationId) ?? []
+    list.push(row)
+    groupsByObligation.set(row.obligationId, list)
+  }
+
+  const groups: ReportGroup[] = [...groupsByObligation.values()].map((list) => ({
+    title: list[0]!.obligation,
+    subtitle: formatLabel(list[0]!.sourceModule),
+    columns: [
+      'Person / subject',
+      'Employee #',
+      'Department',
+      'Status',
+      'Complete',
+      'Expected',
+      '%',
+      'Period',
+      'Due',
+    ],
+    rows: list.map((row) => [
+      row.personName,
+      row.employeeNo,
+      row.department,
+      formatLabel(row.status),
+      row.count,
+      row.expected,
+      `${row.percent}%`,
+      row.periodStart || row.periodEnd
+        ? `${row.periodStart ?? '—'} → ${row.periodEnd ?? '—'}`
+        : null,
+      row.dueOn,
+    ]),
+  }))
+
+  if (groups.length === 0) {
+    groups.push({
+      title: 'Compliance by entity',
+      columns: ['Person / subject', 'Status', 'Complete', 'Expected', '%', 'Due'],
+      rows: [],
+      isEmpty: true,
+    })
+  }
+  return { groups, summary: complianceSummary(rows), rowCount: rows.length }
+}
+
+export async function queryComplianceByPerson(
+  tx: Database,
+  filters: Filters,
+): Promise<ReportRunResult> {
+  const rows = await queryComplianceDetailRows(tx, filters)
+  const groupsByPerson = new Map<string, ComplianceDetailRow[]>()
+  for (const row of rows) {
+    const key = row.personId ?? row.personName
+    const list = groupsByPerson.get(key) ?? []
+    list.push(row)
+    groupsByPerson.set(key, list)
+  }
+
+  const groups: ReportGroup[] = [...groupsByPerson.values()]
+    .sort((a, b) => a[0]!.personName.localeCompare(b[0]!.personName))
+    .map((list) => ({
+      title: list[0]!.personName,
+      subtitle: [list[0]!.employeeNo, list[0]!.department].filter(Boolean).join(' · '),
+      columns: ['Requirement', 'Module', 'Status', 'Complete', 'Expected', '%', 'Period', 'Due'],
+      rows: list.map((row) => [
+        row.obligation,
+        formatLabel(row.sourceModule),
+        formatLabel(row.status),
+        row.count,
+        row.expected,
+        `${row.percent}%`,
+        row.periodStart || row.periodEnd
+          ? `${row.periodStart ?? '—'} → ${row.periodEnd ?? '—'}`
+          : null,
+        row.dueOn,
+      ]),
+    }))
+
+  if (groups.length === 0) {
+    groups.push({
+      title: 'Compliance by person',
+      columns: ['Requirement', 'Module', 'Status', 'Complete', 'Expected', '%', 'Due'],
+      rows: [],
+      isEmpty: true,
+    })
+  }
+  return { groups, summary: complianceSummary(rows), rowCount: rows.length }
+}
+
+// --- skills_missing -------------------------------------------------------------
+
+export async function querySkillsMissing(tx: Database, filters: Filters): Promise<ReportRunResult> {
+  const personIds = pickUuidList(filters.personIds ?? filters.personId)
+  const departmentIds = pickUuidList(filters.departmentIds ?? filters.departmentId)
+  const skillTypeIds = pickUuidList(filters.skillTypeIds ?? filters.skillTypeId)
+  const authorityIds = pickUuidList(filters.authorityIds ?? filters.authorityId)
+
+  const rows = await tx
+    .select({
+      personId: people.id,
+      personName: sql<string>`concat_ws(', ', ${people.lastName}, ${people.firstName})`,
+      employeeNo: people.employeeNo,
+      department: departments.name,
+      obligation: complianceObligations.title,
+      skill: trainingSkillTypes.name,
+      authority: trainingSkillAuthorities.name,
+      status: complianceStatus.status,
+      dueOn: complianceStatus.dueOn,
+    })
+    .from(complianceStatus)
+    .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
+    .innerJoin(people, eq(people.id, complianceStatus.personId))
+    .leftJoin(departments, eq(departments.id, people.departmentId))
+    .innerJoin(
+      trainingSkillTypes,
+      eq(trainingSkillTypes.id, sql<string>`${complianceObligations.targetRef}->>'skillTypeId'`),
+    )
+    .innerJoin(
+      trainingSkillAuthorities,
+      eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
+    )
+    .where(
+      and(
+        eq(complianceObligations.sourceModule, 'cert_requirement'),
+        eq(complianceObligations.status, 'active'),
+        isNull(complianceObligations.deletedAt),
+        isNull(people.deletedAt),
+        eq(people.status, 'active'),
+        inArray(complianceStatus.status, ['pending', 'overdue']),
+        personIds.length ? inArray(people.id, personIds) : undefined,
+        departmentIds.length ? inArray(people.departmentId, departmentIds) : undefined,
+        skillTypeIds.length ? inArray(trainingSkillTypes.id, skillTypeIds) : undefined,
+        authorityIds.length ? inArray(trainingSkillAuthorities.id, authorityIds) : undefined,
+      ),
+    )
+    .orderBy(asc(people.lastName), asc(people.firstName), asc(trainingSkillTypes.name))
+
+  const byPerson = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const list = byPerson.get(row.personId) ?? []
+    list.push(row)
+    byPerson.set(row.personId, list)
+  }
+  const groups: ReportGroup[] = [...byPerson.values()].map((list) => ({
+    title: list[0]!.personName,
+    subtitle: [list[0]!.employeeNo, list[0]!.department].filter(Boolean).join(' · '),
+    columns: ['Required skill', 'Authority', 'Status', 'Due', 'Requirement'],
+    rows: list.map((row) => [
+      row.skill,
+      row.authority,
+      row.status === 'overdue' ? 'Expired / overdue' : 'Never held / pending',
+      row.dueOn,
+      row.obligation,
+    ]),
+  }))
+  if (groups.length === 0) {
+    groups.push({
+      title: 'Missing or expired skills',
+      columns: ['Person', 'Required skill', 'Authority', 'Status'],
+      rows: [],
+      isEmpty: true,
+    })
+  }
+  return {
+    groups,
+    summary: [
+      { label: 'People affected', value: byPerson.size },
+      { label: 'Missing / expired', value: rows.length },
+    ],
+    rowCount: rows.length,
+  }
+}
+
+// --- hazid_signatures -----------------------------------------------------------
+
+export async function queryHazidSignatures(
+  tx: Database,
+  filters: Filters,
+): Promise<ReportRunResult> {
+  const rows = await queryComplianceDetailRows(tx, filters, 'hazard_assessment')
+  const groups: ReportGroup[] = [
+    {
+      title: 'Hazard assessment signatures',
+      columns: [
+        'Person',
+        'Employee #',
+        'Department',
+        'Status',
+        'Signed / created',
+        'Expected',
+        '%',
+        'Period',
+      ],
+      rows: rows.map((row) => [
+        row.personName,
+        row.employeeNo,
+        row.department,
+        formatLabel(row.status),
+        row.count,
+        row.expected,
+        `${row.percent}%`,
+        row.periodStart || row.periodEnd
+          ? `${row.periodStart ?? '—'} → ${row.periodEnd ?? '—'}`
+          : null,
+      ]),
+      isEmpty: rows.length === 0,
+    },
+  ]
+  return { groups, summary: complianceSummary(rows), rowCount: rows.length }
 }
 
 // --- incidents_trend_12m -----------------------------------------------------------

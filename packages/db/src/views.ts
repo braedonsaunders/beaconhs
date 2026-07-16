@@ -29,6 +29,25 @@ export const REPORT_VIEWS_SQL: string[] = [
      au.name AS authority,
      t.code  AS certification_code,
      t.name  AS certification_name,
+     (SELECT ef.field_value
+        FROM training_extra_fields ef
+       WHERE ef.tenant_id = a.tenant_id
+         AND ef.skill_type_id = t.id
+         AND lower(ef.field_key) = 'standard'
+       ORDER BY ef.sort_order, ef.id
+       LIMIT 1) AS cwb_standard,
+     (SELECT ef.field_value FROM training_extra_fields ef
+       WHERE ef.tenant_id = a.tenant_id AND ef.skill_assignment_id = a.id
+         AND lower(ef.field_key) = 'type' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_type,
+     (SELECT ef.field_value FROM training_extra_fields ef
+       WHERE ef.tenant_id = a.tenant_id AND ef.skill_assignment_id = a.id
+         AND lower(ef.field_key) = 'process' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_process,
+     (SELECT ef.field_value FROM training_extra_fields ef
+       WHERE ef.tenant_id = a.tenant_id AND ef.skill_assignment_id = a.id
+         AND lower(ef.field_key) = 'position' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_position,
+     (SELECT ef.field_value FROM training_extra_fields ef
+       WHERE ef.tenant_id = a.tenant_id AND ef.skill_assignment_id = a.id
+         AND lower(ef.field_key) = 'level (w47.2 only)' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_level,
      a.granted_on,
      a.expires_on,
      CASE

@@ -92,4 +92,32 @@ describe('custom report query boundary', () => {
     ).rejects.toThrow(/authorized entity map/i)
     expect(queries).toHaveLength(0)
   })
+
+  it('ANDs scheduled legacy status and CWB-standard filters into custom reports', async () => {
+    const { database, queries } = capturingDatabase()
+    const correctiveActions = { ...ENTITY, key: 'corrective_actions' }
+    const skillAssignments: ReportEntity = {
+      ...ENTITY,
+      key: 'skill_assignments',
+      columns: [...ENTITY.columns, { key: 'cwb_standard', label: 'CWB standard', kind: 'text' }],
+    }
+    await runReport(database, {
+      queryKind: 'custom_query',
+      filters: { statuses: ['open'] },
+      range: { from: new Date(0), to: new Date(), label: 'test' },
+      customQuery: { entity: 'corrective_actions', mode: 'rows', columns: ['name'] },
+      entityMap: { corrective_actions: correctiveActions },
+    })
+    await runReport(database, {
+      queryKind: 'custom_query',
+      filters: { cwbStandard: 'W47.2' },
+      range: { from: new Date(0), to: new Date(), label: 'test' },
+      customQuery: { entity: 'skill_assignments', mode: 'rows', columns: ['name'] },
+      entityMap: { skill_assignments: skillAssignments },
+    })
+
+    expect(queries).toHaveLength(2)
+    expect(new PgDialect().sqlToQuery(queries[0]!).params).toContain('open')
+    expect(new PgDialect().sqlToQuery(queries[1]!).params).toContain('W47.2')
+  })
 })
