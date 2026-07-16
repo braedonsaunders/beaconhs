@@ -32,14 +32,20 @@ type ScheduleFormInitial = {
   definitionId?: string
   name?: string
   cadence?: 'daily' | 'weekly' | 'monthly'
+  repeatEvery?: number
   dayOfWeek?: number | null
   dayOfMonth?: number | null
+  weekOfMonth?: number | null
   hour?: number
   minute?: number
   timezone?: string
+  startsOn?: string | null
+  endsOn?: string | null
   recipientUserIds?: string[]
   recipientEmails?: string[]
   filters?: Record<string, unknown>
+  emailSubject?: string | null
+  emailMessage?: string | null
 }
 
 const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -68,6 +74,9 @@ export function ScheduleForm({
   const [name, setName] = useState(initial?.name ?? '')
   const [cadence, setCadence] = useState<'daily' | 'weekly' | 'monthly'>(
     initial?.cadence ?? 'weekly',
+  )
+  const [monthlyMode, setMonthlyMode] = useState<'day' | 'weekday'>(
+    initial?.weekOfMonth ? 'weekday' : 'day',
   )
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(
     () => new Set(initial?.recipientUserIds ?? []),
@@ -181,6 +190,31 @@ export function ScheduleForm({
               <option value="monthly">{'Monthly'}</option>
             </Select>
           </div>
+          <div className="space-y-1.5">
+            <Label>
+              <GeneratedText id="m_115d7a60362f86" />
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                name="repeatEvery"
+                type="number"
+                min={1}
+                max={999}
+                required
+                defaultValue={initial?.repeatEvery ?? 1}
+                className="w-20"
+              />
+              <span className="text-xs text-slate-500">
+                {cadence === 'daily' ? (
+                  <GeneratedText id="m_0621564e8d1aef" />
+                ) : cadence === 'weekly' ? (
+                  <GeneratedText id="m_1e3123961c3ccb" />
+                ) : (
+                  <GeneratedText id="m_0d87dcb9dd2a8b" />
+                )}
+              </span>
+            </div>
+          </div>
           <GeneratedValue
             value={
               cadence === 'weekly' ? (
@@ -204,6 +238,27 @@ export function ScheduleForm({
               cadence === 'monthly' ? (
                 <div className="space-y-1.5">
                   <Label>
+                    <GeneratedText id="m_113a8243148955" />
+                  </Label>
+                  <Select
+                    name="monthlyMode"
+                    value={monthlyMode}
+                    onChange={(event) => setMonthlyMode(event.target.value as typeof monthlyMode)}
+                  >
+                    <option value="day">{'Day of month'}</option>
+                    <option value="weekday">
+                      <GeneratedText id="m_03d04ff4885019" />
+                    </option>
+                  </Select>
+                </div>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              cadence === 'monthly' && monthlyMode === 'day' ? (
+                <div className="space-y-1.5">
+                  <Label>
                     <GeneratedText id="m_1f8ef50bb3fd8d" />
                   </Label>
                   <Input
@@ -214,6 +269,46 @@ export function ScheduleForm({
                     defaultValue={initial?.dayOfMonth ?? 1}
                   />
                 </div>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              cadence === 'monthly' && monthlyMode === 'weekday' ? (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>
+                      <GeneratedText id="m_0c348e7e37b197" />
+                    </Label>
+                    <Select name="weekOfMonth" defaultValue={String(initial?.weekOfMonth ?? 1)}>
+                      <option value="1">
+                        <GeneratedText id="m_17e8859f590582" />
+                      </option>
+                      <option value="2">
+                        <GeneratedText id="m_1a9504edad7c39" />
+                      </option>
+                      <option value="3">
+                        <GeneratedText id="m_06e296ae537a43" />
+                      </option>
+                      <option value="4">
+                        <GeneratedText id="m_05ddfca283b2c9" />
+                      </option>
+                      <option value="5">{'Last'}</option>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>
+                      <GeneratedText id="m_0a19a9b2e7c15d" />
+                    </Label>
+                    <Select name="dayOfWeek" defaultValue={String(initial?.dayOfWeek ?? 1)}>
+                      {DOW.map((day, index) => (
+                        <option key={day} value={String(index)}>
+                          {day}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </>
               ) : null
             }
           />
@@ -265,6 +360,18 @@ export function ScheduleForm({
               <option value="America/St_Johns" />
               <option value="UTC" />
             </datalist>
+          </div>
+          <div className="space-y-1.5">
+            <Label>
+              <GeneratedText id="m_0d3742b5c2be2e" />
+            </Label>
+            <Input name="startsOn" type="date" defaultValue={initial?.startsOn ?? ''} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>
+              <GeneratedText id="m_16d01a6b8edfbf" />
+            </Label>
+            <Input name="endsOn" type="date" defaultValue={initial?.endsOn ?? ''} />
           </div>
         </div>
       </fieldset>
@@ -339,6 +446,37 @@ export function ScheduleForm({
           <p className="text-xs text-slate-400 dark:text-slate-500">
             <GeneratedText id="m_08778f6f4d177b" />
           </p>
+        </div>
+      </fieldset>
+
+      <fieldset className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+        <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+          <GeneratedText id="m_19769015dfe77d" />
+        </legend>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>
+              <GeneratedText id="m_0a88689556c4a0" />
+            </Label>
+            <Input
+              name="emailSubject"
+              maxLength={REPORT_SCHEDULE_LIMITS.emailSubjectChars}
+              defaultValue={initial?.emailSubject ?? ''}
+              placeholder={tGenerated('m_0a8a2a0d5db09f')}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>
+              <GeneratedText id="m_07b4019031bee9" />
+            </Label>
+            <Textarea
+              name="emailMessage"
+              rows={4}
+              maxLength={REPORT_SCHEDULE_LIMITS.emailMessageChars}
+              defaultValue={initial?.emailMessage ?? ''}
+              placeholder={tGenerated('m_1efbed41ea9494')}
+            />
+          </div>
         </div>
       </fieldset>
 

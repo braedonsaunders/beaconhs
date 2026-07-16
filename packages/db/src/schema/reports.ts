@@ -18,6 +18,7 @@ import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
   check,
+  date,
   foreignKey,
   index,
   integer,
@@ -195,18 +196,30 @@ export const reportSchedules = pgTable(
       .references(() => reportDefinitions.id, { onDelete: 'restrict' }),
     name: text('name').notNull(),
     cadence: reportCadence('cadence').notNull(),
-    // For weekly: 0..6 (0=Sun). For monthly: 1..31. Null otherwise.
+    // Repeat every N cadence periods, anchored to startsOn when present.
+    repeatEvery: integer('repeat_every').default(1).notNull(),
+    // For weekly: 0..6 (0=Sun). For monthly nth-weekday mode, also 0..6.
     dayOfWeek: integer('day_of_week'),
+    // Monthly day-of-month mode: 1..31. Mutually exclusive with weekOfMonth.
     dayOfMonth: integer('day_of_month'),
+    // Monthly nth-weekday mode: 1..4 = ordinal, 5 = last.
+    weekOfMonth: integer('week_of_month'),
     hour: integer('hour').notNull(),
     minute: integer('minute').notNull(),
     timezone: text('timezone').default('America/Toronto').notNull(),
+    // Optional local-date bounds. An ended schedule remains visible in history
+    // but has no next occurrence.
+    startsOn: date('starts_on'),
+    endsOn: date('ends_on'),
     // Recipients. Either explicit users (we resolve emails at send time) or
     // freeform email addresses.
     recipientUserIds: jsonb('recipient_user_ids').$type<string[]>().default([]).notNull(),
     recipientEmails: jsonb('recipient_emails').$type<string[]>().default([]).notNull(),
     // Filter payload — shape depends on the report's queryKind.
     filters: jsonb('filters').$type<Record<string, unknown>>().default({}).notNull(),
+    // Optional delivery copy. Null uses the standard generated subject/body.
+    emailSubject: text('email_subject'),
+    emailMessage: text('email_message'),
     // Scheduled custom reports are re-authorized at execution time as this
     // active tenant member and, when set, their currently assigned role.
     // A null role preserves the explicit union-of-current-assignments mode.
@@ -223,6 +236,18 @@ export const reportSchedules = pgTable(
     definitionIdx: index('report_schedules_definition_idx').on(t.definitionId),
     runAsTenantUserIdx: index('report_schedules_run_as_tenant_user_idx').on(t.runAsTenantUserId),
     runAsRoleIdx: index('report_schedules_run_as_role_idx').on(t.runAsRoleId),
+    repeatEveryCheck: check(
+      'report_schedules_repeat_every_ck',
+      sql`${t.repeatEvery} between 1 and 999`,
+    ),
+    weekOfMonthCheck: check(
+      'report_schedules_week_of_month_ck',
+      sql`${t.weekOfMonth} is null or ${t.weekOfMonth} between 1 and 5`,
+    ),
+    dateBoundsCheck: check(
+      'report_schedules_date_bounds_ck',
+      sql`${t.startsOn} is null or ${t.endsOn} is null or ${t.startsOn} <= ${t.endsOn}`,
+    ),
     tenantIdIdUx: uniqueIndex('report_schedules_tenant_id_id_ux').on(t.tenantId, t.id),
     runAsTenantUserFk: foreignKey({
       columns: [t.tenantId, t.runAsTenantUserId],
@@ -260,6 +285,8 @@ export type ReportRunRequestSnapshot = {
   filters: Record<string, unknown>
   recipientUserIds: string[]
   recipientEmails: string[]
+  emailSubject: string | null
+  emailMessage: string | null
   runAsTenantUserId: string
   runAsRoleId: string | null
 }

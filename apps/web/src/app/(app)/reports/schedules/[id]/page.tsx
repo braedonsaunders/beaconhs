@@ -210,14 +210,20 @@ export default async function ScheduleDetailPage({
                       definitionId: schedule.definitionId,
                       name: schedule.name,
                       cadence: schedule.cadence,
+                      repeatEvery: schedule.repeatEvery,
                       dayOfWeek: schedule.dayOfWeek,
                       dayOfMonth: schedule.dayOfMonth,
+                      weekOfMonth: schedule.weekOfMonth,
                       hour: schedule.hour,
                       minute: schedule.minute,
                       timezone: schedule.timezone,
+                      startsOn: schedule.startsOn,
+                      endsOn: schedule.endsOn,
                       recipientUserIds: schedule.recipientUserIds ?? [],
                       recipientEmails: schedule.recipientEmails ?? [],
                       filters: schedule.filters ?? {},
+                      emailSubject: schedule.emailSubject,
+                      emailMessage: schedule.emailMessage,
                     }}
                     submitLabel={tGenerated('m_1ab9025ed1067c')}
                     action={updateBound}

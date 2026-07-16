@@ -25,14 +25,48 @@ describe('report schedule form parser', () => {
     expect(parseScheduleForm(form())).toEqual({
       name: 'Weekly incidents',
       cadence: 'weekly',
+      repeatEvery: 1,
       dayOfWeek: 1,
       dayOfMonth: null,
+      weekOfMonth: null,
       hour: 7,
       minute: 30,
       timezone: 'America/Toronto',
+      startsOn: null,
+      endsOn: null,
       recipientUserIds: ['user_1', 'user_2'],
       recipientEmails: ['hse@example.com'],
       filters: { days: 30 },
+      emailSubject: null,
+      emailMessage: null,
+    })
+  })
+
+  it('parses bounded nth-weekday schedules and custom email copy', () => {
+    expect(
+      parseScheduleForm(
+        form({
+          cadence: 'monthly',
+          monthlyMode: 'weekday',
+          repeatEvery: '2',
+          weekOfMonth: '1',
+          dayOfWeek: '1',
+          startsOn: '2026-01-01',
+          endsOn: '2027-12-31',
+          emailSubject: 'Monthly safety report',
+          emailMessage: 'Review this before the meeting.',
+        }),
+      ),
+    ).toMatchObject({
+      cadence: 'monthly',
+      repeatEvery: 2,
+      dayOfWeek: 1,
+      dayOfMonth: null,
+      weekOfMonth: 1,
+      startsOn: '2026-01-01',
+      endsOn: '2027-12-31',
+      emailSubject: 'Monthly safety report',
+      emailMessage: 'Review this before the meeting.',
     })
   })
 

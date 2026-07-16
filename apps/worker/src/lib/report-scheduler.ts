@@ -5,7 +5,7 @@
 // rerunning before the next cadence boundary advances does nothing because
 // nextRunAt was already moved forward.
 
-import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { enqueueReportRun } from '@beaconhs/jobs'
@@ -78,12 +78,7 @@ export async function scanReportSchedules(now: Date = new Date()): Promise<void>
     const due = await tx
       .select()
       .from(reportSchedules)
-      .where(
-        and(
-          eq(reportSchedules.active, true),
-          or(isNull(reportSchedules.nextRunAt), lte(reportSchedules.nextRunAt, now)),
-        ),
-      )
+      .where(and(eq(reportSchedules.active, true), lte(reportSchedules.nextRunAt, now)))
       .orderBy(sql`${reportSchedules.nextRunAt} ASC NULLS FIRST`, asc(reportSchedules.id))
       .limit(100)
       .for('update', { skipLocked: true })
@@ -99,17 +94,21 @@ export async function scanReportSchedules(now: Date = new Date()): Promise<void>
       const next = computeNextRunAt(
         {
           cadence: schedule.cadence,
+          repeatEvery: schedule.repeatEvery,
           dayOfWeek: schedule.dayOfWeek,
           dayOfMonth: schedule.dayOfMonth,
+          weekOfMonth: schedule.weekOfMonth,
           hour: schedule.hour,
           minute: schedule.minute,
           timezone: schedule.timezone,
+          startsOn: schedule.startsOn,
+          endsOn: schedule.endsOn,
         },
         now,
       )
       await tx
         .update(reportSchedules)
-        .set({ nextRunAt: next })
+        .set({ nextRunAt: next, ...(next ? {} : { active: false }) })
         .where(eq(reportSchedules.id, schedule.id))
       runs.push({ id: run.id, tenantId: schedule.tenantId, scheduleId: schedule.id })
     }

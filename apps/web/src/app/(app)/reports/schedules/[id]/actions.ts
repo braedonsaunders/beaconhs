@@ -7,7 +7,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { reportSchedules } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { claimReportRun } from '@beaconhs/reports'
+import { claimReportRun, computeNextRunAt } from '@beaconhs/reports'
 import { enqueueReportRun } from '@beaconhs/jobs'
 import { requireUuidInput } from '@/lib/mutation-input'
 import { prepareScheduleMutation } from '../_mutation'
@@ -20,11 +20,40 @@ export async function setActive(scheduleId: string, active: boolean): Promise<vo
   const normalizedScheduleId = requireUuidInput(scheduleId, 'Report schedule')
   const runAsTenantUserId = ctx.membership.id
   const updated = await ctx.db(async (tx) => {
+    const [schedule] = await tx
+      .select()
+      .from(reportSchedules)
+      .where(eq(reportSchedules.id, normalizedScheduleId))
+      .limit(1)
+    if (!schedule) return null
+    const nextRunAt = active
+      ? computeNextRunAt({
+          cadence: schedule.cadence,
+          repeatEvery: schedule.repeatEvery,
+          dayOfWeek: schedule.dayOfWeek,
+          dayOfMonth: schedule.dayOfMonth,
+          weekOfMonth: schedule.weekOfMonth,
+          hour: schedule.hour,
+          minute: schedule.minute,
+          timezone: schedule.timezone,
+          startsOn: schedule.startsOn,
+          endsOn: schedule.endsOn,
+        })
+      : schedule.nextRunAt
+    if (active && !nextRunAt) {
+      throw new Error('This schedule has ended. Extend its end date before activating it.')
+    }
     const [row] = await tx
       .update(reportSchedules)
       .set({
         active,
-        ...(active ? { runAsTenantUserId, runAsRoleId: ctx.activeRoleId ?? null } : {}),
+        ...(active
+          ? {
+              runAsTenantUserId,
+              runAsRoleId: ctx.activeRoleId ?? null,
+              nextRunAt,
+            }
+          : {}),
       })
       .where(eq(reportSchedules.id, normalizedScheduleId))
       .returning({ id: reportSchedules.id })
@@ -83,14 +112,20 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
     definitionId,
     name,
     cadence,
+    repeatEvery,
     dayOfWeek,
     dayOfMonth,
+    weekOfMonth,
     hour,
     minute,
     timezone,
+    startsOn,
+    endsOn,
     recipientUserIds,
     recipientEmails,
     filters,
+    emailSubject,
+    emailMessage,
     nextRunAt,
   } = await prepareScheduleMutation(ctx, formData)
 
@@ -101,17 +136,24 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
         definitionId,
         name,
         cadence,
+        repeatEvery,
         dayOfWeek,
         dayOfMonth,
+        weekOfMonth,
         hour,
         minute,
         timezone,
+        startsOn,
+        endsOn,
         recipientUserIds,
         recipientEmails,
         filters,
+        emailSubject,
+        emailMessage,
         runAsTenantUserId,
         runAsRoleId: ctx.activeRoleId ?? null,
         nextRunAt,
+        ...(nextRunAt ? {} : { active: false }),
       })
       .where(eq(reportSchedules.id, normalizedScheduleId))
       .returning({ id: reportSchedules.id })
@@ -128,11 +170,17 @@ export async function updateSchedule(scheduleId: string, formData: FormData): Pr
       name,
       definitionId,
       cadence,
+      repeatEvery,
       dayOfWeek,
       dayOfMonth,
+      weekOfMonth,
       hour,
       minute,
       timezone,
+      startsOn,
+      endsOn,
+      emailSubject,
+      emailMessage,
       recipientEmails,
       recipientUserIds,
     },

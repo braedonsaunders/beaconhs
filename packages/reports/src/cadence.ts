@@ -19,23 +19,42 @@ export type CadenceInput = {
   dayOfWeek?: number | null
   /** 1..31. Required for monthly. */
   dayOfMonth?: number | null
+  /** Monthly nth-weekday mode: 1..4 = ordinal, 5 = last. */
+  weekOfMonth?: number | null
+  /** Repeat every N cadence periods. */
+  repeatEvery?: number | null
   hour: number
   minute: number
   /** IANA zone (e.g. 'America/Toronto'). */
   timezone: string
+  /** Inclusive local-date bounds (YYYY-MM-DD). */
+  startsOn?: string | null
+  endsOn?: string | null
 }
 
 /**
  * Returns the next future UTC Date matching the cadence (strictly > `from`).
  */
-export function computeNextRunAt(input: CadenceInput, from: Date = new Date()): Date {
+export function computeNextRunAt(input: CadenceInput, from: Date = new Date()): Date | null {
   const tz = input.timezone || 'UTC'
-  // Probe candidate days starting from `from` (in tz). For weekly/monthly we
-  // may need to walk forward up to ~60 days; 366 is a safe upper bound for
-  // edge cases like Feb-29 monthly schedules.
+  const repeatEvery = input.repeatEvery ?? 1
+  if (!Number.isSafeInteger(repeatEvery) || repeatEvery < 1 || repeatEvery > 999) {
+    throw new Error('repeatEvery must be an integer between 1 and 999')
+  }
+  validateDateBound(input.startsOn, 'startsOn')
+  validateDateBound(input.endsOn, 'endsOn')
+  if (input.startsOn && input.endsOn && input.startsOn > input.endsOn) {
+    throw new Error('startsOn must be on or before endsOn')
+  }
+
+  // Probe local calendar days. Ten years covers the largest accepted interval
+  // while still terminating quickly for an ended schedule.
   const start = startOfTzDay(from, tz)
-  for (let i = 0; i < 366; i++) {
+  for (let i = 0; i < 3660; i++) {
     const dayLocal = addDays(start, i)
+    const dateKey = tzDateKey(dayLocal, tz)
+    if (input.startsOn && dateKey < input.startsOn) continue
+    if (input.endsOn && dateKey > input.endsOn) return null
     if (!matchesDay(dayLocal, input, tz)) continue
     const candidate = zonedDateTimeToUtc(
       tzYear(dayLocal, tz),
@@ -47,20 +66,65 @@ export function computeNextRunAt(input: CadenceInput, from: Date = new Date()): 
     )
     if (candidate.getTime() > from.getTime()) return candidate
   }
-  // Shouldn't happen for any realistic schedule.
-  throw new Error('computeNextRunAt: no match within a year')
+  throw new Error('computeNextRunAt: no match within ten years')
 }
 
 function matchesDay(localDay: Date, input: CadenceInput, tz: string): boolean {
-  if (input.cadence === 'daily') return true
+  const repeatEvery = input.repeatEvery ?? 1
+  const dateKey = tzDateKey(localDay, tz)
+  const anchorKey = input.startsOn ?? '1970-01-04'
+  const anchor = parseDateKey(anchorKey)
+  const current = {
+    year: tzYear(localDay, tz),
+    month: tzMonth(localDay, tz),
+    day: tzDay(localDay, tz),
+  }
+  const daysFromAnchor = calendarDayNumber(current) - calendarDayNumber(anchor)
+  if (daysFromAnchor < 0) return false
+
+  if (input.cadence === 'daily') return daysFromAnchor % repeatEvery === 0
   if (input.cadence === 'weekly') {
     const dow = tzWeekday(localDay, tz)
-    return dow === (input.dayOfWeek ?? 1)
+    return dow === (input.dayOfWeek ?? 1) && Math.floor(daysFromAnchor / 7) % repeatEvery === 0
   }
   if (input.cadence === 'monthly') {
-    return tzDay(localDay, tz) === (input.dayOfMonth ?? 1)
+    const monthsFromAnchor = (current.year - anchor.year) * 12 + (current.month - anchor.month)
+    if (monthsFromAnchor < 0 || monthsFromAnchor % repeatEvery !== 0) return false
+    if (input.weekOfMonth != null) {
+      const expectedDow = input.dayOfWeek ?? 1
+      if (tzWeekday(localDay, tz) !== expectedDow) return false
+      if (input.weekOfMonth === 5) {
+        return current.day + 7 > daysInMonth(current.year, current.month)
+      }
+      return Math.ceil(current.day / 7) === input.weekOfMonth
+    }
+    return current.day === (input.dayOfMonth ?? 1)
   }
   return false
+}
+
+function validateDateBound(value: string | null | undefined, label: string): void {
+  if (!value) return
+  const parsed = parseDateKey(value)
+  if (
+    tzDateKey(new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day, 12)), 'UTC') !== value
+  ) {
+    throw new Error(`${label} must be a valid YYYY-MM-DD date`)
+  }
+}
+
+function parseDateKey(value: string): { year: number; month: number; day: number } {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) throw new Error('Schedule date bounds must use YYYY-MM-DD')
+  return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) }
+}
+
+function calendarDayNumber(value: { year: number; month: number; day: number }): number {
+  return Math.floor(Date.UTC(value.year, value.month - 1, value.day) / 86_400_000)
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
 }
 
 // --- Timezone arithmetic -------------------------------------------------
@@ -139,4 +203,8 @@ function tzDay(d: Date, tz: string): number {
 function tzWeekday(d: Date, tz: string): number {
   const wd = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(d)
   return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(wd)
+}
+
+function tzDateKey(d: Date, tz: string): string {
+  return `${String(tzYear(d, tz)).padStart(4, '0')}-${String(tzMonth(d, tz)).padStart(2, '0')}-${String(tzDay(d, tz)).padStart(2, '0')}`
 }

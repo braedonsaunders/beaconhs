@@ -266,7 +266,9 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
       )
     }
 
-    const subject = `${snapshot.scheduleName || snapshot.definition.name} for ${range.label}`
+    const subject =
+      snapshot.emailSubject?.trim() ||
+      `${snapshot.scheduleName || snapshot.definition.name} for ${range.label}`
     const runLink = `${appBaseUrl()}/reports/schedules/${scheduleId}/runs/${runId}`
     const pdfLink = await presignGet({
       key: artifact.r2Key,
@@ -276,11 +278,15 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
     const footnote = attachPdf
       ? 'The PDF is attached to this email and stored on the run record. The download link is valid for 7 days.'
       : 'The PDF was too large to attach — use the download link (valid for 7 days) or the run record in the app.'
-    const html = `<p>Your scheduled report <strong>${escapeHtml(snapshot.scheduleName || snapshot.definition.name)}</strong> is ready.</p>
+    const customMessage = snapshot.emailMessage?.trim() ?? ''
+    const customHtml = customMessage
+      ? `<p>${escapeHtml(customMessage).replace(/\r?\n/g, '<br/>')}</p>`
+      : ''
+    const html = `${customHtml}<p>Your scheduled report <strong>${escapeHtml(snapshot.scheduleName || snapshot.definition.name)}</strong> is ready.</p>
       <p>Date range: ${escapeHtml(range.label)}<br/>Rows: ${artifact.rowCount}</p>
       <p><a href="${escapeHtml(runLink)}">View in app</a> &middot; <a href="${escapeHtml(pdfLink)}">Download PDF</a></p>
       <p style="color:#666;font-size:12px;">${footnote}</p>`
-    const text = `Your scheduled report "${snapshot.scheduleName || snapshot.definition.name}" is ready.
+    const text = `${customMessage ? `${customMessage}\n\n` : ''}Your scheduled report "${snapshot.scheduleName || snapshot.definition.name}" is ready.
 Date range: ${range.label}
 Rows: ${artifact.rowCount}
 

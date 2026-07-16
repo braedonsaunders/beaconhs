@@ -236,9 +236,11 @@ Schedules send a report as a PDF email on a repeating schedule, so nobody has to
 
 1. On any report, click **Subscribe**. Or open the **Schedules** tab and click **New schedule**.
 2. Pick the report and give the schedule a name.
-3. Under **Delivery**, set the **Cadence** (**Daily**, **Weekly**, or **Monthly**), the day, and the time.
-4. Under **Recipients**, add team members, or type outside email addresses under **Additional email addresses**.
-5. Click **Create schedule**.
+3. Under **Delivery**, set the **Cadence** (**Daily**, **Weekly**, or **Monthly**), **Repeat every**, the day, and the time. Monthly schedules can use a calendar date or a weekday pattern such as the first Monday.
+4. Add an optional **Start date** or **End date** when the delivery must run only for a fixed period.
+5. Under **Recipients**, add team members, or type outside email addresses under **Additional email addresses**.
+6. Under **Email copy**, enter an optional subject or message. Leave them blank to use the standard report email.
+7. Click **Create schedule**.
 
 The schedule runs with the current access of the member and active role that created or last edited it. If that membership is suspended, the role is removed, or access to a Builder app is revoked, the run fails without exposing that app's records. Edit and save the schedule to claim it under your current role.
 

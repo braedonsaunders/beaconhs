@@ -1,5 +1,7 @@
 export const REPORT_SCHEDULE_LIMITS = {
   nameChars: 200,
+  emailSubjectChars: 500,
+  emailMessageChars: 20_000,
   timezoneChars: 100,
   recipientCount: 1_000,
   recipientEmailChars: 320,

@@ -30,6 +30,8 @@ function snapshotRequest(
     filters: { ...schedule.filters },
     recipientUserIds: [...schedule.recipientUserIds],
     recipientEmails: [...schedule.recipientEmails],
+    emailSubject: schedule.emailSubject,
+    emailMessage: schedule.emailMessage,
     runAsTenantUserId: schedule.runAsTenantUserId,
     runAsRoleId: schedule.runAsRoleId,
   }

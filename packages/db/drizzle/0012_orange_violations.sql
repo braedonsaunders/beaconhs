@@ -1,0 +1,3 @@
+ALTER TABLE "report_schedules" ADD CONSTRAINT "report_schedules_repeat_every_ck" CHECK ("report_schedules"."repeat_every" between 1 and 999);--> statement-breakpoint
+ALTER TABLE "report_schedules" ADD CONSTRAINT "report_schedules_week_of_month_ck" CHECK ("report_schedules"."week_of_month" is null or "report_schedules"."week_of_month" between 1 and 5);--> statement-breakpoint
+ALTER TABLE "report_schedules" ADD CONSTRAINT "report_schedules_date_bounds_ck" CHECK ("report_schedules"."starts_on" is null or "report_schedules"."ends_on" is null or "report_schedules"."starts_on" <= "report_schedules"."ends_on");
