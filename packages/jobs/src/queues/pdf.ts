@@ -9,6 +9,7 @@ import {
   assertString,
   assertUuid,
 } from '../validation'
+import type { EmailAttachment } from './email'
 
 // When a PDF job carries an `email` payload, the worker emails the rendered PDF
 // as an attachment after rendering (used by the Flows send_email attachPdf path,
@@ -21,6 +22,7 @@ export type PdfEmailPayload = {
   filename: string
   category?: string
   tenantId?: string
+  attachments?: EmailAttachment[]
 }
 
 export type PdfArtifactTarget = { kind: 'form_response'; responseId: string }
@@ -126,7 +128,7 @@ export type RenderedPdfArtifact = {
   filename: string
 }
 
-const MAX_PDF_JOB_BYTES = 8 * 1024 * 1024
+const MAX_PDF_JOB_BYTES = 16 * 1024 * 1024
 const MAX_HTML_BYTES = 2 * 1024 * 1024
 const MAX_RECORD_FIELDS = 500
 const MAX_RECORD_SECTIONS = 50

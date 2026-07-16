@@ -95,9 +95,14 @@ describe('contextual email recipients', () => {
     const parsed = actionDataSchema.parse({
       action: 'send_email',
       to: [
+        { type: 'person_group', groupId: 'safety-team' },
         {
           type: 'person_group_for_record_person',
           groupId: 'manager-group',
+          personField: 'person_id',
+        },
+        {
+          type: 'record_person_manager',
           personField: 'person_id',
         },
         {
@@ -116,7 +121,29 @@ describe('contextual email recipients', () => {
 
     expect(parsed).toMatchObject({ action: 'send_email', to: expect.any(Array) })
     if (parsed.action !== 'send_email') throw new Error('Expected a send-email action')
-    expect(parsed.to).toHaveLength(3)
+    expect(parsed.to).toHaveLength(5)
+  })
+
+  it('accepts conditional XLSX templates and limits attachment fan-out', () => {
+    const attachment = {
+      templateAttachmentId: 'template-id',
+      filename: 'site-report.xlsx',
+      when: { op: 'eq', field: 'site_org_unit_id', value: 'site-id' } as const,
+    }
+    expect(
+      actionDataSchema.parse({
+        action: 'send_email',
+        to: [{ type: 'submitter' }],
+        spreadsheetAttachments: [attachment],
+      }),
+    ).toMatchObject({ spreadsheetAttachments: [attachment] })
+    expect(() =>
+      actionDataSchema.parse({
+        action: 'send_email',
+        to: [{ type: 'submitter' }],
+        spreadsheetAttachments: Array.from({ length: 11 }, () => attachment),
+      }),
+    ).toThrow()
   })
 })
 

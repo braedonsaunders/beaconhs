@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import {
-  notificationGroups,
+  personGroups,
   roles,
   tenantNotificationPolicy,
   tenantNotificationSettings,
@@ -92,13 +92,13 @@ async function loadAllowedRecipients(ctx: RequestContext, items: CategorySetting
     const groupRows =
       requestedGroupIds.length > 0
         ? await tx
-            .select({ id: notificationGroups.id })
-            .from(notificationGroups)
+            .select({ id: personGroups.id })
+            .from(personGroups)
             .where(
               and(
-                eq(notificationGroups.tenantId, ctx.tenantId),
-                isNull(notificationGroups.deletedAt),
-                inArray(notificationGroups.id, requestedGroupIds),
+                eq(personGroups.tenantId, ctx.tenantId),
+                isNull(personGroups.deletedAt),
+                inArray(personGroups.id, requestedGroupIds),
               ),
             )
         : []

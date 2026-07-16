@@ -76,10 +76,6 @@ const hardenedRoutingReferences = [
     onDelete: 'no action',
   },
   {
-    reference: 'notification_group_members.tenant_id,group_id->notification_groups.tenant_id,id',
-    onDelete: 'cascade',
-  },
-  {
     reference: 'sync_crosswalk.tenant_id,connection_id->sync_connections.tenant_id,id',
     onDelete: 'cascade',
   },

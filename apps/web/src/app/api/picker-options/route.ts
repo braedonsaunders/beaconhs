@@ -15,7 +15,6 @@ import {
 } from 'drizzle-orm'
 import {
   correctiveActions,
-  crews,
   departments,
   documents,
   equipmentCategories,
@@ -30,7 +29,6 @@ import {
   inspectionTypes,
   orgUnits,
   people,
-  personGroups,
   personTitles,
   ppeTypes,
   roles,
@@ -209,6 +207,8 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
       return can(ctx, 'compliance.read')
     case 'location-parent-units':
       return can(ctx, 'admin.org.manage')
+    case 'document-signoff-sites':
+      return can(ctx, 'documents.manage')
     case 'incident-sites':
     case 'incident-departments':
     case 'incident-classifications':
@@ -281,14 +281,6 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
       return can(ctx, 'equipment.manage') || can(ctx, 'equipment.inspect')
     case 'incident-classification-parents':
       return canManage('incidents')
-    case 'notification-group-people':
-    case 'notification-group-roles':
-    case 'notification-group-departments':
-    case 'notification-group-org-units':
-    case 'notification-group-trades':
-    case 'notification-group-crews':
-    case 'notification-group-person-groups':
-      return ctx.isSuperAdmin || can(ctx, 'admin.settings.manage')
     case 'compliance-obligation-inspection-types':
     case 'compliance-obligation-documents':
     case 'compliance-obligation-courses':
@@ -385,10 +377,7 @@ async function loadOptions(
       )
     }
 
-    if (
-      lookup === 'notification-group-people' ||
-      lookup === 'compliance-obligation-audience-people'
-    ) {
+    if (lookup === 'compliance-obligation-audience-people') {
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)
         .from(people)
@@ -398,10 +387,7 @@ async function loadOptions(
       return boundPickerOptions(personOptions(rows))
     }
 
-    if (
-      lookup === 'notification-group-roles' ||
-      lookup === 'compliance-obligation-audience-roles'
-    ) {
+    if (lookup === 'compliance-obligation-audience-roles') {
       const match = input.hasQuery
         ? or(
             ilike(roles.name, input.term),
@@ -422,10 +408,7 @@ async function loadOptions(
       return boundPickerOptions(rows.map((row) => option(row.key, row.name, row.key)))
     }
 
-    if (
-      lookup === 'notification-group-departments' ||
-      lookup === 'compliance-obligation-audience-departments'
-    ) {
+    if (lookup === 'compliance-obligation-audience-departments') {
       const match = input.hasQuery
         ? or(
             ilike(departments.name, input.term),
@@ -446,10 +429,7 @@ async function loadOptions(
       return boundPickerOptions(rows.map((row) => option(row.id, row.name, row.code)))
     }
 
-    if (
-      lookup === 'notification-group-trades' ||
-      lookup === 'compliance-obligation-audience-trades'
-    ) {
+    if (lookup === 'compliance-obligation-audience-trades') {
       const match = input.hasQuery
         ? or(
             ilike(trades.name, input.term),
@@ -471,10 +451,9 @@ async function loadOptions(
     }
 
     if (
-      lookup === 'notification-group-org-units' ||
-      lookup === 'compliance-obligation-audience-org-units'
+      lookup === 'compliance-obligation-audience-org-units' ||
+      lookup === 'document-signoff-sites'
     ) {
-      const complianceAudience = lookup === 'compliance-obligation-audience-org-units'
       const match = input.hasQuery
         ? or(
             ilike(orgUnits.name, input.term),
@@ -491,11 +470,7 @@ async function loadOptions(
         })
         .from(orgUnits)
         .where(
-          and(
-            isNull(orgUnits.deletedAt),
-            complianceAudience ? sql`${orgUnits.level} in ('site', 'project')` : undefined,
-            match,
-          ),
+          and(isNull(orgUnits.deletedAt), sql`${orgUnits.level} in ('site', 'project')`, match),
         )
         .orderBy(
           ...(input.selected ? [desc(sql`${orgUnits.id} = ${input.selected}`)] : []),
@@ -504,59 +479,8 @@ async function loadOptions(
         )
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(
-        rows.map((row) =>
-          option(
-            row.id,
-            complianceAudience ? `${row.name} (${row.level})` : `${row.name} · ${row.level}`,
-            row.code,
-          ),
-        ),
+        rows.map((row) => option(row.id, `${row.name} (${row.level})`, row.code)),
       )
-    }
-
-    if (lookup === 'notification-group-crews') {
-      const match = input.hasQuery
-        ? or(
-            ilike(crews.name, input.term),
-            input.selected ? eq(crews.id, input.selected) : undefined,
-          )
-        : undefined
-      const rows = await tx
-        .select({ id: crews.id, name: crews.name })
-        .from(crews)
-        .where(match)
-        .orderBy(
-          ...(input.selected ? [desc(sql`${crews.id} = ${input.selected}`)] : []),
-          asc(crews.name),
-          asc(crews.id),
-        )
-        .limit(PICKER_RESULT_LIMIT + 1)
-      return boundPickerOptions(rows.map((row) => option(row.id, row.name)))
-    }
-
-    if (lookup === 'notification-group-person-groups') {
-      const match = input.hasQuery
-        ? or(
-            ilike(personGroups.name, input.term),
-            ilike(personGroups.description, input.term),
-            input.selected ? eq(personGroups.id, input.selected) : undefined,
-          )
-        : undefined
-      const rows = await tx
-        .select({
-          id: personGroups.id,
-          name: personGroups.name,
-          description: personGroups.description,
-        })
-        .from(personGroups)
-        .where(and(isNull(personGroups.deletedAt), match))
-        .orderBy(
-          ...(input.selected ? [desc(sql`${personGroups.id} = ${input.selected}`)] : []),
-          asc(personGroups.name),
-          asc(personGroups.id),
-        )
-        .limit(PICKER_RESULT_LIMIT + 1)
-      return boundPickerOptions(rows.map((row) => option(row.id, row.name, row.description)))
     }
 
     if (lookup === 'compliance-obligation-inspection-types') {

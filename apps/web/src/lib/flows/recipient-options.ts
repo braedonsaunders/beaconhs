@@ -5,10 +5,10 @@ import 'server-only'
 
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
+  attachments,
   complianceObligations,
   customerContacts,
   departments,
-  notificationGroups,
   orgUnits,
   people,
   personGroups,
@@ -20,10 +20,10 @@ type RecipientOptionsData = {
   people: { id: string; name: string }[]
   roles: { key: string; name: string }[]
   departments: { id: string; name: string }[]
-  groups: { id: string; name: string }[]
   personGroups: { id: string; name: string }[]
   contacts: { id: string; name: string; orgUnitName: string }[]
   obligations: { id: string; name: string }[]
+  spreadsheetTemplates: { id: string; name: string }[]
 }
 
 export async function loadRecipientOptions(ctx: RequestContext): Promise<RecipientOptionsData> {
@@ -41,18 +41,7 @@ export async function loadRecipientOptions(ctx: RequestContext): Promise<Recipie
       .select({ id: departments.id, name: departments.name })
       .from(departments)
       .orderBy(asc(departments.name))
-    // Reusable notification groups — degrade to empty if the table isn't there.
-    let groups: { id: string; name: string }[] = []
-    try {
-      groups = await tx
-        .select({ id: notificationGroups.id, name: notificationGroups.name })
-        .from(notificationGroups)
-        .where(isNull(notificationGroups.deletedAt))
-        .orderBy(asc(notificationGroups.name))
-    } catch {
-      groups = []
-    }
-    const [pGroups, contacts, obligations] = await Promise.all([
+    const [pGroups, contacts, obligations, spreadsheetTemplates] = await Promise.all([
       tx
         .select({ id: personGroups.id, name: personGroups.name })
         .from(personGroups)
@@ -74,15 +63,28 @@ export async function loadRecipientOptions(ctx: RequestContext): Promise<Recipie
           and(eq(complianceObligations.status, 'active'), isNull(complianceObligations.deletedAt)),
         )
         .orderBy(asc(complianceObligations.title)),
+      tx
+        .select({ id: attachments.id, name: attachments.filename })
+        .from(attachments)
+        .where(
+          and(
+            eq(attachments.kind, 'document'),
+            eq(
+              attachments.contentType,
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ),
+          ),
+        )
+        .orderBy(asc(attachments.filename)),
     ])
     return {
       people: ppl.map((p) => ({ id: p.id, name: `${p.first} ${p.last}`.trim() })),
       roles: rls,
       departments: depts,
-      groups,
       personGroups: pGroups,
       contacts,
       obligations,
+      spreadsheetTemplates,
     }
   })
 }

@@ -124,6 +124,7 @@ async function emailRenderedPdf(
     html: email.html,
     text: email.text,
     attachments: [
+      ...(email.attachments ?? []),
       {
         filename: email.filename || artifact.filename,
         content: bytes.toString('base64'),

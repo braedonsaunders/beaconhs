@@ -803,8 +803,8 @@ export function NotificationSettingsForm({
                           onChange={(v) => patch(cat.key, { groupIds: v })}
                           placeholder={tGenerated('m_059b16f0ac25bf')}
                           searchPlaceholder={tGenerated('m_15c4d2ca7e95f7')}
-                          sheetTitle="Select notification groups"
-                          emptyHint="No notification groups yet — create one from the Notification groups page."
+                          sheetTitle="Select People groups"
+                          emptyHint="No People groups yet — create one from People → Groups."
                         />
                       </div>
 

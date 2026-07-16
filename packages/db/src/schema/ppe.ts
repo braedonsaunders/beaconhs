@@ -18,7 +18,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
-import { people } from './org'
+import { orgUnits, people } from './org'
 
 export const ppeTypes = pgTable(
   'ppe_types',
@@ -175,6 +175,7 @@ export const ppeInspections = pgTable(
     kind: ppeInspectionKind('kind').notNull(),
     status: ppeInspectionStatus('status').default('submitted').notNull(),
     result: ppeInspectionResult('result'),
+    siteOrgUnitId: uuid('site_org_unit_id'),
     inspectedByTenantUserId: uuid('inspected_by_tenant_user_id'),
     // Immutable display evidence for historical and imported inspections. The
     // optional actor FK remains authoritative when the account still exists,
@@ -192,6 +193,7 @@ export const ppeInspections = pgTable(
       t.tenantId,
       t.inspectedByTenantUserId,
     ),
+    siteIdx: index('ppe_inspections_site_idx').on(t.tenantId, t.siteOrgUnitId),
     tenantIdx: index('ppe_inspections_tenant_idx').on(t.tenantId),
     itemFk: foreignKey({
       name: 'ppe_inspections_tenant_item_fk',
@@ -202,6 +204,11 @@ export const ppeInspections = pgTable(
       name: 'ppe_inspections_tenant_inspected_by_fk',
       columns: [t.tenantId, t.inspectedByTenantUserId],
       foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    siteFk: foreignKey({
+      name: 'ppe_inspections_tenant_site_fk',
+      columns: [t.tenantId, t.siteOrgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
     }),
     submittedResultCk: check(
       'ppe_inspections_submitted_result_ck',
@@ -399,6 +406,10 @@ export const ppeInspectionsRelations = relations(ppeInspections, ({ one, many })
   inspectedBy: one(tenantUsers, {
     fields: [ppeInspections.tenantId, ppeInspections.inspectedByTenantUserId],
     references: [tenantUsers.tenantId, tenantUsers.id],
+  }),
+  site: one(orgUnits, {
+    fields: [ppeInspections.tenantId, ppeInspections.siteOrgUnitId],
+    references: [orgUnits.tenantId, orgUnits.id],
   }),
   criteria: many(ppeInspectionCriteria),
   attachments: many(ppeInspectionAttachments),

@@ -89,28 +89,29 @@ export type RecipientOptions = {
   people: { id: string; name: string }[]
   roles: { key: string; name: string }[]
   departments: { id: string; name: string }[]
-  groups: { id: string; name: string }[]
   personGroups: { id: string; name: string }[]
   contacts: { id: string; name: string; orgUnitName: string }[]
   obligations: { id: string; name: string }[]
+  spreadsheetTemplates: { id: string; name: string }[]
 }
 const EMPTY_RECIPIENT_OPTIONS: RecipientOptions = {
   people: [],
   roles: [],
   departments: [],
-  groups: [],
   personGroups: [],
   contacts: [],
   obligations: [],
+  spreadsheetTemplates: [],
 }
 
 const RECIPIENT_LABEL: Record<EmailTarget['type'], string> = {
   submitter: 'The submitter',
   submitter_manager: "The submitter's manager",
+  record_person_manager: "The record person's manager",
   person: 'A specific person',
   role: 'Everyone in a role',
   department_manager: "A department's managers",
-  group: 'A notification group',
+  person_group: 'A People group',
   literal: 'Specific email address(es)',
   field: 'A record field',
   person_group_for_record_person: "A People group in the record person's department",
@@ -128,12 +129,14 @@ function defaultTarget(type: EmailTarget['type'], firstField: string): EmailTarg
       return { type: 'person', personId: '' }
     case 'department_manager':
       return { type: 'department_manager', departmentId: '' }
-    case 'group':
-      return { type: 'group', groupId: '' }
+    case 'person_group':
+      return { type: 'person_group', groupId: '' }
     case 'field':
       return { type: 'field', field: firstField }
     case 'person_group_for_record_person':
       return { type: 'person_group_for_record_person', groupId: '', personField: firstField }
+    case 'record_person_manager':
+      return { type: 'record_person_manager', personField: firstField }
     case 'org_unit_contact':
       return { type: 'org_unit_contact', contactId: '', orgUnitField: firstField }
     case 'compliance_recipient':
@@ -171,7 +174,6 @@ function RecipientsEditor({
   const update = (i: number, t: EmailTarget) => onChange(rows.map((x, j) => (j === i ? t : x)))
   const peopleOpts = options.people.map((p) => ({ value: p.id, label: p.name }))
   const deptOpts = options.departments.map((d) => ({ value: d.id, label: d.name }))
-  const groupOpts = options.groups.map((g) => ({ value: g.id, label: g.name }))
   const personGroupOpts = options.personGroups.map((g) => ({ value: g.id, label: g.name }))
   const contactOpts = options.contacts.map((contact) => ({
     value: contact.id,
@@ -233,6 +235,28 @@ function RecipientsEditor({
                       placeholder={tGenerated('m_0a302f85a5260b')}
                       onChange={(v) => update(i, { type: 'person', personId: v })}
                     />
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  t.type === 'record_person_manager' ? (
+                    <Select
+                      value={t.personField}
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        update(i, {
+                          type: 'record_person_manager',
+                          personField: event.target.value,
+                        })
+                      }
+                    >
+                      {fieldIds.map((field) => (
+                        <option key={field} value={field}>
+                          {field}
+                        </option>
+                      ))}
+                    </Select>
                   ) : null
                 }
               />
@@ -376,13 +400,13 @@ function RecipientsEditor({
               />
               <GeneratedValue
                 value={
-                  t.type === 'group' ? (
+                  t.type === 'person_group' ? (
                     <SearchSelect
                       value={t.groupId}
                       disabled={readOnly}
-                      options={groupOpts}
+                      options={personGroupOpts}
                       placeholder={tGenerated('m_0b6591278bf814')}
-                      onChange={(v) => update(i, { type: 'group', groupId: v })}
+                      onChange={(v) => update(i, { type: 'person_group', groupId: v })}
                     />
                   ) : null
                 }
@@ -995,12 +1019,18 @@ export function FlowsCanvas({
     () => ({
       all: profile.fields.map((field) => field.key),
       writable: profile.fields
-        .filter((field) => field.writable !== false)
+        .filter((field) =>
+          profile.subjectType === 'module' ? field.writable === true : field.writable !== false,
+        )
         .map((field) => field.key),
       photoSources: profile.fields.filter((field) => field.photoSource).map((field) => field.key),
       textOutputs: profile.fields.filter((field) => field.textOutput).map((field) => field.key),
       numeric: profile.fields
-        .filter((field) => field.kind === 'number' && field.writable !== false)
+        .filter(
+          (field) =>
+            field.kind === 'number' &&
+            (profile.subjectType === 'module' ? field.writable === true : field.writable !== false),
+        )
         .map((field) => field.key),
     }),
     [profile],
@@ -1977,6 +2007,7 @@ function NodeInspector({
       data={data}
       fieldIds={fieldIds}
       actionFields={actionFields}
+      availableFields={availableFields}
       actions={profile.actions}
       emailTemplates={emailTemplates}
       pdfTemplates={pdfTemplates}
@@ -1992,6 +2023,7 @@ function ActionInspector({
   data,
   fieldIds,
   actionFields,
+  availableFields,
   actions,
   emailTemplates,
   pdfTemplates,
@@ -2003,6 +2035,7 @@ function ActionInspector({
   data: Extract<NData, { kind: 'action' }>
   fieldIds: string[]
   actionFields: ActionFieldOptions
+  availableFields: { id: string; label: string }[]
   actions: ActionData['action'][]
   emailTemplates: EmailTemplateOption[]
   pdfTemplates: PdfTemplateOption[]
@@ -2291,6 +2324,118 @@ function ActionInspector({
                   ) : null
                 }
               />
+              <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      <GeneratedText id="m_091185429bbc1c" />
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_16eed28e441ee2" />
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={readOnly || recipientOptions.spreadsheetTemplates.length === 0}
+                    onClick={() => {
+                      const template = recipientOptions.spreadsheetTemplates[0]
+                      if (!template) return
+                      set({
+                        ...a,
+                        spreadsheetAttachments: [
+                          ...(a.spreadsheetAttachments ?? []),
+                          { templateAttachmentId: template.id },
+                        ],
+                      })
+                    }}
+                  >
+                    <Plus className="mr-1 h-4 w-4" />
+                    <GeneratedText id="m_114fd68aa28e60" />
+                  </Button>
+                </div>
+                {recipientOptions.spreadsheetTemplates.length === 0 ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <GeneratedText id="m_1ed36573238d1d" />
+                  </p>
+                ) : null}
+                {(a.spreadsheetAttachments ?? []).map((attachment, index) => (
+                  <div
+                    key={`${attachment.templateAttachmentId}:${index}`}
+                    className="space-y-3 rounded-md bg-slate-50 p-3 dark:bg-slate-900/50"
+                  >
+                    <div className="flex items-end gap-2">
+                      <div className="min-w-0 flex-1">
+                        <Field label={tGenerated('m_0d5b3e3dbea5a7')}>
+                          <Select
+                            value={attachment.templateAttachmentId}
+                            disabled={readOnly}
+                            onChange={(event) => {
+                              const next = [...(a.spreadsheetAttachments ?? [])]
+                              next[index] = {
+                                ...attachment,
+                                templateAttachmentId: event.target.value,
+                              }
+                              set({ ...a, spreadsheetAttachments: next })
+                            }}
+                          >
+                            {recipientOptions.spreadsheetTemplates.map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {template.name}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={tGenerated('m_1300a5099634f1')}
+                        disabled={readOnly}
+                        onClick={() => {
+                          const next = (a.spreadsheetAttachments ?? []).filter(
+                            (_, itemIndex) => itemIndex !== index,
+                          )
+                          set({ ...a, spreadsheetAttachments: next.length > 0 ? next : undefined })
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <Field label={tGenerated('m_1566168cfca5cb')}>
+                      <Input
+                        value={attachment.filename ?? ''}
+                        placeholder={tGenerated('m_14dfc66e74338e')}
+                        disabled={readOnly}
+                        onChange={(event) => {
+                          const next = [...(a.spreadsheetAttachments ?? [])]
+                          next[index] = {
+                            ...attachment,
+                            filename: event.target.value || undefined,
+                          }
+                          set({ ...a, spreadsheetAttachments: next })
+                        }}
+                      />
+                    </Field>
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+                        <GeneratedText id="m_05928758fdadda" />
+                      </p>
+                      <LogicBuilder
+                        rule={attachment.when}
+                        availableFields={availableFields}
+                        onChange={(rule) => {
+                          const next = [...(a.spreadsheetAttachments ?? [])]
+                          next[index] = { ...attachment, when: rule }
+                          set({ ...a, spreadsheetAttachments: next })
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </>
           ) : null
         }

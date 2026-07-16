@@ -217,8 +217,6 @@ export const TENANT_SCOPED_TABLES = [
   'report_definitions',
   'tenant_notification_settings',
   'tenant_notification_policy',
-  'notification_groups',
-  'notification_group_members',
   'document_book_items',
   'document_types',
   'document_categories',

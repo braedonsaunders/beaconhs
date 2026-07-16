@@ -224,6 +224,8 @@ Open [Reports](/reports) from the sidebar. It has two tabs: **Reports** and **Sc
 
 On a phone, the list fills the screen; picking a report opens its preview, and **All reports** takes you back.
 
+The built-in catalogue includes the former BeaconHS reports for training certificates, missing and expired training, skill matrices, missing and expired skills, CWB qualifications, corrective actions, journals, inspections, equipment, vehicle logs, and PPE. Use **Compliance — By Entity** for one or more requirements, **Compliance — By Person** for a worker's requirements across modules, and **Hazard ID — Signatures** for hazard-assessment signature compliance.
+
 ## Export a report
 
 1. Select or open the report.
@@ -464,7 +466,9 @@ Flows run automatically when things happen on your form.
 
 Rename a flow from its pencil button. Flow names can be up to 200 characters.
 
-For **Send email**, recipients can follow the record. **A People group in the record person's department** reaches only group members in the same department as the selected person field. **A contact for the record location** sends only when the selected contact belongs to the location in the selected record field. **A recipient for a matching compliance assignment** sends only when the record person is part of that assignment. These options let one flow replace separate rules for every department, project, or assignment.
+For **Send email**, recipients can follow the record. **The record person's manager** follows the reporting manager of the person or user in the selected field. **A People group in the record person's department** reaches only group members in the same department as the selected person field. **A contact for the record location** sends only when the selected contact belongs to the location in the selected record field. **A recipient for a matching compliance assignment** sends only when the record person is part of that assignment. These options let one flow replace separate rules for every department, project, or assignment.
+
+To send a filled Excel form, add an **XLSX template** under **Spreadsheet attachments**. Cells containing a field marker such as \`{{site_name}}\` are replaced with the record value. Add an optional **Include only when** rule for site-specific or client-specific forms. Hazard-assessment templates can also use \`{{SIGNATURE-NAME}}\`, \`{{SIGNATURE-VALUE}}\`, and \`{{AdditionalInformation['Question text']}}\`.
 
 **Export PDF** saves the generated file on that form response. The response list shows a **PDF** badge when it is ready. Running the action again replaces that response's previous generated file.
 
@@ -634,7 +638,6 @@ On **Notifications → Rules**, each delivery channel shows whether its provider
 
 Members choose their own language under **Account settings**. Their choice applies only to this workspace. If you disable a language, BeaconHS clears member choices for that language and those members return to the workspace default. Tenant-wide generated documents and group recap emails use the workspace default.
 
-## Build notification groups
 ## Set the local authority and legislation
 
 1. Open **Admin**, then **Tenant settings**.
@@ -643,16 +646,16 @@ Members choose their own language under **Account settings**. Their choice appli
 4. Put any additional acts, regulations, standards, or client requirements under **Other applicable legislation**.
 5. Click **Save settings**. Incident screens, regulatory notices, and compliance labels use the saved terminology.
 
+## Build People groups
 
-Notification groups are reusable alert audiences. One group can include roles, departments, sites, crews, trades, people groups, named people, or everyone. **Exclude** rows remove matching people from the final audience.
+People groups are the one reusable group list across BeaconHS. The same groups are available in notification rules, Flows, role-based record access, and **Send email** dialogs.
 
-1. Open **Admin**, then **Notifications**, then **Groups**.
-2. Use **Search group name or description** to find an existing group. The page shows the exact number of matches. Use **Prev** and **Next** to move through longer lists.
-3. Click **New group**, enter its name and optional description, and choose a colour.
-4. Click **Add member**. Choose **Include** or **Exclude**, choose the member type, then search for the role, team, or person.
-5. Check the live **Reaches** preview, then click **Create**. To change an existing group, open it and click **Save**.
+1. Open **People**, then **Groups**.
+2. Search by group name or description, or click **Add group**.
+3. Open the group. Enter its name, description, and colour, then click **Save**.
+4. Under **Members**, move people into the group and save the membership list.
 
-A group can contain up to 100 include or exclude rows. Names can be up to 200 characters, and descriptions can be up to 1,000 characters. Split a larger audience into focused groups so each one stays understandable.
+BeaconHS blocks deletion while a People group is used by a notification rule, Flow, or role scope. Remove those references first, then delete the group.
 
 ## Integrations
 

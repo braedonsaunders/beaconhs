@@ -1,0 +1,3 @@
+ALTER TABLE "ppe_inspections" ADD COLUMN "site_org_unit_id" uuid;--> statement-breakpoint
+ALTER TABLE "ppe_inspections" ADD CONSTRAINT "ppe_inspections_tenant_site_fk" FOREIGN KEY ("tenant_id","site_org_unit_id") REFERENCES "public"."org_units"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "ppe_inspections_site_idx" ON "ppe_inspections" USING btree ("tenant_id","site_org_unit_id");

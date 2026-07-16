@@ -55,7 +55,7 @@ Drizzle schema now:
 - flow gate -> assignee and deciding tenant memberships
 - data source -> creator membership and data row -> source
 - sync crosswalk/run/change ledgers -> connection and run
-- notification group member -> notification group
+- People group membership -> person and People group
 - compliance audience, dispatch, and status -> obligation
 - compliance status -> person and obligation -> creator membership
 - report schedule -> run-as membership and role (pre-existing in this audit)

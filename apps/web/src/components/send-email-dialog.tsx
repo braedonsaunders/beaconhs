@@ -22,9 +22,9 @@ import { useEffect, useState, useTransition } from 'react'
 import { Mail, X } from 'lucide-react'
 import { Button, Input, Label, SearchSelect, Textarea } from '@beaconhs/ui'
 import {
-  listNotificationGroups,
-  resolveNotificationGroupEmails,
-} from '@/lib/notifications/group-emails-action'
+  listPersonGroups,
+  resolvePersonGroupEmails,
+} from '@/lib/notifications/person-group-emails-action'
 
 type SendEmailDialogProps = {
   open: boolean
@@ -67,7 +67,7 @@ function SendEmailDialogSession({
   const [isPending, startTransition] = useTransition()
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Notification groups — loaded lazily when the dialog opens; the picker only
+  // People groups — loaded lazily when the dialog opens; the picker only
   // appears if the tenant has any. Choosing one appends its members' emails to
   // the recipients field (which is controlled so it can be programmatically set).
   const [groups, setGroups] = useState<{ value: string; label: string }[]>([])
@@ -76,7 +76,7 @@ function SendEmailDialogSession({
 
   useEffect(() => {
     let cancelled = false
-    listNotificationGroups()
+    listPersonGroups()
       .then((g) => {
         if (!cancelled) setGroups(g)
       })
@@ -89,7 +89,7 @@ function SendEmailDialogSession({
   function addGroup(groupId: string) {
     if (!groupId) return
     startGroup(async () => {
-      const emails = await resolveNotificationGroupEmails(groupId)
+      const emails = await resolvePersonGroupEmails(groupId)
       setRecipients((cur) => {
         const have = new Set(
           cur
@@ -189,7 +189,7 @@ function SendEmailDialogSession({
                       groupBusy ? tGenerated('m_1ed2b9215a67c6') : tGenerated('m_0b4ff673912e40'),
                     )}
                     searchPlaceholder={tGenerated('m_15c4d2ca7e95f7')}
-                    ariaLabel="Add a notification group"
+                    ariaLabel="Add a People group"
                     triggerClassName="mt-1"
                   />
                 ) : null

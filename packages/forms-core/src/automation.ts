@@ -33,10 +33,15 @@ export const emailTargetSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('submitter') }), // the user who submitted/owns the record
   z.object({ type: z.literal('person'), personId: z.string() }), // a specific person
   z.object({ type: z.literal('submitter_manager') }), // the submitter's reporting manager
+  // The reporting manager of the person/user referenced by a record field.
+  // Unlike submitter_manager, this follows the business subject (for example a
+  // corrective-action owner or inspection inspector), not the actor clicking
+  // submit.
+  z.object({ type: z.literal('record_person_manager'), personField: z.string() }),
   // every reporting manager of the chosen department's people
   z.object({ type: z.literal('department_manager'), departmentId: z.string() }),
-  // a reusable, composable notification group (/admin/notifications → Groups)
-  z.object({ type: z.literal('group'), groupId: z.string() }),
+  // A reusable People group (/people/groups).
+  z.object({ type: z.literal('person_group'), groupId: z.string() }),
   // Members of a People group who share the same department as the person(s)
   // referenced by a record field. Supports comma-separated ids for records
   // such as incidents with more than one involved person.
@@ -160,6 +165,19 @@ export const actionDataSchema = z.discriminatedUnion('action', [
     attachPdf: z.boolean().optional(),
     pdfTemplateId: z.string().optional(),
     pdfFormat: z.enum(['full', 'summary']).optional(),
+    // Fill an uploaded XLSX template from the record values and attach the
+    // generated workbook. Optional logic keeps location/client-specific forms
+    // on one shared module flow.
+    spreadsheetAttachments: z
+      .array(
+        z.object({
+          templateAttachmentId: z.string(),
+          filename: z.string().optional(),
+          when: logicRuleSchema.optional(),
+        }),
+      )
+      .max(10)
+      .optional(),
   }),
   z.object({
     action: z.literal('create_capa'),

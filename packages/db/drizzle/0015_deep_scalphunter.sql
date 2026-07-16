@@ -1,0 +1,4 @@
+ALTER TABLE "document_acknowledgment_sessions" ADD COLUMN "site_org_unit_id" uuid;--> statement-breakpoint
+ALTER TABLE "document_acknowledgment_sessions" ADD COLUMN "completed_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "document_acknowledgment_sessions" ADD CONSTRAINT "document_ack_sessions_tenant_site_fk" FOREIGN KEY ("tenant_id","site_org_unit_id") REFERENCES "public"."org_units"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "document_ack_sessions_site_idx" ON "document_acknowledgment_sessions" USING btree ("tenant_id","site_org_unit_id");

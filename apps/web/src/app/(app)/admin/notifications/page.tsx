@@ -2,7 +2,7 @@ import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
-  notificationGroups,
+  personGroups,
   roles as rolesTable,
   tenantNotificationPolicy,
   tenantNotificationSettings,
@@ -96,22 +96,13 @@ export default async function NotificationSettingsPage() {
     }
   }
 
-  // Reusable notification groups, selectable per category. Guarded for the
-  // pre-migration window.
-  let groupRows: { id: string; name: string }[] = []
-  try {
-    groupRows = await ctx.db((tx) =>
-      tx
-        .select({ id: notificationGroups.id, name: notificationGroups.name })
-        .from(notificationGroups)
-        .where(
-          and(eq(notificationGroups.tenantId, ctx.tenantId), isNull(notificationGroups.deletedAt)),
-        )
-        .orderBy(asc(notificationGroups.name)),
-    )
-  } catch {
-    groupRows = []
-  }
+  const groupRows = await ctx.db((tx) =>
+    tx
+      .select({ id: personGroups.id, name: personGroups.name })
+      .from(personGroups)
+      .where(and(eq(personGroups.tenantId, ctx.tenantId), isNull(personGroups.deletedAt)))
+      .orderBy(asc(personGroups.name)),
+  )
   const groups = groupRows.map((g) => ({ value: g.id, label: g.name }))
 
   const policy = {

@@ -1,15 +1,14 @@
 // Shared sub-nav that ties the scattered notification surfaces into ONE area:
-// the routing rules, reusable groups, the email/SMS transports, the template
+// the routing rules, email/SMS transports, the template
 // library, and the delivery logs. Rendered under each page's header so the
 // whole notification system reads as a single place. Dumb component.
 
 import { ModuleSubNav } from '@/components/module-admin/module-sub-nav'
 
-type NotificationsTab = 'rules' | 'groups' | 'email' | 'sms' | 'templates' | 'email-log' | 'sms-log'
+type NotificationsTab = 'rules' | 'email' | 'sms' | 'templates' | 'email-log' | 'sms-log'
 
 const TABS = [
   { key: 'rules', label: 'Rules', href: '/admin/notifications' },
-  { key: 'groups', label: 'Groups', href: '/admin/notifications/groups' },
   { key: 'email', label: 'Email', href: '/admin/email' },
   { key: 'sms', label: 'SMS', href: '/admin/sms' },
   { key: 'templates', label: 'Templates', href: '/admin/email-templates' },

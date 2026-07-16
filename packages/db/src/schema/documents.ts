@@ -17,7 +17,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers, users } from './core'
-import { people } from './org'
+import { orgUnits, people } from './org'
 import { documentTypes, documentCategories } from './document-types'
 
 export const documentStatus = pgEnum('document_status', [
@@ -145,9 +145,11 @@ export const documentAcknowledgmentSessions = pgTable(
     versionId: uuid('version_id').notNull(),
     title: text('title'), // defaults to the document title in the UI
     location: text('location'),
+    siteOrgUnitId: uuid('site_org_unit_id'),
     notes: text('notes'),
     conductedByTenantUserId: uuid('conducted_by_tenant_user_id'),
     conductedAt: timestamp('conducted_at', { withTimezone: true }).defaultNow().notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
     ...timestamps,
     ...softDelete,
   },
@@ -171,6 +173,7 @@ export const documentAcknowledgmentSessions = pgTable(
       t.tenantId,
       t.conductedByTenantUserId,
     ),
+    siteIdx: index('document_ack_sessions_site_idx').on(t.tenantId, t.siteOrgUnitId),
     documentFk: foreignKey({
       name: 'document_ack_sessions_tenant_document_fk',
       columns: [t.tenantId, t.documentId],
@@ -185,6 +188,11 @@ export const documentAcknowledgmentSessions = pgTable(
       name: 'document_ack_sessions_tenant_conducted_by_fk',
       columns: [t.tenantId, t.conductedByTenantUserId],
       foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    siteFk: foreignKey({
+      name: 'document_ack_sessions_tenant_site_fk',
+      columns: [t.tenantId, t.siteOrgUnitId],
+      foreignColumns: [orgUnits.tenantId, orgUnits.id],
     }),
   }),
 )
@@ -372,6 +380,13 @@ export const documentAcknowledgmentSessionsRelations = relations(
         documentAcknowledgmentSessions.versionId,
       ],
       references: [documentVersions.tenantId, documentVersions.documentId, documentVersions.id],
+    }),
+    site: one(orgUnits, {
+      fields: [
+        documentAcknowledgmentSessions.tenantId,
+        documentAcknowledgmentSessions.siteOrgUnitId,
+      ],
+      references: [orgUnits.tenantId, orgUnits.id],
     }),
     acknowledgments: many(documentAcknowledgments),
   }),

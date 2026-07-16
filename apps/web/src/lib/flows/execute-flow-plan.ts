@@ -10,6 +10,7 @@ import 'server-only'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import {
+  evaluateLogicRule,
   resolveDefaultValue,
   type AssigneeTarget,
   type AutomationPlan,
@@ -52,6 +53,7 @@ import { buildRecordSummaryPdfJob } from './pdf-summary'
 import { recordFlowGate } from './gate-store'
 import type { FlowActorRef, FlowSubjectAdapter } from './types'
 import { describeFlowWebhookError } from './webhook-policy'
+import { renderSpreadsheetAttachments } from './spreadsheet-attachments'
 
 export async function executeFlowPlan(
   ctx: RequestContext,
@@ -271,6 +273,31 @@ export async function executeFlowPlan(
     )
   }
 
+  const recordPersonManagerIds = async (personField: string): Promise<string[]> => {
+    const identities = await Promise.all(fieldIds(personField).map(personIdentity))
+    const personIds = [
+      ...new Set(
+        identities.map((identity) => identity?.personId).filter((id): id is string => Boolean(id)),
+      ),
+    ]
+    if (personIds.length === 0) return []
+    const managers = await ctx.db((tx) =>
+      tx
+        .selectDistinct({ managerPersonId: people.managerPersonId })
+        .from(people)
+        .where(
+          and(
+            eq(people.tenantId, ctx.tenantId),
+            inArray(people.id, personIds),
+            isNull(people.deletedAt),
+          ),
+        ),
+    )
+    return managers
+      .map((manager) => manager.managerPersonId)
+      .filter((id): id is string => Boolean(id))
+  }
+
   const complianceRecipientApplies = async (
     obligationId: string,
     personField: string,
@@ -332,8 +359,11 @@ export async function executeFlowPlan(
             // subject's `attendee_emails` roster field).
             for (const part of v.split(/[,;\s]+/)) add(part)
           } else {
-            // Not an address — treat the value as a person id.
-            add(await personEmail(v))
+            // Not an address — resolve one or more person / tenant-user ids.
+            for (const id of fieldIds(t.field)) {
+              const identity = await personIdentity(id)
+              if (identity) add(await personEmail(identity.personId))
+            }
           }
         }
       } else if (t.type === 'person') {
@@ -350,6 +380,10 @@ export async function executeFlowPlan(
           )
           if (self?.mgr) add(await personEmail(self.mgr))
         }
+      } else if (t.type === 'record_person_manager') {
+        for (const managerPersonId of await recordPersonManagerIds(t.personField)) {
+          add(await personEmail(managerPersonId))
+        }
       } else if (t.type === 'department_manager') {
         const mgrs = await ctx.db((tx) =>
           tx
@@ -358,8 +392,8 @@ export async function executeFlowPlan(
             .where(and(eq(people.departmentId, t.departmentId), isNull(people.deletedAt))),
         )
         for (const m of mgrs) if (m.mgr) add(await personEmail(m.mgr))
-      } else if (t.type === 'group') {
-        // A reusable notification group — resolved through the shared engine.
+      } else if (t.type === 'person_group') {
+        // The single reusable People group system.
         const emails = await ctx.db((tx) => resolveGroupEmails(tx, ctx.tenantId, [t.groupId]))
         for (const e of emails) add(e)
       } else if (t.type === 'person_group_for_record_person') {
@@ -417,7 +451,9 @@ export async function executeFlowPlan(
         for (const u of await getRoleUsers(t.role)) add(u.userId)
       } else if (t.type === 'person') {
         add(await personUserId(t.personId))
-      } else if (t.type === 'group') {
+      } else if (t.type === 'field') {
+        for (const id of fieldIds(t.field)) add((await personIdentity(id))?.userId)
+      } else if (t.type === 'person_group') {
         for (const u of await ctx.db((tx) => resolveGroupUserIds(tx, ctx.tenantId, [t.groupId])))
           add(u)
       } else if (t.type === 'submitter_manager') {
@@ -431,6 +467,10 @@ export async function executeFlowPlan(
               .limit(1),
           )
           if (self?.mgr) add(await personUserId(self.mgr))
+        }
+      } else if (t.type === 'record_person_manager') {
+        for (const managerPersonId of await recordPersonManagerIds(t.personField)) {
+          add(await personUserId(managerPersonId))
         }
       } else if (t.type === 'department_manager') {
         const mgrs = await ctx.db((tx) =>
@@ -612,6 +652,14 @@ export async function executeFlowPlan(
             failed.push('send_email (no recipients)')
             break
           }
+          const spreadsheetConfigs = (action.spreadsheetAttachments ?? []).filter(
+            (attachment) => !attachment.when || evaluateLogicRule(attachment.when, evalCtx),
+          )
+          const spreadsheetAttachments = await renderSpreadsheetAttachments(
+            ctx,
+            spreadsheetConfigs,
+            values,
+          )
           if (action.attachPdf) {
             const refForFile = values.reference
             const fileBase =
@@ -625,6 +673,7 @@ export async function executeFlowPlan(
               filename: pdfFilename,
               category: adapter.notifyCategory,
               tenantId: ctx.tenantId,
+              attachments: spreadsheetAttachments,
             }
             // Resolve the PDF DOCUMENT template: the flow's explicit pick, else
             // (unless the flow forces the field summary) the subject's assigned
@@ -689,6 +738,7 @@ export async function executeFlowPlan(
               subject,
               text,
               html,
+              attachments: spreadsheetAttachments,
               meta: { tenantId: ctx.tenantId, category: adapter.notifyCategory },
             },
             jobId(nodeId, 'email') ? { jobId: jobId(nodeId, 'email') } : undefined,

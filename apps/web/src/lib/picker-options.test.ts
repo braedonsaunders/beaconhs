@@ -24,7 +24,6 @@ describe('picker options contract', () => {
     expect(isPickerLookup('equipment-item-inspection-types')).toBe(true)
     expect(isPickerLookup('training-course-classes')).toBe(true)
     expect(isPickerLookup('training-course-library-content')).toBe(true)
-    expect(isPickerLookup('notification-group-people')).toBe(true)
     expect(isPickerLookup('compliance-obligation-form-templates')).toBe(true)
     expect(isPickerLookup('dashboard-quick-action-forms')).toBe(true)
     expect(isPickerLookup('admin-navigation-form-templates')).toBe(true)

@@ -61,8 +61,8 @@ export const tenantNotificationSettings = pgTable(
     roleKeys: jsonb('role_keys').$type<string[]>().default([]).notNull(),
     // Specific extra recipients (Better-Auth user ids), merged on top of roles.
     userIds: jsonb('user_ids').$type<string[]>().default([]).notNull(),
-    // Reusable notification groups (notification_groups.id) whose resolved members
-    // are merged on top of roles + people. The shared resolver expands them.
+    // Reusable People groups (person_groups.id) whose members are merged on top
+    // of roles + people. The shared resolver expands them.
     groupIds: jsonb('group_ids').$type<string[]>().default([]).notNull(),
     // Routing (Phase 2): which channels this category may use. The notify worker
     // intersects this with each user's per-channel preferences. Empty => the

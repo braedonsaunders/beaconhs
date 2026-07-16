@@ -6,9 +6,16 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { normalizeCatalogDisplayName } from '@beaconhs/db'
-import { people, personGroupMemberships, personGroups } from '@beaconhs/db/schema'
+import {
+  formAutomations,
+  people,
+  personGroupMemberships,
+  personGroups,
+  roleAssignments,
+  tenantNotificationSettings,
+} from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAuditInTransaction } from '@/lib/audit'
@@ -138,6 +145,28 @@ export async function deleteGroup(formData: FormData): Promise<void> {
       .limit(1)
       .for('update')
     if (!before) return null
+    const referenceNeedle = `%${id}%`
+    const [notificationUse, flowUse, roleUse] = await Promise.all([
+      tx
+        .select({ count: count() })
+        .from(tenantNotificationSettings)
+        .where(sql`${tenantNotificationSettings.groupIds}::text like ${referenceNeedle}`),
+      tx
+        .select({ count: count() })
+        .from(formAutomations)
+        .where(sql`${formAutomations.graph}::text like ${referenceNeedle}`),
+      tx
+        .select({ count: count() })
+        .from(roleAssignments)
+        .where(sql`${roleAssignments.scope}::text like ${referenceNeedle}`),
+    ])
+    const uses =
+      Number(notificationUse[0]?.count ?? 0) +
+      Number(flowUse[0]?.count ?? 0) +
+      Number(roleUse[0]?.count ?? 0)
+    if (uses > 0) {
+      return { blocked: true as const, name: before.name }
+    }
     const members = await tx
       .select({ personId: personGroupMemberships.personId })
       .from(personGroupMemberships)
@@ -166,9 +195,16 @@ export async function deleteGroup(formData: FormData): Promise<void> {
       summary: `Deleted person group "${before.name}"`,
       before: before as unknown as Record<string, unknown>,
     })
-    return before
+    return { blocked: false as const, name: before.name }
   })
   if (!deleted) return
+  if (deleted.blocked) {
+    redirect(
+      `/people/groups/${id}?error=${encodeURIComponent(
+        `“${deleted.name}” is still used by a notification rule, Flow, or role scope. Remove those references before deleting it.`,
+      )}`,
+    )
+  }
   revalidatePath('/people/groups')
   redirect('/people/groups')
 }
