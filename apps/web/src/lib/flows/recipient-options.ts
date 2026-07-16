@@ -4,7 +4,16 @@ import 'server-only'
 // the Flows canvas (person, department-managers, role targets). RLS-bound.
 
 import { and, asc, eq, isNull } from 'drizzle-orm'
-import { departments, notificationGroups, people, roles } from '@beaconhs/db/schema'
+import {
+  complianceObligations,
+  customerContacts,
+  departments,
+  notificationGroups,
+  orgUnits,
+  people,
+  personGroups,
+  roles,
+} from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 
 type RecipientOptionsData = {
@@ -12,6 +21,9 @@ type RecipientOptionsData = {
   roles: { key: string; name: string }[]
   departments: { id: string; name: string }[]
   groups: { id: string; name: string }[]
+  personGroups: { id: string; name: string }[]
+  contacts: { id: string; name: string; orgUnitName: string }[]
+  obligations: { id: string; name: string }[]
 }
 
 export async function loadRecipientOptions(ctx: RequestContext): Promise<RecipientOptionsData> {
@@ -40,11 +52,37 @@ export async function loadRecipientOptions(ctx: RequestContext): Promise<Recipie
     } catch {
       groups = []
     }
+    const [pGroups, contacts, obligations] = await Promise.all([
+      tx
+        .select({ id: personGroups.id, name: personGroups.name })
+        .from(personGroups)
+        .where(isNull(personGroups.deletedAt))
+        .orderBy(asc(personGroups.name)),
+      tx
+        .select({
+          id: customerContacts.id,
+          name: customerContacts.name,
+          orgUnitName: orgUnits.name,
+        })
+        .from(customerContacts)
+        .innerJoin(orgUnits, eq(orgUnits.id, customerContacts.orgUnitId))
+        .orderBy(asc(orgUnits.name), asc(customerContacts.name)),
+      tx
+        .select({ id: complianceObligations.id, name: complianceObligations.title })
+        .from(complianceObligations)
+        .where(
+          and(eq(complianceObligations.status, 'active'), isNull(complianceObligations.deletedAt)),
+        )
+        .orderBy(asc(complianceObligations.title)),
+    ])
     return {
       people: ppl.map((p) => ({ id: p.id, name: `${p.first} ${p.last}`.trim() })),
       roles: rls,
       departments: depts,
       groups,
+      personGroups: pGroups,
+      contacts,
+      obligations,
     }
   })
 }

@@ -217,6 +217,13 @@
     "unlock": "Unlock kiosk"
   },
   "Generated": {
+    "m_1808201312251a": "A People group in the record person's department",
+    "m_12acdd0d617c8a": "A contact for the record location",
+    "m_0210b86f48462f": "A recipient for a matching compliance assignment",
+    "m_0ecfd22a8fb573": "Choose a People group",
+    "m_15593bf256f963": "Choose a location contact",
+    "m_1f1c58a54a4d66": "Choose a compliance assignment",
+    "m_0e6e22a9a495b0": "Choose a recipient",
     "m_115d7a60362f86": "Repeat every",
     "m_0621564e8d1aef": "day(s)",
     "m_1e3123961c3ccb": "week(s)",

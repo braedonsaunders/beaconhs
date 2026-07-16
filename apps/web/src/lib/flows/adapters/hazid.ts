@@ -96,9 +96,16 @@ export function createHazidFlowAdapter(
       const [reporter] = a.reportedByTenantUserId
         ? await ctx.db((tx) =>
             tx
-              .select({ name: users.name })
+              .select({ name: users.name, personId: people.id })
               .from(tenantUsers)
               .innerJoin(users, eq(users.id, tenantUsers.userId))
+              .leftJoin(
+                people,
+                and(
+                  eq(people.tenantId, tenantUsers.tenantId),
+                  eq(people.userId, tenantUsers.userId),
+                ),
+              )
               .where(eq(tenantUsers.id, a.reportedByTenantUserId!))
               .limit(1),
           )
@@ -209,6 +216,7 @@ export function createHazidFlowAdapter(
         site_org_unit_id: a.siteOrgUnitId ?? null,
         project_org_unit_id: a.projectOrgUnitId ?? null,
         supervisor_person_id: a.supervisorPersonId ?? null,
+        reported_by_person_id: reporter?.personId ?? null,
         assessment_type_id: a.assessmentTypeId ?? null,
         // Collections — rendered via {{#each …}} tables.
         tasks: tasks.map((t) => ({

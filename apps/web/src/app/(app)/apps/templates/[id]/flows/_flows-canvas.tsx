@@ -90,12 +90,18 @@ export type RecipientOptions = {
   roles: { key: string; name: string }[]
   departments: { id: string; name: string }[]
   groups: { id: string; name: string }[]
+  personGroups: { id: string; name: string }[]
+  contacts: { id: string; name: string; orgUnitName: string }[]
+  obligations: { id: string; name: string }[]
 }
 const EMPTY_RECIPIENT_OPTIONS: RecipientOptions = {
   people: [],
   roles: [],
   departments: [],
   groups: [],
+  personGroups: [],
+  contacts: [],
+  obligations: [],
 }
 
 const RECIPIENT_LABEL: Record<EmailTarget['type'], string> = {
@@ -107,6 +113,9 @@ const RECIPIENT_LABEL: Record<EmailTarget['type'], string> = {
   group: 'A notification group',
   literal: 'Specific email address(es)',
   field: 'A record field',
+  person_group_for_record_person: "A People group in the record person's department",
+  org_unit_contact: 'A contact for the record location',
+  compliance_recipient: 'A recipient for a matching compliance assignment',
 }
 
 function defaultTarget(type: EmailTarget['type'], firstField: string): EmailTarget {
@@ -123,6 +132,17 @@ function defaultTarget(type: EmailTarget['type'], firstField: string): EmailTarg
       return { type: 'group', groupId: '' }
     case 'field':
       return { type: 'field', field: firstField }
+    case 'person_group_for_record_person':
+      return { type: 'person_group_for_record_person', groupId: '', personField: firstField }
+    case 'org_unit_contact':
+      return { type: 'org_unit_contact', contactId: '', orgUnitField: firstField }
+    case 'compliance_recipient':
+      return {
+        type: 'compliance_recipient',
+        obligationId: '',
+        personField: firstField,
+        recipient: { type: 'person', personId: '' },
+      }
     case 'submitter_manager':
       return { type: 'submitter_manager' }
     default:
@@ -151,6 +171,16 @@ function RecipientsEditor({
   const peopleOpts = options.people.map((p) => ({ value: p.id, label: p.name }))
   const deptOpts = options.departments.map((d) => ({ value: d.id, label: d.name }))
   const groupOpts = options.groups.map((g) => ({ value: g.id, label: g.name }))
+  const personGroupOpts = options.personGroups.map((g) => ({ value: g.id, label: g.name }))
+  const contactOpts = options.contacts.map((contact) => ({
+    value: contact.id,
+    label: contact.name,
+    hint: contact.orgUnitName,
+  }))
+  const obligationOpts = options.obligations.map((obligation) => ({
+    value: obligation.id,
+    label: obligation.name,
+  }))
   return (
     <Field label={tGenerated('m_0d99b2b56f8b5d')}>
       <div className="space-y-2">
@@ -202,6 +232,127 @@ function RecipientsEditor({
                       placeholder={tGenerated('m_0a302f85a5260b')}
                       onChange={(v) => update(i, { type: 'person', personId: v })}
                     />
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  t.type === 'person_group_for_record_person' ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <SearchSelect
+                        value={t.groupId}
+                        disabled={readOnly}
+                        options={personGroupOpts}
+                        placeholder={tGenerated('m_0ecfd22a8fb573')}
+                        onChange={(groupId) => update(i, { ...t, groupId })}
+                      />
+                      <Select
+                        value={t.personField}
+                        disabled={readOnly}
+                        onChange={(event) => update(i, { ...t, personField: event.target.value })}
+                      >
+                        {fieldIds.map((field) => (
+                          <option key={field} value={field}>
+                            {field}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  t.type === 'org_unit_contact' ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <SearchSelect
+                        value={t.contactId}
+                        disabled={readOnly}
+                        options={contactOpts}
+                        placeholder={tGenerated('m_15593bf256f963')}
+                        onChange={(contactId) => update(i, { ...t, contactId })}
+                      />
+                      <Select
+                        value={t.orgUnitField}
+                        disabled={readOnly}
+                        onChange={(event) => update(i, { ...t, orgUnitField: event.target.value })}
+                      >
+                        {fieldIds.map((field) => (
+                          <option key={field} value={field}>
+                            {field}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  t.type === 'compliance_recipient' ? (
+                    <div className="space-y-2">
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <SearchSelect
+                          value={t.obligationId}
+                          disabled={readOnly}
+                          options={obligationOpts}
+                          placeholder={tGenerated('m_1f1c58a54a4d66')}
+                          onChange={(obligationId) => update(i, { ...t, obligationId })}
+                        />
+                        <Select
+                          value={t.personField}
+                          disabled={readOnly}
+                          onChange={(event) => update(i, { ...t, personField: event.target.value })}
+                        >
+                          {fieldIds.map((field) => (
+                            <option key={field} value={field}>
+                              {field}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Select
+                          value={t.recipient.type}
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            update(i, {
+                              ...t,
+                              recipient:
+                                event.target.value === 'literal'
+                                  ? { type: 'literal', email: '' }
+                                  : { type: 'person', personId: '' },
+                            })
+                          }
+                        >
+                          <option value="person">{'A specific person'}</option>
+                          <option value="literal">{'Specific email address(es)'}</option>
+                        </Select>
+                        {t.recipient.type === 'person' ? (
+                          <SearchSelect
+                            value={t.recipient.personId}
+                            disabled={readOnly}
+                            options={peopleOpts}
+                            placeholder={tGenerated('m_0e6e22a9a495b0')}
+                            onChange={(personId) =>
+                              update(i, { ...t, recipient: { type: 'person', personId } })
+                            }
+                          />
+                        ) : (
+                          <Input
+                            value={t.recipient.email}
+                            disabled={readOnly}
+                            placeholder="name@example.com"
+                            onChange={(event) =>
+                              update(i, {
+                                ...t,
+                                recipient: { type: 'literal', email: event.target.value },
+                              })
+                            }
+                          />
+                        )}
+                      </div>
+                    </div>
                   ) : null
                 }
               />

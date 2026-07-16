@@ -86,6 +86,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
       { key: 'project_org_unit_id', label: 'Project (id)', kind: 'org_unit' },
       { key: 'supervisor_person_id', label: 'Supervisor (person id)', kind: 'person' },
+      { key: 'reported_by_person_id', label: 'Reported by (person id)', kind: 'person' },
       { key: 'assessment_type_id', label: 'Assessment type (id)', kind: 'text' },
     ],
     collections: [
@@ -223,6 +224,11 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
       { key: 'department_id', label: 'Department (id)', kind: 'text' },
       { key: 'supervisor_person_id', label: 'Supervisor (person id)', kind: 'person' },
+      {
+        key: 'people_involved_person_ids',
+        label: 'People involved (person ids)',
+        kind: 'text',
+      },
     ],
     collections: [
       {
@@ -231,6 +237,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
         fields: [
           { key: 'name', label: 'Name', kind: 'text' },
           { key: 'role', label: 'Role', kind: 'text' },
+          { key: 'person_id', label: 'Person (id)', kind: 'person' },
         ],
       },
       {
@@ -333,6 +340,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'source', label: 'Source (raw)', kind: 'enum' },
       { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
       { key: 'owner_tenant_user_id', label: 'Owner (user id)', kind: 'person' },
+      { key: 'assigned_by_tenant_user_id', label: 'Assigned by (user id)', kind: 'person' },
     ],
     collections: [
       {
@@ -804,6 +812,8 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'next_review_on', label: 'Next review on', kind: 'date' },
       { key: 'chair_name', label: 'Chaired by', kind: 'text' },
       { key: 'owner_name', label: 'Created by', kind: 'text' },
+      { key: 'chaired_by_tenant_user_id', label: 'Chaired by (user id)', kind: 'person' },
+      { key: 'created_by_tenant_user_id', label: 'Created by (user id)', kind: 'person' },
       { key: 'discussion_notes', label: 'Discussion notes', kind: 'text' },
       { key: 'decisions', label: 'Decisions', kind: 'text' },
     ],

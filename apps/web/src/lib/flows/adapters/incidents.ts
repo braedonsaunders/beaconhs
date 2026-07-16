@@ -87,6 +87,7 @@ export function createIncidentFlowAdapter(
             tx
               .select({
                 role: incidentPeople.role,
+                personId: incidentPeople.personId,
                 nameText: incidentPeople.personNameText,
                 pFirst: people.firstName,
                 pLast: people.lastName,
@@ -254,8 +255,13 @@ export function createIncidentFlowAdapter(
         site_org_unit_id: i.siteOrgUnitId ?? null,
         department_id: i.departmentId ?? null,
         supervisor_person_id: i.supervisorPersonId ?? null,
+        people_involved_person_ids: peopleInvolved
+          .map((person) => person.personId)
+          .filter((personId): personId is string => Boolean(personId))
+          .join(','),
         // Collections.
         people_involved: peopleInvolved.map((p) => ({
+          person_id: p.personId ?? '',
           name:
             personName({ firstName: p.pFirst, lastName: p.pLast, formalName: p.pFormal }) ||
             p.nameText ||

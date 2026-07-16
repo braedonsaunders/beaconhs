@@ -127,6 +127,8 @@ export function createDocumentFlowAdapter(
         decisions: r.decisions ?? '',
         chair_name: head.chairName ?? '',
         owner_name: head.ownerName ?? '',
+        chaired_by_tenant_user_id: r.chairedByTenantUserId ?? null,
+        created_by_tenant_user_id: r.createdByTenantUserId ?? null,
         attendees: attendees.map((a) => ({ name: a.name ?? '', email: a.email ?? '' })),
         documents_reviewed: docsReviewed.map((d) => ({
           title: d.title ?? '',

@@ -90,6 +90,36 @@ describe('send_email design source', () => {
   })
 })
 
+describe('contextual email recipients', () => {
+  it('accepts department-scoped groups, location contacts, and compliance recipients', () => {
+    const parsed = actionDataSchema.parse({
+      action: 'send_email',
+      to: [
+        {
+          type: 'person_group_for_record_person',
+          groupId: 'manager-group',
+          personField: 'person_id',
+        },
+        {
+          type: 'org_unit_contact',
+          contactId: 'client-contact',
+          orgUnitField: 'site_org_unit_id',
+        },
+        {
+          type: 'compliance_recipient',
+          obligationId: 'journal-assignment',
+          personField: 'person_id',
+          recipient: { type: 'person', personId: 'safety-manager' },
+        },
+      ],
+    })
+
+    expect(parsed).toMatchObject({ action: 'send_email', to: expect.any(Array) })
+    if (parsed.action !== 'send_email') throw new Error('Expected a send-email action')
+    expect(parsed.to).toHaveLength(3)
+  })
+})
+
 // --- Engine planning --------------------------------------------------------
 
 const emptyCtx: EvalContext = { values: {}, rows: {}, entities: {} }

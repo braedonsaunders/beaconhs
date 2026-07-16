@@ -129,6 +129,7 @@ export function createCorrectiveActionFlowAdapter(
         // FK ids for conditions / recipient `field` targets.
         site_org_unit_id: r.siteOrgUnitId ?? null,
         owner_tenant_user_id: r.ownerTenantUserId ?? null,
+        assigned_by_tenant_user_id: r.assignedByTenantUserId ?? null,
         // Collections.
         complete_steps: await Promise.all(
           steps.map(async (s) => ({

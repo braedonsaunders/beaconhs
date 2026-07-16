@@ -462,6 +462,8 @@ Flows run automatically when things happen on your form.
 
 Rename a flow from its pencil button. Flow names can be up to 200 characters.
 
+For **Send email**, recipients can follow the record. **A People group in the record person's department** reaches only group members in the same department as the selected person field. **A contact for the record location** sends only when the selected contact belongs to the location in the selected record field. **A recipient for a matching compliance assignment** sends only when the record person is part of that assignment. These options let one flow replace separate rules for every department, project, or assignment.
+
 **Export PDF** saves the generated file on that form response. The response list shows a **PDF** badge when it is ready. Running the action again replaces that response's previous generated file.
 
 Use **Start another form** to choose a published target app. Each run creates one draft and carries over the source record's owner, person, and site. The quick **Record actions** panel offers only actions that are complete as soon as they are added; configure actions that need recipients, fields, statuses, or a target app on the full **Flows** surface.

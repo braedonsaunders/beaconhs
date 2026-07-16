@@ -37,6 +37,32 @@ export const emailTargetSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('department_manager'), departmentId: z.string() }),
   // a reusable, composable notification group (/admin/notifications → Groups)
   z.object({ type: z.literal('group'), groupId: z.string() }),
+  // Members of a People group who share the same department as the person(s)
+  // referenced by a record field. Supports comma-separated ids for records
+  // such as incidents with more than one involved person.
+  z.object({
+    type: z.literal('person_group_for_record_person'),
+    groupId: z.string(),
+    personField: z.string(),
+  }),
+  // A selected external contact, only when the record's org-unit field matches
+  // that contact's location. This replaces per-location hard-coded recipients.
+  z.object({
+    type: z.literal('org_unit_contact'),
+    contactId: z.string(),
+    orgUnitField: z.string(),
+  }),
+  // A recipient that applies only when the record person belongs to a selected
+  // compliance obligation's audience (for assignment-specific completion copy).
+  z.object({
+    type: z.literal('compliance_recipient'),
+    obligationId: z.string(),
+    personField: z.string(),
+    recipient: z.discriminatedUnion('type', [
+      z.object({ type: z.literal('person'), personId: z.string() }),
+      z.object({ type: z.literal('literal'), email: z.string() }),
+    ]),
+  }),
 ])
 export type EmailTarget = z.infer<typeof emailTargetSchema>
 

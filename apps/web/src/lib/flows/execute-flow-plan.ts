@@ -7,7 +7,7 @@ import 'server-only'
 // adapter call. Durable executions checkpoint each completed node; failures are
 // returned to the caller so its domain-event outbox can retry from that node.
 
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import {
   resolveDefaultValue,
@@ -19,7 +19,11 @@ import {
 import { db, withSuperAdmin } from '@beaconhs/db'
 import {
   domainEventEffects,
+  complianceAudience,
+  complianceObligations,
+  customerContacts,
   people,
+  personGroupMemberships,
   roleAssignments,
   roles,
   tenants,
@@ -28,6 +32,7 @@ import {
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { resolveGroupEmails, resolveGroupUserIds } from '@beaconhs/events'
+import { resolveObligationAudience } from '@beaconhs/compliance'
 import { secureFetch } from '@beaconhs/sync/egress'
 import {
   interpolate,
@@ -178,6 +183,133 @@ export async function executeFlowPlan(
     return tu?.email ?? null
   }
 
+  const fieldIds = (field: string): string[] => {
+    const raw = values[field]
+    const candidates = Array.isArray(raw) ? raw : [raw]
+    const ids = new Set<string>()
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') continue
+      for (const value of candidate.split(/[,;\s]+/)) {
+        const normalized = value.trim()
+        if (normalized) ids.add(normalized)
+      }
+    }
+    return [...ids]
+  }
+
+  const personIdentity = async (
+    personOrTenantUserId: string,
+  ): Promise<{ personId: string; departmentId: string | null; userId: string | null } | null> => {
+    const [direct] = await ctx.db((tx) =>
+      tx
+        .select({ id: people.id, departmentId: people.departmentId, userId: people.userId })
+        .from(people)
+        .where(
+          and(
+            eq(people.tenantId, ctx.tenantId),
+            eq(people.id, personOrTenantUserId),
+            isNull(people.deletedAt),
+          ),
+        )
+        .limit(1),
+    )
+    if (direct) {
+      return { personId: direct.id, departmentId: direct.departmentId, userId: direct.userId }
+    }
+    const [throughMember] = await ctx.db((tx) =>
+      tx
+        .select({ id: people.id, departmentId: people.departmentId, userId: people.userId })
+        .from(tenantUsers)
+        .innerJoin(people, eq(people.userId, tenantUsers.userId))
+        .where(
+          and(
+            eq(tenantUsers.tenantId, ctx.tenantId),
+            eq(tenantUsers.id, personOrTenantUserId),
+            eq(people.tenantId, ctx.tenantId),
+            isNull(people.deletedAt),
+          ),
+        )
+        .limit(1),
+    )
+    return throughMember
+      ? {
+          personId: throughMember.id,
+          departmentId: throughMember.departmentId,
+          userId: throughMember.userId,
+        }
+      : null
+  }
+
+  const scopedPersonGroupMembers = async (
+    groupId: string,
+    personField: string,
+  ): Promise<Array<{ personId: string; userId: string | null }>> => {
+    const identities = await Promise.all(fieldIds(personField).map(personIdentity))
+    const departmentIds = [
+      ...new Set(
+        identities
+          .map((identity) => identity?.departmentId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ]
+    if (departmentIds.length === 0) return []
+    return ctx.db((tx) =>
+      tx
+        .selectDistinct({ personId: people.id, userId: people.userId })
+        .from(personGroupMemberships)
+        .innerJoin(people, eq(people.id, personGroupMemberships.personId))
+        .where(
+          and(
+            eq(personGroupMemberships.tenantId, ctx.tenantId),
+            eq(personGroupMemberships.groupId, groupId),
+            eq(people.tenantId, ctx.tenantId),
+            eq(people.status, 'active'),
+            inArray(people.departmentId, departmentIds),
+            isNull(people.deletedAt),
+          ),
+        ),
+    )
+  }
+
+  const complianceRecipientApplies = async (
+    obligationId: string,
+    personField: string,
+  ): Promise<boolean> => {
+    const subjectIdentities = await Promise.all(fieldIds(personField).map(personIdentity))
+    const subjectPersonIds = new Set(
+      subjectIdentities
+        .map((identity) => identity?.personId)
+        .filter((id): id is string => Boolean(id)),
+    )
+    if (subjectPersonIds.size === 0) return false
+    return ctx.db(async (tx) => {
+      const [obligation] = await tx
+        .select({ id: complianceObligations.id })
+        .from(complianceObligations)
+        .where(
+          and(
+            eq(complianceObligations.tenantId, ctx.tenantId),
+            eq(complianceObligations.id, obligationId),
+            eq(complianceObligations.status, 'active'),
+            isNull(complianceObligations.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!obligation) return false
+      const audience = await tx
+        .select({ kind: complianceAudience.kind, entityKey: complianceAudience.entityKey })
+        .from(complianceAudience)
+        .where(
+          and(
+            eq(complianceAudience.tenantId, ctx.tenantId),
+            eq(complianceAudience.obligationId, obligationId),
+          ),
+        )
+      const members = await resolveObligationAudience(tx, ctx.tenantId, audience)
+      return members.some((member) => subjectPersonIds.has(member.personId))
+    })
+  }
+
   const resolveEmails = async (targets: EmailTarget[]): Promise<string[]> => {
     const out = new Set<string>()
     const add = (e: string | null | undefined) => {
@@ -230,6 +362,33 @@ export async function executeFlowPlan(
         // A reusable notification group — resolved through the shared engine.
         const emails = await ctx.db((tx) => resolveGroupEmails(tx, ctx.tenantId, [t.groupId]))
         for (const e of emails) add(e)
+      } else if (t.type === 'person_group_for_record_person') {
+        for (const member of await scopedPersonGroupMembers(t.groupId, t.personField)) {
+          add(await personEmail(member.personId))
+        }
+      } else if (t.type === 'org_unit_contact') {
+        const orgUnitIds = fieldIds(t.orgUnitField)
+        if (orgUnitIds.length > 0) {
+          const [contact] = await ctx.db((tx) =>
+            tx
+              .select({ email: customerContacts.email })
+              .from(customerContacts)
+              .where(
+                and(
+                  eq(customerContacts.tenantId, ctx.tenantId),
+                  eq(customerContacts.id, t.contactId),
+                  inArray(customerContacts.orgUnitId, orgUnitIds),
+                ),
+              )
+              .limit(1),
+          )
+          add(contact?.email)
+        }
+      } else if (t.type === 'compliance_recipient') {
+        if (await complianceRecipientApplies(t.obligationId, t.personField)) {
+          if (t.recipient.type === 'person') add(await personEmail(t.recipient.personId))
+          else for (const part of t.recipient.email.split(/[,;\s]+/)) add(part)
+        }
       }
     }
     return Array.from(out)
@@ -281,6 +440,17 @@ export async function executeFlowPlan(
             .where(and(eq(people.departmentId, t.departmentId), isNull(people.deletedAt))),
         )
         for (const m of mgrs) if (m.mgr) add(await personUserId(m.mgr))
+      } else if (t.type === 'person_group_for_record_person') {
+        for (const member of await scopedPersonGroupMembers(t.groupId, t.personField)) {
+          add(member.userId)
+        }
+      } else if (t.type === 'compliance_recipient') {
+        if (
+          t.recipient.type === 'person' &&
+          (await complianceRecipientApplies(t.obligationId, t.personField))
+        ) {
+          add(await personUserId(t.recipient.personId))
+        }
       }
     }
     return Array.from(out)
