@@ -12,6 +12,7 @@ import { tenantNavConfigs, type TenantNavConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { loadNavConfig } from '@/lib/nav/resolve'
+import { stampKnownModules } from '@/lib/nav/registry'
 
 // Lightweight runtime validation — the client is trusted-ish (admin only) but
 // we still reject malformed payloads so a bad save can't brick the sidebar.
@@ -43,13 +44,17 @@ export async function saveNavConfig(
 
   if (!isValidConfig(config)) return { ok: false, error: 'Invalid navigation layout.' }
 
+  // Stamp the currently-shipped module keys so the resolver can tell a
+  // deliberately deleted module (known, stays deleted) from one shipped after
+  // this save (unknown, auto-appended). Server-side so the client can't skew it.
+  const stamped = stampKnownModules(config)
   await ctx.db((tx) =>
     tx
       .insert(tenantNavConfigs)
-      .values({ tenantId: ctx.tenantId, config })
+      .values({ tenantId: ctx.tenantId, config: stamped })
       .onConflictDoUpdate({
         target: tenantNavConfigs.tenantId,
-        set: { config, updatedAt: new Date() },
+        set: { config: stamped, updatedAt: new Date() },
       }),
   )
   await recordAudit(ctx, {
@@ -57,7 +62,7 @@ export async function saveNavConfig(
     entityId: ctx.tenantId,
     action: 'update',
     summary: 'Sidebar navigation updated',
-    after: config as unknown as Record<string, unknown>,
+    after: stamped as unknown as Record<string, unknown>,
   })
   // Re-render the root (app) layout everywhere so the new sidebar takes effect.
   revalidatePath('/', 'layout')
@@ -108,12 +113,13 @@ export async function pinFormToSidebar(
         config.groups.find((g) => g.label.toLowerCase() === 'forms') ??
         config.groups[0]
       target?.items.push({ kind: 'form', templateId })
+      const stamped = stampKnownModules(config)
       await tx
         .insert(tenantNavConfigs)
-        .values({ tenantId: ctx.tenantId, config })
+        .values({ tenantId: ctx.tenantId, config: stamped })
         .onConflictDoUpdate({
           target: tenantNavConfigs.tenantId,
-          set: { config, updatedAt: new Date() },
+          set: { config: stamped, updatedAt: new Date() },
         })
     }
   })
@@ -151,12 +157,13 @@ export async function unpinFormFromSidebar(
       }
     }
     if (changed) {
+      const stamped = stampKnownModules(config)
       await tx
         .insert(tenantNavConfigs)
-        .values({ tenantId: ctx.tenantId, config })
+        .values({ tenantId: ctx.tenantId, config: stamped })
         .onConflictDoUpdate({
           target: tenantNavConfigs.tenantId,
-          set: { config, updatedAt: new Date() },
+          set: { config: stamped, updatedAt: new Date() },
         })
     }
   })

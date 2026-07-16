@@ -38,6 +38,15 @@ export type NavGroupConfig = {
 export type TenantNavConfig = {
   version: 1
   groups: NavGroupConfig[]
+  /**
+   * Registry module keys that existed when this config was last persisted
+   * (stamped server-side on every save). The resolver only auto-appends
+   * registry modules NOT in this list — i.e. modules shipped after the save —
+   * so a module the admin deliberately deleted stays deleted. Absent on rows
+   * saved before this field existed; those fall back to appending every
+   * missing module.
+   */
+  knownModuleKeys?: string[]
 }
 
 export const tenantNavConfigs = pgTable(

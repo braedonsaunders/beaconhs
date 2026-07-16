@@ -279,9 +279,12 @@ export function buildDefaultNavConfig(): TenantNavConfig {
  * Layer registry modules a saved config doesn't know about into their default
  * group. Without this, a tenant that saved a nav config before a new built-in
  * module shipped would NEVER see it — saved configs only render the module
- * keys they contain. Admins can still hide the module in /admin/navigation
- * (hiding keeps the key in the config, so it never re-appends). Pure; returns
- * the input untouched when nothing is missing.
+ * keys they contain. "Doesn't know about" means the key is neither present in
+ * the config nor listed in its `knownModuleKeys` stamp: a module the admin
+ * deliberately deleted is known-but-absent, so it stays deleted (it remains
+ * re-addable from the editor's Add drawer). Rows saved before the stamp
+ * existed have no `knownModuleKeys` and fall back to appending every missing
+ * module. Pure; returns the input untouched when nothing is missing.
  */
 export function withMissingModules(config: TenantNavConfig): TenantNavConfig {
   const present = new Set(
@@ -290,7 +293,8 @@ export function withMissingModules(config: TenantNavConfig): TenantNavConfig {
       .map((i) => (i.kind === 'module' ? i.moduleKey : null))
       .filter((k): k is string => k !== null),
   )
-  const missing = NAV_MODULES.filter((m) => !present.has(m.key))
+  const known = new Set(config.knownModuleKeys ?? [])
+  const missing = NAV_MODULES.filter((m) => !present.has(m.key) && !known.has(m.key))
   if (missing.length === 0) return config
   const groups = config.groups.map((g) => ({ ...g, items: [...g.items] }))
   for (const mod of missing) {
@@ -303,6 +307,19 @@ export function withMissingModules(config: TenantNavConfig): TenantNavConfig {
     group.items.push({ kind: 'module', moduleKey: mod.key })
   }
   return { ...config, groups }
+}
+
+/**
+ * Stamp a config with every registry module key that exists right now. Called
+ * server-side on every persist path so `withMissingModules` can tell "shipped
+ * after this config was saved" apart from "deliberately deleted by an admin".
+ * Always stamps the full registry (not just present keys): a module that is
+ * absent at save time was either deleted in the editor or already resurfaced
+ * to the admin via withMissingModules before this save — either way it is
+ * known.
+ */
+export function stampKnownModules(config: TenantNavConfig): TenantNavConfig {
+  return { ...config, knownModuleKeys: NAV_MODULES.map((m) => m.key) }
 }
 
 // Default icon for a pinned form when neither the pin nor the template sets one.
