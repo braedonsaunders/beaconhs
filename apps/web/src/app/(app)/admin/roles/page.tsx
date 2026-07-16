@@ -60,7 +60,7 @@ export default async function AdminRolesPage({
           ? eq(roles.isBuiltIn, false)
           : undefined
     const where = and(search, type)
-    const permissionCount = sql<number>`coalesce(array_length(${roles.permissions}, 1), 0)`
+    const permissionCount = sql<number>`coalesce(jsonb_array_length(${roles.permissions}), 0)`
     const memberCount = sql<number>`count(${roleAssignments.id}) filter (where ${tenantUsers.status} = 'active')`
     const dirFn = dir === 'asc' ? asc : desc
     const orderBy =
@@ -89,7 +89,7 @@ export default async function AdminRolesPage({
         .leftJoin(roleAssignments, eq(roleAssignments.roleId, roles.id))
         .leftJoin(tenantUsers, eq(tenantUsers.id, roleAssignments.tenantUserId))
         .where(where)
-        .groupBy(roles.id)
+        .groupBy(roles.id, roles.name, roles.description, roles.isBuiltIn, roles.permissions)
         .orderBy(...orderBy)
         .limit(listParams.perPage)
         .offset((listParams.page - 1) * listParams.perPage),

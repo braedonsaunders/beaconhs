@@ -6,8 +6,16 @@
 // the correlated lookup here gives search, reports, PDFs, APIs, and pickers the
 // same primary-only and soft-delete semantics without multiplying result rows.
 
-import { sql, type SQL, type SQLWrapper } from 'drizzle-orm'
+import { getTableName, sql, type AnyColumn, type SQL } from 'drizzle-orm'
 import { personTitleAssignments, personTitles } from './schema'
+
+// Render a column as an explicitly table-qualified raw identifier. Interpolating
+// Column objects is not safe here: when this fragment is embedded in the field
+// list of a single-table select, Drizzle rewrites every Column chunk to a bare
+// unqualified name, which is ambiguous inside the correlated subquery (42702).
+function qualified(column: AnyColumn): SQL {
+  return sql.raw(`"${getTableName(column.table)}"."${column.name}"`)
+}
 
 /**
  * Return the active primary title name for a person, or null when none exists.
@@ -16,19 +24,19 @@ import { personTitleAssignments, personTitles } from './schema'
  * and RLS already prevent a cross-tenant assignment.
  */
 export function primaryPersonTitleName(
-  personId: SQLWrapper,
-  tenantId: SQLWrapper,
+  personId: AnyColumn,
+  tenantId: AnyColumn,
 ): SQL<string | null> {
   return sql<string | null>`(
-    SELECT ${personTitles.name}
+    SELECT ${qualified(personTitles.name)}
     FROM ${personTitleAssignments}
     INNER JOIN ${personTitles}
-      ON ${personTitles.id} = ${personTitleAssignments.titleId}
-      AND ${personTitles.tenantId} = ${personTitleAssignments.tenantId}
-    WHERE ${personTitleAssignments.personId} = ${personId}
-      AND ${personTitleAssignments.tenantId} = ${tenantId}
-      AND ${personTitleAssignments.isPrimary} = true
-      AND ${personTitles.deletedAt} IS NULL
+      ON ${qualified(personTitles.id)} = ${qualified(personTitleAssignments.titleId)}
+      AND ${qualified(personTitles.tenantId)} = ${qualified(personTitleAssignments.tenantId)}
+    WHERE ${qualified(personTitleAssignments.personId)} = ${qualified(personId)}
+      AND ${qualified(personTitleAssignments.tenantId)} = ${qualified(tenantId)}
+      AND ${qualified(personTitleAssignments.isPrimary)} = true
+      AND ${qualified(personTitles.deletedAt)} IS NULL
     LIMIT 1
   )`
 }
