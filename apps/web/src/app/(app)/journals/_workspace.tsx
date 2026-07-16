@@ -230,11 +230,14 @@ export function JournalWorkspace({
       </aside>
 
       {/* Tree — mobile Browse flyout: right-side, animated (matches app drawers) */}
-      <AnimatePresence>
-        <GeneratedValue
-          value={
-            treeOpen ? (
-              <div className="fixed inset-0 z-50 lg:hidden">
+      <GeneratedValue
+        value={
+          // The open/closed conditional must be AnimatePresence's DIRECT child
+          // (no GeneratedValue wrapper) or presence tracking breaks: the flyout
+          // would unmount instantly with no exit animation.
+          <AnimatePresence>
+            {treeOpen ? (
+              <div key="journals-tree-flyout" className="fixed inset-0 z-50 lg:hidden">
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -253,10 +256,10 @@ export function JournalWorkspace({
                   <GeneratedValue value={sidebar} />
                 </motion.aside>
               </div>
-            ) : null
-          }
-        />
-      </AnimatePresence>
+            ) : null}
+          </AnimatePresence>
+        }
+      />
 
       {/* Editor */}
       <main className="flex min-w-0 flex-1 flex-col">

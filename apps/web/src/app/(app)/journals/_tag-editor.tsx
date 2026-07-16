@@ -175,49 +175,54 @@ export function TagEditor({
             : 'border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40',
         )}
       >
-        <AnimatePresence initial={false}>
-          <GeneratedValue
-            value={tags.map((t) => {
-              const sw = tagSwatch(colorByName.get(t) ?? null)
-              return (
-                <motion.span
-                  key={t}
-                  layout
-                  initial={{ opacity: 0, scale: 0.85 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.85 }}
-                  transition={{ type: 'spring', stiffness: 520, damping: 34 }}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2.5 text-xs font-medium ring-1 ring-inset',
-                    sw.chip,
-                  )}
-                >
-                  <span className="max-w-[14rem] truncate">
-                    <GeneratedValue value={t} />
-                  </span>
-                  <GeneratedValue
-                    value={
-                      editable ? (
-                        <button
-                          type="button"
-                          aria-label={tGenerated('m_101f98a70352fa', { value0: t })}
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => remove(t)}
-                          className={cn(
-                            'grid h-4 w-4 place-items-center rounded-full opacity-60 transition hover:opacity-100',
-                            sw.remove,
-                          )}
-                        >
-                          <X size={12} />
-                        </button>
-                      ) : null
-                    }
-                  />
-                </motion.span>
-              )
-            })}
-          />
-        </AnimatePresence>
+        <GeneratedValue
+          value={
+            // The keyed chip list must be AnimatePresence's DIRECT children (no
+            // GeneratedValue wrapper) or presence tracking breaks: removed
+            // chips would unmount instantly with no exit animation.
+            <AnimatePresence initial={false}>
+              {tags.map((t) => {
+                const sw = tagSwatch(colorByName.get(t) ?? null)
+                return (
+                  <motion.span
+                    key={t}
+                    layout
+                    initial={{ opacity: 0, scale: 0.85 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.85 }}
+                    transition={{ type: 'spring', stiffness: 520, damping: 34 }}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2.5 text-xs font-medium ring-1 ring-inset',
+                      sw.chip,
+                    )}
+                  >
+                    <span className="max-w-[14rem] truncate">
+                      <GeneratedValue value={t} />
+                    </span>
+                    <GeneratedValue
+                      value={
+                        editable ? (
+                          <button
+                            type="button"
+                            aria-label={tGenerated('m_101f98a70352fa', { value0: t })}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => remove(t)}
+                            className={cn(
+                              'grid h-4 w-4 place-items-center rounded-full opacity-60 transition hover:opacity-100',
+                              sw.remove,
+                            )}
+                          >
+                            <X size={12} />
+                          </button>
+                        ) : null
+                      }
+                    />
+                  </motion.span>
+                )
+              })}
+            </AnimatePresence>
+          }
+        />
 
         <GeneratedValue
           value={
@@ -272,11 +277,15 @@ export function TagEditor({
         }
       />
 
-      <AnimatePresence>
-        <GeneratedValue
-          value={
-            hasMenu ? (
+      <GeneratedValue
+        value={
+          // The open/closed conditional must be AnimatePresence's DIRECT child
+          // (no GeneratedValue wrapper) or presence tracking breaks: the menu
+          // would unmount instantly with no exit animation.
+          <AnimatePresence>
+            {hasMenu ? (
               <motion.div
+                key="tag-suggestions-menu"
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
@@ -331,10 +340,10 @@ export function TagEditor({
                   <GeneratedText id="m_1b5732a7479388" />
                 </div>
               </motion.div>
-            ) : null
-          }
-        />
-      </AnimatePresence>
+            ) : null}
+          </AnimatePresence>
+        }
+      />
     </div>
   )
 }
