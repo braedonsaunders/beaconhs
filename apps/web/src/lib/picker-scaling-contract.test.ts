@@ -14,6 +14,17 @@ function between(content: string, start: string, end: string): string {
 }
 
 describe('production-scale picker contract', () => {
+  it('does not restart every remote lookup when translation hooks rerender', () => {
+    const picker = source('../components/remote-search-select.tsx')
+    const lookupEffect = between(picker, 'useEffect(() => {', 'const options = useMemo')
+
+    expect(lookupEffect).not.toContain('setError(tGeneratedValue(')
+    expect(lookupEffect).not.toMatch(/\[[^\]]*tGeneratedValue[^\]]*\]/)
+    expect(picker).toContain('setError(false)')
+    expect(picker).toContain('setError(true)')
+    expect(picker).toContain('if (bounded === query) return')
+  })
+
   it('keeps record-list filter options remote and scoped to visible records', () => {
     const route = source('../app/api/picker-options/route.ts')
     const inspections = between(

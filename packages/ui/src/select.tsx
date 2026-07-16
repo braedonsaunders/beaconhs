@@ -14,7 +14,8 @@
 // (or SearchSelect / PersonSelectField for fully-custom cases) everywhere.
 
 import * as React from 'react'
-import { SearchSelect, type SelectOption } from './search-select'
+import { SearchSelect } from './search-select'
+import { parseNativeSelect, parseSelectChildren, selectChildrenEqual } from './select-options'
 import { cn } from './utils'
 
 export type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
@@ -27,74 +28,6 @@ export type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
   searchable?: boolean
   /** Extra classes for the trigger button (the visible control). */
   triggerClassName?: string
-}
-
-function textOf(node: React.ReactNode): string {
-  if (node == null || node === false || node === true) return ''
-  if (typeof node === 'string' || typeof node === 'number') return String(node)
-  if (Array.isArray(node)) return node.map(textOf).join('')
-  if (React.isValidElement(node))
-    return textOf((node.props as { children?: React.ReactNode }).children)
-  return ''
-}
-
-type Parsed = {
-  options: SelectOption[]
-  placeholder?: string
-  clearable: boolean
-  emptyLabel?: string
-}
-
-// Flatten <option>/<optgroup> children into a SelectOption[] for the typeahead.
-// A leading <option value=""> becomes the placeholder (greyed); if it isn't
-// disabled it also makes the field clearable back to "".
-function parseChildren(children: React.ReactNode): Parsed {
-  const options: SelectOption[] = []
-  let placeholder: string | undefined
-  let emptyLabel: string | undefined
-  let clearable = false
-  let seenAny = false
-
-  const pushOption = (el: React.ReactElement, group?: string) => {
-    const p = el.props as {
-      value?: string | number | readonly string[]
-      children?: React.ReactNode
-      disabled?: boolean
-      hidden?: boolean
-    }
-    const label = textOf(p.children)
-    const value = p.value != null ? String(p.value) : label
-    if (value === '' && !seenAny) {
-      // Leading empty option = placeholder.
-      placeholder = label || undefined
-      emptyLabel = label || 'None'
-      clearable = !p.disabled
-      seenAny = true
-      return
-    }
-    seenAny = true
-    if (p.hidden) return
-    options.push({ value, label: label || value, disabled: !!p.disabled, group })
-  }
-
-  const walk = (nodes: React.ReactNode) => {
-    React.Children.forEach(nodes, (child) => {
-      if (!React.isValidElement(child)) return
-      if (child.type === React.Fragment) {
-        walk((child.props as { children?: React.ReactNode }).children)
-      } else if (child.type === 'optgroup') {
-        const gp = child.props as { label?: string; children?: React.ReactNode }
-        React.Children.forEach(gp.children, (o) => {
-          if (React.isValidElement(o) && o.type === 'option') pushOption(o, gp.label)
-        })
-      } else if (child.type === 'option') {
-        pushOption(child)
-      }
-    })
-  }
-  walk(children)
-
-  return { options, placeholder, clearable, emptyLabel }
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function Select(
@@ -134,7 +67,19 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
   )
   const current = isControlled ? String(value ?? '') : uncontrolled
 
-  const parsed = React.useMemo(() => parseChildren(children), [children])
+  const childParsed = React.useMemo(() => parseSelectChildren(children), [children])
+  const [parsed, setParsed] = React.useState(childParsed)
+
+  // Option-producing components (translation helpers, field registries, and
+  // conditional blocks) only become concrete <option> elements after React
+  // renders the hidden select. Synchronize the visible typeahead from that
+  // resolved DOM so its menu can never silently appear empty.
+  React.useLayoutEffect(() => {
+    const select = innerRef.current
+    if (!select) return
+    const resolved = parseNativeSelect(select)
+    setParsed((current) => (selectChildrenEqual(current, resolved) ? current : resolved))
+  }, [children])
 
   function handleNativeChange(e: React.ChangeEvent<HTMLSelectElement>) {
     if (!isControlled) setUncontrolled(e.currentTarget.value)

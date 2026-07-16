@@ -100,7 +100,7 @@ export function RemoteSearchSelect({
         if (!isPickerOptionsResponse(payload)) {
           throw new Error('Picker lookup returned an invalid response')
         }
-        setError(tGeneratedValue(false))
+        setError(false)
         setRemoteOptions(payload.options)
         setHasMore(payload.hasMore)
       } catch (lookupError) {
@@ -109,7 +109,7 @@ export function RemoteSearchSelect({
           lookup: lookup ?? 'action-backed',
           lookupError,
         })
-        setError(tGeneratedValue(true))
+        setError(true)
         setHasMore(false)
       } finally {
         if (!controller.signal.aborted) setLoading(false)
@@ -120,7 +120,7 @@ export function RemoteSearchSelect({
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [contextId, disabled, loadOptions, lookup, query, tGeneratedValue, value])
+  }, [contextId, disabled, loadOptions, lookup, query, value])
 
   const options = useMemo(() => {
     const excluded = new Set(excludedValues)
@@ -165,9 +165,14 @@ export function RemoteSearchSelect({
       statusMessage={statusMessage}
       statusTone={error ? 'error' : 'muted'}
       onSearchChange={(next) => {
-        setQuery(next.slice(0, 100))
+        const bounded = next.slice(0, 100)
+        // SearchSelect reports an empty query whenever an already-reset menu
+        // opens. Preserve the loaded rows in that case; clearing a real prior
+        // query still changes `query` and therefore starts a fresh lookup.
+        if (bounded === query) return
+        setQuery(bounded)
         setLoading(true)
-        setError(tGeneratedValue(false))
+        setError(false)
         // Never present stale rows as matches while the debounced request runs.
         setRemoteOptions((current) => current.filter((option) => option.value === value))
         setHasMore(false)
