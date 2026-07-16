@@ -31,6 +31,9 @@ export type PolicyInput = {
   digestMode: 'off' | 'daily' | 'weekly'
   digestHourUtc: number
   quietHours: { start: number; end: number } | null
+  // Compliance detection master switch. When false the worker skips the tenant
+  // entirely and the schedule below is inert.
+  scanEnabled: boolean
   // Compliance detection schedule (5-field cron, evaluated in scanTimezone).
   scanCron: string
   scanTimezone: string
@@ -150,6 +153,7 @@ export async function saveNotificationConfiguration(
   const digestMode = input.digestMode
   const digestHourUtc = input.digestHourUtc
   const quietHours = input.quietHours
+  const scanEnabled = input.scanEnabled
   const scanCron = input.scanCron.trim()
   const scanTimezone = input.scanTimezone
   const allowed = await loadAllowedRecipients(ctx, items)
@@ -194,6 +198,7 @@ export async function saveNotificationConfiguration(
         digestMode,
         digestHourUtc,
         quietHours,
+        scanEnabled,
         scanCron,
         scanTimezone,
       })
@@ -203,6 +208,7 @@ export async function saveNotificationConfiguration(
           digestMode,
           digestHourUtc,
           quietHours,
+          scanEnabled,
           scanCron,
           scanTimezone,
           updatedAt: new Date(),
@@ -220,6 +226,7 @@ export async function saveNotificationConfiguration(
       digestMode,
       digestHourUtc,
       quietHours,
+      scanEnabled,
       scanCron,
       scanTimezone,
     },

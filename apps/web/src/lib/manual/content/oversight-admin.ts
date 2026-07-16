@@ -617,7 +617,7 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 - **Data export** — audited CSV exports across modules and Builder apps. Search and filter the source catalogue, then sort it by name, group, or sensitivity. Builder app sources follow the role you are currently using; template builders can also export records from draft and archived apps for review.
 - **Email templates** and **PDF templates** — branded emails and paper documents. PDF templates drive record downloads: every module ships with an editable default document, and each Builder app gets its own generated one the first time it is published. On the **Module print defaults** tab you pick which template each module's **PDF** button renders, and press **Generate default template** for any app that lacks one. Records without a template get a clean field-summary PDF.
 
-On **Notifications → Rules**, each delivery channel shows whether its provider is **Ready**, **Not set up**, or **Disabled by platform policy**. Disabled means a platform kill switch is active; it does not mean the saved credential is missing.
+On **Notifications → Rules**, each delivery channel shows whether its provider is **Ready**, **Not set up**, or **Disabled by platform policy**. Disabled means a platform kill switch is active; it does not mean the saved credential is missing. The **Compliance detection schedule** has an **Automatic detection** switch: turn it **Off** to pause every overdue and expiring reminder for the whole workspace without losing the configured schedule.
 
 ## Set workspace languages
 

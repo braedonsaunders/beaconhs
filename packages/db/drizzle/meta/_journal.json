@@ -50,6 +50,13 @@
       "when": 1784091600000,
       "tag": "0006_tenant_language_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784206236857,
+      "tag": "0007_compliance_scan_toggle",
+      "breakpoints": true
     }
   ]
 }

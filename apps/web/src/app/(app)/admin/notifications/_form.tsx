@@ -609,17 +609,36 @@ export function NotificationSettingsForm({
 
           {/* Per-tenant compliance detection schedule (evaluated in its timezone). */}
           <div className="space-y-1.5 border-t border-slate-100 pt-4 dark:border-slate-800">
-            <Label>
-              <GeneratedText id="m_1af34f7e5bf545" />
-            </Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label>
+                <GeneratedText id="m_1af34f7e5bf545" />
+              </Label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                  <GeneratedText id={pol.scanEnabled ? 'm_0738c9c7544385' : 'm_0580723cde1d9a'} />
+                </span>
+                <Toggle
+                  checked={pol.scanEnabled}
+                  onChange={(next) => patchPol({ scanEnabled: next })}
+                  label={tGenerated('m_0bf8e367a48bd6')}
+                />
+              </div>
+            </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               <GeneratedText id="m_178b7c2d54db58" />
             </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div
+              className={cn(
+                'flex flex-wrap items-center gap-2 pt-1',
+                !pol.scanEnabled && 'pointer-events-none opacity-50',
+              )}
+              aria-disabled={!pol.scanEnabled}
+            >
               <Select
                 value={sched.preset}
                 onChange={(e) => updateSched({ preset: e.target.value as SchedulePreset })}
                 className="w-40"
+                disabled={!pol.scanEnabled}
               >
                 {SCHEDULE_PRESETS.map((p) => (
                   <option key={p.value} value={p.value}>
@@ -704,6 +723,15 @@ export function NotificationSettingsForm({
                 sched.preset === 'custom' && !isValidCron(sched.custom) ? (
                   <p className="text-xs text-red-600 dark:text-red-400">
                     <GeneratedText id="m_032afdfec85876" /> <code>0 6 * * *</code>).
+                  </p>
+                ) : null
+              }
+            />
+            <GeneratedValue
+              value={
+                !pol.scanEnabled ? (
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    <GeneratedText id="m_04dfee210292be" />
                   </p>
                 ) : null
               }

@@ -293,6 +293,7 @@ export async function scanCompliance(
     const tenantRows = await tx
       .select({
         id: tenants.id,
+        enabled: tenantNotificationPolicy.scanEnabled,
         cron: tenantNotificationPolicy.scanCron,
         tz: tenantNotificationPolicy.scanTimezone,
       })
@@ -322,12 +323,18 @@ export async function scanCompliance(
   }
   const schedules = tenantRows.map((r) => ({
     id: r.id,
+    // A missing policy row (left join null) keeps the documented default-on
+    // behaviour; an explicit `false` pauses the scan for this tenant.
+    enabled: r.enabled ?? true,
     cron: r.cron ?? DEFAULT_CRON,
     tz: r.tz ?? DEFAULT_TZ,
   }))
 
   for (const s of schedules) {
     result.tenants += 1
+    // Detection paused for this tenant: no materialization, reminders, or
+    // equipment-maintenance alerts until an admin turns it back on.
+    if (!s.enabled) continue
     let tenantHeartbeatDue: boolean
     try {
       tenantHeartbeatDue = cronDueNow(s.cron, s.tz, now)
