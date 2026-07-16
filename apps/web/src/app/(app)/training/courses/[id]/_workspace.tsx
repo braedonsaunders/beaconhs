@@ -554,6 +554,17 @@ export function CourseWorkspace({
         <div className="flex items-center gap-2">
           <GeneratedValue
             value={
+              delivery.value === 'online' ? (
+                <Link href={`/training/courses/${course.id}/completions`}>
+                  <Button variant="outline" size="sm">
+                    <UserCheck size={14} /> <GeneratedText id="m_1469891f4de5bc" />
+                  </Button>
+                </Link>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
               showBuilder ? (
                 <Link href={`/training/courses/${course.id}/evaluations`}>
                   <Button variant="outline" size="sm">

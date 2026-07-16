@@ -34,7 +34,7 @@ type DeliveryMeta = {
    * completing every required lesson, or an evaluator signing off the last
    * practical) mints the training record + certificate automatically.
    *
-   * True for the learner/evaluator-driven types (self-paced, online,
+   * True for Beacon-verifiable learner/evaluator-driven types (self-paced and
    * on-the-job). FALSE for classroom — an instructor issues those records at
    * class completion with attendance/grade/pass per person — and for external
    * certificates, which are recorded manually. This prevents a stray
@@ -65,11 +65,11 @@ const DELIVERY_META: Record<DeliveryType, DeliveryMeta> = {
   online: {
     value: 'online',
     label: 'Online',
-    hint: 'Learners follow an external link, then confirm completion in the app. A record and certificate are issued automatically.',
+    hint: 'Learners follow an external link, then submit completion for staff verification. A record and certificate are issued only when staff complete the course.',
     hasContent: false,
     selfLaunch: true,
     catalog: 'always',
-    autoIssuesRecord: true,
+    autoIssuesRecord: false,
   },
   on_the_job: {
     value: 'on_the_job',

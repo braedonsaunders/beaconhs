@@ -304,6 +304,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ courseI
               instructionsHtml={course.instructions}
               onlineUrl={course.onlineUrl}
               completed={enrollment.status === 'completed'}
+              completionRequestedAt={enrollment.completionRequestedAt?.toISOString() ?? null}
               certificateRecordId={enrollment.recordId ?? null}
             />
           ) : (

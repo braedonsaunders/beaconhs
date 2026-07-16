@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assertTrainingRecordDateOrder,
+  parseTrainingRecordFileInput,
   parseTrainingRecordFieldUpdate,
   parseTrainingRecordRevocationReason,
 } from './_mutation-input'
@@ -53,5 +54,24 @@ describe('training record mutation input', () => {
     expect(parseTrainingRecordRevocationReason(null)).toBeNull()
     expect(parseTrainingRecordRevocationReason('  replaced  ')).toBe('replaced')
     expect(() => parseTrainingRecordRevocationReason('x'.repeat(1_001))).toThrow(/too long/)
+  })
+
+  it('validates record attachment associations', () => {
+    expect(
+      parseTrainingRecordFileInput({
+        recordId: ID,
+        attachmentId: '20000000-0000-4000-8000-000000000002',
+        label: ' Provider certificate ',
+        kind: 'certificate',
+      }),
+    ).toEqual({
+      recordId: ID,
+      attachmentId: '20000000-0000-4000-8000-000000000002',
+      label: 'Provider certificate',
+      kind: 'certificate',
+    })
+    expect(() =>
+      parseTrainingRecordFileInput({ recordId: ID, attachmentId: ID, label: 'File', kind: 'scan' }),
+    ).toThrow(/File kind is invalid/)
   })
 })

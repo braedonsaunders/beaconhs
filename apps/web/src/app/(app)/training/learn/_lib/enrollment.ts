@@ -23,6 +23,7 @@ export async function requireOpenTrainingEnrollment(
       courseId: trainingEnrollments.courseId,
       personId: trainingEnrollments.personId,
       status: trainingEnrollments.status,
+      completionRequestedAt: trainingEnrollments.completionRequestedAt,
       deliveryType: trainingCourses.deliveryType,
     })
     .from(trainingEnrollments)

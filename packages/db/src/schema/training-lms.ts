@@ -17,9 +17,10 @@
 // certificate), so the matrix / transcripts / compliance engine light up with
 // zero extra wiring.
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   date,
   foreignKey,
   index,
@@ -205,6 +206,13 @@ export const trainingEnrollments = pgTable(
     currentLessonId: uuid('current_lesson_id'),
     startedAt: timestamp('started_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
+    // External online providers cannot report completion to BeaconHS. The
+    // learner submits for verification; training staff then verify the provider
+    // result and explicitly complete the enrollment before a record is issued.
+    completionRequestedAt: timestamp('completion_requested_at', { withTimezone: true }),
+    completionReviewedAt: timestamp('completion_reviewed_at', { withTimezone: true }),
+    completionReviewedByTenantUserId: uuid('completion_reviewed_by_tenant_user_id'),
+    completionReviewNote: text('completion_review_note'),
     dueOn: date('due_on'),
     expiresOn: date('expires_on'),
     // The training_record written when this enrollment completed (provenance).
@@ -220,6 +228,12 @@ export const trainingEnrollments = pgTable(
     assignedByIdx: index('training_enrollments_assigned_by_idx').on(
       t.tenantId,
       t.assignedByTenantUserId,
+    ),
+    completionReviewIdx: index('training_enrollments_completion_review_idx').on(
+      t.tenantId,
+      t.courseId,
+      t.completionRequestedAt,
+      t.completionReviewedAt,
     ),
     recordIdx: index('training_enrollments_record_idx').on(t.tenantId, t.recordId),
     personCourseUx: uniqueIndex('training_enrollments_person_course_ux').on(
@@ -242,11 +256,27 @@ export const trainingEnrollments = pgTable(
       columns: [t.tenantId, t.assignedByTenantUserId],
       foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
     }),
+    completionReviewerFk: foreignKey({
+      name: 'training_enrollments_tenant_completion_reviewer_fk',
+      columns: [t.tenantId, t.completionReviewedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
     recordFk: foreignKey({
       name: 'training_enrollments_tenant_record_fk',
       columns: [t.tenantId, t.recordId],
       foreignColumns: [trainingRecords.tenantId, trainingRecords.id],
     }),
+    completionReviewCheck: check(
+      'training_enrollments_completion_review_ck',
+      sql`(
+        ${t.completionReviewedAt} IS NULL
+        AND ${t.completionReviewedByTenantUserId} IS NULL
+      ) OR (
+        ${t.completionRequestedAt} IS NOT NULL
+        AND ${t.completionReviewedAt} IS NOT NULL
+        AND ${t.completionReviewedByTenantUserId} IS NOT NULL
+      )`,
+    ),
   }),
 )
 
@@ -359,6 +389,10 @@ export const trainingEnrollmentsRelations = relations(trainingEnrollments, ({ on
     references: [trainingCourses.id],
   }),
   person: one(people, { fields: [trainingEnrollments.personId], references: [people.id] }),
+  completionReviewer: one(tenantUsers, {
+    fields: [trainingEnrollments.completionReviewedByTenantUserId],
+    references: [tenantUsers.id],
+  }),
   progress: many(trainingLessonProgress),
 }))
 

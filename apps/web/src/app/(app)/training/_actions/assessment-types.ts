@@ -2,12 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, asc, eq, isNull, max } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, max } from 'drizzle-orm'
 import { trainingAssessmentTypeQuestions, trainingAssessmentTypes } from '@beaconhs/db/schema'
 import { assertComplianceTargetCanRetire } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
-import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { recordAuditInTransaction } from '@/lib/audit'
 
 /**
  * Instant-create an assessment type and land in its detail editor (where the
@@ -28,8 +28,8 @@ export async function createAssessmentType(formData: FormData) {
   const courseId = courseRaw && courseRaw !== '__none__' ? courseRaw : null
   const preMsg = String(formData.get('preAssessmentMessage') ?? '').trim() || null
   const postMsg = String(formData.get('postAssessmentMessage') ?? '').trim() || null
-  const graded = formData.get('graded') !== 'off'
-  const active = formData.get('active') !== 'off'
+  const graded = formData.has('graded') ? formData.get('graded') === 'on' : true
+  const active = formData.has('active') ? formData.get('active') === 'on' : true
 
   const created = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -46,18 +46,17 @@ export async function createAssessmentType(formData: FormData) {
         active,
       })
       .returning()
+    if (row) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'training_assessment_type',
+        entityId: row.id,
+        action: 'create',
+        summary: `Created assessment type "${name}"`,
+        after: { name, passingScore, courseId, graded, active },
+      })
+    }
     return row
   })
-
-  if (created) {
-    await recordAudit(ctx, {
-      entityType: 'training_assessment_type',
-      entityId: created.id,
-      action: 'create',
-      summary: `Created assessment type "${name}"`,
-      after: { name, passingScore, courseId, graded, active },
-    })
-  }
   revalidatePath('/training/assessments/types')
   if (created) redirect(`/training/assessments/types/${created.id}`)
   redirect('/training/assessments/types')
@@ -77,8 +76,8 @@ export async function updateAssessmentType(typeId: string, formData: FormData) {
   const courseId = courseRaw && courseRaw !== '__none__' ? courseRaw : null
   const preMsg = String(formData.get('preAssessmentMessage') ?? '').trim() || null
   const postMsg = String(formData.get('postAssessmentMessage') ?? '').trim() || null
-  const graded = formData.get('graded') !== 'off'
-  const active = formData.get('active') !== 'off'
+  const graded = formData.get('graded') === 'on'
+  const active = formData.get('active') === 'on'
 
   await ctx.db(async (tx) => {
     const [before] = await tx
@@ -230,33 +229,36 @@ export async function createAssessmentQuestion(typeId: string, formData: FormDat
   const correctAnswer = String(formData.get('correctAnswer') ?? '').trim() || null
   const helpText = String(formData.get('helpText') ?? '').trim() || null
   const points = Math.max(1, Number(String(formData.get('points') ?? '1')) || 1)
-  const mandatory = formData.get('mandatory') !== 'off'
+  const mandatory = formData.has('mandatory') ? formData.getAll('mandatory').includes('on') : true
 
   await ctx.db(async (tx) => {
     const [{ next } = { next: 0 }] = await tx
       .select({ next: max(trainingAssessmentTypeQuestions.entityOrder) })
       .from(trainingAssessmentTypeQuestions)
       .where(eq(trainingAssessmentTypeQuestions.typeId, typeId))
-    await tx.insert(trainingAssessmentTypeQuestions).values({
-      tenantId,
-      typeId,
-      prompt,
-      kind,
-      options,
-      correctAnswer,
-      helpText,
-      points,
-      mandatory,
-      entityOrder: (next ?? 0) + 1,
+    const [question] = await tx
+      .insert(trainingAssessmentTypeQuestions)
+      .values({
+        tenantId,
+        typeId,
+        prompt,
+        kind,
+        options,
+        correctAnswer,
+        helpText,
+        points,
+        mandatory,
+        entityOrder: (next ?? 0) + 1,
+      })
+      .returning({ id: trainingAssessmentTypeQuestions.id })
+    if (!question) throw new Error('Could not create assessment question')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_assessment_type_question',
+      entityId: question.id,
+      action: 'create',
+      summary: `Added question to assessment type ${typeId}`,
+      after: { typeId, prompt, kind, points },
     })
-  })
-
-  await recordAudit(ctx, {
-    entityType: 'training_assessment_type_question',
-    entityId: typeId,
-    action: 'create',
-    summary: `Added question to assessment type ${typeId}`,
-    after: { prompt, kind, points },
   })
   revalidatePath(`/training/assessments/types/${typeId}`)
 }
@@ -287,10 +289,22 @@ export async function updateAssessmentQuestion(
   const correctAnswer = String(formData.get('correctAnswer') ?? '').trim() || null
   const helpText = String(formData.get('helpText') ?? '').trim() || null
   const points = Math.max(1, Number(String(formData.get('points') ?? '1')) || 1)
-  const mandatory = formData.get('mandatory') !== 'off'
+  const mandatory = formData.get('mandatory') === 'on'
 
   await ctx.db(async (tx) => {
-    await tx
+    const [before] = await tx
+      .select()
+      .from(trainingAssessmentTypeQuestions)
+      .where(
+        and(
+          eq(trainingAssessmentTypeQuestions.id, questionId),
+          eq(trainingAssessmentTypeQuestions.typeId, typeId),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!before) throw new Error('Assessment question not found')
+    const [question] = await tx
       .update(trainingAssessmentTypeQuestions)
       .set({ prompt, kind, options, correctAnswer, helpText, points, mandatory })
       .where(
@@ -299,14 +313,16 @@ export async function updateAssessmentQuestion(
           eq(trainingAssessmentTypeQuestions.typeId, typeId),
         ),
       )
-  })
-
-  await recordAudit(ctx, {
-    entityType: 'training_assessment_type_question',
-    entityId: questionId,
-    action: 'update',
-    summary: `Updated assessment question ${questionId}`,
-    after: { prompt, kind, points },
+      .returning({ id: trainingAssessmentTypeQuestions.id })
+    if (!question) throw new Error('Assessment question not found')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_assessment_type_question',
+      entityId: questionId,
+      action: 'update',
+      summary: `Updated assessment question ${questionId}`,
+      before,
+      after: { ...before, prompt, kind, options, correctAnswer, helpText, points, mandatory },
+    })
   })
   revalidatePath(`/training/assessments/types/${typeId}`)
 }
@@ -316,7 +332,7 @@ export async function deleteAssessmentQuestion(typeId: string, questionId: strin
   assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
   await ctx.db(async (tx) => {
-    await tx
+    const [question] = await tx
       .delete(trainingAssessmentTypeQuestions)
       .where(
         and(
@@ -324,44 +340,56 @@ export async function deleteAssessmentQuestion(typeId: string, questionId: strin
           eq(trainingAssessmentTypeQuestions.typeId, typeId),
         ),
       )
-  })
-  await recordAudit(ctx, {
-    entityType: 'training_assessment_type_question',
-    entityId: questionId,
-    action: 'delete',
-    summary: `Deleted assessment question ${questionId}`,
+      .returning({ id: trainingAssessmentTypeQuestions.id })
+    if (!question) throw new Error('Assessment question not found')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_assessment_type_question',
+      entityId: questionId,
+      action: 'delete',
+      summary: `Deleted assessment question ${questionId}`,
+    })
   })
   revalidatePath(`/training/assessments/types/${typeId}`)
 }
 
-export async function reorderAssessmentQuestion(
-  typeId: string,
-  questionId: string,
-  direction: 'up' | 'down',
-) {
+export async function reorderAssessmentQuestions(typeId: string, questionIds: string[]) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
   if (!ctx.tenantId) throw new Error('No active tenant')
   await ctx.db(async (tx) => {
     const all = await tx
-      .select()
+      .select({ id: trainingAssessmentTypeQuestions.id })
       .from(trainingAssessmentTypeQuestions)
       .where(eq(trainingAssessmentTypeQuestions.typeId, typeId))
       .orderBy(asc(trainingAssessmentTypeQuestions.entityOrder))
-    const idx = all.findIndex((q) => q.id === questionId)
-    if (idx === -1) return
-    const swapWith = direction === 'up' ? idx - 1 : idx + 1
-    if (swapWith < 0 || swapWith >= all.length) return
-    const a = all[idx]!
-    const b = all[swapWith]!
-    await tx
-      .update(trainingAssessmentTypeQuestions)
-      .set({ entityOrder: b.entityOrder })
-      .where(eq(trainingAssessmentTypeQuestions.id, a.id))
-    await tx
-      .update(trainingAssessmentTypeQuestions)
-      .set({ entityOrder: a.entityOrder })
-      .where(eq(trainingAssessmentTypeQuestions.id, b.id))
+      .for('update')
+    const expected = new Set(all.map((question) => question.id))
+    if (
+      questionIds.length !== expected.size ||
+      new Set(questionIds).size !== questionIds.length ||
+      questionIds.some((questionId) => !expected.has(questionId))
+    ) {
+      throw new Error('Question order is stale. Refresh and try again.')
+    }
+    for (const [index, questionId] of questionIds.entries()) {
+      await tx
+        .update(trainingAssessmentTypeQuestions)
+        .set({ entityOrder: index + 1 })
+        .where(
+          and(
+            eq(trainingAssessmentTypeQuestions.typeId, typeId),
+            inArray(trainingAssessmentTypeQuestions.id, [questionId]),
+          ),
+        )
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_assessment_type',
+      entityId: typeId,
+      action: 'update',
+      summary: 'Reordered assessment questions',
+      after: { questionIds },
+      dedupKey: `training.assessment-type-order:${typeId}:${questionIds.join(':')}`,
+    })
   })
   revalidatePath(`/training/assessments/types/${typeId}`)
 }

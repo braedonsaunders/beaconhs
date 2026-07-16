@@ -20,10 +20,12 @@ import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
+  attachments,
   auditLog,
   people,
   trainingCertificates,
   trainingCourses,
+  trainingRecordFiles,
   trainingRecords,
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
@@ -37,6 +39,7 @@ import { requireUuidInput } from '@/lib/mutation-input'
 import { MAX_TRAINING_VALIDITY_MONTHS } from '@/lib/training-mutation-validation'
 import {
   assertTrainingRecordDateOrder,
+  parseTrainingRecordFileInput,
   parseTrainingRecordFieldUpdate,
   parseTrainingRecordRevocationReason,
   type TrainingRecordFieldUpdate,
@@ -410,6 +413,111 @@ export async function revokeTrainingRecord(formData: FormData): Promise<void> {
   revalidatePath(`/training/records/${id}`)
   revalidatePath('/training/records')
   revalidatePath('/training')
+}
+
+export async function addTrainingRecordFile(args: {
+  recordId: string
+  attachmentId: string
+  label: string
+  kind: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'training.record.create')
+  let input: ReturnType<typeof parseTrainingRecordFileInput>
+  try {
+    input = parseTrainingRecordFileInput(args)
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'File details are invalid.',
+    }
+  }
+
+  const result = await ctx.db(async (tx) => {
+    const [record] = await tx
+      .select({ id: trainingRecords.id })
+      .from(trainingRecords)
+      .where(and(eq(trainingRecords.id, input.recordId), isNull(trainingRecords.deletedAt)))
+      .for('update')
+      .limit(1)
+    if (!record) return { ok: false as const, error: 'Training record not found.' }
+    const [attachment] = await tx
+      .select({ id: attachments.id })
+      .from(attachments)
+      .where(eq(attachments.id, input.attachmentId))
+      .limit(1)
+    if (!attachment) return { ok: false as const, error: 'Uploaded attachment not found.' }
+    const [existing] = await tx
+      .select({ id: trainingRecordFiles.id })
+      .from(trainingRecordFiles)
+      .where(
+        and(
+          eq(trainingRecordFiles.recordId, input.recordId),
+          eq(trainingRecordFiles.attachmentId, input.attachmentId),
+        ),
+      )
+      .limit(1)
+    if (existing) return { ok: false as const, error: 'This file is already attached.' }
+
+    const [file] = await tx
+      .insert(trainingRecordFiles)
+      .values({
+        tenantId: ctx.tenantId,
+        recordId: input.recordId,
+        attachmentId: input.attachmentId,
+        label: input.label,
+        kind: input.kind,
+        uploadedBy: ctx.userId,
+      })
+      .returning({ id: trainingRecordFiles.id })
+    if (!file) return { ok: false as const, error: 'File could not be attached.' }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_record',
+      entityId: input.recordId,
+      action: 'create',
+      summary: `Attached file: ${input.label}`,
+      metadata: { fileId: file.id, attachmentId: input.attachmentId, kind: input.kind },
+    })
+    return { ok: true as const }
+  })
+  if (result.ok) revalidatePath(`/training/records/${input.recordId}`)
+  return result
+}
+
+export async function deleteTrainingRecordFile(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'training.record.create')
+  const id = requireUuidInput(formData.get('id'), 'Training record file')
+  const recordId = requireUuidInput(formData.get('recordId'), 'Training record')
+  await ctx.db(async (tx) => {
+    const [record] = await tx
+      .select({ id: trainingRecords.id })
+      .from(trainingRecords)
+      .where(eq(trainingRecords.id, recordId))
+      .for('update')
+      .limit(1)
+    if (!record) throw new Error('Training record not found.')
+    const [before] = await tx
+      .select()
+      .from(trainingRecordFiles)
+      .where(and(eq(trainingRecordFiles.id, id), eq(trainingRecordFiles.recordId, recordId)))
+      .for('update')
+      .limit(1)
+    if (!before) throw new Error('Training record file not found.')
+    const [deleted] = await tx
+      .delete(trainingRecordFiles)
+      .where(and(eq(trainingRecordFiles.id, id), eq(trainingRecordFiles.recordId, recordId)))
+      .returning({ id: trainingRecordFiles.id })
+    if (!deleted) throw new Error('Training record file could not be deleted.')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_record',
+      entityId: recordId,
+      action: 'delete',
+      summary: `Deleted attachment: ${before.label}`,
+      before: { fileId: before.id, attachmentId: before.attachmentId, kind: before.kind },
+    })
+  })
+  revalidatePath(`/training/records/${recordId}`)
 }
 
 type BulkActionResult =

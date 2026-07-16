@@ -100,6 +100,7 @@ export async function GET(
     action: 'export',
     summary: 'Downloaded training credential PDF',
     metadata: { certificateId: result.cert.id, outputId },
+    dedupKey: `training-record-credential-export:${result.cert.id}:${outputId ?? 'default'}`,
   })
 
   return pdfResponse(rendered)

@@ -30,7 +30,7 @@ import {
 } from '@/lib/training-mutation-validation'
 import { deliveryMeta } from '../_lib/delivery'
 import { createAssessmentAttempt } from '../_lib/assessment-attempts'
-import { completeOnlineEnrollment, recomputeEnrollmentCompletion } from './_lib/completion'
+import { recomputeEnrollmentCompletion } from './_lib/completion'
 import {
   findOutstandingCourseRequirement,
   shouldRestartEnrollment,
@@ -155,6 +155,10 @@ export async function enrollInCourse(courseId: string, personIdArg?: string) {
             currentLessonId: null,
             startedAt: new Date(),
             completedAt: null,
+            completionRequestedAt: null,
+            completionReviewedAt: null,
+            completionReviewedByTenantUserId: null,
+            completionReviewNote: null,
             dueOn: requirement?.dueOn ?? null,
             expiresOn: null,
             recordId: null,
@@ -211,13 +215,12 @@ export async function enrollInCourse(courseId: string, personIdArg?: string) {
   revalidatePath('/compliance/mine')
 }
 
-// Self-attested completion for `online` courses — no lessons to track, so the
-// learner confirms they finished the externally linked course. Writes the
-// training record + certificate and flips the enrollment to completed.
-export async function completeOnlineCourse(enrollmentId: string) {
+// Online providers are external to BeaconHS, so a learner can only submit a
+// verification request. Training staff issue the record/certificate later from
+// the course completions screen after checking the provider result.
+export async function requestOnlineCourseCompletion(enrollmentId: string) {
   const ctx = await requireRequestContext()
   if (!ctx.tenantId) throw new Error('No active tenant')
-  const tenantId = ctx.tenantId
   const personId = await resolvePersonId(ctx)
   enrollmentId = requireTrainingUuid(enrollmentId, 'Enrollment')
 
@@ -230,22 +233,38 @@ export async function completeOnlineCourse(enrollmentId: string) {
       throw new Error('This course is not an online course.')
     }
 
-    const summary = await completeOnlineEnrollment(tx, {
-      tenantId,
-      enrollmentId,
-      courseId: enrollment.courseId,
-      personId,
-    })
-    if (summary.newlyCompleted && summary.recordId) {
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'training_enrollment',
-        entityId: enrollmentId,
-        action: 'sign',
-        summary: `Completed online course — issued record ${summary.recordId}`,
-        after: { recordId: summary.recordId, certificateId: summary.certificateId },
-      })
+    if (enrollment.completionRequestedAt) {
+      return { courseId: enrollment.courseId, requestedAt: enrollment.completionRequestedAt }
     }
-    return { courseId: enrollment.courseId, ...summary }
+    const requestedAt = new Date()
+    const [updated] = await tx
+      .update(trainingEnrollments)
+      .set({
+        completionRequestedAt: requestedAt,
+        completionReviewedAt: null,
+        completionReviewedByTenantUserId: null,
+        completionReviewNote: null,
+        progressPercent: 100,
+      })
+      .where(
+        and(
+          eq(trainingEnrollments.id, enrollmentId),
+          eq(trainingEnrollments.personId, personId),
+          eq(trainingEnrollments.status, 'in_progress'),
+          isNull(trainingEnrollments.deletedAt),
+        ),
+      )
+      .returning({ id: trainingEnrollments.id })
+    if (!updated) throw new Error('Enrollment is no longer open.')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_enrollment',
+      entityId: enrollmentId,
+      action: 'update',
+      summary: 'Submitted online course completion for verification',
+      after: { completionRequestedAt: requestedAt },
+      dedupKey: `training.online-completion-requested:${enrollmentId}:${requestedAt.toISOString()}`,
+    })
+    return { courseId: enrollment.courseId, requestedAt }
   })
   revalidatePath(`/training/learn/${result.courseId}`)
   revalidatePath('/training/learn')

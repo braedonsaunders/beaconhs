@@ -34,9 +34,9 @@ import { LessonBlocksView } from '../../_lib/blocks'
 import { CollaboraEmbed } from '@/components/collabora-embed'
 import { getPptxLearnerPlaybackSession } from '../../pptx/_actions'
 import {
-  completeOnlineCourse,
   enrollInCourse,
   markLessonComplete,
+  requestOnlineCourseCompletion,
   startLesson,
   startLessonQuiz,
 } from '../_actions'
@@ -608,19 +608,21 @@ export function CoursePlayer({
 }
 
 // Self-directed runtime for `online` courses: there are no lessons. The learner
-// opens the externally linked course, follows the instructions, then self-attests
-// completion — which issues the training record + certificate.
+// opens the externally linked course, follows the instructions, then submits a
+// verification request. Training staff issue the record after provider review.
 export function OnlineCoursePlayer({
   enrollmentId,
   instructionsHtml,
   onlineUrl,
   completed,
+  completionRequestedAt,
   certificateRecordId,
 }: {
   enrollmentId: string
   instructionsHtml: string | null
   onlineUrl: string | null
   completed: boolean
+  completionRequestedAt: string | null
   certificateRecordId: string | null
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
@@ -631,7 +633,7 @@ export function OnlineCoursePlayer({
   function finish() {
     startTransition(async () => {
       try {
-        await completeOnlineCourse(enrollmentId)
+        await requestOnlineCourseCompletion(enrollmentId)
         router.refresh()
       } catch (e) {
         toast.error(
@@ -671,6 +673,26 @@ export function OnlineCoursePlayer({
               ) : null
             }
           />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (completionRequestedAt) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-500/15">
+            <Clock size={24} className="text-amber-700 dark:text-amber-300" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              <GeneratedText id="m_18e301b66fe246" />
+            </h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_09daed0dffa7a1" />
+            </p>
+          </div>
         </CardContent>
       </Card>
     )
@@ -722,7 +744,7 @@ export function OnlineCoursePlayer({
             <GeneratedValue
               value={pending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
             />
-            <GeneratedText id="m_10e0e1adeb9304" />
+            <GeneratedText id="m_1c869ece5a0ab2" />
           </Button>
         </div>
       </CardContent>

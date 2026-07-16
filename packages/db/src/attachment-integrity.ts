@@ -76,6 +76,7 @@ export const ATTACHMENT_TENANT_REFERENCES = [
   },
   { table: 'training_lessons', column: 'attachment_id', onDelete: 'set null' },
   { table: 'training_lessons', column: 'source_attachment_id', onDelete: 'set null' },
+  { table: 'training_record_files', column: 'attachment_id', onDelete: 'cascade' },
   { table: 'training_records', column: 'certificate_attachment_id', onDelete: 'set null' },
   { table: 'training_skill_assignment_files', column: 'attachment_id', onDelete: 'set null' },
   { table: 'training_skill_assignments', column: 'evidence_attachment_id', onDelete: 'set null' },

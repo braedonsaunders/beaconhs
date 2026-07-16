@@ -3,15 +3,17 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { and, asc, count, desc, eq, ilike, isNull, like, or } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or } from 'drizzle-orm'
 import {
   CreditCard,
   Paperclip,
+  Plus,
   RotateCcw,
   ShieldAlert,
   ShieldCheck,
   ShieldOff,
   ShieldX,
+  Trash2,
 } from 'lucide-react'
 import {
   Alert,
@@ -32,7 +34,14 @@ import {
   TableHeader,
   TableRow,
 } from '@beaconhs/ui'
-import { attachments, people, tenants, trainingCourses, trainingRecords } from '@beaconhs/db/schema'
+import {
+  attachments,
+  people,
+  tenants,
+  trainingCourses,
+  trainingRecordFiles,
+  trainingRecords,
+} from '@beaconhs/db/schema'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -52,7 +61,13 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { courseCredentialOutputs } from '@/lib/credential-designs'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
 import { RecordDetailFields } from './_fields'
-import { renewTrainingRecord, revokeTrainingRecord, updateTrainingRecordField } from '../_actions'
+import { TrainingRecordFilesDrawer } from './_files-drawer'
+import {
+  deleteTrainingRecordFile,
+  renewTrainingRecord,
+  revokeTrainingRecord,
+  updateTrainingRecordField,
+} from '../_actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,6 +98,7 @@ export default async function TrainingRecordPage({
   if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
+  const drawer = typeof sp.drawer === 'string' ? sp.drawer : null
   const attachmentParams = parseListParams(
     {
       q: sp.attachmentQ,
@@ -113,12 +129,11 @@ export default async function TrainingRecordPage({
       .where(eq(trainingRecords.id, id))
       .limit(1)
     if (!row) return null
-    const attachmentBase = and(
-      eq(attachments.kind, 'document'),
-      like(attachments.r2Key, `t/${ctx.tenantId}/document/training-records/${id}/%`),
-    )
+    const attachmentBase = eq(trainingRecordFiles.recordId, id)
     const attachmentSearch = attachmentParams.q
       ? or(
+          ilike(trainingRecordFiles.label, `%${attachmentParams.q}%`),
+          ilike(trainingRecordFiles.kind, `%${attachmentParams.q}%`),
           ilike(attachments.filename, `%${attachmentParams.q}%`),
           ilike(attachments.contentType, `%${attachmentParams.q}%`),
         )
@@ -132,18 +147,23 @@ export default async function TrainingRecordPage({
       peopleList,
       coursesList,
     ] = await Promise.all([
-      tx.select({ c: count() }).from(attachments).where(attachmentBase),
+      tx.select({ c: count() }).from(trainingRecordFiles).where(attachmentBase),
       active === 'attachments'
-        ? tx.select({ c: count() }).from(attachments).where(attachmentWhere)
+        ? tx
+            .select({ c: count() })
+            .from(trainingRecordFiles)
+            .innerJoin(attachments, eq(attachments.id, trainingRecordFiles.attachmentId))
+            .where(attachmentWhere)
         : Promise.resolve([]),
       // Pull only the visible page of uploaded scans. Counts remain available
       // on every tab for the tab badge and overview statistic.
       active === 'attachments'
         ? tx
-            .select()
-            .from(attachments)
+            .select({ file: trainingRecordFiles, attachment: attachments })
+            .from(trainingRecordFiles)
+            .innerJoin(attachments, eq(attachments.id, trainingRecordFiles.attachmentId))
             .where(attachmentWhere)
-            .orderBy(desc(attachments.createdAt))
+            .orderBy(desc(trainingRecordFiles.uploadedAt))
             .limit(attachmentParams.perPage)
             .offset((attachmentParams.page - 1) * attachmentParams.perPage)
         : Promise.resolve([]),
@@ -247,6 +267,7 @@ export default async function TrainingRecordPage({
     active === 'activity' ? await recentActivityForEntity(ctx, 'training_record', id, 50) : []
 
   const basePath = `/training/records/${id}`
+  const attachmentsCloseHref = `${basePath}?tab=attachments`
   return (
     <DetailPageLayout
       header={
@@ -435,10 +456,23 @@ export default async function TrainingRecordPage({
             active === 'attachments' ? (
               <Card>
                 <CardHeader>
-                  <CardTitle>
-                    <GeneratedText id="m_18b330a9afec8b" />
-                    <GeneratedValue value={attachmentCount} />)
-                  </CardTitle>
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle>
+                      <GeneratedText id="m_18b330a9afec8b" />
+                      <GeneratedValue value={attachmentCount} />)
+                    </CardTitle>
+                    <GeneratedValue
+                      value={
+                        canRecord ? (
+                          <Link href={`${basePath}?tab=attachments&drawer=upload-file`}>
+                            <Button size="sm">
+                              <Plus size={14} /> <GeneratedText id="m_03cb1d648a3cb1" />
+                            </Button>
+                          </Link>
+                        ) : null
+                      }
+                    />
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <TableToolbar className="mb-3">
@@ -486,13 +520,18 @@ export default async function TrainingRecordPage({
                             </TableHeader>
                             <TableBody>
                               <GeneratedValue
-                                value={certAttachments.map((a) => (
-                                  <TableRow key={a.id}>
+                                value={certAttachments.map(({ file, attachment: a }) => (
+                                  <TableRow key={file.id}>
                                     <TableCell className="font-medium">
-                                      <GeneratedValue value={a.filename} />
+                                      <div>
+                                        <GeneratedValue value={file.label} />
+                                      </div>
+                                      <div className="text-xs font-normal text-slate-500">
+                                        <GeneratedValue value={a.filename} />
+                                      </div>
                                     </TableCell>
                                     <TableCell className="text-slate-600 dark:text-slate-400">
-                                      <GeneratedValue value={a.contentType} />
+                                      <GeneratedValue value={file.kind.replace('_', ' ')} />
                                     </TableCell>
                                     <TableCell className="text-slate-600 dark:text-slate-400">
                                       <GeneratedValue value={humanSize(a.sizeBytes)} />
@@ -500,21 +539,38 @@ export default async function TrainingRecordPage({
                                     <TableCell>
                                       <GeneratedValue
                                         value={formatDate(
-                                          new Date(a.createdAt),
+                                          new Date(file.uploadedAt),
                                           ctx.timezone,
                                           ctx.locale,
                                         )}
                                       />
                                     </TableCell>
                                     <TableCell>
-                                      <a
-                                        href={attachmentUrl(a.id)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                      >
-                                        <GeneratedText id="m_0871fb8eeeedd0" />
-                                      </a>
+                                      <div className="flex items-center justify-end gap-1">
+                                        <a
+                                          href={attachmentUrl(a.id)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                        >
+                                          <GeneratedText id="m_0871fb8eeeedd0" />
+                                        </a>
+                                        {canRecord ? (
+                                          <form action={deleteTrainingRecordFile}>
+                                            <input type="hidden" name="id" value={file.id} />
+                                            <input type="hidden" name="recordId" value={id} />
+                                            <Button
+                                              type="submit"
+                                              size="sm"
+                                              variant="ghost"
+                                              className="h-7 w-7 p-0 text-slate-400 hover:text-red-600"
+                                              title={tGenerated('m_1daffe3e5eee41')}
+                                            >
+                                              <Trash2 size={14} />
+                                            </Button>
+                                          </form>
+                                        ) : null}
+                                      </div>
                                     </TableCell>
                                   </TableRow>
                                 ))}
@@ -556,6 +612,13 @@ export default async function TrainingRecordPage({
           }
         />
       </div>
+      {canRecord ? (
+        <TrainingRecordFilesDrawer
+          recordId={id}
+          open={drawer === 'upload-file'}
+          closeHref={attachmentsCloseHref}
+        />
+      ) : null}
     </DetailPageLayout>
   )
 }

@@ -20,6 +20,7 @@ const learnActions = source('../app/(app)/training/learn/_actions.ts')
 const completion = source('../app/(app)/training/learn/_lib/completion.ts')
 const assessmentActions = source('../app/(app)/training/_actions/assessments.ts')
 const practicalActions = source('../app/(app)/training/courses/[id]/evaluations/_actions.ts')
+const onlineCompletionActions = source('../app/(app)/training/courses/[id]/completions/_actions.ts')
 const apiWrites = source('./api/write.ts')
 
 describe('training compliance evidence lifecycle', () => {
@@ -102,15 +103,15 @@ describe('training compliance evidence lifecycle', () => {
     expect(markComplete).toContain('targetRef: { courseId: course.id }')
   })
 
-  it('refreshes enrollment starts, restarts, and both completion modes atomically', () => {
+  it('refreshes enrollment starts, restarts, and verified completion modes atomically', () => {
     const enroll = between(
       learnActions,
       'export async function enrollInCourse',
-      'export async function completeOnlineCourse',
+      'export async function requestOnlineCourseCompletion',
     )
     const online = between(
       learnActions,
-      'export async function completeOnlineCourse',
+      'export async function requestOnlineCourseCompletion',
       'export async function startLesson',
     )
     const lesson = between(
@@ -123,6 +124,8 @@ describe('training compliance evidence lifecycle', () => {
     expect(enroll.match(/await recordAuditInTransaction\(tx, ctx/gu)).toHaveLength(2)
     expect(completion.match(/await materializeEvidenceTargetObligations\(tx/gu)).toHaveLength(2)
     expect(online).toContain('await recordAuditInTransaction(tx, ctx')
+    expect(onlineCompletionActions).toContain('await completeVerifiedOnlineEnrollment(tx')
+    expect(onlineCompletionActions).toContain('await recordAuditInTransaction(tx, ctx')
     expect(lesson.match(/await recordAuditInTransaction\(tx, ctx/gu)).toHaveLength(2)
   })
 

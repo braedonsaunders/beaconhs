@@ -64,6 +64,20 @@
       "when": 1784221200000,
       "tag": "0008_hazid_review_conditions_signatures",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784232101074,
+      "tag": "0009_early_longshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784232727486,
+      "tag": "0010_lush_sue_storm",
+      "breakpoints": true
     }
   ]
 }

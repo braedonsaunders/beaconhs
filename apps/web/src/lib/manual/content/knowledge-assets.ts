@@ -102,6 +102,50 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 - Lessons marked **opt** are optional. Everything else must be completed.`,
   },
   {
+    slug: 'training-record-administration',
+    title: 'Verify online training and manage records',
+    group: 'Knowledge & training',
+    iconKey: 'grad',
+    summary: 'Verify external online courses, attach evidence, and build native assessments.',
+    keywords: [
+      'online completion',
+      'provider verification',
+      'training attachment',
+      'assessment editor',
+      'drag questions',
+    ],
+    requiredPermission: 'training.course.manage',
+    body: `Training managers verify externally hosted online courses before BeaconHS issues a record. They can also keep source evidence with records and build native assessments in the same visual editor used for inspections.
+
+## Verify an online course
+
+1. The learner opens the **Online** course, follows the provider link, and chooses **Submit for verification** after finishing the provider requirements.
+2. BeaconHS shows **Completion submitted** to the learner. No training record or certificate is issued yet.
+3. Open the course under **Training → Courses**, then choose **Completions**.
+4. Confirm the learner's result in the external provider system.
+5. Add an optional verification note and choose **Complete course**. Confirm the message.
+6. BeaconHS records who verified the completion, issues the training record and certificate, and refreshes compliance.
+
+Only **Self-paced** courses completed inside BeaconHS issue automatically. Their required lessons, quizzes, and other completion rules are checked directly by BeaconHS.
+
+## Attach evidence to a training record
+
+1. Open **Training → Certificates** and select the record.
+2. Choose **Attachments**, then **Add attachment**.
+3. Choose the evidence type, add a useful label, and upload the file.
+4. Choose **Add attachment** again to link it to the record.
+5. Use the trash button to remove an incorrect attachment association. This does not revoke or change the training record.
+
+## Build a training assessment type
+
+1. Open **Training → Assessment types** and select a type.
+2. Use **Build** and choose **Add question**.
+3. Set the answer type, choices, correct answer, points, help text, and whether the question is required.
+4. Drag questions by their grip to reorder them. The arrow buttons are the keyboard-friendly alternative.
+5. Use **Settings** for the name, pass mark, linked course, learner messages, grading, and active state.
+6. Use **Activity** to review changes to the assessment type.`,
+  },
+  {
     slug: 'training-courses',
     title: 'Building training courses',
     group: 'Knowledge & training',
@@ -136,7 +180,7 @@ The delivery type decides what the course page shows and how workers complete th
 
 - **Self-paced** — workers take the course themselves from [My training](/my/training). Build lessons, quizzes, and practicals; finishing every required lesson issues a training record and certificate automatically.
 - **Classroom** — instructor-led. Schedule classes on the **Classes** tab. You can still build slides and handouts for instructors to present.
-- **Online** — an outside website runs the course. Set the **Course URL** and **Instructions** in Overview; workers open the link, finish the course, and confirm completion in the app.
+- **Online** — an outside website runs the course. Set the **Course URL** and **Instructions** in Overview. Workers submit completion after using the provider. Training staff verify the provider result under **Completions**, then issue the record and certificate with **Complete course**.
 - **On-the-job** — hands-on training. Build **Practical test** lessons, then sign workers off under **Evaluations**.
 - **External certificate** — training earned outside the company, like First Aid from a provider. There is nothing to build or take in the app — record each person's certificate with **Add record** on the course page, or on the **Certificates** tab.
 

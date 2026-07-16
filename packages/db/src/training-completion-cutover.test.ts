@@ -119,7 +119,10 @@ describe('training completion clean cutover', () => {
   it('keeps every cross-tenant cleanup reader and trigger target visible to the owner', () => {
     const expectedTables = [
       ...new Set([
-        ...ATTACHMENT_TENANT_REFERENCES.map(({ table }) => table),
+        ...ATTACHMENT_TENANT_REFERENCES.map(({ table }) => table).filter(
+          // Added after the squashed cutover migration this test audits.
+          (table) => table !== 'training_record_files',
+        ),
         'attachments',
         'audit_log',
         // This legacy FK exists at the 0020 boundary and is retired later in

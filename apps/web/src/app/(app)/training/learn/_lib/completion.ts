@@ -40,9 +40,23 @@ async function issueCourseRecordAndComplete(
     instructor: string
     details: string
     currentLessonId?: string
+    completionReview?: {
+      reviewedAt: Date
+      reviewerTenantUserId: string
+      note: string | null
+    }
   },
 ): Promise<{ recordId: string; certificateId: string }> {
-  const { tenantId, enrollmentId, courseId, personId, instructor, details, currentLessonId } = args
+  const {
+    tenantId,
+    enrollmentId,
+    courseId,
+    personId,
+    instructor,
+    details,
+    currentLessonId,
+    completionReview,
+  } = args
   const now = new Date()
   const [course] = await tx
     .select()
@@ -75,6 +89,13 @@ async function issueCourseRecordAndComplete(
       completedAt: now,
       progressPercent: 100,
       ...(currentLessonId ? { currentLessonId } : {}),
+      ...(completionReview
+        ? {
+            completionReviewedAt: completionReview.reviewedAt,
+            completionReviewedByTenantUserId: completionReview.reviewerTenantUserId,
+            completionReviewNote: completionReview.note,
+          }
+        : {}),
       recordId: rec.id,
     })
     .where(
@@ -95,12 +116,19 @@ async function issueCourseRecordAndComplete(
   return { recordId: rec.id, certificateId: cert.id }
 }
 
-// Self-directed completion for `online` courses: there are no lessons to track,
-// so the learner self-attests after finishing the externally linked course. The
-// enrollment-ownership check lives in the calling server action.
-export async function completeOnlineEnrollment(
+// Staff-verified completion for an `online` course. The calling action verifies
+// the training permission, provider-completion request, and course delivery
+// type before this shared record/certificate transaction runs.
+export async function completeVerifiedOnlineEnrollment(
   tx: Database,
-  args: { tenantId: string; enrollmentId: string; courseId: string; personId: string },
+  args: {
+    tenantId: string
+    enrollmentId: string
+    courseId: string
+    personId: string
+    reviewerTenantUserId: string
+    reviewNote: string | null
+  },
 ): Promise<CompletionResult> {
   const [enr] = await tx
     .select()
@@ -128,7 +156,12 @@ export async function completeOnlineEnrollment(
     courseId: args.courseId,
     personId: args.personId,
     instructor: 'Online course',
-    details: `Completed online course (enrollment ${args.enrollmentId})`,
+    details: `Online provider completion verified by training staff (enrollment ${args.enrollmentId})`,
+    completionReview: {
+      reviewedAt: new Date(),
+      reviewerTenantUserId: args.reviewerTenantUserId,
+      note: args.reviewNote,
+    },
   })
   return { completed: true, newlyCompleted: true, percent: 100, recordId, certificateId }
 }

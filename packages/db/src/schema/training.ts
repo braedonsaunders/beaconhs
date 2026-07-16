@@ -20,7 +20,8 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
-import { tenants, tenantUsers } from './core'
+import { attachments } from './attachments'
+import { tenants, tenantUsers, users } from './core'
 import { orgUnits, people } from './org'
 
 export const trainingDeliveryType = pgEnum('training_delivery_type', [
@@ -281,6 +282,50 @@ export const trainingRecords = pgTable(
   }),
 )
 
+// Supporting evidence attached to an earned training record. The raw upload
+// lives in `attachments`; this table supplies the durable record association,
+// label, evidence kind, uploader, and tenant-scoped lifecycle.
+export const trainingRecordFiles = pgTable(
+  'training_record_files',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    recordId: uuid('record_id').notNull(),
+    attachmentId: uuid('attachment_id').notNull(),
+    label: text('label').notNull(),
+    kind: text('kind').notNull(),
+    uploadedAt: timestamp('uploaded_at', { withTimezone: true }).defaultNow().notNull(),
+    uploadedBy: text('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => ({
+    tenantIdx: index('training_record_files_tenant_idx').on(t.tenantId),
+    recordIdx: index('training_record_files_record_idx').on(t.tenantId, t.recordId),
+    kindIdx: index('training_record_files_kind_idx').on(t.tenantId, t.kind),
+    attachmentUx: uniqueIndex('training_record_files_attachment_ux').on(
+      t.tenantId,
+      t.recordId,
+      t.attachmentId,
+    ),
+    recordFk: foreignKey({
+      name: 'training_record_files_tenant_record_fk',
+      columns: [t.tenantId, t.recordId],
+      foreignColumns: [trainingRecords.tenantId, trainingRecords.id],
+    }).onDelete('cascade'),
+    attachmentFk: foreignKey({
+      name: 'training_record_files_tenant_attachment_fk',
+      columns: [t.tenantId, t.attachmentId],
+      foreignColumns: [attachments.tenantId, attachments.id],
+    }).onDelete('cascade'),
+    kindCheck: check(
+      'training_record_files_kind_ck',
+      sql`${t.kind} IN ('certificate', 'evidence', 'photo', 'other')`,
+    ),
+  }),
+)
+
 // Issued certificate (PDF + QR-verifiable token).
 export const trainingCertificates = pgTable(
   'training_certificates',
@@ -320,4 +365,18 @@ export const trainingRecordsRelations = relations(trainingRecords, ({ one, many 
     references: [trainingCourses.id],
   }),
   certificates: many(trainingCertificates),
+  files: many(trainingRecordFiles),
+}))
+
+export const trainingRecordFilesRelations = relations(trainingRecordFiles, ({ one }) => ({
+  tenant: one(tenants, { fields: [trainingRecordFiles.tenantId], references: [tenants.id] }),
+  record: one(trainingRecords, {
+    fields: [trainingRecordFiles.recordId],
+    references: [trainingRecords.id],
+  }),
+  attachment: one(attachments, {
+    fields: [trainingRecordFiles.attachmentId],
+    references: [attachments.id],
+  }),
+  uploader: one(users, { fields: [trainingRecordFiles.uploadedBy], references: [users.id] }),
 }))

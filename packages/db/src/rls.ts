@@ -138,6 +138,7 @@ export const TENANT_SCOPED_TABLES = [
   'training_classes',
   'training_class_attendees',
   'training_records',
+  'training_record_files',
   'training_certificates',
   'equipment_categories',
   'equipment_types',

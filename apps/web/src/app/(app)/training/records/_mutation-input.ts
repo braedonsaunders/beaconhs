@@ -3,9 +3,13 @@ import {
   optionalNumberInput,
   optionalTextInput,
   requiredDateInput,
+  requiredTextInput,
   requireEnumInput,
   requireUuidInput,
 } from '../../../../lib/mutation-input'
+
+const TRAINING_RECORD_FILE_KINDS = ['certificate', 'evidence', 'photo', 'other'] as const
+const MAX_FILE_LABEL_LENGTH = 300
 
 export const TRAINING_RECORD_SOURCES = [
   'class',
@@ -90,4 +94,22 @@ export function parseTrainingRecordRevocationReason(value: unknown): string | nu
   if (value == null) return null
   if (typeof value !== 'string') throw new Error('Revocation reason is invalid.')
   return optionalTextInput(value, 'Revocation reason', MAX_REVOCATION_REASON_LENGTH)
+}
+
+export function parseTrainingRecordFileInput(input: unknown): {
+  recordId: string
+  attachmentId: string
+  label: string
+  kind: (typeof TRAINING_RECORD_FILE_KINDS)[number]
+} {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('File details are invalid.')
+  }
+  const candidate = input as Record<string, unknown>
+  return {
+    recordId: requireUuidInput(candidate.recordId, 'Training record'),
+    attachmentId: requireUuidInput(candidate.attachmentId, 'Attachment'),
+    label: requiredTextInput(candidate.label, 'Label', MAX_FILE_LABEL_LENGTH),
+    kind: requireEnumInput(candidate.kind, TRAINING_RECORD_FILE_KINDS, 'File kind'),
+  }
 }
