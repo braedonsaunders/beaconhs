@@ -13,9 +13,17 @@ import { moduleAdminByKey } from './registry'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
 
+const FLOW_SUBJECT_MODULE: Record<string, string> = {
+  'document-signoffs': 'documents',
+}
+
+function permissionModule(moduleKey: string) {
+  return moduleAdminByKey(FLOW_SUBJECT_MODULE[moduleKey] ?? moduleKey)
+}
+
 /** True when the viewer may administer the given module. */
 export function canManageModule(ctx: Ctx, moduleKey: string): boolean {
-  const m = moduleAdminByKey(moduleKey)
+  const m = permissionModule(moduleKey)
   if (!m) return false
   return ctx.isSuperAdmin || can(ctx, m.permission)
 }
@@ -27,7 +35,7 @@ export function canManageModule(ctx: Ctx, moduleKey: string): boolean {
  */
 export async function requireModuleManage(moduleKey: string): Promise<Ctx> {
   const ctx = await requireRequestContext()
-  const m = moduleAdminByKey(moduleKey)
+  const m = permissionModule(moduleKey)
   if (!m) redirect('/')
   if (!canManageModule(ctx, moduleKey)) redirect(m.href)
   return ctx
@@ -39,7 +47,7 @@ export async function requireModuleManage(moduleKey: string): Promise<Ctx> {
  */
 export function assertCanManageModule(ctx: Ctx, moduleKey: string): void {
   if (!canManageModule(ctx, moduleKey)) {
-    const m = moduleAdminByKey(moduleKey)
+    const m = permissionModule(moduleKey)
     throw new Error(`Forbidden: ${m?.permission ?? 'manage'} permission required`)
   }
 }

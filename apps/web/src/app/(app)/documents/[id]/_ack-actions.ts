@@ -6,16 +6,18 @@
 // and commits the audit record in the business transaction.
 
 import { revalidatePath } from 'next/cache'
-import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import {
   attachments,
   documentAcknowledgmentSessions,
   documentAcknowledgments,
   documents,
   documentVersions,
+  orgUnits,
   people,
 } from '@beaconhs/db/schema'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
+import { recordModuleFlowEvent } from '@beaconhs/events'
 import type { RequestContext } from '@beaconhs/tenant'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -292,7 +294,10 @@ export async function addSignOffSigner(
         let sessionId = requestedSessionId
         if (sessionId) {
           const [session] = await tx
-            .select({ id: documentAcknowledgmentSessions.id })
+            .select({
+              id: documentAcknowledgmentSessions.id,
+              completedAt: documentAcknowledgmentSessions.completedAt,
+            })
             .from(documentAcknowledgmentSessions)
             .where(
               and(
@@ -308,6 +313,9 @@ export async function addSignOffSigner(
             throw new AcknowledgmentError(
               'This sign-off session is no longer available for this document version',
             )
+          }
+          if (session.completedAt) {
+            throw new AcknowledgmentError('This sign-off session is already complete')
           }
         } else {
           const [session] = await tx
@@ -424,6 +432,15 @@ export async function removeSignOffSigner(input: unknown): Promise<Ok | Err> {
         throw new AcknowledgmentError('Group sign-off signer not found')
       }
 
+      const [session] = await tx
+        .select({ completedAt: documentAcknowledgmentSessions.completedAt })
+        .from(documentAcknowledgmentSessions)
+        .where(eq(documentAcknowledgmentSessions.id, acknowledgment.sessionId))
+        .limit(1)
+      if (session?.completedAt) {
+        throw new AcknowledgmentError('Signers cannot be removed from a completed session')
+      }
+
       await tx
         .delete(documentAcknowledgments)
         .where(
@@ -462,5 +479,101 @@ export async function removeSignOffSigner(input: unknown): Promise<Ok | Err> {
     return { ok: true }
   } catch (error) {
     return actionError(error, 'The signer could not be removed')
+  }
+}
+
+/** Finalize a group sign-off and fire its configured Flows exactly once. */
+export async function completeSignOffSession(input: unknown): Promise<Ok | Err> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
+
+  try {
+    const values = inputRecord(input, 'Group sign-off')
+    const documentId = uuidInput(values.documentId, 'Document')
+    const sessionId = uuidInput(values.sessionId, 'Session')
+    const title = optionalTextInput(values.title, 'Session title', MAX_SESSION_TITLE_CHARS)
+    const location = optionalTextInput(
+      values.location,
+      'Session location',
+      MAX_SESSION_LOCATION_CHARS,
+    )
+    const notes = optionalTextInput(values.notes, 'Session notes', MAX_SESSION_NOTES_CHARS)
+    const siteOrgUnitId = optionalUuidInput(values.siteOrgUnitId, 'Site')
+
+    await ctx.db(async (tx) => {
+      const [session] = await tx
+        .select({
+          id: documentAcknowledgmentSessions.id,
+          completedAt: documentAcknowledgmentSessions.completedAt,
+        })
+        .from(documentAcknowledgmentSessions)
+        .where(
+          and(
+            eq(documentAcknowledgmentSessions.tenantId, ctx.tenantId),
+            eq(documentAcknowledgmentSessions.id, sessionId),
+            eq(documentAcknowledgmentSessions.documentId, documentId),
+            isNull(documentAcknowledgmentSessions.deletedAt),
+          ),
+        )
+        .limit(1)
+        .for('update')
+      if (!session) throw new AcknowledgmentError('Group sign-off session not found')
+      if (session.completedAt) return
+
+      const [signerCount] = await tx
+        .select({ value: count() })
+        .from(documentAcknowledgments)
+        .where(
+          and(
+            eq(documentAcknowledgments.tenantId, ctx.tenantId),
+            eq(documentAcknowledgments.sessionId, sessionId),
+          ),
+        )
+      if (!signerCount || signerCount.value < 1) {
+        throw new AcknowledgmentError('Add at least one signer before completing the session')
+      }
+
+      let resolvedLocation = location
+      if (siteOrgUnitId) {
+        const [site] = await tx
+          .select({ name: orgUnits.name })
+          .from(orgUnits)
+          .where(
+            and(
+              eq(orgUnits.tenantId, ctx.tenantId),
+              eq(orgUnits.id, siteOrgUnitId),
+              isNull(orgUnits.deletedAt),
+            ),
+          )
+          .limit(1)
+        if (!site) throw new AcknowledgmentError('Selected site is no longer available')
+        resolvedLocation ??= site.name
+      }
+
+      const completedAt = new Date()
+      await tx
+        .update(documentAcknowledgmentSessions)
+        .set({ title, location: resolvedLocation, notes, siteOrgUnitId, completedAt })
+        .where(eq(documentAcknowledgmentSessions.id, sessionId))
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'document_acknowledgment_session',
+        entityId: sessionId,
+        action: 'update',
+        summary: 'Completed group document sign-off',
+        after: { documentId, signerCount: signerCount.value, siteOrgUnitId, completedAt },
+      })
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: sessionId,
+        moduleKey: 'document-signoffs',
+        event: 'on_submit',
+        occurrenceKey: sessionId,
+      })
+    })
+
+    revalidatePath(`/documents/${documentId}`)
+    revalidatePath(`/documents/${documentId}/sign-off`)
+    return { ok: true }
+  } catch (error) {
+    return actionError(error, 'The sign-off session could not be completed')
   }
 }

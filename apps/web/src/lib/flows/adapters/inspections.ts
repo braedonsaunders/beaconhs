@@ -211,6 +211,11 @@ export function createInspectionFlowAdapter(
         type_id: r.typeId ?? null,
         site_org_unit_id: r.siteOrgUnitId ?? null,
         inspector_tenant_user_id: r.inspectorTenantUserId ?? null,
+        supervisor_tenant_user_id: r.supervisorTenantUserId ?? null,
+        manager_scope_person_ids: [r.inspectorTenantUserId, r.supervisorTenantUserId]
+          .filter((value): value is string => Boolean(value))
+          .join(','),
+        foreman_person_ids: r.foremanPersonIds.join(','),
         // Collections.
         criteria: criteria.map((c) => ({
           group: c.groupLabel ?? '',

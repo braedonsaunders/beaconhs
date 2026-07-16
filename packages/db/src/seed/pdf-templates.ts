@@ -495,6 +495,33 @@ const REVIEW = wrap(
     ]),
 )
 
+const DOCUMENT_SIGNOFF = wrap(
+  letterhead(
+    'Document Sign-off',
+    '{{document_title}}',
+    '{{document_key}} · v{{document_version}}',
+  ) +
+    heading('Session') +
+    grid([
+      p('Session', '{{title}}'),
+      p('Completed', '{{completed_at}}'),
+      p('Location', '{{location}}'),
+      p('Conducted by', '{{conducted_by_name}}'),
+      p('Conducted at', '{{conducted_at}}'),
+      p('Signers', '{{signer_count}}'),
+    ]) +
+    narrative('Notes', '{{notes}}') +
+    collection('Signatures', 'signatures', [
+      ['Name', '{{name}}'],
+      ['Signed at', '{{signed_at}}', 'width:22%;'],
+      [
+        'Signature',
+        '<img src="{{image}}" alt="Signature" style="max-width:180px;max-height:52px;object-fit:contain;" />',
+        'width:32%;',
+      ],
+    ]),
+)
+
 const EQUIPMENT_INSPECTION = wrap(
   letterhead(
     'Equipment Inspection',
@@ -748,6 +775,14 @@ export const MODULE_PDF_TEMPLATE_SEEDS: ModulePdfTemplateSeed[] = [
     html: REVIEW,
     orientation: 'portrait',
     header: '{{title}}',
+  },
+  {
+    key: 'document-signoff-pdf',
+    name: 'Document Sign-off (PDF)',
+    subjectKey: 'document-signoffs',
+    html: DOCUMENT_SIGNOFF,
+    orientation: 'portrait',
+    header: '{{document_key}} — {{title}}',
   },
   {
     key: 'equipment-inspection-pdf',

@@ -8,5 +8,5 @@ export async function generateMetadata() {
 export const dynamic = 'force-dynamic'
 
 export default function DocumentsFlowsPage() {
-  return <ModuleFlowsPage moduleKey="documents" />
+  return <ModuleFlowsPage moduleKey="document-signoffs" />
 }

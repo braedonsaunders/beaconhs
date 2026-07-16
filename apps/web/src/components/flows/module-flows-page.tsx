@@ -16,7 +16,7 @@ import { FlowsCanvas, type FlowSummary } from '@/app/(app)/apps/templates/[id]/f
 export async function ModuleFlowsPage({ moduleKey }: { moduleKey: string }) {
   const ctx = await requireModuleManage(moduleKey)
   const profile = moduleFlowProfile(moduleKey)
-  const mod = moduleAdminByKey(moduleKey)
+  const mod = moduleAdminByKey(moduleKey === 'document-signoffs' ? 'documents' : moduleKey)
   if (!profile || !mod) redirect('/')
 
   const [flowsRaw, emailTemplates, pdfTemplates, recipientOptions] = await Promise.all([

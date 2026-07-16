@@ -85,6 +85,16 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       // FK ids kept for conditions / recipient `field` targets.
       { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
       { key: 'project_org_unit_id', label: 'Project (id)', kind: 'org_unit' },
+      {
+        key: 'project_superintendent_person_id',
+        label: 'Project superintendent (person id)',
+        kind: 'person',
+      },
+      {
+        key: 'project_foreman_person_id',
+        label: 'Project foreman (person id)',
+        kind: 'person',
+      },
       { key: 'supervisor_person_id', label: 'Supervisor (person id)', kind: 'person' },
       { key: 'reported_by_person_id', label: 'Reported by (person id)', kind: 'person' },
       { key: 'assessment_type_id', label: 'Assessment type (id)', kind: 'text' },
@@ -241,6 +251,11 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
       { key: 'department_id', label: 'Department (id)', kind: 'text' },
       { key: 'supervisor_person_id', label: 'Supervisor (person id)', kind: 'person' },
+      {
+        key: 'reported_by_tenant_user_id',
+        label: 'Reported by (user id)',
+        kind: 'person',
+      },
       {
         key: 'people_involved_person_ids',
         label: 'People involved (person ids)',
@@ -418,6 +433,13 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'type_id', label: 'Inspection type (id)', kind: 'text' },
       { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
       { key: 'inspector_tenant_user_id', label: 'Inspector (user id)', kind: 'person' },
+      { key: 'supervisor_tenant_user_id', label: 'Supervisor (user id)', kind: 'person' },
+      {
+        key: 'manager_scope_person_ids',
+        label: 'Inspector and supervisor (person ids)',
+        kind: 'person',
+      },
+      { key: 'foreman_person_ids', label: 'Foremen (person ids)', kind: 'person' },
     ],
     collections: [
       {
@@ -624,6 +646,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'type_name', label: 'Inspection type', kind: 'text' },
       { key: 'equipment_name', label: 'Equipment', kind: 'text' },
       { key: 'asset_tag', label: 'Asset tag', kind: 'text' },
+      { key: 'equipment_division', label: 'Equipment division', kind: 'text' },
       { key: 'serial', label: 'Serial number', kind: 'text' },
       { key: 'interval_label', label: 'Interval', kind: 'text' },
       { key: 'occurred_at', label: 'Occurred at', kind: 'date' },
@@ -641,6 +664,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
       { key: 'inspector_tenant_user_id', label: 'Inspector (user id)', kind: 'person' },
       { key: 'inspector_person_id', label: 'Inspector (person id)', kind: 'person' },
+      { key: 'foreman_person_ids', label: 'Foreman (person ids)', kind: 'person' },
     ],
     collections: [
       {
@@ -674,7 +698,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
     subjectKey: 'ppe',
     label: 'PPE inspections',
     triggers: ['on_submit', 'manual'],
-    actions: ['send_email', 'notify_role', 'create_capa', 'webhook', 'export_pdf'],
+    actions: ['send_email', 'notify_role', 'create_capa', 'set_field', 'webhook', 'export_pdf'],
     fields: [
       { key: 'reference', label: 'Reference', kind: 'text' },
       { key: 'kind_label', label: 'Inspection kind', kind: 'text' },
@@ -688,11 +712,19 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'item_size', label: 'Size', kind: 'text' },
       { key: 'holder_name', label: 'Issued to', kind: 'text' },
       { key: 'inspector_name', label: 'Inspected by', kind: 'text' },
+      { key: 'site_name', label: 'Site', kind: 'text' },
       // raw enums + FK ids for conditions / recipient `field` targets.
       { key: 'kind', label: 'Kind (raw)', kind: 'enum' },
       { key: 'result', label: 'Result (raw)', kind: 'enum' },
+      {
+        key: 'item_status',
+        label: 'Related PPE item status',
+        kind: 'enum',
+        writable: true,
+      },
       { key: 'item_id', label: 'PPE item (id)', kind: 'text' },
       { key: 'type_id', label: 'PPE type (id)', kind: 'text' },
+      { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
       { key: 'holder_person_id', label: 'Holder (person id)', kind: 'person' },
       { key: 'inspected_by_tenant_user_id', label: 'Inspector (user id)', kind: 'person' },
     ],
@@ -812,6 +844,49 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
           { key: 'hours_on_site', label: 'Hours on site', kind: 'text' },
           { key: 'crew_count', label: 'Crew count', kind: 'number' },
           { key: 'notes', label: 'Notes', kind: 'text' },
+        ],
+      },
+    ],
+  },
+  'document-signoffs': {
+    subjectType: 'module',
+    subjectKey: 'document-signoffs',
+    label: 'Document group sign-offs',
+    triggers: ['on_submit', 'manual'],
+    actions: ['send_email', 'notify_role', 'webhook', 'export_pdf'],
+    fields: [
+      { key: 'title', label: 'Session title', kind: 'text' },
+      { key: 'document_title', label: 'Document title', kind: 'text' },
+      { key: 'document_key', label: 'Document key', kind: 'text' },
+      { key: 'document_version', label: 'Document version', kind: 'number' },
+      { key: 'location', label: 'Location', kind: 'text' },
+      { key: 'site_name', label: 'Site name', kind: 'text' },
+      { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
+      { key: 'notes', label: 'Notes', kind: 'text' },
+      { key: 'conducted_by_name', label: 'Conducted by', kind: 'text' },
+      {
+        key: 'conducted_by_tenant_user_id',
+        label: 'Conducted by (user id)',
+        kind: 'person',
+      },
+      {
+        key: 'conducted_by_person_id',
+        label: 'Conducted by (person id)',
+        kind: 'person',
+      },
+      { key: 'conducted_at', label: 'Conducted at', kind: 'date' },
+      { key: 'completed_at', label: 'Completed at', kind: 'date' },
+      { key: 'signer_count', label: 'Signer count', kind: 'number' },
+    ],
+    collections: [
+      {
+        key: 'signatures',
+        label: 'Signatures',
+        fields: [
+          { key: 'name', label: 'Name', kind: 'text' },
+          { key: 'signed_at', label: 'Signed at', kind: 'date' },
+          { key: 'attachment_id', label: 'Signature attachment', kind: 'text' },
+          { key: 'image', label: 'Signature image', kind: 'text' },
         ],
       },
     ],

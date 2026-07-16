@@ -363,6 +363,8 @@ Some documents need your sign-off. This is the digital version of signing the sh
 
 If a supervisor is running a group sign-off at a toolbox talk, they will pass you the tablet to sign your name on their screen instead.
 
+For a facilitator-led session, each signature saves immediately. After the last person signs, the facilitator selects the site or project and taps **Complete session**. Completion locks the roster and runs the configured sign-off automations once.
+
 The same tab shows everyone who has signed. Use **Search people or sessions**, **Source**, and **Order** to find an individual acknowledgment or a group sign-off. Use **Next** and **Prev** to move through the complete history.
 
 ## Document books
@@ -469,6 +471,17 @@ If your role manages Documents, use the document tabs to keep the library organi
 3. Open **Management reviews** to record board reviews of the safety management system. Under **Documents reviewed**, add the published documents the board reviewed, then click **Save documents**. BeaconHS pins each document to its exact published version, so a later revision cannot change the historical review record. Search by review title, or use **Next review** to show reviews that have or do not have another review scheduled.
 
 Periodic reviews on an individual document also record the exact published version. Open the document's **Reviews** tab, click **Record review**, and explicitly choose the outcome. Historical reviews whose old source did not capture an outcome are labelled **outcome not recorded** instead of being treated as approvals.
+
+## Automate completed group sign-offs
+
+1. Open [Documents manage](/documents/manage) and choose **Sign-off automations**.
+2. Use **When submitted** for the completed-session event.
+3. Add **Send email** and choose the facilitator, People groups, the facilitator's manager, a People group in the facilitator's department, or contacts for the selected site.
+4. Turn on **Attach PDF** to include the completed sign-off record.
+5. Under **Spreadsheet attachments**, choose an uploaded XLSX template. Add a condition on **Site (id)** when a client-specific workbook should be included only for one site.
+6. Turn the Flow on.
+
+Management review automations are separate. Open **Management review automations** when the trigger should be creation of a governance management-review record rather than completion of a toolbox-talk sign-off.
 
 ## Build and publish a document book
 

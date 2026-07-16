@@ -73,11 +73,25 @@ export default async function SignOffPage({
       .limit(1)
 
     let roster: SheetSigner[] = []
+    let sessionDetails: {
+      title: string | null
+      location: string | null
+      notes: string | null
+      siteOrgUnitId: string | null
+      completedAt: string | null
+    } | null = null
     let invalidSession = false
     if (resumeSessionId) {
       const [session] = pub
         ? await tx
-            .select({ id: documentAcknowledgmentSessions.id })
+            .select({
+              id: documentAcknowledgmentSessions.id,
+              title: documentAcknowledgmentSessions.title,
+              location: documentAcknowledgmentSessions.location,
+              notes: documentAcknowledgmentSessions.notes,
+              siteOrgUnitId: documentAcknowledgmentSessions.siteOrgUnitId,
+              completedAt: documentAcknowledgmentSessions.completedAt,
+            })
             .from(documentAcknowledgmentSessions)
             .where(
               and(
@@ -91,6 +105,13 @@ export default async function SignOffPage({
         : []
       invalidSession = !session
       if (session) {
+        sessionDetails = {
+          title: session.title,
+          location: session.location,
+          notes: session.notes,
+          siteOrgUnitId: session.siteOrgUnitId,
+          completedAt: session.completedAt?.toISOString() ?? null,
+        }
         const rows = await tx
           .select({
             ackId: documentAcknowledgments.id,
@@ -121,11 +142,11 @@ export default async function SignOffPage({
       }
     }
 
-    return { doc, pub: pub ?? null, roster, invalidSession }
+    return { doc, pub: pub ?? null, roster, invalidSession, sessionDetails }
   })
 
   if (!data) notFound()
-  const { doc, pub, roster, invalidSession } = data
+  const { doc, pub, roster, invalidSession, sessionDetails } = data
   if (invalidSession) notFound()
 
   return (
@@ -163,6 +184,11 @@ export default async function SignOffPage({
                 defaultTitle={doc.title}
                 initialRoster={roster}
                 initialSessionId={resumeSessionId}
+                initialTitle={sessionDetails?.title ?? doc.title}
+                initialLocation={sessionDetails?.location ?? ''}
+                initialNotes={sessionDetails?.notes ?? ''}
+                initialSiteOrgUnitId={sessionDetails?.siteOrgUnitId ?? null}
+                completedAt={sessionDetails?.completedAt ?? null}
                 backHref={backHref}
               />
             )

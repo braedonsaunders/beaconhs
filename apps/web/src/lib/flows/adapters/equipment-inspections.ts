@@ -63,6 +63,7 @@ export function createEquipmentInspectionFlowAdapter(
             typeName: equipmentInspectionTypes.name,
             equipmentName: equipmentItems.name,
             assetTag: equipmentItems.assetTag,
+            equipmentMetadata: equipmentItems.metadata,
             siteName: orgUnits.name,
             inspectorUserName: inspU.name,
             inspectorPersonFirst: people.firstName,
@@ -211,6 +212,10 @@ export function createEquipmentInspectionFlowAdapter(
         type_name: head.typeName ?? '',
         equipment_name: head.equipmentName ?? '',
         asset_tag: head.assetTag ?? '',
+        equipment_division:
+          typeof head.equipmentMetadata?.division === 'string'
+            ? head.equipmentMetadata.division
+            : '',
         serial: r.serial ?? '',
         interval_label: r.intervalLabel ?? '',
         occurred_at: fmtDateTime(r.occurredAt),
@@ -226,6 +231,7 @@ export function createEquipmentInspectionFlowAdapter(
         site_org_unit_id: r.siteOrgUnitId ?? null,
         inspector_tenant_user_id: r.inspectorTenantUserId ?? null,
         inspector_person_id: r.inspectorPersonId ?? null,
+        foreman_person_ids: r.foremanPersonIds.join(','),
         // Collections.
         criteria: criteria.map((c) => ({
           group: c.groupLabel ?? '',
@@ -250,6 +256,7 @@ export function createEquipmentInspectionFlowAdapter(
           .select({
             submittedBy: equipmentInspectionRecords.submittedByTenantUserId,
             inspector: equipmentInspectionRecords.inspectorTenantUserId,
+            inspectorPersonId: equipmentInspectionRecords.inspectorPersonId,
           })
           .from(equipmentInspectionRecords)
           .where(
@@ -260,7 +267,19 @@ export function createEquipmentInspectionFlowAdapter(
             ),
           )
           .limit(1)
-        const tuid = r?.submittedBy ?? r?.inspector ?? null
+        let tuid = r?.submittedBy ?? r?.inspector ?? null
+        if (!tuid && r?.inspectorPersonId) {
+          const [linked] = await tx
+            .select({ tenantUserId: tenantUsers.id })
+            .from(people)
+            .innerJoin(
+              tenantUsers,
+              and(eq(tenantUsers.tenantId, people.tenantId), eq(tenantUsers.userId, people.userId)),
+            )
+            .where(eq(people.id, r.inspectorPersonId))
+            .limit(1)
+          tuid = linked?.tenantUserId ?? null
+        }
         if (!tuid) return { tenantUserId: null, email: null, userId: null }
         const [u] = await tx
           .select({ email: users.email, userId: users.id })

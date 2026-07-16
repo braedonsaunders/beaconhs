@@ -15,11 +15,12 @@ import {
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Check, ChevronDown, ChevronRight, PenLine, Trash2, UserPlus, Users } from 'lucide-react'
 import { Button, Input, Label, SignaturePad, Textarea } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
-import { addSignOffSigner, removeSignOffSigner } from '../_ack-actions'
+import { addSignOffSigner, completeSignOffSession, removeSignOffSigner } from '../_ack-actions'
 import { RawImage } from '@/components/raw-image'
 
 export type SheetSigner = {
@@ -44,6 +45,11 @@ export function SignOffSheet({
   defaultTitle,
   initialRoster,
   initialSessionId,
+  initialTitle,
+  initialLocation,
+  initialNotes,
+  initialSiteOrgUnitId,
+  completedAt,
   backHref,
 }: {
   documentId: string
@@ -52,15 +58,22 @@ export function SignOffSheet({
   defaultTitle: string
   initialRoster: SheetSigner[]
   initialSessionId: string | null
+  initialTitle: string
+  initialLocation: string
+  initialNotes: string
+  initialSiteOrgUnitId: string | null
+  completedAt: string | null
   backHref: string
 }) {
+  const router = useRouter()
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId)
   const [roster, setRoster] = useState<SheetSigner[]>(initialRoster)
-  const [title, setTitle] = useState(defaultTitle)
-  const [location, setLocation] = useState('')
-  const [notes, setNotes] = useState('')
+  const [title, setTitle] = useState(initialTitle || defaultTitle)
+  const [location, setLocation] = useState(initialLocation)
+  const [notes, setNotes] = useState(initialNotes)
+  const [siteOrgUnitId, setSiteOrgUnitId] = useState(initialSiteOrgUnitId ?? '')
   const [detailsOpen, setDetailsOpen] = useState(false)
 
   const [personId, setPersonId] = useState('')
@@ -125,6 +138,30 @@ export function SignOffSheet({
     })
   }
 
+  function completeSession() {
+    if (!sessionId || roster.length === 0) {
+      toast.error(tGenerated('m_181a4a77a7bd57'))
+      return
+    }
+    startTransition(async () => {
+      const res = await completeSignOffSession({
+        documentId,
+        sessionId,
+        title,
+        location,
+        notes,
+        siteOrgUnitId: siteOrgUnitId || null,
+      })
+      if (!res.ok) {
+        toast.error(tGeneratedValue(res.error))
+        return
+      }
+      toast.success(tGenerated('m_0fa873e4616c26'))
+      router.push(backHref)
+      router.refresh()
+    })
+  }
+
   return (
     <div className="space-y-5">
       {/* Session details */}
@@ -159,6 +196,22 @@ export function SignOffSheet({
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder={tGenerated('m_016387edb8456c')}
+                    disabled={Boolean(completedAt)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>
+                    <GeneratedText id="m_09f4d1635fc0f2" />
+                  </Label>
+                  <RemoteSearchSelect
+                    lookup="document-signoff-sites"
+                    value={siteOrgUnitId}
+                    onChange={setSiteOrgUnitId}
+                    placeholder={tGenerated('m_14341b79f2ff1c')}
+                    searchPlaceholder={tGenerated('m_14e2a2bb3bbdff')}
+                    sheetTitle={tGenerated('m_14341b79f2ff1c')}
+                    ariaLabel={tGenerated('m_09f4d1635fc0f2')}
+                    disabled={Boolean(completedAt)}
                   />
                 </div>
                 <div className="space-y-1">
@@ -170,6 +223,7 @@ export function SignOffSheet({
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     placeholder={tGenerated('m_18d19fe0820620')}
+                    disabled={Boolean(completedAt)}
                   />
                 </div>
                 <div className="space-y-1">
@@ -182,6 +236,7 @@ export function SignOffSheet({
                     onChange={(e) => setNotes(e.target.value)}
                     rows={2}
                     placeholder={tGenerated('m_0cadbe8ae1ae4e')}
+                    disabled={Boolean(completedAt)}
                   />
                 </div>
                 <p className="text-xs text-slate-400 dark:text-slate-500">
@@ -194,52 +249,54 @@ export function SignOffSheet({
       </div>
 
       {/* Add a signer */}
-      <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-          <UserPlus size={16} /> <GeneratedText id="m_03c2011040b1bb" />
-        </h3>
-        <div className="mt-3 space-y-3">
-          <div className="space-y-1">
-            <Label>
-              <GeneratedText id="m_12e926c9216094" />
-            </Label>
-            <RemoteSearchSelect
-              lookup="document-signoff-people"
-              value={personId}
-              onChange={setPersonId}
-              excludedValues={[...signedIds]}
-              placeholder={tGenerated('m_0be39d3a196b5b')}
-              searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
-              sheetTitle="Add a signer"
-              ariaLabel="Signer"
-            />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
-              <PenLine size={14} /> <GeneratedText id="m_0c0bc02db58371" />
+      {!completedAt ? (
+        <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+            <UserPlus size={16} /> <GeneratedText id="m_03c2011040b1bb" />
+          </h3>
+          <div className="mt-3 space-y-3">
+            <div className="space-y-1">
+              <Label>
+                <GeneratedText id="m_12e926c9216094" />
+              </Label>
+              <RemoteSearchSelect
+                lookup="document-signoff-people"
+                value={personId}
+                onChange={setPersonId}
+                excludedValues={[...signedIds]}
+                placeholder={tGenerated('m_0be39d3a196b5b')}
+                searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
+                sheetTitle="Add a signer"
+                ariaLabel="Signer"
+              />
             </div>
-            <SignaturePad value={sig} onChange={setSig} height={180} />
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+                <PenLine size={14} /> <GeneratedText id="m_0c0bc02db58371" />
+              </div>
+              <SignaturePad value={sig} onChange={setSig} height={180} />
+            </div>
+            <Button
+              type="button"
+              className="w-full"
+              size="lg"
+              onClick={addSigner}
+              disabled={pending || !personId || !sig}
+            >
+              <Check size={16} />{' '}
+              <GeneratedValue
+                value={
+                  pending ? (
+                    <GeneratedText id="m_106811f2aac664" />
+                  ) : (
+                    <GeneratedText id="m_1087d33623b6de" />
+                  )
+                }
+              />
+            </Button>
           </div>
-          <Button
-            type="button"
-            className="w-full"
-            size="lg"
-            onClick={addSigner}
-            disabled={pending || !personId || !sig}
-          >
-            <Check size={16} />{' '}
-            <GeneratedValue
-              value={
-                pending ? (
-                  <GeneratedText id="m_106811f2aac664" />
-                ) : (
-                  <GeneratedText id="m_1087d33623b6de" />
-                )
-              }
-            />
-          </Button>
         </div>
-      </div>
+      ) : null}
 
       {/* Roster */}
       <div>
@@ -289,15 +346,17 @@ export function SignOffSheet({
                           ) : null
                         }
                       />
-                      <button
-                        type="button"
-                        onClick={() => removeSigner(r.ackId)}
-                        disabled={pending}
-                        className="shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40 dark:hover:bg-rose-950/40"
-                        aria-label={tGenerated('m_101f98a70352fa', { value0: r.name })}
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {!completedAt ? (
+                        <button
+                          type="button"
+                          onClick={() => removeSigner(r.ackId)}
+                          disabled={pending}
+                          className="shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-40 dark:hover:bg-rose-950/40"
+                          aria-label={tGenerated('m_101f98a70352fa', { value0: r.name })}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      ) : null}
                     </li>
                   ))}
                 />
@@ -308,11 +367,21 @@ export function SignOffSheet({
       </div>
 
       <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
-        <Link href={backHref}>
-          <Button type="button" variant={roster.length > 0 ? 'default' : 'outline'}>
-            <GeneratedText id="m_00609f822e0571" />
+        {completedAt ? (
+          <Link href={backHref}>
+            <Button type="button">
+              <GeneratedText id="m_00609f822e0571" />
+            </Button>
+          </Link>
+        ) : (
+          <Button
+            type="button"
+            onClick={completeSession}
+            disabled={pending || !sessionId || roster.length === 0}
+          >
+            <Check size={16} /> <GeneratedText id="m_03959afe91d76c" />
           </Button>
-        </Link>
+        )}
       </div>
     </div>
   )

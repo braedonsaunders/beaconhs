@@ -21,6 +21,7 @@ import { createPpeInspectionFlowAdapter } from './adapters/ppe'
 import { createPpeIssueReportFlowAdapter } from './adapters/ppe-issues'
 import { createVehicleLogFlowAdapter } from './adapters/vehicle-log'
 import { createDocumentFlowAdapter } from './adapters/documents'
+import { createDocumentSignoffFlowAdapter } from './adapters/document-signoffs'
 import type { FlowSubjectAdapter } from './types'
 
 type ModuleFlowAdapterFactory = (ctx: RequestContext, subjectId: string) => FlowSubjectAdapter
@@ -41,6 +42,7 @@ const MODULE_FLOW_ADAPTERS: Record<string, ModuleFlowAdapterFactory> = {
   'ppe-issues': createPpeIssueReportFlowAdapter,
   'vehicle-log': createVehicleLogFlowAdapter,
   documents: createDocumentFlowAdapter,
+  'document-signoffs': createDocumentSignoffFlowAdapter,
 }
 
 export function buildFlowAdapter(

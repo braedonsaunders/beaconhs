@@ -86,7 +86,7 @@ export function createHazidFlowAdapter(
       const [proj] = a.projectOrgUnitId
         ? await ctx.db((tx) =>
             tx
-              .select({ name: orgUnits.name })
+              .select({ name: orgUnits.name, metadata: orgUnits.metadata })
               .from(orgUnits)
               .where(eq(orgUnits.id, a.projectOrgUnitId!))
               .limit(1),
@@ -215,6 +215,14 @@ export function createHazidFlowAdapter(
         // FK ids for conditions / recipient `field` targets.
         site_org_unit_id: a.siteOrgUnitId ?? null,
         project_org_unit_id: a.projectOrgUnitId ?? null,
+        project_superintendent_person_id:
+          typeof proj?.metadata?.superintendentPersonId === 'string'
+            ? proj.metadata.superintendentPersonId
+            : null,
+        project_foreman_person_id:
+          typeof proj?.metadata?.foremanPersonId === 'string'
+            ? proj.metadata.foremanPersonId
+            : null,
         supervisor_person_id: a.supervisorPersonId ?? null,
         reported_by_person_id: reporter?.personId ?? null,
         assessment_type_id: a.assessmentTypeId ?? null,
@@ -265,6 +273,7 @@ export function createHazidFlowAdapter(
             cs_attendant: yesBlank(s.row.csAttendant),
             cs_rescue: yesBlank(s.row.csRescue),
             signed_at: fmtDateTime(s.row.signedAt),
+            attachment_id: s.row.signatureAttachmentId ?? null,
             image: s.signatureKey
               ? await presignGet({ key: s.signatureKey, expiresInSeconds: 900 })
               : '',

@@ -11,6 +11,7 @@ import 'server-only'
 import { asc, eq, or } from 'drizzle-orm'
 import {
   attachments,
+  orgUnits,
   people,
   ppeInspectionAttachments,
   ppeInspectionCriteria,
@@ -26,6 +27,7 @@ import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDate, personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
+import { recordAudit } from '@/lib/audit'
 
 function kindLabel(kind: string | null): string {
   if (kind === 'pre_use') return 'Pre-use'
@@ -76,6 +78,7 @@ export function createPpeInspectionFlowAdapter(
             holderLast: people.lastName,
             holderFormal: people.formalName,
             inspectorName: users.name,
+            siteName: orgUnits.name,
           })
           .from(ppeInspections)
           .innerJoin(ppeItems, eq(ppeItems.id, ppeInspections.itemId))
@@ -83,6 +86,7 @@ export function createPpeInspectionFlowAdapter(
           .leftJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
           .leftJoin(tenantUsers, eq(tenantUsers.id, ppeInspections.inspectedByTenantUserId))
           .leftJoin(users, eq(users.id, tenantUsers.userId))
+          .leftJoin(orgUnits, eq(orgUnits.id, ppeInspections.siteOrgUnitId))
           .where(eq(ppeInspections.id, inspectionId))
           .limit(1),
       )
@@ -137,15 +141,18 @@ export function createPpeInspectionFlowAdapter(
         type_category: head.typeCategory ?? '',
         item_serial: item.serialNumber ?? '',
         item_size: item.size ?? '',
+        item_status: item.status,
         holder_name: personName({
           firstName: head.holderFirst,
           lastName: head.holderLast,
           formalName: head.holderFormal,
         }),
         inspector_name: i.inspectorNameSnapshot ?? head.inspectorName ?? '',
+        site_name: head.siteName ?? '',
         // FK ids for conditions / recipient `field` targets.
         item_id: i.itemId ?? null,
         type_id: item.typeId ?? null,
+        site_org_unit_id: i.siteOrgUnitId ?? null,
         holder_person_id: item.currentHolderPersonId ?? null,
         inspected_by_tenant_user_id: i.inspectedByTenantUserId ?? null,
         criteria: criteria.map((criterion) => ({
@@ -200,5 +207,47 @@ export function createPpeInspectionFlowAdapter(
         dueOn: i.dueOn ?? null,
         flowExecutionKey: i.flowExecutionKey,
       }),
+
+    async persistAfterRun({ fieldPatch }) {
+      const keys = Object.keys(fieldPatch)
+      if (keys.length !== 1 || keys[0] !== 'item_status') {
+        throw new Error('PPE inspection Flows may only update the related PPE item status.')
+      }
+      const status = fieldPatch.item_status
+      if (
+        !['in_stock', 'issued', 'returned', 'damaged', 'discarded', 'expired'].includes(
+          String(status),
+        )
+      ) {
+        throw new Error('The PPE item status selected by this Flow is invalid.')
+      }
+      const [inspection] = await ctx.db((tx) =>
+        tx
+          .select({ itemId: ppeInspections.itemId })
+          .from(ppeInspections)
+          .where(eq(ppeInspections.id, inspectionId))
+          .limit(1),
+      )
+      if (!inspection) throw new Error('The PPE inspection no longer exists.')
+      await ctx.db((tx) =>
+        tx
+          .update(ppeItems)
+          .set({
+            status: status as
+              'in_stock' | 'issued' | 'returned' | 'damaged' | 'discarded' | 'expired',
+            ...(status === 'discarded' || status === 'expired'
+              ? { currentHolderPersonId: null }
+              : {}),
+          })
+          .where(eq(ppeItems.id, inspection.itemId)),
+      )
+      await recordAudit(ctx, {
+        entityType: 'ppe_item',
+        entityId: inspection.itemId,
+        action: 'update',
+        summary: `Flow changed PPE item status to ${String(status)}`,
+        metadata: { inspectionId },
+      })
+    },
   }
 }

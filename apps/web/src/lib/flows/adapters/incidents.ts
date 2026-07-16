@@ -261,6 +261,7 @@ export function createIncidentFlowAdapter(
         site_org_unit_id: i.siteOrgUnitId ?? null,
         department_id: i.departmentId ?? null,
         supervisor_person_id: i.supervisorPersonId ?? null,
+        reported_by_tenant_user_id: i.reportedByTenantUserId ?? null,
         people_involved_person_ids: peopleInvolved
           .map((person) => person.personId)
           .filter((personId): personId is string => Boolean(personId))
