@@ -177,7 +177,7 @@ export async function listDueSignals(
         from ${formResponses}
         where ${formResponses.tenantId} = ${tid}
           and ${formResponses.monitorStatus} in ('active','missed','escalated')
-          and ${formResponses.nextCheckinDueAt} <= ${horizonDate}
+          and ${formResponses.nextCheckinDueAt} <= ${horizonDate.toISOString()}::timestamptz
 
         union all
         select 'documents', 'Review due', ${documents.title}, null, null, ${documents.nextReviewOn}::date,

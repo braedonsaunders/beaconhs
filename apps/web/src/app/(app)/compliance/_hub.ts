@@ -212,7 +212,10 @@ export async function agingFromStatus(ctx: Ctx): Promise<AgingRow[]> {
           ...liveFilter(),
         ),
       )
-      .groupBy(complianceObligations.sourceModule, bucket)
+      // Group by select-list ordinal: re-interpolating `bucket` here would
+      // re-number its bind params ($7,$8 vs the select's $1,$2), which makes
+      // Postgres treat SELECT and GROUP BY as different expressions (42803).
+      .groupBy(sql`1`, sql`2`)
     return rows.map((row) => ({
       kind: row.kind as ObligationKind,
       bucket: row.bucket,

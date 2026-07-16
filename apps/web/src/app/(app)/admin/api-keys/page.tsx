@@ -148,7 +148,7 @@ export default async function ApiKeysPage({
               ? revoked
               : undefined
       const where = and(search, status)
-      const statusRank = sql<number>`case when ${apiKeys.revokedAt} is not null then 3 when ${apiKeys.expiresAt} is not null and ${apiKeys.expiresAt} <= ${nowDate} then 2 else 1 end`
+      const statusRank = sql<number>`case when ${apiKeys.revokedAt} is not null then 3 when ${apiKeys.expiresAt} is not null and ${apiKeys.expiresAt} <= ${nowDate.toISOString()}::timestamptz then 2 else 1 end`
       const dirFn = params.dir === 'asc' ? asc : desc
       const orderBy =
         params.sort === 'name'
