@@ -35,7 +35,7 @@ export type DomainNotificationEvent =
       assigneeUserId?: string | null
       assignerUserId?: string | null
     }
-  | { kind: 'corrective_action_completed'; caId: string; completerUserId?: string | null }
+  | { kind: 'corrective_action_completed'; caId: string }
 
 export type DomainEventActor = {
   userId: string

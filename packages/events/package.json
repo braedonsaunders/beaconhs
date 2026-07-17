@@ -19,7 +19,6 @@
     "@beaconhs/compliance": "workspace:*",
     "@beaconhs/db": "workspace:*",
     "@beaconhs/email-render": "workspace:*",
-    "@beaconhs/emails": "workspace:*",
     "@beaconhs/jobs": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },

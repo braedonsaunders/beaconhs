@@ -1,9 +1,9 @@
 // Domain event dispatcher.
 //
 // The single API that domain code (server actions, scheduled workers) calls
-// when something happens. It resolves the audience for an event, builds the
-// in-app notification payload AND the email-template HTML/text, then enqueues
-// both jobs.
+// when something happens. It resolves the audience for an event and enqueues
+// the in-app/push notification. Module email delivery belongs to Flows so it
+// remains tenant-configurable and cannot be sent twice.
 //
 // Importable from both `apps/web` (server actions) and `apps/worker`
 // (scheduled scans).
@@ -15,7 +15,6 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import { db as defaultDb, withSuperAdmin, type Database } from '@beaconhs/db'
-import { caAssignedEmail, caCompletedEmail, incidentReportedEmail } from '@beaconhs/emails'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
 import { resolveNotificationAudienceUserIds } from './recipients'
 import { complianceRollupEmailHtml, maintenanceRollupEmailHtml } from './email-html'
@@ -26,7 +25,6 @@ import {
   incidents,
   people,
   tenantUsers,
-  tenants,
   users,
   type DomainNotificationEvent,
 } from '@beaconhs/db/schema'
@@ -104,32 +102,18 @@ async function resolveAudience(
   )
 }
 
-async function getTenant(ctx: EventCtx, tenantId: string): Promise<{ name: string } | null> {
-  return ctx.db(async (tx) => {
-    const [t] = await tx
-      .select({ name: tenants.name })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1)
-    return t ?? null
-  })
-}
-
 async function tenantUserToUserId(
   ctx: EventCtx,
   tenantId: string,
   tenantUserId: string,
-): Promise<{ userId: string; displayName: string | null } | null> {
+): Promise<string | null> {
   return ctx.db(async (tx) => {
     const [row] = await tx
-      .select({
-        userId: tenantUsers.userId,
-        displayName: tenantUsers.displayName,
-      })
+      .select({ userId: tenantUsers.userId })
       .from(tenantUsers)
       .where(and(eq(tenantUsers.tenantId, tenantId), eq(tenantUsers.id, tenantUserId)))
       .limit(1)
-    return row ?? null
+    return row?.userId ?? null
   })
 }
 
@@ -180,12 +164,9 @@ export async function deliverDomainNotification(
       const reporter = incident.reportedByTenantUserId
         ? await tenantUserToUserId(ctx, tenantId, incident.reportedByTenantUserId)
         : null
-      const tenant = await getTenant(ctx, tenantId)
-      if (!tenant) return
-      const audience = await resolveAudience(ctx, tenantId, 'incident', [reporter?.userId])
+      const audience = await resolveAudience(ctx, tenantId, 'incident', [reporter])
       if (audience.length === 0) return
       const linkPath = `/incidents/${incident.id}`
-      const url = appUrl(linkPath)
       await enqueueNotification(
         {
           tenantId,
@@ -201,31 +182,6 @@ export async function deliverDomainNotification(
         },
         { jobId: stableJobId('domain-notification', `${sourceEventId}\0incident`) },
       )
-      const recipients = await emailsForUserIds(ctx, tenantId, audience)
-      if (recipients.length > 0) {
-        const template = incidentReportedEmail({
-          tenant,
-          incident: {
-            reference: incident.reference,
-            title: incident.title,
-            severity: incident.severity,
-            summary: incident.description,
-            location: incident.location,
-          },
-          reporter: reporter ? { displayName: reporter.displayName } : null,
-          url,
-        })
-        await enqueueEmail(
-          {
-            to: recipients,
-            subject: template.subject,
-            html: template.html,
-            text: template.text,
-            meta: { tenantId, category: 'incident' },
-          },
-          { jobId: stableJobId('domain-email', `${sourceEventId}\0incident`) },
-        )
-      }
       return
     }
     case 'incident_status_changed': {
@@ -244,10 +200,7 @@ export async function deliverDomainNotification(
       const investigator = incident.assignedInvestigatorTenantUserId
         ? await tenantUserToUserId(ctx, tenantId, incident.assignedInvestigatorTenantUserId)
         : null
-      const audience = await resolveAudience(ctx, tenantId, 'incident', [
-        reporter?.userId,
-        investigator?.userId,
-      ])
+      const audience = await resolveAudience(ctx, tenantId, 'incident', [reporter, investigator])
       if (audience.length === 0) return
       await enqueueNotification(
         {
@@ -280,23 +233,17 @@ export async function deliverDomainNotification(
         return row ?? null
       })
       if (!ca) return
-      const tenant = await getTenant(ctx, tenantId)
-      if (!tenant) return
       let assigneeUserId = event.assigneeUserId ?? null
       let assignerUserId = event.assignerUserId ?? null
-      let assigner: { userId: string; displayName: string | null } | null = null
       if (!assigneeUserId && ca.ownerTenantUserId) {
-        assigneeUserId =
-          (await tenantUserToUserId(ctx, tenantId, ca.ownerTenantUserId))?.userId ?? null
+        assigneeUserId = await tenantUserToUserId(ctx, tenantId, ca.ownerTenantUserId)
       }
       if (ca.assignedByTenantUserId) {
-        assigner = await tenantUserToUserId(ctx, tenantId, ca.assignedByTenantUserId)
-        assignerUserId ??= assigner?.userId ?? null
+        assignerUserId ??= await tenantUserToUserId(ctx, tenantId, ca.assignedByTenantUserId)
       }
       const audience = [...new Set([assigneeUserId, assignerUserId].filter(Boolean))] as string[]
       if (audience.length === 0) return
       const linkPath = `/corrective-actions/${ca.id}`
-      const url = appUrl(linkPath)
       await enqueueNotification(
         {
           tenantId,
@@ -312,31 +259,6 @@ export async function deliverDomainNotification(
         },
         { jobId: stableJobId('domain-notification', `${sourceEventId}\0ca-assigned`) },
       )
-      const recipients = await emailsForUserIds(ctx, tenantId, audience)
-      if (recipients.length > 0) {
-        const template = caAssignedEmail({
-          tenant,
-          ca: {
-            reference: ca.reference,
-            title: ca.title,
-            severity: ca.severity,
-            dueOn: ca.dueOn,
-            description: ca.description,
-          },
-          assigner: assigner ? { displayName: assigner.displayName } : null,
-          url,
-        })
-        await enqueueEmail(
-          {
-            to: recipients,
-            subject: template.subject,
-            html: template.html,
-            text: template.text,
-            meta: { tenantId, category: 'ca' },
-          },
-          { jobId: stableJobId('domain-email', `${sourceEventId}\0ca-assigned`) },
-        )
-      }
       return
     }
     case 'corrective_action_completed': {
@@ -351,26 +273,6 @@ export async function deliverDomainNotification(
         return row ?? null
       })
       if (!ca) return
-      const tenant = await getTenant(ctx, tenantId)
-      if (!tenant) return
-      let completer: { userId: string; displayName: string | null } | null = null
-      if (event.completerUserId) {
-        const [user] = await ctx.db((tx) =>
-          tx
-            .select({ id: users.id, name: users.name })
-            .from(tenantUsers)
-            .innerJoin(users, eq(users.id, tenantUsers.userId))
-            .where(
-              and(
-                eq(tenantUsers.tenantId, tenantId),
-                eq(tenantUsers.status, 'active'),
-                eq(tenantUsers.userId, event.completerUserId!),
-              ),
-            )
-            .limit(1),
-        )
-        completer = user ? { userId: user.id, displayName: user.name } : null
-      }
       const assigner = ca.assignedByTenantUserId
         ? await tenantUserToUserId(ctx, tenantId, ca.assignedByTenantUserId)
         : null
@@ -380,14 +282,9 @@ export async function deliverDomainNotification(
       const verifier = ca.verifiedByTenantUserId
         ? await tenantUserToUserId(ctx, tenantId, ca.verifiedByTenantUserId)
         : null
-      const audience = await resolveAudience(ctx, tenantId, 'ca', [
-        assigner?.userId,
-        owner?.userId,
-        verifier?.userId,
-      ])
+      const audience = await resolveAudience(ctx, tenantId, 'ca', [assigner, owner, verifier])
       if (audience.length === 0) return
       const linkPath = `/corrective-actions/${ca.id}`
-      const url = appUrl(linkPath)
       await enqueueNotification(
         {
           tenantId,
@@ -401,25 +298,6 @@ export async function deliverDomainNotification(
         },
         { jobId: stableJobId('domain-notification', `${sourceEventId}\0ca-completed`) },
       )
-      const recipients = await emailsForUserIds(ctx, tenantId, audience)
-      if (recipients.length > 0) {
-        const template = caCompletedEmail({
-          tenant,
-          ca: { reference: ca.reference, title: ca.title, status: ca.status },
-          completer: completer ? { displayName: completer.displayName } : null,
-          url,
-        })
-        await enqueueEmail(
-          {
-            to: recipients,
-            subject: template.subject,
-            html: template.html,
-            text: template.text,
-            meta: { tenantId, category: 'ca' },
-          },
-          { jobId: stableJobId('domain-email', `${sourceEventId}\0ca-completed`) },
-        )
-      }
       return
     }
   }

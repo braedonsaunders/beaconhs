@@ -277,7 +277,6 @@ export async function verifyCorrectiveAction(args: {
           notification: {
             kind: 'corrective_action_completed',
             caId: args.caId,
-            completerUserId: ctx.userId,
           },
           web: moduleFlowCommand(ctx, {
             subjectId: args.caId,
@@ -364,7 +363,6 @@ export async function closeCorrectiveAction(args: {
         notification: {
           kind: 'corrective_action_completed',
           caId: args.caId,
-          completerUserId: ctx.userId,
         },
         integration: correctiveActionClosedEvent(ctx.tenantId, {
           id: args.caId,

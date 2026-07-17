@@ -648,9 +648,6 @@ importers:
       '@beaconhs/email-render':
         specifier: workspace:*
         version: link:../email-render
-      '@beaconhs/emails':
-        specifier: workspace:*
-        version: link:../emails
       '@beaconhs/jobs':
         specifier: workspace:*
         version: link:../jobs

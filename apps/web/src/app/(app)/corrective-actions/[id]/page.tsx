@@ -115,7 +115,6 @@ async function updateStatus(formData: FormData) {
           notification: {
             kind: 'corrective_action_completed',
             caId: id,
-            completerUserId: ctx.userId,
           },
           web: moduleFlowCommand(ctx, {
             subjectId: id,
