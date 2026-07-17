@@ -16,6 +16,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  UrlDrawer,
 } from '@beaconhs/ui'
 import {
   people,
@@ -27,7 +28,7 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { isUuid, parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
@@ -35,6 +36,8 @@ import { SearchInput } from '@/components/search-input'
 import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { ListPageLayout } from '@/components/page-layout'
 import { TrainingSubNav } from '../_components/training-sub-nav'
+import { startAssessmentAttempt } from '../_actions/assessments'
+import { NewTrainingAssessmentDrawer } from './_new-assessment-drawer'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -83,6 +86,8 @@ export default async function AssessmentsPage({
   const courseFilter = pickString(sp.course)
   const dateFromRaw = pickString(sp.dateFrom)
   const dateToRaw = pickString(sp.dateTo)
+  const drawerKey = pickString(sp.drawer)
+  const requestedTypeId = pickString(sp.typeId)
   const dateFrom = parseCalendarDate(dateFromRaw)
   const dateTo = parseCalendarDate(dateToRaw)
   const ctx = await requireRequestContext()
@@ -234,7 +239,58 @@ export default async function AssessmentsPage({
     }
   })
 
+  const newAssessmentOptions =
+    drawerKey === 'new'
+      ? await ctx.db(async (tx) => {
+          const [types, peopleRows] = await Promise.all([
+            tx
+              .select({
+                id: trainingAssessmentTypes.id,
+                name: trainingAssessmentTypes.name,
+                description: trainingAssessmentTypes.description,
+                passingScore: trainingAssessmentTypes.passingScore,
+              })
+              .from(trainingAssessmentTypes)
+              .where(
+                and(
+                  eq(trainingAssessmentTypes.active, true),
+                  isNull(trainingAssessmentTypes.deletedAt),
+                  requestedTypeId && isUuid(requestedTypeId)
+                    ? eq(trainingAssessmentTypes.id, requestedTypeId)
+                    : undefined,
+                ),
+              )
+              .orderBy(asc(trainingAssessmentTypes.name)),
+            tx
+              .select({
+                id: people.id,
+                firstName: people.firstName,
+                lastName: people.lastName,
+                employeeNo: people.employeeNo,
+              })
+              .from(people)
+              .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
+              .orderBy(asc(people.lastName), asc(people.firstName)),
+          ])
+          return { types, peopleRows }
+        })
+      : { types: [], peopleRows: [] }
+
   const sortProps = { basePath: '/training/assessments', currentParams: sp, dir: params.dir }
+  const createHref = mergeHref('/training/assessments', sp, { drawer: 'new' })
+  const closeHref = mergeHref('/training/assessments', sp, {
+    drawer: null,
+    typeId: null,
+    personId: null,
+    obligationId: null,
+  })
+  const requestedPersonId = pickString(sp.personId)
+  const defaultPersonId =
+    (requestedPersonId && isUuid(requestedPersonId) ? requestedPersonId : undefined) ??
+    (personFilter && isUuid(personFilter) ? personFilter : undefined) ??
+    ctx.personId ??
+    undefined
+  const complianceObligationId = pickString(sp.obligationId)
 
   return (
     <ListPageLayout
@@ -244,19 +300,11 @@ export default async function AssessmentsPage({
             title={tGenerated('m_037a7504abbf0b')}
             description={tGenerated('m_141f91c81a0fe6')}
             actions={
-              <div className="flex items-center gap-2">
-                <Link
-                  href="/training/assessments/types"
-                  className="text-sm text-teal-700 hover:underline dark:text-teal-400"
-                >
-                  <GeneratedText id="m_1b2c235fce1ca6" />
-                </Link>
-                <Link href="/training/assessments/new">
-                  <Button>
-                    <GeneratedText id="m_004a7a72035440" />
-                  </Button>
-                </Link>
-              </div>
+              <Link href={createHref} scroll={false}>
+                <Button>
+                  <GeneratedValue value="New assessment" />
+                </Button>
+              </Link>
             }
           />
           <TrainingSubNav active="assessments" />
@@ -353,9 +401,9 @@ export default async function AssessmentsPage({
                   params.q ? tGenerated('m_14cb5a8694d3d8') : tGenerated('m_027150f325b223'),
                 )}
                 action={
-                  <Link href="/training/assessments/new">
+                  <Link href={createHref} scroll={false}>
                     <Button>
-                      <GeneratedText id="m_183bea0becf504" />
+                      <GeneratedValue value="New assessment" />
                     </Button>
                   </Link>
                 }
@@ -570,6 +618,31 @@ export default async function AssessmentsPage({
           )
         }
       />
+      <UrlDrawer
+        open={drawerKey === 'new'}
+        closeHref={closeHref}
+        title={tGeneratedValue('New assessment')}
+        description={tGeneratedValue(
+          'Choose the person and assessment type. The new record opens immediately.',
+        )}
+        size="md"
+      >
+        <NewTrainingAssessmentDrawer
+          types={newAssessmentOptions.types}
+          people={newAssessmentOptions.peopleRows.map((person) => ({
+            value: person.id,
+            label: `${person.lastName}, ${person.firstName}`,
+            hint: person.employeeNo ?? undefined,
+          }))}
+          defaultPersonId={defaultPersonId}
+          complianceObligationId={
+            complianceObligationId && isUuid(complianceObligationId)
+              ? complianceObligationId
+              : undefined
+          }
+          startAction={startAssessmentAttempt}
+        />
+      </UrlDrawer>
     </ListPageLayout>
   )
 }

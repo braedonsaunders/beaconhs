@@ -44,6 +44,7 @@ import {
   removeAssignment,
   removeMember,
   resendInvite,
+  sendMemberPasswordReset,
   setMemberStatus,
   setPermissionOverride,
   setUserPersonLink,
@@ -300,6 +301,24 @@ export default async function AdminUserDetailPage({
                                 <Button type="submit" variant="ghost">
                                   <GeneratedText id="m_103335c1de739f" />
                                 </Button>
+                              </form>
+                            ) : null
+                          }
+                        />
+                        <GeneratedValue
+                          value={
+                            member.membership.status === 'active' && canEditPersonLink ? (
+                              <form action={sendMemberPasswordReset}>
+                                <input type="hidden" name="membershipId" value={id} />
+                                <ConfirmButton
+                                  type="submit"
+                                  variant="outline"
+                                  message={tGenerated('m_1471c23f03fa97', {
+                                    value0: member.account.email,
+                                  })}
+                                >
+                                  <GeneratedText id="m_0443f19fd4e298" />
+                                </ConfirmButton>
                               </form>
                             ) : null
                           }

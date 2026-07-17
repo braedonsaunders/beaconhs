@@ -307,6 +307,42 @@ export async function resendInvite(formData: FormData): Promise<void> {
   revalidatePath(detailPath(membershipId))
 }
 
+/** Send the selected active member Better Auth's one-time password-reset link. */
+export async function sendMemberPasswordReset(formData: FormData): Promise<void> {
+  const ctx = await requireUserAdmin('send password reset emails')
+  const membershipId = String(formData.get('membershipId') ?? '')
+  if (!membershipId) return
+  const member = await loadMember(ctx, membershipId)
+  if (!member) backToDetail(membershipId, 'Membership not found.')
+  if (!canActOn(ctx, member.account)) {
+    backToDetail(membershipId, 'Only a super-admin can reset a super-admin account.')
+  }
+  if (member.membership.status !== 'active') {
+    backToDetail(membershipId, 'Password reset is available only for active members.')
+  }
+
+  try {
+    await getAuth().api.requestPasswordReset({
+      body: { email: member.account.email, redirectTo: '/reset-password' },
+      headers: (await headers()) as unknown as Headers,
+    })
+  } catch {
+    backToDetail(
+      membershipId,
+      'The password reset email could not be sent. Check the email configuration and try again.',
+    )
+  }
+  await recordAudit(ctx, {
+    entityType: 'tenant_user',
+    entityId: membershipId,
+    action: 'update',
+    summary: `Sent password reset email to ${member.account.email}`,
+  })
+  backToTab(membershipId, 'overview', {
+    notice: `Password reset email sent to ${member.account.email}.`,
+  })
+}
+
 // --- membership profile + status ----------------------------------------
 
 export async function updateMemberDisplayName(formData: FormData): Promise<void> {

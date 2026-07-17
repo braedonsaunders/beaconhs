@@ -55,7 +55,7 @@ export function resolveComplianceLink(
         })
         if (opts.obligationId) params.set('obligationId', opts.obligationId)
         return {
-          href: `/training/assessments/new?${params.toString()}`,
+          href: `/training/assessments?drawer=new&${params.toString()}`,
           prefetch: true,
         }
       }

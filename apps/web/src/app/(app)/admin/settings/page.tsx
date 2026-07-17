@@ -1,6 +1,5 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 import { GeneratedValue } from '@/i18n/generated'
-import Link from 'next/link'
 import Image from 'next/image'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -453,30 +452,6 @@ export default async function AdminSettingsPage() {
                   </label>
                 ))}
               />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                <GeneratedValue value={t('riskMatrix')} />
-              </CardTitle>
-              <CardDescription>
-                <GeneratedValue value={t('riskMatrixDescription')} />
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                <GeneratedValue value={t('riskMatrixBody')} />
-                <GeneratedValue value={' '} />
-                <Link
-                  href="/hazard-assessments/risk-matrix"
-                  className="font-medium text-teal-700 hover:underline dark:text-teal-300"
-                >
-                  <GeneratedValue value={t('riskMatrixLink')} />
-                </Link>
-                .
-              </p>
             </CardContent>
           </Card>
 

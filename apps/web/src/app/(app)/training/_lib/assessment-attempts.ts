@@ -1,6 +1,6 @@
 // Shared assessment-attempt creation — the one place that snapshots a type's
 // questions onto a new training_assessments row (+ one result shell per
-// question). Used by the proctor "New attempt" flow and the LMS lesson-quiz
+// question). Used by the proctor "New assessment" flow and the LMS lesson-quiz
 // launcher so the attempt shape can never drift between the two paths.
 
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'

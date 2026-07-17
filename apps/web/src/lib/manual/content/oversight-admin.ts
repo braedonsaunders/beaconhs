@@ -101,7 +101,7 @@ To print a badge:
 1. Open the person's page.
 2. Flip the **ID badge preview** to check both saved sides.
 3. Click **ID badge** to open a print-ready PDF with the front and back of the card.
-4. If the design uses **cardPresso Web Print Server**, click **Print with cardPresso** to send the finished 300-DPI faces directly to the configured card and printer. BeaconHS confirms the accepted job and audits it.
+4. If the design uses a direct-print provider, click its **Print with…** button to send the finished 300-DPI faces to the tenant-configured card printer. BeaconHS supports cardPresso, Zebra, Evolis, and HID FARGO and audits every accepted job.
 
 To change how badges look:
 
@@ -353,7 +353,7 @@ The **Overview** tab shows the big picture: total obligations, subjects tracked,
 
 ## Create an obligation
 
-1. Open the **Obligations** tab and click **New obligation**.
+1. Open the **Obligations** tab and click **New obligation**. The creation flyout opens without leaving the list.
 2. Pick the **Kind**. Common kinds include **Training / assessment**, **Document acknowledgement**, **App (scheduled)** for a form people must fill on a cadence, **Certification requirement**, and **Inspection**.
 3. Fill in the title and what to require for that kind — for example, which course or which document.
 4. Pick the audience: specific people, a role, a department, a site, or everyone.
@@ -411,10 +411,11 @@ Open [Builder](/apps) from the sidebar. People who can build templates see every
 ## Create and publish a form
 
 1. Open [Builder](/apps) and click **New app**.
-2. In the designer, open the **Build** tab. Under **Add an element**, drag a field onto the exact section where it belongs. The section highlights before you drop. You can also select a section and click the field to add it there.
-3. Click a field to set its label, whether it is required, and any logic.
-4. Use the other tabs — **Record behaviour**, **Records list**, **Record actions**, and **Access** — to control how records act and who can open them. On **Access**, leave the role list open for everyone or choose the exact roles that may find and use the app.
-5. When it is ready, click **Publish v1**. Until you publish, only builders can preview, edit, or inspect its records. A draft cannot accept live entries.
+2. Choose one app structure or ready-made starting point, enter the **App name**, then click **Create app**. There is one creation action for every starting point.
+3. In the designer, open the **Build** tab. Under **Add an element**, drag a field onto the exact section where it belongs. The section highlights before you drop. You can also select a section and click the field to add it there.
+4. Click a field to set its label, whether it is required, and any logic.
+5. Use the other tabs — **Record behaviour**, **Records list**, **Record actions**, and **Access** — to control how records act and who can open them. On **Access**, leave the role list open for everyone or choose the exact roles that may find and use the app.
+6. When it is ready, click **Publish v1**. Until you publish, only builders can preview, edit, or inspect its records. A draft cannot accept live entries.
 
 The language picker in the designer toolbar controls which translation you are editing. Add field labels, help text, section titles, option labels, and workflow step titles for each enabled workspace language. The canvas and preview show the selected language. Workers see their own language when a translation exists, then the workspace default when it does not.
 
@@ -554,6 +555,7 @@ Open the member to manage only this workspace's settings:
 - **Permissions** adds a specific grant or denial when a role needs an exception.
 - **Suspend member** blocks this workspace without changing the person's other workspaces.
 - **Reactivate** restores a suspended membership.
+- **Reset password** sends an active member a one-time reset link. Administrators never see or choose the member's password.
 - **Remove from tenant** deletes this membership, its role assignments, and its overrides.
 
 Pending invitations cannot be marked active by an administrator. The person must prove control of the invited email by using the one-time link.
@@ -562,7 +564,7 @@ A platform-level workspace suspension blocks normal member access, pending invit
 
 ## Account security
 
-Members manage their own account name and password under **Account settings**. Tenant administrators cannot change a member's sign-in email, set their password, mark their email verified, sign out all of their sessions, or grant platform super-admin access.
+Members manage their own account name and password under **Account settings**. Tenant administrators can send an active member a password-reset email from the member's **Overview** tab, but cannot see or set the password. Tenant administrators also cannot change a member's sign-in email, mark their email verified, sign out all of their sessions, or grant platform super-admin access.
 
 Platform super-admins manage global identity from **Platform → Users**. Search by name, email, or tenant and use the view filter for multi-tenant, super-admin, or unassigned accounts. Open an identity to search and filter its tenant memberships. **Platform → Tenants** has the same search, status, sorting, and page controls for workspaces. Use these areas only for platform-level work.
 
@@ -591,6 +593,11 @@ Platform super-admins manage global identity from **Platform → Users**. Search
       'api keys',
       'data export',
       'email templates',
+      'direct printing',
+      'cardpresso',
+      'zebra',
+      'evolis',
+      'hid fargo',
     ],
     requiredAnyPermission: [
       'admin.users.manage',
@@ -620,12 +627,20 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 
 ## Workspace
 
-- **Tenant settings** — branding, languages, regulatory terminology, risk matrix, hierarchy.
+- **Tenant settings** — branding, languages, regulatory terminology, and hierarchy. Risk matrices are configured in each module's own **Manage** area.
 - **Notifications** — who gets automatic alerts and how often reminders repeat.
 - **Navigation** — reorder the sidebar and pin forms as modules.
 - **Data sources** — reference lists and live data your apps bind to. Search by name, key, or description and filter by **Reference** or **Live responses**. Inside a reference source, search its row values and its Builder references separately.
 - **Data export** — audited CSV exports across modules and Builder apps. Search and filter the source catalogue, then sort it by name, group, or sensitivity. Builder app sources follow the role you are currently using; template builders can also export records from draft and archived apps for review.
 - **Email templates** and **PDF templates** — branded emails and paper documents. PDF templates drive record downloads: every module ships with an editable default document, and each Builder app gets its own generated one the first time it is published. On the **Module print defaults** tab you pick which template each module's **PDF** button renders, and press **Generate default template** for any app that lacks one. Records without a template get a clean field-summary PDF.
+
+## Configure direct card printing
+
+1. Open **Admin**, then **Direct printing**.
+2. Open the provider used by the Card Studio design: **cardPresso Web Print Server**, **Zebra Browser Print bridge**, **Evolis SDK bridge**, or **HID FARGO SDK bridge**.
+3. Enter the tenant's HTTPS service URL and printer name. For cardPresso, also enter the WPS login, card document, image item IDs, and both credentials. For the other providers, enter the secured bridge access token.
+4. Turn on **Enable this provider**, then click **Save provider**. Secrets are encrypted in the database; leave a secret box blank later to keep the stored value.
+5. Open an issued ID badge, course wallet card, or external certification wallet card and use the matching **Print with…** button.
 
 On **Notifications → Rules**, each delivery channel shows whether its provider is **Ready**, **Not set up**, or **Disabled by platform policy**. Disabled means a platform kill switch is active; it does not mean the saved credential is missing. The **Compliance detection schedule** has an **Automatic detection** switch: turn it **Off** to pause every overdue and expiring reminder for the whole workspace without losing the configured schedule.
 

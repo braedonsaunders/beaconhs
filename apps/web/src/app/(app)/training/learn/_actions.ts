@@ -546,7 +546,7 @@ export async function startLessonQuiz(enrollmentId: string, lessonId: string) {
     }
     if (existing?.status === 'completed') throw new Error('Lesson is already complete.')
 
-    // Shared creation path (also used by the proctor "New attempt" flow).
+    // Shared creation path (also used by the proctor "New assessment" flow).
     // Soft-deleted types are rejected; the catalogue `active` flag is not
     // required here — a type hidden from the catalogue keeps working for the
     // lessons still wired to it.

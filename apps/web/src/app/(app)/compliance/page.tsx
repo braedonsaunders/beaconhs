@@ -67,7 +67,7 @@ export default async function ComplianceOverviewPage({
             description={tGenerated('m_15bbf8bb08b939')}
             actions={
               canAssign ? (
-                <Link href="/compliance/obligations/new">
+                <Link href="/compliance/obligations?drawer=new">
                   <Button>
                     <GeneratedText id="m_01ea7b508d9390" />
                   </Button>
@@ -107,7 +107,7 @@ export default async function ComplianceOverviewPage({
                       <>
                         <GeneratedValue value={' '} />
                         <Link
-                          href="/compliance/obligations/new"
+                          href="/compliance/obligations?drawer=new"
                           className="text-teal-700 hover:underline"
                         >
                           <GeneratedText id="m_0cf45bbe73ce8b" />

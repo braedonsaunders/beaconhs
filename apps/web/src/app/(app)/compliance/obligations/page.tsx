@@ -17,6 +17,7 @@ import { ListChecks } from 'lucide-react'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { parseListParams, pickString } from '@/lib/list-params'
+import { mergeHref } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { FilterChips } from '@/components/filter-bar'
 import { SearchInput } from '@/components/search-input'
@@ -25,6 +26,8 @@ import { Pagination } from '@/components/pagination'
 import { ComplianceSubNav } from '../_sub-nav'
 import { listObligations } from './_data'
 import { OBLIGATION_KINDS, type ObligationKind, kindLabel } from './_meta'
+import { loadObligationFormOptions } from './_form-options'
+import { NewObligationDrawer } from './_new-obligation-drawer'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -62,6 +65,27 @@ export default async function ObligationsPage({
     perPage: params.perPage,
   })
   const hasFilters = Boolean(params.q || kindFilter)
+  const drawerOpen = pickString(sp.drawer) === 'new'
+  const initialKind: ObligationKind = kindFilter ?? 'inspection'
+  const prefillTargetRef = {
+    formTemplateId: pickString(sp.formTemplateId),
+    inspectionTypeId: pickString(sp.inspectionTypeId),
+    documentId: pickString(sp.documentId),
+    courseId: pickString(sp.courseId),
+    skillTypeId: pickString(sp.skillTypeId),
+  }
+  const formOptions = drawerOpen
+    ? await loadObligationFormOptions(ctx, { targetRef: prefillTargetRef })
+    : { targets: emptyTargets(), audienceOptions: emptyAudienceOptions() }
+  const createHref = mergeHref(BASE, sp, { drawer: 'new' })
+  const closeHref = mergeHref(BASE, sp, {
+    drawer: null,
+    formTemplateId: null,
+    inspectionTypeId: null,
+    documentId: null,
+    courseId: null,
+    skillTypeId: null,
+  })
 
   return (
     <ListPageLayout
@@ -72,7 +96,7 @@ export default async function ObligationsPage({
             description={tGenerated('m_146371a6a81e59')}
             actions={
               canAssign ? (
-                <Link href="/compliance/obligations/new">
+                <Link href={createHref} scroll={false}>
                   <Button>
                     <GeneratedText id="m_01ea7b508d9390" />
                   </Button>
@@ -103,7 +127,7 @@ export default async function ObligationsPage({
               description={tGenerated('m_116b2fdc6cce4f')}
               action={
                 canAssign ? (
-                  <Link href="/compliance/obligations/new">
+                  <Link href={createHref} scroll={false}>
                     <Button>
                       <GeneratedText id="m_01ea7b508d9390" />
                     </Button>
@@ -189,6 +213,38 @@ export default async function ObligationsPage({
           )
         }
       />
+      <NewObligationDrawer
+        open={drawerOpen}
+        closeHref={closeHref}
+        initialKind={initialKind}
+        targets={formOptions.targets}
+        audienceOptions={formOptions.audienceOptions}
+        prefillTargetRef={prefillTargetRef}
+      />
     </ListPageLayout>
   )
+}
+
+function emptyTargets() {
+  return {
+    inspectionTypes: [],
+    documents: [],
+    courses: [],
+    assessmentTypes: [],
+    skillTypes: [],
+    formTemplates: [],
+    equipmentTypes: [],
+    ppeTypes: [],
+    jobTitles: [],
+  }
+}
+
+function emptyAudienceOptions() {
+  return {
+    roles: [],
+    trades: [],
+    people: [],
+    departments: [],
+    orgUnits: [],
+  }
 }

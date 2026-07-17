@@ -4065,7 +4065,7 @@ function AssignmentsPanel({ templateId }: { templateId: string }) {
         <GeneratedText id="m_1bac81ba078d96" />
       </p>
       <Link
-        href={`/compliance/obligations/new?kind=form&formTemplateId=${templateId}`}
+        href={`/compliance/obligations?drawer=new&kind=form&formTemplateId=${templateId}`}
         className="block"
       >
         <Button className="w-full">

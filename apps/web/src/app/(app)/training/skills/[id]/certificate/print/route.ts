@@ -5,7 +5,7 @@ import { isUuid } from '@/lib/list-params'
 import { readBoundedJsonBody } from '@/lib/request-body'
 import { skillCertificateForAssignment } from '@/lib/training-credential-access'
 import { renderSkillCredentialPngs } from '@/lib/training-credential-pdf'
-import { sendCardPressoPrint } from '@/lib/cardpresso'
+import { sendDirectPrint, DIRECT_PRINT_PROVIDER_LABELS } from '@/lib/direct-printing'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -39,26 +39,29 @@ export async function POST(
   if ('error' in access)
     return NextResponse.json({ error: access.error }, { status: access.status })
   try {
-    const images = await renderSkillCredentialPngs(ctx, access.certificateId, { outputId })
-    if (!images?.[0]) {
+    const rendered = await renderSkillCredentialPngs(ctx, access.certificateId, { outputId })
+    if (!rendered?.images[0]) {
       return NextResponse.json(
         { error: 'This output is not a wallet-card design.' },
         { status: 409 },
       )
     }
-    const result = await sendCardPressoPrint({ front: images[0], back: images[1] })
+    const result = await sendDirectPrint(ctx, rendered.provider, {
+      front: rendered.images[0],
+      back: rendered.images[1],
+    })
     await recordAudit(ctx, {
       entityType: 'training_skill',
       entityId: assignmentId,
       action: 'export',
-      summary: 'Sent skill wallet card to cardPresso',
+      summary: `Sent skill wallet card to ${DIRECT_PRINT_PROVIDER_LABELS[rendered.provider]}`,
       metadata: { certificateId: access.certificateId, outputId, ...result },
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (error) {
-    console.error('[cardpresso] skill credential print failed', { assignmentId, error })
+    console.error('[direct-print] skill credential print failed', { assignmentId, error })
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'cardPresso printing failed.' },
+      { error: error instanceof Error ? error.message : 'Direct printing failed.' },
       { status: 502 },
     )
   }

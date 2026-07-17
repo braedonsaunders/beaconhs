@@ -17,6 +17,7 @@ import {
   Blocks,
   FileText,
   ListChecks,
+  Sparkles,
   Table2,
   WalletCards,
   type LucideIcon,
@@ -24,6 +25,7 @@ import {
 import { Button, Input, Label } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import { createApp, type AppKind } from './_actions'
+import { CANONICAL_TEMPLATES } from '@beaconhs/db/canonical-templates'
 
 type TypeDef = {
   kind: AppKind
@@ -75,6 +77,7 @@ export function AppTypePicker() {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const [selected, setSelected] = useState<AppKind>('form')
+  const [canonicalKey, setCanonicalKey] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [pending, start] = useTransition()
 
@@ -86,7 +89,7 @@ export function AppTypePicker() {
       return
     }
     start(async () => {
-      const res = await createApp({ kind: selected, name: name.trim() })
+      const res = await createApp({ kind: selected, name: name.trim(), canonicalKey })
       // A successful createApp redirects; only an error object returns here.
       if (res && res.ok === false) toast.error(tGeneratedValue(res.error))
     })
@@ -94,16 +97,27 @@ export function AppTypePicker() {
 
   return (
     <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          <GeneratedValue value="Choose a starting point" />
+        </h2>
+        <p className="text-sm text-slate-600 dark:text-slate-400">
+          <GeneratedValue value="Pick the closest structure. You can change every field and workflow in the designer." />
+        </p>
+      </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <GeneratedValue
           value={TYPES.map((t) => {
             const Icon = t.icon
-            const isSel = t.kind === selected
+            const isSel = !canonicalKey && t.kind === selected
             return (
               <button
                 key={t.kind}
                 type="button"
-                onClick={() => setSelected(t.kind)}
+                onClick={() => {
+                  setSelected(t.kind)
+                  setCanonicalKey(null)
+                }}
                 className={`group flex flex-col rounded-xl border p-4 text-left transition ${
                   isSel
                     ? 'border-teal-500 bg-white shadow-md ring-1 ring-teal-500'
@@ -127,11 +141,51 @@ export function AppTypePicker() {
         />
       </div>
 
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          <GeneratedValue value="Ready-made starting points" />
+        </h3>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <GeneratedValue
+            value={CANONICAL_TEMPLATES.map((template) => {
+              const isSelected = canonicalKey === template.key
+              return (
+                <button
+                  key={template.key}
+                  type="button"
+                  onClick={() => {
+                    setSelected('form')
+                    setCanonicalKey(template.key)
+                    setName(template.name)
+                  }}
+                  className={`flex items-start gap-3 rounded-lg border p-3 text-left transition ${
+                    isSelected
+                      ? 'border-teal-500 bg-white ring-1 ring-teal-500 dark:bg-slate-900'
+                      : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900'
+                  }`}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+                    <Sparkles size={17} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      <GeneratedValue value={template.name} />
+                    </span>
+                    <span className="mt-0.5 line-clamp-2 block text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedValue value={template.description} />
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
+          />
+        </div>
+      </div>
+
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-end">
         <div className="flex-1 space-y-1.5">
           <Label htmlFor="app-name">
-            <GeneratedText id="m_0deef774518119" />{' '}
-            <GeneratedValue value={active.title.toLowerCase()} />
+            <GeneratedValue value="App name" />
           </Label>
           <Input
             id="app-name"
@@ -154,17 +208,9 @@ export function AppTypePicker() {
         </div>
         <Button onClick={create} disabled={pending} className="shrink-0">
           <GeneratedValue
-            value={
-              pending ? (
-                <GeneratedText id="m_14edc14616e78d" />
-              ) : (
-                <>
-                  <GeneratedText id="m_017309f0f9f564" /> <GeneratedValue value={active.title} />{' '}
-                  <ArrowRight size={15} />
-                </>
-              )
-            }
+            value={pending ? <GeneratedText id="m_14edc14616e78d" /> : 'Create app'}
           />
+          {!pending ? <ArrowRight size={15} /> : null}
         </Button>
       </div>
     </div>

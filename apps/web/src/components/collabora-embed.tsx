@@ -46,6 +46,8 @@ export type CollaboraSession =
 export type CollaboraHandle = {
   /** Insert plain text at the current cursor position. */
   insertText: (text: string) => void
+  /** Flush pending editor changes through WOPI and wait for storage acknowledgment. */
+  save: () => Promise<void>
   /** Whether the document finished loading (postMessage channel live). */
   isLoaded: () => boolean
 }
@@ -68,6 +70,11 @@ export const CollaboraEmbed = forwardRef<
   const formRef = useRef<HTMLFormElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const originRef = useRef<string>('')
+  const saveRequestRef = useRef<{
+    resolve: () => void
+    reject: (error: Error) => void
+    timeout: ReturnType<typeof setTimeout>
+  } | null>(null)
   const fetchSessionRef = useRef(fetchSession)
   const { resolvedTheme } = useTheme()
 
@@ -178,7 +185,10 @@ export const CollaboraEmbed = forwardRef<
       ) {
         return
       }
-      let msg: { MessageId?: string; Values?: { Status?: string } }
+      let msg: {
+        MessageId?: string
+        Values?: { Status?: string; success?: boolean; result?: string; errorMsg?: string }
+      }
       try {
         msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
       } catch {
@@ -191,12 +201,31 @@ export const CollaboraEmbed = forwardRef<
         )
         setLoaded(true)
       }
+      if (msg?.MessageId === 'Action_Save_Resp' && saveRequestRef.current) {
+        const request = saveRequestRef.current
+        saveRequestRef.current = null
+        clearTimeout(request.timeout)
+        if (msg.Values?.success === true || msg.Values?.result === 'unmodified') {
+          request.resolve()
+        } else {
+          request.reject(
+            new Error(
+              msg.Values?.errorMsg || msg.Values?.result || 'The document could not be saved.',
+            ),
+          )
+        }
+      }
     }
     window.addEventListener('message', onMessage)
     const fallback = setTimeout(() => setLoaded(true), 45_000)
     return () => {
       window.removeEventListener('message', onMessage)
       clearTimeout(fallback)
+      if (saveRequestRef.current) {
+        clearTimeout(saveRequestRef.current.timeout)
+        saveRequestRef.current.reject(new Error('The editor closed before the document was saved.'))
+        saveRequestRef.current = null
+      }
     }
   }, [session])
 
@@ -204,6 +233,33 @@ export const CollaboraEmbed = forwardRef<
     ref,
     () => ({
       isLoaded: () => loaded,
+      save: () => {
+        if (!loaded || !originRef.current || !iframeRef.current?.contentWindow) {
+          return Promise.reject(new Error('Wait for the document editor to finish loading.'))
+        }
+        if (saveRequestRef.current) {
+          return Promise.reject(new Error('The document is already being saved.'))
+        }
+        return new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            saveRequestRef.current = null
+            reject(new Error('The document save timed out. Try publishing again.'))
+          }, 30_000)
+          saveRequestRef.current = { resolve, reject, timeout }
+          iframeRef.current?.contentWindow?.postMessage(
+            JSON.stringify({
+              MessageId: 'Action_Save',
+              SendTime: Date.now(),
+              Values: {
+                DontTerminateEdit: true,
+                DontSaveIfUnmodified: false,
+                Notify: true,
+              },
+            }),
+            originRef.current,
+          )
+        })
+      },
       insertText: (text: string) => {
         if (!originRef.current) return
         iframeRef.current?.contentWindow?.postMessage(

@@ -1,4 +1,6 @@
-import type { PrintProvider, PrintProfile } from './schema'
+import type { DesignDocument, PrintProvider, PrintProfile } from './schema'
+
+export type DirectPrintProvider = Exclude<PrintProvider, 'browser-pdf'>
 
 export const PRINT_PROVIDERS: {
   id: PrintProvider
@@ -47,4 +49,12 @@ export function defaultPrintProfile(media: PrintProfile['media']): PrintProfile 
     edgeToEdge: true,
     orientation: 'landscape',
   }
+}
+
+/** Resolve the direct-print provider selected by a design, if it has one. */
+export function directPrintProvider(document: DesignDocument): DirectPrintProvider | null {
+  const provider = document.artboards.find(
+    (artboard) => artboard.printProfile?.provider !== 'browser-pdf',
+  )?.printProfile?.provider
+  return provider && provider !== 'browser-pdf' ? provider : null
 }

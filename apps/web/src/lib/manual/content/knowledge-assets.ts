@@ -83,7 +83,7 @@ If you manage training, class changes can send emails on their own — for examp
 4. Choose **Preview PDF** to check the current design with sample data.
 5. Choose **Save designs**. BeaconHS checks names, colours, dimensions, fields, links, and design size before saving. If it finds a problem, it shows the exact design, artboard, or element to fix and leaves the saved designs unchanged.
 
-For a CR80 design, open **Print** and choose **cardPresso Web Print Server**. After the platform administrator connects cardPresso XXL WPS, each issued wallet card shows **Print with cardPresso** beside **Open PDF**. BeaconHS renders the saved front and back at 300 DPI, sends them to the configured cardPresso card and printer, confirms the accepted job, and records it in the audit log. The cardPresso .card file must contain the configured full-card front and back image items.
+For a CR80 design, open **Print** and choose **cardPresso Web Print Server**, **Zebra Browser Print**, **Evolis SDK**, or **HID FARGO SDK**. A tenant administrator connects that provider under **Admin → Direct printing**. Each issued wallet card then shows the matching direct-print button beside **Open PDF**. BeaconHS renders the saved front and back at 300 DPI, sends them only to that workspace's configured provider, confirms the accepted job, and records it in the audit log. cardPresso requires a .card file with the configured full-card front and back image items. Zebra, Evolis, and HID FARGO use the workspace's secured HTTPS print bridge.
 
 The same wallet-card templates render both BeaconHS course completions and externally issued skill or certification records. External qualifications appear in **My Workspace → Wallet** with their issuing authority and verification link.
 
@@ -96,6 +96,8 @@ Choose **Additional fields** on an authority or skill type to search field names
 When you edit a worker's held skill, **Person** and **Skill / certification** search the complete active tenant directory and skill catalogue. The currently saved value stays visible while you review an older record, even if that value is no longer active. If the picker says more results exist, add more of the name, employee number, code, or authority to the search.
 
 On **Assessments**, search by person, assessment, or course. The person, assessment type, course, status, and date controls narrow the same list; no filter option is hidden after the first few values.
+
+To start one, click **New assessment**. In the flyout, choose the person, then choose an active assessment type. BeaconHS creates the assessment and immediately opens the same record page used to answer, submit, review, or cancel it.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
@@ -411,7 +413,7 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 
 1. Open [Documents](/documents) and click **New document** — a draft opens right away.
 2. On the **Write** tab, pick **Import Word file** (drop in a .docx) or **Start blank**. Set the title and details in the panel on the left.
-3. The file becomes the working draft. Everything you type saves automatically.
+3. The file becomes the working draft. The editor saves as you work, and publishing performs one final confirmed save before it creates the version.
 
 The **Key** is the document's short identifier. It can be up to 120 characters and must be unique among live documents. The save badge changes to **Not saved** and shows the reason if any detail cannot be saved.
 
@@ -445,7 +447,8 @@ The editor is blocked while an administrator is using **View as user**. Exit tha
 
 1. Click **Publish** in the Write toolbar.
 2. Add a short note about what changed (optional), then confirm.
-3. The draft is frozen as the next whole numbered version — v1, v2, v3 — and its PDF renders in the background. Imported decimal revisions such as v1.1 stay in the history. Readers always see the latest published version; your draft stays private until the next publish.
+3. BeaconHS waits for the Word editor to confirm that the working file is saved. If saving fails or times out, no version is created and you can try again without publishing a blank file.
+4. The saved draft is frozen as the next whole numbered version — v1, v2, v3 — and its PDF renders in the background. Imported decimal revisions such as v1.1 stay in the history. Readers always see the latest published version; your draft stays private until the next publish.
 
 ## Version history
 

@@ -15,6 +15,7 @@ import {
 import { renderDesignDocumentPdf, renderDesignDocumentPngs } from '@beaconhs/forms-pdf'
 import { presignGet, resolveTenantLogoUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
+import { directPrintProvider, type DirectPrintProvider } from '@beaconhs/design-studio'
 import { appBaseUrl } from '@/lib/app-base-url'
 import {
   credentialOutputPdfFormat,
@@ -26,6 +27,11 @@ import {
 export type RenderedCredentialPdf = {
   bytes: Buffer
   filename: string
+}
+
+export type RenderedCredentialPrint = {
+  images: Buffer[]
+  provider: DirectPrintProvider
 }
 
 async function makeVerifyQr(verifyUrl: string): Promise<string> {
@@ -210,20 +216,16 @@ async function renderPreparedCredentialPdf(
 
 async function renderPreparedCredentialPngs(
   prepared: PreparedCredential | null,
-): Promise<Buffer[] | null> {
-  if (
-    !prepared?.output.document ||
-    prepared.output.format !== 'wallet' ||
-    !prepared.output.document.artboards.some(
-      (artboard) => artboard.printProfile?.provider === 'cardpresso-wps',
-    )
-  )
-    return null
-  return renderDesignDocumentPngs({
+): Promise<RenderedCredentialPrint | null> {
+  if (!prepared?.output.document || prepared.output.format !== 'wallet') return null
+  const provider = directPrintProvider(prepared.output.document)
+  if (!provider) return null
+  const images = await renderDesignDocumentPngs({
     document: prepared.output.document,
     data: prepared.documentData,
     dpi: 300,
   })
+  return { images, provider }
 }
 
 export async function renderTrainingCredentialPdf(
@@ -246,7 +248,7 @@ export async function renderTrainingCredentialPngs(
   ctx: RequestContext,
   certificateId: string,
   request: CredentialOutputRequest,
-): Promise<Buffer[] | null> {
+): Promise<RenderedCredentialPrint | null> {
   return renderPreparedCredentialPngs(await prepareTrainingCredential(ctx, certificateId, request))
 }
 
@@ -254,7 +256,7 @@ export async function renderSkillCredentialPngs(
   ctx: RequestContext,
   certificateId: string,
   request: CredentialOutputRequest,
-): Promise<Buffer[] | null> {
+): Promise<RenderedCredentialPrint | null> {
   return renderPreparedCredentialPngs(await prepareSkillCredential(ctx, certificateId, request))
 }
 

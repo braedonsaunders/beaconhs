@@ -127,7 +127,7 @@ export function DocumentCompliancePanel({
   canAssign: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
-  const createHref = `/compliance/obligations/new?kind=document&documentId=${documentId}`
+  const createHref = `/compliance/obligations?drawer=new&kind=document&documentId=${documentId}`
   const basePath = `/documents/${documentId}`
 
   if (total === 0) {

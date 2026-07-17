@@ -13,10 +13,14 @@ import { attachments, departments, people, tenants } from '@beaconhs/db/schema'
 import { renderDesignDocumentPdf, renderDesignDocumentPngs } from '@beaconhs/forms-pdf'
 import { presignGet, resolveTenantLogoUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
-import { renderDesignDocumentHtml, type PersonBadgeDesignData } from '@beaconhs/design-studio'
+import {
+  directPrintProvider,
+  renderDesignDocumentHtml,
+  type PersonBadgeDesignData,
+} from '@beaconhs/design-studio'
 import { appBaseUrl } from '@/lib/app-base-url'
 import { normalizePersonBadgeDesign } from '@/lib/person-badge-design'
-import type { RenderedCredentialPdf } from '@/lib/training-credential-pdf'
+import type { RenderedCredentialPdf, RenderedCredentialPrint } from '@/lib/training-credential-pdf'
 
 /** Return the person's badge token, generating + persisting one on first use. */
 async function ensurePersonBadgeToken(
@@ -113,20 +117,17 @@ export async function renderPersonBadgePdf(
 export async function renderPersonBadgePngs(
   ctx: RequestContext,
   personId: string,
-): Promise<Buffer[] | null> {
+): Promise<RenderedCredentialPrint | null> {
   const prepared = await preparePersonBadge(ctx, personId)
-  if (
-    !prepared ||
-    !prepared.document.artboards.some(
-      (artboard) => artboard.printProfile?.provider === 'cardpresso-wps',
-    )
-  )
-    return null
-  return renderDesignDocumentPngs({
+  if (!prepared) return null
+  const provider = directPrintProvider(prepared.document)
+  if (!provider) return null
+  const images = await renderDesignDocumentPngs({
     document: prepared.document,
     data: prepared.data,
     dpi: 300,
   })
+  return { images, provider }
 }
 
 export async function renderPersonBadgePreview(ctx: RequestContext, personId: string) {

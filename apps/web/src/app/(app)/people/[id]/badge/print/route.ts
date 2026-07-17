@@ -4,7 +4,7 @@ import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
 import { renderPersonBadgePngs } from '@/lib/person-badge'
-import { sendCardPressoPrint } from '@/lib/cardpresso'
+import { sendDirectPrint, DIRECT_PRINT_PROVIDER_LABELS } from '@/lib/direct-printing'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -19,21 +19,25 @@ export async function POST(
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'people')
   try {
-    const images = await renderPersonBadgePngs(ctx, personId)
-    if (!images?.[0]) return NextResponse.json({ error: 'Person not found.' }, { status: 404 })
-    const result = await sendCardPressoPrint({ front: images[0], back: images[1] })
+    const rendered = await renderPersonBadgePngs(ctx, personId)
+    if (!rendered?.images[0])
+      return NextResponse.json({ error: 'Person not found.' }, { status: 404 })
+    const result = await sendDirectPrint(ctx, rendered.provider, {
+      front: rendered.images[0],
+      back: rendered.images[1],
+    })
     await recordAudit(ctx, {
       entityType: 'person_badge',
       entityId: personId,
       action: 'export',
-      summary: 'Sent ID badge to cardPresso',
+      summary: `Sent ID badge to ${DIRECT_PRINT_PROVIDER_LABELS[rendered.provider]}`,
       metadata: result,
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (error) {
-    console.error('[cardpresso] person badge print failed', { personId, error })
+    console.error('[direct-print] person badge print failed', { personId, error })
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'cardPresso printing failed.' },
+      { error: error instanceof Error ? error.message : 'Direct printing failed.' },
       { status: 502 },
     )
   }

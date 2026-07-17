@@ -89,8 +89,9 @@ import {
   SYNC_OWNED_PERSON_RELATIONSHIPS,
 } from '@/lib/people-sync'
 import { PageContainer } from '@/components/page-layout'
-import { CardPressoPrintButton } from '@/components/cardpresso-print-button'
-import { cardPressoConfigured } from '@/lib/cardpresso'
+import { DirectPrintButton } from '@/components/direct-print-button'
+import { directPrintProvider } from '@beaconhs/design-studio'
+import { getConfiguredDirectPrintProviders } from '@/lib/direct-printing'
 import { normalizePersonBadgeDesign } from '@/lib/person-badge-design'
 import { renderPersonBadgePreview } from '@/lib/person-badge'
 import { CredentialFlipCard } from '@/components/credential-flip-card'
@@ -615,9 +616,8 @@ export default async function PersonDetailPage({
   const badgePreview = canEdit ? await renderPersonBadgePreview(ctx, id) : null
 
   const basePath = `/people/${id}`
-  const badgeUsesCardPresso = normalizePersonBadgeDesign(data.tenantSettings).artboards.some(
-    (artboard) => artboard.printProfile?.provider === 'cardpresso-wps',
-  )
+  const badgeProvider = directPrintProvider(normalizePersonBadgeDesign(data.tenantSettings))
+  const availablePrintProviders = await getConfiguredDirectPrintProviders(ctx)
   return (
     <PageContainer>
       <div className="space-y-5">
@@ -639,10 +639,11 @@ export default async function PersonDetailPage({
                 </Button>
                 <GeneratedValue
                   value={
-                    badgeUsesCardPresso ? (
-                      <CardPressoPrintButton
+                    badgeProvider ? (
+                      <DirectPrintButton
                         endpoint={`${basePath}/badge/print`}
-                        disabled={!cardPressoConfigured()}
+                        provider={badgeProvider}
+                        disabled={!availablePrintProviders.includes(badgeProvider)}
                       />
                     ) : null
                   }

@@ -13,6 +13,7 @@ import type { FormSchemaV1 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { generatedTemplateKey } from '@/app/(app)/apps/_lib/template-key.server'
+import { getCanonicalTemplate } from '@beaconhs/db/canonical-templates'
 
 export type AppKind = 'form' | 'wizard' | 'checklist' | 'register' | 'mini_app'
 
@@ -185,19 +186,25 @@ export async function createApp(input: {
   category?: string | null
   moduleBinding?: string | null
   description?: string | null
+  canonicalKey?: string | null
 }): Promise<{ ok: false; error: string } | void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'forms.template.create')
 
   const name = (input.name ?? '').trim()
   if (!name) return { ok: false, error: 'A name is required' }
+  const canonical = input.canonicalKey ? getCanonicalTemplate(input.canonicalKey) : null
+  if (input.canonicalKey && !canonical)
+    return { ok: false, error: 'The starting template was not found' }
   const kind: AppKind = input.kind ?? 'form'
-  const category = input.category?.trim() || null
-  const moduleBinding = input.moduleBinding?.trim() || null
-  const description = input.description?.trim() || null
+  const category = canonical?.category ?? input.category?.trim() ?? null
+  const moduleBinding = canonical?.moduleBinding ?? input.moduleBinding?.trim() ?? null
+  const description = canonical?.description ?? input.description?.trim() ?? null
   const key = generatedTemplateKey(name)
 
-  const schema = starterSchema(kind, name, description)
+  const schema = canonical
+    ? { ...canonical.schema, title: { ...canonical.schema.title, en: name } }
+    : starterSchema(kind, name, description)
 
   const templateId = await ctx.db(async (tx) => {
     const [tmpl] = await tx
@@ -229,7 +236,14 @@ export async function createApp(input: {
     entityId: templateId,
     action: 'create',
     summary: `Created ${kind} "${name}"`,
-    after: { name, kind, category, moduleBinding, mode: 'kind-picker' },
+    after: {
+      name,
+      kind,
+      category,
+      moduleBinding,
+      canonicalKey: canonical?.key ?? null,
+      mode: canonical ? 'starter-template' : 'app-kind',
+    },
   })
   revalidatePath('/apps')
   redirect(`/apps/templates/${templateId}/designer`)

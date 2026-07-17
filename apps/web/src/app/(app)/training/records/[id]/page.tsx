@@ -60,7 +60,7 @@ import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
 import { courseCredentialOutputs } from '@/lib/credential-designs'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
-import { cardPressoConfigured } from '@/lib/cardpresso'
+import { getConfiguredDirectPrintProviders } from '@/lib/direct-printing'
 import { RecordDetailFields } from './_fields'
 import { TrainingRecordFilesDrawer } from './_files-drawer'
 import {
@@ -252,6 +252,7 @@ export default async function TrainingRecordPage({
       ? [{ id: course.id, name: course.name, code: course.code }, ...coursesList]
       : coursesList
   const credentialOutputs = courseCredentialOutputs(course?.metadata, tenantSettings)
+  const availablePrintProviders = await getConfiguredDirectPrintProviders(ctx)
   const canDesignCredentials = canDesignTrainingCredentials(ctx)
   // Recording training (renew/revoke) is gated separately from viewing: a
   // read-only viewer (e.g. foreman with training.read.all) sees the record but
@@ -447,7 +448,7 @@ export default async function TrainingRecordPage({
                 endpoint={`${basePath}/certificate`}
                 canDesign={canDesignCredentials}
                 unavailable={isRevoked}
-                cardPressoAvailable={cardPressoConfigured()}
+                availablePrintProviders={availablePrintProviders}
               />
             ) : null
           }

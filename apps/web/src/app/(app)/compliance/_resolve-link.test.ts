@@ -61,7 +61,7 @@ describe('compliance completion links', () => {
         },
       ),
     ).toEqual({
-      href: '/training/assessments/new?typeId=50000000-0000-4000-8000-000000000005&personId=60000000-0000-4000-8000-000000000006&obligationId=80000000-0000-4000-8000-000000000008',
+      href: '/training/assessments?drawer=new&typeId=50000000-0000-4000-8000-000000000005&personId=60000000-0000-4000-8000-000000000006&obligationId=80000000-0000-4000-8000-000000000008',
       prefetch: true,
     })
   })

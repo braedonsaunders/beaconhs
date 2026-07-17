@@ -14,6 +14,7 @@ import {
   MessageSquare,
   PanelLeft,
   PlayCircle,
+  Printer,
   RefreshCw,
   ScrollText,
   ShieldCheck,
@@ -105,7 +106,7 @@ const STATIC_GROUPS: Group[] = [
         href: '/admin/settings',
         icon: <SlidersHorizontal size={18} />,
         title: 'Tenant settings',
-        desc: 'Branding, languages, risk matrix, hierarchy',
+        desc: 'Branding, languages & hierarchy',
         permission: 'admin.settings.manage',
       },
       {
@@ -183,6 +184,13 @@ const STATIC_GROUPS: Group[] = [
         icon: <MessageSquare size={18} />,
         title: 'SMS',
         desc: 'Provider, sender & encrypted credentials',
+        permission: 'admin.settings.manage',
+      },
+      {
+        href: '/admin/printing',
+        icon: <Printer size={18} />,
+        title: 'Direct printing',
+        desc: 'Card-printer services & encrypted credentials',
         permission: 'admin.settings.manage',
       },
       {

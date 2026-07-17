@@ -3,22 +3,23 @@ import { GeneratedText } from '@/i18n/generated'
 import Link from 'next/link'
 import { CreditCard, FileText, Settings } from 'lucide-react'
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@beaconhs/ui'
+import { directPrintProvider, type DirectPrintProvider } from '@beaconhs/design-studio'
 import type { CredentialOutput } from '../lib/credential-designs'
 import { credentialFormatLabel, credentialOutputActions } from '../lib/credential-output-actions'
-import { CardPressoPrintButton } from './cardpresso-print-button'
+import { DirectPrintButton } from './direct-print-button'
 
 export function CredentialOutputsCard({
   outputs,
   endpoint,
   canDesign,
   unavailable = false,
-  cardPressoAvailable = false,
+  availablePrintProviders = [],
 }: {
   outputs: CredentialOutput[]
   endpoint: string
   canDesign: boolean
   unavailable?: boolean
-  cardPressoAvailable?: boolean
+  availablePrintProviders?: DirectPrintProvider[]
 }) {
   const tGenerated = useGeneratedTranslations()
   return (
@@ -117,16 +118,21 @@ export function CredentialOutputsCard({
                   />
                   <GeneratedValue
                     value={
-                      output.format === 'wallet' &&
-                      output.document?.artboards.some(
-                        (artboard) => artboard.printProfile?.provider === 'cardpresso-wps',
-                      ) ? (
-                        <CardPressoPrintButton
-                          endpoint={`${endpoint}/print`}
-                          outputId={output.id}
-                          disabled={unavailable || !cardPressoAvailable}
-                        />
-                      ) : null
+                      output.format === 'wallet' && output.document
+                        ? (() => {
+                            const provider = directPrintProvider(output.document)
+                            return provider ? (
+                              <DirectPrintButton
+                                endpoint={`${endpoint}/print`}
+                                provider={provider}
+                                outputId={output.id}
+                                disabled={
+                                  unavailable || !availablePrintProviders.includes(provider)
+                                }
+                              />
+                            ) : null
+                          })()
+                        : null
                     }
                   />
                 </div>

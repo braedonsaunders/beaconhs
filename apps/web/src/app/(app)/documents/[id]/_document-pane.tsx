@@ -86,6 +86,9 @@ export function DocumentPane({
   function publish() {
     startTransition(async () => {
       try {
+        const editor = editorRef.current
+        if (!editor) throw new Error('Wait for the document editor to finish loading.')
+        await editor.save()
         await publishDocumentVersion(documentId, changelog)
         setShowPublish(false)
         setChangelog('')

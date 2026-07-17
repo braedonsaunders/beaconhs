@@ -3,20 +3,24 @@
 import { useState } from 'react'
 import { Printer } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
+import { PRINT_PROVIDERS, type DirectPrintProvider } from '@beaconhs/design-studio'
 import { GeneratedValue, useGeneratedTranslations } from '@/i18n/generated'
 import { toast } from '@/lib/toast'
 
-export function CardPressoPrintButton({
+export function DirectPrintButton({
   endpoint,
+  provider,
   outputId,
   disabled = false,
 }: {
   endpoint: string
+  provider: DirectPrintProvider
   outputId?: string
   disabled?: boolean
 }) {
   const [printing, setPrinting] = useState(false)
   const tGenerated = useGeneratedTranslations()
+  const providerLabel = PRINT_PROVIDERS.find((item) => item.id === provider)?.label ?? 'printer'
 
   async function print() {
     if (printing || disabled) return
@@ -53,7 +57,9 @@ export function CardPressoPrintButton({
       onClick={print}
     >
       <Printer size={14} />
-      <GeneratedValue value={printing ? 'Sending to cardPresso…' : 'Print with cardPresso'} />
+      <GeneratedValue
+        value={printing ? `Sending to ${providerLabel}…` : `Print with ${providerLabel}`}
+      />
     </Button>
   )
 }

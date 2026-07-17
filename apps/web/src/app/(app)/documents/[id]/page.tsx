@@ -875,7 +875,7 @@ export default async function DocumentDetailPage({
 
       {/* Split body: left 1/3 subtabs · right 2/3 the document */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="flex min-h-0 w-1/3 max-w-md min-w-[300px] flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <aside className="flex min-h-0 w-1/3 max-w-md min-w-[300px] shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="border-b border-slate-200 px-3 pt-2 dark:border-slate-800">
             <TabNav
               basePath={basePath}
