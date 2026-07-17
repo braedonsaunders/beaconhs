@@ -29,6 +29,16 @@ export const REPORT_VIEWS_SQL: string[] = [
      au.name AS authority,
      t.code  AS certification_code,
      t.name  AS certification_name,
+     a.granted_on,
+     a.expires_on,
+     CASE
+       WHEN a.expires_on IS NULL THEN 'no_expiry'
+       WHEN a.expires_on < CURRENT_DATE THEN 'expired'
+       WHEN a.expires_on <= CURRENT_DATE + 90 THEN 'expiring'
+       ELSE 'valid'
+     END AS status,
+     -- New columns must stay appended: PostgreSQL only permits CREATE OR REPLACE
+     -- VIEW to add columns after the installed view's existing column sequence.
      (SELECT ef.field_value
         FROM training_extra_fields ef
        WHERE ef.tenant_id = a.tenant_id
@@ -47,15 +57,7 @@ export const REPORT_VIEWS_SQL: string[] = [
          AND lower(ef.field_key) = 'position' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_position,
      (SELECT ef.field_value FROM training_extra_fields ef
        WHERE ef.tenant_id = a.tenant_id AND ef.skill_assignment_id = a.id
-         AND lower(ef.field_key) = 'level (w47.2 only)' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_level,
-     a.granted_on,
-     a.expires_on,
-     CASE
-       WHEN a.expires_on IS NULL THEN 'no_expiry'
-       WHEN a.expires_on < CURRENT_DATE THEN 'expired'
-       WHEN a.expires_on <= CURRENT_DATE + 90 THEN 'expiring'
-       ELSE 'valid'
-     END AS status
+         AND lower(ef.field_key) = 'level (w47.2 only)' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_level
    FROM training_skill_assignments a
    JOIN training_skill_types t ON t.id = a.skill_type_id
    JOIN training_skill_authorities au ON au.id = t.authority_id

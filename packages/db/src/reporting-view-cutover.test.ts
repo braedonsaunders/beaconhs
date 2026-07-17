@@ -3,6 +3,18 @@ import { readProductionCutoverSection } from './test/read-production-cutover-sec
 import { REPORT_VIEWS_SQL } from './views'
 
 describe('reporting view cutover', () => {
+  it('appends skill report columns after the installed view shape', () => {
+    const skills = REPORT_VIEWS_SQL.find((statement) =>
+      statement.includes('CREATE OR REPLACE VIEW report_skill_assignments'),
+    )
+    expect(skills).toBeDefined()
+
+    const installedTailAt = skills?.indexOf('END AS status') ?? -1
+    const appendedColumnsAt = skills?.indexOf('AS cwb_standard') ?? -1
+    expect(installedTailAt).toBeGreaterThan(-1)
+    expect(appendedColumnsAt).toBeGreaterThan(installedTailAt)
+  })
+
   it('reads equipment type categories through the canonical catalog relation', () => {
     const fleet = REPORT_VIEWS_SQL.find((statement) =>
       statement.includes('CREATE OR REPLACE VIEW report_equipment_fleet'),
