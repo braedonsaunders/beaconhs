@@ -1,7 +1,7 @@
 import * as React from 'react'
 import type { SelectOption } from './search-select'
 
-export type ParsedSelectChildren = {
+type ParsedSelectChildren = {
   options: SelectOption[]
   placeholder?: string
   clearable: boolean

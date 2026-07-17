@@ -1,4 +1,4 @@
-export type CardPressoRequestConfig = {
+type CardPressoRequestConfig = {
   loginName: string
   loginPassword: string
   cardDocument: string

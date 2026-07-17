@@ -1,16 +1,16 @@
-export type DocumentDiffKind = 'equal' | 'added' | 'removed'
+type DocumentDiffKind = 'equal' | 'added' | 'removed'
 
-export type DocumentDiffLine = {
+type DocumentDiffLine = {
   kind: DocumentDiffKind
   text: string
   beforeLine: number | null
   afterLine: number | null
 }
 
-export type DocumentDiffRow =
+type DocumentDiffRow =
   DocumentDiffLine | { kind: 'skipped'; count: number; beforeLine: null; afterLine: null }
 
-export type DocumentTextDiff = {
+type DocumentTextDiff = {
   lines: DocumentDiffLine[]
   additions: number
   removals: number

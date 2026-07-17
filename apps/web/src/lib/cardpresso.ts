@@ -15,7 +15,7 @@ type CardPressoConfig = {
   backItemId: string
 }
 
-export type CardPressoPrintResult = {
+type CardPressoPrintResult = {
   jobId: string | null
   status: string | null
   message: string | null
