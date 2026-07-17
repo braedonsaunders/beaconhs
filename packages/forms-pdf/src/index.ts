@@ -189,7 +189,7 @@ export async function renderReportPdf(
 ): Promise<Buffer> {
   const layout = resolveReportLayout(input.layout)
   const html = `<!doctype html>
-<html><head><meta charset="utf-8"/>
+<html><head><meta charset="utf-8"/><title>${escapeHtml(input.reportName)}</title>
 <style>${buildReportPageCss(layout)} body { margin: 0; } ${buildReportDocumentCss(input.primaryColor, layout.density)}</style>
 </head><body>${renderReportDocumentBodyHtml({
     ...input,
@@ -206,7 +206,7 @@ export async function renderReportPdf(
       displayHeaderFooter: true,
       headerTemplate: `<div></div>`,
       footerTemplate: `<div style="font-size:8px;width:100%;padding:0 ${m};display:flex;justify-content:space-between;color:#666;">
-        <span>${escapeHtml(input.tenantName)} — ${escapeHtml(input.reportName)}</span>
+        <span>${escapeHtml(input.tenantName)} - ${escapeHtml(input.reportName)}</span>
         <span><span class="pageNumber"></span> / <span class="totalPages"></span></span>
       </div>`,
       margin: { top: m, bottom: m, left: m, right: m },

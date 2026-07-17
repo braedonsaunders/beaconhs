@@ -55,7 +55,7 @@ import {
 type Mode = 'rows' | 'summarize' | 'matrix'
 
 /** A guided coverage matrix: two dimension axes (cross-product) ⟕ the latest fact
- *  per cell, shown as a status (missing/expired/expiring/valid by an expiry date,
+ *  per cell, shown as a status (blank/expired/expiring/valid by an expiry date,
  *  or the latest value of a field). Compiles to a spine query — no view. */
 type MatrixSpec = {
   rowSource: string
@@ -181,15 +181,16 @@ function filtersToGroup(rows: FilterRow[]): ReportRuleGroup | null {
 
 const CURRENT_DATE_EXPR: BhqlExpr = { ex: 'call', fn: 'current_date', args: [] }
 
-/** The standard coverage CASE (missing/valid/expired/expiring) keyed on a fact
- *  expiry field ref — the training-matrix RAG colours come from these strings. */
+/** The standard coverage CASE (blank/valid/expired/expiring) keyed on a fact
+ *  expiry field ref. An absent fact is intentionally null so an unheld
+ *  credential renders as an empty matrix cell instead of the word "missing". */
 function coverageCase(expiryRef: string): BhqlExpr {
   return {
     ex: 'case',
     branches: [
       {
         when: { ex: 'isnull', arg: { ex: 'field', field: 'f.id' } },
-        then: { ex: 'lit', value: 'missing' },
+        then: { ex: 'lit', value: null },
       },
       {
         when: { ex: 'isnull', arg: { ex: 'field', field: expiryRef } },

@@ -130,7 +130,7 @@ function assembleFlat(compiled: CompiledBhql, dataRows: Record<string, unknown>[
   }
 }
 
-function reshapePivot(flat: FlatResult, pivot: BhqlPivot): PivotResult {
+export function reshapePivot(flat: FlatResult, pivot: BhqlPivot): PivotResult {
   const colByKey = new Map(flat.columns.map((c) => [c.key, c]))
   const pick = (keys: string[]): ResultColumn[] =>
     keys.map((k) => colByKey.get(k)).filter((c): c is ResultColumn => Boolean(c))
@@ -141,6 +141,11 @@ function reshapePivot(flat: FlatResult, pivot: BhqlPivot): PivotResult {
 
   const keyOf = (row: Record<string, unknown>, dims: ResultColumn[]): string =>
     dims.map((d) => String(row[d.key] ?? '')).join('\u0000')
+  const hasAxisValue = (row: Record<string, unknown>, dims: ResultColumn[]): boolean =>
+    dims.some((d) => {
+      const value = row[d.key]
+      return value !== null && typeof value !== 'undefined' && value !== ''
+    })
 
   const rowIndex = new Map<string, number>()
   const colIndex = new Map<string, number>()
@@ -156,6 +161,10 @@ function reshapePivot(flat: FlatResult, pivot: BhqlPivot): PivotResult {
         labels: rowDims.map((d) => labelValue(row[d.key])),
       })
     }
+    // A pivot cannot give an empty column tuple a useful heading. Dropping it
+    // prevents a phantom "(none)" column while retaining partially populated
+    // multi-dimension tuples.
+    if (!hasAxisValue(row, columnDims)) continue
     const ck = keyOf(row, columnDims)
     if (!colIndex.has(ck)) {
       if (columnKeys.length >= MAX_PIVOT_COLUMNS) {
@@ -173,6 +182,7 @@ function reshapePivot(flat: FlatResult, pivot: BhqlPivot): PivotResult {
 
   const cells: (PivotCell | null)[][] = rowKeys.map(() => columnKeys.map(() => null))
   for (const row of flat.rows) {
+    if (!hasAxisValue(row, columnDims)) continue
     const ri = rowIndex.get(keyOf(row, rowDims))
     const ci = colIndex.get(keyOf(row, columnDims))
     if (ri === undefined || ci === undefined) continue

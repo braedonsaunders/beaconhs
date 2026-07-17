@@ -6,13 +6,16 @@ import { useGeneratedTranslations } from '@/i18n/generated'
 
 // Library hub with subtabs (Cards | Dashboards) instead of stacked sections.
 
-import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { LayoutDashboard, Search } from 'lucide-react'
+import { FileText, LayoutDashboard } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { vizDef } from '@beaconhs/analytics'
 import { VizIcon } from '../_viz/viz-icon'
 import { PinButton } from './_pin-button.client'
+import { SearchInput } from '@/components/search-input'
+import { FilterChips } from '@/components/filter-bar'
+import { Pagination } from '@/components/pagination'
+import { mergeHref } from '@/lib/list-params'
 
 type LibraryCardItem = {
   id: string
@@ -26,30 +29,29 @@ type LibraryDashItem = { id: string; name: string; pinned: boolean }
 export function LibraryTabs({
   cards,
   dashboards,
+  canExport,
+  tab,
+  query,
+  page,
+  perPage,
+  total,
+  cardCount,
+  dashboardCount,
+  currentParams,
 }: {
   cards: LibraryCardItem[]
   dashboards: LibraryDashItem[]
+  canExport: boolean
+  tab: 'cards' | 'dashboards'
+  query: string
+  page: number
+  perPage: number
+  total: number
+  cardCount: number
+  dashboardCount: number
+  currentParams: Record<string, string | string[] | undefined>
 }) {
   const tGenerated = useGeneratedTranslations()
-  const [tab, setTab] = useState<'cards' | 'dashboards'>('cards')
-  const [query, setQuery] = useState('')
-  const needle = query.trim().toLowerCase()
-
-  const shownCards = useMemo(
-    () =>
-      needle
-        ? cards.filter(
-            (c) =>
-              c.name.toLowerCase().includes(needle) ||
-              (c.description ?? '').toLowerCase().includes(needle),
-          )
-        : cards,
-    [cards, needle],
-  )
-  const shownDashboards = useMemo(
-    () => (needle ? dashboards.filter((d) => d.name.toLowerCase().includes(needle)) : dashboards),
-    [dashboards, needle],
-  )
 
   return (
     <div>
@@ -57,10 +59,9 @@ export function LibraryTabs({
         <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
           <GeneratedValue
             value={(['cards', 'dashboards'] as const).map((t) => (
-              <button
+              <Link
                 key={t}
-                type="button"
-                onClick={() => setTab(t)}
+                href={mergeHref('/insights/library', currentParams, { tab: t, page: 1 })}
                 className={cn(
                   'rounded-md px-3 py-1.5 text-xs font-medium capitalize transition',
                   tab === t
@@ -70,37 +71,43 @@ export function LibraryTabs({
               >
                 <GeneratedValue value={t} />
                 <span className="ml-1 tabular-nums opacity-60">
-                  <GeneratedValue value={t === 'cards' ? cards.length : dashboards.length} />
+                  <GeneratedValue value={t === 'cards' ? cardCount : dashboardCount} />
                 </span>
-              </button>
+              </Link>
             ))}
           />
         </div>
-        <div className="relative w-full sm:w-64">
-          <Search
-            size={14}
-            className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+          <GeneratedValue
+            value={
+              tab === 'cards' ? (
+                <FilterChips
+                  basePath="/insights/library"
+                  currentParams={currentParams}
+                  paramKey="status"
+                  label={tGenerated('m_0b9da892d6faf0')}
+                  allLabel="All statuses"
+                  options={[
+                    { value: 'published', label: 'Published' },
+                    { value: 'draft', label: 'Draft' },
+                  ]}
+                />
+              ) : null
+            }
           />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={tGenerated('m_1f0a8c50aedb8c', { value0: tab })}
-            aria-label={tGenerated('m_15e71b3fa83632', { value0: tab })}
-            className="h-9 w-full rounded-md border border-slate-300 bg-white pr-3 pl-8 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          />
+          <SearchInput placeholder={tGenerated('m_1f0a8c50aedb8c', { value0: tab })} />
         </div>
       </div>
 
       <GeneratedValue
         value={
           tab === 'cards' ? (
-            shownCards.length === 0 ? (
+            total === 0 ? (
               <Empty>
                 <GeneratedValue
                   value={
-                    needle ? (
-                      <GeneratedText id="m_161a011e2a0efa" values={{ value0: query.trim() }} />
+                    query ? (
+                      <GeneratedText id="m_161a011e2a0efa" values={{ value0: query }} />
                     ) : (
                       <GeneratedText id="m_1a1eef4e7913c3" />
                     )
@@ -110,12 +117,16 @@ export function LibraryTabs({
             ) : (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <GeneratedValue
-                  value={shownCards.map((c) => (
-                    <Link
+                  value={cards.map((c) => (
+                    <div
                       key={c.id}
-                      href={`/insights/cards/${c.id}`}
-                      className="group flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-teal-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-500/40"
+                      className="group relative flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-teal-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-500/40"
                     >
+                      <Link
+                        href={`/insights/cards/${c.id}`}
+                        aria-label={tGenerated('m_07f6f328b6cf6a', { value0: c.name })}
+                        className="absolute inset-0 rounded-xl"
+                      />
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-600 dark:bg-teal-500/10 dark:text-teal-300">
                         <VizIcon iconKey={vizDef(c.vizType)?.iconKey ?? 'Table'} size={17} />
                       </span>
@@ -142,17 +153,31 @@ export function LibraryTabs({
                           ) : null
                         }
                       />
-                    </Link>
+                      <GeneratedValue
+                        value={
+                          canExport ? (
+                            <a
+                              href={`/insights/cards/${c.id}/export?format=pdf`}
+                              className="relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-teal-700 focus:ring-2 focus:ring-teal-500/30 focus:outline-none dark:hover:bg-slate-800 dark:hover:text-teal-300"
+                              aria-label={tGenerated('m_13928c678297eb', { value0: c.name })}
+                              title={tGenerated('m_1e5ece8eefa44b')}
+                            >
+                              <FileText size={14} />
+                            </a>
+                          ) : null
+                        }
+                      />
+                    </div>
                   ))}
                 />
               </div>
             )
-          ) : shownDashboards.length === 0 ? (
+          ) : total === 0 ? (
             <Empty>
               <GeneratedValue
                 value={
-                  needle ? (
-                    <GeneratedText id="m_12785264ffab7f" values={{ value0: query.trim() }} />
+                  query ? (
+                    <GeneratedText id="m_12785264ffab7f" values={{ value0: query }} />
                   ) : (
                     <GeneratedText id="m_16b77ccf090fe8" />
                   )
@@ -162,7 +187,7 @@ export function LibraryTabs({
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <GeneratedValue
-                value={shownDashboards.map((d) => (
+                value={dashboards.map((d) => (
                   <div
                     key={d.id}
                     className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
@@ -182,6 +207,13 @@ export function LibraryTabs({
             </div>
           )
         }
+      />
+      <Pagination
+        basePath="/insights/library"
+        currentParams={currentParams}
+        total={total}
+        page={page}
+        perPage={perPage}
       />
     </div>
   )

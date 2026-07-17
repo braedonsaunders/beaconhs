@@ -24,6 +24,9 @@ import {
 
 function fmt(v: unknown): string {
   if (v === null || typeof v === 'undefined' || v === '') return ''
+  // Older saved coverage matrices emitted this sentinel. Keep their display
+  // aligned with newly authored matrices, which now emit null for an empty cell.
+  if (v === 'missing') return ''
   if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(2)
   return String(v)
 }

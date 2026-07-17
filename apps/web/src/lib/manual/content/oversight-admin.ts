@@ -281,9 +281,9 @@ On the full report, subscriptions, past runs, and report details live on the **S
 
 ## What this is for
 
-Insights answers "how are we doing right now?" — incidents by month, open actions by site, training completion by department. It is the screen you keep open, not the document you print.
+Insights answers "how are we doing right now?" — incidents by month, open actions by site, training completion by department. It is the screen you keep open. You can also save any individual card as a current PDF snapshot.
 
-One rule to remember: **Reports are documents, Insights are dashboards.** If you need a PDF or a scheduled email, use [Reports](/help/reports). If you need a live view, you are in the right place.
+One rule to remember: **Reports are scheduled documents, Insights are live dashboards.** Use [Reports](/help/reports) for a designed report or scheduled email. Use a card's PDF export when you need a quick snapshot of its current data.
 
 ## Where to find it
 
@@ -308,6 +308,25 @@ A card is one saved chart or table. The fastest way to build one is to describe 
 You can also build a card by hand using the same side panel, without asking AI. The data-source list only includes Builder apps you can currently open. If an app is a draft, archived, or restricted to another active role, its records cannot be used by your cards.
 
 For a custom grouping or measure, open **ƒ Fields & functions**. If the data source has many columns, type a field or related-table name in **Search fields or related tables…**. The search covers the complete available schema; no field is dropped after the first page of columns.
+
+## Build a training matrix
+
+1. Open the [Library](/insights/library) and click **New card**.
+2. Choose **Matrix**.
+3. Use people for the rows, courses for the columns, and training records for the latest status.
+4. Click **Save card**.
+
+A person who has no record for a course has a blank cell. The matrix does not add an empty **None** course column.
+
+## Save a card as PDF
+
+You need data-export permission to download card data.
+
+1. Open the [Library](/insights/library).
+2. Click the PDF icon on a card, or open the card and click **PDF**.
+3. BeaconHS downloads a branded snapshot using the card's current data. Wide matrices continue in readable column sections.
+
+Use **Download CSV** on the open card when you need the same live data in a spreadsheet. Exporting an AI card runs its saved analysis and puts the summary and key points in the PDF.
 
 ## Build or change a dashboard
 

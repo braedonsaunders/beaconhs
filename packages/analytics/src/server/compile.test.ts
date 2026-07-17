@@ -194,7 +194,7 @@ show('Training matrix (spine, view-free)', {
               branches: [
                 {
                   when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.id' } },
-                  then: { ex: 'lit', value: 'missing' },
+                  then: { ex: 'lit', value: null },
                 },
                 {
                   when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.expires_on' } },
