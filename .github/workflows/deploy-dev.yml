@@ -355,23 +355,24 @@ jobs:
         run: |
           set -euo pipefail
           ready_url="${APP_URL%/}/api/health/ready"
+          login_url="${APP_URL%/}/login"
           deadline=$((SECONDS + 600))
+          last_login_status="not checked"
           while [ "$SECONDS" -lt "$deadline" ]; do
             body="$(curl -fsS --connect-timeout 5 --max-time 15 "$ready_url" 2>/dev/null || true)"
             if [ -n "$body" ] \
               && jq -e --arg sha "$GITHUB_SHA" \
                   '.status=="ready" and .version==$sha' <<< "$body" >/dev/null 2>&1; then
-              echo "Deployment is externally ready at commit $GITHUB_SHA"
-              login_status="$(curl -sS -o /dev/null -w '%{http_code}' \
-                --connect-timeout 5 --max-time 15 "${APP_URL%/}/login")"
-              if [ "$login_status" = 200 ]; then
+              last_login_status="$(curl -sS -o /dev/null -w '%{http_code}' \
+                --connect-timeout 5 --max-time 15 "$login_url" || true)"
+              if [ "$last_login_status" = 200 ]; then
+                echo "Deployment is externally ready at commit $GITHUB_SHA"
                 echo "Login page responds 200 — deployment healthy"
                 exit 0
               fi
-              echo "::error::Readiness reported the new commit but /login returned HTTP $login_status"
-              exit 1
+              echo "Readiness reports the new commit; /login returned HTTP ${last_login_status:-000}. Retrying."
             fi
             sleep 10
           done
-          echo "::error::Deployment did not become externally ready at the new commit within 10 minutes"
+          echo "::error::Deployment did not become externally ready with a healthy login page within 10 minutes (last /login status: ${last_login_status:-000})"
           exit 1
