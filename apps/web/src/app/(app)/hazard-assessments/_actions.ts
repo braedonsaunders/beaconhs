@@ -458,12 +458,7 @@ async function createAssessment(formData: FormData): Promise<{ id: string }> {
             const hazRows = await tx
               .select()
               .from(hazidHazards)
-              .where(
-                and(
-                  sql`${hazidHazards.id} = ANY(${set.hazardIds})`,
-                  isNull(hazidHazards.deletedAt),
-                ),
-              )
+              .where(and(inArray(hazidHazards.id, set.hazardIds), isNull(hazidHazards.deletedAt)))
             if (hazRows.length > 0) {
               await tx.insert(hazidAssessmentHazards).values(
                 hazRows.map((h, i) => ({
@@ -1389,7 +1384,7 @@ export async function addHazardSet(formData: FormData) {
     const hazRows = await tx
       .select()
       .from(hazidHazards)
-      .where(and(sql`${hazidHazards.id} = ANY(${set.hazardIds})`, isNull(hazidHazards.deletedAt)))
+      .where(and(inArray(hazidHazards.id, set.hazardIds), isNull(hazidHazards.deletedAt)))
     if (hazRows.length === 0) return
     const [maxOrder] = await tx
       .select({ m: max(hazidAssessmentHazards.entityOrder) })

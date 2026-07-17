@@ -137,4 +137,20 @@ describe('hazard-assessment transactional locking contract', () => {
       expect(mutation).not.toContain('await recordAudit(ctx')
     }
   })
+
+  it('uses a typed IN predicate for hazard-set arrays', () => {
+    const create = between(
+      'async function createAssessment(',
+      'export async function startAssessment',
+    )
+    const addSet = between(
+      'export async function addHazardSet',
+      'export async function updateHazard',
+    )
+
+    for (const mutation of [create, addSet]) {
+      expect(mutation).toContain('inArray(hazidHazards.id, set.hazardIds)')
+      expect(mutation).not.toContain('ANY(${set.hazardIds})')
+    }
+  })
 })
