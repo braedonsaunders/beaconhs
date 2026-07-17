@@ -450,6 +450,7 @@ export default async function HazidAssessmentDetailPage({
   // Single unified page: anyone in the tenant edits an unlocked assessment;
   // module managers additionally get the destructive actions (delete).
   const canManage = canManageModule(ctx, 'hazid')
+  const canReview = can(ctx, 'hazid.review')
   const activity = await recentActivityForEntity(ctx, 'hazid_assessment', id, 25)
 
   // Inline app fill: when `?app=<typeAppId>` is present we render the embedded
@@ -795,8 +796,10 @@ export default async function HazidAssessmentDetailPage({
                 id={id}
                 locked={locked}
                 canManage={canManage}
+                canReview={canReview}
                 pdfHref={`/hazard-assessments/${id}/pdf`}
                 emailHref={`/hazard-assessments/${id}?send=1`}
+                reviewHref={drawerHref('safety-review')}
                 deleteHref={drawerHref('confirm-delete')}
                 copyAction={copyAssessment}
                 lockAction={lockAssessment}
@@ -970,78 +973,6 @@ export default async function HazidAssessmentDetailPage({
                 })}
               />
             </div>
-
-            <Section
-              title={tGenerated('m_039fc01243fb46')}
-              subtitle={tGenerated('m_1dcf53db730123')}
-              icon={<Shield size={20} />}
-              tone="slate"
-            >
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <Badge
-                    variant={
-                      a.reviewStatus === 'approved'
-                        ? 'success'
-                        : a.reviewStatus === 'rejected'
-                          ? 'destructive'
-                          : 'outline'
-                    }
-                  >
-                    <GeneratedValue value={a.reviewStatus} />
-                  </Badge>
-                  <GeneratedValue
-                    value={
-                      a.reviewedAt ? (
-                        <span className="text-slate-500 dark:text-slate-400">
-                          <GeneratedText id="m_08791cd0d5daff" />{' '}
-                          <GeneratedValue
-                            value={formatDateTime(a.reviewedAt, ctx.timezone, ctx.locale)}
-                          />
-                        </span>
-                      ) : null
-                    }
-                  />
-                </div>
-                <GeneratedValue
-                  value={
-                    a.reviewNote ? (
-                      <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
-                        <GeneratedValue value={a.reviewNote} />
-                      </p>
-                    ) : null
-                  }
-                />
-                <GeneratedValue
-                  value={
-                    canManage ? (
-                      <form action={reviewAssessment} className="space-y-3">
-                        <input type="hidden" name="id" value={id} />
-                        <Textarea
-                          name="note"
-                          rows={3}
-                          defaultValue={a.reviewNote ?? ''}
-                          placeholder={tGenerated('m_0f5bae5cd10511')}
-                        />
-                        <div className="flex flex-wrap gap-2">
-                          <Button type="submit" name="decision" value="approved">
-                            <GeneratedText id="m_05194a49d7f46e" />
-                          </Button>
-                          <Button
-                            type="submit"
-                            name="decision"
-                            value="rejected"
-                            variant="destructive"
-                          >
-                            <GeneratedText id="m_0f51548c04b27f" />
-                          </Button>
-                        </div>
-                      </form>
-                    ) : null
-                  }
-                />
-              </div>
-            </Section>
 
             <Section
               title={tGenerated('m_062cdc4673a07a')}
@@ -1932,6 +1863,69 @@ export default async function HazidAssessmentDetailPage({
           closeHref={tabHref}
           addAction={addSignature}
         />
+      </UrlDrawer>
+
+      {/* Safety review — visible and actionable only with the dedicated review permission. */}
+      <UrlDrawer
+        open={drawerKey === 'safety-review' && canReview}
+        closeHref={tabHref}
+        title={tGenerated('m_039fc01243fb46')}
+        description={tGenerated('m_1dcf53db730123')}
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Badge
+              variant={
+                a.reviewStatus === 'approved'
+                  ? 'success'
+                  : a.reviewStatus === 'rejected'
+                    ? 'destructive'
+                    : 'outline'
+              }
+            >
+              <GeneratedValue value={a.reviewStatus} />
+            </Badge>
+            <GeneratedValue
+              value={
+                a.reviewedAt ? (
+                  <span className="text-slate-500 dark:text-slate-400">
+                    <GeneratedText id="m_08791cd0d5daff" />{' '}
+                    <GeneratedValue
+                      value={formatDateTime(a.reviewedAt, ctx.timezone, ctx.locale)}
+                    />
+                  </span>
+                ) : null
+              }
+            />
+          </div>
+          <GeneratedValue
+            value={
+              a.reviewNote ? (
+                <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+                  <GeneratedValue value={a.reviewNote} />
+                </p>
+              ) : null
+            }
+          />
+          <form action={reviewAssessment} className="space-y-3">
+            <input type="hidden" name="id" value={id} />
+            <Textarea
+              name="note"
+              rows={3}
+              defaultValue={a.reviewNote ?? ''}
+              placeholder={tGenerated('m_0f5bae5cd10511')}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" name="decision" value="approved">
+                <GeneratedText id="m_05194a49d7f46e" />
+              </Button>
+              <Button type="submit" name="decision" value="rejected" variant="destructive">
+                <GeneratedText id="m_0f51548c04b27f" />
+              </Button>
+            </div>
+          </form>
+        </div>
       </UrlDrawer>
 
       {/* Delete confirmation — module managers only, matching deleteAssessment */}

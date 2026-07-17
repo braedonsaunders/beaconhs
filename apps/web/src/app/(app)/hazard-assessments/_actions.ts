@@ -925,7 +925,7 @@ export async function lockAssessment(formData: FormData) {
 
 export async function reviewAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
-  assertCanManageModule(ctx, 'hazid')
+  assertCan(ctx, 'hazid.review')
   const id = String(formData.get('id') ?? '')
   const decision = String(formData.get('decision') ?? '')
   const note = String(formData.get('note') ?? '').trim() || null

@@ -185,12 +185,14 @@ export const PERMISSION_CATALOGUE = [
   'inspections.manage',
   // Hazard assessments (internal key `hazid`) — record visibility tiers + write.
   // `create` = start/copy an assessment; `update` = edit/lock/sign/answer and
-  // add/remove hazards, tasks, PPE, questions, signatures, photos.
+  // add/remove hazards, tasks, PPE, questions, signatures, photos; `review` =
+  // record the advisory safety review decision and note.
   'hazid.read.all',
   'hazid.read.site',
   'hazid.read.self',
   'hazid.create',
   'hazid.update',
+  'hazid.review',
   // Training
   'training.read.all',
   'training.read.self',
@@ -377,6 +379,7 @@ export const BUILTIN_ROLES: Record<
       'hazid.read.all',
       'hazid.create',
       'hazid.update',
+      'hazid.review',
       'training.read.all',
       'training.course.manage',
       'training.class.manage',

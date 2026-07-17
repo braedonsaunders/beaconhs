@@ -10,14 +10,16 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 import Link from 'next/link'
 import { useState } from 'react'
 import { Button } from '@beaconhs/ui'
-import { Copy, FileText, Lock, Mail, MoreHorizontal, Trash2, Unlock } from 'lucide-react'
+import { Copy, FileText, Lock, Mail, MoreHorizontal, Shield, Trash2, Unlock } from 'lucide-react'
 
 export function AssessmentHeaderActions({
   id,
   locked,
   canManage,
+  canReview,
   pdfHref,
   emailHref,
+  reviewHref,
   deleteHref,
   copyAction,
   lockAction,
@@ -26,8 +28,10 @@ export function AssessmentHeaderActions({
   id: string
   locked: boolean
   canManage: boolean
+  canReview: boolean
   pdfHref: string
   emailHref: string
+  reviewHref: string
   deleteHref: string
   copyAction: (formData: FormData) => Promise<void>
   lockAction: (formData: FormData) => Promise<void>
@@ -64,6 +68,17 @@ export function AssessmentHeaderActions({
     <>
       {/* Desktop: the full row */}
       <div className="hidden items-center gap-2 sm:flex">
+        <GeneratedValue
+          value={
+            canReview ? (
+              <Link href={reviewHref as any} scroll={false}>
+                <Button variant="outline">
+                  <Shield size={14} /> <GeneratedText id="m_039fc01243fb46" />
+                </Button>
+              </Link>
+            ) : null
+          }
+        />
         {/* Plain <a>, not <Link> — the PDF route audits the export, and Link
             prefetch would log phantom exports on hover/viewport. */}
         <a href={pdfHref}>
@@ -119,6 +134,20 @@ export function AssessmentHeaderActions({
                   onClick={() => setOpen(false)}
                 />
                 <div className="fixed inset-x-3 bottom-3 z-50 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                  <GeneratedValue
+                    value={
+                      canReview ? (
+                        <Link
+                          href={reviewHref as any}
+                          scroll={false}
+                          className={menuItem}
+                          onClick={() => setOpen(false)}
+                        >
+                          <Shield size={15} /> <GeneratedText id="m_039fc01243fb46" />
+                        </Link>
+                      ) : null
+                    }
+                  />
                   <a href={pdfHref} className={menuItem} onClick={() => setOpen(false)}>
                     <FileText size={15} /> <GeneratedText id="m_016088be0b1e51" />
                   </a>

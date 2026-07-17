@@ -193,7 +193,7 @@ If your role manages Hazard Assessments, open **Types** to set up the templates 
 
 ## Safety review
 
-Safety managers can record an advisory decision in **Safety review**. Add an optional note, then tap **Approve** or **Reject**. The decision does not lock the assessment or stop field work. Use the **Safety review** filter on the list to find pending, approved, or rejected assessments.
+People with permission to review hazard assessments can record an advisory decision. Open an assessment, tap **Safety review** in the header, and use the flyout to add an optional note. Then tap **Approve** or **Reject**. The decision does not lock the assessment or stop field work. Use the **Safety review** filter on the list to find pending, approved, or rejected assessments.
 
 ## Finishing up
 

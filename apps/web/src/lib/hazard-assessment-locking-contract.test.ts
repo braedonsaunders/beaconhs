@@ -1,8 +1,17 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { BUILTIN_ROLES, PERMISSION_CATALOGUE } from '@beaconhs/db/schema'
 
 const actions = readFileSync(
   new URL('../app/(app)/hazard-assessments/_actions.ts', import.meta.url),
+  'utf8',
+)
+const detailPage = readFileSync(
+  new URL('../app/(app)/hazard-assessments/[id]/page.tsx', import.meta.url),
+  'utf8',
+)
+const headerActions = readFileSync(
+  new URL('../app/(app)/hazard-assessments/[id]/_header-actions.tsx', import.meta.url),
   'utf8',
 )
 
@@ -152,5 +161,23 @@ describe('hazard-assessment transactional locking contract', () => {
       expect(mutation).toContain('inArray(hazidHazards.id, set.hazardIds)')
       expect(mutation).not.toContain('ANY(${set.hazardIds})')
     }
+  })
+
+  it('gates the safety-review flyout and mutation with a dedicated permission', () => {
+    const review = between(
+      'export async function reviewAssessment',
+      'export async function unlockAssessment',
+    )
+
+    expect(PERMISSION_CATALOGUE).toContain('hazid.review')
+    expect(BUILTIN_ROLES.safety_manager?.permissions).toContain('hazid.review')
+    expect(BUILTIN_ROLES.worker?.permissions).not.toContain('hazid.review')
+    expect(BUILTIN_ROLES.foreman?.permissions).not.toContain('hazid.review')
+    expect(review).toContain("assertCan(ctx, 'hazid.review')")
+    expect(detailPage).toContain("const canReview = can(ctx, 'hazid.review')")
+    expect(detailPage).toContain("reviewHref={drawerHref('safety-review')}")
+    expect(detailPage).toContain("open={drawerKey === 'safety-review' && canReview}")
+    expect(headerActions).toContain('canReview ? (')
+    expect(headerActions).toContain('<GeneratedText id="m_039fc01243fb46" />')
   })
 })

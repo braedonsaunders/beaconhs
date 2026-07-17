@@ -62,6 +62,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'hazid.read.self': 'View own hazard assessments',
   'hazid.create': 'Create hazard assessments',
   'hazid.update': 'Edit hazard assessments',
+  'hazid.review': 'Review hazard assessments',
 
   'training.read.all': 'View all training',
   'training.read.self': 'View own training',
