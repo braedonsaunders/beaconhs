@@ -40,7 +40,7 @@
     "@excalidraw/excalidraw": "^0.18.1",
     "@grapesjs/react": "^2.0.0",
     "@napi-rs/canvas": "^1.0.2",
-    "@sentry/nextjs": "10.65.0",
+    "@sentry/nextjs": "10.67.0",
     "@tiptap/core": "^3.27.4",
     "@tiptap/extension-character-count": "^3.27.4",
     "@tiptap/extension-highlight": "^3.27.4",

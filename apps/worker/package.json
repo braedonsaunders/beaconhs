@@ -33,7 +33,7 @@
     "@beaconhs/storage": "workspace:*",
     "@beaconhs/sync": "workspace:*",
     "@beaconhs/tenant": "workspace:*",
-    "@sentry/node": "10.65.0",
+    "@sentry/node": "10.67.0",
     "bullmq": "^5.80.2",
     "cron-parser": "^4.9.0",
     "drizzle-orm": "^0.45.2"
