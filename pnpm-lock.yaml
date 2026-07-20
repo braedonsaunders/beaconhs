@@ -793,13 +793,6 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(jsdom@29.1.1(@noble/hashes@2.2.0)(canvas@3.2.3))(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
 
   packages/office:
-    dependencies:
-      jszip:
-        specifier: ^3.10.1
-        version: 3.10.1
-      parse5:
-        specifier: ^8.0.1
-        version: 8.0.1
     devDependencies:
       '@types/node':
         specifier: ^24.13.2

@@ -8,7 +8,6 @@ import { promisify } from 'node:util'
 import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildDocxFromHtml } from './html-docx'
 
 export const exec = promisify(execFile)
 
@@ -76,11 +75,6 @@ export async function sofficeConvert(
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => {})
   }
-}
-
-/** Convert sanitized HTML into a deterministic, editable DOCX master. */
-export async function htmlToDocx(html: Buffer): Promise<Buffer> {
-  return buildDocxFromHtml(html)
 }
 
 /** Concatenate PDFs in order with poppler's pdfunite. */

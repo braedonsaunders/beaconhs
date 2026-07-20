@@ -9,10 +9,6 @@
     ".": "./src/index.ts",
     "./limits": "./src/limits.ts"
   },
-  "dependencies": {
-    "jszip": "^3.10.1",
-    "parse5": "^8.0.1"
-  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo",
