@@ -249,7 +249,7 @@ export default async function AssessmentTypesPage({
                       <GeneratedText id="m_0a4456ce9a12f5" />
                     </TableHead>
                     <SortableTh {...sortProps} column="passing" active={params.sort === 'passing'}>
-                      <GeneratedText id="m_1cdf12c7dddf29" />
+                      <GeneratedValue value="Result rule" />
                     </SortableTh>
                     <SortableTh
                       {...sortProps}
@@ -266,7 +266,7 @@ export default async function AssessmentTypesPage({
                       <GeneratedText id="m_01c2d80ce4b2ca" />
                     </SortableTh>
                     <TableHead>
-                      <GeneratedText id="m_009fe99b6d9fad" />
+                      <GeneratedValue value="Success rate" />
                     </TableHead>
                     <TableHead>
                       <GeneratedText id="m_05407ee4fbb68c" />
@@ -325,7 +325,18 @@ export default async function AssessmentTypesPage({
                             />
                           </TableCell>
                           <TableCell className="tabular-nums">
-                            <GeneratedValue value={type.passingScore} />%
+                            <GeneratedValue
+                              value={
+                                type.graded ? (
+                                  <>
+                                    <GeneratedValue value={type.passingScore} />%{' '}
+                                    <GeneratedValue value="pass mark" />
+                                  </>
+                                ) : (
+                                  'Completion only'
+                                )
+                              }
+                            />
                           </TableCell>
                           <TableCell className="tabular-nums">
                             <GeneratedValue value={questionCount} />
@@ -363,7 +374,7 @@ export default async function AssessmentTypesPage({
                                   </Badge>
                                 ) : (
                                   <Badge variant="secondary" className="text-xs">
-                                    <GeneratedText id="m_1d61d796ca6dea" />
+                                    <GeneratedValue value="Completion only" />
                                   </Badge>
                                 )
                               }

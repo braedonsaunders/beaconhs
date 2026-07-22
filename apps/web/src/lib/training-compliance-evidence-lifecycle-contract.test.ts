@@ -130,6 +130,11 @@ describe('training compliance evidence lifecycle', () => {
   })
 
   it('refreshes assessment and course targets when an assessment mints or revokes a record', () => {
+    const finalize = between(
+      assessmentActions,
+      'async function finalizeAssessmentAttempt',
+      'export async function submitAssessmentAttempt',
+    )
     const submit = between(
       assessmentActions,
       'export async function submitAssessmentAttempt',
@@ -147,7 +152,10 @@ describe('training compliance evidence lifecycle', () => {
       expect(mutation).toContain('await recordAuditInTransaction(tx, ctx')
       expect(mutation).toContain(".for('update')")
     }
-    expect(submit).toContain('targetRef: { courseId: attempt.courseId }')
+    expect(finalize).toContain('targetRef: { courseId: attempt.courseId }')
+    expect(finalize).toContain('await materializeEvidenceTargetsObligations(')
+    expect(finalize).toContain('await recordAuditInTransaction(tx, ctx')
+    expect(submit).toContain('return finalizeAssessmentAttempt(tx, ctx, attempt')
     expect(cancel).toContain('targetRef: { courseId: revokedCourseId }')
     expect(cancel).toContain(
       '.returning({ id: trainingRecords.id, courseId: trainingRecords.courseId })',

@@ -21,7 +21,8 @@ export const dynamic = 'force-dynamic'
  * page with a flat, slightly-formal layout that prints cleanly to PDF via
  * browser "Save as PDF".
  *
- * Only renders for `submitted` + `passed` attempts.
+ * Only renders for completed attempts that satisfied their graded pass mark or
+ * their completion-only requirement.
  */
 export default async function AssessmentCertificatePage({
   params,
@@ -109,37 +110,45 @@ export default async function AssessmentCertificatePage({
         </div>
 
         <dl className="grid grid-cols-2 gap-x-12 gap-y-3 text-sm">
-          <div>
-            <dt className="text-xs tracking-wide text-slate-500 uppercase">
-              <GeneratedText id="m_1469688270fa41" />
-            </dt>
-            <dd className="font-semibold text-slate-900">
-              <GeneratedValue value={attempt.score} />%
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs tracking-wide text-slate-500 uppercase">
-              <GeneratedText id="m_0983c76465bdb2" />
-            </dt>
-            <dd className="text-slate-900">
-              <GeneratedValue value={attempt.passingScore} />%
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs tracking-wide text-slate-500 uppercase">
-              <GeneratedText id="m_08e7a76c4ab77f" />
-            </dt>
-            <dd className="text-slate-900">
-              <GeneratedValue value={attempt.pointsAwarded} /> /{' '}
-              <GeneratedValue value={attempt.pointsPossible} />
-            </dd>
-          </div>
+          <GeneratedValue
+            value={
+              attempt.graded ? (
+                <>
+                  <div>
+                    <dt className="text-xs tracking-wide text-slate-500 uppercase">
+                      <GeneratedText id="m_1469688270fa41" />
+                    </dt>
+                    <dd className="font-semibold text-slate-900">
+                      <GeneratedValue value={attempt.score} />%
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs tracking-wide text-slate-500 uppercase">
+                      <GeneratedText id="m_0983c76465bdb2" />
+                    </dt>
+                    <dd className="text-slate-900">
+                      <GeneratedValue value={attempt.passingScore} />%
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs tracking-wide text-slate-500 uppercase">
+                      <GeneratedText id="m_08e7a76c4ab77f" />
+                    </dt>
+                    <dd className="text-slate-900">
+                      <GeneratedValue value={attempt.pointsAwarded} /> /{' '}
+                      <GeneratedValue value={attempt.pointsPossible} />
+                    </dd>
+                  </div>
+                </>
+              ) : null
+            }
+          />
           <div>
             <dt className="text-xs tracking-wide text-slate-500 uppercase">
               <GeneratedText id="m_0b9da892d6faf0" />
             </dt>
             <dd className="font-semibold text-green-700">
-              <GeneratedText id="m_10cad12b9fc18d" />
+              <GeneratedValue value={attempt.graded ? 'Pass' : 'Completed'} />
             </dd>
           </div>
         </dl>

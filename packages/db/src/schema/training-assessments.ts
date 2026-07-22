@@ -142,8 +142,14 @@ export const trainingAssessmentTypeQuestions = pgTable(
 
 export const trainingAssessmentStatus = pgEnum('training_assessment_status', [
   'in_progress',
-  'submitted', // graded
+  'submitted',
   'cancelled',
+])
+
+export const trainingAssessmentReviewStatus = pgEnum('training_assessment_review_status', [
+  'not_required',
+  'pending',
+  'completed',
 ])
 
 export const trainingAssessments = pgTable(
@@ -158,6 +164,9 @@ export const trainingAssessments = pgTable(
     // Snapshot the linked course at attempt time (so renaming/moving the type's
     // course later doesn't retroactively rewrite history).
     courseId: uuid('course_id'),
+    // Snapshot whether this attempt is graded. Template changes must not alter
+    // the scoring or completion semantics of an attempt after it starts.
+    graded: boolean('graded').default(true).notNull(),
     // Snapshot the passing score from the type so historical attempts read the
     // same threshold they were graded against.
     passingScore: integer('passing_score').notNull(),
@@ -167,13 +176,17 @@ export const trainingAssessments = pgTable(
     pointsPossible: integer('points_possible'),
     passed: boolean('passed'),
     status: trainingAssessmentStatus('status').default('in_progress').notNull(),
+    reviewStatus: trainingAssessmentReviewStatus('review_status').default('not_required').notNull(),
     // Exact canonical requirement that launched this attempt. Standalone and
     // lesson-quiz attempts remain null; assigned assessment evidence is never
     // inferred from another attempt against the same assessment type.
     complianceObligationId: uuid('compliance_obligation_id'),
     startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     submittedByTenantUserId: uuid('submitted_by_tenant_user_id'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewedByTenantUserId: uuid('reviewed_by_tenant_user_id'),
     // Triggered training record id (populated when course-linked + passed).
     trainingRecordId: uuid('training_record_id'),
     notes: text('notes'),
@@ -198,6 +211,11 @@ export const trainingAssessments = pgTable(
     submittedByIdx: index('training_assessments_submitted_by_idx').on(
       t.tenantId,
       t.submittedByTenantUserId,
+    ),
+    reviewStatusIdx: index('training_assessments_review_status_idx').on(t.tenantId, t.reviewStatus),
+    reviewedByIdx: index('training_assessments_reviewed_by_idx').on(
+      t.tenantId,
+      t.reviewedByTenantUserId,
     ),
     statusIdx: index('training_assessments_status_idx').on(t.tenantId, t.status),
     completedIdx: index('training_assessments_completed_idx').on(t.tenantId, t.completedAt),
@@ -226,6 +244,11 @@ export const trainingAssessments = pgTable(
       columns: [t.tenantId, t.submittedByTenantUserId],
       foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
     }),
+    reviewedByFk: foreignKey({
+      name: 'training_assessments_tenant_reviewed_by_fk',
+      columns: [t.tenantId, t.reviewedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
@@ -242,6 +265,7 @@ export const trainingAssessmentResults = pgTable(
     // If an admin later edits the question, an in-progress or historical
     // attempt must remain the exact assessment that was originally started.
     promptSnapshot: text('prompt_snapshot').notNull(),
+    helpTextSnapshot: text('help_text_snapshot'),
     correctAnswerSnapshot: text('correct_answer_snapshot'),
     kindSnapshot: trainingAssessmentQuestionKind('kind_snapshot').notNull(),
     optionsSnapshot: jsonb('options_snapshot').$type<{ value: string; label: string }[] | null>(),
@@ -250,6 +274,7 @@ export const trainingAssessmentResults = pgTable(
     correct: boolean('correct'),
     pointsAwarded: integer('points_awarded').default(0).notNull(),
     pointsPossible: integer('points_possible').default(1).notNull(),
+    reviewNotes: text('review_notes'),
     ...timestamps,
   },
   (t) => ({

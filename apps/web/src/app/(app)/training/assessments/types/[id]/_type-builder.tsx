@@ -298,6 +298,7 @@ function SettingsPanel({
   const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, startTransition] = React.useTransition()
+  const [graded, setGraded] = React.useState(type.graded)
   const deleteType = useConfirmedBuilderDelete({
     confirmMessage: tGenerated('m_1d68b9e7ba9139'),
     action: () => deleteAssessmentType(type.id),
@@ -327,18 +328,20 @@ function SettingsPanel({
         <Textarea name="description" rows={3} defaultValue={type.description ?? ''} />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
+        <div className={`space-y-1.5 ${graded ? '' : 'opacity-50'}`}>
           <Label>
             <GeneratedText id="m_0983c76465bdb2" />
           </Label>
           <Input
-            name="passingScore"
+            name={graded ? 'passingScore' : undefined}
             type="number"
             min={0}
             max={100}
             required
             defaultValue={type.passingScore}
+            disabled={!graded}
           />
+          {!graded ? <input type="hidden" name="passingScore" value={type.passingScore} /> : null}
         </div>
         <div className="space-y-1.5">
           <Label>
@@ -376,7 +379,12 @@ function SettingsPanel({
       </div>
       <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="graded" defaultChecked={type.graded} />{' '}
+          <input
+            type="checkbox"
+            name="graded"
+            checked={graded}
+            onChange={(event) => setGraded(event.target.checked)}
+          />{' '}
           <GeneratedText id="m_08773e0a52facb" />
         </label>
         <label className="flex items-center gap-2 text-sm">

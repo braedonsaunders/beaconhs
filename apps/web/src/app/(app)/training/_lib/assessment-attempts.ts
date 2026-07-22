@@ -23,9 +23,9 @@ import {
  * active check so a type hidden from the catalogue keeps working for the
  * lessons still wired to it.
  *
- * Free-text questions are never auto-graded and there is no manual-marking
- * flow, so they are excluded from the scored points denominator — they render
- * as unscored reference answers on the attempt page.
+ * Graded attempts include every question in the points denominator. Free-text
+ * answers move to manual review after submission. Completion-only attempts
+ * persist answers without calculating a score.
  */
 export async function createAssessmentAttempt(
   tx: Database,
@@ -71,10 +71,13 @@ export async function createAssessmentAttempt(
     .from(trainingAssessmentTypeQuestions)
     .where(eq(trainingAssessmentTypeQuestions.typeId, type.id))
     .orderBy(asc(trainingAssessmentTypeQuestions.entityOrder))
+  if (questions.length === 0) {
+    throw new Error('This assessment has no questions and cannot be started.')
+  }
 
-  const pointsPossible = questions
-    .filter((q) => q.kind !== 'text')
-    .reduce((s, q) => s + (q.points ?? 1), 0)
+  const pointsPossible = type.graded
+    ? questions.reduce((sum, question) => sum + (question.points ?? 1), 0)
+    : null
 
   const [attempt] = await tx
     .insert(trainingAssessments)
@@ -83,6 +86,7 @@ export async function createAssessmentAttempt(
       typeId: type.id,
       personId: args.personId,
       courseId: assessmentAttemptRecordCourseId(type.courseId, args.source ?? 'standalone'),
+      graded: type.graded,
       complianceObligationId: args.complianceObligationId ?? null,
       passingScore: type.passingScore,
       pointsPossible,
@@ -124,6 +128,7 @@ export async function createAssessmentAttempt(
         assessmentId: attempt.id,
         questionId: q.id,
         promptSnapshot: q.prompt,
+        helpTextSnapshot: q.helpText,
         correctAnswerSnapshot: q.correctAnswer,
         kindSnapshot: q.kind,
         optionsSnapshot: q.options,

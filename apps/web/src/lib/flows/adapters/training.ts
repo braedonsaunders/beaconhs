@@ -71,6 +71,7 @@ export function createTrainingFlowAdapter(
             correct: trainingAssessmentResults.correct,
             pointsAwarded: trainingAssessmentResults.pointsAwarded,
             pointsPossible: trainingAssessmentResults.pointsPossible,
+            reviewNotes: trainingAssessmentResults.reviewNotes,
           })
           .from(trainingAssessmentResults)
           .where(eq(trainingAssessmentResults.assessmentId, assessmentId))
@@ -79,12 +80,25 @@ export function createTrainingFlowAdapter(
 
       return {
         status: a.status ?? null,
-        status_label: titleize(a.status),
+        status_label:
+          a.status === 'in_progress' && a.reviewStatus === 'pending'
+            ? 'Awaiting review'
+            : !a.graded && a.status === 'submitted'
+              ? 'Completed'
+              : titleize(a.status),
         score: a.score ?? null,
         score_percent: a.score != null ? `${a.score}%` : '',
-        passing_score: a.passingScore != null ? `${a.passingScore}%` : '',
+        passing_score: a.graded && a.passingScore != null ? `${a.passingScore}%` : '',
         passed: a.passed ?? null,
-        pass_fail: a.passed === true ? 'Pass' : a.passed === false ? 'Fail' : 'Not graded',
+        pass_fail: !a.graded
+          ? a.status === 'submitted'
+            ? 'Completed'
+            : 'Not completed'
+          : a.passed === true
+            ? 'Pass'
+            : a.passed === false
+              ? 'Fail'
+              : 'Not graded',
         assessment_name: head.assessmentName ?? '',
         assessment_description: head.assessmentDescription ?? '',
         person_name: personName({
@@ -101,8 +115,15 @@ export function createTrainingFlowAdapter(
           prompt: q.prompt ?? '',
           answer: q.answer ?? '',
           correct_answer: q.correctAnswer ?? '',
-          result: q.correct === true ? 'Correct' : q.correct === false ? 'Incorrect' : 'N/A',
-          points: `${q.pointsAwarded}/${q.pointsPossible}`,
+          result: !a.graded
+            ? 'Recorded'
+            : q.correct === true
+              ? 'Correct'
+              : q.correct === false
+                ? 'Incorrect'
+                : 'Awaiting review',
+          points: a.graded ? `${q.pointsAwarded}/${q.pointsPossible}` : '',
+          review_notes: q.reviewNotes ?? '',
         })),
       }
     },

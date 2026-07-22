@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
+import type { Database } from '@beaconhs/db'
 import {
   complianceObligations,
   complianceStatus,
@@ -24,7 +25,13 @@ import { recordAuditInTransaction } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
 import { createAssessmentAttempt } from '../_lib/assessment-attempts'
 import { addMonthsIso, isoToday } from '../_lib/dates'
-import { gradeAnswer, normalizeSubmittedAnswer, type QuestionKind } from '../_lib/grading'
+import {
+  gradeAnswer,
+  normalizeSubmittedAnswer,
+  parseManualReviewNotes,
+  parseManualReviewPoints,
+  type QuestionKind,
+} from '../_lib/grading'
 
 /**
  * Resolve the signed-in user's People record id, or null when no People row is
@@ -144,15 +151,110 @@ export async function startAssessmentAttempt(formData: FormData) {
   redirect(`/training/assessments/${result.attempt.id}`)
 }
 
+type AssessmentAttempt = typeof trainingAssessments.$inferSelect
+
+async function finalizeAssessmentAttempt(
+  tx: Database,
+  ctx: RequestContext,
+  attempt: AssessmentAttempt,
+  outcome: {
+    score: number | null
+    pointsAwarded: number | null
+    pointsPossible: number | null
+    passed: boolean
+    reviewStatus: 'not_required' | 'completed'
+  },
+) {
+  const completedAt = new Date()
+  let trainingRecordId: string | null = null
+  if (outcome.passed && attempt.courseId) {
+    const [course] = await tx
+      .select()
+      .from(trainingCourses)
+      .where(eq(trainingCourses.id, attempt.courseId))
+      .limit(1)
+    const completedOn = isoToday()
+    const expiresOn = course?.validForMonths
+      ? addMonthsIso(completedOn, course.validForMonths)
+      : null
+    const [record] = await tx
+      .insert(trainingRecords)
+      .values({
+        tenantId: ctx.tenantId,
+        personId: attempt.personId,
+        courseId: attempt.courseId,
+        source: 'self_paced',
+        completedOn,
+        expiresOn,
+        score: outcome.score,
+        grade: outcome.score,
+        instructor: attempt.graded ? 'Assessment' : 'Assessment completion',
+        details: `Auto-recorded from assessment attempt ${attempt.id}`,
+        certificateType: 'auto',
+      })
+      .returning()
+    if (!record) throw new Error('Could not issue the course training record')
+    trainingRecordId = record.id
+  }
+
+  await tx
+    .update(trainingAssessments)
+    .set({
+      status: 'submitted',
+      reviewStatus: outcome.reviewStatus,
+      score: outcome.score,
+      pointsAwarded: outcome.pointsAwarded,
+      pointsPossible: outcome.pointsPossible,
+      passed: outcome.passed,
+      submittedAt: attempt.submittedAt ?? completedAt,
+      submittedByTenantUserId: attempt.submittedByTenantUserId ?? ctx.membership?.id ?? null,
+      reviewedAt: outcome.reviewStatus === 'completed' ? completedAt : null,
+      reviewedByTenantUserId:
+        outcome.reviewStatus === 'completed' ? (ctx.membership?.id ?? null) : null,
+      completedAt,
+      trainingRecordId,
+    })
+    .where(eq(trainingAssessments.id, attempt.id))
+
+  await recordModuleFlowEvent(tx, ctx, {
+    subjectId: attempt.id,
+    moduleKey: 'training',
+    event: 'on_submit',
+    occurrenceKey: attempt.id,
+  })
+
+  const targets: ComplianceEvidenceTarget[] = []
+  if (attempt.complianceObligationId) {
+    targets.push({
+      sourceModule: 'training',
+      targetRef: { assessmentTypeId: attempt.typeId },
+    })
+  }
+  if (trainingRecordId && attempt.courseId) {
+    targets.push({
+      sourceModule: 'training',
+      targetRef: { courseId: attempt.courseId },
+    })
+  }
+  await materializeEvidenceTargetsObligations(tx, ctx.tenantId, targets)
+
+  await recordAuditInTransaction(tx, ctx, {
+    entityType: 'training_assessment',
+    entityId: attempt.id,
+    action: 'sign',
+    summary: attempt.graded
+      ? `${outcome.reviewStatus === 'completed' ? 'Reviewed' : 'Submitted'} assessment ${attempt.id} (${outcome.score}%, ${outcome.passed ? 'pass' : 'fail'})`
+      : `Completed assessment ${attempt.id}`,
+    after: { ...outcome, trainingRecordId },
+  })
+
+  return { ...outcome, trainingRecordId }
+}
+
 /**
- * Submit (or re-grade) an attempt. Reads the user's answers from the form
- * payload — each result row has a field named `answer_<resultId>` — grades
- * each one server-side using the snapshotted correctAnswer, totals the
- * points, computes percentage, flips passed bool against passingScore, and
- * flips status to 'submitted'.
- *
- * If the type is linked to a course AND the attempt passed, a training_records
- * row is created so it lights up the matrix.
+ * Persist a candidate's answers. Auto-gradable attempts finalize immediately;
+ * graded attempts with free-text answers are locked and sent for manual review.
+ * Completion-only attempts record answers without manufacturing a score.
  */
 export async function submitAssessmentAttempt(attemptId: string, formData: FormData) {
   const ctx = await requireRequestContext()
@@ -175,7 +277,9 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
     if (attempt.personId !== myPersonId && !canProctorAssessments(ctx)) {
       throw new Error('That assessment attempt is not yours')
     }
-    if (attempt.status !== 'in_progress') throw new Error('Attempt is no longer editable')
+    if (attempt.status !== 'in_progress' || attempt.reviewStatus === 'pending') {
+      throw new Error('Attempt is no longer editable')
+    }
 
     const results = await tx
       .select()
@@ -184,6 +288,7 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
 
     let pointsAwarded = 0
     let pointsPossible = 0
+    let requiresManualReview = false
     for (const r of results) {
       const kind = r.kindSnapshot as QuestionKind
       const answer = normalizeSubmittedAnswer(
@@ -192,103 +297,137 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
         r.optionsSnapshot,
         r.mandatorySnapshot,
       )
-      const correct = gradeAnswer(kind, r.correctAnswerSnapshot, answer)
-      const awarded = correct === true ? (r.pointsPossible ?? 1) : 0
-      // Free-text questions are never auto-graded and have no manual-marking
-      // flow — leaving them in the denominator would cap the achievable score
-      // below 100% and could make a passing score unreachable. They are
-      // recorded but unscored.
-      if (r.kindSnapshot !== 'text') {
+      const correct = attempt.graded ? gradeAnswer(kind, r.correctAnswerSnapshot, answer) : null
+      const awarded = attempt.graded && correct === true ? (r.pointsPossible ?? 1) : 0
+      if (attempt.graded) {
         pointsAwarded += awarded
         pointsPossible += r.pointsPossible ?? 1
+        if (kind === 'text' && answer !== null) requiresManualReview = true
       }
       await tx
         .update(trainingAssessmentResults)
-        .set({ answer, correct, pointsAwarded: awarded })
+        .set({ answer, correct, pointsAwarded: awarded, reviewNotes: null })
         .where(eq(trainingAssessmentResults.id, r.id))
     }
-    const score = pointsPossible > 0 ? Math.round((pointsAwarded / pointsPossible) * 100) : 0
-    const passed = score >= attempt.passingScore
-
-    let trainingRecordId: string | null = null
-    if (passed && attempt.courseId) {
-      // Look up the linked course to compute expiry from validForMonths.
-      const [course] = await tx
-        .select()
-        .from(trainingCourses)
-        .where(eq(trainingCourses.id, attempt.courseId))
-        .limit(1)
-      const completedOn = isoToday()
-      const expiresOn = course?.validForMonths
-        ? addMonthsIso(completedOn, course.validForMonths)
-        : null
-      const [rec] = await tx
-        .insert(trainingRecords)
-        .values({
-          tenantId,
-          personId: attempt.personId,
-          courseId: attempt.courseId,
-          source: 'self_paced',
-          completedOn,
-          expiresOn,
-          score,
-          grade: score,
-          instructor: 'Assessment',
-          details: `Auto-recorded from assessment attempt ${attempt.id}`,
-          certificateType: 'auto',
+    if (requiresManualReview) {
+      const submittedAt = new Date()
+      await tx
+        .update(trainingAssessments)
+        .set({
+          reviewStatus: 'pending',
+          score: null,
+          pointsAwarded,
+          pointsPossible,
+          passed: null,
+          submittedAt,
+          submittedByTenantUserId: ctx.membership?.id ?? null,
         })
-        .returning()
-      if (!rec) throw new Error('Could not issue the course training record')
-      trainingRecordId = rec.id
+        .where(eq(trainingAssessments.id, attemptId))
+      if (attempt.complianceObligationId) {
+        await materializeEvidenceTargetsObligations(tx, tenantId, [
+          {
+            sourceModule: 'training',
+            targetRef: { assessmentTypeId: attempt.typeId },
+          },
+        ])
+      }
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'training_assessment',
+        entityId: attemptId,
+        action: 'sign',
+        summary: `Submitted assessment ${attemptId} for manual review`,
+        after: { reviewStatus: 'pending', pointsAwarded, pointsPossible },
+      })
+      return { reviewStatus: 'pending' as const }
     }
 
-    await tx
-      .update(trainingAssessments)
-      .set({
-        status: 'submitted',
-        score,
-        pointsAwarded,
-        pointsPossible,
-        passed,
-        completedAt: new Date(),
-        trainingRecordId,
+    if (!attempt.graded) {
+      return finalizeAssessmentAttempt(tx, ctx, attempt, {
+        score: null,
+        pointsAwarded: null,
+        pointsPossible: null,
+        passed: true,
+        reviewStatus: 'not_required',
       })
-      .where(eq(trainingAssessments.id, attemptId))
+    }
 
-    await recordModuleFlowEvent(tx, ctx, {
-      subjectId: attemptId,
-      moduleKey: 'training',
-      event: 'on_submit',
-      occurrenceKey: attemptId,
+    const score = pointsPossible > 0 ? Math.round((pointsAwarded / pointsPossible) * 100) : 0
+    return finalizeAssessmentAttempt(tx, ctx, attempt, {
+      score,
+      pointsAwarded,
+      pointsPossible,
+      passed: score >= attempt.passingScore,
+      reviewStatus: 'not_required',
     })
-
-    const targets: ComplianceEvidenceTarget[] = []
-    if (attempt.complianceObligationId) {
-      targets.push({
-        sourceModule: 'training' as const,
-        targetRef: { assessmentTypeId: attempt.typeId },
-      })
-    }
-    if (trainingRecordId && attempt.courseId) {
-      targets.push({
-        sourceModule: 'training' as const,
-        targetRef: { courseId: attempt.courseId },
-      })
-    }
-    await materializeEvidenceTargetsObligations(tx, tenantId, targets)
-
-    const submission = { score, passed, pointsAwarded, pointsPossible, trainingRecordId }
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'training_assessment',
-      entityId: attemptId,
-      action: 'sign',
-      summary: `Submitted assessment ${attemptId} (${score}%, ${passed ? 'pass' : 'fail'})`,
-      after: submission,
-    })
-    return submission
   })
   revalidatePath(`/training/assessments/${attemptId}`)
   revalidatePath('/training/assessments')
+}
+
+/** Complete a pending free-text review and finalize the graded result. */
+export async function reviewAssessmentAttempt(attemptId: string, formData: FormData) {
+  const ctx = await requireRequestContext()
+  if (!ctx.tenantId) throw new Error('No active tenant')
+  if (!canProctorAssessments(ctx)) throw new Error('You cannot review assessment answers')
+
+  await ctx.db(async (tx) => {
+    const [attempt] = await tx
+      .select()
+      .from(trainingAssessments)
+      .where(eq(trainingAssessments.id, attemptId))
+      .for('update')
+      .limit(1)
+    if (!attempt) throw new Error('Attempt not found')
+    if (attempt.status !== 'in_progress' || attempt.reviewStatus !== 'pending' || !attempt.graded) {
+      throw new Error('This assessment is not awaiting review')
+    }
+
+    const results = await tx
+      .select()
+      .from(trainingAssessmentResults)
+      .where(eq(trainingAssessmentResults.assessmentId, attemptId))
+
+    let pointsAwarded = 0
+    let pointsPossible = 0
+    for (const result of results) {
+      const maximum = result.pointsPossible ?? 1
+      pointsPossible += maximum
+      if (result.kindSnapshot !== 'text') {
+        pointsAwarded += result.pointsAwarded
+        continue
+      }
+
+      const awarded =
+        result.answer === null
+          ? 0
+          : parseManualReviewPoints(formData.get(`points_${result.id}`), maximum)
+      const reviewNotes =
+        result.answer === null
+          ? null
+          : parseManualReviewNotes(formData.get(`reviewNotes_${result.id}`))
+      pointsAwarded += awarded
+      await tx
+        .update(trainingAssessmentResults)
+        .set({
+          pointsAwarded: awarded,
+          correct: awarded === maximum,
+          reviewNotes,
+        })
+        .where(eq(trainingAssessmentResults.id, result.id))
+    }
+
+    const score = pointsPossible > 0 ? Math.round((pointsAwarded / pointsPossible) * 100) : 0
+    return finalizeAssessmentAttempt(tx, ctx, attempt, {
+      score,
+      pointsAwarded,
+      pointsPossible,
+      passed: score >= attempt.passingScore,
+      reviewStatus: 'completed',
+    })
+  })
+  revalidatePath(`/training/assessments/${attemptId}`)
+  revalidatePath('/training/assessments')
+  revalidatePath('/training')
 }
 
 /**

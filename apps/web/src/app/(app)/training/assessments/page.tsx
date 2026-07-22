@@ -4,7 +4,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ClipboardCheck } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, ne, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -61,6 +61,8 @@ function parseCalendarDate(value: string | undefined): string | undefined {
 
 const STATUS_OPTIONS = [
   { value: 'in_progress', label: 'In progress' },
+  { value: 'awaiting_review', label: 'Awaiting review' },
+  { value: 'completed', label: 'Completed' },
   { value: 'pass', label: 'Pass' },
   { value: 'fail', label: 'Fail' },
   { value: 'cancelled', label: 'Cancelled' },
@@ -129,13 +131,22 @@ export default async function AssessmentsPage({
     }
     if (statusFilter === 'in_progress') {
       filters.push(eq(trainingAssessments.status, 'in_progress'))
+      filters.push(ne(trainingAssessments.reviewStatus, 'pending'))
+    } else if (statusFilter === 'awaiting_review') {
+      filters.push(eq(trainingAssessments.status, 'in_progress'))
+      filters.push(eq(trainingAssessments.reviewStatus, 'pending'))
+    } else if (statusFilter === 'completed') {
+      filters.push(eq(trainingAssessments.status, 'submitted'))
+      filters.push(eq(trainingAssessments.graded, false))
     } else if (statusFilter === 'cancelled') {
       filters.push(eq(trainingAssessments.status, 'cancelled'))
     } else if (statusFilter === 'pass') {
       filters.push(eq(trainingAssessments.status, 'submitted'))
+      filters.push(eq(trainingAssessments.graded, true))
       filters.push(eq(trainingAssessments.passed, true))
     } else if (statusFilter === 'fail') {
       filters.push(eq(trainingAssessments.status, 'submitted'))
+      filters.push(eq(trainingAssessments.graded, true))
       filters.push(eq(trainingAssessments.passed, false))
     }
     if (personFilter && isUuid(personFilter))
@@ -208,26 +219,39 @@ export default async function AssessmentsPage({
     const counts = await tx
       .select({
         status: trainingAssessments.status,
+        reviewStatus: trainingAssessments.reviewStatus,
+        graded: trainingAssessments.graded,
         passed: trainingAssessments.passed,
         c: count(),
       })
       .from(trainingAssessments)
       .where(and(isNull(trainingAssessments.deletedAt), vis))
-      .groupBy(trainingAssessments.status, trainingAssessments.passed)
+      .groupBy(
+        trainingAssessments.status,
+        trainingAssessments.reviewStatus,
+        trainingAssessments.graded,
+        trainingAssessments.passed,
+      )
 
     const sc: Record<string, number> = {
       all: 0,
       in_progress: 0,
+      awaiting_review: 0,
+      completed: 0,
       pass: 0,
       fail: 0,
       cancelled: 0,
     }
     for (const c of counts) {
       sc.all = (sc.all ?? 0) + Number(c.c)
-      if (c.status === 'in_progress') sc.in_progress = (sc.in_progress ?? 0) + Number(c.c)
-      else if (c.status === 'cancelled') sc.cancelled = (sc.cancelled ?? 0) + Number(c.c)
+      if (c.status === 'in_progress' && c.reviewStatus === 'pending') {
+        sc.awaiting_review = (sc.awaiting_review ?? 0) + Number(c.c)
+      } else if (c.status === 'in_progress') {
+        sc.in_progress = (sc.in_progress ?? 0) + Number(c.c)
+      } else if (c.status === 'cancelled') sc.cancelled = (sc.cancelled ?? 0) + Number(c.c)
       else if (c.status === 'submitted') {
-        if (c.passed) sc.pass = (sc.pass ?? 0) + Number(c.c)
+        if (!c.graded) sc.completed = (sc.completed ?? 0) + Number(c.c)
+        else if (c.passed) sc.pass = (sc.pass ?? 0) + Number(c.c)
         else sc.fail = (sc.fail ?? 0) + Number(c.c)
       }
     }
@@ -249,6 +273,7 @@ export default async function AssessmentsPage({
                 name: trainingAssessmentTypes.name,
                 description: trainingAssessmentTypes.description,
                 passingScore: trainingAssessmentTypes.passingScore,
+                graded: trainingAssessmentTypes.graded,
               })
               .from(trainingAssessmentTypes)
               .where(
@@ -463,11 +488,12 @@ export default async function AssessmentsPage({
                 <TableBody>
                   <GeneratedValue
                     value={rows.map(({ attempt, type, person, course }) => {
-                      const when = attempt.completedAt ?? attempt.startedAt
+                      const endedAt = attempt.completedAt ?? attempt.submittedAt
+                      const when = endedAt ?? attempt.startedAt
                       const duration =
-                        attempt.completedAt && attempt.startedAt
+                        endedAt && attempt.startedAt
                           ? Math.round(
-                              (new Date(attempt.completedAt).getTime() -
+                              (new Date(endedAt).getTime() -
                                 new Date(attempt.startedAt).getTime()) /
                                 60_000,
                             )
@@ -557,7 +583,7 @@ export default async function AssessmentsPage({
                           <TableCell className="tabular-nums">
                             <GeneratedValue
                               value={
-                                attempt.score != null ? (
+                                attempt.graded && attempt.score != null ? (
                                   <span
                                     className={
                                       attempt.status === 'submitted'
@@ -576,18 +602,37 @@ export default async function AssessmentsPage({
                             />
                           </TableCell>
                           <TableCell className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
-                            ≥ <GeneratedValue value={attempt.passingScore} />%
+                            <GeneratedValue
+                              value={
+                                attempt.graded ? (
+                                  <>
+                                    ≥ <GeneratedValue value={attempt.passingScore} />%
+                                  </>
+                                ) : (
+                                  '—'
+                                )
+                              }
+                            />
                           </TableCell>
                           <TableCell>
                             <GeneratedValue
                               value={
-                                attempt.status === 'in_progress' ? (
+                                attempt.status === 'in_progress' &&
+                                attempt.reviewStatus === 'pending' ? (
+                                  <Badge variant="warning">
+                                    <GeneratedValue value="Awaiting review" />
+                                  </Badge>
+                                ) : attempt.status === 'in_progress' ? (
                                   <Badge variant="secondary">
                                     <GeneratedText id="m_1a03b06872ffd9" />
                                   </Badge>
                                 ) : attempt.status === 'cancelled' ? (
                                   <Badge variant="outline">
                                     <GeneratedText id="m_1a7e1cf2be443e" />
+                                  </Badge>
+                                ) : !attempt.graded ? (
+                                  <Badge variant="success">
+                                    <GeneratedValue value="Completed" />
                                   </Badge>
                                 ) : attempt.passed ? (
                                   <Badge variant="success">

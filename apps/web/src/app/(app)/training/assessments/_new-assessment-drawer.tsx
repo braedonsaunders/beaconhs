@@ -7,7 +7,13 @@ import { PersonSelectField } from '@/components/person-select-field'
 import { toast } from '@/lib/toast'
 import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 
-type AssessmentType = { id: string; name: string; description: string | null; passingScore: number }
+type AssessmentType = {
+  id: string
+  name: string
+  description: string | null
+  passingScore: number
+  graded: boolean
+}
 type PersonOption = { value: string; label: string; hint?: string }
 
 export function NewTrainingAssessmentDrawer({
@@ -123,7 +129,17 @@ export function NewTrainingAssessmentDrawer({
                       </span>
                     ) : null}
                     <span className="mt-1.5 inline-flex rounded bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-600 ring-1 ring-slate-500/10 dark:bg-slate-800 dark:text-slate-400">
-                      <GeneratedValue value="Pass mark" /> {type.passingScore}%
+                      <GeneratedValue
+                        value={
+                          type.graded ? (
+                            <>
+                              <GeneratedValue value="Pass mark" /> {type.passingScore}%
+                            </>
+                          ) : (
+                            'Completion only'
+                          )
+                        }
+                      />
                     </span>
                   </span>
                   <span className="self-center text-xs font-medium text-teal-700 opacity-0 group-hover:opacity-100 dark:text-teal-400">

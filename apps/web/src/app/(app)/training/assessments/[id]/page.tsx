@@ -32,7 +32,11 @@ import { canSeeRecord } from '@/lib/visibility'
 import { PageContainer } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
 import { isUuid } from '@/lib/list-params'
-import { cancelAssessmentAttempt, submitAssessmentAttempt } from '../../_actions/assessments'
+import {
+  cancelAssessmentAttempt,
+  reviewAssessmentAttempt,
+  submitAssessmentAttempt,
+} from '../../_actions/assessments'
 
 export const dynamic = 'force-dynamic'
 
@@ -97,11 +101,14 @@ export default async function AssessmentAttemptDetailPage({
   const { attempt, type, person, course, results, isMine } = data
 
   const isInProgress = attempt.status === 'in_progress'
+  const isAwaitingReview = isInProgress && attempt.reviewStatus === 'pending'
+  const isAnswering = isInProgress && !isAwaitingReview
   // Only the candidate (or a proctor) may record answers / submit / cancel —
   // mirrors the ownership checks in the server actions, so a read.all viewer
   // gets a read-only sheet instead of controls that would be rejected on POST.
-  const canAct = isInProgress && (isMine || isProctor)
+  const canAct = isAnswering && (isMine || isProctor)
   const submitAction = submitAssessmentAttempt.bind(null, attempt.id)
+  const reviewAction = reviewAssessmentAttempt.bind(null, attempt.id)
   const cancelAction = cancelAssessmentAttempt.bind(null, attempt.id)
 
   return (
@@ -114,13 +121,21 @@ export default async function AssessmentAttemptDetailPage({
             person ? `${person.firstName} ${person.lastName}` : tGenerated('m_03029599bbfa85'),
           )}
           badge={
-            attempt.status === 'in_progress' ? (
+            isAwaitingReview ? (
+              <Badge variant="warning">
+                <GeneratedValue value="Awaiting review" />
+              </Badge>
+            ) : attempt.status === 'in_progress' ? (
               <Badge variant="secondary">
                 <GeneratedText id="m_1a03b06872ffd9" />
               </Badge>
             ) : attempt.status === 'cancelled' ? (
               <Badge variant="outline">
                 <GeneratedText id="m_1a7e1cf2be443e" />
+              </Badge>
+            ) : !attempt.graded ? (
+              <Badge variant="success">
+                <GeneratedValue value="Completed" />
               </Badge>
             ) : attempt.passed ? (
               <Badge variant="success">
@@ -148,18 +163,22 @@ export default async function AssessmentAttemptDetailPage({
             { label: 'Person', value: person ? `${person.firstName} ${person.lastName}` : '—' },
             { label: 'Type', value: type?.name ?? '—' },
             { label: 'Course', value: course?.name ?? '—' },
-            { label: 'Passing score', value: `${attempt.passingScore}%` },
-            {
-              label: 'Score',
-              value: attempt.score != null ? `${attempt.score}%` : '—',
-            },
-            {
-              label: 'Points',
-              value:
-                attempt.pointsAwarded != null && attempt.pointsPossible != null
-                  ? `${attempt.pointsAwarded} / ${attempt.pointsPossible}`
-                  : '—',
-            },
+            ...(attempt.graded
+              ? [
+                  { label: 'Passing score', value: `${attempt.passingScore}%` },
+                  {
+                    label: 'Score',
+                    value: attempt.score != null ? `${attempt.score}%` : '—',
+                  },
+                  {
+                    label: 'Points',
+                    value:
+                      attempt.pointsAwarded != null && attempt.pointsPossible != null
+                        ? `${attempt.pointsAwarded} / ${attempt.pointsPossible}`
+                        : '—',
+                  },
+                ]
+              : [{ label: 'Assessment mode', value: 'Completion only' }]),
             {
               label: 'Started',
               value: attempt.startedAt
@@ -177,7 +196,7 @@ export default async function AssessmentAttemptDetailPage({
 
         <GeneratedValue
           value={
-            type?.preAssessmentMessage && isInProgress ? (
+            type?.preAssessmentMessage && isAnswering ? (
               <Card>
                 <CardHeader>
                   <CardTitle>
@@ -196,7 +215,7 @@ export default async function AssessmentAttemptDetailPage({
 
         <GeneratedValue
           value={
-            type?.postAssessmentMessage && !isInProgress ? (
+            type?.postAssessmentMessage && attempt.status === 'submitted' ? (
               <Card>
                 <CardHeader>
                   <CardTitle>
@@ -249,11 +268,30 @@ export default async function AssessmentAttemptDetailPage({
                                   <p className="mt-1 text-sm font-medium text-slate-900 dark:text-slate-100">
                                     <GeneratedValue value={r.promptSnapshot} />
                                   </p>
+                                  <GeneratedValue
+                                    value={
+                                      r.helpTextSnapshot ? (
+                                        <p className="mt-1 text-xs whitespace-pre-wrap text-slate-500 dark:text-slate-400">
+                                          <GeneratedValue value={r.helpTextSnapshot} />
+                                        </p>
+                                      ) : null
+                                    }
+                                  />
                                 </div>
                                 <GeneratedValue
                                   value={
-                                    !isInProgress ? (
-                                      r.correct === true ? (
+                                    attempt.status === 'submitted' ? (
+                                      !attempt.graded ? (
+                                        <Badge variant="outline">
+                                          <GeneratedValue value="Recorded" />
+                                        </Badge>
+                                      ) : r.kindSnapshot === 'text' ? (
+                                        <Badge variant="secondary">
+                                          <GeneratedValue value={r.pointsAwarded} /> /{' '}
+                                          <GeneratedValue value={r.pointsPossible} />{' '}
+                                          <GeneratedValue value="points" />
+                                        </Badge>
+                                      ) : r.correct === true ? (
                                         <Badge variant="success">
                                           <Check size={12} />{' '}
                                           <GeneratedText id="m_0b8e912869ae1c" />
@@ -267,6 +305,10 @@ export default async function AssessmentAttemptDetailPage({
                                           <GeneratedText id="m_1b859977f25898" />
                                         </Badge>
                                       )
+                                    ) : isAwaitingReview ? (
+                                      <Badge variant="warning">
+                                        <GeneratedValue value="Awaiting review" />
+                                      </Badge>
                                     ) : null
                                   }
                                 />
@@ -286,7 +328,11 @@ export default async function AssessmentAttemptDetailPage({
                             attempt harvest every correct answer. */}
                               <GeneratedValue
                                 value={
-                                  !isInProgress && isProctor && r.correctAnswerSnapshot ? (
+                                  attempt.status === 'submitted' &&
+                                  attempt.graded &&
+                                  r.kindSnapshot !== 'text' &&
+                                  isProctor &&
+                                  r.correctAnswerSnapshot ? (
                                     <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                                       <GeneratedText id="m_08f8d29ea3c01e" />
                                       <GeneratedValue value={' '} />
@@ -299,6 +345,20 @@ export default async function AssessmentAttemptDetailPage({
                                         />
                                       </span>
                                     </p>
+                                  ) : null
+                                }
+                              />
+                              <GeneratedValue
+                                value={
+                                  r.reviewNotes ? (
+                                    <div className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/60">
+                                      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                        <GeneratedValue value="Reviewer notes" />
+                                      </div>
+                                      <p className="mt-1 whitespace-pre-wrap text-slate-700 dark:text-slate-200">
+                                        <GeneratedValue value={r.reviewNotes} />
+                                      </p>
+                                    </div>
                                   ) : null
                                 }
                               />
@@ -320,8 +380,16 @@ export default async function AssessmentAttemptDetailPage({
                               <GeneratedText id="m_1a7698c35ef272" />
                             </button>
                             <Button type="submit">
-                              <GeneratedText id="m_1e73dbf5825a68" />
+                              <GeneratedValue
+                                value={
+                                  attempt.graded ? 'Submit for grading' : 'Complete assessment'
+                                }
+                              />
                             </Button>
+                          </div>
+                        ) : isAwaitingReview ? (
+                          <div className="text-xs text-amber-700 dark:text-amber-300">
+                            <GeneratedValue value="Answers are locked and awaiting review by training staff." />
                           </div>
                         ) : isInProgress ? (
                           <div className="text-xs text-slate-500 dark:text-slate-400">
@@ -353,6 +421,79 @@ export default async function AssessmentAttemptDetailPage({
             />
           </CardContent>
         </Card>
+
+        <GeneratedValue
+          value={
+            isAwaitingReview && isProctor ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    <GeneratedValue value="Manual review" />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form action={reviewAction} className="space-y-5">
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                      <GeneratedValue value="Award whole-number points for each submitted free-text answer. The final score and pass or fail result are calculated when you complete the review." />
+                    </p>
+                    <GeneratedValue
+                      value={results
+                        .filter(
+                          (result) => result.kindSnapshot === 'text' && result.answer !== null,
+                        )
+                        .map((result) => (
+                          <div
+                            key={result.id}
+                            className="space-y-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                <GeneratedValue value={result.promptSnapshot} />
+                              </p>
+                              <p className="mt-2 rounded-md bg-slate-50 p-3 text-sm whitespace-pre-wrap text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                                <GeneratedValue value={result.answer} />
+                              </p>
+                            </div>
+                            <label className="block space-y-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+                              <span>
+                                <GeneratedValue value="Points awarded" /> ({'0–'}
+                                <GeneratedValue value={result.pointsPossible} />)
+                              </span>
+                              <Input
+                                name={`points_${result.id}`}
+                                type="number"
+                                min={0}
+                                max={result.pointsPossible}
+                                step={1}
+                                defaultValue={result.pointsAwarded}
+                                required
+                              />
+                            </label>
+                            <label className="block space-y-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+                              <span>
+                                <GeneratedValue value="Review notes (optional)" />
+                              </span>
+                              <Textarea
+                                name={`reviewNotes_${result.id}`}
+                                rows={3}
+                                maxLength={2000}
+                                defaultValue={result.reviewNotes ?? ''}
+                              />
+                            </label>
+                          </div>
+                        ))}
+                    />
+                    <div className="flex justify-end">
+                      <Button type="submit">
+                        <GeneratedValue value="Complete review" />
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            ) : null
+          }
+        />
       </div>
     </PageContainer>
   )

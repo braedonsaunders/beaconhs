@@ -101,11 +101,13 @@ To start one, click **New assessment**. In the flyout, choose the person, then c
 
 ## Answer an assessment
 
-1. Read each question.
+1. Read each question and any help text below it.
 2. For a single-choice question, select one answer.
 3. For a multiple-choice question, select every answer that applies.
-4. Answer every required question, then choose **Submit for grading**.
-5. Review the score and result shown after submission.
+4. For a free-text question, type your answer in the box.
+5. Answer every required question, then choose **Submit for grading**. A completion-only assessment instead shows **Complete assessment**.
+6. A graded assessment with a free-text answer shows **Awaiting review**. Your answers are locked while training staff award the points. Other graded assessments show the score and pass or fail result immediately.
+7. A completion-only assessment shows **Completed**. It records your answers without inventing a score or pass mark.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
@@ -158,7 +160,19 @@ Only **Self-paced** courses completed inside BeaconHS issue automatically. Their
 4. For **Single choice** or **Multi choice**, enter each choice in its own row. Choose **Add choice** when you need another row, then use the circle or boxes to mark the correct answer or answers.
 5. Drag questions by their grip to reorder them. The arrow buttons are the keyboard-friendly alternative.
 6. Use **Settings** for the name, pass mark, linked course, learner messages, grading, and active state.
-7. Use **Activity** to review changes to the assessment type.`,
+   - Turn on **Graded** to calculate points, a score, and pass or fail. The pass mark applies only in this mode.
+   - Turn off **Graded** to make the assessment completion-only. Answers are recorded, and completing it can still issue the linked course record.
+7. Use **Activity** to review changes to the assessment type.
+
+An assessment needs at least one question before anyone can start it.
+
+## Review free-text assessment answers
+
+1. Open **Training → Assessments**.
+2. Choose the **Awaiting review** status filter.
+3. Open an assessment. The learner's answers are locked and cannot be changed.
+4. Under **Manual review**, enter whole-number **Points awarded** for every submitted free-text answer. Add **Review notes** when the learner needs feedback.
+5. Choose **Complete review**. BeaconHS calculates the final score and pass or fail result, issues any earned linked-course record, and refreshes compliance.`,
   },
   {
     slug: 'training-courses',

@@ -10,6 +10,7 @@ const languageSection = readFileSync(
   new URL('0006_tenant_language_policy.sql', drizzleFolder),
   'utf8',
 )
+const assessmentReviewSql = readFileSync(new URL('0017_wakeful_jackal.sql', drizzleFolder), 'utf8')
 
 function position(fragment: string): number {
   const value = finalSection.indexOf(fragment)
@@ -40,6 +41,7 @@ describe('production cutover migration integrity', () => {
       '0014_military_major_mapleleaf.sql',
       '0015_deep_scalphunter.sql',
       '0016_smiling_thunderbolts.sql',
+      '0017_wakeful_jackal.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -63,12 +65,13 @@ describe('production cutover migration integrity', () => {
       { idx: 14, tag: '0014_military_major_mapleleaf' },
       { idx: 15, tag: '0015_deep_scalphunter' },
       { idx: 16, tag: '0016_smiling_thunderbolts' },
+      { idx: 17, tag: '0017_wakeful_jackal' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)
     }
 
-    const snapshots = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].map(
+    const snapshots = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17].map(
       (index) =>
         JSON.parse(
           readFileSync(
@@ -82,6 +85,14 @@ describe('production cutover migration integrity', () => {
       expect(snapshots[index]!.id).not.toBe(snapshots[index]!.prevId)
     }
     expect([...cutoverSql.matchAll(/^-- Squashed source:/gm)]).toHaveLength(30)
+  })
+
+  it('normalizes completion-only assessment history during the review cutover', () => {
+    expect(assessmentReviewSql).toContain('AND assessment."graded" = false')
+    expect(assessmentReviewSql).toContain("'Assessment completion'")
+    expect(assessmentReviewSql).toContain('SET "training_record_id" = record."id"')
+    expect(assessmentReviewSql).toContain('SET "score" = NULL')
+    expect(assessmentReviewSql).toContain('"passed" = true')
   })
 
   it('preflights and backfills training owners before removing legacy columns', () => {

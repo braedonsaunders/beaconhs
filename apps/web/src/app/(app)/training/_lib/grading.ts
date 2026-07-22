@@ -1,8 +1,7 @@
 // Server-side grading for assessment attempts.
 // Pure function: given a question (kind + correctAnswer) and the user's answer,
-// decide correct/incorrect/null. `text` questions never auto-grade — they are
-// unscored: submitAssessmentAttempt excludes them from the points denominator
-// and they render as recorded reference answers on the attempt page.
+// decide correct/incorrect/null. `text` questions never auto-grade; graded
+// attempts send those answers to a training staff member for manual points.
 //
 // Multi-choice canonicalisation: both `correctAnswer` and `answer` are
 // comma-separated value lists. We sort + lowercase both before comparing so
@@ -98,4 +97,20 @@ export function gradeAnswer(
     return norm(ua) === norm(ca)
   }
   return null
+}
+
+export function parseManualReviewPoints(rawValue: FormDataEntryValue | null, maximum: number) {
+  const value = String(rawValue ?? '').trim()
+  if (!/^\d+$/.test(value)) throw new Error('Enter whole-number points for every answer')
+  const points = Number(value)
+  if (points < 0 || points > maximum) {
+    throw new Error(`Points must be between 0 and ${maximum}`)
+  }
+  return points
+}
+
+export function parseManualReviewNotes(rawValue: FormDataEntryValue | null) {
+  const notes = String(rawValue ?? '').trim()
+  if (notes.length > 2_000) throw new Error('Review notes must be 2,000 characters or fewer')
+  return notes || null
 }
