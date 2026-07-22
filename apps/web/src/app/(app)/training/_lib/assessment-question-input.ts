@@ -7,7 +7,7 @@ export const ASSESSMENT_QUESTION_KINDS = [
 ] as const
 
 export type AssessmentQuestionKind = (typeof ASSESSMENT_QUESTION_KINDS)[number]
-export type AssessmentChoiceOption = { value: string; label: string }
+type AssessmentChoiceOption = { value: string; label: string }
 
 const MAX_CHOICE_OPTIONS = 50
 const MAX_CHOICE_LABEL_LENGTH = 500
