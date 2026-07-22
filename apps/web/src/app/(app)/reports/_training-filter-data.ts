@@ -9,6 +9,7 @@ export type TrainingFilterSelections = {
   departments: PickerOption[]
   groups: PickerOption[]
   courses: PickerOption[]
+  courseTypes: PickerOption[]
 }
 
 export async function loadTrainingFilterSelections(
@@ -72,6 +73,7 @@ export async function loadTrainingFilterSelections(
         value: row.id,
         label: `${row.code ? `${row.code} · ` : ''}${row.name}`,
       })),
+      courseTypes: filters.courseTypes.map((value) => ({ value, label: value })),
     }
   })
 }

@@ -36,6 +36,10 @@ describe('reporting view cutover', () => {
     expect(training).toContain('AS group_ids')
     expect(training).toContain('FROM compliance_status cs')
     expect(training).toContain('AS is_required')
+    expect(training).toContain('c.course_type                     AS course_type')
+    expect(training?.indexOf('AS course_type')).toBeGreaterThan(
+      training?.indexOf('AS is_required') ?? -1,
+    )
   })
 
   it('retires the installed legacy fleet view before dropping its source column', () => {

@@ -96,7 +96,6 @@ const SEEDS: Record<string, ReportCustomQuery> = {
     columns: ['person_name', 'course_name', 'completed_on', 'expires_on', 'coverage_status'],
     sort: { column: 'expires_on', direction: 'asc' },
   },
-  training_certificate_matrix: TRAINING_MATRIX_SEED,
   training_certificates: TRAINING_MATRIX_SEED,
   training_expired_upcoming: TRAINING_MATRIX_SEED,
   training_missing: TRAINING_MATRIX_SEED,

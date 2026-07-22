@@ -215,9 +215,8 @@ async function main() {
         },
         // ----- Legacy BeaconHS report parity --------------------------------
         // Faithful ports of the legacy Laravel app's on-demand + scheduled
-        // reports. Training credentials use dedicated runtime-filtered runners;
-        // the remaining single-source reports use curated custom-query entities
-        // (skill_assignments / equipment / ppe / corrective_actions).
+        // reports. Reports with legacy runtime selectors use dedicated,
+        // validated runners; operational equipment reports use curated views.
         {
           slug: 'compliance_by_entity',
           kind: 'built_in',
@@ -246,20 +245,11 @@ async function main() {
           queryKind: 'hazid_signatures',
         },
         {
-          slug: 'training_certificate_matrix',
-          kind: 'built_in',
-          name: 'Training — Certificate Matrix',
-          description:
-            'Every active person and selected course with the latest certificate status. Filter by employee, group, department, course, and delivery type; group by employee or course.',
-          category: 'training',
-          queryKind: 'training_certificate_matrix',
-        },
-        {
           slug: 'training_certificates',
           kind: 'built_in',
           name: 'Training — Certificates',
           description:
-            'Held training certificates. Filter by employee, group, department, course, and delivery type; include or exclude expired records and group by employee or course.',
+            'Held training certificates. Filter by employee, group, department, course, course type, and delivery type; include or exclude expired records and group by employee or course.',
           category: 'training',
           queryKind: 'training_certificates',
         },
@@ -288,25 +278,7 @@ async function main() {
           description:
             'Externally-issued skills & certifications per person — authority, certificate, granted/expiry, and current status — grouped by issuing authority. Mirrors the legacy Training Skills Matrix.',
           category: 'training',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'skill_assignments',
-            mode: 'rows',
-            columns: [
-              'last_name',
-              'first_name',
-              'employee_no',
-              'trade',
-              'authority',
-              'certification_name',
-              'granted_on',
-              'expires_on',
-              'status',
-            ],
-            groupBy: 'authority',
-            sort: { column: 'last_name', direction: 'asc' },
-            limit: 5000,
-          },
+          queryKind: 'skills_matrix',
         },
         {
           slug: 'skills_expired_upcoming',
@@ -315,27 +287,7 @@ async function main() {
           description:
             'Skills & certifications expiring within 90 days or already expired, grouped by certification. Mirrors the legacy Training Skills Expired & Upcoming report.',
           category: 'training',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'skill_assignments',
-            mode: 'rows',
-            columns: [
-              'last_name',
-              'first_name',
-              'employee_no',
-              'authority',
-              'certification_name',
-              'expires_on',
-              'status',
-            ],
-            filters: {
-              combinator: 'and',
-              rules: [{ field: 'expires_on', op: 'due_within_days', value: 90 }],
-            },
-            groupBy: 'certification_name',
-            sort: { column: 'expires_on', direction: 'asc' },
-            limit: 5000,
-          },
+          queryKind: 'skills_expired_upcoming',
         },
         {
           slug: 'skills_missing',
@@ -353,33 +305,7 @@ async function main() {
           description:
             'Canadian Welding Bureau qualifications roster — qualified people with certificate, granted/expiry, and status. Mirrors the legacy CWB report (the W47 Type/Process/Position/Level fields live on each skill record).',
           category: 'training',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'skill_assignments',
-            mode: 'rows',
-            columns: [
-              'last_name',
-              'first_name',
-              'employee_no',
-              'trade',
-              'certification_code',
-              'certification_name',
-              'cwb_standard',
-              'cwb_type',
-              'cwb_process',
-              'cwb_position',
-              'cwb_level',
-              'granted_on',
-              'expires_on',
-              'status',
-            ],
-            filters: {
-              combinator: 'and',
-              rules: [{ field: 'authority', op: 'eq', value: 'Canadian Welding Bureau' }],
-            },
-            sort: { column: 'last_name', direction: 'asc' },
-            limit: 5000,
-          },
+          queryKind: 'skills_cwb',
         },
         {
           slug: 'corrective_actions_list',
@@ -388,23 +314,7 @@ async function main() {
           description:
             'Every corrective action across all statuses, grouped by status and sorted by due date. Mirrors the legacy Corrective Actions List report.',
           category: 'corrective_actions',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'corrective_actions',
-            mode: 'rows',
-            columns: [
-              'reference',
-              'title',
-              'severity',
-              'status',
-              'source',
-              'assigned_on',
-              'due_on',
-            ],
-            groupBy: 'status',
-            sort: { column: 'due_on', direction: 'desc' },
-            limit: 5000,
-          },
+          queryKind: 'corrective_actions_list',
         },
         {
           slug: 'ppe_list',
@@ -413,25 +323,7 @@ async function main() {
           description:
             'All active PPE items (issued or in stock) with serial, size, status, and inspection dates. Mirrors the legacy PPE List report.',
           category: 'ppe',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'ppe_items',
-            mode: 'rows',
-            columns: [
-              'serial_number',
-              'size',
-              'status',
-              'next_inspection_due',
-              'next_annual_inspection_due',
-              'expires_on',
-            ],
-            filters: {
-              combinator: 'and',
-              rules: [{ field: 'status', op: 'in', value: ['issued', 'in_stock'] }],
-            },
-            sort: { column: 'serial_number', direction: 'asc' },
-            limit: 5000,
-          },
+          queryKind: 'ppe_list',
         },
         {
           slug: 'ppe_expired_upcoming',
@@ -440,21 +332,7 @@ async function main() {
           description:
             'Active PPE whose annual inspection is overdue or due within 90 days, soonest first. Mirrors the legacy PPE Expired & Upcoming report.',
           category: 'ppe',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'ppe_items',
-            mode: 'rows',
-            columns: ['serial_number', 'size', 'status', 'next_annual_inspection_due'],
-            filters: {
-              combinator: 'and',
-              rules: [
-                { field: 'status', op: 'in', value: ['issued', 'in_stock'] },
-                { field: 'next_annual_inspection_due', op: 'due_within_days', value: 90 },
-              ],
-            },
-            sort: { column: 'next_annual_inspection_due', direction: 'asc' },
-            limit: 5000,
-          },
+          queryKind: 'ppe_expired_upcoming',
         },
         {
           slug: 'ppe_expiring',

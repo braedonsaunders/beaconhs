@@ -221,13 +221,15 @@ Open [Reports](/reports) from the sidebar. It has two tabs: **Reports** and **Sc
 2. Use **Search reports…** or the **Kind** and **Category** filters to narrow the list.
 3. Click a report. The right side shows the printed pages, exactly as the PDF will look.
 4. Click **Open** to see the full document. Use the day-range buttons (like **30 days**) to change how far back the report looks.
-5. On a training certificate, expired, missing, or matrix report, open **Report filters**. Choose any employees, people groups, departments, courses, or delivery types. Choose **Group by** → **Course** or **Employee**, then click **Apply**. Leaving a choice empty includes all records.
+5. On a training certificate, expired, or missing report, open **Report filters**. Choose any employees, people groups, departments, courses, course types, or delivery types. Choose **Group by** → **Course** or **Employee**, then click **Apply**. Leaving a choice empty includes all records.
 
 The **Training — Expired & Upcoming** report also lets you choose an expiry window from 30 to 365 days. **Training — Certificates** can include or exclude expired certificates. **Training — Missing** only shows courses assigned to each employee through compliance requirements; it does not treat every course in the catalogue as required.
 
+The legacy-parity reports have filters that match their subject. Skills reports filter by employee, group, department, skill, and issuing authority. The CWB report also filters by standard. Corrective actions filter by owner, department, group, location, and status. PPE reports filter by holder, department, group, and PPE type. Compliance and Hazard ID reports filter by employee, group, department, status, and date; compliance reports can also filter requirements and source modules.
+
 On a phone, the list fills the screen; picking a report opens its preview, and **All reports** takes you back.
 
-The built-in catalogue includes the former BeaconHS reports for training certificates, missing and expired training, skill matrices, missing and expired skills, CWB qualifications, corrective actions, journals, inspections, equipment, vehicle logs, and PPE. Use **Compliance — By Entity** for one or more requirements, **Compliance — By Person** for a worker's requirements across modules, and **Hazard ID — Signatures** for hazard-assessment signature compliance.
+The built-in catalogue includes the former BeaconHS reports for training certificates, missing and expired training, skill matrices, missing and expired skills, CWB qualifications, corrective actions, journals, inspections, operational equipment, vehicle logs, and PPE. Use **Compliance — By Entity** for one or more requirements, **Compliance — By Person** for a worker's requirements across modules, and **Hazard ID — Signatures** for hazard-assessment signature compliance. The old training certificate matrix is now the live **Training — Certificate Matrix** card in Insights, so it is not duplicated in Reports. Equipment charges and ROI are intentionally excluded because equipment financials are outside BeaconHS.
 
 ## Export a report
 
@@ -245,7 +247,7 @@ Schedules send a report as a PDF email on a repeating schedule, so nobody has to
 2. Pick the report and give the schedule a name.
 3. Under **Delivery**, set the **Cadence** (**Daily**, **Weekly**, or **Monthly**), **Repeat every**, the day, and the time. Monthly schedules can use a calendar date or a weekday pattern such as the first Monday.
 4. Add an optional **Start date** or **End date** when the delivery must run only for a fixed period.
-5. For a training report, set **Training report filters**. A schedule created from an already-filtered report carries those choices in automatically.
+5. For any report with **Report filters**, choose the records and grouping the schedule should use. A schedule created from an already-filtered report carries those choices in automatically.
 6. Under **Recipients**, add team members, or type outside email addresses under **Additional email addresses**.
 7. Under **Email copy**, enter an optional subject or message. Leave them blank to use the standard report email.
 8. Click **Create schedule**.
@@ -313,14 +315,16 @@ You can also build a card by hand using the same side panel, without asking AI. 
 
 For a custom grouping or measure, open **ƒ Fields & functions**. If the data source has many columns, type a field or related-table name in **Search fields or related tables…**. The search covers the complete available schema; no field is dropped after the first page of columns.
 
-## Build a training matrix
+## Open the training certificate matrix
 
-1. Open the [Library](/insights/library) and click **New card**.
-2. Choose **Matrix**.
-3. Use people for the rows, courses for the columns, and training records for the latest status.
-4. Click **Save card**.
+The live **Training — Certificate Matrix** is the one canonical training matrix. It replaces the old flat report.
 
-A person who has no record for a course has a blank cell. The matrix does not add an empty **None** course column.
+1. Open the [Library](/insights/library).
+2. Search for **Training — Certificate Matrix** and open it.
+3. Employees are the rows, courses are the columns, and each cell shows the latest certificate status.
+4. To put it on a dashboard, open that dashboard, click **Customise**, then **Add content** and choose the matrix card.
+
+A person who has no record for a course has a blank cell. The matrix does not add an empty **None** course column. Use **Download CSV** or **PDF** on the card when you need a snapshot.
 
 ## Save a card as PDF
 

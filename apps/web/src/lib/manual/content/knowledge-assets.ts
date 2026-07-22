@@ -201,7 +201,9 @@ An assessment needs at least one question before anyone can start it.
 
 1. Open **Training** in the left menu, then **Courses**.
 2. Tap **New course**. A draft opens immediately — there is no form to fill in first.
-3. On the **Overview** tab, set the **Name**, **Code**, and **Delivery type**, then tap **Save settings**.
+3. On the **Overview** tab, set the **Name**, **Code**, **Course type**, and **Delivery type**, then tap **Save settings**.
+
+**Course type** is your reporting category, such as Orientation or Safety. **Delivery type** controls how people take and complete the course. Reports can filter on either field.
 
 ## Pick the delivery type
 

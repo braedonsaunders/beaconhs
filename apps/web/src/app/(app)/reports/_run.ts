@@ -54,6 +54,7 @@ export async function runReportForViewer(
     const result = await ctx.db(async (tx) =>
       runReport(tx, {
         queryKind: definition.queryKind,
+        definitionSlug: definition.slug,
         filters,
         range,
         customQuery: definition.customQuery,

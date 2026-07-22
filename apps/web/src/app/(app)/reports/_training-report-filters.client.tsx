@@ -28,6 +28,7 @@ const FILTER_KEYS = [
   'departmentIds',
   'groupIds',
   'courseIds',
+  'courseTypes',
   'deliveryTypes',
   'groupBy',
   'expiryWindowDays',
@@ -51,6 +52,7 @@ export function TrainingReportFilterPanel({
   const [departmentValue, setDepartmentValue] = useState<PickerOption[]>(selections.departments)
   const [groupValue, setGroupValue] = useState<PickerOption[]>(selections.groups)
   const [courseValue, setCourseValue] = useState<PickerOption[]>(selections.courses)
+  const [courseTypeValue, setCourseTypeValue] = useState<PickerOption[]>(selections.courseTypes)
   const [deliveryTypes, setDeliveryTypes] = useState(new Set(filters.deliveryTypes))
   const [groupBy, setGroupBy] = useState(filters.groupBy)
   const [expiryWindowDays, setExpiryWindowDays] = useState(filters.expiryWindowDays)
@@ -64,6 +66,7 @@ export function TrainingReportFilterPanel({
       setList(params, 'departmentIds', departmentValue)
       setList(params, 'groupIds', groupValue)
       setList(params, 'courseIds', courseValue)
+      setList(params, 'courseTypes', courseTypeValue)
       if (deliveryTypes.size) params.set('deliveryTypes', [...deliveryTypes].join(','))
       params.set('groupBy', groupBy)
       if (queryKind === 'training_expired_upcoming') {
@@ -87,34 +90,41 @@ export function TrainingReportFilterPanel({
         </span>
       </summary>
       <div className="space-y-4 border-t border-slate-200 p-3 dark:border-slate-700">
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-5">
           <FilterMulti
             label={tGenerated('m_0302a7e2443143')}
-            lookup="report-training-people"
+            lookup="report-people"
             value={peopleValue}
             onChange={setPeopleValue}
             placeholder={tGenerated('m_1bf6bad927fd90')}
           />
           <FilterMulti
             label={tGenerated('m_08416151d62d16')}
-            lookup="report-training-departments"
+            lookup="report-departments"
             value={departmentValue}
             onChange={setDepartmentValue}
             placeholder={tGenerated('m_05c052bd93f704')}
           />
           <FilterMulti
             label={tGenerated('m_00a9926beb1db6')}
-            lookup="report-training-groups"
+            lookup="report-groups"
             value={groupValue}
             onChange={setGroupValue}
             placeholder={tGenerated('m_1acb38c886c316')}
           />
           <FilterMulti
             label={tGenerated('m_0c5dd55a54140d')}
-            lookup="report-training-courses"
+            lookup="report-courses"
             value={courseValue}
             onChange={setCourseValue}
             placeholder={tGenerated('m_040b9cb201a0b0')}
+          />
+          <FilterMulti
+            label={tGenerated('m_0711690b5beb18')}
+            lookup="report-course-types"
+            value={courseTypeValue}
+            onChange={setCourseTypeValue}
+            placeholder={tGenerated('m_08075234fff33f')}
           />
         </div>
 
@@ -212,10 +222,11 @@ function FilterMulti({
 }: {
   label: string
   lookup:
-    | 'report-training-people'
-    | 'report-training-departments'
-    | 'report-training-groups'
-    | 'report-training-courses'
+    | 'report-people'
+    | 'report-departments'
+    | 'report-groups'
+    | 'report-courses'
+    | 'report-course-types'
   value: PickerOption[]
   onChange: (value: PickerOption[]) => void
   placeholder: string

@@ -9,6 +9,7 @@ import type { ReportEntity } from './entities'
 import {
   queryComplianceByEntity,
   queryComplianceByPerson,
+  queryCorrectiveActionsList,
   queryCorrectiveActionsOpen,
   queryDocumentComplianceSnapshot,
   queryDocumentsOverdueReview,
@@ -21,17 +22,25 @@ import {
   queryOverdueRollup,
   querySafetyKpiSummary,
   querySiteScorecard,
+  querySkillsAssignments,
   querySkillsMissing,
+  queryPpeReport,
   queryTrainingComplianceSnapshot,
   queryTrainingCredentialReport,
   queryTrainingExpiring,
 } from './built-ins'
 import { isTrainingReportQueryKind } from './training-filters'
+import {
+  isOperationalFilterReportSlug,
+  normalizeOperationalReportFilters,
+  operationalReportFiltersToRecord,
+} from './operational-filters'
 import { runCustomQuery } from './custom-query'
 import { isoDate, type ReportRange, type ReportRunResult } from './types'
 
 export type RunReportInput = {
   queryKind: string
+  definitionSlug?: string
   filters: Record<string, unknown>
   range: ReportRange
   customQuery?: ReportCustomQuery | null
@@ -43,7 +52,14 @@ export type RunReportInput = {
 }
 
 export async function runReport(tx: Database, input: RunReportInput): Promise<ReportRunResult> {
-  const { queryKind, filters, range, customQuery } = input
+  const { queryKind, range, customQuery } = input
+  const filters =
+    input.definitionSlug && isOperationalFilterReportSlug(input.definitionSlug)
+      ? operationalReportFiltersToRecord(
+          input.definitionSlug,
+          normalizeOperationalReportFilters(input.definitionSlug, input.filters),
+        )
+      : input.filters
   if (isTrainingReportQueryKind(queryKind)) {
     return queryTrainingCredentialReport(tx, filters, queryKind, input.maxRows)
   }
@@ -76,6 +92,18 @@ export async function runReport(tx: Database, input: RunReportInput): Promise<Re
       return queryComplianceByPerson(tx, filters)
     case 'skills_missing':
       return querySkillsMissing(tx, filters)
+    case 'skills_matrix':
+      return querySkillsAssignments(tx, filters, 'skills_matrix')
+    case 'skills_expired_upcoming':
+      return querySkillsAssignments(tx, filters, 'skills_expired_upcoming')
+    case 'skills_cwb':
+      return querySkillsAssignments(tx, filters, 'skills_cwb')
+    case 'corrective_actions_list':
+      return queryCorrectiveActionsList(tx, filters)
+    case 'ppe_list':
+      return queryPpeReport(tx, filters, 'ppe_list')
+    case 'ppe_expired_upcoming':
+      return queryPpeReport(tx, filters, 'ppe_expired_upcoming')
     case 'hazid_signatures':
       return queryHazidSignatures(tx, filters)
     case 'incidents_trend_12m':
@@ -139,6 +167,12 @@ export function rangeModeFor(queryKind: string): 'lookback' | 'lookahead' | 'as_
     queryKind === 'compliance_by_entity' ||
     queryKind === 'compliance_by_person' ||
     queryKind === 'skills_missing' ||
+    queryKind === 'skills_matrix' ||
+    queryKind === 'skills_expired_upcoming' ||
+    queryKind === 'skills_cwb' ||
+    queryKind === 'corrective_actions_list' ||
+    queryKind === 'ppe_list' ||
+    queryKind === 'ppe_expired_upcoming' ||
     queryKind === 'hazid_signatures' ||
     queryKind === 'incidents_trend_12m' ||
     queryKind === 'custom_query'

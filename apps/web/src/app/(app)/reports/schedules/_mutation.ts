@@ -2,7 +2,15 @@ import 'server-only'
 
 import { and, eq, inArray } from 'drizzle-orm'
 import { tenantUsers } from '@beaconhs/db/schema'
-import { computeNextRunAt } from '@beaconhs/reports'
+import {
+  computeNextRunAt,
+  isOperationalFilterReportSlug,
+  isTrainingReportQueryKind,
+  normalizeOperationalReportFilters,
+  normalizeTrainingReportFilters,
+  operationalReportFiltersToRecord,
+  trainingReportFiltersToRecord,
+} from '@beaconhs/reports'
 import type { RequestContext } from '@beaconhs/tenant'
 import { requireUuidInput } from '@/lib/mutation-input'
 import { loadDefinitionById } from '../_definitions'
@@ -16,6 +24,14 @@ export async function prepareScheduleMutation(ctx: RequestContext, formData: For
 
   const definition = await loadDefinitionById(ctx.tenantId, definitionId)
   if (!definition) throw new Error('Unknown report definition')
+  const filters = isTrainingReportQueryKind(definition.queryKind)
+    ? trainingReportFiltersToRecord(normalizeTrainingReportFilters(parsed.filters))
+    : isOperationalFilterReportSlug(definition.slug)
+      ? operationalReportFiltersToRecord(
+          definition.slug,
+          normalizeOperationalReportFilters(definition.slug, parsed.filters),
+        )
+      : parsed.filters
 
   if (parsed.recipientUserIds.length) {
     const activeRecipients = await ctx.db((tx) =>
@@ -38,6 +54,7 @@ export async function prepareScheduleMutation(ctx: RequestContext, formData: For
   return {
     definitionId,
     ...parsed,
+    filters,
     nextRunAt: computeNextRunAt(parsed),
   }
 }

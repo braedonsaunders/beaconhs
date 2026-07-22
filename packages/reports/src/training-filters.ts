@@ -1,7 +1,6 @@
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export const TRAINING_REPORT_QUERY_KINDS = [
-  'training_certificate_matrix',
   'training_certificates',
   'training_expired_upcoming',
   'training_missing',
@@ -27,6 +26,7 @@ export type TrainingReportFilters = {
   departmentIds: string[]
   groupIds: string[]
   courseIds: string[]
+  courseTypes: string[]
   deliveryTypes: TrainingReportDeliveryType[]
   groupBy: TrainingReportGroupBy
   expiryWindowDays: number
@@ -68,6 +68,14 @@ export function normalizeTrainingReportFilters(
     departmentIds: uuidList(value.departmentIds),
     groupIds: uuidList(value.groupIds),
     courseIds: uuidList(value.courseIds),
+    courseTypes: [
+      ...new Set(
+        list(value.courseTypes)
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => item.trim())
+          .filter(Boolean),
+      ),
+    ].slice(0, MAX_MULTI_FILTER_VALUES),
     deliveryTypes: TRAINING_REPORT_DELIVERY_TYPES.filter((type) => rawDeliveryTypes.has(type)),
     groupBy: value.groupBy === 'employee' ? 'employee' : 'course',
     expiryWindowDays: (TRAINING_REPORT_EXPIRY_WINDOWS as readonly number[]).includes(expiryWindow)
@@ -86,6 +94,7 @@ export function trainingReportFiltersToRecord(
     ...(filters.departmentIds.length ? { departmentIds: filters.departmentIds } : {}),
     ...(filters.groupIds.length ? { groupIds: filters.groupIds } : {}),
     ...(filters.courseIds.length ? { courseIds: filters.courseIds } : {}),
+    ...(filters.courseTypes.length ? { courseTypes: filters.courseTypes } : {}),
     ...(filters.deliveryTypes.length ? { deliveryTypes: filters.deliveryTypes } : {}),
     groupBy: filters.groupBy,
     expiryWindowDays: filters.expiryWindowDays,

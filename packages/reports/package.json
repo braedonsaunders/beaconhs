@@ -10,6 +10,7 @@
     "./document": "./src/document.ts",
     "./entities": "./src/entities.ts",
     "./filters": "./src/filters.ts",
+    "./operational-filters": "./src/operational-filters.ts",
     "./schedule-policy": "./src/schedule-policy.ts",
     "./training-filters": "./src/training-filters.ts"
   },

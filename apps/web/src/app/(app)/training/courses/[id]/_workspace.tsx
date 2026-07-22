@@ -113,6 +113,7 @@ type CourseLite = {
   name: string
   code: string
   description: string | null
+  courseType: string | null
   deliveryType: string
   onlineUrl: string | null
   instructions: string | null
@@ -1083,6 +1084,21 @@ function OverviewPanel({
           <GeneratedText id="m_0570e24c85cf95" />
         </Label>
         <Input id="ov-code" name="code" defaultValue={course.code} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="ov-course-type">
+          <GeneratedText id="m_156ace8ac5b62c" />
+        </Label>
+        <Input
+          id="ov-course-type"
+          name="courseType"
+          defaultValue={course.courseType ?? ''}
+          placeholder={tGenerated('m_0621117e71363f')}
+          maxLength={120}
+        />
+        <p className="text-[11px] text-slate-400 dark:text-slate-500">
+          <GeneratedText id="m_0d48bcc43c48b6" />
+        </p>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="ov-delivery">

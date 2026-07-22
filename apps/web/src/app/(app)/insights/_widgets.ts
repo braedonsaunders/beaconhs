@@ -24,6 +24,7 @@ export const INSIGHT_CATEGORY_LABELS: Record<InsightWidgetCategory, string> = {
 
 const KPI = { defaultSize: { w: 3, h: 2 }, minSize: { w: 2, h: 2 } }
 const CHART = { defaultSize: { w: 6, h: 4 }, minSize: { w: 3, h: 3 } }
+const MATRIX = { defaultSize: { w: 12, h: 7 }, minSize: { w: 6, h: 4 } }
 
 const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
   // AI
@@ -170,6 +171,13 @@ const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
     category: 'compliance',
     ...KPI,
   },
+  {
+    id: 'training-certificate-matrix',
+    label: 'Training — Certificate Matrix',
+    description: 'Active employees by course, with current certificate coverage status.',
+    category: 'compliance',
+    ...MATRIX,
+  },
 
   // Operations
   {
@@ -236,6 +244,128 @@ export const BUILTIN_QUERIES: Record<
   string,
   { query: BhqlQuery; vizType: string; vizSettings?: Record<string, unknown> }
 > = {
+  'training-certificate-matrix': {
+    vizType: 'pivot',
+    query: {
+      version: 'bhql/1',
+      display: 'pivot',
+      pivot: {
+        rows: [{ breakout: 'person_name' }],
+        columns: [{ breakout: 'course_name' }],
+        values: [{ measure: 'coverage_status' }],
+      },
+      stages: [
+        {
+          source: 'people',
+          spine: {
+            dimensions: [
+              {
+                alias: 'p',
+                source: 'people',
+                filter: {
+                  combinator: 'and',
+                  rules: [
+                    { field: 'status', op: 'eq', value: 'active' },
+                    { field: 'deleted_at', op: 'is_null' },
+                  ],
+                },
+              },
+              {
+                alias: 'c',
+                source: 'training_courses',
+                filter: {
+                  combinator: 'and',
+                  rules: [{ field: 'deleted_at', op: 'is_null' }],
+                },
+              },
+            ],
+            facts: [
+              {
+                alias: 'tr',
+                source: 'training_records',
+                on: [
+                  { field: 'person_id', equals: 'p.id' },
+                  { field: 'course_id', equals: 'c.id' },
+                ],
+                filter: {
+                  combinator: 'and',
+                  rules: [{ field: 'deleted_at', op: 'is_null' }],
+                },
+                latestBy: [{ ref: 'completed_on', direction: 'desc' }],
+              },
+            ],
+          },
+          breakouts: [
+            {
+              alias: 'person_name',
+              expr: {
+                ex: 'call',
+                fn: 'concat',
+                args: [
+                  { ex: 'field', field: 'p.last_name' },
+                  { ex: 'lit', value: ', ' },
+                  { ex: 'field', field: 'p.first_name' },
+                ],
+              },
+            },
+            { alias: 'course_name', field: 'c.name' },
+          ],
+          aggregations: [
+            {
+              kind: 'expr',
+              alias: 'coverage_status',
+              expr: {
+                ex: 'agg',
+                fn: 'min',
+                arg: {
+                  ex: 'case',
+                  branches: [
+                    {
+                      when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.id' } },
+                      then: { ex: 'lit', value: null },
+                    },
+                    {
+                      when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.expires_on' } },
+                      then: { ex: 'lit', value: 'valid' },
+                    },
+                    {
+                      when: {
+                        ex: 'compare',
+                        op: '<',
+                        left: { ex: 'field', field: 'tr.expires_on' },
+                        right: { ex: 'call', fn: 'current_date', args: [] },
+                      },
+                      then: { ex: 'lit', value: 'expired' },
+                    },
+                    {
+                      when: {
+                        ex: 'compare',
+                        op: '<=',
+                        left: { ex: 'field', field: 'tr.expires_on' },
+                        right: {
+                          ex: 'arith',
+                          op: '+',
+                          left: { ex: 'call', fn: 'current_date', args: [] },
+                          right: { ex: 'lit', value: 90 },
+                        },
+                      },
+                      then: { ex: 'lit', value: 'expiring' },
+                    },
+                  ],
+                  else: { ex: 'lit', value: 'valid' },
+                },
+              },
+            },
+          ],
+          orderBy: [
+            { ref: 'person_name', direction: 'asc' },
+            { ref: 'course_name', direction: 'asc' },
+          ],
+          limit: 50_000,
+        },
+      ],
+    },
+  },
   'kpi-incidents': {
     vizType: 'scalar',
     query: {

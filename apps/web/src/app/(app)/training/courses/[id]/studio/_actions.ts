@@ -709,6 +709,7 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
   courseId = requireTrainingUuid(courseId, 'Course')
   const name = requiredTrainingText(formData.get('name'), 'Course name', 200)
   const code = optionalTrainingText(formData.get('code'), 'Course code', 100) ?? ''
+  const courseType = optionalTrainingText(formData.get('courseType'), 'Course type', 120)
   const descriptionRaw = optionalTrainingText(
     formData.get('description'),
     'Course description',
@@ -776,6 +777,7 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
       .set({
         name,
         code,
+        courseType,
         deliveryType,
         description,
         onlineUrl,
@@ -797,6 +799,7 @@ export async function updateCourseSettings(courseId: string, formData: FormData)
     summary: `Updated course "${name}"`,
     after: {
       code,
+      courseType,
       deliveryType,
       durationMinutes,
       validForMonths,

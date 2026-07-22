@@ -42,6 +42,7 @@ export const trainingCourses = pgTable(
     code: text('code').notNull(),
     name: text('name').notNull(),
     description: text('description'),
+    courseType: text('course_type'),
     deliveryType: trainingDeliveryType('delivery_type').notNull(),
     durationMinutes: integer('duration_minutes'),
     validForMonths: integer('valid_for_months'), // null = doesn't expire

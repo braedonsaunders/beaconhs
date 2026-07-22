@@ -12,7 +12,10 @@ import {
   claimReportRun,
   computeNextRunAt,
   isTrainingReportQueryKind,
+  isOperationalFilterReportSlug,
+  normalizeOperationalReportFilters,
   normalizeTrainingReportFilters,
+  operationalReportFiltersToRecord,
   trainingReportFiltersToRecord,
 } from '@beaconhs/reports'
 import { assertBoundedReportFilters } from '@beaconhs/reports/schedule-policy'
@@ -63,7 +66,12 @@ export async function runOnceFromDefinition(
   }
   const filters = isTrainingReportQueryKind(def.queryKind)
     ? trainingReportFiltersToRecord(normalizeTrainingReportFilters(requestedFilters))
-    : requestedFilters
+    : isOperationalFilterReportSlug(def.slug)
+      ? operationalReportFiltersToRecord(
+          def.slug,
+          normalizeOperationalReportFilters(def.slug, requestedFilters),
+        )
+      : requestedFilters
 
   // Reuse an existing one-shot schedule if we already made one for this def.
   const oneShotName = `One-shot — ${def.name}`

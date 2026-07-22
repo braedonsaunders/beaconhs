@@ -9,7 +9,10 @@ import ExcelJS from 'exceljs'
 import { assertCan } from '@beaconhs/tenant'
 import {
   isTrainingReportQueryKind,
+  isOperationalFilterReportSlug,
+  normalizeOperationalReportFilters,
   normalizeTrainingReportFilters,
+  operationalReportFiltersToRecord,
   resolveReportLayout,
   trainingReportFiltersToRecord,
 } from '@beaconhs/reports'
@@ -46,13 +49,36 @@ export async function GET(
           departmentIds: url.searchParams.get('departmentIds'),
           groupIds: url.searchParams.get('groupIds'),
           courseIds: url.searchParams.get('courseIds'),
+          courseTypes: url.searchParams.get('courseTypes'),
           deliveryTypes: url.searchParams.get('deliveryTypes'),
           groupBy: url.searchParams.get('groupBy'),
           expiryWindowDays: url.searchParams.get('expiryWindowDays'),
           includeExpired: url.searchParams.get('includeExpired'),
         }),
       )
-    : {}
+    : isOperationalFilterReportSlug(definition.slug)
+      ? operationalReportFiltersToRecord(
+          definition.slug,
+          normalizeOperationalReportFilters(definition.slug, {
+            personIds: url.searchParams.get('personIds'),
+            departmentIds: url.searchParams.get('departmentIds'),
+            groupIds: url.searchParams.get('groupIds'),
+            obligationIds: url.searchParams.get('obligationIds'),
+            sourceModules: url.searchParams.get('sourceModules'),
+            complianceStatuses: url.searchParams.get('complianceStatuses'),
+            skillTypeIds: url.searchParams.get('skillTypeIds'),
+            authorityIds: url.searchParams.get('authorityIds'),
+            siteIds: url.searchParams.get('siteIds'),
+            correctiveStatuses: url.searchParams.get('correctiveStatuses'),
+            ppeTypeIds: url.searchParams.get('ppeTypeIds'),
+            groupBy: url.searchParams.get('groupBy'),
+            expiryWindowDays: url.searchParams.get('expiryWindowDays'),
+            cwbStandard: url.searchParams.get('cwbStandard'),
+            fromDate: url.searchParams.get('fromDate'),
+            toDate: url.searchParams.get('toDate'),
+          }),
+        )
+      : {}
 
   const run = await runReportForViewer(ctx, definition, {
     days,

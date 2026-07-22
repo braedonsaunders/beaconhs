@@ -45,11 +45,15 @@ import {
   buildReportDocumentCss,
   buildReportPageCss,
   isTrainingReportQueryKind,
+  isOperationalFilterReportSlug,
+  normalizeOperationalReportFilters,
   normalizeTrainingReportFilters,
+  operationalReportFiltersToRecord,
   renderReportDocumentBodyHtml,
   resolveReportLayout,
   trainingReportFiltersToRecord,
   type TrainingReportFilters,
+  type OperationalReportFilters,
 } from '@beaconhs/reports'
 import { requireRequestContext } from '@/lib/auth'
 import { FadeInHeader } from '@/components/page-layout-motion'
@@ -72,6 +76,8 @@ import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { runOnceFromDefinition, deleteDefinition } from './actions'
 import { TrainingReportFilterPanel } from '../../_training-report-filters.client'
 import { loadTrainingFilterSelections } from '../../_training-filter-data'
+import { OperationalReportFilterPanel } from '../../_operational-report-filters.client'
+import { loadOperationalFilterSelections } from '../../_operational-filter-data'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -118,12 +124,38 @@ export default async function ReportViewerPage({
         departmentIds: sp.departmentIds,
         groupIds: sp.groupIds,
         courseIds: sp.courseIds,
+        courseTypes: sp.courseTypes,
         deliveryTypes: sp.deliveryTypes,
         groupBy: sp.groupBy,
         expiryWindowDays: sp.expiryWindowDays,
         includeExpired: sp.includeExpired,
       })
     : null
+  const operationalFilters = isOperationalFilterReportSlug(definition.slug)
+    ? normalizeOperationalReportFilters(definition.slug, {
+        personIds: sp.personIds,
+        departmentIds: sp.departmentIds,
+        groupIds: sp.groupIds,
+        obligationIds: sp.obligationIds,
+        sourceModules: sp.sourceModules,
+        complianceStatuses: sp.complianceStatuses,
+        skillTypeIds: sp.skillTypeIds,
+        authorityIds: sp.authorityIds,
+        siteIds: sp.siteIds,
+        correctiveStatuses: sp.correctiveStatuses,
+        ppeTypeIds: sp.ppeTypeIds,
+        groupBy: sp.groupBy,
+        expiryWindowDays: sp.expiryWindowDays,
+        cwbStandard: sp.cwbStandard,
+        fromDate: sp.fromDate,
+        toDate: sp.toDate,
+      })
+    : null
+  const runtimeFilters = trainingFilters
+    ? trainingReportFiltersToRecord(trainingFilters)
+    : operationalFilters && isOperationalFilterReportSlug(definition.slug)
+      ? operationalReportFiltersToRecord(definition.slug, operationalFilters)
+      : {}
   const scheduleParams = parseListParams(
     {
       q: sp.scheduleQ,
@@ -245,8 +277,8 @@ export default async function ReportViewerPage({
   const runBound = runOnceFromDefinition.bind(null, id)
   const deleteBound = deleteDefinition.bind(null, id)
   const scheduleUrlParams = new URLSearchParams({ definitionId: definition.id })
-  if (trainingFilters) {
-    for (const [key, value] of Object.entries(trainingReportFiltersToRecord(trainingFilters))) {
+  if (Object.keys(runtimeFilters).length) {
+    for (const [key, value] of Object.entries(runtimeFilters)) {
       scheduleUrlParams.set(key, Array.isArray(value) ? value.join(',') : String(value))
     }
   } else if (daysParam) {
@@ -278,8 +310,8 @@ export default async function ReportViewerPage({
                           type="hidden"
                           name="filters"
                           value={JSON.stringify(
-                            trainingFilters
-                              ? trainingReportFiltersToRecord(trainingFilters)
+                            Object.keys(runtimeFilters).length
+                              ? runtimeFilters
                               : daysParam
                                 ? { days: daysParam }
                                 : {},
@@ -345,6 +377,7 @@ export default async function ReportViewerPage({
               definition={definition}
               daysParam={daysParam}
               trainingFilters={trainingFilters}
+              operationalFilters={operationalFilters}
               sp={sp}
             />
           ) : (
@@ -376,23 +409,30 @@ async function DocumentTab({
   definition,
   daysParam,
   trainingFilters,
+  operationalFilters,
   sp,
 }: {
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
   definition: NonNullable<Awaited<ReturnType<typeof loadDefinitionById>>>
   daysParam: number | null
   trainingFilters: TrainingReportFilters | null
+  operationalFilters: OperationalReportFilters | null
   sp: Record<string, string | string[] | undefined>
 }) {
   const tGeneratedValue = await getGeneratedValueTranslations()
   const tGenerated = await getGeneratedTranslations()
-  const [run, branding, trainingSelections] = await Promise.all([
+  const [run, branding, trainingSelections, operationalSelections] = await Promise.all([
     runReportForViewer(ctx, definition, {
       days: daysParam,
-      ...(trainingFilters ? { filters: trainingReportFiltersToRecord(trainingFilters) } : {}),
+      ...(trainingFilters
+        ? { filters: trainingReportFiltersToRecord(trainingFilters) }
+        : operationalFilters && isOperationalFilterReportSlug(definition.slug)
+          ? { filters: operationalReportFiltersToRecord(definition.slug, operationalFilters) }
+          : {}),
     }),
     loadTenantBranding(ctx),
     trainingFilters ? loadTrainingFilterSelections(ctx, trainingFilters) : null,
+    operationalFilters ? loadOperationalFilterSelections(ctx, operationalFilters) : null,
   ])
 
   const layout = resolveReportLayout(definition.layout)
@@ -420,6 +460,13 @@ async function DocumentTab({
       exportParams.set(key, Array.isArray(value) ? value.join(',') : String(value))
     }
   }
+  if (operationalFilters && isOperationalFilterReportSlug(definition.slug)) {
+    for (const [key, value] of Object.entries(
+      operationalReportFiltersToRecord(definition.slug, operationalFilters),
+    )) {
+      exportParams.set(key, Array.isArray(value) ? value.join(',') : String(value))
+    }
+  }
   const exportBase = `/reports/definitions/${definition.id}/export?${exportParams.toString()}`
   const exportJoin = exportParams.size ? '&' : ''
 
@@ -437,6 +484,22 @@ async function DocumentTab({
                   queryKind={definition.queryKind}
                   filters={trainingFilters}
                   selections={trainingSelections}
+                />
+              </div>
+            ) : null
+          }
+        />
+        <GeneratedValue
+          value={
+            operationalFilters &&
+            operationalSelections &&
+            isOperationalFilterReportSlug(definition.slug) ? (
+              <div className="mx-auto max-w-screen-2xl">
+                <OperationalReportFilterPanel
+                  key={JSON.stringify(operationalFilters)}
+                  slug={definition.slug}
+                  filters={operationalFilters}
+                  selections={operationalSelections}
                 />
               </div>
             ) : null

@@ -279,6 +279,7 @@ export default async function CoursePage({
         name: course.name,
         code: course.code,
         description: course.description,
+        courseType: course.courseType,
         deliveryType: course.deliveryType,
         onlineUrl: course.onlineUrl,
         instructions: course.instructions,

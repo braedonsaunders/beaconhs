@@ -15,6 +15,7 @@ describe('training report filters', () => {
       normalizeTrainingReportFilters({
         personIds: `${personId},not-a-uuid,${personId}`,
         courseIds: [courseId],
+        courseTypes: [' Orientation ', '', 'Orientation', 'Safety'],
         deliveryTypes: 'classroom,not-real,online',
         groupBy: 'employee',
         expiryWindowDays: '180',
@@ -25,6 +26,7 @@ describe('training report filters', () => {
       departmentIds: [],
       groupIds: [],
       courseIds: [courseId],
+      courseTypes: ['Orientation', 'Safety'],
       deliveryTypes: ['classroom', 'online'],
       groupBy: 'employee',
       expiryWindowDays: 180,

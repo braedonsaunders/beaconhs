@@ -130,6 +130,7 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
         const { entityMap, locale } = await resolveScheduledEntityMap(tx, tenantId, snapshot)
         const result = await runReport(tx, {
           queryKind: snapshot.definition.queryKind,
+          definitionSlug: snapshot.definition.slug,
           filters: snapshot.filters,
           range,
           customQuery: (snapshot.definition.customQuery as ReportCustomQuery | null) ?? null,

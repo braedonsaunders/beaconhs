@@ -27,10 +27,13 @@ import {
   inspectionRecords,
   orgUnits,
   people,
+  personGroupMemberships,
   ppeItems,
+  ppeTypes,
   tenantUsers,
   trainingSkillAuthorities,
   trainingSkillTypes,
+  users,
 } from '@beaconhs/db/schema'
 import { extractRows } from './custom-query'
 import {
@@ -42,10 +45,15 @@ import {
   type ReportRunResult,
 } from './types'
 import { normalizeTrainingReportFilters, type TrainingReportQueryKind } from './training-filters'
+import {
+  normalizeOperationalReportFilters,
+  type OperationalFilterReportSlug,
+  type OperationalReportGroupBy,
+} from './operational-filters'
 
 type Filters = Record<string, unknown>
 
-const COMPLIANCE_SOURCE_MODULES = [
+export const COMPLIANCE_SOURCE_MODULES = [
   'inspection',
   'document',
   'training',
@@ -59,7 +67,7 @@ const COMPLIANCE_SOURCE_MODULES = [
   'hazard_assessment',
 ] as const
 
-const COMPLIANCE_STATUS_VALUES = [
+export const COMPLIANCE_STATUS_VALUES = [
   'pending',
   'in_progress',
   'completed',
@@ -283,7 +291,7 @@ function uuidIn(column: string, values: string[]) {
 }
 
 /**
- * Canonical training credential runner. It replaces four hard-coded legacy
+ * Canonical training credential runner. It replaces three hard-coded legacy
  * endpoints while preserving their useful runtime controls: employee/group/
  * department, course/type, expiry horizon, and employee/course grouping.
  * The base training and compliance tables supply one latest credential per
@@ -305,6 +313,21 @@ export async function queryTrainingCredentialReport(
     where.push(uuidIn('department_id', filters.departmentIds))
   }
   if (filters.courseIds.length) where.push(uuidIn('course_id', filters.courseIds))
+  if (filters.courseTypes.length) {
+    where.push(
+      sql.join(
+        [
+          sql.raw('course_type IN ('),
+          sql.join(
+            filters.courseTypes.map((value) => sql`${value}`),
+            sql.raw(', '),
+          ),
+          sql.raw(')'),
+        ],
+        sql.raw(''),
+      ),
+    )
+  }
   if (filters.deliveryTypes.length) {
     where.push(
       sql.join(
@@ -1334,10 +1357,16 @@ async function queryComplianceDetailRows(
   const obligationIds = pickUuidList(filters.obligationIds ?? filters.obligationId)
   const personIds = pickUuidList(filters.personIds ?? filters.personId)
   const departmentIds = pickUuidList(filters.departmentIds ?? filters.departmentId)
+  const groupIds = pickUuidList(filters.groupIds ?? filters.groupId)
   const sourceModules = fixedSourceModule
     ? [fixedSourceModule]
     : pickEnumList(filters.sourceModules ?? filters.sourceModule, COMPLIANCE_SOURCE_MODULES)
-  const statuses = pickEnumList(filters.statuses ?? filters.status, COMPLIANCE_STATUS_VALUES)
+  const statuses = pickEnumList(
+    filters.complianceStatuses ?? filters.statuses ?? filters.status,
+    COMPLIANCE_STATUS_VALUES,
+  )
+  const fromDate = typeof filters.fromDate === 'string' ? filters.fromDate : ''
+  const toDate = typeof filters.toDate === 'string' ? filters.toDate : ''
 
   const rows = await tx
     .select({
@@ -1368,10 +1397,26 @@ async function queryComplianceDetailRows(
         obligationIds.length ? inArray(complianceObligations.id, obligationIds) : undefined,
         personIds.length ? inArray(complianceStatus.personId, personIds) : undefined,
         departmentIds.length ? inArray(people.departmentId, departmentIds) : undefined,
+        groupIds.length
+          ? sql`exists (
+              select 1 from ${personGroupMemberships}
+              where ${personGroupMemberships.personId} = ${people.id}
+                and ${personGroupMemberships.groupId} in (${sql.join(
+                  groupIds.map((id) => sql`${id}::uuid`),
+                  sql`, `,
+                )})
+            )`
+          : undefined,
         sourceModules.length
           ? inArray(complianceObligations.sourceModule, sourceModules)
           : undefined,
         statuses.length ? inArray(complianceStatus.status, statuses) : undefined,
+        fromDate
+          ? sql`coalesce(${complianceStatus.periodEnd}, ${complianceStatus.dueOn}, ${fromDate}) >= ${fromDate}`
+          : undefined,
+        toDate
+          ? sql`coalesce(${complianceStatus.periodStart}, ${complianceStatus.dueOn}, ${toDate}) <= ${toDate}`
+          : undefined,
       ),
     )
     .orderBy(
@@ -1496,13 +1541,177 @@ export async function queryComplianceByPerson(
   return { groups, summary: complianceSummary(rows), rowCount: rows.length }
 }
 
+// --- skills roster / expiry / CWB -------------------------------------------
+
+type SkillAssignmentReportRow = {
+  person_id: string
+  employee_no: string | null
+  last_name: string
+  first_name: string
+  trade: string | null
+  authority: string
+  certification_code: string | null
+  certification_name: string
+  cwb_standard: string | null
+  cwb_type: string | null
+  cwb_process: string | null
+  cwb_position: string | null
+  cwb_level: string | null
+  granted_on: unknown
+  expires_on: unknown
+  status: string
+}
+
+export async function querySkillsAssignments(
+  tx: Database,
+  rawFilters: Filters,
+  slug: 'skills_matrix' | 'skills_expired_upcoming' | 'skills_cwb',
+): Promise<ReportRunResult> {
+  const filters = normalizeOperationalReportFilters(slug, rawFilters)
+  const where = [sql`TRUE`]
+  if (filters.personIds.length) where.push(uuidIn('person_id', filters.personIds))
+  if (filters.departmentIds.length) where.push(uuidIn('department_id', filters.departmentIds))
+  if (filters.skillTypeIds.length) where.push(uuidIn('skill_type_id', filters.skillTypeIds))
+  if (filters.authorityIds.length) where.push(uuidIn('authority_id', filters.authorityIds))
+  if (filters.groupIds.length) {
+    where.push(
+      sql.join(
+        [
+          sql.raw('group_ids && ARRAY['),
+          sql.join(
+            filters.groupIds.map((value) => sql`${value}::uuid`),
+            sql.raw(', '),
+          ),
+          sql.raw(']::uuid[]'),
+        ],
+        sql.raw(''),
+      ),
+    )
+  }
+  if (slug === 'skills_expired_upcoming') {
+    where.push(sql`expires_on IS NOT NULL`)
+    where.push(sql`expires_on <= CURRENT_DATE + ${filters.expiryWindowDays}::int`)
+  }
+  if (slug === 'skills_cwb') {
+    where.push(sql`lower(authority) = lower('Canadian Welding Bureau')`)
+    if (filters.cwbStandard) where.push(sql`cwb_standard = ${filters.cwbStandard}`)
+  }
+
+  const result = (await tx.execute(sql`
+    SELECT person_id, employee_no, last_name, first_name, trade, authority,
+           certification_code, certification_name, cwb_standard, cwb_type,
+           cwb_process, cwb_position, cwb_level, granted_on, expires_on, status
+    FROM report_skill_assignments
+    WHERE ${sql.join(where, sql` AND `)}
+    ORDER BY last_name, first_name, certification_name
+    LIMIT 10000
+  `)) as unknown
+  const rows = extractRows(result) as SkillAssignmentReportRow[]
+  const grouped = new Map<string, SkillAssignmentReportRow[]>()
+  for (const row of rows) {
+    const key =
+      filters.groupBy === 'skill'
+        ? row.certification_name
+        : filters.groupBy === 'authority'
+          ? row.authority
+          : row.person_id
+    const list = grouped.get(key) ?? []
+    list.push(row)
+    grouped.set(key, list)
+  }
+
+  const cwb = slug === 'skills_cwb'
+  const groups: ReportGroup[] = [...grouped.values()].map((list) => {
+    const first = list[0]!
+    const byEmployee = filters.groupBy === 'employee'
+    return {
+      title: byEmployee
+        ? `${first.last_name}, ${first.first_name}`
+        : filters.groupBy === 'authority'
+          ? first.authority
+          : first.certification_name,
+      subtitle: byEmployee
+        ? [first.employee_no, first.trade].filter(Boolean).join(' · ')
+        : `${list.length} credential${list.length === 1 ? '' : 's'}`,
+      columns: cwb
+        ? [
+            ...(byEmployee ? [] : ['Person']),
+            'Employee #',
+            'Certification',
+            'Standard',
+            'Type',
+            'Process',
+            'Position',
+            'Level',
+            'Granted',
+            'Expires',
+            'Status',
+          ]
+        : [
+            ...(byEmployee ? [] : ['Person']),
+            'Employee #',
+            'Trade',
+            'Authority',
+            'Certification',
+            'Granted',
+            'Expires',
+            'Status',
+          ],
+      rows: list.map((row) =>
+        cwb
+          ? [
+              ...(byEmployee ? [] : [`${row.last_name}, ${row.first_name}`]),
+              row.employee_no,
+              row.certification_name,
+              row.cwb_standard,
+              row.cwb_type,
+              row.cwb_process,
+              row.cwb_position,
+              row.cwb_level,
+              dayString(row.granted_on),
+              dayString(row.expires_on),
+              formatLabel(row.status),
+            ]
+          : [
+              ...(byEmployee ? [] : [`${row.last_name}, ${row.first_name}`]),
+              row.employee_no,
+              row.trade,
+              row.authority,
+              row.certification_name,
+              dayString(row.granted_on),
+              dayString(row.expires_on),
+              formatLabel(row.status),
+            ],
+      ),
+    }
+  })
+  if (!groups.length) {
+    groups.push({
+      title: cwb ? 'CWB qualifications' : 'Skills and certifications',
+      columns: ['Person', 'Certification', 'Authority', 'Status'],
+      rows: [],
+      isEmpty: true,
+    })
+  }
+  return {
+    groups,
+    summary: [
+      { label: 'Credentials', value: rows.length },
+      { label: 'People', value: new Set(rows.map((row) => row.person_id)).size },
+    ],
+    rowCount: rows.length,
+  }
+}
+
 // --- skills_missing -------------------------------------------------------------
 
 export async function querySkillsMissing(tx: Database, filters: Filters): Promise<ReportRunResult> {
   const personIds = pickUuidList(filters.personIds ?? filters.personId)
   const departmentIds = pickUuidList(filters.departmentIds ?? filters.departmentId)
+  const groupIds = pickUuidList(filters.groupIds ?? filters.groupId)
   const skillTypeIds = pickUuidList(filters.skillTypeIds ?? filters.skillTypeId)
   const authorityIds = pickUuidList(filters.authorityIds ?? filters.authorityId)
+  const groupBy: OperationalReportGroupBy = filters.groupBy === 'skill' ? 'skill' : 'employee'
 
   const rows = await tx
     .select({
@@ -1538,25 +1747,43 @@ export async function querySkillsMissing(tx: Database, filters: Filters): Promis
         inArray(complianceStatus.status, ['pending', 'overdue']),
         personIds.length ? inArray(people.id, personIds) : undefined,
         departmentIds.length ? inArray(people.departmentId, departmentIds) : undefined,
+        groupIds.length
+          ? sql`exists (
+              select 1 from ${personGroupMemberships}
+              where ${personGroupMemberships.personId} = ${people.id}
+                and ${personGroupMemberships.groupId} in (${sql.join(
+                  groupIds.map((id) => sql`${id}::uuid`),
+                  sql`, `,
+                )})
+            )`
+          : undefined,
         skillTypeIds.length ? inArray(trainingSkillTypes.id, skillTypeIds) : undefined,
         authorityIds.length ? inArray(trainingSkillAuthorities.id, authorityIds) : undefined,
       ),
     )
     .orderBy(asc(people.lastName), asc(people.firstName), asc(trainingSkillTypes.name))
 
-  const byPerson = new Map<string, typeof rows>()
+  const grouped = new Map<string, typeof rows>()
   for (const row of rows) {
-    const list = byPerson.get(row.personId) ?? []
+    const key = groupBy === 'skill' ? row.skill : row.personId
+    const list = grouped.get(key) ?? []
     list.push(row)
-    byPerson.set(row.personId, list)
+    grouped.set(key, list)
   }
-  const groups: ReportGroup[] = [...byPerson.values()].map((list) => ({
-    title: list[0]!.personName,
-    subtitle: [list[0]!.employeeNo, list[0]!.department].filter(Boolean).join(' · '),
-    columns: ['Required skill', 'Authority', 'Status', 'Due', 'Requirement'],
+  const groups: ReportGroup[] = [...grouped.values()].map((list) => ({
+    title: groupBy === 'skill' ? list[0]!.skill : list[0]!.personName,
+    subtitle:
+      groupBy === 'skill'
+        ? list[0]!.authority
+        : [list[0]!.employeeNo, list[0]!.department].filter(Boolean).join(' · '),
+    columns:
+      groupBy === 'skill'
+        ? ['Person', 'Employee #', 'Department', 'Status', 'Due', 'Requirement']
+        : ['Required skill', 'Authority', 'Status', 'Due', 'Requirement'],
     rows: list.map((row) => [
-      row.skill,
-      row.authority,
+      ...(groupBy === 'skill'
+        ? [row.personName, row.employeeNo, row.department]
+        : [row.skill, row.authority]),
       row.status === 'overdue' ? 'Expired / overdue' : 'Never held / pending',
       row.dueOn,
       row.obligation,
@@ -1573,8 +1800,251 @@ export async function querySkillsMissing(tx: Database, filters: Filters): Promis
   return {
     groups,
     summary: [
-      { label: 'People affected', value: byPerson.size },
+      { label: 'People affected', value: new Set(rows.map((row) => row.personId)).size },
       { label: 'Missing / expired', value: rows.length },
+    ],
+    rowCount: rows.length,
+  }
+}
+
+// --- corrective actions list ------------------------------------------------
+
+export async function queryCorrectiveActionsList(
+  tx: Database,
+  rawFilters: Filters,
+): Promise<ReportRunResult> {
+  const filters = normalizeOperationalReportFilters('corrective_actions_list', rawFilters)
+  const rows = await tx
+    .select({
+      reference: correctiveActions.reference,
+      title: correctiveActions.title,
+      severity: correctiveActions.severity,
+      status: correctiveActions.status,
+      source: correctiveActions.source,
+      assignedOn: correctiveActions.assignedOn,
+      dueOn: correctiveActions.dueOn,
+      ownerId: tenantUsers.id,
+      owner: sql<string>`coalesce(${tenantUsers.displayName}, ${users.name}, ${users.email}, 'Unassigned')`,
+      personId: people.id,
+      department: departments.name,
+      siteId: orgUnits.id,
+      site: orgUnits.name,
+    })
+    .from(correctiveActions)
+    .leftJoin(tenantUsers, eq(tenantUsers.id, correctiveActions.ownerTenantUserId))
+    .leftJoin(users, eq(users.id, tenantUsers.userId))
+    .leftJoin(people, eq(people.userId, tenantUsers.userId))
+    .leftJoin(departments, eq(departments.id, people.departmentId))
+    .leftJoin(orgUnits, eq(orgUnits.id, correctiveActions.siteOrgUnitId))
+    .where(
+      and(
+        isNull(correctiveActions.deletedAt),
+        eq(correctiveActions.isDraft, false),
+        filters.personIds.length ? inArray(people.id, filters.personIds) : undefined,
+        filters.departmentIds.length
+          ? inArray(people.departmentId, filters.departmentIds)
+          : undefined,
+        filters.siteIds.length
+          ? inArray(correctiveActions.siteOrgUnitId, filters.siteIds)
+          : undefined,
+        filters.correctiveStatuses.length
+          ? inArray(correctiveActions.status, filters.correctiveStatuses)
+          : undefined,
+        filters.groupIds.length
+          ? sql`exists (
+              select 1 from ${personGroupMemberships}
+              where ${personGroupMemberships.personId} = ${people.id}
+                and ${personGroupMemberships.groupId} in (${sql.join(
+                  filters.groupIds.map((id) => sql`${id}::uuid`),
+                  sql`, `,
+                )})
+            )`
+          : undefined,
+      ),
+    )
+    .orderBy(asc(correctiveActions.dueOn), asc(correctiveActions.reference))
+
+  const grouped = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const key =
+      filters.groupBy === 'site'
+        ? (row.site ?? 'No site')
+        : filters.groupBy === 'employee'
+          ? row.owner
+          : row.status
+    const list = grouped.get(key) ?? []
+    list.push(row)
+    grouped.set(key, list)
+  }
+  const groups: ReportGroup[] = [...grouped.entries()].map(([key, list]) => ({
+    title: `${filters.groupBy === 'site' ? 'Site' : filters.groupBy === 'employee' ? 'Owner' : 'Status'}: ${formatLabel(key)}`,
+    subtitle: `${list.length} action${list.length === 1 ? '' : 's'}`,
+    columns: [
+      'Reference',
+      'Title',
+      'Severity',
+      'Status',
+      'Owner',
+      'Department',
+      'Site',
+      'Source',
+      'Assigned',
+      'Due',
+    ],
+    rows: list.map((row) => [
+      row.reference,
+      row.title,
+      formatLabel(row.severity),
+      formatLabel(row.status),
+      row.owner,
+      row.department,
+      row.site,
+      row.source ? formatLabel(row.source) : null,
+      row.assignedOn,
+      row.dueOn,
+    ]),
+  }))
+  if (!groups.length) {
+    groups.push({
+      title: 'Corrective actions',
+      columns: ['Reference', 'Title', 'Severity', 'Status', 'Owner', 'Site', 'Due'],
+      rows: [],
+      isEmpty: true,
+    })
+  }
+  return {
+    groups,
+    summary: [
+      { label: 'Actions', value: rows.length },
+      {
+        label: 'Open',
+        value: rows.filter((row) => !['closed', 'cancelled'].includes(row.status)).length,
+      },
+      {
+        label: 'Overdue',
+        value: rows.filter(
+          (row) => row.dueOn && String(row.dueOn) < isoDate(new Date()) && row.status !== 'closed',
+        ).length,
+      },
+    ],
+    rowCount: rows.length,
+  }
+}
+
+// --- PPE list / annual inspection expiry -----------------------------------
+
+export async function queryPpeReport(
+  tx: Database,
+  rawFilters: Filters,
+  slug: 'ppe_list' | 'ppe_expired_upcoming',
+): Promise<ReportRunResult> {
+  const filters = normalizeOperationalReportFilters(slug, rawFilters)
+  const rows = await tx
+    .select({
+      itemId: ppeItems.id,
+      serial: ppeItems.serialNumber,
+      size: ppeItems.size,
+      status: ppeItems.status,
+      typeId: ppeTypes.id,
+      type: ppeTypes.name,
+      category: ppeTypes.category,
+      personId: people.id,
+      person: sql<string>`case when ${people.id} is null then 'Unassigned / in stock' else concat_ws(', ', ${people.lastName}, ${people.firstName}) end`,
+      employeeNo: people.employeeNo,
+      department: departments.name,
+      lastInspection: ppeItems.lastAnnualInspectionOn,
+      nextInspection: ppeItems.nextAnnualInspectionDue,
+      expiresOn: ppeItems.expiresOn,
+    })
+    .from(ppeItems)
+    .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
+    .leftJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
+    .leftJoin(departments, eq(departments.id, people.departmentId))
+    .where(
+      and(
+        isNull(ppeItems.deletedAt),
+        inArray(ppeItems.status, ['issued', 'in_stock']),
+        filters.personIds.length ? inArray(people.id, filters.personIds) : undefined,
+        filters.departmentIds.length
+          ? inArray(people.departmentId, filters.departmentIds)
+          : undefined,
+        filters.ppeTypeIds.length ? inArray(ppeItems.typeId, filters.ppeTypeIds) : undefined,
+        filters.groupIds.length
+          ? sql`exists (
+              select 1 from ${personGroupMemberships}
+              where ${personGroupMemberships.personId} = ${people.id}
+                and ${personGroupMemberships.groupId} in (${sql.join(
+                  filters.groupIds.map((id) => sql`${id}::uuid`),
+                  sql`, `,
+                )})
+            )`
+          : undefined,
+        slug === 'ppe_expired_upcoming' ? eq(ppeTypes.isInspectable, true) : undefined,
+        slug === 'ppe_expired_upcoming' ? isNotNull(ppeItems.nextAnnualInspectionDue) : undefined,
+        slug === 'ppe_expired_upcoming'
+          ? sql`${ppeItems.nextAnnualInspectionDue} <= CURRENT_DATE + ${filters.expiryWindowDays}::int`
+          : undefined,
+      ),
+    )
+    .orderBy(
+      slug === 'ppe_expired_upcoming' ? asc(ppeItems.nextAnnualInspectionDue) : asc(ppeTypes.name),
+      asc(people.lastName),
+      asc(ppeItems.serialNumber),
+    )
+
+  const grouped = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const key = filters.groupBy === 'employee' ? row.person : row.type
+    const list = grouped.get(key) ?? []
+    list.push(row)
+    grouped.set(key, list)
+  }
+  const groups: ReportGroup[] = [...grouped.entries()].map(([key, list]) => ({
+    title: `${filters.groupBy === 'employee' ? 'Employee' : 'PPE type'}: ${key}`,
+    subtitle: `${list.length} item${list.length === 1 ? '' : 's'}`,
+    columns: [
+      'Employee',
+      'Employee #',
+      'Department',
+      'Type',
+      'Category',
+      'Serial',
+      'Size',
+      'Status',
+      'Last annual inspection',
+      'Next annual inspection',
+      'Expires',
+    ],
+    rows: list.map((row) => [
+      row.person,
+      row.employeeNo,
+      row.department,
+      row.type,
+      row.category,
+      row.serial,
+      row.size,
+      formatLabel(row.status),
+      row.lastInspection,
+      row.nextInspection,
+      row.expiresOn,
+    ]),
+  }))
+  if (!groups.length) {
+    groups.push({
+      title: slug === 'ppe_expired_upcoming' ? 'PPE annual inspections due' : 'PPE register',
+      columns: ['Employee', 'Type', 'Serial', 'Status', 'Next annual inspection'],
+      rows: [],
+      isEmpty: true,
+    })
+  }
+  return {
+    groups,
+    summary: [
+      { label: 'Items', value: rows.length },
+      {
+        label: 'People',
+        value: new Set(rows.flatMap((row) => (row.personId ? [row.personId] : []))).size,
+      },
     ],
     rowCount: rows.length,
   }

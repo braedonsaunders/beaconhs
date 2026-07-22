@@ -58,6 +58,19 @@ export const REPORT_VIEWS_SQL: string[] = [
      (SELECT ef.field_value FROM training_extra_fields ef
        WHERE ef.tenant_id = a.tenant_id AND ef.skill_assignment_id = a.id
          AND lower(ef.field_key) = 'level (w47.2 only)' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_level
+     ,p.id AS person_id
+     ,p.department_id AS department_id
+     ,coalesce(
+       ARRAY(
+         SELECT gm.group_id
+         FROM person_group_memberships gm
+         WHERE gm.tenant_id = p.tenant_id AND gm.person_id = p.id
+         ORDER BY gm.group_id
+       ),
+       ARRAY[]::uuid[]
+     ) AS group_ids
+     ,t.id AS skill_type_id
+     ,au.id AS authority_id
    FROM training_skill_assignments a
    JOIN training_skill_types t ON t.id = a.skill_type_id
    JOIN training_skill_authorities au ON au.id = t.authority_id
@@ -124,7 +137,10 @@ export const REPORT_VIEWS_SQL: string[] = [
          AND co.status = 'active'
          AND co.deleted_at IS NULL
          AND co.target_ref->>'courseId' = c.id::text
-     )                                 AS is_required
+     )                                 AS is_required,
+     -- Keep new fields at the end so CREATE OR REPLACE remains compatible
+     -- with the column order of the installed production view.
+     c.course_type                     AS course_type
    FROM people p
    CROSS JOIN training_courses c
    LEFT JOIN latest l
