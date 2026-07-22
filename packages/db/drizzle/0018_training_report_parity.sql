@@ -1,6 +1,12 @@
 -- Canonicalize the training report catalogue. The old 30-day expiring report
 -- duplicated Expired & Upcoming; preserve any schedules by moving them to the
 -- configurable canonical definition before removing the duplicate.
+-- The migrator assumes the NOLOGIN owner role. Temporarily relax FORCE RLS so
+-- it can reconcile global definitions and schedules across every tenant; the
+-- migration transaction restores FORCE before commit.
+ALTER TABLE "report_definitions" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "report_schedules" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+
 UPDATE "report_schedules" s
 SET "definition_id" = canonical."id",
     "updated_at" = now()
@@ -19,15 +25,6 @@ WHERE "tenant_id" IS NULL
 INSERT INTO "report_definitions"
   ("slug", "kind", "name", "description", "category", "query_kind", "custom_query")
 VALUES
-  (
-    'training_certificate_matrix',
-    'built_in',
-    'Training — Certificate Matrix',
-    'Every active person and selected course with the latest certificate status. Filter by employee, group, department, course, and delivery type; group by employee or course.',
-    'training',
-    'training_certificate_matrix',
-    NULL
-  ),
   (
     'training_certificates',
     'built_in',
@@ -63,4 +60,7 @@ DO UPDATE SET
   "category" = EXCLUDED."category",
   "query_kind" = EXCLUDED."query_kind",
   "custom_query" = EXCLUDED."custom_query",
-  "updated_at" = now();
+  "updated_at" = now();--> statement-breakpoint
+
+ALTER TABLE "report_schedules" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "report_definitions" FORCE ROW LEVEL SECURITY;

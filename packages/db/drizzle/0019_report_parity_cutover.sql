@@ -1,3 +1,10 @@
+-- These tables already enforce FORCE RLS in an upgraded environment. The
+-- migrator assumes their NOLOGIN owner role, so relax FORCE transactionally
+-- while reconciling all tenants and global system definitions.
+ALTER TABLE "training_courses" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "report_definitions" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "report_schedules" NO FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+
 ALTER TABLE "training_courses" ADD COLUMN IF NOT EXISTS "course_type" text;--> statement-breakpoint
 
 UPDATE "training_courses"
@@ -57,4 +64,8 @@ WHERE "tenant_id" IS NULL
     'corrective_actions_list',
     'ppe_list',
     'ppe_expired_upcoming'
-  );
+  );--> statement-breakpoint
+
+ALTER TABLE "report_schedules" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "report_definitions" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE "training_courses" FORCE ROW LEVEL SECURITY;
