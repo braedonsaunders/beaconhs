@@ -9,6 +9,62 @@
 // "A,B,C" matches "c,b,a".
 
 export type QuestionKind = 'text' | 'single_choice' | 'multi_choice' | 'numeric' | 'true_false'
+type ChoiceOption = { value: string; label: string }
+
+function submittedChoiceOptions(options: unknown): ChoiceOption[] {
+  if (!Array.isArray(options)) return []
+  return options.filter(
+    (option): option is ChoiceOption =>
+      option != null &&
+      typeof option === 'object' &&
+      'value' in option &&
+      typeof option.value === 'string' &&
+      'label' in option &&
+      typeof option.label === 'string',
+  )
+}
+
+export function normalizeSubmittedAnswer(
+  kind: QuestionKind,
+  rawValues: string[],
+  options: unknown,
+  mandatory: boolean,
+): string | null {
+  const values = rawValues.map((value) => value.trim()).filter(Boolean)
+  if (values.length === 0) {
+    if (mandatory) throw new Error('Answer every required question before submitting')
+    return null
+  }
+
+  if (kind === 'text') return values[0] ?? null
+  if (kind === 'numeric') {
+    const value = values[0]
+    if (!value || !Number.isFinite(Number(value))) throw new Error('Enter a valid number')
+    return value
+  }
+  if (kind === 'true_false') {
+    const value = values[0]
+    if (value !== 'true' && value !== 'false') throw new Error('Choose true or false')
+    return value
+  }
+
+  const choices = submittedChoiceOptions(options)
+  if (choices.length < 2) throw new Error('This assessment question has no available choices')
+  const allowed = new Set(choices.map((option) => option.value))
+  if (values.some((value) => !allowed.has(value))) {
+    throw new Error('An answer does not match the available choices')
+  }
+  if (kind === 'single_choice') {
+    if (values.length !== 1) throw new Error('Choose one answer')
+    return values[0] ?? null
+  }
+
+  const selected = new Set(values)
+  return choices
+    .filter((option) => selected.has(option.value))
+    .map((option) => option.value)
+    .join(',')
+}
 
 export function gradeAnswer(
   kind: QuestionKind,

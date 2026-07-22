@@ -275,7 +275,9 @@ export default async function AssessmentAttemptDetailPage({
                                 <AnswerInput
                                   resultId={r.id}
                                   kind={r.kindSnapshot}
+                                  options={r.optionsSnapshot}
                                   answer={r.answer}
+                                  mandatory={r.mandatorySnapshot}
                                   disabled={!canAct}
                                 />
                               </div>
@@ -289,7 +291,12 @@ export default async function AssessmentAttemptDetailPage({
                                       <GeneratedText id="m_08f8d29ea3c01e" />
                                       <GeneratedValue value={' '} />
                                       <span className="font-mono">
-                                        <GeneratedValue value={r.correctAnswerSnapshot} />
+                                        <GeneratedValue
+                                          value={formatChoiceAnswer(
+                                            r.correctAnswerSnapshot,
+                                            r.optionsSnapshot,
+                                          )}
+                                        />
                                       </span>
                                     </p>
                                   ) : null
@@ -351,22 +358,45 @@ export default async function AssessmentAttemptDetailPage({
   )
 }
 
-/**
- * Render the appropriate input for an answer based on the question kind. Because
- * we snapshot the `kind_snapshot` but not the option-list, we re-parse the
- * options from the originating question only at the type-detail page; here we
- * render a textarea-based fallback for choice questions (the candidate types
- * the option value). This keeps the page server-only with no client JS.
- */
+type ChoiceOption = { value: string; label: string }
+
+function validChoiceOptions(options: unknown): ChoiceOption[] {
+  if (!Array.isArray(options)) return []
+  return options.filter(
+    (option): option is ChoiceOption =>
+      option != null &&
+      typeof option === 'object' &&
+      'value' in option &&
+      typeof option.value === 'string' &&
+      'label' in option &&
+      typeof option.label === 'string',
+  )
+}
+
+function formatChoiceAnswer(answer: string, options: unknown): string {
+  const choices = validChoiceOptions(options)
+  if (choices.length === 0) return answer
+  const labels = new Map(choices.map((option) => [option.value, option.label]))
+  return answer
+    .split(',')
+    .map((value) => labels.get(value.trim()) ?? value.trim())
+    .filter(Boolean)
+    .join(', ')
+}
+
 function AnswerInput({
   resultId,
   kind,
+  options,
   answer,
+  mandatory,
   disabled,
 }: {
   resultId: string
   kind: string
+  options: unknown
   answer: string | null
+  mandatory: boolean
   disabled?: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
@@ -378,46 +408,81 @@ function AnswerInput({
         rows={3}
         defaultValue={answer ?? ''}
         disabled={disabled}
+        required={mandatory}
         placeholder={tGenerated('m_03679ea3fca4d3')}
       />
     )
   }
   if (kind === 'numeric') {
     return (
-      <Input name={name} type="number" step="any" defaultValue={answer ?? ''} disabled={disabled} />
+      <Input
+        name={name}
+        type="number"
+        step="any"
+        defaultValue={answer ?? ''}
+        disabled={disabled}
+        required={mandatory}
+      />
     )
   }
   if (kind === 'true_false') {
     return (
-      <Select name={name} defaultValue={answer ?? ''} disabled={disabled}>
+      <Select name={name} defaultValue={answer ?? ''} disabled={disabled} required={mandatory}>
         <option value="">{'— Pick one —'}</option>
         <option value="true">{'True'}</option>
         <option value="false">{'False'}</option>
       </Select>
     )
   }
-  if (kind === 'multi_choice') {
-    return (
-      <div className="space-y-2">
-        <Input
-          name={name}
-          defaultValue={answer ?? ''}
-          disabled={disabled}
-          placeholder={tGenerated('m_00800734f33d24')}
-        />
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          <GeneratedText id="m_0202beb2abf5c8" />
+  const choices = validChoiceOptions(options)
+  if (kind === 'single_choice' || kind === 'multi_choice') {
+    if (choices.length === 0) {
+      return (
+        <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+          <GeneratedText id="m_0988b671c7f65b" />
         </p>
-      </div>
+      )
+    }
+    const selected = new Set(
+      (answer ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
+    )
+    return (
+      <fieldset
+        className="space-y-2"
+        aria-label={tGenerated(kind === 'single_choice' ? 'm_17ca695e06a9f9' : 'm_09bbeb80f7afa2')}
+      >
+        {choices.map((option, index) => (
+          <label
+            key={option.value}
+            className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 transition-colors hover:bg-slate-50 has-[:checked]:border-sky-500 has-[:checked]:bg-sky-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900 dark:has-[:checked]:border-sky-500 dark:has-[:checked]:bg-sky-950/40"
+          >
+            <input
+              type={kind === 'single_choice' ? 'radio' : 'checkbox'}
+              name={name}
+              value={option.value}
+              defaultChecked={selected.has(option.value)}
+              disabled={disabled}
+              required={kind === 'single_choice' && mandatory}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-sky-600"
+            />
+            <span>
+              <span className="mr-2 font-medium text-slate-500 dark:text-slate-400">
+                {String.fromCharCode(65 + index)}.
+              </span>
+              {option.label}
+            </span>
+          </label>
+        ))}
+        {kind === 'multi_choice' ? (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            <GeneratedText id="m_0ab7550e21edbf" />
+          </p>
+        ) : null}
+      </fieldset>
     )
   }
-  // single_choice (and fallback)
-  return (
-    <Input
-      name={name}
-      defaultValue={answer ?? ''}
-      disabled={disabled}
-      placeholder={tGenerated('m_0e2e5b38857229')}
-    />
-  )
+  return null
 }

@@ -99,6 +99,14 @@ On **Assessments**, search by person, assessment, or course. The person, assessm
 
 To start one, click **New assessment**. In the flyout, choose the person, then choose an active assessment type. BeaconHS creates the assessment and immediately opens the same record page used to answer, submit, review, or cancel it.
 
+## Answer an assessment
+
+1. Read each question.
+2. For a single-choice question, select one answer.
+3. For a multiple-choice question, select every answer that applies.
+4. Answer every required question, then choose **Submit for grading**.
+5. Review the score and result shown after submission.
+
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
 ## Tips
@@ -146,10 +154,11 @@ Only **Self-paced** courses completed inside BeaconHS issue automatically. Their
 
 1. Open **Training → Assessment types** and select a type.
 2. Use **Build** and choose **Add question**.
-3. Set the answer type, choices, correct answer, points, help text, and whether the question is required.
-4. Drag questions by their grip to reorder them. The arrow buttons are the keyboard-friendly alternative.
-5. Use **Settings** for the name, pass mark, linked course, learner messages, grading, and active state.
-6. Use **Activity** to review changes to the assessment type.`,
+3. Set the answer type, points, help text, and whether the question is required.
+4. For **Single choice** or **Multi choice**, enter each choice in its own row. Choose **Add choice** when you need another row, then use the circle or boxes to mark the correct answer or answers.
+5. Drag questions by their grip to reorder them. The arrow buttons are the keyboard-friendly alternative.
+6. Use **Settings** for the name, pass mark, linked course, learner messages, grading, and active state.
+7. Use **Activity** to review changes to the assessment type.`,
   },
   {
     slug: 'training-courses',

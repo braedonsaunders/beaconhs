@@ -238,11 +238,14 @@ export const trainingAssessmentResults = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     assessmentId: uuid('assessment_id').notNull(),
     questionId: uuid('question_id').notNull(),
-    // Snapshot the prompt + correct answer at attempt time. If the admin later
-    // edits the question, this attempt still shows what the user actually saw.
+    // Snapshot everything the learner sees and everything grading depends on.
+    // If an admin later edits the question, an in-progress or historical
+    // attempt must remain the exact assessment that was originally started.
     promptSnapshot: text('prompt_snapshot').notNull(),
     correctAnswerSnapshot: text('correct_answer_snapshot'),
     kindSnapshot: trainingAssessmentQuestionKind('kind_snapshot').notNull(),
+    optionsSnapshot: jsonb('options_snapshot').$type<{ value: string; label: string }[] | null>(),
+    mandatorySnapshot: boolean('mandatory_snapshot').default(true).notNull(),
     answer: text('answer'),
     correct: boolean('correct'),
     pointsAwarded: integer('points_awarded').default(0).notNull(),

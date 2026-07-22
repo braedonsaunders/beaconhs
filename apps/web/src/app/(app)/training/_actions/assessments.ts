@@ -24,7 +24,7 @@ import { recordAuditInTransaction } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
 import { createAssessmentAttempt } from '../_lib/assessment-attempts'
 import { addMonthsIso, isoToday } from '../_lib/dates'
-import { gradeAnswer, type QuestionKind } from '../_lib/grading'
+import { gradeAnswer, normalizeSubmittedAnswer, type QuestionKind } from '../_lib/grading'
 
 /**
  * Resolve the signed-in user's People record id, or null when no People row is
@@ -185,8 +185,14 @@ export async function submitAssessmentAttempt(attemptId: string, formData: FormD
     let pointsAwarded = 0
     let pointsPossible = 0
     for (const r of results) {
-      const answer = String(formData.get(`answer_${r.id}`) ?? '').trim() || null
-      const correct = gradeAnswer(r.kindSnapshot as QuestionKind, r.correctAnswerSnapshot, answer)
+      const kind = r.kindSnapshot as QuestionKind
+      const answer = normalizeSubmittedAnswer(
+        kind,
+        formData.getAll(`answer_${r.id}`).map(String),
+        r.optionsSnapshot,
+        r.mandatorySnapshot,
+      )
+      const correct = gradeAnswer(kind, r.correctAnswerSnapshot, answer)
       const awarded = correct === true ? (r.pointsPossible ?? 1) : 0
       // Free-text questions are never auto-graded and have no manual-marking
       // flow — leaving them in the denominator would cap the achievable score

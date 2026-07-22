@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { ClipboardCheck, Plus, Save } from 'lucide-react'
+import { ClipboardCheck, Plus, Save, Trash2 } from 'lucide-react'
 import { Badge, Button, Drawer, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import {
   GeneratedText,
@@ -63,6 +63,33 @@ type Question = {
   points: number
   mandatory: boolean
   entityOrder: number
+}
+type ChoiceOption = { value: string; label: string }
+
+function questionChoiceOptions(question: Question | null): ChoiceOption[] {
+  if (Array.isArray(question?.options)) {
+    const options = question.options.filter(
+      (option): option is ChoiceOption =>
+        option != null &&
+        typeof option === 'object' &&
+        'value' in option &&
+        typeof option.value === 'string' &&
+        'label' in option &&
+        typeof option.label === 'string',
+    )
+    if (options.length >= 2) return options
+  }
+  return [
+    { value: 'option_1', label: '' },
+    { value: 'option_2', label: '' },
+  ]
+}
+
+function nextChoiceValue(options: ChoiceOption[]): string {
+  const existing = new Set(options.map((option) => option.value))
+  let index = 1
+  while (existing.has(`option_${index}`)) index += 1
+  return `option_${index}`
 }
 
 export function TrainingAssessmentTypeBuilder({
@@ -386,9 +413,49 @@ function QuestionDrawer({
   const tGenerated = useGeneratedTranslations()
   const [pending, startTransition] = React.useTransition()
   const [kind, setKind] = React.useState(question?.kind ?? 'single_choice')
-  const options = Array.isArray(question?.options)
-    ? (question.options as Array<{ label?: string; value?: string }>)
-    : []
+  const [options, setOptions] = React.useState<ChoiceOption[]>(() =>
+    questionChoiceOptions(question),
+  )
+  const [correctChoices, setCorrectChoices] = React.useState<string[]>(() =>
+    (question?.correctAnswer ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  )
+  const choiceQuestion = kind === 'single_choice' || kind === 'multi_choice'
+  const correctAnswer =
+    kind === 'single_choice'
+      ? (correctChoices[0] ?? '')
+      : options
+          .filter((option) => correctChoices.includes(option.value))
+          .map((option) => option.value)
+          .join(',')
+  const choiceEditorComplete =
+    !choiceQuestion ||
+    (options.length >= 2 &&
+      options.every((option) => option.label.trim().length > 0) &&
+      correctAnswer.length > 0)
+
+  function removeOption(value: string) {
+    if (options.length <= 2) return
+    setOptions((current) => current.filter((option) => option.value !== value))
+    setCorrectChoices((current) => current.filter((item) => item !== value))
+  }
+
+  function toggleCorrectChoice(value: string, checked: boolean) {
+    if (kind === 'single_choice') {
+      setCorrectChoices(checked ? [value] : [])
+      return
+    }
+    setCorrectChoices((current) =>
+      checked
+        ? current.includes(value)
+          ? current
+          : [...current, value]
+        : current.filter((item) => item !== value),
+    )
+  }
+
   return (
     <Drawer
       open={open}
@@ -401,7 +468,11 @@ function QuestionDrawer({
           <Button variant="outline" onClick={onClose}>
             <GeneratedText id="m_112e2e8ecda428" />
           </Button>
-          <Button type="submit" form="assessment-question-form" disabled={pending}>
+          <Button
+            type="submit"
+            form="assessment-question-form"
+            disabled={pending || !choiceEditorComplete}
+          >
             <GeneratedValue
               value={
                 question ? (
@@ -452,38 +523,111 @@ function QuestionDrawer({
             <Input name="points" type="number" min={1} defaultValue={question?.points ?? 1} />
           </div>
         </div>
-        {kind === 'single_choice' || kind === 'multi_choice' ? (
-          <div className="space-y-1.5">
-            <Label>
-              <GeneratedText id="m_13425e9e2e5168" />
-            </Label>
-            <Textarea
-              name="options"
-              rows={5}
-              defaultValue={options.map((option) => option.label ?? option.value ?? '').join('\n')}
-              required
-            />
-          </div>
+        {choiceQuestion ? (
+          <fieldset className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <legend className="text-sm leading-none font-medium text-slate-900 dark:text-slate-100">
+                <GeneratedText id="m_13425e9e2e5168" />
+              </legend>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                <GeneratedText
+                  id={kind === 'single_choice' ? 'm_0a0de23acdd3a9' : 'm_12f9ab3443f098'}
+                />
+              </span>
+            </div>
+            <input type="hidden" name="options" value={JSON.stringify(options)} />
+            <input type="hidden" name="correctAnswer" value={correctAnswer} />
+            <div className="space-y-2">
+              {options.map((option, index) => {
+                const inputId = `assessment-choice-${index}`
+                return (
+                  <div
+                    key={option.value}
+                    className="flex items-center gap-2 rounded-md border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-950"
+                  >
+                    <input
+                      id={inputId}
+                      type={kind === 'single_choice' ? 'radio' : 'checkbox'}
+                      checked={
+                        kind === 'single_choice'
+                          ? correctChoices[0] === option.value
+                          : correctChoices.includes(option.value)
+                      }
+                      onChange={(event) =>
+                        toggleCorrectChoice(option.value, event.currentTarget.checked)
+                      }
+                      className="h-4 w-4 shrink-0 accent-sky-600"
+                      aria-label={tGenerated('m_0ce645817b8812', { value0: index + 1 })}
+                    />
+                    <Input
+                      value={option.label}
+                      onChange={(event) =>
+                        setOptions((current) =>
+                          current.map((item) =>
+                            item.value === option.value
+                              ? { ...item, label: event.currentTarget.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      placeholder={tGenerated('m_1e0081bf0fdcad', { value0: index + 1 })}
+                      aria-label={tGenerated('m_1e0081bf0fdcad', { value0: index + 1 })}
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeOption(option.value)}
+                      disabled={options.length <= 2}
+                      aria-label={tGenerated('m_10fe694e346e34', { value0: index + 1 })}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={options.length >= 50}
+              onClick={() =>
+                setOptions((current) => [
+                  ...current,
+                  { value: nextChoiceValue(current), label: '' },
+                ])
+              }
+            >
+              <Plus size={14} /> <GeneratedText id="m_0f4383c7906865" />
+            </Button>
+          </fieldset>
         ) : null}
         {kind !== 'text' ? (
           <div className="space-y-1.5">
-            <Label>
-              <GeneratedText id="m_101746dffd63c7" />
-            </Label>
-            {kind === 'true_false' ? (
-              <Select name="correctAnswer" defaultValue={question?.correctAnswer ?? 'true'}>
-                <option value="true">True</option>
-                <option value="false">False</option>
-              </Select>
-            ) : (
-              <Input
-                name="correctAnswer"
-                defaultValue={question?.correctAnswer ?? ''}
-                placeholder={tGenerated(
-                  kind === 'multi_choice' ? 'm_0a017b099ef8fa' : 'm_14570dbd7256db',
+            {!choiceQuestion ? (
+              <>
+                <Label>
+                  <GeneratedText id="m_101746dffd63c7" />
+                </Label>
+                {kind === 'true_false' ? (
+                  <Select name="correctAnswer" defaultValue={question?.correctAnswer ?? 'true'}>
+                    <option value="true">True</option>
+                    <option value="false">False</option>
+                  </Select>
+                ) : (
+                  <Input
+                    name="correctAnswer"
+                    type="number"
+                    step="any"
+                    required
+                    defaultValue={question?.correctAnswer ?? ''}
+                    placeholder={tGenerated('m_14570dbd7256db')}
+                  />
                 )}
-              />
-            )}
+              </>
+            ) : null}
           </div>
         ) : null}
         <div className="space-y-1.5">

@@ -8,6 +8,11 @@ import { assertComplianceTargetCanRetire } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAuditInTransaction } from '@/lib/audit'
+import {
+  ASSESSMENT_QUESTION_KINDS,
+  parseAssessmentQuestionChoices,
+  type AssessmentQuestionKind,
+} from '../_lib/assessment-question-input'
 
 /**
  * Instant-create an assessment type and land in its detail editor (where the
@@ -174,38 +179,6 @@ export async function deleteAssessmentType(typeId: string) {
 
 // ----- Question CRUD ------------------------------------------------------
 
-const QUESTION_KINDS = ['text', 'single_choice', 'multi_choice', 'numeric', 'true_false'] as const
-type QuestionKind = (typeof QUESTION_KINDS)[number]
-
-function parseOptions(raw: string | null): { value: string; label: string }[] | null {
-  if (!raw) return null
-  // Accept newline-separated list or JSON array.
-  const trimmed = raw.trim()
-  if (trimmed.startsWith('[')) {
-    try {
-      const arr = JSON.parse(trimmed)
-      if (Array.isArray(arr)) {
-        return arr
-          .map((x) => {
-            if (typeof x === 'string') return { value: x, label: x }
-            if (x && typeof x === 'object' && typeof x.value === 'string') {
-              return { value: String(x.value), label: String(x.label ?? x.value) }
-            }
-            return null
-          })
-          .filter((x): x is { value: string; label: string } => x !== null)
-      }
-    } catch {
-      /* fallthrough to line-split */
-    }
-  }
-  return trimmed
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s, i) => ({ value: String.fromCharCode(65 + i), label: s }))
-}
-
 export async function createAssessmentQuestion(typeId: string, formData: FormData) {
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
@@ -215,18 +188,15 @@ export async function createAssessmentQuestion(typeId: string, formData: FormDat
   const prompt = String(formData.get('prompt') ?? '').trim()
   if (!prompt) throw new Error('Prompt is required')
   const kindRaw = String(formData.get('kind') ?? 'single_choice')
-  if (!QUESTION_KINDS.includes(kindRaw as QuestionKind)) throw new Error('Invalid kind')
-  const kind = kindRaw as QuestionKind
-  const optionsRaw = String(formData.get('options') ?? '').trim() || null
-  let options =
-    kind === 'single_choice' || kind === 'multi_choice' ? parseOptions(optionsRaw) : null
-  if (kind === 'true_false') {
-    options = [
-      { value: 'true', label: 'True' },
-      { value: 'false', label: 'False' },
-    ]
+  if (!ASSESSMENT_QUESTION_KINDS.includes(kindRaw as AssessmentQuestionKind)) {
+    throw new Error('Invalid kind')
   }
-  const correctAnswer = String(formData.get('correctAnswer') ?? '').trim() || null
+  const kind = kindRaw as AssessmentQuestionKind
+  const { options, correctAnswer } = parseAssessmentQuestionChoices(
+    kind,
+    String(formData.get('options') ?? ''),
+    String(formData.get('correctAnswer') ?? ''),
+  )
   const helpText = String(formData.get('helpText') ?? '').trim() || null
   const points = Math.max(1, Number(String(formData.get('points') ?? '1')) || 1)
   const mandatory = formData.has('mandatory') ? formData.getAll('mandatory').includes('on') : true
@@ -275,18 +245,15 @@ export async function updateAssessmentQuestion(
   const prompt = String(formData.get('prompt') ?? '').trim()
   if (!prompt) throw new Error('Prompt is required')
   const kindRaw = String(formData.get('kind') ?? 'single_choice')
-  if (!QUESTION_KINDS.includes(kindRaw as QuestionKind)) throw new Error('Invalid kind')
-  const kind = kindRaw as QuestionKind
-  const optionsRaw = String(formData.get('options') ?? '').trim() || null
-  let options =
-    kind === 'single_choice' || kind === 'multi_choice' ? parseOptions(optionsRaw) : null
-  if (kind === 'true_false') {
-    options = [
-      { value: 'true', label: 'True' },
-      { value: 'false', label: 'False' },
-    ]
+  if (!ASSESSMENT_QUESTION_KINDS.includes(kindRaw as AssessmentQuestionKind)) {
+    throw new Error('Invalid kind')
   }
-  const correctAnswer = String(formData.get('correctAnswer') ?? '').trim() || null
+  const kind = kindRaw as AssessmentQuestionKind
+  const { options, correctAnswer } = parseAssessmentQuestionChoices(
+    kind,
+    String(formData.get('options') ?? ''),
+    String(formData.get('correctAnswer') ?? ''),
+  )
   const helpText = String(formData.get('helpText') ?? '').trim() || null
   const points = Math.max(1, Number(String(formData.get('points') ?? '1')) || 1)
   const mandatory = formData.get('mandatory') === 'on'

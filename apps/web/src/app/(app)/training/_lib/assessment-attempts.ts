@@ -126,6 +126,8 @@ export async function createAssessmentAttempt(
         promptSnapshot: q.prompt,
         correctAnswerSnapshot: q.correctAnswer,
         kindSnapshot: q.kind,
+        optionsSnapshot: q.options,
+        mandatorySnapshot: q.mandatory,
         pointsPossible: q.points ?? 1,
       })),
     )
