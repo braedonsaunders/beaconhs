@@ -23,6 +23,7 @@ import {
 import { History, Pause, Play, Trash2, Zap } from 'lucide-react'
 import { reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
+import { normalizeTrainingReportFilters } from '@beaconhs/reports'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
 import { FilterChips } from '@/components/filter-bar'
@@ -35,6 +36,7 @@ import { formatCadence, StatusBadge } from '../../_format'
 import { formatDateTime } from '@/lib/datetime'
 import { loadScheduleFormData } from '../_data'
 import { ScheduleForm } from '../_schedule-form'
+import { loadTrainingFilterSelections } from '../../_training-filter-data'
 import { deleteSchedule, setActive, triggerNow, updateSchedule } from './actions'
 
 export async function generateMetadata() {
@@ -78,31 +80,35 @@ export default async function ScheduleDetailPage({
 
   const canSchedule = can(ctx, 'reports.schedule')
 
-  const [definition, { definitions, members }, runData] = await Promise.all([
-    loadDefinitionById(ctx.tenantId!, schedule.definitionId),
-    canSchedule
-      ? loadScheduleFormData(ctx)
-      : Promise.resolve({ definitions: [] as never[], members: [] as never[] }),
-    ctx.db(async (tx) => {
-      const search: SQL<unknown> | undefined = listParams.q
-        ? sql`(${reportRuns.status}::text ilike ${`%${listParams.q}%`} or ${reportRuns.trigger}::text ilike ${`%${listParams.q}%`} or ${reportRuns.startedAt}::text ilike ${`%${listParams.q}%`})`
-        : undefined
-      const where = and(
-        eq(reportRuns.scheduleId, id),
-        search,
-        statusFilter ? eq(reportRuns.status, statusFilter) : undefined,
-      )
-      const [totalRow] = await tx.select({ c: count() }).from(reportRuns).where(where)
-      const rows = await tx
-        .select()
-        .from(reportRuns)
-        .where(where)
-        .orderBy(desc(reportRuns.startedAt))
-        .limit(listParams.perPage)
-        .offset((listParams.page - 1) * listParams.perPage)
-      return { rows, total: Number(totalRow?.c ?? 0) }
-    }),
-  ])
+  const [definition, { definitions, members }, runData, trainingFilterSelections] =
+    await Promise.all([
+      loadDefinitionById(ctx.tenantId!, schedule.definitionId),
+      canSchedule
+        ? loadScheduleFormData(ctx)
+        : Promise.resolve({ definitions: [] as never[], members: [] as never[] }),
+      ctx.db(async (tx) => {
+        const search: SQL<unknown> | undefined = listParams.q
+          ? sql`(${reportRuns.status}::text ilike ${`%${listParams.q}%`} or ${reportRuns.trigger}::text ilike ${`%${listParams.q}%`} or ${reportRuns.startedAt}::text ilike ${`%${listParams.q}%`})`
+          : undefined
+        const where = and(
+          eq(reportRuns.scheduleId, id),
+          search,
+          statusFilter ? eq(reportRuns.status, statusFilter) : undefined,
+        )
+        const [totalRow] = await tx.select({ c: count() }).from(reportRuns).where(where)
+        const rows = await tx
+          .select()
+          .from(reportRuns)
+          .where(where)
+          .orderBy(desc(reportRuns.startedAt))
+          .limit(listParams.perPage)
+          .offset((listParams.page - 1) * listParams.perPage)
+        return { rows, total: Number(totalRow?.c ?? 0) }
+      }),
+      canSchedule
+        ? loadTrainingFilterSelections(ctx, normalizeTrainingReportFilters(schedule.filters ?? {}))
+        : Promise.resolve(undefined),
+    ])
   const runs = runData.rows
   const basePath = `/reports/schedules/${id}`
 
@@ -227,6 +233,7 @@ export default async function ScheduleDetailPage({
                     }}
                     submitLabel={tGenerated('m_1ab9025ed1067c')}
                     action={updateBound}
+                    initialTrainingSelections={trainingFilterSelections}
                     extraFooter={
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         <GeneratedText id="m_055eaa561d8421" />

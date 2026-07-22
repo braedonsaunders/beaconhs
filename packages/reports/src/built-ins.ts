@@ -41,6 +41,7 @@ import {
   type ReportRange,
   type ReportRunResult,
 } from './types'
+import { normalizeTrainingReportFilters, type TrainingReportQueryKind } from './training-filters'
 
 type Filters = Record<string, unknown>
 
@@ -251,6 +252,246 @@ export async function queryTrainingExpiring(
     ],
     rowCount: rows.length,
   }
+}
+
+// --- legacy-parity training credential reports -----------------------------
+
+type TrainingCredentialRow = {
+  person_id: string
+  employee_no: string | null
+  person_name: string
+  course_id: string
+  course_code: string
+  course_name: string
+  completed_on: unknown
+  expires_on: unknown
+  coverage_status: 'valid' | 'expiring' | 'expired' | 'missing'
+}
+
+function uuidIn(column: string, values: string[]) {
+  return sql.join(
+    [
+      sql.raw(`${column} IN (`),
+      sql.join(
+        values.map((value) => sql`${value}::uuid`),
+        sql.raw(', '),
+      ),
+      sql.raw(')'),
+    ],
+    sql.raw(''),
+  )
+}
+
+/**
+ * Canonical training credential runner. It replaces four hard-coded legacy
+ * endpoints while preserving their useful runtime controls: employee/group/
+ * department, course/type, expiry horizon, and employee/course grouping.
+ * The base training and compliance tables supply one latest credential per
+ * active person/course plus whether that course is assigned to the person.
+ */
+export async function queryTrainingCredentialReport(
+  tx: Database,
+  rawFilters: Filters,
+  kind: TrainingReportQueryKind,
+  maxRows?: number,
+): Promise<ReportRunResult> {
+  const filters = normalizeTrainingReportFilters(rawFilters)
+  const requestedLimit = Number.isFinite(maxRows) ? Math.trunc(maxRows!) : 10_000
+  const limit = Math.min(Math.max(requestedLimit, 1), 10_000)
+  const where = [sql`TRUE`]
+
+  if (filters.personIds.length) where.push(uuidIn('person_id', filters.personIds))
+  if (filters.departmentIds.length) {
+    where.push(uuidIn('department_id', filters.departmentIds))
+  }
+  if (filters.courseIds.length) where.push(uuidIn('course_id', filters.courseIds))
+  if (filters.deliveryTypes.length) {
+    where.push(
+      sql.join(
+        [
+          sql.raw('delivery_type IN ('),
+          sql.join(
+            filters.deliveryTypes.map((value) => sql`${value}`),
+            sql.raw(', '),
+          ),
+          sql.raw(')'),
+        ],
+        sql.raw(''),
+      ),
+    )
+  }
+  if (filters.groupIds.length) {
+    where.push(
+      sql.join(
+        [
+          sql.raw('group_ids && ARRAY['),
+          sql.join(
+            filters.groupIds.map((value) => sql`${value}::uuid`),
+            sql.raw(', '),
+          ),
+          sql.raw(']::uuid[]'),
+        ],
+        sql.raw(''),
+      ),
+    )
+  }
+
+  if (kind === 'training_certificates') {
+    where.push(sql`completed_on IS NOT NULL`)
+    if (!filters.includeExpired) {
+      where.push(sql`(expires_on IS NULL OR expires_on >= CURRENT_DATE)`)
+    }
+  } else if (kind === 'training_expired_upcoming') {
+    where.push(sql`expires_on IS NOT NULL`)
+    where.push(sql`expires_on <= CURRENT_DATE + (${filters.expiryWindowDays} * INTERVAL '1 day')`)
+  } else if (kind === 'training_missing') {
+    // Unlike the retired all-people × all-courses fallback, a never-trained
+    // cell is missing only when the unified compliance engine assigns that
+    // course to that person. Assigned credentials nearing/past expiry remain
+    // visible so supervisors can act before compliance is lost.
+    where.push(sql`is_required IS TRUE`)
+    where.push(sql`coverage_status IN ('missing', 'expired', 'expiring')`)
+  }
+
+  const result = (await tx.execute(sql`
+    WITH latest AS (
+      SELECT DISTINCT ON (r.tenant_id, r.person_id, r.course_id)
+             r.tenant_id, r.person_id, r.course_id, r.completed_on, r.expires_on
+      FROM training_records r
+      WHERE r.deleted_at IS NULL
+      ORDER BY r.tenant_id, r.person_id, r.course_id,
+               r.completed_on DESC, r.created_at DESC, r.id DESC
+    ), matrix AS (
+      SELECT
+        p.id AS person_id,
+        p.employee_no,
+        (p.last_name || ', ' || p.first_name) AS person_name,
+        p.department_id,
+        c.id AS course_id,
+        c.code AS course_code,
+        c.name AS course_name,
+        c.delivery_type,
+        l.completed_on,
+        l.expires_on,
+        CASE
+          WHEN l.person_id IS NULL THEN 'missing'
+          WHEN l.expires_on IS NULL THEN 'valid'
+          WHEN l.expires_on < CURRENT_DATE THEN 'expired'
+          WHEN l.expires_on <= CURRENT_DATE + ${filters.expiryWindowDays}::integer THEN 'expiring'
+          ELSE 'valid'
+        END AS coverage_status,
+        coalesce(
+          ARRAY(
+            SELECT gm.group_id
+            FROM person_group_memberships gm
+            WHERE gm.tenant_id = p.tenant_id AND gm.person_id = p.id
+            ORDER BY gm.group_id
+          ),
+          ARRAY[]::uuid[]
+        ) AS group_ids,
+        EXISTS (
+          SELECT 1
+          FROM compliance_status cs
+          JOIN compliance_obligations co ON co.id = cs.obligation_id
+          WHERE cs.tenant_id = p.tenant_id
+            AND cs.person_id = p.id
+            AND co.tenant_id = p.tenant_id
+            AND co.source_module IN ('training', 'cert_requirement')
+            AND co.status = 'active'
+            AND co.deleted_at IS NULL
+            AND co.target_ref->>'courseId' = c.id::text
+        ) AS is_required
+      FROM people p
+      CROSS JOIN training_courses c
+      LEFT JOIN latest l
+        ON l.person_id = p.id
+       AND l.course_id = c.id
+       AND l.tenant_id = p.tenant_id
+      WHERE p.tenant_id = c.tenant_id
+        AND p.status = 'active'
+        AND p.deleted_at IS NULL
+        AND c.deleted_at IS NULL
+    )
+    SELECT person_id, employee_no, person_name,
+           course_id, course_code, course_name,
+           completed_on, expires_on, coverage_status
+    FROM matrix
+    WHERE ${sql.join(where, sql.raw(' AND '))}
+    ORDER BY
+      ${filters.groupBy === 'employee' ? sql.raw('person_name, course_name') : sql.raw('course_name, person_name')}
+    LIMIT ${sql.raw(String(limit))}
+  `)) as unknown
+  const rows = extractRows(result) as TrainingCredentialRow[]
+
+  const groups = buildTrainingCredentialGroups(rows, filters.groupBy)
+  const byStatus = new Map<string, number>()
+  for (const row of rows) {
+    byStatus.set(row.coverage_status, (byStatus.get(row.coverage_status) ?? 0) + 1)
+  }
+
+  return {
+    groups,
+    summary: [
+      { label: 'Rows', value: rows.length },
+      { label: filters.groupBy === 'employee' ? 'Employees' : 'Courses', value: groups.length },
+      ...['missing', 'expired', 'expiring', 'valid']
+        .filter((status) => byStatus.has(status))
+        .map((status) => ({ label: formatLabel(status), value: byStatus.get(status) ?? 0 })),
+    ],
+    rowCount: rows.length,
+  }
+}
+
+function buildTrainingCredentialGroups(
+  rows: TrainingCredentialRow[],
+  groupBy: 'employee' | 'course',
+): ReportGroup[] {
+  const grouped = new Map<string, TrainingCredentialRow[]>()
+  for (const row of rows) {
+    const key = groupBy === 'employee' ? row.person_name : row.course_name
+    const list = grouped.get(key) ?? []
+    list.push(row)
+    grouped.set(key, list)
+  }
+
+  if (grouped.size === 0) {
+    return [
+      {
+        title: 'Training credentials',
+        columns:
+          groupBy === 'employee'
+            ? ['Course', 'Completed', 'Expires', 'Status']
+            : ['Employee #', 'Employee', 'Completed', 'Expires', 'Status'],
+        rows: [],
+        isEmpty: true,
+      },
+    ]
+  }
+
+  return [...grouped.entries()].map(([title, list]) => ({
+    title,
+    subtitle: `${list.length} record${list.length === 1 ? '' : 's'}`,
+    columns:
+      groupBy === 'employee'
+        ? ['Course', 'Completed', 'Expires', 'Status']
+        : ['Employee #', 'Employee', 'Completed', 'Expires', 'Status'],
+    rows: list.map((row) =>
+      groupBy === 'employee'
+        ? [
+            `${row.course_code} — ${row.course_name}`,
+            dayString(row.completed_on),
+            dayString(row.expires_on),
+            formatLabel(row.coverage_status),
+          ]
+        : [
+            row.employee_no,
+            row.person_name,
+            dayString(row.completed_on),
+            dayString(row.expires_on),
+            formatLabel(row.coverage_status),
+          ],
+    ),
+  }))
 }
 
 // --- corrective_actions_open -------------------------------------------------

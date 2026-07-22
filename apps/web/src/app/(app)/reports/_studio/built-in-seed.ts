@@ -8,6 +8,21 @@
 
 import type { ReportCustomQuery } from '@beaconhs/db/schema'
 
+const TRAINING_MATRIX_SEED: ReportCustomQuery = {
+  entity: 'training_matrix',
+  mode: 'rows',
+  columns: [
+    'person_name',
+    'employee_no',
+    'course_name',
+    'completed_on',
+    'expires_on',
+    'coverage_status',
+  ],
+  groupBy: 'course_name',
+  sort: { column: 'person_name', direction: 'asc' },
+}
+
 const SEEDS: Record<string, ReportCustomQuery> = {
   incidents_summary: {
     entity: 'incidents',
@@ -76,11 +91,15 @@ const SEEDS: Record<string, ReportCustomQuery> = {
     sort: { column: 'title', direction: 'asc' },
   },
   training_expiring: {
-    entity: 'report_training_matrix',
+    entity: 'training_matrix',
     mode: 'rows',
     columns: ['person_name', 'course_name', 'completed_on', 'expires_on', 'coverage_status'],
     sort: { column: 'expires_on', direction: 'asc' },
   },
+  training_certificate_matrix: TRAINING_MATRIX_SEED,
+  training_certificates: TRAINING_MATRIX_SEED,
+  training_expired_upcoming: TRAINING_MATRIX_SEED,
+  training_missing: TRAINING_MATRIX_SEED,
   inspections_completed: {
     entity: 'inspection_records',
     mode: 'rows',

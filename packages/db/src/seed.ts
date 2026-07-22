@@ -115,15 +115,6 @@ async function main() {
           queryKind: 'incidents_summary',
         },
         {
-          slug: 'training_expiring_30d',
-          kind: 'built_in',
-          name: 'Training Expiring (30 days)',
-          description:
-            'Training records expiring in the next N days (default 30), grouped by course.',
-          category: 'training',
-          queryKind: 'training_expiring',
-        },
-        {
           slug: 'corrective_actions_open',
           kind: 'built_in',
           name: 'Open Corrective Actions',
@@ -224,10 +215,9 @@ async function main() {
         },
         // ----- Legacy BeaconHS report parity --------------------------------
         // Faithful ports of the legacy Laravel app's on-demand + scheduled
-        // reports, expressed as custom-query definitions over the curated
-        // entities (training_matrix / skill_assignments / equipment / ppe /
-        // corrective_actions). The matrix views pre-compute coverage_status on
-        // a 90-day "expiring" window — matching the legacy reports exactly.
+        // reports. Training credentials use dedicated runtime-filtered runners;
+        // the remaining single-source reports use curated custom-query entities
+        // (skill_assignments / equipment / ppe / corrective_actions).
         {
           slug: 'compliance_by_entity',
           kind: 'built_in',
@@ -260,97 +250,36 @@ async function main() {
           kind: 'built_in',
           name: 'Training — Certificate Matrix',
           description:
-            'Every active person × course with the latest certificate status (valid / expiring / expired / missing), grouped by person. Mirrors the legacy Training Certificates Matrix.',
+            'Every active person and selected course with the latest certificate status. Filter by employee, group, department, course, and delivery type; group by employee or course.',
           category: 'training',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'training_matrix',
-            mode: 'rows',
-            columns: [
-              'person_name',
-              'employee_no',
-              'course_code',
-              'course_name',
-              'completed_on',
-              'expires_on',
-              'coverage_status',
-            ],
-            groupBy: 'person_name',
-            sort: { column: 'person_name', direction: 'asc' },
-            limit: 10000,
-          },
+          queryKind: 'training_certificate_matrix',
         },
         {
           slug: 'training_certificates',
           kind: 'built_in',
           name: 'Training — Certificates',
           description:
-            'Held training certificates (valid, expiring, or expired — excludes never-trained), grouped by course. Mirrors the legacy Training Certificates listing.',
+            'Held training certificates. Filter by employee, group, department, course, and delivery type; include or exclude expired records and group by employee or course.',
           category: 'training',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'training_matrix',
-            mode: 'rows',
-            columns: [
-              'course_name',
-              'person_name',
-              'employee_no',
-              'completed_on',
-              'expires_on',
-              'coverage_status',
-            ],
-            filters: {
-              combinator: 'and',
-              rules: [
-                { field: 'coverage_status', op: 'in', value: ['valid', 'expiring', 'expired'] },
-              ],
-            },
-            groupBy: 'course_name',
-            sort: { column: 'person_name', direction: 'asc' },
-            limit: 10000,
-          },
+          queryKind: 'training_certificates',
         },
         {
           slug: 'training_expired_upcoming',
           kind: 'built_in',
           name: 'Training — Expired & Upcoming',
           description:
-            'Training certificates that are expired or expiring within 90 days, grouped by course. Mirrors the legacy Training Certificates Expired & Upcoming report.',
+            'Expired certificates and certificates expiring within a selectable 30–365 day window. Filter people and courses, then group by employee or course.',
           category: 'training',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'training_matrix',
-            mode: 'rows',
-            columns: ['person_name', 'employee_no', 'course_name', 'expires_on', 'coverage_status'],
-            filters: {
-              combinator: 'and',
-              rules: [{ field: 'coverage_status', op: 'in', value: ['expired', 'expiring'] }],
-            },
-            groupBy: 'course_name',
-            sort: { column: 'expires_on', direction: 'asc' },
-            limit: 5000,
-          },
+          queryKind: 'training_expired_upcoming',
         },
         {
           slug: 'training_missing',
           kind: 'built_in',
           name: 'Training — Missing',
           description:
-            'People who are missing a required course entirely or whose certificate has expired, grouped by course. Mirrors the legacy Training Certificates Missing report.',
+            'Assigned course requirements that are missing, expired, or expiring. Filter people and courses, then group by employee or course.',
           category: 'training',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'training_matrix',
-            mode: 'rows',
-            columns: ['person_name', 'employee_no', 'course_name', 'expires_on', 'coverage_status'],
-            filters: {
-              combinator: 'and',
-              rules: [{ field: 'coverage_status', op: 'in', value: ['missing', 'expired'] }],
-            },
-            groupBy: 'course_name',
-            sort: { column: 'person_name', direction: 'asc' },
-            limit: 10000,
-          },
+          queryKind: 'training_missing',
         },
         {
           slug: 'skills_matrix',
@@ -581,9 +510,17 @@ async function main() {
           },
         },
       ])
-      .onConflictDoNothing({
+      .onConflictDoUpdate({
         target: reportDefinitions.slug,
-        where: sql`${reportDefinitions.tenantId} is null`,
+        targetWhere: sql`${reportDefinitions.tenantId} is null`,
+        set: {
+          name: sql`excluded.name`,
+          description: sql`excluded.description`,
+          category: sql`excluded.category`,
+          queryKind: sql`excluded.query_kind`,
+          customQuery: sql`excluded.custom_query`,
+          updatedAt: sql`now()`,
+        },
       })
 
     // Equipment reports — migrated out of the retired native /equipment/reports

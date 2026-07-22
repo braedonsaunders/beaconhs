@@ -221,6 +221,9 @@ Open [Reports](/reports) from the sidebar. It has two tabs: **Reports** and **Sc
 2. Use **Search reports…** or the **Kind** and **Category** filters to narrow the list.
 3. Click a report. The right side shows the printed pages, exactly as the PDF will look.
 4. Click **Open** to see the full document. Use the day-range buttons (like **30 days**) to change how far back the report looks.
+5. On a training certificate, expired, missing, or matrix report, open **Report filters**. Choose any employees, people groups, departments, courses, or delivery types. Choose **Group by** → **Course** or **Employee**, then click **Apply**. Leaving a choice empty includes all records.
+
+The **Training — Expired & Upcoming** report also lets you choose an expiry window from 30 to 365 days. **Training — Certificates** can include or exclude expired certificates. **Training — Missing** only shows courses assigned to each employee through compliance requirements; it does not treat every course in the catalogue as required.
 
 On a phone, the list fills the screen; picking a report opens its preview, and **All reports** takes you back.
 
@@ -229,7 +232,7 @@ The built-in catalogue includes the former BeaconHS reports for training certifi
 ## Export a report
 
 1. Select or open the report.
-2. Click **CSV**, **Excel**, or **PDF**.
+2. Set any report filters first, then click **CSV**, **Excel**, or **PDF**.
 3. The file downloads. The PDF matches the preview page-for-page; CSV and Excel are best for working with the numbers.
 
 You can also click **Email PDF** on the full report to send it right away instead of downloading it.
@@ -242,9 +245,10 @@ Schedules send a report as a PDF email on a repeating schedule, so nobody has to
 2. Pick the report and give the schedule a name.
 3. Under **Delivery**, set the **Cadence** (**Daily**, **Weekly**, or **Monthly**), **Repeat every**, the day, and the time. Monthly schedules can use a calendar date or a weekday pattern such as the first Monday.
 4. Add an optional **Start date** or **End date** when the delivery must run only for a fixed period.
-5. Under **Recipients**, add team members, or type outside email addresses under **Additional email addresses**.
-6. Under **Email copy**, enter an optional subject or message. Leave them blank to use the standard report email.
-7. Click **Create schedule**.
+5. For a training report, set **Training report filters**. A schedule created from an already-filtered report carries those choices in automatically.
+6. Under **Recipients**, add team members, or type outside email addresses under **Additional email addresses**.
+7. Under **Email copy**, enter an optional subject or message. Leave them blank to use the standard report email.
+8. Click **Create schedule**.
 
 The schedule runs with the current access of the member and active role that created or last edited it. If that membership is suspended, the role is removed, or access to a Builder app is revoked, the run fails without exposing that app's records. Edit and save the schedule to claim it under your current role.
 

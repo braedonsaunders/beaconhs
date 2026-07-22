@@ -1,4 +1,5 @@
 export * from './types'
+export * from './training-filters'
 export * from './document'
 export * from './entities'
 export * from './refine'

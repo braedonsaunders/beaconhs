@@ -38,7 +38,7 @@ export const DOCUMENT_PREVIEW_MAX_ROWS = 500
 export async function runReportForViewer(
   ctx: RequestContext,
   definition: ReportDefinitionRow,
-  opts: { days?: number | null; maxRows?: number } = {},
+  opts: { days?: number | null; maxRows?: number; filters?: Record<string, unknown> } = {},
 ): Promise<ViewerRun> {
   const mode = rangeModeFor(definition.queryKind)
   const days =
@@ -47,7 +47,7 @@ export async function runReportForViewer(
       : opts.days && VIEWER_RANGE_CHOICES.includes(opts.days)
         ? opts.days
         : null
-  const filters: Record<string, unknown> = days ? { days } : {}
+  const filters: Record<string, unknown> = { ...(opts.filters ?? {}), ...(days ? { days } : {}) }
   const range = computeRangeFor(definition.queryKind, filters)
 
   try {

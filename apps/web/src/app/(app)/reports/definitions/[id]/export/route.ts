@@ -7,7 +7,12 @@ import { notFound } from 'next/navigation'
 import { NextResponse, type NextRequest } from 'next/server'
 import ExcelJS from 'exceljs'
 import { assertCan } from '@beaconhs/tenant'
-import { resolveReportLayout } from '@beaconhs/reports'
+import {
+  isTrainingReportQueryKind,
+  normalizeTrainingReportFilters,
+  resolveReportLayout,
+  trainingReportFiltersToRecord,
+} from '@beaconhs/reports'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -34,8 +39,26 @@ export async function GET(
   const format = formatRaw === 'xlsx' ? 'xlsx' : formatRaw === 'pdf' ? 'pdf' : 'csv'
   const daysRaw = url.searchParams.get('days')
   const days = daysRaw ? Number(daysRaw) : null
+  const runtimeFilters = isTrainingReportQueryKind(definition.queryKind)
+    ? trainingReportFiltersToRecord(
+        normalizeTrainingReportFilters({
+          personIds: url.searchParams.get('personIds'),
+          departmentIds: url.searchParams.get('departmentIds'),
+          groupIds: url.searchParams.get('groupIds'),
+          courseIds: url.searchParams.get('courseIds'),
+          deliveryTypes: url.searchParams.get('deliveryTypes'),
+          groupBy: url.searchParams.get('groupBy'),
+          expiryWindowDays: url.searchParams.get('expiryWindowDays'),
+          includeExpired: url.searchParams.get('includeExpired'),
+        }),
+      )
+    : {}
 
-  const run = await runReportForViewer(ctx, definition, { days, maxRows: 10_000 })
+  const run = await runReportForViewer(ctx, definition, {
+    days,
+    maxRows: 10_000,
+    filters: runtimeFilters,
+  })
   if (run.error) {
     return NextResponse.json({ error: run.error }, { status: 422 })
   }
@@ -45,7 +68,12 @@ export async function GET(
     entityId: id,
     action: 'export',
     summary: `Exported "${definition.name}" to ${format.toUpperCase()} (${run.result.rowCount} rows)`,
-    metadata: { format, rowCount: run.result.rowCount, rangeLabel: run.rangeLabel },
+    metadata: {
+      format,
+      rowCount: run.result.rowCount,
+      rangeLabel: run.rangeLabel,
+      filters: runtimeFilters,
+    },
   })
 
   const stamp = new Date().toISOString().slice(0, 10)

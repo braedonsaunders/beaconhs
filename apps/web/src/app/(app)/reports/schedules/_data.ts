@@ -19,6 +19,7 @@ export async function loadScheduleFormData(ctx: RequestContext): Promise<{
     category: d.category,
     kind: d.kind,
     description: d.description,
+    queryKind: d.queryKind,
   }))
 
   const members = await ctx.db(async (tx) => {

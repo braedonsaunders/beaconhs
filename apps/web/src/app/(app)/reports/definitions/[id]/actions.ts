@@ -8,7 +8,14 @@ import { reportDefinitions, reportSchedules } from '@beaconhs/db/schema'
 import { enqueueReportRun } from '@beaconhs/jobs'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { claimReportRun, computeNextRunAt } from '@beaconhs/reports'
+import {
+  claimReportRun,
+  computeNextRunAt,
+  isTrainingReportQueryKind,
+  normalizeTrainingReportFilters,
+  trainingReportFiltersToRecord,
+} from '@beaconhs/reports'
+import { assertBoundedReportFilters } from '@beaconhs/reports/schedule-policy'
 
 /**
  * Run-once: build (or reuse) a hidden, single-recipient schedule pointed at
@@ -16,7 +23,10 @@ import { claimReportRun, computeNextRunAt } from '@beaconhs/reports'
  * a schedule row because `report_runs` has a NOT-NULL FK to scheduleId — the
  * worker reads filters/recipients off it.
  */
-export async function runOnceFromDefinition(definitionId: string): Promise<void> {
+export async function runOnceFromDefinition(
+  definitionId: string,
+  formData: FormData,
+): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.schedule')
   if (!ctx.membership) throw new Error('An active tenant membership is required to run reports')
@@ -37,6 +47,23 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
     return d ?? null
   })
   if (!def) throw new Error('Definition not visible to this tenant')
+
+  const rawFilters = String(formData.get('filters') ?? '').trim()
+  let requestedFilters: Record<string, unknown> = {}
+  if (rawFilters) {
+    try {
+      const parsed: unknown = JSON.parse(rawFilters)
+      assertBoundedReportFilters(parsed)
+      requestedFilters = parsed
+    } catch (error) {
+      throw new Error(
+        `Invalid report filters: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
+  const filters = isTrainingReportQueryKind(def.queryKind)
+    ? trainingReportFiltersToRecord(normalizeTrainingReportFilters(requestedFilters))
+    : requestedFilters
 
   // Reuse an existing one-shot schedule if we already made one for this def.
   const oneShotName = `One-shot — ${def.name}`
@@ -61,6 +88,7 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
         .set({
           recipientUserIds: [ctx.userId],
           recipientEmails: [],
+          filters,
           runAsTenantUserId,
           runAsRoleId: ctx.activeRoleId ?? null,
         })
@@ -95,7 +123,7 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
         timezone: 'America/Toronto',
         recipientUserIds: [ctx.userId],
         recipientEmails: [],
-        filters: {},
+        filters,
         runAsTenantUserId,
         runAsRoleId: ctx.activeRoleId ?? null,
         nextRunAt,
@@ -116,7 +144,7 @@ export async function runOnceFromDefinition(definitionId: string): Promise<void>
     entityId: definitionId,
     action: 'export',
     summary: `Ran one-shot of "${def.name}"`,
-    metadata: { scheduleId, runId },
+    metadata: { scheduleId, runId, filters },
   })
 
   revalidatePath(`/reports/definitions/${definitionId}`)

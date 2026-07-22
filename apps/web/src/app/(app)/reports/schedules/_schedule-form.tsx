@@ -16,7 +16,17 @@ import {
 import { useMemo, useState } from 'react'
 import { X } from 'lucide-react'
 import { Button, Input, Label, SearchSelect, Select, Textarea } from '@beaconhs/ui'
+import {
+  isTrainingReportQueryKind,
+  normalizeTrainingReportFilters,
+  TRAINING_REPORT_DELIVERY_TYPES,
+  TRAINING_REPORT_EXPIRY_WINDOWS,
+  trainingReportFiltersToRecord,
+} from '@beaconhs/reports/training-filters'
 import { REPORT_SCHEDULE_LIMITS } from '@beaconhs/reports/schedule-policy'
+import { RemoteMultiSelect } from '@/components/remote-multi-select'
+import type { PickerOption } from '@/lib/picker-options'
+import type { TrainingFilterSelections } from '../_training-filter-data'
 
 export type ScheduleFormDefinition = {
   id: string
@@ -24,6 +34,7 @@ export type ScheduleFormDefinition = {
   category: string | null
   kind: 'built_in' | 'custom'
   description: string | null
+  queryKind: string
 }
 
 export type ScheduleFormMember = { userId: string; name: string; email: string }
@@ -57,6 +68,7 @@ export function ScheduleForm({
   submitLabel,
   action,
   extraFooter,
+  initialTrainingSelections,
 }: {
   definitions: ScheduleFormDefinition[]
   members: ScheduleFormMember[]
@@ -64,6 +76,7 @@ export function ScheduleForm({
   submitLabel: string
   action: (formData: FormData) => Promise<void>
   extraFooter?: React.ReactNode
+  initialTrainingSelections?: TrainingFilterSelections
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
@@ -71,6 +84,7 @@ export function ScheduleForm({
     initial?.definitionId ?? definitions[0]?.id ?? '',
   )
   const definition = definitions.find((d) => d.id === definitionId)
+  const isTrainingReport = definition ? isTrainingReportQueryKind(definition.queryKind) : false
   const [name, setName] = useState(initial?.name ?? '')
   const [cadence, setCadence] = useState<'daily' | 'weekly' | 'monthly'>(
     initial?.cadence ?? 'weekly',
@@ -82,19 +96,71 @@ export function ScheduleForm({
     () => new Set(initial?.recipientUserIds ?? []),
   )
 
-  // The stored filters minus the `days` key we manage with a dedicated input.
-  const { days: initialDays, ...initialAdvanced } = (initial?.filters ?? {}) as Record<
-    string,
-    unknown
-  >
+  const initialFilterRecord = (initial?.filters ?? {}) as Record<string, unknown>
+  const { days: initialDays, ...initialAdvancedRaw } = initialFilterRecord
+  const initialAdvanced = Object.fromEntries(
+    Object.entries(initialAdvancedRaw).filter(
+      ([key]) =>
+        ![
+          'personIds',
+          'departmentIds',
+          'groupIds',
+          'courseIds',
+          'deliveryTypes',
+          'groupBy',
+          'expiryWindowDays',
+          'includeExpired',
+        ].includes(key),
+    ),
+  )
+  const initialTraining = normalizeTrainingReportFilters(initialFilterRecord)
   const [days, setDays] = useState<string>(
     typeof initialDays === 'number' ? String(initialDays) : '',
   )
   const [advanced, setAdvanced] = useState<string>(
     Object.keys(initialAdvanced).length ? JSON.stringify(initialAdvanced, null, 2) : '',
   )
+  const [trainingPeople, setTrainingPeople] = useState<PickerOption[]>(
+    initialTrainingSelections?.people ?? [],
+  )
+  const [trainingDepartments, setTrainingDepartments] = useState<PickerOption[]>(
+    initialTrainingSelections?.departments ?? [],
+  )
+  const [trainingGroups, setTrainingGroups] = useState<PickerOption[]>(
+    initialTrainingSelections?.groups ?? [],
+  )
+  const [trainingCourses, setTrainingCourses] = useState<PickerOption[]>(
+    initialTrainingSelections?.courses ?? [],
+  )
+  const [trainingDeliveryTypes, setTrainingDeliveryTypes] = useState(
+    new Set(initialTraining.deliveryTypes),
+  )
+  const [trainingGroupBy, setTrainingGroupBy] = useState(initialTraining.groupBy)
+  const [trainingExpiryDays, setTrainingExpiryDays] = useState(initialTraining.expiryWindowDays)
+  const [trainingIncludeExpired, setTrainingIncludeExpired] = useState(
+    initialTraining.includeExpired,
+  )
 
   const { filtersJson, advancedError } = useMemo(() => {
+    if (isTrainingReport) {
+      return {
+        filtersJson: JSON.stringify(
+          trainingReportFiltersToRecord({
+            personIds: trainingPeople.map((option) => option.value),
+            departmentIds: trainingDepartments.map((option) => option.value),
+            groupIds: trainingGroups.map((option) => option.value),
+            courseIds: trainingCourses.map((option) => option.value),
+            deliveryTypes: TRAINING_REPORT_DELIVERY_TYPES.filter((type) =>
+              trainingDeliveryTypes.has(type),
+            ),
+            groupBy: trainingGroupBy,
+            expiryWindowDays: trainingExpiryDays,
+            includeExpired: trainingIncludeExpired,
+          }),
+        ),
+        advancedError: null,
+      }
+    }
     let base: Record<string, unknown> = {}
     let err: string | null = null
     if (advanced.trim()) {
@@ -112,7 +178,19 @@ export function ScheduleForm({
     const n = Number(days)
     if (days.trim() && Number.isFinite(n) && n > 0) base = { ...base, days: n }
     return { filtersJson: JSON.stringify(base), advancedError: err }
-  }, [advanced, days])
+  }, [
+    advanced,
+    days,
+    isTrainingReport,
+    trainingCourses,
+    trainingDeliveryTypes,
+    trainingDepartments,
+    trainingExpiryDays,
+    trainingGroupBy,
+    trainingGroups,
+    trainingIncludeExpired,
+    trainingPeople,
+  ])
 
   function toggleUser(id: string) {
     setSelectedUsers((s) => {
@@ -135,7 +213,11 @@ export function ScheduleForm({
         <Select
           name="definitionId"
           value={definitionId}
-          onChange={(e) => setDefinitionId(e.target.value)}
+          onChange={(e) => {
+            setDefinitionId(e.target.value)
+            setDays('')
+            setAdvanced('')
+          }}
         >
           {definitions.map((d) => (
             <option key={d.id} value={d.id}>
@@ -376,6 +458,27 @@ export function ScheduleForm({
         </div>
       </fieldset>
 
+      {isTrainingReport && definition && isTrainingReportQueryKind(definition.queryKind) ? (
+        <TrainingScheduleFilters
+          queryKind={definition.queryKind}
+          people={trainingPeople}
+          setPeople={setTrainingPeople}
+          departments={trainingDepartments}
+          setDepartments={setTrainingDepartments}
+          groups={trainingGroups}
+          setGroups={setTrainingGroups}
+          courses={trainingCourses}
+          setCourses={setTrainingCourses}
+          deliveryTypes={trainingDeliveryTypes}
+          setDeliveryTypes={setTrainingDeliveryTypes}
+          groupBy={trainingGroupBy}
+          setGroupBy={setTrainingGroupBy}
+          expiryDays={trainingExpiryDays}
+          setExpiryDays={setTrainingExpiryDays}
+          includeExpired={trainingIncludeExpired}
+          setIncludeExpired={setTrainingIncludeExpired}
+        />
+      ) : null}
       <fieldset className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
         <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
           <GeneratedText id="m_0d99b2b56f8b5d" />
@@ -480,52 +583,54 @@ export function ScheduleForm({
         </div>
       </fieldset>
 
-      <fieldset className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-        <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          <GeneratedText id="m_1b6d30e8a7b8f2" />
-        </legend>
-        <div className="flex items-end gap-3">
-          <div className="space-y-1.5">
-            <Label>
-              <GeneratedText id="m_0d7a3c5db73e70" />
-            </Label>
-            <Input
-              type="number"
-              min={1}
-              max={365}
-              value={days}
-              onChange={(e) => setDays(e.target.value)}
-              placeholder={tGenerated('m_063b869c773315')}
-              className="w-36"
-            />
+      {!isTrainingReport ? (
+        <fieldset className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+          <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+            <GeneratedText id="m_1b6d30e8a7b8f2" />
+          </legend>
+          <div className="flex items-end gap-3">
+            <div className="space-y-1.5">
+              <Label>
+                <GeneratedText id="m_0d7a3c5db73e70" />
+              </Label>
+              <Input
+                type="number"
+                min={1}
+                max={365}
+                value={days}
+                onChange={(e) => setDays(e.target.value)}
+                placeholder={tGenerated('m_063b869c773315')}
+                className="w-36"
+              />
+            </div>
+            <p className="pb-2 text-xs text-slate-400 dark:text-slate-500">
+              <GeneratedText id="m_038258667df019" />
+            </p>
           </div>
-          <p className="pb-2 text-xs text-slate-400 dark:text-slate-500">
-            <GeneratedText id="m_038258667df019" />
-          </p>
-        </div>
-        <details className="mt-2">
-          <summary className="cursor-pointer text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400">
-            <GeneratedText id="m_1c766f2981b51f" />
-          </summary>
-          <Textarea
-            rows={3}
-            maxLength={REPORT_SCHEDULE_LIMITS.filtersChars}
-            value={advanced}
-            onChange={(e) => setAdvanced(e.target.value)}
-            placeholder={tGenerated('m_03573b6be12a60')}
-            className="mt-2 font-mono text-xs"
-          />
-          <GeneratedValue
-            value={
-              advancedError ? (
-                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                  <GeneratedValue value={advancedError} />
-                </p>
-              ) : null
-            }
-          />
-        </details>
-      </fieldset>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400">
+              <GeneratedText id="m_1c766f2981b51f" />
+            </summary>
+            <Textarea
+              rows={3}
+              maxLength={REPORT_SCHEDULE_LIMITS.filtersChars}
+              value={advanced}
+              onChange={(e) => setAdvanced(e.target.value)}
+              placeholder={tGenerated('m_03573b6be12a60')}
+              className="mt-2 font-mono text-xs"
+            />
+            <GeneratedValue
+              value={
+                advancedError ? (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                    <GeneratedValue value={advancedError} />
+                  </p>
+                ) : null
+              }
+            />
+          </details>
+        </fieldset>
+      ) : null}
 
       <div className="flex items-center justify-between gap-2">
         <div>
@@ -536,5 +641,193 @@ export function ScheduleForm({
         </Button>
       </div>
     </form>
+  )
+}
+
+type TrainingFilterSetter = (value: PickerOption[]) => void
+
+const TRAINING_DELIVERY_MESSAGE_IDS = {
+  classroom: 'm_0e2095879e70e6',
+  self_paced: 'm_0ae07f12b9afb0',
+  on_the_job: 'm_195306cf88332c',
+  external_certificate: 'm_1a9444513d40a2',
+  online: 'm_064cf27492eeb4',
+} as const
+
+function TrainingScheduleFilters({
+  queryKind,
+  people,
+  setPeople,
+  departments,
+  setDepartments,
+  groups,
+  setGroups,
+  courses,
+  setCourses,
+  deliveryTypes,
+  setDeliveryTypes,
+  groupBy,
+  setGroupBy,
+  expiryDays,
+  setExpiryDays,
+  includeExpired,
+  setIncludeExpired,
+}: {
+  queryKind:
+    | 'training_certificate_matrix'
+    | 'training_certificates'
+    | 'training_expired_upcoming'
+    | 'training_missing'
+  people: PickerOption[]
+  setPeople: TrainingFilterSetter
+  departments: PickerOption[]
+  setDepartments: TrainingFilterSetter
+  groups: PickerOption[]
+  setGroups: TrainingFilterSetter
+  courses: PickerOption[]
+  setCourses: TrainingFilterSetter
+  deliveryTypes: Set<(typeof TRAINING_REPORT_DELIVERY_TYPES)[number]>
+  setDeliveryTypes: (value: Set<(typeof TRAINING_REPORT_DELIVERY_TYPES)[number]>) => void
+  groupBy: 'employee' | 'course'
+  setGroupBy: (value: 'employee' | 'course') => void
+  expiryDays: number
+  setExpiryDays: (value: number) => void
+  includeExpired: boolean
+  setIncludeExpired: (value: boolean) => void
+}) {
+  const tGenerated = useGeneratedTranslations()
+  return (
+    <fieldset className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+      <legend className="px-1 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        <GeneratedText id="m_167fcaf1b02242" />
+      </legend>
+      <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+        <GeneratedText id="m_0b38e0cf3fa1f4" />
+      </p>
+      <div className="grid gap-4 md:grid-cols-2">
+        <ScheduleMulti
+          labelId="m_0302a7e2443143"
+          lookup="report-training-people"
+          value={people}
+          onChange={setPeople}
+        />
+        <ScheduleMulti
+          labelId="m_08416151d62d16"
+          lookup="report-training-departments"
+          value={departments}
+          onChange={setDepartments}
+        />
+        <ScheduleMulti
+          labelId="m_00a9926beb1db6"
+          lookup="report-training-groups"
+          value={groups}
+          onChange={setGroups}
+        />
+        <ScheduleMulti
+          labelId="m_0c5dd55a54140d"
+          lookup="report-training-courses"
+          value={courses}
+          onChange={setCourses}
+        />
+      </div>
+      <div className="mt-4 grid items-end gap-4 md:grid-cols-3">
+        <fieldset className="space-y-1.5 md:col-span-3">
+          <legend className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            <GeneratedText id="m_0144792027bd01" />
+          </legend>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {TRAINING_REPORT_DELIVERY_TYPES.map((type) => (
+              <label key={type} className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={deliveryTypes.has(type)}
+                  onChange={(event) => {
+                    const next = new Set(deliveryTypes)
+                    if (event.target.checked) next.add(type)
+                    else next.delete(type)
+                    setDeliveryTypes(next)
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+                />
+                <GeneratedText id={TRAINING_DELIVERY_MESSAGE_IDS[type]} />
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div className="space-y-1.5">
+          <Label>
+            <GeneratedText id="m_175ee59112fb66" />
+          </Label>
+          <Select
+            value={groupBy}
+            onChange={(event) => setGroupBy(event.target.value as 'employee' | 'course')}
+          >
+            <option value="course">{tGenerated('m_14fc1e0739b60e')}</option>
+            <option value="employee">{tGenerated('m_0d191facfeeb70')}</option>
+          </Select>
+        </div>
+        {queryKind === 'training_expired_upcoming' ? (
+          <div className="space-y-1.5">
+            <Label>
+              <GeneratedText id="m_17f91dad5cc730" />
+            </Label>
+            <Select
+              value={String(expiryDays)}
+              onChange={(event) => setExpiryDays(Number(event.target.value))}
+            >
+              {TRAINING_REPORT_EXPIRY_WINDOWS.map((value) => (
+                <option key={value} value={value}>
+                  {tGenerated('m_09ef44d65a4a8f', { value0: value })}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+        {queryKind === 'training_certificates' ? (
+          <label className="flex h-10 items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={includeExpired}
+              onChange={(event) => setIncludeExpired(event.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+            />
+            <GeneratedText id="m_02c8309b7043ba" />
+          </label>
+        ) : null}
+      </div>
+    </fieldset>
+  )
+}
+
+function ScheduleMulti({
+  labelId,
+  lookup,
+  value,
+  onChange,
+}: {
+  labelId: 'm_0302a7e2443143' | 'm_08416151d62d16' | 'm_00a9926beb1db6' | 'm_0c5dd55a54140d'
+  lookup:
+    | 'report-training-people'
+    | 'report-training-departments'
+    | 'report-training-groups'
+    | 'report-training-courses'
+  value: PickerOption[]
+  onChange: TrainingFilterSetter
+}) {
+  const tGenerated = useGeneratedTranslations()
+  const label = tGenerated(labelId)
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <RemoteMultiSelect
+        lookup={lookup}
+        value={value}
+        onChange={onChange}
+        placeholder={tGenerated('m_01dbaab9d75038', { value0: label.toLowerCase() })}
+        searchPlaceholder={tGenerated('m_1f0a8c50aedb8c', { value0: label.toLowerCase() })}
+        emptyLabel={tGenerated('m_17201516610431')}
+        max={50}
+      />
+    </div>
   )
 }

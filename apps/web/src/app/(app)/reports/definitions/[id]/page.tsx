@@ -44,8 +44,12 @@ import { can } from '@beaconhs/tenant'
 import {
   buildReportDocumentCss,
   buildReportPageCss,
+  isTrainingReportQueryKind,
+  normalizeTrainingReportFilters,
   renderReportDocumentBodyHtml,
   resolveReportLayout,
+  trainingReportFiltersToRecord,
+  type TrainingReportFilters,
 } from '@beaconhs/reports'
 import { requireRequestContext } from '@/lib/auth'
 import { FadeInHeader } from '@/components/page-layout-motion'
@@ -66,6 +70,8 @@ import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
 import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { runOnceFromDefinition, deleteDefinition } from './actions'
+import { TrainingReportFilterPanel } from '../../_training-report-filters.client'
+import { loadTrainingFilterSelections } from '../../_training-filter-data'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -106,6 +112,18 @@ export default async function ReportViewerPage({
 
   const tab = pickActiveTab(sp, TABS, 'document')
   const daysParam = typeof sp.days === 'string' ? Number(sp.days) : null
+  const trainingFilters = isTrainingReportQueryKind(definition.queryKind)
+    ? normalizeTrainingReportFilters({
+        personIds: sp.personIds,
+        departmentIds: sp.departmentIds,
+        groupIds: sp.groupIds,
+        courseIds: sp.courseIds,
+        deliveryTypes: sp.deliveryTypes,
+        groupBy: sp.groupBy,
+        expiryWindowDays: sp.expiryWindowDays,
+        includeExpired: sp.includeExpired,
+      })
+    : null
   const scheduleParams = parseListParams(
     {
       q: sp.scheduleQ,
@@ -226,6 +244,15 @@ export default async function ReportViewerPage({
     : `/reports/definitions/new?from=${id}`
   const runBound = runOnceFromDefinition.bind(null, id)
   const deleteBound = deleteDefinition.bind(null, id)
+  const scheduleUrlParams = new URLSearchParams({ definitionId: definition.id })
+  if (trainingFilters) {
+    for (const [key, value] of Object.entries(trainingReportFiltersToRecord(trainingFilters))) {
+      scheduleUrlParams.set(key, Array.isArray(value) ? value.join(',') : String(value))
+    }
+  } else if (daysParam) {
+    scheduleUrlParams.set('days', String(daysParam))
+  }
+  const createScheduleHref = `/reports/schedules/new?${scheduleUrlParams.toString()}`
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -247,6 +274,17 @@ export default async function ReportViewerPage({
                   value={
                     canSchedule ? (
                       <form action={runBound}>
+                        <input
+                          type="hidden"
+                          name="filters"
+                          value={JSON.stringify(
+                            trainingFilters
+                              ? trainingReportFiltersToRecord(trainingFilters)
+                              : daysParam
+                                ? { days: daysParam }
+                                : {},
+                          )}
+                        />
                         <Button type="submit" variant="outline" size="sm">
                           <Mail size={14} className="mr-1.5" />
                           <GeneratedText id="m_172e986a84c411" />
@@ -270,7 +308,7 @@ export default async function ReportViewerPage({
                 <GeneratedValue
                   value={
                     canSchedule ? (
-                      <Link href={`/reports/schedules/new?definitionId=${definition.id}`}>
+                      <Link href={createScheduleHref}>
                         <Button size="sm">
                           <Calendar size={14} className="mr-1.5" />
                           <GeneratedText id="m_13104884fca730" />
@@ -302,7 +340,13 @@ export default async function ReportViewerPage({
       <GeneratedValue
         value={
           tab === 'document' ? (
-            <DocumentTab ctx={ctx} definition={definition} daysParam={daysParam} sp={sp} />
+            <DocumentTab
+              ctx={ctx}
+              definition={definition}
+              daysParam={daysParam}
+              trainingFilters={trainingFilters}
+              sp={sp}
+            />
           ) : (
             <ActivityTab
               definition={definition}
@@ -331,18 +375,24 @@ async function DocumentTab({
   ctx,
   definition,
   daysParam,
+  trainingFilters,
   sp,
 }: {
   ctx: Awaited<ReturnType<typeof requireRequestContext>>
   definition: NonNullable<Awaited<ReturnType<typeof loadDefinitionById>>>
   daysParam: number | null
+  trainingFilters: TrainingReportFilters | null
   sp: Record<string, string | string[] | undefined>
 }) {
   const tGeneratedValue = await getGeneratedValueTranslations()
   const tGenerated = await getGeneratedTranslations()
-  const [run, branding] = await Promise.all([
-    runReportForViewer(ctx, definition, { days: daysParam }),
+  const [run, branding, trainingSelections] = await Promise.all([
+    runReportForViewer(ctx, definition, {
+      days: daysParam,
+      ...(trainingFilters ? { filters: trainingReportFiltersToRecord(trainingFilters) } : {}),
+    }),
     loadTenantBranding(ctx),
+    trainingFilters ? loadTrainingFilterSelections(ctx, trainingFilters) : null,
   ])
 
   const layout = resolveReportLayout(definition.layout)
@@ -363,12 +413,35 @@ async function DocumentTab({
     }) + buildReportDocumentCss(branding.primaryColor, layout.density)
   const truncated = run.result.rowCount >= DOCUMENT_PREVIEW_MAX_ROWS
 
-  const exportBase = `/reports/definitions/${definition.id}/export${run.days ? `?days=${run.days}` : ''}`
-  const exportJoin = run.days ? '&' : '?'
+  const exportParams = new URLSearchParams()
+  if (run.days) exportParams.set('days', String(run.days))
+  if (trainingFilters) {
+    for (const [key, value] of Object.entries(trainingReportFiltersToRecord(trainingFilters))) {
+      exportParams.set(key, Array.isArray(value) ? value.join(',') : String(value))
+    }
+  }
+  const exportBase = `/reports/definitions/${definition.id}/export?${exportParams.toString()}`
+  const exportJoin = exportParams.size ? '&' : ''
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-slate-200 bg-white px-3 py-2 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
+      <div className="space-y-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
+        <GeneratedValue
+          value={
+            trainingFilters &&
+            trainingSelections &&
+            isTrainingReportQueryKind(definition.queryKind) ? (
+              <div className="mx-auto max-w-screen-2xl">
+                <TrainingReportFilterPanel
+                  key={JSON.stringify(trainingFilters)}
+                  queryKind={definition.queryKind}
+                  filters={trainingFilters}
+                  selections={trainingSelections}
+                />
+              </div>
+            ) : null
+          }
+        />
         <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-2">
           <GeneratedValue
             value={

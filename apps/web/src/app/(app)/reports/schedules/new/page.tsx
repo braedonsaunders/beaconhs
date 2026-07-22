@@ -2,11 +2,17 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { notFound, redirect } from 'next/navigation'
 import { Card, CardContent, DetailHeader } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
+import {
+  isTrainingReportQueryKind,
+  normalizeTrainingReportFilters,
+  trainingReportFiltersToRecord,
+} from '@beaconhs/reports'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { loadScheduleFormData } from '../_data'
 import { ScheduleForm } from '../_schedule-form'
 import { createSchedule } from './actions'
+import { loadTrainingFilterSelections } from '../../_training-filter-data'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -28,6 +34,27 @@ export default async function NewSchedulePage({
   const { definitions, members } = await loadScheduleFormData(ctx)
   if (definitions.length === 0) notFound()
   const preset = definitions.find((d) => d.id === presetDefinitionId)
+  const trainingFilters =
+    preset && isTrainingReportQueryKind(preset.queryKind)
+      ? normalizeTrainingReportFilters({
+          personIds: sp.personIds,
+          departmentIds: sp.departmentIds,
+          groupIds: sp.groupIds,
+          courseIds: sp.courseIds,
+          deliveryTypes: sp.deliveryTypes,
+          groupBy: sp.groupBy,
+          expiryWindowDays: sp.expiryWindowDays,
+          includeExpired: sp.includeExpired,
+        })
+      : null
+  const initialFilters = trainingFilters
+    ? trainingReportFiltersToRecord(trainingFilters)
+    : typeof sp.days === 'string' && Number.isFinite(Number(sp.days))
+      ? { days: Number(sp.days) }
+      : undefined
+  const trainingSelections = trainingFilters
+    ? await loadTrainingFilterSelections(ctx, trainingFilters)
+    : undefined
 
   return (
     <PageContainer>
@@ -50,7 +77,8 @@ export default async function NewSchedulePage({
             <ScheduleForm
               definitions={definitions}
               members={members}
-              initial={preset ? { definitionId: preset.id } : undefined}
+              initial={preset ? { definitionId: preset.id, filters: initialFilters } : undefined}
+              initialTrainingSelections={trainingSelections}
               submitLabel={tGenerated('m_1c516d834dca35')}
               action={createSchedule}
             />

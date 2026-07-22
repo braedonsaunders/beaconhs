@@ -26,6 +26,18 @@ describe('reporting view cutover', () => {
     expect(fleet).not.toContain('t.category                           AS type_category')
   })
 
+  it('exposes assigned training and legacy-parity runtime filter fields', () => {
+    const training = REPORT_VIEWS_SQL.find((statement) =>
+      statement.includes('CREATE OR REPLACE VIEW report_training_matrix'),
+    )
+    expect(training).toBeDefined()
+    expect(training).toContain('p.department_id                   AS department_id')
+    expect(training).toContain('c.delivery_type                   AS delivery_type')
+    expect(training).toContain('AS group_ids')
+    expect(training).toContain('FROM compliance_status cs')
+    expect(training).toContain('AS is_required')
+  })
+
   it('retires the installed legacy fleet view before dropping its source column', () => {
     const migration = readProductionCutoverSection('0033_physical_schema_convergence.sql')
     const dropViewAt = migration.indexOf('DROP VIEW IF EXISTS "report_equipment_fleet"')

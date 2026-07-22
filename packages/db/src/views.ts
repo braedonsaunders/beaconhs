@@ -99,7 +99,32 @@ export const REPORT_VIEWS_SQL: string[] = [
        WHEN l.expires_on < CURRENT_DATE      THEN 'expired'
        WHEN l.expires_on <= CURRENT_DATE + 90 THEN 'expiring'
        ELSE 'valid'
-     END                               AS coverage_status
+     END                               AS coverage_status,
+     -- Appended runtime-filter fields used by the canonical training reports.
+     p.department_id                   AS department_id,
+     (SELECT d.name FROM departments d WHERE d.id = p.department_id) AS department_name,
+     c.delivery_type                   AS delivery_type,
+     coalesce(
+       ARRAY(
+         SELECT gm.group_id
+         FROM person_group_memberships gm
+         WHERE gm.tenant_id = p.tenant_id AND gm.person_id = p.id
+         ORDER BY gm.group_id
+       ),
+       ARRAY[]::uuid[]
+     )                                 AS group_ids,
+     EXISTS (
+       SELECT 1
+       FROM compliance_status cs
+       JOIN compliance_obligations co ON co.id = cs.obligation_id
+       WHERE cs.tenant_id = p.tenant_id
+         AND cs.person_id = p.id
+         AND co.tenant_id = p.tenant_id
+         AND co.source_module IN ('training', 'cert_requirement')
+         AND co.status = 'active'
+         AND co.deleted_at IS NULL
+         AND co.target_ref->>'courseId' = c.id::text
+     )                                 AS is_required
    FROM people p
    CROSS JOIN training_courses c
    LEFT JOIN latest l

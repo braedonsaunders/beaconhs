@@ -23,8 +23,10 @@ import {
   querySiteScorecard,
   querySkillsMissing,
   queryTrainingComplianceSnapshot,
+  queryTrainingCredentialReport,
   queryTrainingExpiring,
 } from './built-ins'
+import { isTrainingReportQueryKind } from './training-filters'
 import { runCustomQuery } from './custom-query'
 import { isoDate, type ReportRange, type ReportRunResult } from './types'
 
@@ -33,7 +35,7 @@ export type RunReportInput = {
   filters: Record<string, unknown>
   range: ReportRange
   customQuery?: ReportCustomQuery | null
-  /** Viewer/preview cap; scheduled runs leave it unset. Custom queries only. */
+  /** Viewer/preview cap; scheduled runs leave it unset. */
   maxRows?: number
   /** Permission-filtered entity whitelist injected by the caller. Required for
    *  custom queries; built-in query kinds do not use it. */
@@ -42,6 +44,9 @@ export type RunReportInput = {
 
 export async function runReport(tx: Database, input: RunReportInput): Promise<ReportRunResult> {
   const { queryKind, filters, range, customQuery } = input
+  if (isTrainingReportQueryKind(queryKind)) {
+    return queryTrainingCredentialReport(tx, filters, queryKind, input.maxRows)
+  }
   switch (queryKind) {
     case 'incidents_summary':
       return queryIncidentsSummary(tx, filters, range)
@@ -125,6 +130,7 @@ function applyRuntimeCustomFilters(
 export function rangeModeFor(queryKind: string): 'lookback' | 'lookahead' | 'as_of' {
   if (queryKind === 'training_expiring') return 'lookahead'
   if (
+    isTrainingReportQueryKind(queryKind) ||
     queryKind === 'documents_overdue_review' ||
     queryKind === 'corrective_actions_open' ||
     queryKind === 'overdue_rollup' ||

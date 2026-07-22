@@ -10,7 +10,8 @@
     "./document": "./src/document.ts",
     "./entities": "./src/entities.ts",
     "./filters": "./src/filters.ts",
-    "./schedule-policy": "./src/schedule-policy.ts"
+    "./schedule-policy": "./src/schedule-policy.ts",
+    "./training-filters": "./src/training-filters.ts"
   },
   "scripts": {
     "test": "vitest run",

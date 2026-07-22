@@ -29,6 +29,7 @@ import {
   inspectionTypes,
   orgUnits,
   people,
+  personGroups,
   personTitles,
   ppeTypes,
   roles,
@@ -192,6 +193,11 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'training-skill-assignment-people':
     case 'training-skill-assignment-types':
       return canManage('training')
+    case 'report-training-people':
+    case 'report-training-departments':
+    case 'report-training-groups':
+    case 'report-training-courses':
+      return can(ctx, 'reports.read')
     case 'journal-locations':
     case 'journal-supervisors':
       return (
@@ -377,7 +383,7 @@ async function loadOptions(
       )
     }
 
-    if (lookup === 'compliance-obligation-audience-people') {
+    if (lookup === 'compliance-obligation-audience-people' || lookup === 'report-training-people') {
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)
         .from(people)
@@ -408,7 +414,10 @@ async function loadOptions(
       return boundPickerOptions(rows.map((row) => option(row.key, row.name, row.key)))
     }
 
-    if (lookup === 'compliance-obligation-audience-departments') {
+    if (
+      lookup === 'compliance-obligation-audience-departments' ||
+      lookup === 'report-training-departments'
+    ) {
       const match = input.hasQuery
         ? or(
             ilike(departments.name, input.term),
@@ -524,7 +533,7 @@ async function loadOptions(
       return boundPickerOptions(rows.map((row) => option(row.id, row.title, row.key)))
     }
 
-    if (lookup === 'compliance-obligation-courses') {
+    if (lookup === 'compliance-obligation-courses' || lookup === 'report-training-courses') {
       const match = input.hasQuery
         ? or(
             ilike(trainingCourses.name, input.term),
@@ -545,6 +554,26 @@ async function loadOptions(
       return boundPickerOptions(
         rows.map((row) => option(row.id, `${row.code ? `${row.code} · ` : ''}${row.name}`)),
       )
+    }
+
+    if (lookup === 'report-training-groups') {
+      const match = input.hasQuery
+        ? or(
+            ilike(personGroups.name, input.term),
+            input.selected ? eq(personGroups.id, input.selected) : undefined,
+          )
+        : undefined
+      const rows = await tx
+        .select({ id: personGroups.id, name: personGroups.name })
+        .from(personGroups)
+        .where(and(isNull(personGroups.deletedAt), match))
+        .orderBy(
+          ...(input.selected ? [desc(sql`${personGroups.id} = ${input.selected}`)] : []),
+          asc(personGroups.name),
+          asc(personGroups.id),
+        )
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(rows.map((row) => option(row.id, row.name)))
     }
 
     if (lookup === 'compliance-obligation-assessment-types') {
