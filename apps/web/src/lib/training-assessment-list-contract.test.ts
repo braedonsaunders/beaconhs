@@ -11,11 +11,12 @@ const detailPage = readFileSync(
 )
 
 describe('training assessment history navigation', () => {
-  it('keeps the assessment title and explicit action as native record links', () => {
+  it('keeps the assessment title and explicit action as client-side record links', () => {
     expect(listPage).toContain(
-      '<a\n                              href={`/training/assessments/${attempt.id}`}',
+      '<Link\n                              href={`/training/assessments/${attempt.id}`}',
     )
-    expect(listPage).toContain('<a href={`/training/assessments/${attempt.id}`}>')
+    expect(listPage).toContain('<Link href={`/training/assessments/${attempt.id}`}>')
+    expect(listPage).not.toContain('<a href={`/training/assessments/${attempt.id}`}>')
     expect(listPage).toContain("? 'Review'")
     expect(listPage).toContain("? 'Continue'")
     expect(listPage).toContain(": 'View'")

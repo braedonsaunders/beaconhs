@@ -539,12 +539,12 @@ export default async function AssessmentsPage({
                             />
                           </TableCell>
                           <TableCell>
-                            <a
+                            <Link
                               href={`/training/assessments/${attempt.id}`}
                               className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
                             >
                               <GeneratedValue value={type.name} />
-                            </a>
+                            </Link>
                           </TableCell>
                           <TableCell className="text-slate-600 dark:text-slate-400">
                             <GeneratedValue
@@ -659,7 +659,7 @@ export default async function AssessmentsPage({
                           </TableCell>
                           <TableCell>
                             <Button asChild variant="ghost" size="sm">
-                              <a href={`/training/assessments/${attempt.id}`}>
+                              <Link href={`/training/assessments/${attempt.id}`}>
                                 <GeneratedValue
                                   value={
                                     attempt.status === 'in_progress' &&
@@ -673,7 +673,7 @@ export default async function AssessmentsPage({
                                   }
                                 />
                                 <ArrowRight size={14} />
-                              </a>
+                              </Link>
                             </Button>
                           </TableCell>
                         </TableRow>

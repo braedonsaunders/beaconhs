@@ -15,6 +15,7 @@
 import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   foreignKey,
   index,
   integer,
@@ -133,6 +134,17 @@ export const trainingAssessmentTypeQuestions = pgTable(
       columns: [t.tenantId, t.typeId],
       foreignColumns: [trainingAssessmentTypes.tenantId, trainingAssessmentTypes.id],
     }).onDelete('cascade'),
+    choiceOptionsCk: check(
+      'training_assessment_type_questions_choice_options_ck',
+      sql`
+        ${t.kind} NOT IN ('single_choice', 'multi_choice')
+        OR COALESCE(
+          jsonb_typeof(${t.options}) = 'array'
+          AND jsonb_array_length(${t.options}) BETWEEN 2 AND 50,
+          false
+        )
+      `,
+    ),
   }),
 )
 
@@ -297,6 +309,17 @@ export const trainingAssessmentResults = pgTable(
         trainingAssessmentTypeQuestions.id,
       ],
     }).onDelete('restrict'),
+    choiceOptionsSnapshotCk: check(
+      'training_assessment_results_choice_options_snapshot_ck',
+      sql`
+        ${t.kindSnapshot} NOT IN ('single_choice', 'multi_choice')
+        OR COALESCE(
+          jsonb_typeof(${t.optionsSnapshot}) = 'array'
+          AND jsonb_array_length(${t.optionsSnapshot}) BETWEEN 2 AND 50,
+          false
+        )
+      `,
+    ),
   }),
 )
 

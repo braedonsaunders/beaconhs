@@ -15,6 +15,10 @@ const assessmentHistorySql = readFileSync(
   new URL('0021_training_assessment_history.sql', drizzleFolder),
   'utf8',
 )
+const assessmentChoiceSnapshotSql = readFileSync(
+  new URL('0023_gorgeous_sheva_callister.sql', drizzleFolder),
+  'utf8',
+)
 
 function position(fragment: string): number {
   const value = finalSection.indexOf(fragment)
@@ -51,6 +55,7 @@ describe('production cutover migration integrity', () => {
       '0020_inspection_location_storage.sql',
       '0021_training_assessment_history.sql',
       '0022_hazid_submit_trigger_cutover.sql',
+      '0023_gorgeous_sheva_callister.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -80,12 +85,15 @@ describe('production cutover migration integrity', () => {
       { idx: 20, tag: '0020_inspection_location_storage' },
       { idx: 21, tag: '0021_training_assessment_history' },
       { idx: 22, tag: '0022_hazid_submit_trigger_cutover' },
+      { idx: 23, tag: '0023_gorgeous_sheva_callister' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)
     }
 
-    const snapshots = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map(
+    const snapshots = [
+      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+    ].map(
       (index) =>
         JSON.parse(
           readFileSync(
@@ -119,6 +127,23 @@ describe('production cutover migration integrity', () => {
     expect(assessmentHistorySql).toContain(`"notes" LIKE 'Migrated legacy quiz attempt.%'`)
     expect(assessmentHistorySql).toContain(
       'ALTER TABLE "training_assessments" FORCE ROW LEVEL SECURITY',
+    )
+  })
+
+  it('repairs and enforces complete choice snapshots for assessment attempts', () => {
+    expect(assessmentChoiceSnapshotSql).toContain('UPDATE "training_assessment_results" AS result')
+    expect(assessmentChoiceSnapshotSql).toContain('THEN question."options"')
+    expect(assessmentChoiceSnapshotSql).toContain(
+      "'assessment choice snapshot cutover blocked: % invalid template(s), % invalid snapshot(s)'",
+    )
+    expect(assessmentChoiceSnapshotSql).toContain(
+      'ADD CONSTRAINT "training_assessment_results_choice_options_snapshot_ck"',
+    )
+    expect(assessmentChoiceSnapshotSql).toContain(
+      'VALIDATE CONSTRAINT "training_assessment_results_choice_options_snapshot_ck"',
+    )
+    expect(assessmentChoiceSnapshotSql).toContain(
+      'ALTER TABLE "training_assessment_results" FORCE ROW LEVEL SECURITY',
     )
   })
 
