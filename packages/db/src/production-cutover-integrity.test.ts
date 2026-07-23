@@ -11,6 +11,10 @@ const languageSection = readFileSync(
   'utf8',
 )
 const assessmentReviewSql = readFileSync(new URL('0017_wakeful_jackal.sql', drizzleFolder), 'utf8')
+const assessmentHistorySql = readFileSync(
+  new URL('0021_training_assessment_history.sql', drizzleFolder),
+  'utf8',
+)
 
 function position(fragment: string): number {
   const value = finalSection.indexOf(fragment)
@@ -45,6 +49,7 @@ describe('production cutover migration integrity', () => {
       '0018_training_report_parity.sql',
       '0019_report_parity_cutover.sql',
       '0020_inspection_location_storage.sql',
+      '0021_training_assessment_history.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -72,12 +77,13 @@ describe('production cutover migration integrity', () => {
       { idx: 18, tag: '0018_training_report_parity' },
       { idx: 19, tag: '0019_report_parity_cutover' },
       { idx: 20, tag: '0020_inspection_location_storage' },
+      { idx: 21, tag: '0021_training_assessment_history' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)
     }
 
-    const snapshots = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(
+    const snapshots = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].map(
       (index) =>
         JSON.parse(
           readFileSync(
@@ -99,6 +105,19 @@ describe('production cutover migration integrity', () => {
     expect(assessmentReviewSql).toContain('SET "training_record_id" = record."id"')
     expect(assessmentReviewSql).toContain('SET "score" = NULL')
     expect(assessmentReviewSql).toContain('"passed" = true')
+  })
+
+  it('repairs imported assessment lifecycle timestamps without inventing completions', () => {
+    expect(assessmentHistorySql).toContain(
+      'ALTER TABLE "training_assessments" NO FORCE ROW LEVEL SECURITY',
+    )
+    expect(assessmentHistorySql).toContain(`WHERE "status" = 'cancelled'`)
+    expect(assessmentHistorySql).toContain('SET "completed_at" = NULL')
+    expect(assessmentHistorySql).toContain('SET "completed_at" = GREATEST')
+    expect(assessmentHistorySql).toContain(`"notes" LIKE 'Migrated legacy quiz attempt.%'`)
+    expect(assessmentHistorySql).toContain(
+      'ALTER TABLE "training_assessments" FORCE ROW LEVEL SECURITY',
+    )
   })
 
   it('preflights and backfills training owners before removing legacy columns', () => {

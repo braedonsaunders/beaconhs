@@ -95,7 +95,7 @@ Choose **Additional fields** on an authority or skill type to search field names
 
 When you edit a worker's held skill, **Person** and **Skill / certification** search the complete active tenant directory and skill catalogue. The currently saved value stays visible while you review an older record, even if that value is no longer active. If the picker says more results exist, add more of the name, employee number, code, or authority to the search.
 
-On **Assessments**, search by person, assessment, or course. The person, assessment type, course, status, and date controls narrow the same list; no filter option is hidden after the first few values.
+On **Assessments**, search by person, assessment, or course. The person, assessment type, course, status, and date controls narrow the same list; no filter option is hidden after the first few values. Select an assessment title or use **Continue**, **Review**, or **View** to open the record. Completed and cancelled assessments open read-only. Historical imported assessments show their recorded dates without inventing an attempt duration that the old system did not preserve.
 
 To start one, click **New assessment**. In the flyout, choose the person, then choose an active assessment type. BeaconHS creates the assessment and immediately opens the same record page used to answer, submit, review, or cancel it.
 

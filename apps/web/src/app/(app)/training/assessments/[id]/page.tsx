@@ -27,7 +27,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { formatDateTime } from '@/lib/datetime'
+import { formatDate, formatDateTime } from '@/lib/datetime'
 import { canSeeRecord } from '@/lib/visibility'
 import { PageContainer } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
@@ -99,6 +99,7 @@ export default async function AssessmentAttemptDetailPage({
 
   if (!data) notFound()
   const { attempt, type, person, course, results, isMine } = data
+  const isMigratedLegacy = attempt.notes?.startsWith('Migrated legacy quiz attempt.') ?? false
 
   const isInProgress = attempt.status === 'in_progress'
   const isAwaitingReview = isInProgress && attempt.reviewStatus === 'pending'
@@ -188,7 +189,9 @@ export default async function AssessmentAttemptDetailPage({
             {
               label: 'Completed',
               value: attempt.completedAt
-                ? formatDateTime(new Date(attempt.completedAt), ctx.timezone, ctx.locale)
+                ? isMigratedLegacy
+                  ? formatDate(new Date(attempt.completedAt), ctx.timezone, ctx.locale)
+                  : formatDateTime(new Date(attempt.completedAt), ctx.timezone, ctx.locale)
                 : '—',
             },
           ]}
@@ -402,11 +405,17 @@ export default async function AssessmentAttemptDetailPage({
                             <GeneratedValue
                               value={
                                 attempt.completedAt
-                                  ? formatDateTime(
-                                      new Date(attempt.completedAt),
-                                      ctx.timezone,
-                                      ctx.locale,
-                                    )
+                                  ? isMigratedLegacy
+                                    ? formatDate(
+                                        new Date(attempt.completedAt),
+                                        ctx.timezone,
+                                        ctx.locale,
+                                      )
+                                    : formatDateTime(
+                                        new Date(attempt.completedAt),
+                                        ctx.timezone,
+                                        ctx.locale,
+                                      )
                                   : '—'
                               }
                             />

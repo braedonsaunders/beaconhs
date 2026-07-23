@@ -3,7 +3,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ClipboardCheck } from 'lucide-react'
+import { ArrowRight, ClipboardCheck } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, ne, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
@@ -183,8 +183,12 @@ export default async function AssessmentsPage({
               ]
             : [
                 params.dir === 'asc'
-                  ? asc(trainingAssessments.completedAt)
-                  : desc(trainingAssessments.completedAt),
+                  ? asc(
+                      sql`coalesce(${trainingAssessments.completedAt}, ${trainingAssessments.submittedAt}, ${trainingAssessments.startedAt})`,
+                    )
+                  : desc(
+                      sql`coalesce(${trainingAssessments.completedAt}, ${trainingAssessments.submittedAt}, ${trainingAssessments.startedAt})`,
+                    ),
               ]
 
     const [tot] = await tx
@@ -483,15 +487,20 @@ export default async function AssessmentsPage({
                     <TableHead>
                       <GeneratedText id="m_100e41041dbe51" />
                     </TableHead>
+                    <TableHead>
+                      <GeneratedValue value="Open" />
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <GeneratedValue
                     value={rows.map(({ attempt, type, person, course }) => {
+                      const isMigratedLegacy =
+                        attempt.notes?.startsWith('Migrated legacy quiz attempt.') ?? false
                       const endedAt = attempt.completedAt ?? attempt.submittedAt
                       const when = endedAt ?? attempt.startedAt
                       const duration =
-                        endedAt && attempt.startedAt
+                        !isMigratedLegacy && endedAt && attempt.startedAt
                           ? Math.round(
                               (new Date(endedAt).getTime() -
                                 new Date(attempt.startedAt).getTime()) /
@@ -504,7 +513,9 @@ export default async function AssessmentsPage({
                             <GeneratedValue
                               value={
                                 when
-                                  ? formatDateTime(new Date(when), ctx.timezone, ctx.locale)
+                                  ? isMigratedLegacy
+                                    ? formatDate(new Date(when), ctx.timezone, ctx.locale)
+                                    : formatDateTime(new Date(when), ctx.timezone, ctx.locale)
                                   : '—'
                               }
                             />
@@ -528,12 +539,12 @@ export default async function AssessmentsPage({
                             />
                           </TableCell>
                           <TableCell>
-                            <Link
+                            <a
                               href={`/training/assessments/${attempt.id}`}
-                              className="text-teal-700 hover:underline dark:text-teal-400"
+                              className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
                             >
                               <GeneratedValue value={type.name} />
-                            </Link>
+                            </a>
                           </TableCell>
                           <TableCell className="text-slate-600 dark:text-slate-400">
                             <GeneratedValue
@@ -645,6 +656,25 @@ export default async function AssessmentsPage({
                                 )
                               }
                             />
+                          </TableCell>
+                          <TableCell>
+                            <Button asChild variant="ghost" size="sm">
+                              <a href={`/training/assessments/${attempt.id}`}>
+                                <GeneratedValue
+                                  value={
+                                    attempt.status === 'in_progress' &&
+                                    attempt.reviewStatus === 'pending' &&
+                                    isProctor
+                                      ? 'Review'
+                                      : attempt.status === 'in_progress' &&
+                                          (isProctor || attempt.personId === ctx.personId)
+                                        ? 'Continue'
+                                        : 'View'
+                                  }
+                                />
+                                <ArrowRight size={14} />
+                              </a>
+                            </Button>
                           </TableCell>
                         </TableRow>
                       )

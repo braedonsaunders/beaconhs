@@ -148,6 +148,13 @@
       "when": 1784814783386,
       "tag": "0020_inspection_location_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784824177552,
+      "tag": "0021_training_assessment_history",
+      "breakpoints": true
     }
   ]
 }
