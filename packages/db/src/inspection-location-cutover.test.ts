@@ -13,11 +13,12 @@ describe('inspection location cutover', () => {
     const relaxTemplates = migration.indexOf(
       'ALTER TABLE "pdf_templates" NO FORCE ROW LEVEL SECURITY',
     )
-    const add = migration.indexOf('ADD COLUMN IF NOT EXISTS "location" text')
+    const add = migration.indexOf('ADD COLUMN IF NOT EXISTS "location_on_site" text')
     const backfill = migration.indexOf(
-      `SET "location" = NULLIF(btrim("metadata"->>'locationOnSite'), '')`,
+      `SET "location_on_site" = NULLIF(btrim("metadata"->>'locationOnSite'), '')`,
     )
     const removeLegacyCopy = migration.indexOf(`SET "metadata" = "metadata" - 'locationOnSite'`)
+    const removeDuplicateCustomer = migration.indexOf(`SET "customer_org_unit_id" = NULL`)
     const restore = migration.indexOf('ALTER TABLE "inspection_records" FORCE ROW LEVEL SECURITY')
     const restoreTemplates = migration.indexOf(
       'ALTER TABLE "pdf_templates" FORCE ROW LEVEL SECURITY',
@@ -28,13 +29,22 @@ describe('inspection location cutover', () => {
     expect(add).toBeGreaterThan(relaxTemplates)
     expect(backfill).toBeGreaterThan(add)
     expect(removeLegacyCopy).toBeGreaterThan(backfill)
-    expect(restoreTemplates).toBeGreaterThan(removeLegacyCopy)
+    expect(removeDuplicateCustomer).toBeGreaterThan(removeLegacyCopy)
+    expect(restoreTemplates).toBeGreaterThan(removeDuplicateCustomer)
     expect(restore).toBeGreaterThan(restoreTemplates)
   })
 
   it('updates only the canonical seeded inspection PDF contract', () => {
     expect(migration).toContain(`WHERE "key" = 'inspection-report-pdf'`)
     expect(migration).toContain(`AND "record_subject_key" = 'inspections'`)
-    expect(migration).toContain(`'>Location</td>\\1{{location}}</td>'`)
+    expect(migration).toContain(`regexp_replace("source_html", '>Site</td>', '>Location</td>')`)
+    expect(migration).toContain(`data-if="location_on_site"`)
+    expect(migration).toContain(`Location on site</td>`)
+    expect(migration).toContain(`{{location_on_site}}</td></tr>`)
+  })
+
+  it('does not preserve the legacy Location as a duplicate customer relation', () => {
+    expect(migration).toContain(`WHERE "metadata"->>'legacy' = 'JOBSITEINSPECTIONS'`)
+    expect(migration).toContain(`SET "customer_org_unit_id" = NULL`)
   })
 })

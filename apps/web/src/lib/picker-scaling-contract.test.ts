@@ -101,6 +101,21 @@ describe('production-scale picker contract', () => {
     expect(injuryDrawer).not.toContain('injuryTypeOptions')
   })
 
+  it('uses the complete Locations catalogue for every linked location picker', () => {
+    const route = source('../app/api/picker-options/route.ts')
+    const locations = between(
+      route,
+      "lookup === 'journal-locations' ||",
+      "lookup === 'journal-supervisors' ||",
+    )
+
+    expect(locations).toContain("lookup === 'inspection-sites'")
+    expect(locations).toContain("lookup === 'incident-sites'")
+    expect(locations).toContain("lookup === 'corrective-action-sites'")
+    expect(locations).toContain('isNull(orgUnits.deletedAt)')
+    expect(locations).not.toContain('eq(orgUnits.level')
+  })
+
   it('searches the full eligible class-attendee set without a hidden first-page cap', () => {
     const route = source('../app/api/picker-options/route.ts')
     const candidates = between(

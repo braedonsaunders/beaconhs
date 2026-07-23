@@ -37,6 +37,7 @@ import {
   inspectionRecords,
   inspectionTypeCriteria,
   inspectionTypes,
+  orgUnits,
   tenantUsers,
   users as user,
 } from '@beaconhs/db/schema'
@@ -121,7 +122,8 @@ export default async function InspectionRecordsPage({
       const c = or(
         ilike(inspectionRecords.reference, term),
         ilike(inspectionTypes.name, term),
-        ilike(inspectionRecords.location, term),
+        ilike(orgUnits.name, term),
+        ilike(inspectionRecords.locationOnSite, term),
         ilike(inspectionRecords.foremanText, term),
       )
       if (c) filters.push(c)
@@ -174,6 +176,7 @@ export default async function InspectionRecordsPage({
       .select({
         record: inspectionRecords,
         type: inspectionTypes,
+        site: orgUnits,
         inspectorName: user.name,
         passCount:
           sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'pass' then 1 else 0 end), 0)`.mapWith(
@@ -191,6 +194,7 @@ export default async function InspectionRecordsPage({
       })
       .from(inspectionRecords)
       .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
+      .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, inspectionRecords.inspectorTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .leftJoin(
@@ -198,7 +202,7 @@ export default async function InspectionRecordsPage({
         eq(inspectionRecordCriteria.recordId, inspectionRecords.id),
       )
       .where(whereClause)
-      .groupBy(inspectionRecords.id, inspectionTypes.id, user.id)
+      .groupBy(inspectionRecords.id, inspectionTypes.id, orgUnits.id, user.id)
       .orderBy(...orderBy)
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
@@ -334,9 +338,9 @@ export default async function InspectionRecordsPage({
                 basePath="/inspections/records"
                 currentParams={sp}
                 paramKey="site"
-                placeholder={tGenerated('m_1f5ad6ec6b5d2a')}
-                allLabel="All sites"
-                searchPlaceholder={tGenerated('m_027b30a61c22c4')}
+                placeholder={tGenerated('m_1a37e747f6006b')}
+                allLabel="All locations"
+                searchPlaceholder={tGenerated('m_016e087c3c8544')}
               />
               <RemoteSearchFilter
                 lookup="inspection-record-filter-inspectors"
@@ -419,7 +423,7 @@ export default async function InspectionRecordsPage({
                           }
                           person={r.inspectorName}
                           meta={`${formatDate(new Date(r.record.occurredAt), ctx.timezone, ctx.locale)}${
-                            r.record.location ? ` · ${r.record.location}` : ''
+                            r.site?.name ? ` · ${r.site.name}` : ''
                           }`}
                           footer={
                             <>
@@ -547,7 +551,7 @@ export default async function InspectionRecordsPage({
                                 />
                               </TableCell>
                               <TableCell className="text-slate-600 dark:text-slate-400">
-                                <GeneratedValue value={r.record.location ?? '—'} />
+                                <GeneratedValue value={r.site?.name ?? '—'} />
                               </TableCell>
                               <TableCell className="text-slate-600 dark:text-slate-400">
                                 <GeneratedValue value={r.inspectorName ?? '—'} />

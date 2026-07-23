@@ -24093,8 +24093,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "location": {
-          "name": "location",
+        "location_on_site": {
+          "name": "location_on_site",
           "type": "text",
           "primaryKey": false,
           "notNull": false

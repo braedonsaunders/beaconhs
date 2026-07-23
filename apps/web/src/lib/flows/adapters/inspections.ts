@@ -184,7 +184,7 @@ export function createInspectionFlowAdapter(
         reference: r.reference ?? null,
         type_name: head.typeName ?? '',
         occurred_at: fmtDateTime(r.occurredAt),
-        location: r.location ?? '',
+        location_on_site: r.locationOnSite ?? '',
         site_name: head.siteName ?? '',
         inspector_name: head.inspectorName ?? '',
         supervisor_name: head.supervisorName ?? '',

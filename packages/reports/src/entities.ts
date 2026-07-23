@@ -157,7 +157,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'reference', label: 'Reference', kind: 'text' },
       { key: 'status', label: 'Status', kind: 'enum' },
       { key: 'occurred_at', label: 'Occurred at', kind: 'timestamp' },
-      { key: 'location', label: 'Location', kind: 'text' },
+      { key: 'location_on_site', label: 'Location on site', kind: 'text' },
       { key: 'type_id', label: 'Type (id)', kind: 'uuid' },
       { key: 'site_org_unit_id', label: 'Site (id)', kind: 'uuid' },
     ],

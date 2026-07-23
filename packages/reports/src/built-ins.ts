@@ -600,10 +600,12 @@ export async function queryInspectionsCompleted(
       status: inspectionRecords.status,
       typeId: inspectionTypes.id,
       typeName: inspectionTypes.name,
-      location: inspectionRecords.location,
+      locationName: orgUnits.name,
+      locationOnSite: inspectionRecords.locationOnSite,
     })
     .from(inspectionRecords)
     .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
+    .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
     .where(
       and(
         isNull(inspectionRecords.deletedAt),
@@ -628,7 +630,7 @@ export async function queryInspectionsCompleted(
   if (rows.length === 0) {
     groups.push({
       title: 'Completed inspections',
-      columns: ['Submitted', 'Inspection type', 'Status', 'Location'],
+      columns: ['Submitted', 'Inspection type', 'Status', 'Location', 'Location on site'],
       rows: [],
       isEmpty: true,
     })
@@ -639,11 +641,12 @@ export async function queryInspectionsCompleted(
       groups.push({
         title: name,
         subtitle: `${list.length} completed`,
-        columns: ['Submitted', 'Status', 'Location'],
+        columns: ['Submitted', 'Status', 'Location', 'Location on site'],
         rows: list.map((r) => [
           r.submittedAt ? r.submittedAt.toISOString().slice(0, 16).replace('T', ' ') : null,
           formatLabel(r.status),
-          r.location ?? null,
+          r.locationName ?? null,
+          r.locationOnSite ?? null,
         ]),
       })
     }

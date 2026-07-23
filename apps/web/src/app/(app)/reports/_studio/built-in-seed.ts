@@ -102,7 +102,7 @@ const SEEDS: Record<string, ReportCustomQuery> = {
   inspections_completed: {
     entity: 'inspection_records',
     mode: 'rows',
-    columns: ['reference', 'status', 'occurred_at', 'location'],
+    columns: ['reference', 'status', 'occurred_at', 'site_org_unit_id', 'location_on_site'],
     sort: { column: 'occurred_at', direction: 'desc' },
   },
   lone_worker_summary: {

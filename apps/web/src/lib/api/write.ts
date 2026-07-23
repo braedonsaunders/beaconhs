@@ -837,7 +837,7 @@ const inspectionCreate = z.object({
   typeId: uuid,
   occurredAt: z.coerce.date().optional(),
   siteOrgUnitId: uuid.nullish(),
-  location: z.string().max(500).nullish(),
+  locationOnSite: z.string().max(500).nullish(),
   inspectorTenantUserId: uuid.nullish(),
   supervisorTenantUserId: uuid.nullish(),
   foremanPersonIds: z.array(uuid).default([]),
@@ -894,7 +894,7 @@ async function createInspection(ctx: RequestContext, raw: unknown): Promise<Writ
         status: 'draft',
         occurredAt,
         siteOrgUnitId: b.siteOrgUnitId ?? null,
-        location: stripEmpty(b.location),
+        locationOnSite: stripEmpty(b.locationOnSite),
         inspectorTenantUserId: b.inspectorTenantUserId ?? safeTenantUserId(ctx),
         supervisorTenantUserId: b.supervisorTenantUserId ?? null,
         foremanPersonIds: b.foremanPersonIds,
@@ -929,7 +929,7 @@ async function createInspection(ctx: RequestContext, raw: unknown): Promise<Writ
         typeId: created.typeId,
         occurredAt: created.occurredAt,
         siteOrgUnitId: created.siteOrgUnitId,
-        location: created.location,
+        locationOnSite: created.locationOnSite,
       },
     })
     return created
@@ -947,7 +947,7 @@ function inspectionResult(row: typeof inspectionRecords.$inferSelect): WriteResu
     status: row.status,
     occurred_at: row.occurredAt.toISOString(),
     site_org_unit_id: row.siteOrgUnitId,
-    location: row.location,
+    location_on_site: row.locationOnSite,
     inspector_tenant_user_id: row.inspectorTenantUserId,
     supervisor_tenant_user_id: row.supervisorTenantUserId,
     foreman_person_ids: row.foremanPersonIds,
@@ -991,7 +991,7 @@ async function updateInspection(
     const patch: Partial<typeof inspectionRecords.$inferInsert> = {}
     if (hasOwn(b, 'occurredAt')) patch.occurredAt = b.occurredAt
     if (hasOwn(b, 'siteOrgUnitId')) patch.siteOrgUnitId = b.siteOrgUnitId ?? null
-    if (hasOwn(b, 'location')) patch.location = stripEmpty(b.location)
+    if (hasOwn(b, 'locationOnSite')) patch.locationOnSite = stripEmpty(b.locationOnSite)
     if (hasOwn(b, 'inspectorTenantUserId')) {
       patch.inspectorTenantUserId = b.inspectorTenantUserId ?? null
     }
@@ -1166,9 +1166,9 @@ const INSPECTION_BODY: Json = {
     },
     occurredAt: { type: 'string', format: 'date-time' },
     siteOrgUnitId: { type: 'string', format: 'uuid' },
-    location: {
+    locationOnSite: {
       type: 'string',
-      description: 'Specific place where the inspection occurred.',
+      description: 'Specific place on the selected location where the inspection occurred.',
     },
     inspectorTenantUserId: { type: 'string', format: 'uuid' },
     supervisorTenantUserId: { type: 'string', format: 'uuid' },

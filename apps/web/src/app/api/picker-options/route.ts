@@ -1324,12 +1324,6 @@ async function loadOptions(
       lookup === 'inspection-sites' ||
       lookup === 'corrective-action-sites'
     ) {
-      const level =
-        lookup === 'journal-locations'
-          ? 'customer'
-          : lookup === 'location-parent-units'
-            ? null
-            : 'site'
       const match = input.hasQuery
         ? or(
             ilike(orgUnits.name, input.term),
@@ -1345,12 +1339,10 @@ async function loadOptions(
           level: orgUnits.level,
         })
         .from(orgUnits)
-        .where(
-          and(isNull(orgUnits.deletedAt), level ? eq(orgUnits.level, level) : undefined, match),
-        )
+        .where(and(isNull(orgUnits.deletedAt), match))
         .orderBy(
           ...(input.selected ? [desc(sql`${orgUnits.id} = ${input.selected}`)] : []),
-          ...(level ? [] : [asc(orgUnits.level)]),
+          asc(orgUnits.level),
           asc(orgUnits.name),
           asc(orgUnits.id),
         )

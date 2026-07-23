@@ -17,6 +17,7 @@ import {
   inspectionRecordCriteria,
   inspectionRecords,
   inspectionTypes,
+  orgUnits,
   tenantUsers,
   users as user,
 } from '@beaconhs/db/schema'
@@ -84,7 +85,8 @@ export async function GET(req: NextRequest) {
       const c = or(
         ilike(inspectionRecords.reference, term),
         ilike(inspectionTypes.name, term),
-        ilike(inspectionRecords.location, term),
+        ilike(orgUnits.name, term),
+        ilike(inspectionRecords.locationOnSite, term),
         ilike(inspectionRecords.foremanText, term),
       )
       if (c) filters.push(c)
@@ -124,6 +126,7 @@ export async function GET(req: NextRequest) {
       .select({
         record: inspectionRecords,
         type: inspectionTypes,
+        site: orgUnits,
         inspectorName: user.name,
         passCount:
           sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'pass' then 1 else 0 end), 0)`.mapWith(
@@ -140,6 +143,7 @@ export async function GET(req: NextRequest) {
       })
       .from(inspectionRecords)
       .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
+      .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, inspectionRecords.inspectorTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .leftJoin(
@@ -147,7 +151,7 @@ export async function GET(req: NextRequest) {
         eq(inspectionRecordCriteria.recordId, inspectionRecords.id),
       )
       .where(whereClause)
-      .groupBy(inspectionRecords.id, inspectionTypes.id, user.id)
+      .groupBy(inspectionRecords.id, inspectionTypes.id, orgUnits.id, user.id)
       .orderBy(...orderBy)
       .limit(CSV_EXPORT_QUERY_LIMIT)
   })
@@ -168,6 +172,7 @@ export async function GET(req: NextRequest) {
     'Status',
     'Occurred',
     'Location',
+    'Location on site',
     'Inspector',
     'Pass',
     'Fail',
@@ -185,7 +190,8 @@ export async function GET(req: NextRequest) {
         r.type.name,
         r.record.status,
         new Date(r.record.occurredAt).toISOString(),
-        r.record.location ?? '',
+        r.site?.name ?? '',
+        r.record.locationOnSite ?? '',
         r.inspectorName ?? '',
         String(r.passCount ?? 0),
         String(r.failCount ?? 0),
