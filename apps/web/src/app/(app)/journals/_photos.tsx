@@ -11,6 +11,7 @@ import {
   attachJournalPhotos,
   describeJournalPhoto,
   removeJournalPhoto,
+  reorderJournalPhotos,
   updateJournalPhoto,
 } from './_actions'
 import type { JournalPhoto } from './_types'
@@ -91,6 +92,11 @@ export function Photos({
           }}
           onRemove={async (photoId) => {
             const result = await removeJournalPhoto(photoId)
+            onChange()
+            return result
+          }}
+          onReorder={async (photoIds) => {
+            const result = await reorderJournalPhotos(entryId, photoIds)
             onChange()
             return result
           }}

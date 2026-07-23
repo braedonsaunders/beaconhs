@@ -3903,6 +3903,14 @@ function PhotoInput({
     setFiles(attachments.filter((photo) => photo.attachmentId !== photoId))
     return Promise.resolve()
   }
+  const reorderPhotos = (photoIds: string[]) => {
+    const byId = new Map(attachments.map((photo) => [photo.attachmentId, photo] as const))
+    if (photoIds.length !== attachments.length || photoIds.some((photoId) => !byId.has(photoId))) {
+      return Promise.resolve({ ok: false, error: 'Photos changed before they could be reordered.' })
+    }
+    setFiles(photoIds.flatMap((photoId) => (byId.get(photoId) ? [byId.get(photoId)!] : [])))
+    return Promise.resolve({ ok: true })
+  }
   const analyze = () => {
     if (attachments.length === 0 || analyzing) return
     setErr(null)
@@ -3943,6 +3951,7 @@ function PhotoInput({
         editable={!readOnly}
         onUpdate={updatePhoto}
         onRemove={removePhoto}
+        onReorder={reorderPhotos}
       />
       {config.aiAnalysis && !readOnly ? (
         <div className="flex flex-wrap items-center gap-2">

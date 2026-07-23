@@ -7,7 +7,7 @@
 // entries even though RLS only bounds to the tenant.
 
 import { revalidatePath } from 'next/cache'
-import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   attachments,
   journalEntries,
@@ -512,6 +512,75 @@ export async function removeJournalPhoto(photoId: string): Promise<ActionOk | Ac
     action: 'update',
     summary: 'Removed a photo',
   })
+  revalidatePath('/journals')
+  return { ok: true }
+}
+
+export async function reorderJournalPhotos(
+  entryId: string,
+  photoIds: string[],
+): Promise<ActionOk | ActionErr> {
+  const ctx = await requireRequestContext()
+  if (
+    !isUuid(entryId) ||
+    !Array.isArray(photoIds) ||
+    photoIds.some((photoId) => !isUuid(photoId)) ||
+    new Set(photoIds).size !== photoIds.length
+  ) {
+    return { ok: false, error: 'Photo order is invalid.' }
+  }
+  const where = await mutationWhere(ctx, entryId, 'edit')
+  const changed = await ctx.db(async (tx) => {
+    const [entry] = await tx
+      .select({ id: journalEntries.id })
+      .from(journalEntries)
+      .where(where)
+      .limit(1)
+      .for('update')
+    if (!entry) return false
+    const current = await tx
+      .select({ id: journalEntryPhotos.id })
+      .from(journalEntryPhotos)
+      .where(
+        and(eq(journalEntryPhotos.tenantId, ctx.tenantId), eq(journalEntryPhotos.entryId, entryId)),
+      )
+      .orderBy(
+        asc(journalEntryPhotos.sortOrder),
+        asc(journalEntryPhotos.createdAt),
+        asc(journalEntryPhotos.id),
+      )
+      .for('update')
+    const previousIds = current.map((photo) => photo.id)
+    if (
+      previousIds.length !== photoIds.length ||
+      previousIds.some((photoId) => !photoIds.includes(photoId))
+    ) {
+      return false
+    }
+    if (previousIds.every((photoId, index) => photoId === photoIds[index])) return true
+    for (const [sortOrder, photoId] of photoIds.entries()) {
+      await tx
+        .update(journalEntryPhotos)
+        .set({ sortOrder })
+        .where(
+          and(
+            eq(journalEntryPhotos.tenantId, ctx.tenantId),
+            eq(journalEntryPhotos.entryId, entryId),
+            eq(journalEntryPhotos.id, photoId),
+          ),
+        )
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'journal_entry',
+      entityId: entryId,
+      action: 'update',
+      summary: 'Reordered photos',
+      before: { photoIds: previousIds },
+      after: { photoIds },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photos changed before they could be reordered.' }
   revalidatePath('/journals')
   return { ok: true }
 }

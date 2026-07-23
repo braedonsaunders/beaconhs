@@ -5,11 +5,12 @@
 // child rows in that same transaction. This makes autosave, submit, and reopen
 // serialize on one lifecycle lock instead of racing across separate requests.
 
-import { and, eq, inArray, isNull, notInArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, notInArray } from 'drizzle-orm'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import {
   attachments,
+  equipmentInspectionRecordAttachments,
   equipmentInspectionRecordCriteria,
   equipmentInspectionRecords,
   equipmentInspectionTypes,
@@ -585,6 +586,212 @@ export async function removeCriterionPhoto(
     },
   )
   if (!changed) return { ok: false, error: 'Photo not found.' }
+  revalidateRecord(recordId)
+  return { ok: true }
+}
+
+export async function reorderCriterionPhotos(
+  recordId: string,
+  rowId: string,
+  attachmentIds: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
+  if (
+    attachmentIds.some((attachmentId) => !isUuid(attachmentId)) ||
+    new Set(attachmentIds).size !== attachmentIds.length
+  ) {
+    return { ok: false, error: 'Photo order is invalid.' }
+  }
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, _record, criterion) => {
+      const previousIds = criterion.photoAttachmentIds ?? []
+      if (
+        previousIds.length !== attachmentIds.length ||
+        previousIds.some((attachmentId) => !attachmentIds.includes(attachmentId))
+      ) {
+        return false
+      }
+      if (previousIds.every((attachmentId, index) => attachmentId === attachmentIds[index])) {
+        return true
+      }
+      const [updated] = await tx
+        .update(equipmentInspectionRecordCriteria)
+        .set({ photoAttachmentIds: attachmentIds })
+        .where(
+          and(
+            eq(equipmentInspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(equipmentInspectionRecordCriteria.recordId, recordId),
+            eq(equipmentInspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: equipmentInspectionRecordCriteria.id })
+      if (!updated) throw new Error('Inspection item changed before photos could be reordered')
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'equipment_inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: 'Reordered inspection item photos',
+        before: { rowId, photoAttachmentIds: previousIds },
+        after: { rowId, photoAttachmentIds: attachmentIds },
+      })
+      return true
+    },
+  )
+  if (!changed) return { ok: false, error: 'Photos changed before they could be reordered.' }
+  revalidateRecord(recordId)
+  return { ok: true }
+}
+
+export async function updateRecordPhoto(
+  recordId: string,
+  photoId: string,
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
+  if (!isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
+  const edits = parsePhotoEdits(input)
+  const changed = await withLockedRecordMutation(ctx, recordId, async (tx) => {
+    const [photo] = await tx
+      .select({ attachmentId: equipmentInspectionRecordAttachments.attachmentId })
+      .from(equipmentInspectionRecordAttachments)
+      .where(
+        and(
+          eq(equipmentInspectionRecordAttachments.tenantId, ctx.tenantId),
+          eq(equipmentInspectionRecordAttachments.recordId, recordId),
+          eq(equipmentInspectionRecordAttachments.id, photoId),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!photo) return false
+    await tx
+      .update(equipmentInspectionRecordAttachments)
+      .set({ caption: edits.caption })
+      .where(
+        and(
+          eq(equipmentInspectionRecordAttachments.tenantId, ctx.tenantId),
+          eq(equipmentInspectionRecordAttachments.recordId, recordId),
+          eq(equipmentInspectionRecordAttachments.id, photoId),
+        ),
+      )
+    await tx
+      .update(attachments)
+      .set({ annotations: edits.annotations })
+      .where(
+        and(
+          eq(attachments.tenantId, ctx.tenantId),
+          eq(attachments.id, photo.attachmentId),
+          eq(attachments.kind, 'image'),
+        ),
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment_inspection_record',
+      entityId: recordId,
+      action: 'update',
+      summary: 'Updated photo caption and markup',
+      metadata: { photoId, annotationCount: edits.annotations?.length ?? 0 },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photo not found.' }
+  revalidateRecord(recordId)
+  return { ok: true }
+}
+
+export async function removeRecordPhoto(
+  recordId: string,
+  photoId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
+  if (!isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
+  const changed = await withLockedRecordMutation(ctx, recordId, async (tx) => {
+    const removed = await tx
+      .delete(equipmentInspectionRecordAttachments)
+      .where(
+        and(
+          eq(equipmentInspectionRecordAttachments.tenantId, ctx.tenantId),
+          eq(equipmentInspectionRecordAttachments.recordId, recordId),
+          eq(equipmentInspectionRecordAttachments.id, photoId),
+        ),
+      )
+      .returning({ id: equipmentInspectionRecordAttachments.id })
+    if (!removed[0]) return false
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment_inspection_record',
+      entityId: recordId,
+      action: 'update',
+      summary: 'Removed photo',
+      metadata: { photoId },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photo not found.' }
+  revalidateRecord(recordId)
+  return { ok: true }
+}
+
+export async function reorderRecordPhotos(
+  recordId: string,
+  photoIds: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
+  if (photoIds.some((photoId) => !isUuid(photoId)) || new Set(photoIds).size !== photoIds.length) {
+    return { ok: false, error: 'Photo order is invalid.' }
+  }
+  const changed = await withLockedRecordMutation(ctx, recordId, async (tx) => {
+    const current = await tx
+      .select({ id: equipmentInspectionRecordAttachments.id })
+      .from(equipmentInspectionRecordAttachments)
+      .where(
+        and(
+          eq(equipmentInspectionRecordAttachments.tenantId, ctx.tenantId),
+          eq(equipmentInspectionRecordAttachments.recordId, recordId),
+        ),
+      )
+      .orderBy(
+        asc(equipmentInspectionRecordAttachments.sortOrder),
+        asc(equipmentInspectionRecordAttachments.createdAt),
+        asc(equipmentInspectionRecordAttachments.id),
+      )
+      .for('update')
+    const previousIds = current.map((photo) => photo.id)
+    if (
+      previousIds.length !== photoIds.length ||
+      previousIds.some((photoId) => !photoIds.includes(photoId))
+    ) {
+      return false
+    }
+    if (previousIds.every((photoId, index) => photoId === photoIds[index])) return true
+    for (const [sortOrder, photoId] of photoIds.entries()) {
+      await tx
+        .update(equipmentInspectionRecordAttachments)
+        .set({ sortOrder })
+        .where(
+          and(
+            eq(equipmentInspectionRecordAttachments.tenantId, ctx.tenantId),
+            eq(equipmentInspectionRecordAttachments.recordId, recordId),
+            eq(equipmentInspectionRecordAttachments.id, photoId),
+          ),
+        )
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment_inspection_record',
+      entityId: recordId,
+      action: 'update',
+      summary: 'Reordered photos',
+      before: { photoIds: previousIds },
+      after: { photoIds },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photos changed before they could be reordered.' }
   revalidateRecord(recordId)
   return { ok: true }
 }

@@ -33,6 +33,9 @@ import {
   passAllEquipmentInspection,
   reopenEquipmentInspection,
   removeCriterionPhoto,
+  removeRecordPhoto,
+  reorderCriterionPhotos,
+  reorderRecordPhotos,
   setActionTaken,
   setAnswer,
   setComment,
@@ -40,6 +43,7 @@ import {
   setValue,
   submitEquipmentInspection,
   updateCriterionPhoto,
+  updateRecordPhoto,
 } from '../_actions'
 
 export const dynamic = 'force-dynamic'
@@ -173,9 +177,13 @@ export default async function EquipmentInspectionRecordPage({
     }
     const recordPhotos = await tx
       .select({
-        id: attachments.id,
+        id: equipmentInspectionRecordAttachments.id,
+        attachmentId: attachments.id,
         filename: attachments.filename,
         caption: equipmentInspectionRecordAttachments.caption,
+        annotations: attachments.annotations,
+        width: attachments.width,
+        height: attachments.height,
       })
       .from(equipmentInspectionRecordAttachments)
       .innerJoin(
@@ -191,6 +199,11 @@ export default async function EquipmentInspectionRecordPage({
           eq(equipmentInspectionRecordAttachments.tenantId, ctx.tenantId),
           eq(equipmentInspectionRecordAttachments.recordId, id),
         ),
+      )
+      .orderBy(
+        asc(equipmentInspectionRecordAttachments.sortOrder),
+        asc(equipmentInspectionRecordAttachments.createdAt),
+        asc(equipmentInspectionRecordAttachments.id),
       )
     return { ...row, criteria, photoMap, recordPhotos }
   })
@@ -235,7 +248,11 @@ export default async function EquipmentInspectionRecordPage({
     addPhotos: addCriterionPhotos,
     updatePhoto: updateCriterionPhoto,
     removePhoto: removeCriterionPhoto,
+    reorderPhotos: reorderCriterionPhotos,
   }
+  const updateRecordPhotoAction = updateRecordPhoto.bind(null, id)
+  const removeRecordPhotoAction = removeRecordPhoto.bind(null, id)
+  const reorderRecordPhotosAction = reorderRecordPhotos.bind(null, id)
   const activity = await recentActivityForEntity(ctx, 'equipment_inspection_record', id, 25)
 
   return (
@@ -370,10 +387,18 @@ export default async function EquipmentInspectionRecordPage({
                 <PhotoGallery
                   photos={recordPhotos.map((photo) => ({
                     id: photo.id,
-                    url: attachmentUrl(photo.id),
+                    attachmentId: photo.attachmentId,
+                    url: attachmentUrl(photo.attachmentId),
                     filename: photo.filename,
                     caption: photo.caption,
+                    annotations: photo.annotations,
+                    width: photo.width,
+                    height: photo.height,
                   }))}
+                  editable={editable}
+                  onUpdate={updateRecordPhotoAction}
+                  onRemove={removeRecordPhotoAction}
+                  onReorder={reorderRecordPhotosAction}
                 />
               </section>
             ) : null

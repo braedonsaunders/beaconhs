@@ -183,6 +183,13 @@
       "when": 1784831400000,
       "tag": "0025_unify_builder_photo_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784835600000,
+      "tag": "0026_order_frontline_photos",
+      "breakpoints": true
     }
   ]
 }

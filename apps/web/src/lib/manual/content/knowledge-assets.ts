@@ -762,7 +762,7 @@ Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspect
 1. Tap **Fail** on the item.
 2. Set the **Severity**: **Low**, **Medium**, **High**, or **Critical**.
 3. Fill in **What's wrong?** with a short note, and **Action taken** if you did something about it.
-4. Add a photo if the item asks for one. Tap the pencil button to add a caption or mark up the photo. Tap the trash button to remove the wrong photo. The app will not let you submit until required comments and photos are filled in.
+4. Add a photo if the item asks for one. Tap the pencil button to add a caption or mark up the photo. Tap the trash button to remove the wrong photo, and use the arrow buttons to change the order. The app will not let you submit until required comments and photos are filled in.
 
 ## Submit the inspection
 
@@ -770,7 +770,7 @@ Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspect
 2. Tap **Submit**.
 3. The result shows as **pass** or **fail** in the list. Failed items can spawn a work order automatically, so the shop sees the defect without a phone call. A small **Work order** tag appears on the failed item when that happens.
 
-Imported or inspection-level evidence appears under **Record photos**. Photos added to a checklist item stay on that item and are also available to the submitted-inspection email flow.
+Imported or inspection-level evidence appears under **Record photos**. Reopen the inspection before editing, removing, or reordering those photos. Photos added to a checklist item stay on that item and are also available to the submitted-inspection email flow.
 
 ## Reopen an inspection
 

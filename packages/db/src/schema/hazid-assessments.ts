@@ -345,10 +345,16 @@ export const hazidAssessmentPhotos = pgTable(
     assessmentId: uuid('assessment_id').notNull(),
     attachmentId: uuid('attachment_id').notNull(),
     caption: text('caption'),
+    sortOrder: integer('sort_order').default(0).notNull(),
     ...timestamps,
   },
   (t) => ({
     assessmentIdx: index('hazid_assessment_photos_assessment_idx').on(t.tenantId, t.assessmentId),
+    assessmentOrderIdx: index('hazid_assessment_photos_assessment_order_idx').on(
+      t.tenantId,
+      t.assessmentId,
+      t.sortOrder,
+    ),
     tenantIdx: index('hazid_assessment_photos_tenant_idx').on(t.tenantId),
     assessmentFk: foreignKey({
       name: 'hazid_assessment_photos_tenant_assessment_fk',

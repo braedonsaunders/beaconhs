@@ -295,6 +295,7 @@ async function toggleLock(formData: FormData) {
     const reopeningClosed = current.status === 'closed' && !lock
     const submittingAndLocking =
       lock && (current.status === 'draft' || current.status === 'in_progress')
+    const resubmittingAndLocking = lock && current.status === 'submitted' && !current.locked
     if (current.locked === lock && !reopeningClosed && !submittingAndLocking) return false
     if (submittingAndLocking) {
       await assertInspectionStatusTransitionInTx(tx, ctx.tenantId, current, 'submitted')
@@ -329,16 +330,18 @@ async function toggleLock(formData: FormData) {
         locked: inspectionRecords.locked,
       })
     if (!updated) throw new Error('Inspection record changed before its lock could be updated')
-    if (reopeningClosed || submittingAndLocking) {
+    if (reopeningClosed || submittingAndLocking || resubmittingAndLocking) {
       const occurrenceKey = randomUUID()
-      await recordModuleFlowEvent(tx, ctx, {
-        subjectId: id,
-        moduleKey: 'inspections',
-        event: 'status_change',
-        toStatus: 'submitted',
-        occurrenceKey,
-      })
-      if (submittingAndLocking) {
+      if (reopeningClosed || submittingAndLocking) {
+        await recordModuleFlowEvent(tx, ctx, {
+          subjectId: id,
+          moduleKey: 'inspections',
+          event: 'status_change',
+          toStatus: 'submitted',
+          occurrenceKey,
+        })
+      }
+      if (submittingAndLocking || resubmittingAndLocking) {
         await recordModuleFlowEvent(tx, ctx, {
           subjectId: id,
           moduleKey: 'inspections',
@@ -359,9 +362,11 @@ async function toggleLock(formData: FormData) {
         ? 'Reopened closed inspection'
         : submittingAndLocking
           ? 'Submitted and locked'
-          : lock
-            ? 'Locked'
-            : 'Unlocked',
+          : resubmittingAndLocking
+            ? 'Resubmitted and locked'
+            : lock
+              ? 'Locked'
+              : 'Unlocked',
       before: { status: current.status, locked: current.locked },
       after: { status: updated.status, locked: updated.locked },
     })
@@ -1083,6 +1088,65 @@ async function removeCriterionPhoto(
   return { ok: true }
 }
 
+async function reorderCriterionPhotos(
+  recordId: string,
+  rowId: string,
+  attachmentIds: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
+  if (
+    !isUuid(recordId) ||
+    !isUuid(rowId) ||
+    attachmentIds.some((attachmentId) => !isUuid(attachmentId)) ||
+    new Set(attachmentIds).size !== attachmentIds.length
+  ) {
+    return { ok: false, error: 'Photo order is invalid.' }
+  }
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, _record, criterion) => {
+      const previousIds = criterion.photoAttachmentIds ?? []
+      if (
+        previousIds.length !== attachmentIds.length ||
+        previousIds.some((attachmentId) => !attachmentIds.includes(attachmentId))
+      ) {
+        return false
+      }
+      if (previousIds.every((attachmentId, index) => attachmentId === attachmentIds[index])) {
+        return false
+      }
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({ photoAttachmentIds: attachmentIds })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated) throw new Error('Inspection criterion changed before photos could be reordered')
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: 'Reordered inspection item photos',
+        before: { rowId, photoAttachmentIds: previousIds },
+        after: { rowId, photoAttachmentIds: attachmentIds },
+      })
+      return true
+    },
+  )
+  if (!changed) return { ok: false, error: 'Photos changed before they could be reordered.' }
+  revalidatePath(`/inspections/records/${recordId}`)
+  return { ok: true }
+}
+
 async function passAll(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
@@ -1218,23 +1282,33 @@ async function attachRecordPhotos(recordId: string, ids: string[]) {
     await lockVisibleInspectionRecordForMutation(tx, ctx, recordId)
     const validIds = await validateInspectionPhotoAttachmentIdsInTx(tx, ctx.tenantId, ids)
     const existing = await tx
-      .select({ attachmentId: inspectionRecordAttachments.attachmentId })
+      .select({
+        attachmentId: inspectionRecordAttachments.attachmentId,
+        sortOrder: inspectionRecordAttachments.sortOrder,
+      })
       .from(inspectionRecordAttachments)
       .where(
         and(
           eq(inspectionRecordAttachments.tenantId, ctx.tenantId),
           eq(inspectionRecordAttachments.recordId, recordId),
-          inArray(inspectionRecordAttachments.attachmentId, validIds),
         ),
+      )
+      .orderBy(
+        asc(inspectionRecordAttachments.sortOrder),
+        asc(inspectionRecordAttachments.createdAt),
+        asc(inspectionRecordAttachments.id),
       )
     const existingIds = new Set(existing.map((row) => row.attachmentId))
     const newIds = validIds.filter((id) => !existingIds.has(id))
     if (newIds.length === 0) return 0
+    const nextSortOrder =
+      existing.reduce((maximum, row) => Math.max(maximum, row.sortOrder), -1) + 1
     await tx.insert(inspectionRecordAttachments).values(
-      newIds.map((attachmentId) => ({
+      newIds.map((attachmentId, index) => ({
         tenantId: ctx.tenantId,
         recordId,
         attachmentId,
+        sortOrder: nextSortOrder + index,
       })),
     )
     await recordAuditInTransaction(tx, ctx, {
@@ -1340,6 +1414,72 @@ async function removeRecordPhoto(
     return true
   })
   if (!removed) return { ok: false, error: 'Photo not found.' }
+  revalidatePath(`/inspections/records/${recordId}`)
+  return { ok: true }
+}
+
+async function reorderRecordPhotos(
+  recordId: string,
+  photoIds: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
+  if (
+    !isUuid(recordId) ||
+    photoIds.some((photoId) => !isUuid(photoId)) ||
+    new Set(photoIds).size !== photoIds.length
+  ) {
+    return { ok: false, error: 'Photo order is invalid.' }
+  }
+  const changed = await ctx.db(async (tx) => {
+    await lockVisibleInspectionRecordForMutation(tx, ctx, recordId)
+    const current = await tx
+      .select({ id: inspectionRecordAttachments.id })
+      .from(inspectionRecordAttachments)
+      .where(
+        and(
+          eq(inspectionRecordAttachments.tenantId, ctx.tenantId),
+          eq(inspectionRecordAttachments.recordId, recordId),
+        ),
+      )
+      .orderBy(
+        asc(inspectionRecordAttachments.sortOrder),
+        asc(inspectionRecordAttachments.createdAt),
+        asc(inspectionRecordAttachments.id),
+      )
+      .for('update')
+    const previousIds = current.map((photo) => photo.id)
+    if (
+      previousIds.length !== photoIds.length ||
+      previousIds.some((photoId) => !photoIds.includes(photoId))
+    ) {
+      return false
+    }
+    if (previousIds.every((photoId, index) => photoId === photoIds[index])) return true
+    for (const [sortOrder, photoId] of photoIds.entries()) {
+      await tx
+        .update(inspectionRecordAttachments)
+        .set({ sortOrder })
+        .where(
+          and(
+            eq(inspectionRecordAttachments.tenantId, ctx.tenantId),
+            eq(inspectionRecordAttachments.recordId, recordId),
+            eq(inspectionRecordAttachments.id, photoId),
+          ),
+        )
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: recordId,
+      action: 'update',
+      summary: 'Reordered photos',
+      before: { photoIds: previousIds },
+      after: { photoIds },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photos changed before they could be reordered.' }
   revalidatePath(`/inspections/records/${recordId}`)
   return { ok: true }
 }
@@ -1468,6 +1608,11 @@ export default async function InspectionRecordDetailPage({
           eq(inspectionRecordAttachments.recordId, id),
         ),
       )
+      .orderBy(
+        asc(inspectionRecordAttachments.sortOrder),
+        asc(inspectionRecordAttachments.createdAt),
+        asc(inspectionRecordAttachments.id),
+      )
 
     // Resolve per-criterion photo previews in one pass.
     const allPhotoIds = Array.from(new Set(criteria.flatMap((c) => c.c.photoAttachmentIds ?? [])))
@@ -1579,11 +1724,15 @@ export default async function InspectionRecordDetailPage({
     addPhotos: addCriterionPhotos,
     updatePhoto: updateCriterionPhoto,
     removePhoto: removeCriterionPhoto,
+    reorderPhotos: reorderCriterionPhotos,
   }
 
   const needsSignature = type.requiresCustomerSignature
   const signed = Boolean(record.customerSignatureAttachmentId)
   const recordImmutable = record.locked || record.status === 'closed'
+  const updateRecordPhotoAction = updateRecordPhoto.bind(null, id)
+  const removeRecordPhotoAction = removeRecordPhoto.bind(null, id)
+  const reorderRecordPhotosAction = reorderRecordPhotos.bind(null, id)
 
   const sectionItems: SectionNavItem[] = [
     { id: 'overview', label: 'Overview' },
@@ -1668,7 +1817,9 @@ export default async function InspectionRecordDetailPage({
                         <>
                           <Lock size={14} />{' '}
                           <GeneratedValue
-                            value={record.status === 'submitted' ? 'Lock' : 'Submit & lock'}
+                            value={
+                              record.status === 'submitted' ? 'Resubmit & lock' : 'Submit & lock'
+                            }
                           />
                         </>
                       )
@@ -2125,8 +2276,9 @@ export default async function InspectionRecordDetailPage({
               <PhotoGallery
                 photos={galleryPhotos}
                 editable={!recordImmutable}
-                onUpdate={async (photoId, edits) => updateRecordPhoto(id, photoId, edits)}
-                onRemove={async (photoId) => removeRecordPhoto(id, photoId)}
+                onUpdate={updateRecordPhotoAction}
+                onRemove={removeRecordPhotoAction}
+                onReorder={reorderRecordPhotosAction}
               />
               <GeneratedValue
                 value={

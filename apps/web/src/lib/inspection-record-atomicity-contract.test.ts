@@ -199,6 +199,26 @@ describe('inspection record atomicity contract', () => {
     }
   })
 
+  it('resubmits an unlocked submitted record when it is locked again', () => {
+    const toggle = functionSlice(page, 'toggleLock', 'async function updateRecordField')
+    expect(toggle).toContain(
+      "const resubmittingAndLocking = lock && current.status === 'submitted' && !current.locked",
+    )
+    expect(toggle).toContain('submittingAndLocking || resubmittingAndLocking')
+    expect(toggle).toContain("event: 'on_submit'")
+    expect(toggle).toContain("'Resubmitted and locked'")
+    expect(page).toContain("record.status === 'submitted' ? 'Resubmit & lock' : 'Submit & lock'")
+  })
+
+  it('passes bound server actions to the interactive record photo gallery', () => {
+    expect(page).toContain('const updateRecordPhotoAction = updateRecordPhoto.bind(null, id)')
+    expect(page).toContain('const removeRecordPhotoAction = removeRecordPhoto.bind(null, id)')
+    expect(page).toContain('const reorderRecordPhotosAction = reorderRecordPhotos.bind(null, id)')
+    expect(page).toContain('onUpdate={updateRecordPhotoAction}')
+    expect(page).toContain('onRemove={removeRecordPhotoAction}')
+    expect(page).toContain('onReorder={reorderRecordPhotosAction}')
+  })
+
   it('validates and de-duplicates photos and retires superseded signatures atomically', () => {
     const criterionPhotos = functionSlice(page, 'addCriterionPhotos', 'async function passAll')
     const recordPhotos = functionSlice(

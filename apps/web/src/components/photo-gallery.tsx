@@ -7,7 +7,7 @@ import {
   useGeneratedValueTranslations,
 } from '@/i18n/generated'
 import { useEffect, useRef, useState, useTransition } from 'react'
-import { Check, Pencil, RotateCcw, Trash2, Undo2, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Pencil, RotateCcw, Trash2, Undo2, X } from 'lucide-react'
 import { Button, Input, Label, cn } from '@beaconhs/ui'
 import type { Annotation } from '@beaconhs/db/schema'
 import { MAX_PHOTO_ANNOTATIONS, MAX_PHOTO_ANNOTATION_POINTS } from '@beaconhs/forms-core'
@@ -369,18 +369,62 @@ export function PhotoGallery({
   editable = false,
   onUpdate,
   onRemove,
+  onReorder,
 }: {
   photos: GalleryPhoto[]
   editable?: boolean
   onUpdate?: (photoId: string, edits: PhotoEdits) => Promise<MutationResult>
   onRemove?: (photoId: string) => Promise<MutationResult>
+  onReorder?: (photoIds: string[]) => Promise<MutationResult>
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null)
   const [editing, setEditing] = useState<GalleryPhoto | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
+  const [optimisticOrder, setOptimisticOrder] = useState<{
+    baseOrderKey: string
+    photoIds: string[]
+  } | null>(null)
   const [pending, startTransition] = useTransition()
+  const propOrderKey = photos.map((photo) => photo.id).join('\0')
+  const photosById = new Map(photos.map((photo) => [photo.id, photo] as const))
+  const orderedPhotos =
+    optimisticOrder?.baseOrderKey === propOrderKey
+      ? optimisticOrder.photoIds.flatMap((photoId) => {
+          const photo = photosById.get(photoId)
+          return photo ? [photo] : []
+        })
+      : photos
+
+  function move(photoId: string, direction: -1 | 1) {
+    if (!onReorder || pending) return
+    const currentIndex = orderedPhotos.findIndex((photo) => photo.id === photoId)
+    const nextIndex = currentIndex + direction
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= orderedPhotos.length) return
+    const next = [...orderedPhotos]
+    const [moved] = next.splice(currentIndex, 1)
+    if (!moved) return
+    next.splice(nextIndex, 0, moved)
+    setOptimisticOrder({ baseOrderKey: propOrderKey, photoIds: next.map((photo) => photo.id) })
+    startTransition(async () => {
+      try {
+        const result = await onReorder(next.map((photo) => photo.id))
+        if (result && !result.ok) {
+          setOptimisticOrder(null)
+          toast.error(tGeneratedValue(result.error ?? 'Photos could not be reordered.'))
+        }
+      } catch (error) {
+        setOptimisticOrder(null)
+        toast.error(
+          tGeneratedValue(
+            error instanceof Error ? error.message : 'Photos could not be reordered.',
+          ),
+        )
+      }
+    })
+  }
+
   async function remove(photo: GalleryPhoto) {
     if (!onRemove) return
     if (
@@ -420,7 +464,7 @@ export function PhotoGallery({
     <>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
         <GeneratedValue
-          value={photos.map((photo) => (
+          value={orderedPhotos.map((photo, index) => (
             <div
               key={photo.id}
               className="group relative aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800"
@@ -448,25 +492,51 @@ export function PhotoGallery({
                   <GeneratedValue value="Marked up" />
                 </span>
               ) : null}
-              {editable && onUpdate && onRemove ? (
+              {editable && (onUpdate || onRemove || onReorder) ? (
                 <div className="absolute top-1 right-1 flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setEditing(photo)}
-                    className="grid h-8 w-8 place-items-center rounded-md bg-white/95 text-slate-800 shadow hover:bg-white dark:bg-slate-900/95 dark:text-white"
-                    aria-label={tGeneratedValue('Edit photo')}
-                  >
-                    <Pencil size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => remove(photo)}
-                    disabled={pending && removing === photo.id}
-                    className="grid h-8 w-8 place-items-center rounded-md bg-white/95 text-red-600 shadow hover:bg-white dark:bg-slate-900/95"
-                    aria-label={tGeneratedValue('Remove photo')}
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {onReorder ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => move(photo.id, -1)}
+                        disabled={pending || index === 0}
+                        className="grid h-8 w-8 place-items-center rounded-md bg-white/95 text-slate-800 shadow hover:bg-white disabled:opacity-45 dark:bg-slate-900/95 dark:text-white"
+                        aria-label={tGeneratedValue('Move photo earlier')}
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => move(photo.id, 1)}
+                        disabled={pending || index === orderedPhotos.length - 1}
+                        className="grid h-8 w-8 place-items-center rounded-md bg-white/95 text-slate-800 shadow hover:bg-white disabled:opacity-45 dark:bg-slate-900/95 dark:text-white"
+                        aria-label={tGeneratedValue('Move photo later')}
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+                    </>
+                  ) : null}
+                  {onUpdate ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditing(photo)}
+                      className="grid h-8 w-8 place-items-center rounded-md bg-white/95 text-slate-800 shadow hover:bg-white dark:bg-slate-900/95 dark:text-white"
+                      aria-label={tGeneratedValue('Edit photo')}
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  ) : null}
+                  {onRemove ? (
+                    <button
+                      type="button"
+                      onClick={() => remove(photo)}
+                      disabled={pending && removing === photo.id}
+                      className="grid h-8 w-8 place-items-center rounded-md bg-white/95 text-red-600 shadow hover:bg-white dark:bg-slate-900/95"
+                      aria-label={tGeneratedValue('Remove photo')}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>

@@ -204,12 +204,18 @@ export const equipmentInspectionRecordAttachments = pgTable(
     recordId: uuid('record_id').notNull(),
     attachmentId: uuid('attachment_id').notNull(),
     caption: text('caption'),
+    sortOrder: integer('sort_order').default(0).notNull(),
     ...timestamps,
   },
   (t) => ({
     recordIdx: index('equipment_inspection_record_attachments_record_idx').on(
       t.tenantId,
       t.recordId,
+    ),
+    recordOrderIdx: index('equipment_inspection_record_attachments_record_order_idx').on(
+      t.tenantId,
+      t.recordId,
+      t.sortOrder,
     ),
     tenantIdx: index('equipment_inspection_record_attachments_tenant_idx').on(t.tenantId),
     recordFk: foreignKey({

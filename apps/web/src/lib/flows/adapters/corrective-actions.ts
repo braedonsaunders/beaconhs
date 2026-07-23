@@ -102,7 +102,8 @@ export function createCorrectiveActionFlowAdapter(
             })
             .from(caPhotos)
             .innerJoin(attachments, eq(attachments.id, caPhotos.attachmentId))
-            .where(eq(caPhotos.caId, caId)),
+            .where(eq(caPhotos.caId, caId))
+            .orderBy(asc(caPhotos.sortOrder), asc(caPhotos.createdAt), asc(caPhotos.id)),
         ),
       ])
 

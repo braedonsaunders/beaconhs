@@ -199,7 +199,12 @@ export function createIncidentFlowAdapter(
               })
               .from(incidentAttachments)
               .innerJoin(attachments, eq(attachments.id, incidentAttachments.attachmentId))
-              .where(eq(incidentAttachments.incidentId, incidentId)),
+              .where(eq(incidentAttachments.incidentId, incidentId))
+              .orderBy(
+                asc(incidentAttachments.sortOrder),
+                asc(incidentAttachments.createdAt),
+                asc(incidentAttachments.id),
+              ),
           ),
         ])
 

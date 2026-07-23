@@ -13,7 +13,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import {
   caCompleteSteps,
   caPhotos,
@@ -35,6 +35,7 @@ import { canSeeRecord, moduleScopeWhere } from '@/lib/visibility'
 import { requireUuidArrayInput, requireUuidInput } from '@/lib/mutation-input'
 import { parsePhotoEdits } from '@/lib/photo-edits'
 import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
+import { isUuid } from '@/lib/list-params'
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -96,19 +97,29 @@ export async function attachCaPhotos(caId: string, attachmentIds: string[]): Pro
     if (!current) return { ok: false as const, error: 'Corrective action not found.' }
     if (current.locked) return { ok: false as const, error: 'This action is locked.' }
     const validIds = await validateTenantImageAttachmentIdsInTx(tx, ctx.tenantId, attachmentIds)
+    const existing = await tx
+      .select({ attachmentId: caPhotos.attachmentId, sortOrder: caPhotos.sortOrder })
+      .from(caPhotos)
+      .where(and(eq(caPhotos.tenantId, ctx.tenantId), eq(caPhotos.caId, caId)))
+    const existingIds = new Set(existing.map((photo) => photo.attachmentId))
+    const newAttachmentIds = validIds.filter((attachmentId) => !existingIds.has(attachmentId))
+    if (newAttachmentIds.length === 0) return { ok: true as const }
+    const baseSortOrder =
+      existing.reduce((maximum, photo) => Math.max(maximum, photo.sortOrder), -1) + 1
     await tx.insert(caPhotos).values(
-      validIds.map((attachmentId) => ({
+      newAttachmentIds.map((attachmentId, index) => ({
         tenantId: ctx.tenantId,
         caId,
         attachmentId,
+        sortOrder: baseSortOrder + index,
       })),
     )
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'corrective_action',
       entityId: caId,
       action: 'update',
-      summary: `Attached ${validIds.length} photo${validIds.length === 1 ? '' : 's'}`,
-      metadata: { attachmentIds: validIds },
+      summary: `Attached ${newAttachmentIds.length} photo${newAttachmentIds.length === 1 ? '' : 's'}`,
+      metadata: { attachmentIds: newAttachmentIds },
     })
     return { ok: true as const }
   })
@@ -210,6 +221,69 @@ export async function deleteCaPhoto(caId: string, photoId: string): Promise<Acti
     return true
   })
   if (!removed) return { ok: false, error: 'Photo not found.' }
+  revalidatePath(`/corrective-actions/${caId}`)
+  return { ok: true }
+}
+
+export async function reorderCaPhotos(caId: string, photoIds: string[]): Promise<ActionResult> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'ca.update')
+  if (
+    !isUuid(caId) ||
+    photoIds.some((photoId) => !isUuid(photoId)) ||
+    new Set(photoIds).size !== photoIds.length
+  ) {
+    return { ok: false, error: 'Photo order is invalid.' }
+  }
+  const ca = await loadCA(ctx, caId)
+  if (!ca) return { ok: false, error: 'Corrective action not found.' }
+  const lockErr = assertNotLocked(ca)
+  if (lockErr) return lockErr
+  const changed = await ctx.db(async (tx) => {
+    const [currentAction] = await tx
+      .select({ locked: correctiveActions.locked })
+      .from(correctiveActions)
+      .where(and(eq(correctiveActions.tenantId, ctx.tenantId), eq(correctiveActions.id, caId)))
+      .limit(1)
+      .for('update')
+    if (!currentAction || currentAction.locked) return false
+    const current = await tx
+      .select({ id: caPhotos.id })
+      .from(caPhotos)
+      .where(and(eq(caPhotos.tenantId, ctx.tenantId), eq(caPhotos.caId, caId)))
+      .orderBy(asc(caPhotos.sortOrder), asc(caPhotos.createdAt), asc(caPhotos.id))
+      .for('update')
+    const previousIds = current.map((photo) => photo.id)
+    if (
+      previousIds.length !== photoIds.length ||
+      previousIds.some((photoId) => !photoIds.includes(photoId))
+    ) {
+      return false
+    }
+    if (previousIds.every((photoId, index) => photoId === photoIds[index])) return true
+    for (const [sortOrder, photoId] of photoIds.entries()) {
+      await tx
+        .update(caPhotos)
+        .set({ sortOrder })
+        .where(
+          and(
+            eq(caPhotos.tenantId, ctx.tenantId),
+            eq(caPhotos.caId, caId),
+            eq(caPhotos.id, photoId),
+          ),
+        )
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'corrective_action',
+      entityId: caId,
+      action: 'update',
+      summary: 'Reordered photos',
+      before: { photoIds: previousIds },
+      after: { photoIds },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photos changed before they could be reordered.' }
   revalidatePath(`/corrective-actions/${caId}`)
   return { ok: true }
 }

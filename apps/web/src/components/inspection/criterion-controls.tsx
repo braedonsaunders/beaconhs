@@ -308,6 +308,7 @@ export function CriterionPhotosPanel({
   addPhotos,
   updatePhoto,
   removePhoto,
+  reorderPhotos,
   onDone,
 }: {
   photoPreviews: GalleryPhoto[]
@@ -326,6 +327,11 @@ export function CriterionPhotosPanel({
     rowId: string,
     attachmentId: string,
   ) => Promise<{ ok: boolean; error?: string }>
+  reorderPhotos?: (
+    recordId: string,
+    rowId: string,
+    attachmentIds: string[],
+  ) => Promise<{ ok: boolean; error?: string }>
   onDone: () => void
 }) {
   return (
@@ -336,7 +342,7 @@ export function CriterionPhotosPanel({
             <div className="mb-2">
               <PhotoGallery
                 photos={photoPreviews}
-                editable={editable && Boolean(updatePhoto && removePhoto)}
+                editable={editable}
                 onUpdate={
                   updatePhoto
                     ? async (attachmentId, edits) => {
@@ -350,6 +356,15 @@ export function CriterionPhotosPanel({
                   removePhoto
                     ? async (attachmentId) => {
                         const result = await removePhoto(recordId, rowId, attachmentId)
+                        onDone()
+                        return result
+                      }
+                    : undefined
+                }
+                onReorder={
+                  reorderPhotos
+                    ? async (attachmentIds) => {
+                        const result = await reorderPhotos(recordId, rowId, attachmentIds)
                         onDone()
                         return result
                       }

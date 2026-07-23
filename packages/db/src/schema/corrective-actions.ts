@@ -142,10 +142,12 @@ export const caPhotos = pgTable(
       .references(() => correctiveActions.id, { onDelete: 'cascade' }),
     attachmentId: uuid('attachment_id').notNull(),
     caption: text('caption'),
+    sortOrder: integer('sort_order').default(0).notNull(),
     ...timestamps,
   },
   (t) => ({
     caIdx: index('ca_photos_ca_idx').on(t.caId),
+    caOrderIdx: index('ca_photos_ca_order_idx').on(t.tenantId, t.caId, t.sortOrder),
     tenantIdx: index('ca_photos_tenant_idx').on(t.tenantId),
   }),
 )

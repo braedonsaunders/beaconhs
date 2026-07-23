@@ -78,6 +78,7 @@ export default async function CorrectiveActionPrintPage({
       .from(caPhotos)
       .innerJoin(attachments, eq(attachments.id, caPhotos.attachmentId))
       .where(eq(caPhotos.caId, id))
+      .orderBy(asc(caPhotos.sortOrder), asc(caPhotos.createdAt), asc(caPhotos.id))
 
     const steps = await tx
       .select({

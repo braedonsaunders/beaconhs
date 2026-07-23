@@ -1922,18 +1922,36 @@ export async function attachPhotos(formData: FormData) {
   await ctx.db(async (tx) => {
     await lockEditableAssessment(ctx, tx, assessmentId)
     const attachmentIds = await validateTenantImageAttachmentIdsInTx(tx, ctx.tenantId, ids)
+    const existing = await tx
+      .select({
+        attachmentId: hazidAssessmentPhotos.attachmentId,
+        sortOrder: hazidAssessmentPhotos.sortOrder,
+      })
+      .from(hazidAssessmentPhotos)
+      .where(
+        and(
+          eq(hazidAssessmentPhotos.tenantId, ctx.tenantId),
+          eq(hazidAssessmentPhotos.assessmentId, assessmentId),
+        ),
+      )
+    const existingIds = new Set(existing.map((photo) => photo.attachmentId))
+    const newAttachmentIds = attachmentIds.filter((attachmentId) => !existingIds.has(attachmentId))
+    if (newAttachmentIds.length === 0) return
+    const baseSortOrder =
+      existing.reduce((maximum, photo) => Math.max(maximum, photo.sortOrder), -1) + 1
     await tx.insert(hazidAssessmentPhotos).values(
-      attachmentIds.map((attachmentId) => ({
+      newAttachmentIds.map((attachmentId, index) => ({
         tenantId: ctx.tenantId,
         assessmentId,
         attachmentId,
+        sortOrder: baseSortOrder + index,
       })),
     )
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'hazid_assessment',
       entityId: assessmentId,
       action: 'update',
-      summary: `Attached ${ids.length} photo${ids.length === 1 ? '' : 's'}`,
+      summary: `Attached ${newAttachmentIds.length} photo${newAttachmentIds.length === 1 ? '' : 's'}`,
     })
   })
   revalidateAssessment(assessmentId)
@@ -2031,6 +2049,71 @@ export async function updatePhoto(
     return true
   })
   if (!changed) return { ok: false, error: 'Photo not found.' }
+  revalidateAssessment(assessmentId)
+  return { ok: true }
+}
+
+export async function reorderPhotos(
+  assessmentId: string,
+  photoIds: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
+  if (
+    !isUuid(assessmentId) ||
+    photoIds.some((photoId) => !isUuid(photoId)) ||
+    new Set(photoIds).size !== photoIds.length
+  ) {
+    return { ok: false, error: 'Photo order is invalid.' }
+  }
+  const changed = await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    const current = await tx
+      .select({ id: hazidAssessmentPhotos.id })
+      .from(hazidAssessmentPhotos)
+      .where(
+        and(
+          eq(hazidAssessmentPhotos.tenantId, ctx.tenantId),
+          eq(hazidAssessmentPhotos.assessmentId, assessmentId),
+        ),
+      )
+      .orderBy(
+        asc(hazidAssessmentPhotos.sortOrder),
+        asc(hazidAssessmentPhotos.createdAt),
+        asc(hazidAssessmentPhotos.id),
+      )
+      .for('update')
+    const previousIds = current.map((photo) => photo.id)
+    if (
+      previousIds.length !== photoIds.length ||
+      previousIds.some((photoId) => !photoIds.includes(photoId))
+    ) {
+      return false
+    }
+    if (previousIds.every((photoId, index) => photoId === photoIds[index])) return true
+    for (const [sortOrder, photoId] of photoIds.entries()) {
+      await tx
+        .update(hazidAssessmentPhotos)
+        .set({ sortOrder })
+        .where(
+          and(
+            eq(hazidAssessmentPhotos.tenantId, ctx.tenantId),
+            eq(hazidAssessmentPhotos.assessmentId, assessmentId),
+            eq(hazidAssessmentPhotos.id, photoId),
+          ),
+        )
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
+      action: 'update',
+      summary: 'Reordered photos',
+      before: { photoIds: previousIds },
+      after: { photoIds },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photos changed before they could be reordered.' }
   revalidateAssessment(assessmentId)
   return { ok: true }
 }

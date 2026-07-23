@@ -176,7 +176,12 @@ export function createHazidFlowAdapter(
             })
             .from(hazidAssessmentPhotos)
             .innerJoin(attachments, eq(attachments.id, hazidAssessmentPhotos.attachmentId))
-            .where(eq(hazidAssessmentPhotos.assessmentId, assessmentId)),
+            .where(eq(hazidAssessmentPhotos.assessmentId, assessmentId))
+            .orderBy(
+              asc(hazidAssessmentPhotos.sortOrder),
+              asc(hazidAssessmentPhotos.createdAt),
+              asc(hazidAssessmentPhotos.id),
+            ),
         ),
       ])
 

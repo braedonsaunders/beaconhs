@@ -72,6 +72,11 @@ type CriterionActions = {
     rowId: string,
     attachmentId: string,
   ) => Promise<{ ok: boolean; error?: string }>
+  reorderPhotos: (
+    recordId: string,
+    rowId: string,
+    attachmentIds: string[],
+  ) => Promise<{ ok: boolean; error?: string }>
 }
 
 export function CriterionCard({
@@ -518,6 +523,7 @@ export function CriterionCard({
               addPhotos={actions.addPhotos}
               updatePhoto={actions.updatePhoto}
               removePhoto={actions.removePhoto}
+              reorderPhotos={actions.reorderPhotos}
               onDone={refresh}
             />
           ) : null

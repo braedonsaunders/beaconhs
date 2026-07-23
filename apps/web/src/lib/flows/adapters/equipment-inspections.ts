@@ -164,6 +164,11 @@ export function createEquipmentInspectionFlowAdapter(
               eq(equipmentInspectionRecordAttachments.recordId, recordId),
             ),
           )
+          .orderBy(
+            asc(equipmentInspectionRecordAttachments.sortOrder),
+            asc(equipmentInspectionRecordAttachments.createdAt),
+            asc(equipmentInspectionRecordAttachments.id),
+          )
 
         const criterionPhotoIds = [
           ...new Set(criteria.flatMap((criterion) => criterion.photoAttachmentIds ?? [])),

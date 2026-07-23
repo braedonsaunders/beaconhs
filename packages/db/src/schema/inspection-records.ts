@@ -12,6 +12,7 @@ import {
   check,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -176,6 +177,7 @@ export const inspectionRecordAttachments = pgTable(
     recordId: uuid('record_id').notNull(),
     attachmentId: uuid('attachment_id').notNull(),
     caption: text('caption'),
+    sortOrder: integer('sort_order').default(0).notNull(),
     ...timestamps,
   },
   (t) => ({
@@ -183,6 +185,11 @@ export const inspectionRecordAttachments = pgTable(
       t.tenantId,
       t.recordId,
       t.attachmentId,
+    ),
+    recordOrderIdx: index('inspection_record_attachments_record_order_idx').on(
+      t.tenantId,
+      t.recordId,
+      t.sortOrder,
     ),
     recordFk: foreignKey({
       name: 'inspection_record_attachments_tenant_record_fk',

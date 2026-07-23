@@ -59,6 +59,7 @@ describe('production cutover migration integrity', () => {
       '0023_gorgeous_sheva_callister.sql',
       '0024_flawless_la_nuit.sql',
       '0025_unify_builder_photo_fields.sql',
+      '0026_order_frontline_photos.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -91,6 +92,7 @@ describe('production cutover migration integrity', () => {
       { idx: 23, tag: '0023_gorgeous_sheva_callister' },
       { idx: 24, tag: '0024_flawless_la_nuit' },
       { idx: 25, tag: '0025_unify_builder_photo_fields' },
+      { idx: 26, tag: '0026_order_frontline_photos' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)

@@ -309,6 +309,7 @@ export default async function CorrectiveActionPage({
       .from(caPhotos)
       .innerJoin(attachments, eq(attachments.id, caPhotos.attachmentId))
       .where(eq(caPhotos.caId, id))
+      .orderBy(asc(caPhotos.sortOrder), asc(caPhotos.createdAt), asc(caPhotos.id))
 
     const stepsRaw = await tx
       .select({ step: caCompleteSteps, byTenantUser: tenantUsers, byUser: user })

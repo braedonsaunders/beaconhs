@@ -461,18 +461,36 @@ async function attachPhotos(incidentId: string, attachmentIds: string[]) {
     if (!incident) throw new Error('Incident not found')
     if (incident.locked) throw new Error('Incident is locked')
     const validIds = await validateTenantImageAttachmentIdsInTx(tx, ctx.tenantId, attachmentIds)
+    const existing = await tx
+      .select({
+        attachmentId: incidentAttachments.attachmentId,
+        sortOrder: incidentAttachments.sortOrder,
+      })
+      .from(incidentAttachments)
+      .where(
+        and(
+          eq(incidentAttachments.tenantId, ctx.tenantId),
+          eq(incidentAttachments.incidentId, incidentId),
+        ),
+      )
+    const existingIds = new Set(existing.map((photo) => photo.attachmentId))
+    const newAttachmentIds = validIds.filter((attachmentId) => !existingIds.has(attachmentId))
+    if (newAttachmentIds.length === 0) return
+    const baseSortOrder =
+      existing.reduce((maximum, photo) => Math.max(maximum, photo.sortOrder), -1) + 1
     await tx.insert(incidentAttachments).values(
-      validIds.map((attachmentId) => ({
+      newAttachmentIds.map((attachmentId, index) => ({
         tenantId: ctx.tenantId,
         incidentId,
         attachmentId,
+        sortOrder: baseSortOrder + index,
       })),
     )
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'incident',
       entityId: incidentId,
       action: 'update',
-      summary: `Attached ${validIds.length} photo${validIds.length === 1 ? '' : 's'}`,
+      summary: `Attached ${newAttachmentIds.length} photo${newAttachmentIds.length === 1 ? '' : 's'}`,
     })
   })
   revalidatePath(`/incidents/${incidentId}`)
@@ -584,6 +602,80 @@ async function removeIncidentPhoto(
     return true
   })
   if (!removed) return { ok: false, error: 'Photo not found.' }
+  revalidatePath(`/incidents/${incidentId}`)
+  return { ok: true }
+}
+
+async function reorderIncidentPhotos(
+  incidentId: string,
+  photoIds: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
+  if (
+    !isUuid(incidentId) ||
+    photoIds.some((photoId) => !isUuid(photoId)) ||
+    new Set(photoIds).size !== photoIds.length
+  ) {
+    return { ok: false, error: 'Photo order is invalid.' }
+  }
+  await assertCanSeeIncident(ctx, incidentId)
+  const changed = await ctx.db(async (tx) => {
+    const [incident] = await tx
+      .select({ locked: incidents.locked })
+      .from(incidents)
+      .where(and(eq(incidents.tenantId, ctx.tenantId), eq(incidents.id, incidentId)))
+      .limit(1)
+      .for('update')
+    if (!incident) return false
+    if (incident.locked) throw new Error('Incident is locked')
+    const current = await tx
+      .select({ id: incidentAttachments.id })
+      .from(incidentAttachments)
+      .where(
+        and(
+          eq(incidentAttachments.tenantId, ctx.tenantId),
+          eq(incidentAttachments.incidentId, incidentId),
+        ),
+      )
+      .orderBy(
+        asc(incidentAttachments.sortOrder),
+        asc(incidentAttachments.createdAt),
+        asc(incidentAttachments.id),
+      )
+      .for('update')
+    const previousIds = current.map((photo) => photo.id)
+    if (
+      previousIds.length !== photoIds.length ||
+      previousIds.some((photoId) => !photoIds.includes(photoId))
+    ) {
+      return false
+    }
+    if (previousIds.every((photoId, index) => photoId === photoIds[index])) return true
+    for (const [sortOrder, photoId] of photoIds.entries()) {
+      await tx
+        .update(incidentAttachments)
+        .set({ sortOrder })
+        .where(
+          and(
+            eq(incidentAttachments.tenantId, ctx.tenantId),
+            eq(incidentAttachments.incidentId, incidentId),
+            eq(incidentAttachments.id, photoId),
+          ),
+        )
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'incident',
+      entityId: incidentId,
+      action: 'update',
+      summary: 'Reordered photos',
+      before: { photoIds: previousIds },
+      after: { photoIds },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photos changed before they could be reordered.' }
   revalidatePath(`/incidents/${incidentId}`)
   return { ok: true }
 }
@@ -1546,6 +1638,11 @@ export default async function IncidentDetailPage({
       .from(incidentAttachments)
       .innerJoin(attachments, eq(attachments.id, incidentAttachments.attachmentId))
       .where(eq(incidentAttachments.incidentId, id))
+      .orderBy(
+        asc(incidentAttachments.sortOrder),
+        asc(incidentAttachments.createdAt),
+        asc(incidentAttachments.id),
+      )
     const timelineEvents = await tx
       .select()
       .from(incidentEvents)
@@ -1630,6 +1727,9 @@ export default async function IncidentDetailPage({
     width: p.attachment.width,
     height: p.attachment.height,
   }))
+  const updateIncidentPhotoAction = updateIncidentPhoto.bind(null, id)
+  const removeIncidentPhotoAction = removeIncidentPhoto.bind(null, id)
+  const reorderIncidentPhotosAction = reorderIncidentPhotos.bind(null, id)
 
   // Investigation-progress milestones — drive the overview hero + checklist.
   const milestones = [
@@ -3176,8 +3276,9 @@ export default async function IncidentDetailPage({
               <PhotoGallery
                 photos={galleryPhotos}
                 editable={!locked}
-                onUpdate={async (photoId, edits) => updateIncidentPhoto(id, photoId, edits)}
-                onRemove={async (photoId) => removeIncidentPhoto(id, photoId)}
+                onUpdate={updateIncidentPhotoAction}
+                onRemove={removeIncidentPhotoAction}
+                onReorder={reorderIncidentPhotosAction}
               />
               <GeneratedValue
                 value={

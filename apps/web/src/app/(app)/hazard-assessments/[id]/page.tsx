@@ -107,6 +107,7 @@ import {
   openAssessmentApp,
   reviewAssessment,
   removePhoto,
+  reorderPhotos,
   updateHazard,
   updatePPE,
   updateQuestion,
@@ -278,6 +279,11 @@ export default async function HazidAssessmentDetailPage({
       .from(hazidAssessmentPhotos)
       .innerJoin(attachments, eq(attachments.id, hazidAssessmentPhotos.attachmentId))
       .where(eq(hazidAssessmentPhotos.assessmentId, id))
+      .orderBy(
+        asc(hazidAssessmentPhotos.sortOrder),
+        asc(hazidAssessmentPhotos.createdAt),
+        asc(hazidAssessmentPhotos.id),
+      )
     const allTypeApps = row.a.assessmentTypeId
       ? await tx
           .select({ app: hazidAssessmentTypeApps, template: formTemplates })
@@ -567,6 +573,9 @@ export default async function HazidAssessmentDetailPage({
     width: p.attachment.width,
     height: p.attachment.height,
   }))
+  const updatePhotoAction = updatePhoto.bind(null, id)
+  const removePhotoAction = removePhoto.bind(null, id)
+  const reorderPhotosAction = reorderPhotos.bind(null, id)
 
   const hazardNameLookup = new Map<string, string>(
     [...referencedHazards, ...hazardLibrary].map((h) => [h.id, h.name] as const),
@@ -1465,8 +1474,9 @@ export default async function HazidAssessmentDetailPage({
               <PhotoGallery
                 photos={galleryPhotos}
                 editable={!locked}
-                onUpdate={async (photoId, edits) => updatePhoto(id, photoId, edits)}
-                onRemove={async (photoId) => removePhoto(id, photoId)}
+                onUpdate={updatePhotoAction}
+                onRemove={removePhotoAction}
+                onReorder={reorderPhotosAction}
               />
               <GeneratedValue
                 value={

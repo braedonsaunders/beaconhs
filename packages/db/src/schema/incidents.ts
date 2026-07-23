@@ -392,10 +392,16 @@ export const incidentAttachments = pgTable(
     incidentId: uuid('incident_id').notNull(),
     attachmentId: uuid('attachment_id').notNull(),
     caption: text('caption'),
+    sortOrder: integer('sort_order').default(0).notNull(),
     ...timestamps,
   },
   (t) => ({
     incidentIdx: index('incident_attachments_incident_idx').on(t.tenantId, t.incidentId),
+    incidentOrderIdx: index('incident_attachments_incident_order_idx').on(
+      t.tenantId,
+      t.incidentId,
+      t.sortOrder,
+    ),
     incidentFk: foreignKey({
       name: 'incident_attachments_tenant_incident_fk',
       columns: [t.tenantId, t.incidentId],

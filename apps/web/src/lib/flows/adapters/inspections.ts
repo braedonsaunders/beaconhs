@@ -181,6 +181,11 @@ export function createInspectionFlowAdapter(
                 eq(inspectionRecordAttachments.tenantId, ctx.tenantId),
                 eq(inspectionRecordAttachments.recordId, recordId),
               ),
+            )
+            .orderBy(
+              asc(inspectionRecordAttachments.sortOrder),
+              asc(inspectionRecordAttachments.createdAt),
+              asc(inspectionRecordAttachments.id),
             ),
         ),
       ])

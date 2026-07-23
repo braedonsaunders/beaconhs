@@ -3,7 +3,7 @@
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { PhotoGallery, type GalleryPhoto } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
-import { attachCaPhotos, deleteCaPhoto, updateCaPhoto } from '../_actions'
+import { attachCaPhotos, deleteCaPhoto, reorderCaPhotos, updateCaPhoto } from '../_actions'
 
 export type CaPhotoRow = GalleryPhoto
 
@@ -26,6 +26,7 @@ export function PhotosPanel({
               editable={!locked}
               onUpdate={async (photoId, edits) => updateCaPhoto(caId, photoId, edits)}
               onRemove={async (photoId) => deleteCaPhoto(caId, photoId)}
+              onReorder={async (photoIds) => reorderCaPhotos(caId, photoIds)}
             />
           ) : (
             <p className="text-sm text-slate-500 dark:text-slate-400">
