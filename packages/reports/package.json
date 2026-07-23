@@ -26,7 +26,7 @@
     "@beaconhs/db": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.24.0",
-    "react": "19.2.7"
+    "react": "19.2.8"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
