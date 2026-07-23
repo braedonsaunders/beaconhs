@@ -5,7 +5,7 @@ import {
   type ReportCustomQuery,
 } from '@appkit/reports'
 
-export type BeaconReportSeed = Omit<CustomReportDefinition, 'id' | 'builtIn'> & {
+type BeaconReportSeed = Omit<CustomReportDefinition, 'id' | 'builtIn'> & {
   seedKey: string
   category: string
 }

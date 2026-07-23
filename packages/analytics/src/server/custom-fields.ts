@@ -64,14 +64,3 @@ export async function discoverEntitiesWithScopedApps(
     .filter((e): e is AnalyticsEntity => e != null)
   return [...base, ...appEntities]
 }
-
-/** Map form of {@link discoverEntitiesWithScopedApps}. Unknown scoped IDs stay
- *  unknown; there is deliberately no proxy fallback. */
-export async function discoverEntityMapWithScopedApps(
-  tx: Database,
-  apps: readonly { id: string; name: string }[],
-): Promise<Record<string, AnalyticsEntity>> {
-  return Object.fromEntries(
-    (await discoverEntitiesWithScopedApps(tx, apps)).map((entity) => [entity.key, entity]),
-  )
-}

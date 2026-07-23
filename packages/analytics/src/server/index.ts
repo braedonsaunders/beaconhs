@@ -11,7 +11,7 @@ export { runBhql } from './execute'
 export { compileBhql } from './compile'
 export { compileRuleGroup as compileAnalyticsRuleGroup } from './filter-sql'
 export { addTrustedSystemFormEntity, discoverEntities, discoverEntityMap } from './discover'
-export { discoverEntitiesWithScopedApps, discoverEntityMapWithScopedApps } from './custom-fields'
+export { discoverEntitiesWithScopedApps } from './custom-fields'
 
 /** Validate untrusted BHQL against the live, schema-discovered registry. The
  *  server-side convenience over the pure `parseBhqlQuery(raw, entityMap)`. */
