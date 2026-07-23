@@ -48,15 +48,11 @@ import {
   resolveReportLayout,
 } from '@beaconhs/reports'
 import type { ReportDefinitionRow } from '../_definitions'
-import { loadTenantBranding, runReportForViewer } from '../_run'
+import { DOCUMENT_PREVIEW_MAX_ROWS, loadTenantBranding, runReportForViewer } from '../_run'
 import { formatCadence, CategoryBadge, KindBadge, StatusBadge } from '../_format'
 import { formatDateTime } from '@/lib/datetime'
 import { ReportPagedPreview } from '../_components/report-paged-preview.client'
 import { hubHref } from './definition-list'
-
-/** Rows in the hub's live preview — enough to show real pagination without
- *  making every list click run a heavy query. Open the report for more. */
-const HUB_PREVIEW_MAX_ROWS = 50
 
 export async function PreviewPane({
   ctx,
@@ -74,7 +70,7 @@ export async function PreviewPane({
   if (!definition) return <OverviewPane ctx={ctx} counts={counts} />
 
   const [run, branding] = await Promise.all([
-    runReportForViewer(ctx, definition, { maxRows: HUB_PREVIEW_MAX_ROWS }),
+    runReportForViewer(ctx, definition),
     loadTenantBranding(ctx),
   ])
 
@@ -94,14 +90,10 @@ export async function PreviewPane({
     buildReportPageCss(layout, {
       marginBoxes: { footerLeft: `${branding.name} — ${definition.name}` },
     }) + buildReportDocumentCss(branding.primaryColor, layout.density)
-  const truncated = run.result.rowCount >= HUB_PREVIEW_MAX_ROWS
+  const truncated = run.result.rowCount >= DOCUMENT_PREVIEW_MAX_ROWS
 
   const canSchedule = can(ctx, 'reports.schedule')
   const canBuild = can(ctx, 'reports.builder')
-  const editHref =
-    definition.kind === 'custom'
-      ? `/reports/definitions/${definition.id}/edit`
-      : `/reports/definitions/new?from=${definition.id}`
   const exportBase = `/reports/definitions/${definition.id}/export?format=`
 
   return (
@@ -163,8 +155,8 @@ export async function PreviewPane({
             />
             <GeneratedValue
               value={
-                canBuild ? (
-                  <Link href={editHref as never}>
+                canBuild && definition.kind === 'custom' ? (
+                  <Link href={`/reports/definitions/${definition.id}/edit` as never}>
                     <Button variant="outline" size="sm">
                       <Pencil size={13} className="mr-1.5" />
                       <GeneratedText id="m_03a66f9d34ac7b" />
@@ -203,7 +195,7 @@ export async function PreviewPane({
                 css={css}
                 caption={tGeneratedValue(
                   truncated
-                    ? tGenerated('m_193ad92cebef87', { value0: HUB_PREVIEW_MAX_ROWS })
+                    ? tGenerated('m_193ad92cebef87', { value0: DOCUMENT_PREVIEW_MAX_ROWS })
                     : null,
                 )}
               />

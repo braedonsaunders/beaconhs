@@ -260,7 +260,7 @@ Open a schedule to see **Run history**. Search by date, status, or trigger, or u
 
 ## Build your own report
 
-If no built-in report fits, click **New report** to build a custom one. You can also open a built-in report and click **Edit a copy** to start from something close.
+Built-in reports always run their tested system definition. Open one to apply its runtime filters, export it, or schedule it. Built-ins are not editable or duplicated into a different query. If no built-in report fits, click **New report** to build a custom one. Custom reports can be edited or duplicated without changing their query between the catalogue preview and the editor.
 
 The builder shows a live print preview while you work. Builder apps you can currently open appear in the **Data source** list by their own names — pick one to report on its submissions. Draft, archived, and role-restricted apps you cannot open stay out of the list and cannot be queried from a saved report. Under **Page setup** you can pick the paper size (**Letter**, **A4**, or **Legal**), switch between **Portrait** and **Landscape**, set the page margin, choose **Compact** to fit more rows per page, and turn the **Summary cards** band on or off — the preview and every export follow it.
 

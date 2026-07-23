@@ -29,9 +29,8 @@ export default async function EditCustomDefinitionPage({
 
   const definition = await loadDefinitionById(ctx.tenantId!, id)
   if (!definition) notFound()
-  // Built-ins are shared across tenants — editing one opens an editable copy.
   if (definition.kind !== 'custom' || definition.tenantId !== ctx.tenantId) {
-    redirect(`/reports/definitions/new?from=${id}` as never)
+    redirect(`/reports/definitions/${id}` as never)
   }
 
   const action = updateCustomDefinition.bind(null, id)

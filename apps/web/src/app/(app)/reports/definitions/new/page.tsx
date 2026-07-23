@@ -1,12 +1,12 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 import { DetailHeader } from '@beaconhs/ui'
+import { redirect } from 'next/navigation'
 import { REPORT_OPERATORS } from '@beaconhs/reports'
 import { requireRequestContext } from '@/lib/auth'
 import { DetailPageLayout } from '@/components/page-layout'
 import { loadDefinitionById } from '../../_definitions'
 import { ReportStudio } from '../../_studio/studio.client'
 import { createCustomDefinition } from '../../_studio/actions'
-import { builtInSeedQuery } from '../../_studio/built-in-seed'
 import { loadReportStudioEntities } from '../../_studio/entities'
 
 export async function generateMetadata() {
@@ -27,10 +27,12 @@ export default async function NewCustomDefinitionPage({
   const presetEntity = typeof sp.entity === 'string' ? sp.entity : null
   const cloneFromId = typeof sp.from === 'string' ? sp.from : null
 
-  // Cloning / edit-a-copy: prefill from the source definition. Built-ins have no
-  // customQuery, so derive a starter from their queryKind.
-  const cloneFrom = cloneFromId ? await loadDefinitionById(ctx.tenantId!, cloneFromId) : null
-  const seed = cloneFrom ? (cloneFrom.customQuery ?? builtInSeedQuery(cloneFrom.queryKind)) : null
+  const requestedClone = cloneFromId ? await loadDefinitionById(ctx.tenantId!, cloneFromId) : null
+  if (requestedClone?.kind === 'built_in') {
+    redirect(`/reports/definitions/${requestedClone.id}` as never)
+  }
+  const cloneFrom = requestedClone?.kind === 'custom' ? requestedClone : null
+  const seed = cloneFrom?.customQuery ?? null
 
   const entities = await loadReportStudioEntities(ctx)
 

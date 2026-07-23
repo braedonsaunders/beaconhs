@@ -269,11 +269,7 @@ export default async function ReportViewerPage({
   const canSchedule = can(ctx, 'reports.schedule')
   const canBuild = can(ctx, 'reports.builder')
   const isCustom = definition.kind === 'custom'
-  // Every report is editable: custom edits in place; a built-in opens an
-  // editable copy you own (the original stays in the catalogue).
-  const editHref = isCustom
-    ? `/reports/definitions/${id}/edit`
-    : `/reports/definitions/new?from=${id}`
+  const editHref = isCustom ? `/reports/definitions/${id}/edit` : null
   const runBound = runOnceFromDefinition.bind(null, id)
   const deleteBound = deleteDefinition.bind(null, id)
   const scheduleUrlParams = new URLSearchParams({ definitionId: definition.id })
@@ -327,7 +323,7 @@ export default async function ReportViewerPage({
                 />
                 <GeneratedValue
                   value={
-                    canBuild ? (
+                    canBuild && editHref ? (
                       <Link href={editHref as never}>
                         <Button variant="outline" size="sm">
                           <Pencil size={14} className="mr-1.5" />
@@ -656,7 +652,7 @@ function ActivityTab({
   canSchedule: boolean
   canBuild: boolean
   isCustom: boolean
-  editHref: string
+  editHref: string | null
   deleteBound: () => Promise<void>
   timeZone: string
   locale: Awaited<ReturnType<typeof requireRequestContext>>['locale']
@@ -996,20 +992,12 @@ function ActivityTab({
             </dl>
             <GeneratedValue
               value={
-                canBuild ? (
+                canBuild && isCustom && editHref ? (
                   <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
                     <Link href={editHref as never}>
                       <Button variant="outline" size="sm">
                         <Pencil size={14} className="mr-1.5" />
-                        <GeneratedValue
-                          value={
-                            isCustom ? (
-                              <GeneratedText id="m_186e85e2d4fd61" />
-                            ) : (
-                              <GeneratedText id="m_0fde1ff7b7eaf9" />
-                            )
-                          }
-                        />
+                        <GeneratedText id="m_186e85e2d4fd61" />
                       </Button>
                     </Link>
                     <Link href={`/reports/definitions/new?from=${definition.id}` as never}>
