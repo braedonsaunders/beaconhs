@@ -32,7 +32,7 @@ function currentPeriodClause(column: SQL, unit: 'day' | 'week' | 'month' | 'year
   )
 }
 
-export function compileRule(
+function compileRule(
   entity: ReportEntity,
   rule: { column: string; op: string; value?: unknown },
   resolveColumn?: (column: string) => SQL | null,

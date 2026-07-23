@@ -7,7 +7,7 @@ import { loadBeaconReportCatalog, runBeaconReport } from '@beaconhs/reports/serv
 import type { RequestContext } from '@beaconhs/tenant'
 import type { ReportDefinitionRow } from './_definitions'
 
-export const DOCUMENT_PREVIEW_MAX_ROWS = 500
+const DOCUMENT_PREVIEW_MAX_ROWS = 500
 
 export async function runReportForViewer(
   ctx: RequestContext,

@@ -76,7 +76,6 @@
     "react-dom": "19.2.7",
     "react-grid-layout": "^2.2.3",
     "react-markdown": "^10.1.0",
-    "react-querybuilder": "^8.20.2",
     "remark-gfm": "^4.0.1",
     "saxes": "^6.0.0",
     "server-only": "^0.0.1",
