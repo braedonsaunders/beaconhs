@@ -30,7 +30,9 @@ describe('contentSecurityPolicy', () => {
       "frame-src 'self' https://office.example.com https://objects.example.com",
     )
     expect(policy).toContain('blob: https:')
-    expect(policy).toContain("connect-src 'self' https://example.ingest.sentry.io")
+    expect(policy).toContain(
+      "connect-src 'self' https://objects.example.com https://example.ingest.sentry.io",
+    )
     expect(policy).not.toContain('wss:')
     expect(policy).toContain("object-src 'none';")
     expect(policy).toContain('upgrade-insecure-requests;')

@@ -60,6 +60,11 @@ export function contentSecurityPolicy(options: ContentSecurityPolicyOptions): st
   ])
   const connectSources = uniqueSources([
     "'self'",
+    // Browser uploads use short-lived presigned PUT/part URLs against the
+    // configured private S3-compatible store. Without this origin, CSP turns
+    // every shared FileUpload request into a generic browser "Network error"
+    // before MinIO/R2 ever receives it.
+    storageOrigin,
     sentryOrigin,
     'https://nominatim.openstreetmap.org',
     'https://api.nango.dev',
