@@ -361,6 +361,10 @@ export async function getEntry(
         id: journalEntryPhotos.id,
         caption: journalEntryPhotos.caption,
         attachmentId: attachments.id,
+        annotations: attachments.annotations,
+        width: attachments.width,
+        height: attachments.height,
+        filename: attachments.filename,
       })
       .from(journalEntryPhotos)
       .innerJoin(attachments, eq(attachments.id, journalEntryPhotos.attachmentId))
@@ -384,8 +388,13 @@ export async function getEntry(
       tags: tagRows.map((t) => t.tag),
       photos: photoRows.map((p) => ({
         id: p.id,
+        attachmentId: p.attachmentId,
         url: attachmentUrl(p.attachmentId),
         caption: p.caption,
+        annotations: p.annotations,
+        width: p.width,
+        height: p.height,
+        filename: p.filename,
       })),
       authorName: row.firstName ? `${row.firstName} ${row.lastName ?? ''}`.trim() : null,
       siteName: row.siteName ?? null,

@@ -40,8 +40,10 @@ import {
   people,
   tenantUsers,
   users as user,
+  type Annotation,
 } from '@beaconhs/db/schema'
 import { attachmentUrl } from '@/lib/attachment-url'
+import { parsePhotoEdits } from '@/lib/photo-edits'
 import { assertCan } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
@@ -291,10 +293,26 @@ async function toggleLock(formData: FormData) {
       allowLocked: true,
     })
     const reopeningClosed = current.status === 'closed' && !lock
-    if (current.locked === lock && !reopeningClosed) return false
+    const submittingAndLocking =
+      lock && (current.status === 'draft' || current.status === 'in_progress')
+    if (current.locked === lock && !reopeningClosed && !submittingAndLocking) return false
+    if (submittingAndLocking) {
+      await assertInspectionStatusTransitionInTx(tx, ctx.tenantId, current, 'submitted')
+    }
+    const now = new Date()
     const patch = reopeningClosed
-      ? inspectionStatusMilestonePatch(current, 'submitted', ctx.membership?.id ?? null, new Date())
-      : { locked: lock }
+      ? inspectionStatusMilestonePatch(current, 'submitted', ctx.membership?.id ?? null, now)
+      : submittingAndLocking
+        ? {
+            ...inspectionStatusMilestonePatch(
+              current,
+              'submitted',
+              ctx.membership?.id ?? null,
+              now,
+            ),
+            locked: true,
+          }
+        : { locked: lock }
     const [updated] = await tx
       .update(inspectionRecords)
       .set(patch)
@@ -311,14 +329,23 @@ async function toggleLock(formData: FormData) {
         locked: inspectionRecords.locked,
       })
     if (!updated) throw new Error('Inspection record changed before its lock could be updated')
-    if (reopeningClosed) {
+    if (reopeningClosed || submittingAndLocking) {
+      const occurrenceKey = randomUUID()
       await recordModuleFlowEvent(tx, ctx, {
         subjectId: id,
         moduleKey: 'inspections',
         event: 'status_change',
         toStatus: 'submitted',
-        occurrenceKey: randomUUID(),
+        occurrenceKey,
       })
+      if (submittingAndLocking) {
+        await recordModuleFlowEvent(tx, ctx, {
+          subjectId: id,
+          moduleKey: 'inspections',
+          event: 'on_submit',
+          occurrenceKey,
+        })
+      }
       await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
         sourceModule: 'inspection',
         targetRef: { inspectionTypeId: current.typeId },
@@ -328,7 +355,13 @@ async function toggleLock(formData: FormData) {
       entityType: 'inspection_record',
       entityId: id,
       action: 'update',
-      summary: reopeningClosed ? 'Reopened closed inspection' : lock ? 'Locked' : 'Unlocked',
+      summary: reopeningClosed
+        ? 'Reopened closed inspection'
+        : submittingAndLocking
+          ? 'Submitted and locked'
+          : lock
+            ? 'Locked'
+            : 'Unlocked',
       before: { status: current.status, locked: current.locked },
       after: { status: updated.status, locked: updated.locked },
     })
@@ -961,6 +994,95 @@ async function addCriterionPhotos(formData: FormData) {
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
+async function updateCriterionPhoto(
+  recordId: string,
+  rowId: string,
+  attachmentId: string,
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
+  if (!isUuid(attachmentId)) return { ok: false, error: 'Photo not found.' }
+  const edits = parsePhotoEdits(input)
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, _record, criterion) => {
+      if (!(criterion.photoAttachmentIds ?? []).includes(attachmentId)) return false
+      const [updated] = await tx
+        .update(attachments)
+        .set({ caption: edits.caption, annotations: edits.annotations })
+        .where(
+          and(
+            eq(attachments.tenantId, ctx.tenantId),
+            eq(attachments.id, attachmentId),
+            eq(attachments.kind, 'image'),
+          ),
+        )
+        .returning({ id: attachments.id })
+      if (!updated) return false
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: 'Updated criterion photo caption and markup',
+        metadata: { rowId, attachmentId, annotationCount: edits.annotations?.length ?? 0 },
+      })
+      return true
+    },
+  )
+  if (!changed) return { ok: false, error: 'Photo not found.' }
+  revalidatePath(`/inspections/records/${recordId}`)
+  return { ok: true }
+}
+
+async function removeCriterionPhoto(
+  recordId: string,
+  rowId: string,
+  attachmentId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
+  if (!isUuid(attachmentId)) return { ok: false, error: 'Photo not found.' }
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, _record, criterion) => {
+      const previousIds = criterion.photoAttachmentIds ?? []
+      if (!previousIds.includes(attachmentId)) return false
+      const nextIds = previousIds.filter((id) => id !== attachmentId)
+      const [updated] = await tx
+        .update(inspectionRecordCriteria)
+        .set({ photoAttachmentIds: nextIds })
+        .where(
+          and(
+            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(inspectionRecordCriteria.recordId, recordId),
+            eq(inspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: inspectionRecordCriteria.id })
+      if (!updated) return false
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: 'Removed photo from an inspection item',
+        before: { rowId, photoAttachmentIds: previousIds },
+        after: { rowId, photoAttachmentIds: nextIds },
+      })
+      return true
+    },
+  )
+  if (!changed) return { ok: false, error: 'Photo not found.' }
+  revalidatePath(`/inspections/records/${recordId}`)
+  return { ok: true }
+}
+
 async function passAll(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
@@ -1128,6 +1250,100 @@ async function attachRecordPhotos(recordId: string, ids: string[]) {
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
+async function updateRecordPhoto(
+  recordId: string,
+  photoId: string,
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
+  if (!isUuid(recordId) || !isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
+  const edits = parsePhotoEdits(input)
+  const changed = await ctx.db(async (tx) => {
+    await lockVisibleInspectionRecordForMutation(tx, ctx, recordId)
+    const [photo] = await tx
+      .select({ attachmentId: inspectionRecordAttachments.attachmentId })
+      .from(inspectionRecordAttachments)
+      .where(
+        and(
+          eq(inspectionRecordAttachments.tenantId, ctx.tenantId),
+          eq(inspectionRecordAttachments.recordId, recordId),
+          eq(inspectionRecordAttachments.id, photoId),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!photo) return false
+    await tx
+      .update(inspectionRecordAttachments)
+      .set({ caption: edits.caption })
+      .where(
+        and(
+          eq(inspectionRecordAttachments.tenantId, ctx.tenantId),
+          eq(inspectionRecordAttachments.recordId, recordId),
+          eq(inspectionRecordAttachments.id, photoId),
+        ),
+      )
+    await tx
+      .update(attachments)
+      .set({ annotations: edits.annotations })
+      .where(
+        and(
+          eq(attachments.tenantId, ctx.tenantId),
+          eq(attachments.id, photo.attachmentId),
+          eq(attachments.kind, 'image'),
+        ),
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: recordId,
+      action: 'update',
+      summary: 'Updated photo caption and markup',
+      metadata: { photoId, annotationCount: edits.annotations?.length ?? 0 },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photo not found.' }
+  revalidatePath(`/inspections/records/${recordId}`)
+  return { ok: true }
+}
+
+async function removeRecordPhoto(
+  recordId: string,
+  photoId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
+  if (!isUuid(recordId) || !isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
+  const removed = await ctx.db(async (tx) => {
+    await lockVisibleInspectionRecordForMutation(tx, ctx, recordId)
+    const rows = await tx
+      .delete(inspectionRecordAttachments)
+      .where(
+        and(
+          eq(inspectionRecordAttachments.tenantId, ctx.tenantId),
+          eq(inspectionRecordAttachments.recordId, recordId),
+          eq(inspectionRecordAttachments.id, photoId),
+        ),
+      )
+      .returning({ id: inspectionRecordAttachments.id })
+    if (rows.length === 0) return false
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: recordId,
+      action: 'update',
+      summary: 'Removed photo',
+      metadata: { photoId },
+    })
+    return true
+  })
+  if (!removed) return { ok: false, error: 'Photo not found.' }
+  revalidatePath(`/inspections/records/${recordId}`)
+  return { ok: true }
+}
+
 // ----------------------------------------------------------------------------
 // Page
 // ----------------------------------------------------------------------------
@@ -1255,10 +1471,28 @@ export default async function InspectionRecordDetailPage({
 
     // Resolve per-criterion photo previews in one pass.
     const allPhotoIds = Array.from(new Set(criteria.flatMap((c) => c.c.photoAttachmentIds ?? [])))
-    const criterionPhotoMap = new Map<string, { id: string; url: string; filename: string }>()
+    const criterionPhotoMap = new Map<
+      string,
+      {
+        id: string
+        url: string
+        filename: string
+        caption: string | null
+        annotations: Annotation[] | null
+        width: number | null
+        height: number | null
+      }
+    >()
     if (allPhotoIds.length > 0) {
       const rows = await tx
-        .select({ id: attachments.id, key: attachments.r2Key, filename: attachments.filename })
+        .select({
+          id: attachments.id,
+          filename: attachments.filename,
+          caption: attachments.caption,
+          annotations: attachments.annotations,
+          width: attachments.width,
+          height: attachments.height,
+        })
         .from(attachments)
         .where(
           and(
@@ -1272,6 +1506,10 @@ export default async function InspectionRecordDetailPage({
           id: r.id,
           url: attachmentUrl(r.id),
           filename: r.filename,
+          caption: r.caption,
+          annotations: r.annotations,
+          width: r.width,
+          height: r.height,
         })
       }
     }
@@ -1319,9 +1557,13 @@ export default async function InspectionRecordDetailPage({
 
   const galleryPhotos = photos.map((p) => ({
     id: p.link.id,
+    attachmentId: p.attachment.id,
     url: attachmentUrl(p.attachment.id),
     filename: p.attachment.filename,
     caption: p.link.caption,
+    annotations: p.attachment.annotations,
+    width: p.attachment.width,
+    height: p.attachment.height,
   }))
 
   const criterionActions = {
@@ -1335,6 +1577,8 @@ export default async function InspectionRecordDetailPage({
     setAssignment: setCriterionAssignment,
     setCorrected: setCriterionCorrectedOn,
     addPhotos: addCriterionPhotos,
+    updatePhoto: updateCriterionPhoto,
+    removePhoto: removeCriterionPhoto,
   }
 
   const needsSignature = type.requiresCustomerSignature
@@ -1422,7 +1666,10 @@ export default async function InspectionRecordDetailPage({
                         </>
                       ) : (
                         <>
-                          <Lock size={14} /> <GeneratedText id="m_19f2c846c5777a" />
+                          <Lock size={14} />{' '}
+                          <GeneratedValue
+                            value={record.status === 'submitted' ? 'Lock' : 'Submit & lock'}
+                          />
                         </>
                       )
                     }
@@ -1845,9 +2092,7 @@ export default async function InspectionRecordDetailPage({
                                 })}
                                 photoPreviews={(row.c.photoAttachmentIds ?? [])
                                   .map((aid) => data.criterionPhotoMap.get(aid))
-                                  .filter((p): p is { id: string; url: string; filename: string } =>
-                                    Boolean(p),
-                                  )}
+                                  .filter((p): p is NonNullable<typeof p> => Boolean(p))}
                                 correctiveActionRef={row.ca?.reference ?? null}
                                 correctiveActionId={row.c.correctiveActionId}
                                 locked={recordImmutable}
@@ -1877,7 +2122,12 @@ export default async function InspectionRecordDetailPage({
             defaultOpen={photos.length > 0}
           >
             <div className="space-y-3">
-              <PhotoGallery photos={galleryPhotos} />
+              <PhotoGallery
+                photos={galleryPhotos}
+                editable={!recordImmutable}
+                onUpdate={async (photoId, edits) => updateRecordPhoto(id, photoId, edits)}
+                onRemove={async (photoId) => removeRecordPhoto(id, photoId)}
+              />
               <GeneratedValue
                 value={
                   !recordImmutable ? (

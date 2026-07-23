@@ -18,6 +18,7 @@ import {
   caCompleteSteps,
   caPhotos,
   correctiveActions,
+  attachments,
   orgUnits,
   tenantUsers,
   users as user,
@@ -32,6 +33,8 @@ import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { canSeeRecord, moduleScopeWhere } from '@/lib/visibility'
 import { requireUuidArrayInput, requireUuidInput } from '@/lib/mutation-input'
+import { parsePhotoEdits } from '@/lib/photo-edits'
+import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -83,30 +86,41 @@ export async function attachCaPhotos(caId: string, attachmentIds: string[]): Pro
   const lockErr = assertNotLocked(ca)
   if (lockErr) return lockErr
 
-  await ctx.db((tx) =>
-    tx.insert(caPhotos).values(
-      attachmentIds.map((attachmentId) => ({
+  const result = await ctx.db(async (tx) => {
+    const [current] = await tx
+      .select({ locked: correctiveActions.locked })
+      .from(correctiveActions)
+      .where(and(eq(correctiveActions.tenantId, ctx.tenantId), eq(correctiveActions.id, caId)))
+      .limit(1)
+      .for('update')
+    if (!current) return { ok: false as const, error: 'Corrective action not found.' }
+    if (current.locked) return { ok: false as const, error: 'This action is locked.' }
+    const validIds = await validateTenantImageAttachmentIdsInTx(tx, ctx.tenantId, attachmentIds)
+    await tx.insert(caPhotos).values(
+      validIds.map((attachmentId) => ({
         tenantId: ctx.tenantId,
         caId,
         attachmentId,
       })),
-    ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: caId,
-    action: 'update',
-    summary: `Attached ${attachmentIds.length} photo${attachmentIds.length === 1 ? '' : 's'}`,
-    metadata: { attachmentIds },
+    )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'corrective_action',
+      entityId: caId,
+      action: 'update',
+      summary: `Attached ${validIds.length} photo${validIds.length === 1 ? '' : 's'}`,
+      metadata: { attachmentIds: validIds },
+    })
+    return { ok: true as const }
   })
+  if (!result.ok) return result
   revalidatePath(`/corrective-actions/${caId}`)
   return { ok: true }
 }
 
-export async function updateCaPhotoCaption(
+export async function updateCaPhoto(
   caId: string,
   photoId: string,
-  caption: string,
+  input: unknown,
 ): Promise<ActionResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'ca.update')
@@ -114,20 +128,51 @@ export async function updateCaPhotoCaption(
   if (!ca) return { ok: false, error: 'Corrective action not found.' }
   const lockErr = assertNotLocked(ca)
   if (lockErr) return lockErr
+  const edits = parsePhotoEdits(input)
 
-  await ctx.db((tx) =>
-    tx
+  const changed = await ctx.db(async (tx) => {
+    const [current] = await tx
+      .select({ locked: correctiveActions.locked })
+      .from(correctiveActions)
+      .where(and(eq(correctiveActions.tenantId, ctx.tenantId), eq(correctiveActions.id, caId)))
+      .limit(1)
+      .for('update')
+    if (!current || current.locked) return false
+    const [photo] = await tx
+      .select({ attachmentId: caPhotos.attachmentId })
+      .from(caPhotos)
+      .where(
+        and(eq(caPhotos.tenantId, ctx.tenantId), eq(caPhotos.id, photoId), eq(caPhotos.caId, caId)),
+      )
+      .limit(1)
+      .for('update')
+    if (!photo) return false
+    await tx
       .update(caPhotos)
-      .set({ caption: caption.trim() || null })
-      .where(and(eq(caPhotos.id, photoId), eq(caPhotos.caId, caId))),
-  )
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: caId,
-    action: 'update',
-    summary: 'Updated photo caption',
-    metadata: { photoId, caption },
+      .set({ caption: edits.caption })
+      .where(
+        and(eq(caPhotos.tenantId, ctx.tenantId), eq(caPhotos.id, photoId), eq(caPhotos.caId, caId)),
+      )
+    await tx
+      .update(attachments)
+      .set({ annotations: edits.annotations })
+      .where(
+        and(
+          eq(attachments.tenantId, ctx.tenantId),
+          eq(attachments.id, photo.attachmentId),
+          eq(attachments.kind, 'image'),
+        ),
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'corrective_action',
+      entityId: caId,
+      action: 'update',
+      summary: 'Updated photo caption and markup',
+      metadata: { photoId, annotationCount: edits.annotations?.length ?? 0 },
+    })
+    return true
   })
+  if (!changed) return { ok: false, error: 'Photo not found.' }
   revalidatePath(`/corrective-actions/${caId}`)
   return { ok: true }
 }
@@ -140,16 +185,31 @@ export async function deleteCaPhoto(caId: string, photoId: string): Promise<Acti
   const lockErr = assertNotLocked(ca)
   if (lockErr) return lockErr
 
-  await ctx.db((tx) =>
-    tx.delete(caPhotos).where(and(eq(caPhotos.id, photoId), eq(caPhotos.caId, caId))),
-  )
-  await recordAudit(ctx, {
-    entityType: 'corrective_action',
-    entityId: caId,
-    action: 'delete',
-    summary: 'Removed photo',
-    metadata: { photoId },
+  const removed = await ctx.db(async (tx) => {
+    const [current] = await tx
+      .select({ locked: correctiveActions.locked })
+      .from(correctiveActions)
+      .where(and(eq(correctiveActions.tenantId, ctx.tenantId), eq(correctiveActions.id, caId)))
+      .limit(1)
+      .for('update')
+    if (!current || current.locked) return false
+    const rows = await tx
+      .delete(caPhotos)
+      .where(
+        and(eq(caPhotos.tenantId, ctx.tenantId), eq(caPhotos.id, photoId), eq(caPhotos.caId, caId)),
+      )
+      .returning({ id: caPhotos.id })
+    if (rows.length === 0) return false
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'corrective_action',
+      entityId: caId,
+      action: 'delete',
+      summary: 'Removed photo',
+      metadata: { photoId },
+    })
+    return true
   })
+  if (!removed) return { ok: false, error: 'Photo not found.' }
   revalidatePath(`/corrective-actions/${caId}`)
   return { ok: true }
 }

@@ -52,7 +52,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
     subjectType: 'module',
     subjectKey: 'hazid',
     label: 'Hazard Assessments',
-    triggers: ['on_create', 'on_sign', 'on_lock', 'on_unlock', 'on_delete', 'manual'],
+    triggers: ['on_create', 'on_sign', 'on_submit', 'on_unlock', 'on_delete', 'manual'],
     actions: [
       'send_email',
       'notify_role',

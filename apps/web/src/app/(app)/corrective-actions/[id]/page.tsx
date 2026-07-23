@@ -350,9 +350,13 @@ export default async function CorrectiveActionPage({
 
   const photos: CaPhotoRow[] = photoRows.map((p) => ({
     id: p.link.id,
+    attachmentId: p.attachment.id,
     url: attachmentUrl(p.attachment.id),
     filename: p.attachment.filename,
     caption: p.link.caption,
+    annotations: p.attachment.annotations,
+    width: p.attachment.width,
+    height: p.attachment.height,
   }))
 
   const steps: CompleteStep[] = stepsRaw.map((s) => ({

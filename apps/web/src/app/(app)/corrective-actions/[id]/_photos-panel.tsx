@@ -1,26 +1,12 @@
 'use client'
 
-import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
-
-import { useGeneratedTranslations } from '@/i18n/generated'
-
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { Trash2 } from 'lucide-react'
-import { Button, Input } from '@beaconhs/ui'
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { PhotoGallery, type GalleryPhoto } from '@/components/photo-gallery'
 import { PhotoUploaderSection } from '@/components/photo-uploader-section'
-import { RawImage } from '@/components/raw-image'
-import { confirmDialog } from '@/lib/confirm'
-import { attachCaPhotos, deleteCaPhoto, updateCaPhotoCaption } from '../_actions'
+import { attachCaPhotos, deleteCaPhoto, updateCaPhoto } from '../_actions'
 
 export type CaPhotoRow = GalleryPhoto
 
-/**
- * Photos tab body. Combines the shared PhotoGallery (lightbox preview),
- * the shared PhotoUploaderSection (FileUpload → finalizeUpload →
- * attachment FK), and an inline editor for each photo's caption + delete.
- */
 export function PhotosPanel({
   caId,
   photos,
@@ -30,38 +16,17 @@ export function PhotosPanel({
   photos: CaPhotoRow[]
   locked: boolean
 }) {
-  const router = useRouter()
   return (
     <div className="space-y-4">
       <GeneratedValue
         value={
           photos.length > 0 ? (
-            <>
-              <PhotoGallery photos={photos} />
-              <GeneratedValue
-                value={
-                  !locked ? (
-                    <div className="rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                      <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-                        <GeneratedText id="m_198846e6854d54" />
-                      </div>
-                      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                        <GeneratedValue
-                          value={photos.map((p) => (
-                            <PhotoRow
-                              key={p.id}
-                              caId={caId}
-                              photo={p}
-                              onChanged={() => router.refresh()}
-                            />
-                          ))}
-                        />
-                      </ul>
-                    </div>
-                  ) : null
-                }
-              />
-            </>
+            <PhotoGallery
+              photos={photos}
+              editable={!locked}
+              onUpdate={async (photoId, edits) => updateCaPhoto(caId, photoId, edits)}
+              onRemove={async (photoId) => deleteCaPhoto(caId, photoId)}
+            />
           ) : (
             <p className="text-sm text-slate-500 dark:text-slate-400">
               <GeneratedText id="m_177e2d48fbc8cb" />
@@ -81,81 +46,5 @@ export function PhotosPanel({
         }
       />
     </div>
-  )
-}
-
-function PhotoRow({
-  caId,
-  photo,
-  onChanged,
-}: {
-  caId: string
-  photo: CaPhotoRow
-  onChanged: () => void
-}) {
-  const tGeneratedValue = useGeneratedValueTranslations()
-  const tGenerated = useGeneratedTranslations()
-  const [caption, setCaption] = useState(photo.caption ?? '')
-  const [pending, start] = useTransition()
-  const [busy, setBusy] = useState<'caption' | 'delete' | null>(null)
-
-  function saveCaption() {
-    if ((caption ?? '') === (photo.caption ?? '')) return
-    setBusy('caption')
-    start(async () => {
-      await updateCaPhotoCaption(caId, photo.id, caption)
-      setBusy(null)
-      onChanged()
-    })
-  }
-
-  async function remove() {
-    if (
-      !(await confirmDialog({
-        message: 'Remove this photo from the corrective action?',
-        tone: 'danger',
-      }))
-    )
-      return
-    setBusy('delete')
-    start(async () => {
-      await deleteCaPhoto(caId, photo.id)
-      setBusy(null)
-      onChanged()
-    })
-  }
-
-  return (
-    <li className="flex items-center gap-3 px-3 py-2">
-      <RawImage
-        src={photo.url}
-        alt={tGeneratedValue(photo.caption ?? photo.filename)}
-        optimizationReason="authenticated"
-        className="h-10 w-10 shrink-0 rounded object-cover"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-xs text-slate-500 dark:text-slate-400">
-          <GeneratedValue value={photo.filename} />
-        </div>
-        <Input
-          value={caption}
-          onChange={(e) => setCaption(e.target.value)}
-          onBlur={saveCaption}
-          placeholder={tGenerated('m_1a7a1bf1a20c79')}
-          disabled={pending}
-          className="h-7 text-xs"
-        />
-      </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={remove}
-        disabled={pending}
-        aria-label={tGenerated('m_1d10555bea1d88')}
-      >
-        <Trash2 size={12} className={busy === 'delete' ? 'text-slate-400' : 'text-red-500'} />
-      </Button>
-    </li>
   )
 }

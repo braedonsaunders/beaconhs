@@ -19,6 +19,7 @@ import {
 import { presignGet } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { inspectionCriterionDisplayAnswer } from '@/lib/inspection-response-config'
+import { photoDocumentUrl } from '@/lib/photo-document-url'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDateTime, personName, titleize } from '../format'
@@ -159,7 +160,13 @@ export function createInspectionFlowAdapter(
         ),
         ctx.db((tx) =>
           tx
-            .select({ caption: inspectionRecordAttachments.caption, r2Key: attachments.r2Key })
+            .select({
+              caption: inspectionRecordAttachments.caption,
+              r2Key: attachments.r2Key,
+              annotations: attachments.annotations,
+              width: attachments.width,
+              height: attachments.height,
+            })
             .from(inspectionRecordAttachments)
             .innerJoin(
               attachments,
@@ -236,10 +243,18 @@ export function createInspectionFlowAdapter(
           action_taken: c.actionTaken ?? '',
         })),
         photos: await Promise.all(
-          photos.map(async (p) => ({
-            url: await presignGet({ key: p.r2Key, expiresInSeconds: 900 }),
-            caption: p.caption ?? '',
-          })),
+          photos.map(async (p) => {
+            const url = await presignGet({ key: p.r2Key, expiresInSeconds: 900 })
+            return {
+              url: photoDocumentUrl({
+                url,
+                annotations: p.annotations,
+                width: p.width,
+                height: p.height,
+              }),
+              caption: p.caption ?? '',
+            }
+          }),
         ),
       }
     },

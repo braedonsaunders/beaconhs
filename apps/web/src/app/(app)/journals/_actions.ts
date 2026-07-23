@@ -54,6 +54,8 @@ import {
   type JournalMutation,
 } from './_mutation-policy'
 import { normalizeJournalFilters, normalizeJournalGroupBy } from './_query-input'
+import { parsePhotoEdits } from '@/lib/photo-edits'
+import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
 
 type ActionOk<T = {}> = { ok: true } & T
 type ActionErr = { ok: false; error: string }
@@ -441,11 +443,11 @@ export async function attachJournalPhotos(input: {
       .where(where)
       .limit(1)
     if (!e) return null
-    const availableAttachments = await tx
-      .select({ id: attachments.id })
-      .from(attachments)
-      .where(inArray(attachments.id, attachmentIds))
-    if (availableAttachments.length !== attachmentIds.length) return null
+    const availableAttachmentIds = await validateTenantImageAttachmentIdsInTx(
+      tx,
+      ctx.tenantId,
+      attachmentIds,
+    )
     const [{ maxOrder } = { maxOrder: -1 }] = await tx
       .select({ maxOrder: sql<number>`coalesce(max(${journalEntryPhotos.sortOrder}), -1)::int` })
       .from(journalEntryPhotos)
@@ -454,7 +456,7 @@ export async function attachJournalPhotos(input: {
     const inserted = await tx
       .insert(journalEntryPhotos)
       .values(
-        attachmentIds.map((attachmentId, i) => ({
+        availableAttachmentIds.map((attachmentId, i) => ({
           tenantId: ctx.tenantId,
           entryId: input.entryId,
           attachmentId,
@@ -510,6 +512,68 @@ export async function removeJournalPhoto(photoId: string): Promise<ActionOk | Ac
     action: 'update',
     summary: 'Removed a photo',
   })
+  revalidatePath('/journals')
+  return { ok: true }
+}
+
+export async function updateJournalPhoto(
+  photoId: string,
+  input: unknown,
+): Promise<ActionOk | ActionErr> {
+  const ctx = await requireRequestContext()
+  if (!isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
+  const edits = parsePhotoEdits(input)
+  const photoHead = await ctx.db(async (tx) => {
+    const [photo] = await tx
+      .select({ entryId: journalEntryPhotos.entryId })
+      .from(journalEntryPhotos)
+      .where(and(eq(journalEntryPhotos.tenantId, ctx.tenantId), eq(journalEntryPhotos.id, photoId)))
+      .limit(1)
+    return photo ?? null
+  })
+  if (!photoHead) return { ok: false, error: 'Photo not found.' }
+  const where = await mutationWhere(ctx, photoHead.entryId, 'edit')
+  const changed = await ctx.db(async (tx) => {
+    const [photo] = await tx
+      .select({
+        entryId: journalEntryPhotos.entryId,
+        attachmentId: journalEntryPhotos.attachmentId,
+      })
+      .from(journalEntryPhotos)
+      .where(and(eq(journalEntryPhotos.tenantId, ctx.tenantId), eq(journalEntryPhotos.id, photoId)))
+      .limit(1)
+      .for('update')
+    if (!photo) return false
+    const [entry] = await tx
+      .select({ id: journalEntries.id })
+      .from(journalEntries)
+      .where(where)
+      .limit(1)
+    if (!entry) return false
+    await tx
+      .update(journalEntryPhotos)
+      .set({ caption: edits.caption })
+      .where(and(eq(journalEntryPhotos.tenantId, ctx.tenantId), eq(journalEntryPhotos.id, photoId)))
+    await tx
+      .update(attachments)
+      .set({ annotations: edits.annotations })
+      .where(
+        and(
+          eq(attachments.tenantId, ctx.tenantId),
+          eq(attachments.id, photo.attachmentId),
+          eq(attachments.kind, 'image'),
+        ),
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'journal_entry',
+      entityId: photo.entryId,
+      action: 'update',
+      summary: 'Updated photo caption and markup',
+      metadata: { photoId, annotationCount: edits.annotations?.length ?? 0 },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photo not found.' }
   revalidatePath('/journals')
   return { ok: true }
 }

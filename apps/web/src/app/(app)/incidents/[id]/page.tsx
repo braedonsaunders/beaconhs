@@ -81,6 +81,8 @@ import {
 import { IncidentHeaderActions } from './_header-actions'
 import { isUuid, pickString } from '@/lib/list-params'
 import { attachmentUrl } from '@/lib/attachment-url'
+import { parsePhotoEdits } from '@/lib/photo-edits'
+import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { nextReference } from '@/lib/reference'
@@ -449,22 +451,141 @@ async function attachPhotos(incidentId: string, attachmentIds: string[]) {
   assertCan(ctx, 'incidents.update')
   if (attachmentIds.length === 0) return
   await assertCanSeeIncident(ctx, incidentId)
-  await ctx.db((tx) =>
-    tx.insert(incidentAttachments).values(
-      attachmentIds.map((attachmentId) => ({
+  await ctx.db(async (tx) => {
+    const [incident] = await tx
+      .select({ locked: incidents.locked })
+      .from(incidents)
+      .where(and(eq(incidents.tenantId, ctx.tenantId), eq(incidents.id, incidentId)))
+      .limit(1)
+      .for('update')
+    if (!incident) throw new Error('Incident not found')
+    if (incident.locked) throw new Error('Incident is locked')
+    const validIds = await validateTenantImageAttachmentIdsInTx(tx, ctx.tenantId, attachmentIds)
+    await tx.insert(incidentAttachments).values(
+      validIds.map((attachmentId) => ({
         tenantId: ctx.tenantId,
         incidentId,
         attachmentId,
       })),
-    ),
-  )
-  await recordAudit(ctx, {
-    entityType: 'incident',
-    entityId: incidentId,
-    action: 'update',
-    summary: `Attached ${attachmentIds.length} photo${attachmentIds.length === 1 ? '' : 's'}`,
+    )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'incident',
+      entityId: incidentId,
+      action: 'update',
+      summary: `Attached ${validIds.length} photo${validIds.length === 1 ? '' : 's'}`,
+    })
   })
   revalidatePath(`/incidents/${incidentId}`)
+}
+
+async function updateIncidentPhoto(
+  incidentId: string,
+  photoId: string,
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
+  if (!isUuid(incidentId) || !isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
+  await assertCanSeeIncident(ctx, incidentId)
+  const edits = parsePhotoEdits(input)
+  const changed = await ctx.db(async (tx) => {
+    const [incident] = await tx
+      .select({ locked: incidents.locked })
+      .from(incidents)
+      .where(and(eq(incidents.tenantId, ctx.tenantId), eq(incidents.id, incidentId)))
+      .limit(1)
+      .for('update')
+    if (!incident) return false
+    if (incident.locked) throw new Error('Incident is locked')
+    const [photo] = await tx
+      .select({ attachmentId: incidentAttachments.attachmentId })
+      .from(incidentAttachments)
+      .where(
+        and(
+          eq(incidentAttachments.tenantId, ctx.tenantId),
+          eq(incidentAttachments.incidentId, incidentId),
+          eq(incidentAttachments.id, photoId),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!photo) return false
+    await tx
+      .update(incidentAttachments)
+      .set({ caption: edits.caption })
+      .where(
+        and(
+          eq(incidentAttachments.tenantId, ctx.tenantId),
+          eq(incidentAttachments.incidentId, incidentId),
+          eq(incidentAttachments.id, photoId),
+        ),
+      )
+    await tx
+      .update(attachments)
+      .set({ annotations: edits.annotations })
+      .where(
+        and(
+          eq(attachments.tenantId, ctx.tenantId),
+          eq(attachments.id, photo.attachmentId),
+          eq(attachments.kind, 'image'),
+        ),
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'incident',
+      entityId: incidentId,
+      action: 'update',
+      summary: 'Updated photo caption and markup',
+      metadata: { photoId, annotationCount: edits.annotations?.length ?? 0 },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photo not found.' }
+  revalidatePath(`/incidents/${incidentId}`)
+  return { ok: true }
+}
+
+async function removeIncidentPhoto(
+  incidentId: string,
+  photoId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'incidents.update')
+  if (!isUuid(incidentId) || !isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
+  await assertCanSeeIncident(ctx, incidentId)
+  const removed = await ctx.db(async (tx) => {
+    const [incident] = await tx
+      .select({ locked: incidents.locked })
+      .from(incidents)
+      .where(and(eq(incidents.tenantId, ctx.tenantId), eq(incidents.id, incidentId)))
+      .limit(1)
+      .for('update')
+    if (!incident) return false
+    if (incident.locked) throw new Error('Incident is locked')
+    const rows = await tx
+      .delete(incidentAttachments)
+      .where(
+        and(
+          eq(incidentAttachments.tenantId, ctx.tenantId),
+          eq(incidentAttachments.incidentId, incidentId),
+          eq(incidentAttachments.id, photoId),
+        ),
+      )
+      .returning({ id: incidentAttachments.id })
+    if (rows.length === 0) return false
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'incident',
+      entityId: incidentId,
+      action: 'update',
+      summary: 'Removed photo',
+      metadata: { photoId },
+    })
+    return true
+  })
+  if (!removed) return { ok: false, error: 'Photo not found.' }
+  revalidatePath(`/incidents/${incidentId}`)
+  return { ok: true }
 }
 
 async function sendEmailAction(formData: FormData) {
@@ -1501,9 +1622,13 @@ export default async function IncidentDetailPage({
 
   const galleryPhotos = photos.map((p) => ({
     id: p.link.id,
+    attachmentId: p.attachment.id,
     url: attachmentUrl(p.attachment.id),
     filename: p.attachment.filename,
     caption: p.link.caption,
+    annotations: p.attachment.annotations,
+    width: p.attachment.width,
+    height: p.attachment.height,
   }))
 
   // Investigation-progress milestones — drive the overview hero + checklist.
@@ -3048,7 +3173,12 @@ export default async function IncidentDetailPage({
             defaultOpen={photos.length > 0}
           >
             <div className="space-y-3">
-              <PhotoGallery photos={galleryPhotos} />
+              <PhotoGallery
+                photos={galleryPhotos}
+                editable={!locked}
+                onUpdate={async (photoId, edits) => updateIncidentPhoto(id, photoId, edits)}
+                onRemove={async (photoId) => removeIncidentPhoto(id, photoId)}
+              />
               <GeneratedValue
                 value={
                   !locked ? (

@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle2 } from 'lucide-react'
 import { Button, Label, Textarea, cn } from '@beaconhs/ui'
 import { FileUpload, type AttachedFile } from '@/components/file-upload'
-import { RawImage } from '@/components/raw-image'
+import { PhotoGallery, type GalleryPhoto, type PhotoEdits } from '@/components/photo-gallery'
 import { toast } from '@/lib/toast'
 import type { InspectionSeverity } from '@/components/builder/inspection-severity'
 import { enqueueSerialTask } from './criterion-save-queue'
@@ -306,39 +306,55 @@ export function CriterionPhotosPanel({
   recordId,
   rowId,
   addPhotos,
+  updatePhoto,
+  removePhoto,
   onDone,
 }: {
-  photoPreviews: { id: string; url: string; filename: string }[]
+  photoPreviews: GalleryPhoto[]
   editable: boolean
   recordId: string
   rowId: string
   addPhotos: (formData: FormData) => Promise<void>
+  updatePhoto?: (
+    recordId: string,
+    rowId: string,
+    attachmentId: string,
+    input: PhotoEdits,
+  ) => Promise<{ ok: boolean; error?: string }>
+  removePhoto?: (
+    recordId: string,
+    rowId: string,
+    attachmentId: string,
+  ) => Promise<{ ok: boolean; error?: string }>
   onDone: () => void
 }) {
-  const tGeneratedValue = useGeneratedValueTranslations()
   return (
     <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
       <GeneratedValue
         value={
           photoPreviews.length > 0 ? (
-            <div className="mb-2 flex flex-wrap gap-2">
-              <GeneratedValue
-                value={photoPreviews.map((photo) => (
-                  <a
-                    key={photo.id}
-                    href={photo.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
-                  >
-                    <RawImage
-                      src={photo.url}
-                      alt={tGeneratedValue(photo.filename)}
-                      optimizationReason="authenticated"
-                      className="h-full w-full object-cover"
-                    />
-                  </a>
-                ))}
+            <div className="mb-2">
+              <PhotoGallery
+                photos={photoPreviews}
+                editable={editable && Boolean(updatePhoto && removePhoto)}
+                onUpdate={
+                  updatePhoto
+                    ? async (attachmentId, edits) => {
+                        const result = await updatePhoto(recordId, rowId, attachmentId, edits)
+                        onDone()
+                        return result
+                      }
+                    : undefined
+                }
+                onRemove={
+                  removePhoto
+                    ? async (attachmentId) => {
+                        const result = await removePhoto(recordId, rowId, attachmentId)
+                        onDone()
+                        return result
+                      }
+                    : undefined
+                }
               />
             </div>
           ) : null

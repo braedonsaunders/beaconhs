@@ -135,7 +135,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Submit it',
-        body: 'When everything is filled in, submit. Your supervisor can see it right away, and you can reopen it if conditions change.',
+        body: 'When everything is filled in, tap Submit & lock. Your submit flows run, your supervisor can see it right away, and you can unlock it if conditions change.',
       },
     ],
   },
@@ -164,7 +164,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Draft or submit',
-        body: 'You can save a draft and finish later. Submit when every item is complete; closing locks the record. If a submitted item needs correction, fix it and submit again.',
+        body: 'You can save a draft and finish later. Tap Submit & lock when every item is complete; that runs submit flows and makes the record read-only. Unlock it before a correction.',
       },
     ],
   },

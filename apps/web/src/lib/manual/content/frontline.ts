@@ -58,7 +58,8 @@ BeaconHS leaves your original words in place until the AI response finishes. If 
 
 1. Scroll to the **Photos** section under the text.
 2. Tap the upload area to take a photo or pick one from your phone.
-3. To remove a photo, tap the remove button on it.
+3. Tap the pencil button to add a caption or draw attention to something in the photo.
+4. To remove a photo, tap the trash button on it.
 
 ## Tags
 
@@ -197,7 +198,7 @@ People with permission to review hazard assessments can record an advisory decis
 
 ## Finishing up
 
-1. When everything is rated and signed, tap **Lock** so nothing changes.
+1. When everything is rated and signed, tap **Submit & lock**. This makes the assessment read-only and runs its submit flows.
 2. Use **Print / PDF** for a paper copy, or **Send email** to share it.
 
 ## Tips
@@ -251,7 +252,8 @@ On **Inspection records**, use **All inspection types**, **All locations**, and 
    - **Action taken** — what was done to fix it.
    - A severity, and a person the finding is assigned to, if your company uses those.
 3. Add photos on any failed item. Some items require a photo before you can submit — they show a **Photo** tag.
-4. If most outcome items pass, tap **Mark unanswered as pass** in the **Status & workflow** section to fill those items in one tap. **Select one**, **Text**, **Long text**, and **Number** items are never filled by this shortcut; answer each one yourself. Only use the shortcut when you actually checked the items.
+4. Tap the pencil button on a photo to add a caption or draw attention to a problem. Tap the trash button to remove the wrong photo.
+5. If most outcome items pass, tap **Mark unanswered as pass** in the **Status & workflow** section to fill those items in one tap. **Select one**, **Text**, **Long text**, and **Number** items are never filled by this shortcut; answer each one yourself. Only use the shortcut when you actually checked the items.
 
 ## Setting up checklist questions
 
@@ -261,13 +263,13 @@ Managers build inspection types under **Inspections** → **Manage** → **Types
 
 A record stays a draft while you work — you can leave and come back. When every item is answered:
 
-1. Open the **Status & workflow** section.
-2. Pick the new status under **Move to** and tap **Update status**.
-3. Submitting or closing requires every item to be answered. Closing locks the record so it cannot change.
+1. Tap **Submit & lock** in the header to submit the inspection, run its submit flows, and make it read-only in one step.
+2. If the inspection should stay editable after submission, open **Status & workflow**, choose **Submitted**, and tap **Update status** instead.
+3. Choosing **Closed** also submits and locks the inspection. Every submission path requires all required answers, comments, photos, and signatures.
 
 If an edit removes required information from a submitted record, it returns to **In progress**. Complete the missing item and submit it again.
 
-To correct a closed record, tap **Unlock**. The record reopens as **Submitted** so you can make the correction and close it again.
+To correct a locked or closed record, tap **Unlock**. A closed record reopens as **Submitted** so you can make the correction and close it again.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
@@ -318,7 +320,7 @@ Open **Incidents** in the left menu, or go to [Incidents](/incidents).
 7. Fill in **Immediate action taken** — first aid given, area barricaded, equipment locked out, and so on.
 8. Tap **Submit report**.
 
-The quick report captures the essentials. Photos, witness statements, and the full investigation happen on the incident's page after you submit.
+The quick report captures the essentials. Photos, witness statements, and the full investigation happen on the incident's page after you submit. In **Photos**, tap the pencil button to add a caption or mark up a photo. Tap the trash button to remove the wrong photo before the incident is locked.
 
 ## What happens after
 
@@ -396,7 +398,7 @@ Open **Corrective Actions** in the left menu, or go to [Corrective actions](/cor
 2. Read the **General** section so you understand what is being asked, and check the due date.
 3. Do the work in the field.
 4. In the **Work** section, fill in **Action taken** — what you actually did. Fields save as you type. Add the root cause if you know it.
-5. Add photos of the finished fix in the **Photos** section.
+5. Add photos of the finished fix in the **Photos** section. Tap the pencil button to add a caption or mark up a photo, and the trash button to remove the wrong one.
 6. Some actions have step-by-step items. Check each one off as you finish it.
 
 ## Verification and closing

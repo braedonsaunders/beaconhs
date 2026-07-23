@@ -61,6 +61,17 @@ type CriterionActions = {
   setAssignment: (fd: FormData) => Promise<void>
   setCorrected: (fd: FormData) => Promise<void>
   addPhotos: (fd: FormData) => Promise<void>
+  updatePhoto: (
+    recordId: string,
+    rowId: string,
+    attachmentId: string,
+    input: unknown,
+  ) => Promise<{ ok: boolean; error?: string }>
+  removePhoto: (
+    recordId: string,
+    rowId: string,
+    attachmentId: string,
+  ) => Promise<{ ok: boolean; error?: string }>
 }
 
 export function CriterionCard({
@@ -114,7 +125,7 @@ export function CriterionCard({
   assignedDueDate: string | null
   correctedOn: string | null
   overdue: boolean
-  photoPreviews: { id: string; url: string; filename: string }[]
+  photoPreviews: import('@/components/photo-gallery').GalleryPhoto[]
   correctiveActionRef: string | null
   correctiveActionId: string | null
   locked: boolean
@@ -505,6 +516,8 @@ export function CriterionCard({
               recordId={recordId}
               rowId={rowId}
               addPhotos={actions.addPhotos}
+              updatePhoto={actions.updatePhoto}
+              removePhoto={actions.removePhoto}
               onDone={refresh}
             />
           ) : null

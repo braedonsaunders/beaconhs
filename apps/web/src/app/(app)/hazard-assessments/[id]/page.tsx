@@ -95,7 +95,6 @@ import {
   deleteAssessment,
   deleteHazard,
   deletePPE,
-  deletePhoto,
   deleteQuestion,
   deleteSignature,
   deleteTask,
@@ -107,9 +106,11 @@ import {
   unlockAssessment,
   openAssessmentApp,
   reviewAssessment,
+  removePhoto,
   updateHazard,
   updatePPE,
   updateQuestion,
+  updatePhoto,
   updateTask,
   updateTextField,
 } from '../_actions'
@@ -558,9 +559,13 @@ export default async function HazidAssessmentDetailPage({
 
   const galleryPhotos = photos.map((p) => ({
     id: p.link.id,
+    attachmentId: p.attachment.id,
     url: attachmentUrl(p.attachment.id),
     filename: p.attachment.filename,
     caption: p.link.caption,
+    annotations: p.attachment.annotations,
+    width: p.attachment.width,
+    height: p.attachment.height,
   }))
 
   const hazardNameLookup = new Map<string, string>(
@@ -1457,35 +1462,16 @@ export default async function HazidAssessmentDetailPage({
             tone="slate"
           >
             <div className="space-y-3">
-              <PhotoGallery photos={galleryPhotos} />
+              <PhotoGallery
+                photos={galleryPhotos}
+                editable={!locked}
+                onUpdate={async (photoId, edits) => updatePhoto(id, photoId, edits)}
+                onRemove={async (photoId) => removePhoto(id, photoId)}
+              />
               <GeneratedValue
                 value={
                   !locked ? (
                     <HazidPhotoUploader assessmentId={id} attachAction={attachPhotos} />
-                  ) : null
-                }
-              />
-              <GeneratedValue
-                value={
-                  !locked && photos.length > 0 ? (
-                    <ul className="space-y-1 text-xs text-slate-500">
-                      <GeneratedValue
-                        value={photos.map((p) => (
-                          <li key={p.link.id} className="flex items-center justify-between">
-                            <span>
-                              <GeneratedValue value={p.attachment.filename} />
-                            </span>
-                            <form action={deletePhoto}>
-                              <input type="hidden" name="id" value={p.link.id} />
-                              <input type="hidden" name="assessmentId" value={id} />
-                              <button type="submit" className="text-red-600 hover:underline">
-                                <GeneratedText id="m_1a9d8d971b1edb" />
-                              </button>
-                            </form>
-                          </li>
-                        ))}
-                      />
-                    </ul>
                   ) : null
                 }
               />

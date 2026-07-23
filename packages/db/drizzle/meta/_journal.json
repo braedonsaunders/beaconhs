@@ -155,6 +155,13 @@
       "when": 1784824177552,
       "tag": "0021_training_assessment_history",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784827071367,
+      "tag": "0022_hazid_submit_trigger_cutover",
+      "breakpoints": true
     }
   ]
 }

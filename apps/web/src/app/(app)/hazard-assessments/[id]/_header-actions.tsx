@@ -3,7 +3,7 @@
 import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 
 // Detail-header actions, responsive. Desktop shows the full button row;
-// phones get the one action that matters in the field (Lock / Unlock) plus a
+// phones get the one action that matters in the field (Submit & lock / Unlock) plus a
 // "More" sheet with the rest — six buttons would otherwise wrap into three
 // rows and shove the form below the fold.
 
@@ -52,7 +52,7 @@ export function AssessmentHeaderActions({
               </>
             ) : (
               <>
-                <Lock size={14} /> <GeneratedText id="m_19f2c846c5777a" />
+                <Lock size={14} /> <GeneratedValue value="Submit & lock" />
               </>
             )
           }

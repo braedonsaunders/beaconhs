@@ -365,7 +365,12 @@ export async function renderPdfOnDemand(
   ) {
     throw new Error('On-demand PDF timeout must be between 1,000 and 120,000 milliseconds.')
   }
-  const job = await addPdfJob(data, {
+  // Every viewer owns a distinct transient artifact. Reusing the deterministic
+  // background-render job id lets concurrent viewers receive the same r2Key;
+  // the first response then deletes that object and the other response fails.
+  const pdfQueue = getPdfQueue()
+  const job = await pdfQueue.add(data.kind, data, {
+    jobId: `${pdfJobId(data)}|view|${randomUUID()}`,
     attempts: 1,
     removeOnComplete: { age: 3600 },
     removeOnFail: { age: 24 * 3600 },

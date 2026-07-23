@@ -49,6 +49,8 @@ import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { canAccessTemplate, canEditResponsePayload } from '@/app/(app)/apps/_lib/access'
 import { riskRating } from './_risk-scale'
 import { hazidAppIsApplicable } from '@/lib/hazid-app-condition'
+import { parsePhotoEdits } from '@/lib/photo-edits'
+import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
 
 // All HazID server actions assume a tenant is active. requireRequestContext
 // types tenantId as string | null because some admin pages run pre-tenant —
@@ -906,7 +908,7 @@ export async function lockAssessment(formData: FormData) {
     await recordModuleFlowEvent(tx, ctx, {
       subjectId: id,
       moduleKey: 'hazid',
-      event: 'on_lock',
+      event: 'on_submit',
       occurrenceKey: randomUUID(),
     })
     await recordAuditInTransaction(tx, ctx, {
@@ -1919,8 +1921,9 @@ export async function attachPhotos(formData: FormData) {
   await assertAssessmentEditable(ctx, assessmentId)
   await ctx.db(async (tx) => {
     await lockEditableAssessment(ctx, tx, assessmentId)
+    const attachmentIds = await validateTenantImageAttachmentIdsInTx(tx, ctx.tenantId, ids)
     await tx.insert(hazidAssessmentPhotos).values(
-      ids.map((attachmentId) => ({
+      attachmentIds.map((attachmentId) => ({
         tenantId: ctx.tenantId,
         assessmentId,
         attachmentId,
@@ -1937,26 +1940,99 @@ export async function attachPhotos(formData: FormData) {
 }
 
 export async function deletePhoto(formData: FormData) {
+  return removePhoto(String(formData.get('assessmentId') ?? ''), String(formData.get('id') ?? ''))
+}
+
+export async function removePhoto(
+  assessmentId: string,
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
   const ctx = await ctxWithTenant()
   assertCan(ctx, 'hazid.update')
-  const id = String(formData.get('id') ?? '')
-  const assessmentId = String(formData.get('assessmentId') ?? '')
+  if (!isUuid(assessmentId) || !isUuid(id)) return { ok: false, error: 'Photo not found.' }
   await assertAssessmentEditable(ctx, assessmentId)
-  await ctx.db(async (tx) => {
+  const removed = await ctx.db(async (tx) => {
     await lockEditableAssessment(ctx, tx, assessmentId)
-    await tx
+    const rows = await tx
       .delete(hazidAssessmentPhotos)
       .where(
-        and(eq(hazidAssessmentPhotos.id, id), eq(hazidAssessmentPhotos.assessmentId, assessmentId)),
+        and(
+          eq(hazidAssessmentPhotos.tenantId, ctx.tenantId),
+          eq(hazidAssessmentPhotos.id, id),
+          eq(hazidAssessmentPhotos.assessmentId, assessmentId),
+        ),
       )
+      .returning({ id: hazidAssessmentPhotos.id })
+    if (rows.length === 0) return false
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'hazid_assessment',
       entityId: assessmentId,
       action: 'update',
       summary: 'Removed photo',
     })
+    return true
   })
+  if (!removed) return { ok: false, error: 'Photo not found.' }
   revalidateAssessment(assessmentId)
+  return { ok: true }
+}
+
+export async function updatePhoto(
+  assessmentId: string,
+  photoId: string,
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
+  if (!isUuid(assessmentId) || !isUuid(photoId)) return { ok: false, error: 'Photo not found.' }
+  const edits = parsePhotoEdits(input)
+  const changed = await ctx.db(async (tx) => {
+    await lockEditableAssessment(ctx, tx, assessmentId)
+    const [photo] = await tx
+      .select({ attachmentId: hazidAssessmentPhotos.attachmentId })
+      .from(hazidAssessmentPhotos)
+      .where(
+        and(
+          eq(hazidAssessmentPhotos.tenantId, ctx.tenantId),
+          eq(hazidAssessmentPhotos.assessmentId, assessmentId),
+          eq(hazidAssessmentPhotos.id, photoId),
+        ),
+      )
+      .limit(1)
+      .for('update')
+    if (!photo) return false
+    await tx
+      .update(hazidAssessmentPhotos)
+      .set({ caption: edits.caption })
+      .where(
+        and(
+          eq(hazidAssessmentPhotos.tenantId, ctx.tenantId),
+          eq(hazidAssessmentPhotos.assessmentId, assessmentId),
+          eq(hazidAssessmentPhotos.id, photoId),
+        ),
+      )
+    await tx
+      .update(attachments)
+      .set({ annotations: edits.annotations })
+      .where(
+        and(
+          eq(attachments.tenantId, ctx.tenantId),
+          eq(attachments.id, photo.attachmentId),
+          eq(attachments.kind, 'image'),
+        ),
+      )
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
+      action: 'update',
+      summary: 'Updated photo caption and markup',
+      metadata: { photoId, annotationCount: edits.annotations?.length ?? 0 },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Photo not found.' }
+  revalidateAssessment(assessmentId)
+  return { ok: true }
 }
 
 // ------------------------------------------------------------------

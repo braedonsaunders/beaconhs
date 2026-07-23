@@ -19,6 +19,7 @@ import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDate, personName } from '../format'
 import type { FlowSubjectAdapter } from '../types'
+import { photoDocumentUrl } from '@/lib/photo-document-url'
 
 export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): FlowSubjectAdapter {
   return {
@@ -66,7 +67,13 @@ export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): 
 
       const photos = await ctx.db((tx) =>
         tx
-          .select({ caption: journalEntryPhotos.caption, r2Key: attachments.r2Key })
+          .select({
+            caption: journalEntryPhotos.caption,
+            r2Key: attachments.r2Key,
+            annotations: attachments.annotations,
+            width: attachments.width,
+            height: attachments.height,
+          })
           .from(journalEntryPhotos)
           .innerJoin(attachments, eq(attachments.id, journalEntryPhotos.attachmentId))
           .where(eq(journalEntryPhotos.entryId, entryId))
@@ -102,10 +109,18 @@ export function createJournalFlowAdapter(ctx: RequestContext, entryId: string): 
         supervisor_person_id: r.supervisorPersonId ?? null,
         site_org_unit_id: r.siteOrgUnitId ?? null,
         photos: await Promise.all(
-          photos.map(async (p) => ({
-            url: await presignGet({ key: p.r2Key, expiresInSeconds: 900 }),
-            caption: p.caption ?? '',
-          })),
+          photos.map(async (p) => {
+            const url = await presignGet({ key: p.r2Key, expiresInSeconds: 900 })
+            return {
+              url: photoDocumentUrl({
+                url,
+                annotations: p.annotations,
+                width: p.width,
+                height: p.height,
+              }),
+              caption: p.caption ?? '',
+            }
+          }),
         ),
       }
     },

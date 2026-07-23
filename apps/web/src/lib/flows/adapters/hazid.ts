@@ -27,6 +27,7 @@ import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { fmtDateTime, personName, yesBlank, yesNo } from '../format'
 import type { FlowSubjectAdapter } from '../types'
+import { photoDocumentUrl } from '@/lib/photo-document-url'
 
 function riskScore(l: number | null, s: number | null): number | string {
   return l != null && s != null ? l * s : ''
@@ -166,7 +167,13 @@ export function createHazidFlowAdapter(
         ),
         ctx.db((tx) =>
           tx
-            .select({ caption: hazidAssessmentPhotos.caption, r2Key: attachments.r2Key })
+            .select({
+              caption: hazidAssessmentPhotos.caption,
+              r2Key: attachments.r2Key,
+              annotations: attachments.annotations,
+              width: attachments.width,
+              height: attachments.height,
+            })
             .from(hazidAssessmentPhotos)
             .innerJoin(attachments, eq(attachments.id, hazidAssessmentPhotos.attachmentId))
             .where(eq(hazidAssessmentPhotos.assessmentId, assessmentId)),
@@ -280,10 +287,18 @@ export function createHazidFlowAdapter(
           })),
         ),
         photos: await Promise.all(
-          photos.map(async (p) => ({
-            url: await presignGet({ key: p.r2Key, expiresInSeconds: 900 }),
-            caption: p.caption ?? '',
-          })),
+          photos.map(async (p) => {
+            const url = await presignGet({ key: p.r2Key, expiresInSeconds: 900 })
+            return {
+              url: photoDocumentUrl({
+                url,
+                annotations: p.annotations,
+                width: p.width,
+                height: p.height,
+              }),
+              caption: p.caption ?? '',
+            }
+          }),
         ),
       }
     },

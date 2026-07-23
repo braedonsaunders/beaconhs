@@ -61,8 +61,13 @@ export type JournalListItem = {
 
 export type JournalPhoto = {
   id: string
+  attachmentId: string
   url: string | null
   caption: string | null
+  annotations: import('@beaconhs/db/schema').Annotation[] | null
+  width: number | null
+  height: number | null
+  filename: string
 }
 
 export type JournalEntryDetail = {

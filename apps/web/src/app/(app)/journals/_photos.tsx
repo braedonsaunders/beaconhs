@@ -1,23 +1,18 @@
 'use client'
 
-import {
-  useGeneratedTranslations,
-  GeneratedValue,
-  useGeneratedValueTranslations,
-} from '@/i18n/generated'
-
-import { GeneratedText } from '@/i18n/generated'
-
-// Photo strip for an entry: mobile-camera capture + upload, AI auto-caption and
-// hazard read, remove. Renders from the entry's persisted photos.
-
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 import { useTransition } from 'react'
-import { Loader2, Sparkles, Trash2 } from 'lucide-react'
+import { Loader2, Sparkles } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { FileUpload, type AttachedFile } from '@/components/file-upload'
-import { RawImage } from '@/components/raw-image'
+import { PhotoGallery } from '@/components/photo-gallery'
 import { toast } from 'sonner'
-import { attachJournalPhotos, describeJournalPhoto, removeJournalPhoto } from './_actions'
+import {
+  attachJournalPhotos,
+  describeJournalPhoto,
+  removeJournalPhoto,
+  updateJournalPhoto,
+} from './_actions'
 import type { JournalPhoto } from './_types'
 
 export function Photos({
@@ -34,42 +29,38 @@ export function Photos({
   onChange: () => void
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
-  const tGenerated = useGeneratedTranslations()
   const [busy, start] = useTransition()
 
   function onUploaded(files: AttachedFile[]) {
     if (files.length === 0) return
     start(async () => {
-      const res = await attachJournalPhotos({
+      const result = await attachJournalPhotos({
         entryId,
-        attachmentIds: files.map((f) => f.attachmentId),
+        attachmentIds: files.map((file) => file.attachmentId),
       })
-      if (!res.ok) {
-        toast.error(tGeneratedValue(res.error))
+      if (!result.ok) {
+        toast.error(tGeneratedValue(result.error))
         return
       }
       onChange()
-      if (aiEnabled && res.photoIds.length > 0) {
-        await Promise.all(res.photoIds.map((id) => describeJournalPhoto(id)))
+      if (aiEnabled && result.photoIds.length > 0) {
+        await Promise.all(result.photoIds.map((id) => describeJournalPhoto(id)))
         onChange()
       }
     })
   }
 
-  function remove(id: string) {
+  function describe(id: string) {
     start(async () => {
-      await removeJournalPhoto(id)
+      const result = await describeJournalPhoto(id)
+      if (!result.ok) toast.error(tGeneratedValue(result.error))
       onChange()
     })
   }
 
-  function describe(id: string) {
-    start(async () => {
-      const res = await describeJournalPhoto(id)
-      if (!res.ok) toast.error(tGeneratedValue(res.error))
-      onChange()
-    })
-  }
+  const visiblePhotos = photos
+    .filter((photo) => Boolean(photo.url))
+    .map((photo) => ({ ...photo, url: photo.url! }))
 
   return (
     <div className="space-y-2.5">
@@ -89,88 +80,46 @@ export function Photos({
         />
       </div>
 
-      <GeneratedValue
-        value={
-          photos.length > 0 ? (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-              <GeneratedValue
-                value={photos.map((p) => (
-                  <div
-                    key={p.id}
-                    className="group relative aspect-square overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700"
-                  >
-                    <GeneratedValue
-                      value={
-                        p.url ? (
-                          <RawImage
-                            src={p.url}
-                            alt={tGeneratedValue(p.caption ?? '')}
-                            optimizationReason="authenticated"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : null
-                      }
-                    />
+      {visiblePhotos.length > 0 ? (
+        <PhotoGallery
+          photos={visiblePhotos}
+          editable={editable}
+          onUpdate={async (photoId, edits) => {
+            const result = await updateJournalPhoto(photoId, edits)
+            onChange()
+            return result
+          }}
+          onRemove={async (photoId) => {
+            const result = await removeJournalPhoto(photoId)
+            onChange()
+            return result
+          }}
+        />
+      ) : null}
 
-                    <GeneratedValue
-                      value={
-                        p.caption ? (
-                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-1.5">
-                            <p className="line-clamp-2 text-[10px] leading-tight text-white">
-                              <GeneratedValue value={p.caption} />
-                            </p>
-                          </div>
-                        ) : null
-                      }
-                    />
+      {editable && aiEnabled && photos.some((photo) => !photo.caption) ? (
+        <div className="flex flex-wrap gap-2">
+          {photos
+            .filter((photo) => !photo.caption)
+            .map((photo) => (
+              <button
+                key={photo.id}
+                type="button"
+                onClick={() => describe(photo.id)}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-teal-200 px-2.5 text-xs font-medium text-teal-700 hover:bg-teal-50 dark:border-teal-900 dark:text-teal-300 dark:hover:bg-teal-950/40"
+              >
+                <Sparkles size={12} /> <GeneratedValue value="Generate caption for" />{' '}
+                <span className="max-w-48 truncate">{photo.filename}</span>
+              </button>
+            ))}
+        </div>
+      ) : null}
 
-                    <GeneratedValue
-                      value={
-                        editable ? (
-                          <div className="absolute top-1 right-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                            <GeneratedValue
-                              value={
-                                aiEnabled && !p.caption ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => describe(p.id)}
-                                    title={tGenerated('m_17f59d8b2a6028')}
-                                    className="grid h-6 w-6 place-items-center rounded bg-white/90 text-teal-700 hover:bg-white"
-                                  >
-                                    <Sparkles size={12} />
-                                  </button>
-                                ) : null
-                              }
-                            />
-                            <button
-                              type="button"
-                              onClick={() => remove(p.id)}
-                              title={tGenerated('m_1a9d8d971b1edb')}
-                              className="grid h-6 w-6 place-items-center rounded bg-white/90 text-red-600 hover:bg-white"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        ) : null
-                      }
-                    />
-                  </div>
-                ))}
-              />
-            </div>
-          ) : null
-        }
-      />
-
-      <GeneratedValue
-        value={
-          editable ? (
-            <div className={cn(photos.length > 0 && 'max-w-xs')}>
-              <FileUpload variant="photo" value={[]} onChange={onUploaded} />
-            </div>
-          ) : null
-        }
-      />
+      {editable ? (
+        <div className={cn(photos.length > 0 && 'max-w-xs')}>
+          <FileUpload variant="photo" value={[]} onChange={onUploaded} />
+        </div>
+      ) : null}
     </div>
   )
 }

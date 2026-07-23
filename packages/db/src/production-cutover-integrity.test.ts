@@ -50,6 +50,7 @@ describe('production cutover migration integrity', () => {
       '0019_report_parity_cutover.sql',
       '0020_inspection_location_storage.sql',
       '0021_training_assessment_history.sql',
+      '0022_hazid_submit_trigger_cutover.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -78,12 +79,13 @@ describe('production cutover migration integrity', () => {
       { idx: 19, tag: '0019_report_parity_cutover' },
       { idx: 20, tag: '0020_inspection_location_storage' },
       { idx: 21, tag: '0021_training_assessment_history' },
+      { idx: 22, tag: '0022_hazid_submit_trigger_cutover' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)
     }
 
-    const snapshots = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21].map(
+    const snapshots = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map(
       (index) =>
         JSON.parse(
           readFileSync(

@@ -20,6 +20,7 @@ import type { RequestContext } from '@beaconhs/tenant'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDate, fmtDateTime, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
+import { photoDocumentUrl } from '@/lib/photo-document-url'
 
 export function createCorrectiveActionFlowAdapter(
   ctx: RequestContext,
@@ -92,7 +93,13 @@ export function createCorrectiveActionFlowAdapter(
         ),
         ctx.db((tx) =>
           tx
-            .select({ caption: caPhotos.caption, r2Key: attachments.r2Key })
+            .select({
+              caption: caPhotos.caption,
+              r2Key: attachments.r2Key,
+              annotations: attachments.annotations,
+              width: attachments.width,
+              height: attachments.height,
+            })
             .from(caPhotos)
             .innerJoin(attachments, eq(attachments.id, caPhotos.attachmentId))
             .where(eq(caPhotos.caId, caId)),
@@ -143,10 +150,18 @@ export function createCorrectiveActionFlowAdapter(
           })),
         ),
         photos: await Promise.all(
-          photos.map(async (p) => ({
-            url: await presignGet({ key: p.r2Key, expiresInSeconds: 900 }),
-            caption: p.caption ?? '',
-          })),
+          photos.map(async (p) => {
+            const url = await presignGet({ key: p.r2Key, expiresInSeconds: 900 })
+            return {
+              url: photoDocumentUrl({
+                url,
+                annotations: p.annotations,
+                width: p.width,
+                height: p.height,
+              }),
+              caption: p.caption ?? '',
+            }
+          }),
         ),
       }
     },
