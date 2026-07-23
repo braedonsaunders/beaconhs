@@ -103,7 +103,12 @@ const wahRescueSchema: FormSchemaV1 = {
         { id: 'equipment_name', type: 'text', label: { en: 'Equipment' }, required: true },
         { id: 'location', type: 'text', label: { en: 'Location / storage' } },
         { id: 'last_inspected', type: 'date', label: { en: 'Last inspected' } },
-        { id: 'photo', type: 'photo_upload', label: { en: 'Photo' } },
+        {
+          id: 'photo',
+          type: 'photo',
+          label: { en: 'Photo' },
+          config: { multiple: false, maxFiles: 1 },
+        },
       ],
     },
     {

@@ -19,7 +19,6 @@ exports[`tenant relational integrity > ratchets the reviewed residual single-col
   "journal_entry_tags.entry_id->journal_entries.id",
   "journal_tags.created_by_tenant_user_id->tenant_users.id",
   "pdf_templates.created_by_tenant_user_id->tenant_users.id",
-  "report_schedules.definition_id->report_definitions.id",
   "safe_distance_records.operator_person_id->people.id",
   "safe_distance_records.site_org_unit_id->org_units.id",
   "safe_distance_records.supervisor_tenant_user_id->tenant_users.id",

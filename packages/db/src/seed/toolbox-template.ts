@@ -89,7 +89,12 @@ const TOOLBOX_TEMPLATE_SCHEMA: FormSchemaV1 = {
       id: 'photos',
       title: { en: 'Photos' },
       fields: [
-        { id: 'photos', type: 'photo_upload', label: { en: 'Photos' }, config: { multiple: true } },
+        {
+          id: 'photos',
+          type: 'photo',
+          label: { en: 'Photos' },
+          config: { multiple: true, maxFiles: 10 },
+        },
       ],
     },
   ],

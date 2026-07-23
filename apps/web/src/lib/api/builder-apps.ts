@@ -811,14 +811,20 @@ function fieldOpenApiSchema(field: FormField): Record<string, unknown> {
       return { type: 'string', format: 'date-time' }
     case 'multi_select':
     case 'checkbox_group':
-    case 'photo':
-    case 'photo_upload':
-    case 'photo_ai':
-    case 'photo_annotated':
     case 'file':
     case 'video':
     case 'audio':
       return { type: 'array', items: {} }
+    case 'photo':
+      return {
+        type: 'object',
+        required: ['attachments'],
+        properties: {
+          attachments: { type: 'array', items: { type: 'object', additionalProperties: true } },
+          analysis: { type: 'object', additionalProperties: true },
+          analyzedAt: { type: 'string', format: 'date-time' },
+        },
+      }
     case 'table':
       return { type: 'array', items: { type: 'object', additionalProperties: true } }
     case 'yes_no_comment':

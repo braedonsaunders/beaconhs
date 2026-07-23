@@ -1,97 +1,48 @@
-// In-app report execution. Runs the shared engine under the caller's
-// tenant-scoped RLS context (ctx.db) — the same code path the worker uses for
-// scheduled PDFs, so what you see in the viewer is exactly what subscribers
-// get emailed.
-
 import { eq } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { resolveTenantLogoUrl } from '@beaconhs/storage'
-import {
-  augmentEntityMapWithCustomFields,
-  refineEntityMapForDocuments,
-  computeRangeFor,
-  rangeModeFor,
-  runReport,
-  type ReportRunResult,
-} from '@beaconhs/reports'
+import { type ReportRuleGroup, type ReportRunResult } from '@beaconhs/reports'
+import { loadBeaconReportCatalog, runBeaconReport } from '@beaconhs/reports/server'
 import type { RequestContext } from '@beaconhs/tenant'
-import { resolveAnalyticsAccess } from '@/lib/analytics-access'
 import type { ReportDefinitionRow } from './_definitions'
 
-type ViewerRun = {
-  result: ReportRunResult
-  rangeLabel: string
-  rangeMode: 'lookback' | 'lookahead' | 'as_of'
-  /** The days value the range was computed with (null when not applicable). */
-  days: number | null
-  error: string | null
-}
-
-export const VIEWER_RANGE_CHOICES = [7, 14, 30, 90, 365]
-
-/** Row cap for the in-app paginated document preview. Paged.js lays out every
- *  row into page boxes client-side, so the preview stays deliberately small;
- *  exports and scheduled PDFs run to the plan limit (10k / uncapped). */
 export const DOCUMENT_PREVIEW_MAX_ROWS = 500
 
 export async function runReportForViewer(
   ctx: RequestContext,
   definition: ReportDefinitionRow,
-  opts: { days?: number | null; maxRows?: number; filters?: Record<string, unknown> } = {},
-): Promise<ViewerRun> {
-  const mode = rangeModeFor(definition.queryKind)
-  const days =
-    mode === 'as_of'
-      ? null
-      : opts.days && VIEWER_RANGE_CHOICES.includes(opts.days)
-        ? opts.days
-        : null
-  const filters: Record<string, unknown> = { ...(opts.filters ?? {}), ...(days ? { days } : {}) }
-  const range = computeRangeFor(definition.queryKind, filters)
-
+  options: {
+    maxRows?: number
+    filters?: ReportRuleGroup | null
+    groupBy?: string | null
+  } = {},
+): Promise<{ result: ReportRunResult; error: string | null }> {
   try {
-    const result = await ctx.db(async (tx) =>
-      runReport(tx, {
-        queryKind: definition.queryKind,
-        definitionSlug: definition.slug,
-        filters,
-        range,
-        customQuery: definition.customQuery,
-        maxRows: opts.maxRows ?? DOCUMENT_PREVIEW_MAX_ROWS,
-        entityMap: refineEntityMapForDocuments(
-          await augmentEntityMapWithCustomFields(
-            tx,
-            (await resolveAnalyticsAccess(ctx, tx)).entityMap,
-          ),
-        ),
-      }),
-    )
-    return { result, rangeLabel: range.label, rangeMode: mode, days, error: null }
-  } catch (err) {
+    const result = await ctx.db(async (tx) => {
+      const catalog = await loadBeaconReportCatalog(tx)
+      return runBeaconReport(
+        tx,
+        ctx.tenantId!,
+        {
+          ...definition.query,
+          ...(options.filters === undefined ? {} : { filters: options.filters }),
+          ...(options.groupBy === undefined ? {} : { groupBy: options.groupBy }),
+        },
+        catalog,
+        { maxRows: options.maxRows ?? DOCUMENT_PREVIEW_MAX_ROWS },
+      )
+    })
+    return { result, error: null }
+  } catch (cause) {
     return {
-      result: { groups: [], summary: [], rowCount: 0 },
-      rangeLabel: range.label,
-      rangeMode: mode,
-      days,
-      error: err instanceof Error ? err.message : String(err),
+      result: { groups: [], summary: [], rowCount: 0, truncated: false, durationMs: 0 },
+      error: cause instanceof Error ? cause.message : String(cause),
     }
   }
 }
 
-// --- Tenant branding for the document header --------------------------------
-
-type TenantBranding = {
-  name: string
-  logoUrl: string | null
-  primaryColor: string | null
-}
-
-/** Tenant name + branding for the report document header. Shared by the
- *  viewer preview, the hub preview pane, the studio preview, and PDF export.
- *  Reads the global tenants table with the super-admin bypass (same pattern
- *  as the export route). */
-export async function loadTenantBranding(ctx: RequestContext): Promise<TenantBranding> {
+export async function loadTenantBranding(ctx: RequestContext) {
   const [tenant] = await withSuperAdmin(db, (tx) =>
     tx
       .select({ name: tenants.name, branding: tenants.branding })

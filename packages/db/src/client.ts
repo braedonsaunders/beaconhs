@@ -1,4 +1,5 @@
 import { drizzle } from 'drizzle-orm/postgres-js'
+import { sql, type SQL } from 'drizzle-orm'
 import postgres from 'postgres'
 import * as schema from './schema'
 
@@ -48,6 +49,53 @@ function createDatabase(url: string, max: number) {
 }
 
 export type Database = ReturnType<typeof createDatabase>['db']
+
+/** Normalise Drizzle/postgres-js query results without coupling consumers to
+ * either driver's envelope shape. */
+export function extractRows(result: unknown): Record<string, unknown>[] {
+  if (Array.isArray(result)) return result as Record<string, unknown>[]
+  if (result && typeof result === 'object' && Array.isArray((result as { rows?: unknown }).rows)) {
+    return (result as { rows: Record<string, unknown>[] }).rows
+  }
+  return []
+}
+
+/**
+ * Convert a compiler-owned PostgreSQL statement (`$1`, `$2`, …) into a
+ * Drizzle SQL object without interpolating values into SQL text. This keeps
+ * execution on the caller's current transaction, including its tenant RLS
+ * settings.
+ */
+export function parameterizedSql(query: string, parameters: readonly unknown[] = []): SQL {
+  const chunks: SQL[] = []
+  let cursor = 0
+  for (const match of query.matchAll(/\$(\d+)/g)) {
+    const offset = match.index
+    const parameterIndex = Number(match[1]) - 1
+    if (!Number.isSafeInteger(parameterIndex) || parameterIndex < 0) {
+      throw new Error(`Invalid SQL parameter placeholder "${match[0]}"`)
+    }
+    if (parameterIndex >= parameters.length) {
+      throw new Error(`SQL parameter ${match[0]} has no bound value`)
+    }
+    if (offset > cursor) chunks.push(sql.raw(query.slice(cursor, offset)))
+    chunks.push(sql`${parameters[parameterIndex]}`)
+    cursor = offset + match[0].length
+  }
+  if (cursor < query.length) chunks.push(sql.raw(query.slice(cursor)))
+  if (parameters.length > 0 && chunks.length === 0) {
+    throw new Error('SQL parameters were provided but the statement has no placeholders')
+  }
+  return sql.join(chunks, sql.raw(''))
+}
+
+export async function executeParameterizedRows(
+  tx: Pick<Database, 'execute'>,
+  query: string,
+  parameters: readonly unknown[] = [],
+): Promise<Record<string, unknown>[]> {
+  return extractRows((await tx.execute(parameterizedSql(query, parameters))) as unknown)
+}
 
 function lazyDatabase(factory: () => Database): Database {
   let instance: Database | undefined

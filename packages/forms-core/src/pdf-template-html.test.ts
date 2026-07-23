@@ -35,7 +35,6 @@ const schema = validateFormSchema({
         { id: 'diagram', type: 'sketch', label: { en: 'Rigging diagram' } },
         { id: 'site_photos', type: 'photo', label: { en: 'Site photos' } },
         { id: 'attachments', type: 'file', label: { en: 'Attachments' } },
-        { id: 'ai_photos', type: 'photo_ai', label: { en: 'AI photos' } },
         {
           id: 'rigging',
           type: 'table',
@@ -56,6 +55,7 @@ const schema = validateFormSchema({
       fields: [
         { id: 'load_desc', type: 'text', label: { en: 'Load' } },
         { id: 'load_weight', type: 'number', label: { en: 'Weight (kg)' } },
+        { id: 'load_photos', type: 'photo', label: { en: 'Load photos' } },
       ],
     },
   ],
@@ -82,12 +82,13 @@ describe('generateFormPdfTemplate', () => {
     // rich text merges unescaped
     expect(out.sourceHtml).toContain('{{{narrative}}}')
     // photo/file/table/repeating-section collections via tr markers
-    expect(out.sourceHtml).toContain('data-each="site_photos"')
+    expect(out.sourceHtml).toContain('data-each="site_photos_photos"')
+    expect(out.sourceHtml).toContain('{{site_photos_text}}')
     expect(out.sourceHtml).toContain('data-each="attachments"')
     expect(out.sourceHtml).toContain('data-each="rigging"')
     expect(out.sourceHtml).toContain('data-each="loads"')
-    expect(out.sourceHtml).toContain('{{ai_photos_text}}')
-    expect(out.sourceHtml).toContain('data-each="ai_photos_photos"')
+    expect(out.sourceHtml).toContain('{{load_photos_text}}')
+    expect(out.sourceHtml).toContain('data-each="loads_load_photos_photos"')
     // layout-only fields carry no tokens
     expect(out.sourceHtml).not.toContain('{{intro}}')
   })
@@ -110,15 +111,23 @@ describe('generateFormPdfTemplate', () => {
         narrative: '<p>All <strong>clear</strong></p>',
         signoff: 'data:image/png;base64,AAAA',
         diagram_image: 'https://files.test/sketch.png',
-        site_photos: [{ url: 'https://files.test/1.jpg', filename: 'one.jpg' }],
+        site_photos: { attachments: [] },
+        site_photos_text: '1 photo',
+        site_photos_photos: [
+          { url: 'https://files.test/1.jpg', filename: 'one.jpg', caption: 'Setup' },
+        ],
         attachments: [{ url: 'https://files.test/a.pdf', filename: 'a.pdf' }],
-        ai_photos: { attachments: [] },
-        ai_photos_text: '1 photo · risk low',
-        ai_photos_photos: [],
         rigging: [{ item: 'Sling', wll: '2t' }],
         loads: [
-          { load_desc: 'RTU', load_weight: 1800 },
-          { load_desc: 'Curb', load_weight: 240 },
+          { load_desc: 'RTU', load_weight: 1800, load_photos_text: '1 photo' },
+          { load_desc: 'Curb', load_weight: 240, load_photos_text: '0 photos' },
+        ],
+        loads_load_photos_photos: [
+          {
+            url: 'https://files.test/load.jpg',
+            filename: 'load.jpg',
+            caption: 'Rigged load',
+          },
         ],
       },
       { escapeHtml: true },
@@ -128,6 +137,7 @@ describe('generateFormPdfTemplate', () => {
     // rich text survives; escaped fields do not inject markup
     expect(html).toContain('<strong>clear</strong>')
     expect(html).toContain('src="https://files.test/1.jpg"')
+    expect(html).toContain('src="https://files.test/load.jpg"')
     // repeating rows expand with 1-based numbering
     expect(html).toContain('RTU')
     expect(html).toContain('Curb')

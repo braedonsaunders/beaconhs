@@ -10,6 +10,13 @@ const ATTACHMENT = {
   contentType: 'image/jpeg',
   url: ATTACHMENT_URL,
 }
+const SECOND_ATTACHMENT_ID = '20000000-0000-4000-8000-000000000002'
+const SECOND_ATTACHMENT = {
+  ...ATTACHMENT,
+  attachmentId: SECOND_ATTACHMENT_ID,
+  filename: 'jobsite-2.jpg',
+  url: `/api/attachments/${SECOND_ATTACHMENT_ID}?cap=${'B'.repeat(43)}`,
+}
 const SAFETY_ANALYSIS = {
   summary: 'Workers are wearing required PPE.',
   overallRisk: 'low',
@@ -72,8 +79,12 @@ describe('validateFieldValue', () => {
       'Rate at least one row',
     )
     expect(
-      validateFieldValue(field('photo', 'photo_ai', { required: true }), { attachments: [] }),
+      validateFieldValue(field('photo', 'photo', { required: true }), { attachments: [] }),
     ).toBe('Add a photo')
+    expect(validateFieldValue(field('choices', 'multi_select', { required: true }), [])).toBe(
+      'Required',
+    )
+    expect(validateFieldValue(field('files', 'file', { required: true }), [])).toBe('Required')
     expect(validateFieldValue(field('sketch', 'sketch', { required: true }), {})).toBe(
       'Add a diagram',
     )
@@ -110,18 +121,24 @@ describe('validateFieldValue', () => {
   it.each([
     ['address', { line1: 123 }, 'Must be an address'],
     ['matrix', [], 'Must be a rating grid'],
-    ['photo_ai', { attachments: 'not-an-array' }, 'Invalid photo value'],
-    ['photo_ai', { attachments: [ATTACHMENT], analysis: {} }, 'Invalid photo value'],
+    ['photo', { attachments: 'not-an-array' }, 'Invalid photo value'],
+    ['photo', { attachments: [ATTACHMENT], analysis: {} }, 'Invalid photo value'],
     [
-      'photo_ai',
+      'photo',
       { attachments: [ATTACHMENT], analysis: SAFETY_ANALYSIS, analyzedAt: 'not-a-date' },
       'Invalid photo value',
     ],
-    ['photo_ai', { attachments: [ATTACHMENT], analysis: SAFETY_ANALYSIS }, 'Invalid photo value'],
-    ['photo_annotated', { attachments: [], markers: 'not-an-array' }, 'Invalid photo value'],
+    ['photo', { attachments: [ATTACHMENT], analysis: SAFETY_ANALYSIS }, 'Invalid photo value'],
     [
-      'photo_annotated',
-      { attachments: [ATTACHMENT], markers: [{ id: 'marker', x: 2, y: 0.5, label: '' }] },
+      'photo',
+      {
+        attachments: [
+          {
+            ...ATTACHMENT,
+            annotations: [{ type: 'free', points: [[2_000, 0]], color: '#ef4444', width: 8 }],
+          },
+        ],
+      },
       'Invalid photo value',
     ],
     ['sketch', { attachmentId: 123 }, 'Invalid diagram'],
@@ -145,8 +162,7 @@ describe('validateFieldValue', () => {
   it.each([
     ['address', {}],
     ['matrix', {}],
-    ['photo_ai', { attachments: [] }],
-    ['photo_annotated', { attachments: [], markers: [] }],
+    ['photo', { attachments: [] }],
     ['sketch', {}],
     ['gps', {}],
     ['signature', {}],
@@ -175,7 +191,7 @@ describe('validateFieldValue', () => {
     ['ranking', [{}], 'Must be a list of choices'],
     ['multi_person_picker', [42], 'Must be a list of people'],
     ['multi_person_picker', ['not-a-uuid'], 'Must be a list of people'],
-    ['photo', [{}], 'Invalid attachment list'],
+    ['photo', [{}], 'Invalid photo value'],
     ['number', '   ', 'Must be a number'],
     ['number', '2', 'Must be a number'],
     ['slider', '0x10', 'Must be a number'],
@@ -301,20 +317,36 @@ describe('validateFieldValue', () => {
   })
 
   it('accepts canonical private attachment values and complete photo compounds', () => {
-    expect(validateFieldValue(field('photo', 'photo'), [ATTACHMENT])).toBeNull()
     expect(
-      validateFieldValue(field('photo_ai', 'photo_ai'), {
-        attachments: [ATTACHMENT],
+      validateFieldValue(field('photo', 'photo'), {
+        attachments: [
+          {
+            ...ATTACHMENT,
+            caption: 'Guardrail gap',
+            annotations: [
+              {
+                type: 'free',
+                points: [
+                  [10, 20],
+                  [30, 40],
+                ],
+                color: '#ef4444',
+                width: 8,
+              },
+            ],
+            width: 1920,
+            height: 1080,
+          },
+        ],
         analysis: SAFETY_ANALYSIS,
         analyzedAt: '2026-07-13T12:00:00.000Z',
       }),
     ).toBeNull()
     expect(
-      validateFieldValue(field('annotated', 'photo_annotated'), {
-        attachments: [ATTACHMENT],
-        markers: [{ id: 'marker-1', x: 0.25, y: 0.75, label: '' }],
+      validateFieldValue(field('photo', 'photo', { config: { multiple: false, maxFiles: 1 } }), {
+        attachments: [ATTACHMENT, SECOND_ATTACHMENT],
       }),
-    ).toBeNull()
+    ).toBe('Use no more than 1 photo')
     expect(
       validateFieldValue(field('signature', 'signature'), {
         attachmentId: ATTACHMENT_ID,
@@ -328,6 +360,42 @@ describe('validateFieldValue', () => {
         scene: { elements: [], appState: {}, files: {} },
       }),
     ).toBeNull()
+  })
+
+  it('rejects unsafe photo metadata and duplicate attachment references', () => {
+    expect(
+      validateFieldValue(field('photo', 'photo'), {
+        attachments: [{ ...ATTACHMENT, caption: 'x'.repeat(1_001) }],
+      }),
+    ).toBe('Invalid photo value')
+    expect(
+      validateFieldValue(field('photo', 'photo'), {
+        attachments: [{ ...ATTACHMENT, width: 0, height: 1080 }],
+      }),
+    ).toBe('Invalid photo value')
+    expect(
+      validateFieldValue(field('photo', 'photo'), {
+        attachments: [
+          {
+            ...ATTACHMENT,
+            annotations: [
+              {
+                type: 'free',
+                points: [[10, 20]],
+                color: '#ef4444',
+                width: 8,
+                hiddenPayload: 'not allowed',
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe('Invalid photo value')
+    expect(
+      validateFieldValue(field('photo', 'photo'), {
+        attachments: [ATTACHMENT, ATTACHMENT],
+      }),
+    ).toBe('Invalid photo value')
   })
 
   it('accepts the numeric risk-matrix value emitted by the shared picker', () => {
@@ -402,11 +470,10 @@ describe('validateFieldValue', () => {
       ),
     ).toBe('Must be a list of people')
     expect(
-      validateFieldValue(
-        field('photos', 'photo'),
-        Array.from({ length: 51 }, () => ATTACHMENT),
-      ),
-    ).toBe('Invalid attachment list')
+      validateFieldValue(field('photos', 'photo'), {
+        attachments: Array.from({ length: 51 }, () => ATTACHMENT),
+      }),
+    ).toBe('Invalid photo value')
     expect(validateFieldValue(field('notes', 'long_text'), 'a'.repeat(100_001))).toBe(
       'Text is too long',
     )
@@ -429,12 +496,7 @@ describe('validateFieldValue', () => {
   })
 
   it.each([
-    ['photo', [{ ...ATTACHMENT, url: 'https://tracker.example/photo.jpg' }]],
-    ['photo_ai', { attachments: [{ ...ATTACHMENT, url: 'https://tracker.example/photo.jpg' }] }],
-    [
-      'photo_annotated',
-      { attachments: [{ ...ATTACHMENT, url: 'https://tracker.example/photo.jpg' }], markers: [] },
-    ],
+    ['photo', { attachments: [{ ...ATTACHMENT, url: 'https://tracker.example/photo.jpg' }] }],
     ['signature', { attachmentId: ATTACHMENT_ID, url: 'https://tracker.example/signature.png' }],
     ['sketch', { attachmentId: ATTACHMENT_ID, url: 'https://tracker.example/sketch.png' }],
   ] as Array<[FormField['type'], unknown]>)(
@@ -446,10 +508,10 @@ describe('validateFieldValue', () => {
 
   it('rejects an attachment URL whose embedded id does not match the value', () => {
     expect(
-      validateFieldValue(field('photo', 'photo'), [
-        { ...ATTACHMENT, attachmentId: '20000000-0000-4000-8000-000000000002' },
-      ]),
-    ).toBe('Invalid attachment list')
+      validateFieldValue(field('photo', 'photo'), {
+        attachments: [{ ...ATTACHMENT, attachmentId: '20000000-0000-4000-8000-000000000002' }],
+      }),
+    ).toBe('Invalid photo value')
   })
 
   it.each(['formula', 'heading', 'paragraph', 'divider', 'metric'] as const)(
@@ -466,8 +528,7 @@ describe('validateResponse', () => {
       field('notes', 'rich_text', { required: true }),
       field('address', 'address', { required: true }),
       field('matrix', 'matrix', { required: true }),
-      field('photo_ai', 'photo_ai', { required: true }),
-      field('photo_annotated', 'photo_annotated', { required: true }),
+      field('photos', 'photo', { required: true }),
       field('sketch', 'sketch', { required: true }),
       field('slider', 'slider', { config: { min: 5, max: 10 } }),
     ])
@@ -479,8 +540,7 @@ describe('validateResponse', () => {
           notes: '<p>&nbsp;</p>',
           address: {},
           matrix: {},
-          photo_ai: { attachments: [] },
-          photo_annotated: { attachments: [] },
+          photos: { attachments: [] },
           sketch: {},
           slider: 4,
         },
@@ -490,8 +550,7 @@ describe('validateResponse', () => {
       { fieldId: 'notes', sectionId: 'section', message: 'Required' },
       { fieldId: 'address', sectionId: 'section', message: 'Required' },
       { fieldId: 'matrix', sectionId: 'section', message: 'Rate at least one row' },
-      { fieldId: 'photo_ai', sectionId: 'section', message: 'Add a photo' },
-      { fieldId: 'photo_annotated', sectionId: 'section', message: 'Add a photo' },
+      { fieldId: 'photos', sectionId: 'section', message: 'Add a photo' },
       { fieldId: 'sketch', sectionId: 'section', message: 'Add a diagram' },
       { fieldId: 'slider', sectionId: 'section', message: 'Must be >= 5' },
     ])

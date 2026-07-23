@@ -1,262 +1,132 @@
 'use server'
 
-// Server actions for the report studio: create / update custom definitions
-// and the live preview. All three share the validate.ts sanitiser; preview
-// executes under the caller's RLS context with a tight row cap.
-
-import { randomBytes } from 'node:crypto'
-import { redirect } from 'next/navigation'
+import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
-import { and, eq, isNull, or } from 'drizzle-orm'
-import type { Database } from '@beaconhs/db'
-import { assertCan } from '@beaconhs/tenant'
+import { redirect } from 'next/navigation'
+import { and, eq, ne } from 'drizzle-orm'
 import { reportDefinitions } from '@beaconhs/db/schema'
 import {
-  refineEntityMapForDocuments,
-  buildReportDocumentCss,
-  buildReportPageCss,
-  computeRangeFor,
-  renderReportDocumentBodyHtml,
-  resolveReportLayout,
-  runReport,
-  type ReportEntity,
+  assertCustomReportDefinition,
+  compileCustomReport,
+  reportEntity,
+  type CustomReportDefinition,
+  type ReportEntityCatalog,
+  type ReportRunResult,
 } from '@beaconhs/reports'
+import { loadBeaconReportCatalog, runBeaconReport } from '@beaconhs/reports/server'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
-import { resolveAnalyticsAccess } from '@/lib/analytics-access'
-import { isUuid } from '@/lib/list-params'
-import { loadTenantBranding } from '../_run'
-import { validateCustomQuery, validateReportLayout } from './validate'
-import { getGeneratedValueTranslations } from '@/i18n/generated.server'
 
-/** Definition category for an entity key. Scoped per-app keys
- *  (`form_responses:<templateId>`) fall back to their base table. */
-function entityCategory(entityKey: string): string {
-  return entityKey.split(':')[0] ?? entityKey
-}
-
-/** Build a stable, URL-safe slug for a custom definition. */
-function buildSlug(name: string): string {
-  const base =
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 48) || 'custom_report'
-  const suffix = randomBytes(3).toString('hex')
-  return `custom__${base}__${suffix}`
-}
-
-function parseStudioForm(formData: FormData, entityMap: Record<string, ReportEntity>) {
-  const name = String(formData.get('name') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim() || null
-  const customQueryRaw = String(formData.get('customQuery') ?? '').trim()
-  if (!name) throw new Error('Name is required')
-  if (!customQueryRaw) throw new Error('Custom query payload is missing')
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(customQueryRaw)
-  } catch (err) {
-    throw new Error(`Invalid customQuery JSON: ${err instanceof Error ? err.message : String(err)}`)
-  }
-  const layoutRaw = String(formData.get('layout') ?? '').trim()
-  let layoutParsed: unknown = null
-  if (layoutRaw) {
-    try {
-      layoutParsed = JSON.parse(layoutRaw)
-    } catch (err) {
-      throw new Error(`Invalid layout JSON: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
-  return {
-    name,
-    description,
-    customQuery: validateCustomQuery(parsed, entityMap),
-    layout: validateReportLayout(layoutParsed),
-  }
-}
-
-/** Discovered catalog augmented with the tenant's custom-field columns, so the
- *  studio can save/validate `cf_*` columns. */
-async function resolveStudioEntityMap(
-  ctx: Awaited<ReturnType<typeof requireRequestContext>>,
-  tx: Database,
-): Promise<Record<string, ReportEntity>> {
-  return refineEntityMapForDocuments((await resolveAnalyticsAccess(ctx, tx)).entityMap)
-}
-
-export async function createCustomDefinition(formData: FormData): Promise<void> {
+export async function previewReportDefinition(
+  definition: CustomReportDefinition,
+): Promise<ReportRunResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.builder')
-  const cloneFromIdRaw = String(formData.get('cloneFromId') ?? '').trim()
+  assertCustomReportDefinition(definition)
+  return ctx.db(async (tx) => {
+    const catalog = await loadBeaconReportCatalog(tx)
+    validateDefinition(definition, ctx.tenantId!, catalog)
+    return runBeaconReport(tx, ctx.tenantId!, definition.query, catalog, {
+      maxRows: 500,
+    })
+  })
+}
 
-  // report_definitions exposes global built-ins read-only while its command-
-  // specific RLS policies constrain custom-definition writes to this tenant.
-  // Validation, custom-field KEY SHARE locks, write, and audit share one tx so
-  // field retirement cannot race a newly persisted cf_* reference.
-  const newId = await ctx.db(async (tx) => {
-    const { name, description, customQuery, layout } = parseStudioForm(
-      formData,
-      await resolveStudioEntityMap(ctx, tx),
-    )
-    let category: string | null = entityCategory(customQuery.entity)
-    if (isUuid(cloneFromIdRaw)) {
-      const [source] = await tx
-        .select({ category: reportDefinitions.category })
+export async function saveReportDefinition(
+  definition: CustomReportDefinition,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const ctx = await requireRequestContext()
+    assertCan(ctx, 'reports.builder')
+    assertCustomReportDefinition(definition)
+    const creating = definition.id === 'new'
+    const definitionId = creating ? randomUUID() : definition.id
+
+    await ctx.db(async (tx) => {
+      const catalog = await loadBeaconReportCatalog(tx)
+      validateDefinition(definition, ctx.tenantId!, catalog)
+      const entity = reportEntity(catalog, definition.query.entity)
+      if (!entity) throw new Error('Choose an available report source.')
+      const [conflict] = await tx
+        .select({ id: reportDefinitions.id })
         .from(reportDefinitions)
         .where(
           and(
-            eq(reportDefinitions.id, cloneFromIdRaw),
-            or(isNull(reportDefinitions.tenantId), eq(reportDefinitions.tenantId, ctx.tenantId)),
+            eq(reportDefinitions.tenantId, ctx.tenantId!),
+            eq(reportDefinitions.slug, definition.slug),
+            ne(reportDefinitions.id, definitionId),
           ),
         )
         .limit(1)
-      if (source?.category) category = source.category
-    }
-    const slug = buildSlug(name)
-    const [row] = await tx
-      .insert(reportDefinitions)
-      .values({
-        tenantId: ctx.tenantId,
-        kind: 'custom',
-        slug,
-        name,
-        description,
-        category,
-        queryKind: 'custom_query',
-        customQuery,
-        layout,
-      })
-      .returning({ id: reportDefinitions.id })
-    if (!row) throw new Error('Could not create the report definition')
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'report_definition',
-      entityId: row.id,
-      action: 'create',
-      summary: `Created custom report definition "${name}"`,
-      after: {
-        name,
-        slug,
-        category,
-        queryKind: 'custom_query',
-        clonedFrom: isUuid(cloneFromIdRaw) ? cloneFromIdRaw : null,
-      },
-    })
-    return row.id
-  })
+      if (conflict) throw new Error('Another report already uses that name.')
 
-  revalidatePath('/reports')
-  revalidatePath('/reports/definitions')
-  redirect(`/reports/definitions/${newId}` as never)
-}
+      if (creating) {
+        await tx.insert(reportDefinitions).values({
+          id: definitionId,
+          tenantId: ctx.tenantId!,
+          seedKey: null,
+          slug: definition.slug,
+          name: definition.name.trim(),
+          description: definition.description?.trim() || null,
+          category: entity.category,
+          query: definition.query,
+          layout: definition.layout,
+          state: definition.state,
+          tags: definition.tags ?? [entity.category],
+        })
+      } else {
+        const [updated] = await tx
+          .update(reportDefinitions)
+          .set({
+            slug: definition.slug,
+            name: definition.name.trim(),
+            description: definition.description?.trim() || null,
+            category: entity.category,
+            query: definition.query,
+            layout: definition.layout,
+            state: definition.state,
+            tags: definition.tags ?? [entity.category],
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(reportDefinitions.tenantId, ctx.tenantId!),
+              eq(reportDefinitions.id, definitionId),
+            ),
+          )
+          .returning({ id: reportDefinitions.id })
+        if (!updated) throw new Error('Report not found.')
+      }
 
-export async function updateCustomDefinition(
-  definitionId: string,
-  formData: FormData,
-): Promise<void> {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'reports.builder')
-
-  await ctx.db(async (tx) => {
-    const { name, description, customQuery, layout } = parseStudioForm(
-      formData,
-      await resolveStudioEntityMap(ctx, tx),
-    )
-    const [d] = await tx
-      .select()
-      .from(reportDefinitions)
-      .where(eq(reportDefinitions.id, definitionId))
-      .limit(1)
-      .for('update')
-    if (!d) throw new Error('Definition not found')
-    if (d.kind !== 'custom') throw new Error('Built-in definitions cannot be edited')
-    if (d.tenantId !== ctx.tenantId) {
-      throw new Error('Cannot edit a definition owned by another tenant')
-    }
-    const [updated] = await tx
-      .update(reportDefinitions)
-      .set({
-        name,
-        description,
-        category: entityCategory(customQuery.entity),
-        customQuery,
-        layout,
-        updatedAt: new Date(),
-      })
-      .where(eq(reportDefinitions.id, definitionId))
-      .returning({ id: reportDefinitions.id })
-    if (!updated) throw new Error('Definition not found')
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'report_definition',
-      entityId: definitionId,
-      action: 'update',
-      summary: `Updated custom report definition "${name}"`,
-      before: { name: d.name },
-      after: { name },
-    })
-  })
-
-  revalidatePath('/reports')
-  revalidatePath('/reports/definitions')
-  revalidatePath(`/reports/definitions/${definitionId}`)
-  redirect(`/reports/definitions/${definitionId}` as never)
-}
-
-export type StudioPreviewResult =
-  | { ok: true; bodyHtml: string; css: string; rowCount: number; rangeLabel: string }
-  | { ok: false; error: string }
-
-// Not exported: 'use server' modules may only export async functions.
-const STUDIO_PREVIEW_MAX_ROWS = 50
-
-/** Live studio preview — runs the draft plan (row-capped) and returns the
- *  rendered DOCUMENT (body HTML + @page CSS with live page counters) so the
- *  builder shows the same paginated pages the saved report will print. */
-export async function previewCustomReport(payload: {
-  query: unknown
-  layout?: unknown
-  name?: string
-}): Promise<StudioPreviewResult> {
-  try {
-    const tGeneratedValue = await getGeneratedValueTranslations()
-    const ctx = await requireRequestContext()
-    assertCan(ctx, 'reports.builder')
-    const range = computeRangeFor('custom_query', {})
-    const result = await ctx.db(async (tx) => {
-      const entityMap = await resolveStudioEntityMap(ctx, tx)
-      const customQuery = validateCustomQuery(payload.query, entityMap)
-      return runReport(tx, {
-        queryKind: 'custom_query',
-        filters: {},
-        range,
-        customQuery,
-        maxRows: STUDIO_PREVIEW_MAX_ROWS,
-        entityMap,
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'report_definition',
+        entityId: definitionId,
+        action: creating ? 'create' : 'update',
+        summary: `${creating ? 'Created' : 'Updated'} report "${definition.name}"`,
+        after: {
+          name: definition.name,
+          slug: definition.slug,
+          entity: definition.query.entity,
+          state: definition.state,
+        },
       })
     })
-    const branding = await loadTenantBranding(ctx)
-    const layout = resolveReportLayout(validateReportLayout(payload.layout))
-    const reportName =
-      typeof payload.name === 'string' && payload.name.trim()
-        ? payload.name.trim()
-        : 'Untitled report'
-    const bodyHtml = renderReportDocumentBodyHtml({
-      tenantName: branding.name,
-      tenantLogoUrl: branding.logoUrl,
-      primaryColor: branding.primaryColor,
-      reportName,
-      dateRangeLabel: range.label,
-      generatedAt: new Date(),
-      summary: layout.showSummary ? result.summary : undefined,
-      groups: result.groups,
-      translate: tGeneratedValue,
-    })
-    const css =
-      buildReportPageCss(layout, {
-        marginBoxes: { footerLeft: `${branding.name} — ${reportName}` },
-      }) + buildReportDocumentCss(branding.primaryColor, layout.density)
-    return { ok: true, bodyHtml, css, rowCount: result.rowCount, rangeLabel: range.label }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+
+    revalidatePath('/reports')
+    revalidatePath(`/reports/definitions/${definitionId}`)
+    if (creating) redirect(`/reports/definitions/${definitionId}/edit`)
+    return { ok: true }
+  } catch (cause) {
+    return { ok: false, error: cause instanceof Error ? cause.message : String(cause) }
   }
+}
+
+function validateDefinition(
+  definition: CustomReportDefinition,
+  tenantId: string,
+  catalog: ReportEntityCatalog,
+): void {
+  assertCustomReportDefinition(definition)
+  compileCustomReport(definition.query, tenantId, catalog, { maxRows: 1 })
 }

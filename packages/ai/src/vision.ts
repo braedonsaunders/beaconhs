@@ -78,7 +78,7 @@ export async function describePhoto(
 // --- Safety vision analysis -------------------------------------------------
 //
 // Construction H&S review of one or more jobsite photos: flags missing/incorrect
-// PPE and visible hazards with a severity. Powers the `photo_ai` fill element +
+// PPE and visible hazards with a severity. Powers AI-enabled Builder photo fields +
 // the `analyze_photos` flow action. Uses the smart (vision) tier.
 
 export const visionSeverity = z.enum(['low', 'medium', 'high'])

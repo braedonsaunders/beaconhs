@@ -561,7 +561,7 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 - In a formatted-text field, pasted content is cleaned automatically. **Link** accepts a web address, email address, phone number, app path, or page anchor.
 - In a **Risk matrix** field, tap where likelihood meets severity. The score and risk band appear above the grid. Tap the selected cell again to clear it.
 - Linked record pickers search company data as you type. Large linked tables have their own search box and **Previous** and **Next** page buttons.
-- An AI photo review belongs to the exact photos shown. Changing those photos clears the old review so you can run it again. A marked-up photo keeps one photo at a time and clears its markers when you replace it.
+- Every Builder photo works the same way: tap the pencil button to add a caption or draw on it, and tap the trash button to remove it. Those edits appear in the record PDF. If AI review is available, changing the set of photos clears the old review so you can run it again.
 - For a toolbox talk, add everyone who attended before you submit — that is your attendance record.
 - If a form you need is not in your menu, check that you are using the right role, then ask your supervisor. The form may need to be published, allowed for your role, pinned, or assigned to you.`,
   },

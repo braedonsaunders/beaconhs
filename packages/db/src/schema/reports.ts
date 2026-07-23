@@ -1,20 +1,15 @@
-// Document reports (HTML view + scheduled PDF email). Dashboards are NOT a
-// reports concept — live dashboards/grids live in the Insights module
-// (insight_dashboards in insights.ts).
-//
-//   report_definitions  — report templates.
-//                         `kind='built_in'`  → system-defined, tenantId is null,
-//                                              dispatched via queryKind.
-//                         `kind='custom'`    → tenant-defined, tenantId is set,
-//                                              custom_query jsonb describes the
-//                                              entity / columns / filters /
-//                                              group-by chosen in the builder.
-//   report_schedules    — per-tenant subscription. Owns cadence, recipients,
-//                         filters, and the rolling nextRunAt.
-//   report_runs         — execution log. One row per attempted run, points
-//                         at the generated PDF attachment.
+// AppKit report persistence. Every definition is tenant-scoped and uses the
+// same editable AppKit query/layout contract. `seed_key` records only where a
+// tenant's initial copy came from; it never changes editability or execution.
 
 import { relations, sql } from 'drizzle-orm'
+import type { CustomReportDefinition, ReportCustomQuery, ReportLayout } from '@appkit/reports'
+export type {
+  ReportCustomQuery,
+  ReportFilterOperator,
+  ReportRule,
+  ReportRuleGroup,
+} from '@appkit/reports'
 import {
   boolean,
   check,
@@ -35,148 +30,34 @@ import { attachments } from './attachments'
 import { tenantUsers, tenants } from './core'
 import { roles } from './iam'
 
-// --- Definitions (built-in cross-tenant + tenant-scoped custom) -----------
-
-export const reportDefinitionKind = pgEnum('report_definition_kind', ['built_in', 'custom'])
-
-/** Operators a custom-report filter clause can use. */
-export const REPORT_FILTER_OPERATORS = [
-  'eq',
-  'neq',
-  'in',
-  'not_in',
-  'gte',
-  'lte',
-  'is_null',
-  'is_not_null',
-  // Boolean column tests (no value) — booleans surface as enum-kind columns.
-  'is_true',
-  'is_false',
-  'contains',
-  'between_days_ago',
-  // Forward window: col on/before now + N days (includes overdue) — drives
-  // "expiring soon / upcoming inspection" reports.
-  'due_within_days',
-  // Relative-date operators (no value) — anchored to the server clock at compile
-  // time, so "this month" / "overdue" cards stay correct without a parameter.
-  'since_today',
-  'this_week',
-  'this_month',
-  'this_year',
-  'before_now',
-] as const
-export type ReportFilterOperator = (typeof REPORT_FILTER_OPERATORS)[number]
-
-/** Leaf clause in the nested filter tree. */
-export type ReportRule = {
-  field: string
-  op: ReportFilterOperator
-  value?: string | number | string[] | number[] | null
-}
-
-/** Nested and/or filter tree produced by the report studio and compiled to SQL
- *  by @beaconhs/reports. */
-export type ReportRuleGroup = {
-  combinator: 'and' | 'or'
-  not?: boolean
-  rules: (ReportRule | ReportRuleGroup)[]
-}
-
-/** Paper sizes a report document can print on. */
-export const REPORT_PAPER_SIZES = ['letter', 'a4', 'legal'] as const
-export type ReportPaperSize = (typeof REPORT_PAPER_SIZES)[number]
-
-/** Document densities: compact shrinks type and cell padding so more rows fit
- *  per page. */
-export const REPORT_DENSITIES = ['standard', 'compact'] as const
-export type ReportDensity = (typeof REPORT_DENSITIES)[number]
-
-/** Per-definition page setup for the printed document — drives the in-app
- *  paginated preview AND the PDF renderer (they share one template). A null
- *  layout means the default: landscape Letter, 15 mm margins, standard
- *  density, summary band shown. */
-export type ReportLayoutConfig = {
-  paperSize: ReportPaperSize
-  orientation: 'portrait' | 'landscape'
-  /** Uniform page margin in millimetres. */
-  marginMm: number
-  /** Print the key-figures summary band under the header. Default true. */
-  showSummary?: boolean
-  /** Type/padding scale for the whole document. Default 'standard'. */
-  density?: ReportDensity
-}
-
-/** Aggregate functions a Summarize-mode measure can use. */
-export const REPORT_AGG_FNS = ['count', 'count_distinct', 'sum', 'avg', 'min', 'max'] as const
-export type ReportAggFn = (typeof REPORT_AGG_FNS)[number]
-
-/** Temporal buckets for a Summarize-mode breakout on a date/timestamp column. */
-export const REPORT_TEMPORAL_BINS = ['day', 'week', 'month', 'quarter', 'year'] as const
-export type ReportTemporalBin = (typeof REPORT_TEMPORAL_BINS)[number]
-
-/** A group-by dimension in Summarize mode. A date/timestamp column can be
- *  bucketed by `bin` (e.g. month) before grouping. */
-export type ReportBreakout = {
-  column: string
-  bin?: ReportTemporalBin
-}
-
-/** An aggregate column in Summarize mode. `column` is omitted only for `count`. */
-export type ReportMeasure = {
-  fn: ReportAggFn
-  column?: string
-  /** Optional display label; defaults to a humanised "<fn> of <column>". */
-  label?: string
-}
-
-export type ReportCustomQuery = {
-  /** Entity key — validated at runtime against the caller's permission-filtered
-   *  discovered catalog. */
-  entity: string
-  /** 'rows' (default) = detail rows; 'summarize' = GROUP BY breakouts + measures. */
-  mode?: 'rows' | 'summarize'
-  columns: string[]
-  /** Summarize mode: group-by dimensions (with optional temporal bucketing). */
-  breakouts?: ReportBreakout[]
-  /** Summarize mode: aggregate columns. */
-  measures?: ReportMeasure[]
-  /** Canonical nested and/or filter tree. */
-  filters?: ReportRuleGroup | null
-  groupBy?: string | null
-  /** Defaults to descending by primary date column. */
-  sort?: { column: string; direction: 'asc' | 'desc' } | null
-  /** Hard cap on rows; renderer adds "showing N of M" footer. */
-  limit?: number | null
-}
+// --- Definitions ---------------------------------------------------------
 
 export const reportDefinitions = pgTable(
   'report_definitions',
   {
     id: id(),
-    /** Null for built-ins, set for tenant-scoped custom definitions. */
-    tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
-    kind: reportDefinitionKind('kind').default('built_in').notNull(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    /** Stable seed identity. Missing seeds are inserted, never overwritten. */
+    seedKey: text('seed_key'),
     slug: text('slug').notNull(),
     name: text('name').notNull(),
     description: text('description'),
-    category: text('category'), // 'incidents' | 'training' | 'corrective_actions' | 'inspections' | 'documents' | 'equipment' | 'ppe' | 'lone_worker' | 'toolbox' | 'cross_module'
-    // queryKind dispatches to a query helper in the worker. For 'custom' the
-    // value is always 'custom_query' and the actual plan lives in customQuery.
-    queryKind: text('query_kind').notNull(),
-    /** Populated when kind='custom'. JSON-encoded ReportCustomQuery. */
-    customQuery: jsonb('custom_query').$type<ReportCustomQuery | null>(),
-    /** Page setup for the printed document; null = landscape Letter default. */
-    layout: jsonb('layout').$type<ReportLayoutConfig | null>(),
+    category: text('category').notNull(),
+    query: jsonb('query').$type<ReportCustomQuery>().notNull(),
+    layout: jsonb('layout').$type<ReportLayout>().notNull(),
+    state: text('state').$type<CustomReportDefinition['state']>().default('published').notNull(),
+    tags: jsonb('tags').$type<string[]>().default([]).notNull(),
     ...timestamps,
   },
   (t) => ({
-    builtInSlugUx: uniqueIndex('report_definitions_builtin_slug_ux')
-      .on(t.slug)
-      .where(sql`${t.tenantId} is null`),
-    tenantSlugUx: uniqueIndex('report_definitions_tenant_slug_ux')
-      .on(t.tenantId, t.slug)
-      .where(sql`${t.tenantId} is not null`),
-    tenantKindIdx: index('report_definitions_tenant_kind_idx').on(t.tenantId, t.kind),
+    tenantSlugUx: uniqueIndex('report_definitions_tenant_slug_ux').on(t.tenantId, t.slug),
+    tenantSeedUx: uniqueIndex('report_definitions_tenant_seed_ux')
+      .on(t.tenantId, t.seedKey)
+      .where(sql`${t.seedKey} is not null`),
+    tenantStateIdx: index('report_definitions_tenant_state_idx').on(t.tenantId, t.state),
+    tenantIdIdUx: uniqueIndex('report_definitions_tenant_id_id_ux').on(t.tenantId, t.id),
   }),
 )
 
@@ -191,9 +72,7 @@ export const reportSchedules = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    definitionId: uuid('definition_id')
-      .notNull()
-      .references(() => reportDefinitions.id, { onDelete: 'restrict' }),
+    definitionId: uuid('definition_id').notNull(),
     name: text('name').notNull(),
     cadence: reportCadence('cadence').notNull(),
     // Repeat every N cadence periods, anchored to startsOn when present.
@@ -215,7 +94,7 @@ export const reportSchedules = pgTable(
     // freeform email addresses.
     recipientUserIds: jsonb('recipient_user_ids').$type<string[]>().default([]).notNull(),
     recipientEmails: jsonb('recipient_emails').$type<string[]>().default([]).notNull(),
-    // Filter payload — shape depends on the report's queryKind.
+    // Optional schedule-time AppKit filters AND-ed with the saved definition.
     filters: jsonb('filters').$type<Record<string, unknown>>().default({}).notNull(),
     // Optional delivery copy. Null uses the standard generated subject/body.
     emailSubject: text('email_subject'),
@@ -259,6 +138,11 @@ export const reportSchedules = pgTable(
       foreignColumns: [roles.tenantId, roles.id],
       name: 'report_schedules_tenant_run_as_role_fk',
     }).onDelete('restrict'),
+    tenantDefinitionFk: foreignKey({
+      columns: [t.tenantId, t.definitionId],
+      foreignColumns: [reportDefinitions.tenantId, reportDefinitions.id],
+      name: 'report_schedules_tenant_definition_fk',
+    }).onDelete('restrict'),
   }),
 )
 
@@ -278,9 +162,10 @@ export type ReportRunRequestSnapshot = {
     id: string
     slug: string
     name: string
-    queryKind: string
-    customQuery: ReportCustomQuery | null
-    layout: ReportLayoutConfig | null
+    query: ReportCustomQuery
+    layout: ReportLayout
+    state: CustomReportDefinition['state']
+    tags: string[]
   }
   filters: Record<string, unknown>
   recipientUserIds: string[]

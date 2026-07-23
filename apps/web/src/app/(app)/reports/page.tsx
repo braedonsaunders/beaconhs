@@ -1,29 +1,29 @@
+import Link from 'next/link'
+import { ArrowRight, Plus } from 'lucide-react'
+import {
+  Badge,
+  Button,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@beaconhs/ui'
+import { can } from '@beaconhs/tenant'
+import { FilterChips } from '@/components/filter-bar'
+import { ListPageLayout } from '@/components/page-layout'
+import { Pagination } from '@/components/pagination'
+import { SearchInput } from '@/components/search-input'
 import { GeneratedText } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
-// Reports hub — a fit-to-viewport master-detail split. LEFT: the searchable,
-// filterable catalogue of every report (built-in + custom, grouped by
-// category). RIGHT: a live paginated print preview of the selected report
-// (?selected=), or the module overview (stats / schedules / deliveries) when
-// nothing is selected. The old Library tab merged into this page.
-
-import Link from 'next/link'
-import { Suspense } from 'react'
-import { Button, PageHeader, Skeleton, cn } from '@beaconhs/ui'
-import { Plus, Sparkles } from 'lucide-react'
 import { requireRequestContext } from '@/lib/auth'
-import { FadeInHeader } from '@/components/page-layout-motion'
-import { FilterChips } from '@/components/filter-bar'
-import { SearchInput } from '@/components/search-input'
-import { loadVisibleDefinitions, type ReportDefinitionRow } from './_definitions'
+import { loadVisibleDefinitions } from './_definitions'
 import { ReportsSubNav } from './_nav'
-import { DefinitionList } from './_hub/definition-list'
-import { PreviewPane } from './_hub/preview-pane'
 
-export async function generateMetadata() {
-  const tGenerated = await getGeneratedTranslations()
-  return { title: tGenerated('m_09bb00824b733b') }
-}
 export const dynamic = 'force-dynamic'
+const PER_PAGE = 25
 
 export default async function ReportsPage({
   searchParams,
@@ -32,63 +32,39 @@ export default async function ReportsPage({
 }) {
   const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
-  const sp = await searchParams
-  const kind = typeof sp.kind === 'string' ? sp.kind : undefined
-  const category = typeof sp.category === 'string' ? sp.category : undefined
-  const q = typeof sp.q === 'string' ? sp.q.trim() : ''
-  const selected = typeof sp.selected === 'string' ? sp.selected : null
-
-  const all = await loadVisibleDefinitions(ctx.tenantId!)
-  const selectedDef = selected ? (all.find((d) => d.id === selected) ?? null) : null
-
-  const categories = [...new Set(all.map((d) => d.category).filter(Boolean))] as string[]
-  categories.sort()
-
-  const needle = q.toLowerCase()
-  const filtered = all.filter((d) => {
-    if (kind && d.kind !== kind) return false
-    if (category && d.category !== category) return false
-    if (needle && !`${d.name} ${d.description ?? ''}`.toLowerCase().includes(needle)) return false
-    return true
-  })
-
-  const byCategory = new Map<string, ReportDefinitionRow[]>()
-  for (const d of filtered) {
-    const k = d.category ?? 'other'
-    const list = byCategory.get(k) ?? []
-    list.push(d)
-    byCategory.set(k, list)
-  }
-  const sections = [...byCategory.entries()].sort(([a], [b]) => a.localeCompare(b))
-
-  const listParams = { q: q || undefined, kind, category }
-  const counts = {
-    builtIn: all.filter((d) => d.kind === 'built_in').length,
-    custom: all.filter((d) => d.kind === 'custom').length,
-  }
+  const params = await searchParams
+  const query = typeof params.q === 'string' ? params.q.trim().toLowerCase() : ''
+  const category = typeof params.category === 'string' ? params.category : ''
+  const page = Math.max(1, Number(typeof params.page === 'string' ? params.page : 1) || 1)
+  const definitions = await loadVisibleDefinitions(ctx.tenantId!)
+  const categories = [...new Set(definitions.map((definition) => definition.category))].sort()
+  const filtered = definitions.filter(
+    (definition) =>
+      (!category || definition.category === category) &&
+      (!query ||
+        `${definition.name} ${definition.description ?? ''} ${definition.category}`
+          .toLowerCase()
+          .includes(query)),
+  )
+  const rows = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
+  const canBuild = ctx.isSuperAdmin || can(ctx, 'reports.builder')
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
-        <FadeInHeader className="mx-auto max-w-screen-2xl space-y-2 sm:space-y-2.5">
+    <ListPageLayout
+      header={
+        <>
           <PageHeader
             title={tGenerated('m_09bb00824b733b')}
-            description={tGenerated('m_12fd5f7b139d2f')}
+            description={tGenerated('m_0f7946011d7d13')}
             actions={
-              <div className="flex gap-2">
-                <Link href={'/reports/definitions/new' as never}>
-                  <Button variant="outline">
-                    <Sparkles size={14} className="mr-1.5" />
+              canBuild ? (
+                <Button asChild>
+                  <Link href="/reports/definitions/new">
+                    <Plus size={15} />
                     <GeneratedText id="m_084b76c7fa79df" />
-                  </Button>
-                </Link>
-                <Link href="/reports/schedules/new">
-                  <Button>
-                    <Plus size={14} className="mr-1.5" />
-                    <GeneratedText id="m_0f2dd0043302a1" />
-                  </Button>
-                </Link>
-              </div>
+                  </Link>
+                </Button>
+              ) : null
             }
           />
           <div className="flex flex-wrap items-center gap-2">
@@ -97,68 +73,87 @@ export default async function ReportsPage({
               <SearchInput placeholder={tGenerated('m_0224c155374ff8')} />
               <FilterChips
                 basePath="/reports"
-                currentParams={sp}
-                paramKey="kind"
-                label={tGenerated('m_1e578efe1574cd')}
-                options={[
-                  { value: 'built_in', label: 'Built-in' },
-                  { value: 'custom', label: 'Custom' },
-                ]}
-              />
-              <FilterChips
-                basePath="/reports"
-                currentParams={sp}
+                currentParams={params}
                 paramKey="category"
                 label={tGenerated('m_108b41637f364f')}
-                options={categories.map((c) => ({ value: c, label: c.replace(/_/g, ' ') }))}
+                options={categories.map((value) => ({
+                  value,
+                  label: value.replaceAll('_', ' '),
+                }))}
               />
             </div>
           </div>
-        </FadeInHeader>
+        </>
+      }
+    >
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>
+                <GeneratedText id="m_0ab5a972fc80fd" />
+              </TableHead>
+              <TableHead>
+                <GeneratedText id="m_1d05fa7a091a9b" />
+              </TableHead>
+              <TableHead>
+                <GeneratedText id="m_108b41637f364f" />
+              </TableHead>
+              <TableHead>
+                <GeneratedText id="m_014ca61c68ab13" />
+              </TableHead>
+              <TableHead className="w-24" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length ? (
+              rows.map((definition) => (
+                <TableRow key={definition.id}>
+                  <TableCell>
+                    <Link
+                      href={`/reports/definitions/${definition.id}`}
+                      className="font-medium text-teal-700 hover:underline dark:text-teal-400"
+                    >
+                      {definition.name}
+                    </Link>
+                    {definition.description ? (
+                      <p className="mt-1 max-w-3xl text-xs text-slate-500">
+                        {definition.description}
+                      </p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>{definition.query.entity.replaceAll('_', ' ')}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{definition.category.replaceAll('_', ' ')}</Badge>
+                  </TableCell>
+                  <TableCell>{definition.updatedAt.toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={`/reports/definitions/${definition.id}`}>
+                        <GeneratedText id="m_107ab58c3c38bc" />
+                        <ArrowRight size={14} />
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={5} className="h-32 text-center text-slate-500">
+                  <GeneratedText id="m_1841d2703b10cc" />
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+        <Pagination
+          basePath="/reports"
+          currentParams={params}
+          total={filtered.length}
+          page={page}
+          perPage={PER_PAGE}
+        />
       </div>
-
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside
-          className={cn(
-            'app-scroll min-h-0 w-full overflow-y-auto border-slate-200 bg-white md:block md:w-1/3 md:max-w-md md:min-w-[300px] md:shrink-0 md:border-r dark:border-slate-800 dark:bg-slate-900',
-            selectedDef ? 'hidden' : 'block',
-          )}
-        >
-          <DefinitionList
-            sections={sections}
-            selectedId={selectedDef?.id ?? null}
-            listParams={listParams}
-            totalAll={all.length}
-          />
-        </aside>
-        <section
-          className={cn(
-            'min-h-0 min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950',
-            selectedDef ? 'flex' : 'hidden md:flex',
-          )}
-        >
-          <Suspense key={selectedDef?.id ?? 'overview'} fallback={<PreviewSkeleton />}>
-            <PreviewPane
-              ctx={ctx}
-              definition={selectedDef}
-              listParams={listParams}
-              counts={counts}
-            />
-          </Suspense>
-        </section>
-      </div>
-    </div>
-  )
-}
-
-function PreviewSkeleton() {
-  return (
-    <div className="space-y-4 p-3 sm:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <Skeleton className="h-5 w-64" />
-        <Skeleton className="h-8 w-48" />
-      </div>
-      <Skeleton className="mx-auto h-[70vh] w-full max-w-3xl" />
-    </div>
+    </ListPageLayout>
   )
 }

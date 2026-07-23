@@ -120,7 +120,6 @@ import {
   LayoutGrid,
   ListOrdered,
   Map as MapIcon,
-  MapPinned,
   MousePointerClick,
   PanelLeft,
   PenTool,
@@ -165,9 +164,6 @@ const FIELD_ICONS: Partial<Record<FieldType, React.ComponentType<{ size?: number
   site_picker: MapPin,
   area_picker: MapIcon,
   photo: ImageIcon,
-  photo_upload: ImageIcon,
-  photo_ai: Sparkles,
-  photo_annotated: MapPinned,
   file: Upload,
   video: Video,
   audio: Mic,
@@ -231,7 +227,7 @@ const PALETTE_MORE: PaletteGroup[] = [
       'area_picker',
     ],
   },
-  { label: 'Media', types: ['photo_ai', 'photo_annotated', 'sketch', 'video', 'audio'] },
+  { label: 'Media', types: ['sketch', 'video', 'audio'] },
   { label: 'Computed', types: ['risk_matrix', 'typed_attestation'] },
   { label: 'Data', types: ['lookup', 'data_table', 'metric'] },
   { label: 'Display', types: ['heading', 'paragraph', 'rich_text', 'divider'] },
@@ -247,6 +243,7 @@ function emptyField(type: FieldType): FormField {
     type,
     label: { en: FIELD_TYPES[type].label },
     required: false,
+    config: type === 'photo' ? { multiple: true } : undefined,
   }
 }
 
@@ -2069,6 +2066,11 @@ function FieldBasicTab({
       />
       <GeneratedValue
         value={
+          field.type === 'photo' ? <PhotoConfigEditor field={field} onChange={onChange} /> : null
+        }
+      />
+      <GeneratedValue
+        value={
           field.type === 'lookup' || field.type === 'data_table' || field.type === 'metric' ? (
             <DataBindingEditor
               field={field}
@@ -2079,6 +2081,74 @@ function FieldBasicTab({
           ) : null
         }
       />
+    </div>
+  )
+}
+
+function PhotoConfigEditor({
+  field,
+  onChange,
+}: {
+  field: FormField
+  onChange: (patch: Partial<FormField>) => void
+}) {
+  const config = (field.config ?? {}) as {
+    multiple?: boolean
+    maxFiles?: number
+    aiAnalysis?: boolean
+  }
+  const multiple = config.multiple !== false
+  const set = (patch: Partial<typeof config>) => onChange({ config: { ...field.config, ...patch } })
+
+  return (
+    <div className="space-y-2 rounded-md border border-slate-200 p-2 dark:border-slate-800">
+      <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+        <GeneratedText id="m_0b648a9b0a5a77" />
+      </div>
+      <label className="flex items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={multiple}
+          onChange={(event) =>
+            set({
+              multiple: event.target.checked,
+              maxFiles: event.target.checked
+                ? config.maxFiles && config.maxFiles > 1
+                  ? config.maxFiles
+                  : 10
+                : 1,
+            })
+          }
+        />
+        <GeneratedText id="m_1d2af5c83914b6" />
+      </label>
+      <label className="flex items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={config.aiAnalysis === true}
+          onChange={(event) => set({ aiAnalysis: event.target.checked })}
+        />
+        <GeneratedText id="m_01a08eeac5c42c" />
+      </label>
+      {multiple ? (
+        <div className="space-y-1">
+          <Label className="text-xs">
+            <GeneratedText id="m_10d0f58130e0c4" />
+          </Label>
+          <Input
+            type="number"
+            min={1}
+            max={50}
+            value={config.maxFiles ?? 10}
+            onChange={(event) =>
+              set({ maxFiles: Math.max(1, Math.min(50, Number(event.target.value) || 1)) })
+            }
+          />
+        </div>
+      ) : null}
+      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+        <GeneratedText id="m_1fc2a2e38d88c7" />
+      </p>
     </div>
   )
 }
@@ -3817,7 +3887,6 @@ function PreviewField({ type }: { type: FieldType }) {
     case 'signature':
       return <div className="h-16 rounded border border-dashed border-slate-300 bg-slate-50" />
     case 'photo':
-    case 'photo_upload':
     case 'file':
     case 'video':
     case 'audio':

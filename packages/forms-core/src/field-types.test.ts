@@ -12,9 +12,10 @@ describe('field type metadata', () => {
   })
 
   it('describes actual attachment storage shapes', () => {
-    for (const type of ['photo', 'photo_upload', 'file', 'video', 'audio'] as const) {
+    for (const type of ['file', 'video', 'audio'] as const) {
       expect(FIELD_TYPES[type].valueKind).toBe('attachment_array')
     }
+    expect(FIELD_TYPES.photo.valueKind).toBe('compound')
     expect(FIELD_TYPES.signature.valueKind).toBe('compound')
   })
 

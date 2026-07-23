@@ -16,7 +16,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { Truck } from 'lucide-react'
-import { extractRows } from '@beaconhs/reports'
+import { extractRows } from '@beaconhs/db'
 import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'

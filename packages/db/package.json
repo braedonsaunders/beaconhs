@@ -12,7 +12,8 @@
     "./rls": "./src/rls.ts",
     "./canonical-templates": "./src/canonical-templates.ts",
     "./seed/lift-plan-template": "./src/seed/lift-plan-template.ts",
-    "./seed/pdf-templates": "./src/seed/pdf-templates.ts"
+    "./seed/pdf-templates": "./src/seed/pdf-templates.ts",
+    "./seed/report-definitions": "./src/seed/report-definitions.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
@@ -26,6 +27,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@appkit/reports": "file:../../vendor/appkit/appkit-reports-0.2.0-1e69bf8.tgz",
     "@beaconhs/forms-core": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9",

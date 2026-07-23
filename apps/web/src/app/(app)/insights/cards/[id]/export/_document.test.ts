@@ -28,8 +28,11 @@ describe('card export documents', () => {
     }
 
     expect(cardResultDocument(result).groups[0]).toMatchObject({
-      columns: ['Name', 'Active'],
-      rows: [['Alex', 'Yes']],
+      columns: [
+        { key: 'name', label: 'Name' },
+        { key: 'active', label: 'Active' },
+      ],
+      rows: [{ name: 'Alex', active: 'Yes' }],
     })
   })
 
@@ -79,8 +82,11 @@ describe('card export documents', () => {
 
     const document = cardResultDocument(result)
     expect(document.groups).toHaveLength(2)
-    expect(document.groups[0]?.rows[0]?.[1]).toBe('')
-    expect(document.groups[1]?.columns).toEqual(['Person', 'Course 9'])
+    expect(document.groups[0]?.rows[0]?.value_0).toBe('')
+    expect(document.groups[1]?.columns).toEqual([
+      expect.objectContaining({ label: 'Person' }),
+      expect.objectContaining({ label: 'Course 9' }),
+    ])
   })
 
   it('renders AI analysis and creates a safe filename', () => {
@@ -91,7 +97,9 @@ describe('card export documents', () => {
       },
       12,
     )
-    expect(document.groups[1]?.rows).toEqual([['positive', 'Good trend', 'Fewer incidents.']])
+    expect(document.groups[1]?.rows).toEqual([
+      { tone: 'positive', point: 'Good trend', detail: 'Fewer incidents.' },
+    ])
     expect(cardExportFilename('Training — Matrix!')).toBe('training-matrix')
   })
 })

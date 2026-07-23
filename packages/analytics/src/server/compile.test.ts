@@ -1,11 +1,24 @@
 import { PgDialect } from 'drizzle-orm/pg-core'
-import { expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { BhqlExpr, BhqlQuery } from '@beaconhs/db/schema'
 import { parseBhqlQuery } from '../ast-schema'
 import { compileBhql } from './compile'
 import { discoverEntityMap } from './discover'
 
 const entityMap = discoverEntityMap()
+
+describe('analytics entity discovery', () => {
+  it('keeps first-class tables ahead of same-key report projections', () => {
+    expect(entityMap.corrective_actions?.table).toBe('corrective_actions')
+    expect(
+      entityMap.corrective_actions?.columns.some((column) => column.key === 'created_at'),
+    ).toBe(true)
+    expect(entityMap.compliance_status?.table).toBe('compliance_status')
+    expect(
+      entityMap.compliance_status?.relations?.some((relation) => relation.via === 'obligation_id'),
+    ).toBe(true)
+  })
+})
 const dialect = new PgDialect()
 const show = (label: string, q: BhqlQuery) => {
   it(label, () => {

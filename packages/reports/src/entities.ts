@@ -5,55 +5,17 @@
 // hand-synced copies (apps/web _builder-meta.ts + apps/worker
 // reports-shared.ts whitelists).
 
-import type { ReportFilterOperator, ReportRuleGroup } from '@beaconhs/db/schema'
+import {
+  reportColumn,
+  reportColumnExpression,
+  type ReportColumnKind,
+  type ReportEntity as AppKitReportEntity,
+  type ReportEntityColumn,
+  type ReportEntityCatalog,
+} from '@appkit/reports'
 
-export type ReportColumnKind = 'text' | 'date' | 'timestamp' | 'enum' | 'uuid' | 'number'
-
-export type ReportEntityColumn = {
-  /** Public key used in stored query plans (snake_case). */
-  key: string
-  label: string
-  kind: ReportColumnKind
-  /** Physical column name. Defaults to `key` when omitted. */
-  sql?: string
-  /**
-   * Raw, already-table-qualified SQL expression used VERBATIM as the column
-   * reference instead of `"table"."col"`. Server-generated only (never from
-   * user input) — used for synthetic columns such as tenant custom fields
-   * read out of a jsonb `metadata` column. When set, takes precedence over
-   * `sql`/`key` everywhere a physical reference is built.
-   */
-  expr?: string
-}
-
-export type ReportEntity = {
-  /** Entity key = the physical table/view name (validated against the registry). */
-  key: string
-  label: string
-  category: string
-  /** A line of helpful text shown under the entity name in the picker. */
-  description: string
-  /** Physical table (or RLS-safe view) name. */
-  table: string
-  /** Columns selectable for output AND filterable. Order is preserved. */
-  columns: ReportEntityColumn[]
-  defaultSort?: { column: string; direction: 'asc' | 'desc' }
-  /**
-   * The physical table carries a `deleted_at` soft-delete column. Executors
-   * (reports + BHQL) implicitly add `deleted_at IS NULL` so soft-deleted rows
-   * never surface — matching the module list pages and the report_* views.
-   * Views bake the filter in themselves and leave this unset.
-   */
-  softDelete?: boolean
-  /**
-   * Implicit predicate ALWAYS AND-ed into every query against this entity.
-   * Used by scoped virtual entities — e.g. a per-Builder-app
-   * `form_responses:<templateId>` source is the real form_responses table
-   * with a baked-in template_id filter (see @beaconhs/analytics/server
-   * scopedFormAppEntity). Server-generated only, never from user input.
-   */
-  baseFilter?: ReportRuleGroup
-}
+export type ReportEntity = AppKitReportEntity & { table: string }
+export type { ReportColumnKind, ReportEntityColumn, ReportEntityCatalog }
 
 export const REPORT_ENTITIES: ReportEntity[] = [
   {
@@ -82,7 +44,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     label: 'Corrective actions',
     category: 'corrective_actions',
     description: 'CAs assigned from inspections, audits, incidents, observations, etc.',
-    table: 'corrective_actions',
+    table: 'report_corrective_actions',
     softDelete: true,
     columns: [
       { key: 'reference', label: 'Reference', kind: 'text' },
@@ -92,7 +54,13 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'due_on', label: 'Due on', kind: 'date' },
       { key: 'assigned_on', label: 'Assigned on', kind: 'date' },
       { key: 'source', label: 'Source', kind: 'enum' },
+      { key: 'owner_tenant_user_id', label: 'Owner (id)', kind: 'uuid' },
+      { key: 'owner_name', label: 'Owner', kind: 'text' },
+      { key: 'department_id', label: 'Department (id)', kind: 'uuid' },
+      { key: 'department_name', label: 'Department', kind: 'text' },
+      { key: 'group_id_list', label: 'Person group', kind: 'text' },
       { key: 'site_org_unit_id', label: 'Site (id)', kind: 'uuid' },
+      { key: 'location_name', label: 'Location', kind: 'text' },
     ],
     defaultSort: { column: 'due_on', direction: 'asc' },
   },
@@ -140,7 +108,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'status', label: 'Status', kind: 'enum' },
       { key: 'person_id', label: 'Person (id)', kind: 'uuid' },
       { key: 'department_id', label: 'Department (id)', kind: 'uuid' },
-      { key: 'group_ids', label: 'Person group ids', kind: 'text' },
+      { key: 'group_id_list', label: 'Person group', kind: 'text' },
       { key: 'skill_type_id', label: 'Skill type (id)', kind: 'uuid' },
       { key: 'authority_id', label: 'Authority (id)', kind: 'uuid' },
     ],
@@ -222,7 +190,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'ownership', label: 'Ownership', kind: 'enum' },
       { key: 'last_inspection_on', label: 'Last inspection', kind: 'date' },
       { key: 'next_inspection_due', label: 'Next inspection due', kind: 'date' },
-      { key: 'requires_oil_change', label: 'Requires oil change', kind: 'enum' },
+      { key: 'requires_oil_change', label: 'Requires oil change', kind: 'boolean' },
       { key: 'last_oil_change_on', label: 'Last oil change', kind: 'date' },
       { key: 'next_oil_change_due', label: 'Next oil change', kind: 'date' },
       { key: 'oil_change_interval_months', label: 'Oil change interval (mo.)', kind: 'number' },
@@ -304,13 +272,19 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     label: 'PPE items',
     category: 'ppe',
     description: 'Individual PPE assets.',
-    table: 'ppe_items',
+    table: 'report_ppe_items',
     softDelete: true,
     columns: [
+      { key: 'type_id', label: 'PPE type (id)', kind: 'uuid' },
+      { key: 'ppe_type', label: 'PPE type', kind: 'text' },
       { key: 'serial_number', label: 'Serial', kind: 'text' },
       { key: 'size', label: 'Size', kind: 'text' },
       { key: 'status', label: 'Status', kind: 'enum' },
       { key: 'current_holder_person_id', label: 'Current holder (id)', kind: 'uuid' },
+      { key: 'holder_name', label: 'Current holder', kind: 'text' },
+      { key: 'department_id', label: 'Department (id)', kind: 'uuid' },
+      { key: 'department_name', label: 'Department', kind: 'text' },
+      { key: 'group_id_list', label: 'Person group', kind: 'text' },
       { key: 'last_inspection_on', label: 'Last pre-use inspection', kind: 'date' },
       { key: 'next_inspection_due', label: 'Next pre-use inspection', kind: 'date' },
       { key: 'next_annual_inspection_due', label: 'Next annual inspection', kind: 'date' },
@@ -328,10 +302,12 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     // Join-baked view (packages/db/src/views.ts) — RLS flows through base tables.
     table: 'report_training_matrix',
     columns: [
+      { key: 'person_id', label: 'Person (id)', kind: 'uuid' },
       { key: 'employee_no', label: 'Employee #', kind: 'text' },
       { key: 'last_name', label: 'Last name', kind: 'text' },
       { key: 'first_name', label: 'First name', kind: 'text' },
       { key: 'person_name', label: 'Person', kind: 'text' },
+      { key: 'course_id', label: 'Course (id)', kind: 'uuid' },
       { key: 'course_code', label: 'Course code', kind: 'text' },
       { key: 'course_name', label: 'Course', kind: 'text' },
       { key: 'course_type', label: 'Course type', kind: 'text' },
@@ -341,8 +317,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'department_id', label: 'Department (id)', kind: 'uuid' },
       { key: 'department_name', label: 'Department', kind: 'text' },
       { key: 'delivery_type', label: 'Course delivery type', kind: 'enum' },
-      { key: 'group_ids', label: 'Person group ids', kind: 'text' },
-      { key: 'is_required', label: 'Required', kind: 'enum' },
+      { key: 'group_id_list', label: 'Person group', kind: 'text' },
+      { key: 'is_required', label: 'Required', kind: 'boolean' },
     ],
     defaultSort: { column: 'person_name', direction: 'asc' },
   },
@@ -361,14 +337,125 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'month', direction: 'asc' },
   },
+  {
+    key: 'compliance_status',
+    label: 'Compliance status',
+    category: 'compliance',
+    description:
+      'Materialized compliance results with the obligation, source module, and person names resolved.',
+    table: 'report_compliance_status',
+    from: `(
+      SELECT
+        status.id,
+        status.tenant_id,
+        obligation.source_module,
+        obligation.title AS obligation_title,
+        status.subject_key,
+        CASE
+          WHEN person.id IS NULL THEN NULL
+          ELSE person.last_name || ', ' || person.first_name
+        END AS person_name,
+        status.status,
+        status.period_start,
+        status.period_end,
+        status.due_on,
+        status.completed_on,
+        status.count,
+        status.expected,
+        status.percent,
+        status.computed_at
+      FROM compliance_status status
+      JOIN compliance_obligations obligation
+        ON obligation.tenant_id = status.tenant_id
+       AND obligation.id = status.obligation_id
+       AND obligation.deleted_at IS NULL
+      LEFT JOIN people person
+        ON person.tenant_id = status.tenant_id
+       AND person.id = status.person_id
+       AND person.deleted_at IS NULL
+    ) AS "report_compliance_status"`,
+    columns: [
+      { key: 'source_module', label: 'Module', kind: 'enum' },
+      { key: 'obligation_title', label: 'Requirement', kind: 'text' },
+      { key: 'subject_key', label: 'Subject', kind: 'text' },
+      { key: 'person_name', label: 'Employee', kind: 'text' },
+      { key: 'status', label: 'Status', kind: 'enum' },
+      { key: 'period_start', label: 'Period start', kind: 'date' },
+      { key: 'period_end', label: 'Period end', kind: 'date' },
+      { key: 'due_on', label: 'Due on', kind: 'date' },
+      { key: 'completed_on', label: 'Completed on', kind: 'date' },
+      { key: 'count', label: 'Completed', kind: 'number' },
+      { key: 'expected', label: 'Expected', kind: 'number' },
+      { key: 'percent', label: 'Compliance %', kind: 'number' },
+      { key: 'computed_at', label: 'Computed at', kind: 'timestamp' },
+    ],
+    defaultSort: { column: 'due_on', direction: 'asc' },
+  },
+  {
+    key: 'monitored_sessions',
+    label: 'Monitored sessions',
+    category: 'lone_worker',
+    description: 'Live monitored form sessions such as Lone Worker check-ins.',
+    table: 'report_monitored_sessions',
+    from: `(
+      SELECT
+        id,
+        tenant_id,
+        subject_person_id,
+        site_org_unit_id,
+        monitor_status,
+        checkin_interval_minutes,
+        grace_period_minutes,
+        expected_end_at,
+        next_checkin_due_at,
+        last_checkin_at,
+        escalated_at,
+        created_at,
+        closed_at
+      FROM form_responses
+      WHERE monitor_status IS NOT NULL
+        AND deleted_at IS NULL
+    ) AS "report_monitored_sessions"`,
+    columns: [
+      { key: 'subject_person_id', label: 'Employee (id)', kind: 'uuid' },
+      { key: 'site_org_unit_id', label: 'Location (id)', kind: 'uuid' },
+      { key: 'monitor_status', label: 'Status', kind: 'enum' },
+      { key: 'checkin_interval_minutes', label: 'Check-in interval', kind: 'number' },
+      { key: 'grace_period_minutes', label: 'Grace period', kind: 'number' },
+      { key: 'expected_end_at', label: 'Expected end', kind: 'timestamp' },
+      { key: 'next_checkin_due_at', label: 'Next check-in', kind: 'timestamp' },
+      { key: 'last_checkin_at', label: 'Last check-in', kind: 'timestamp' },
+      { key: 'escalated_at', label: 'Escalated at', kind: 'timestamp' },
+      { key: 'created_at', label: 'Started at', kind: 'timestamp' },
+      { key: 'closed_at', label: 'Closed at', kind: 'timestamp' },
+    ],
+    defaultSort: { column: 'created_at', direction: 'desc' },
+  },
+  {
+    key: 'hazid_signatures',
+    label: 'Hazard assessment signatures',
+    category: 'hazid',
+    description: 'Recorded internal and external signatures on hazard assessments.',
+    table: 'hazid_assessment_signatures',
+    columns: [
+      { key: 'assessment_id', label: 'Assessment (id)', kind: 'uuid' },
+      { key: 'signature_type', label: 'Signature type', kind: 'enum' },
+      { key: 'person_id', label: 'Employee (id)', kind: 'uuid' },
+      { key: 'external_name', label: 'External signer', kind: 'text' },
+      { key: 'signed_at', label: 'Signed at', kind: 'timestamp' },
+    ],
+    defaultSort: { column: 'signed_at', direction: 'desc' },
+  },
 ]
+
+export const BEACON_REPORT_CATALOG: ReportEntityCatalog = { entities: REPORT_ENTITIES }
 
 export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.fromEntries(
   REPORT_ENTITIES.map((e) => [e.key, e]),
 )
 
 export function entityColumn(entity: ReportEntity, key: string): ReportEntityColumn | null {
-  return entity.columns.find((c) => c.key === key) ?? null
+  return reportColumn(entity, key)
 }
 
 /** Physical (quoted-safe) column identifier for a whitelisted column key. */
@@ -386,89 +473,5 @@ export function entityColumnSql(entity: ReportEntity, key: string): string | nul
  * server code, and physical identifiers still come from the whitelist.
  */
 export function columnRef(entity: ReportEntity, key: string): string | null {
-  const col = entityColumn(entity, key)
-  if (!col) return null
-  if (col.expr) return col.expr
-  return `"${entity.table}"."${col.sql ?? col.key}"`
-}
-
-// --- Operators --------------------------------------------------------------
-
-export type ReportOperatorMeta = {
-  key: ReportFilterOperator
-  label: string
-  /** Whether this op needs a value field next to it. */
-  needsValue: 'none' | 'one' | 'list'
-  /** Restrict to specific column kinds (undefined = applies to all). */
-  applicableKinds?: ReportColumnKind[]
-}
-
-export const REPORT_OPERATORS: ReportOperatorMeta[] = [
-  { key: 'eq', label: 'equals', needsValue: 'one' },
-  { key: 'neq', label: 'not equals', needsValue: 'one' },
-  { key: 'in', label: 'is any of', needsValue: 'list' },
-  { key: 'not_in', label: 'is none of', needsValue: 'list' },
-  {
-    key: 'gte',
-    label: 'on or after / ≥',
-    needsValue: 'one',
-    applicableKinds: ['date', 'timestamp', 'number'],
-  },
-  {
-    key: 'lte',
-    label: 'on or before / ≤',
-    needsValue: 'one',
-    applicableKinds: ['date', 'timestamp', 'number'],
-  },
-  { key: 'is_null', label: 'is empty', needsValue: 'none' },
-  { key: 'is_not_null', label: 'is set', needsValue: 'none' },
-  { key: 'is_true', label: 'is yes', needsValue: 'none', applicableKinds: ['enum'] },
-  { key: 'is_false', label: 'is no', needsValue: 'none', applicableKinds: ['enum'] },
-  { key: 'contains', label: 'contains', needsValue: 'one', applicableKinds: ['text'] },
-  {
-    key: 'between_days_ago',
-    label: 'within last N days',
-    needsValue: 'one',
-    applicableKinds: ['date', 'timestamp'],
-  },
-  {
-    key: 'due_within_days',
-    label: 'due within next N days',
-    needsValue: 'one',
-    applicableKinds: ['date', 'timestamp'],
-  },
-  {
-    key: 'since_today',
-    label: 'is today',
-    needsValue: 'none',
-    applicableKinds: ['date', 'timestamp'],
-  },
-  {
-    key: 'this_week',
-    label: 'is this week',
-    needsValue: 'none',
-    applicableKinds: ['date', 'timestamp'],
-  },
-  {
-    key: 'this_month',
-    label: 'is this month',
-    needsValue: 'none',
-    applicableKinds: ['date', 'timestamp'],
-  },
-  {
-    key: 'this_year',
-    label: 'is this year',
-    needsValue: 'none',
-    applicableKinds: ['date', 'timestamp'],
-  },
-  {
-    key: 'before_now',
-    label: 'is in the past (overdue)',
-    needsValue: 'none',
-    applicableKinds: ['date', 'timestamp'],
-  },
-]
-
-export function operatorsForKind(kind: ReportColumnKind): ReportOperatorMeta[] {
-  return REPORT_OPERATORS.filter((o) => !o.applicableKinds || o.applicableKinds.includes(kind))
+  return reportColumnExpression(entity, key)
 }

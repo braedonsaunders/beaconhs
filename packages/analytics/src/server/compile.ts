@@ -18,7 +18,7 @@ import {
   type ReportEntity,
   type ReportEntityColumn,
 } from '@beaconhs/reports/entities'
-import { compileRuleGroup } from '@beaconhs/reports/filters'
+import { compileRuleGroup } from './filter-sql'
 import type {
   BhqlBreakout,
   BhqlCalcMeasure,

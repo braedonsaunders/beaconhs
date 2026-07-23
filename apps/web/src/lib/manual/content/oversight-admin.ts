@@ -217,37 +217,34 @@ Open [Reports](/reports) from the sidebar. It has two tabs: **Reports** and **Sc
 
 ## Run a report
 
-1. The list on the left shows built-in reports and any custom ones your team made. Custom reports show a small **custom** badge.
-2. Use **Search reports…** or the **Kind** and **Category** filters to narrow the list.
-3. Click a report. The right side shows the printed pages, exactly as the PDF will look.
-4. Click **Open** to see the full document. Use the day-range buttons (like **30 days**) to change how far back the report looks.
-5. On a training certificate, expired, or missing report, open **Report filters**. Choose any employees, people groups, departments, courses, course types, or delivery types. Choose **Group by** → **Course** or **Employee**, then click **Apply**. Leaving a choice empty includes all records.
+1. Use **Search reports…** or **Category** to narrow the list.
+2. Click the report name or **Open**.
+3. Open **Run filters and grouping**.
+4. Add one or more filters. Every filter uses a field from that report's data source.
+5. Under **Group results by**, choose the field that should create the printed sections. For training reports, choose **Person** or **Course**.
+6. Click **Apply and run**. The paper preview and summary now use those exact controls.
+7. Click **Reset to saved report** to return to the report's saved filters and grouping.
 
-The **Training — Expired & Upcoming** report also lets you choose an expiry window from 30 to 365 days. **Training — Certificates** can include or exclude expired certificates. **Training — Missing** only shows courses assigned to each employee through compliance requirements; it does not treat every course in the catalogue as required.
+Training reports expose employee, course, course type, delivery type, department, and person-group fields. This lets the certificate, expired, and missing reports be filtered and grouped without a separate training-only reporting screen. **Training — Missing** only includes courses assigned through active compliance requirements.
 
-The legacy-parity reports have filters that match their subject. Skills reports filter by employee, group, department, skill, and issuing authority. The CWB report also filters by standard. Corrective actions filter by owner, department, group, location, and status. PPE reports filter by holder, department, group, and PPE type. Compliance and Hazard ID reports filter by employee, group, department, status, and date; compliance reports can also filter requirements and source modules.
-
-On a phone, the list fills the screen; picking a report opens its preview, and **All reports** takes you back.
-
-The built-in catalogue includes the former BeaconHS reports for training certificates, missing and expired training, skill matrices, missing and expired skills, CWB qualifications, corrective actions, journals, inspections, operational equipment, vehicle logs, and PPE. Use **Compliance — By Entity** for one or more requirements, **Compliance — By Person** for a worker's requirements across modules, and **Hazard ID — Signatures** for hazard-assessment signature compliance. The old training certificate matrix is now the live **Training — Certificate Matrix** card in Insights, so it is not duplicated in Reports. Equipment charges and ROI are intentionally excluded because equipment financials are outside BeaconHS.
+The seeded catalogue replaces the former Beacon reports for training certificates, missing and expired training, skill matrices, missing and expired skills, CWB qualifications, corrective actions, PPE, compliance by entity, compliance by person, Hazard ID signatures, equipment fleet, equipment inspections, and equipment oil changes. The old training matrix is the live **Training — Certificate Matrix** card in Insights, so it is not duplicated in Reports. Equipment charges and ROI are intentionally excluded.
 
 ## Export a report
 
-1. Select or open the report.
-2. Set any report filters first, then click **CSV**, **Excel**, or **PDF**.
-3. The file downloads. The PDF matches the preview page-for-page; CSV and Excel are best for working with the numbers.
-
-You can also click **Email PDF** on the full report to send it right away instead of downloading it.
+1. Open the report.
+2. Set the filters and grouping, then click **Apply and run**.
+3. Click **CSV**, **Excel**, or **PDF**.
+4. The export uses the same filters and grouping shown in the preview. PDF keeps the paper layout. CSV and Excel are best for working with the rows.
 
 ## Schedule a report by email
 
 Schedules send a report as a PDF email on a repeating schedule, so nobody has to remember to run it.
 
-1. On any report, click **Subscribe**. Or open the **Schedules** tab and click **New schedule**.
+1. Open the **Schedules** tab and click **New schedule**.
 2. Pick the report and give the schedule a name.
 3. Under **Delivery**, set the **Cadence** (**Daily**, **Weekly**, or **Monthly**), **Repeat every**, the day, and the time. Monthly schedules can use a calendar date or a weekday pattern such as the first Monday.
 4. Add an optional **Start date** or **End date** when the delivery must run only for a fixed period.
-5. For any report with **Report filters**, choose the records and grouping the schedule should use. A schedule created from an already-filtered report carries those choices in automatically.
+5. Under **Report filters**, add the same field rules used when running the report.
 6. Under **Recipients**, add team members, or type outside email addresses under **Additional email addresses**.
 7. Under **Email copy**, enter an optional subject or message. Leave them blank to use the standard report email.
 8. Click **Create schedule**.
@@ -256,15 +253,21 @@ The schedule runs with the current access of the member and active role that cre
 
 The **Schedules** tab shows every schedule with its next run and last run. Use **Search schedules and reports…** to find one by schedule or report name, and use the **Status** filter to show active or paused schedules. Use the pause button to stop one without deleting it.
 
-Open a schedule to see **Run history**. Search by date, status, or trigger, or use **Status** to show queued, running, succeeded, or failed runs. Use **Next** and **Prev** to move through older deliveries.
+Open a schedule to see **Run history**. Search by trigger or failure message, or use **Status** to show queued, running, succeeded, or failed runs. Use **Next** and **Previous** to move through older deliveries.
 
-## Build your own report
+## Edit or build a report
 
-Built-in reports always run their tested system definition. Open one to apply its runtime filters, export it, or schedule it. Built-ins are not editable or duplicated into a different query. If no built-in report fits, click **New report** to build a custom one. Custom reports can be edited or duplicated without changing their query between the catalogue preview and the editor.
+Seeded and team-created reports use the same editable report definition. There is no separate built-in execution path.
 
-The builder shows a live print preview while you work. Builder apps you can currently open appear in the **Data source** list by their own names — pick one to report on its submissions. Draft, archived, and role-restricted apps you cannot open stay out of the list and cannot be queried from a saved report. Under **Page setup** you can pick the paper size (**Letter**, **A4**, or **Legal**), switch between **Portrait** and **Landscape**, set the page margin, choose **Compact** to fit more rows per page, and turn the **Summary cards** band on or off — the preview and every export follow it.
+1. Open any report and click **Edit report**, or click **New report**.
+2. Choose the **Data source**.
+3. Select and order the columns.
+4. Set the saved filters, grouping, and sorting.
+5. Under **Page setup**, choose **Letter**, **A4**, or **Legal**, **Portrait** or **Landscape**, the page margin, row density, and whether to show summary cards.
+6. Check the live paper preview.
+7. Save the report.
 
-On the full report, subscriptions, past runs, and report details live on the **Schedules & activity** tab.`,
+The report list, full viewer, exports, and schedules all run this same saved definition. Seed provenance only lets BeaconHS restore a missing default during setup; it does not make the report read-only.`,
   },
   {
     slug: 'insights',
@@ -450,7 +453,7 @@ Use **Risk matrix** when a response needs a scored likelihood-and-severity ratin
 
 Under **Data**, a **Lookup** searches its full data source as the worker types. **Results per search** controls the size of each result set. A **Data table** has its own search and pages; **Rows per page** controls each page. For a grouped **Metric**, **Groups shown** limits only the chart. Counts, sums, averages, minimums, and maximums always use every matching record the worker is allowed to see.
 
-**Photo + AI analysis** stores the review for the exact attached photos. Replacing, adding, removing, or reordering a photo clears the old review. **Photo + markup** uses one photo at a time and clears its numbered markers when that photo changes.
+Use the single **Photo** field for every photo question. Under **Photo options**, choose whether the worker can add several photos, set the maximum, and turn on **Enable AI safety analysis** when you need it. Every photo supports the same pencil button for captions and freehand markup, plus the trash button for removal. Captions and markup appear in generated PDFs and Flow photo fields. An AI review belongs to the exact attached photos, so replacing, adding, removing, or reordering a photo clears the old review.
 
 For a text field that must follow a fixed code format, open its validation settings and use **Fixed-format pattern**. Start the pattern with **^**, end it with **$**, and use exact repeats such as **{2}** or **{4}**. The designer rejects variable repeats and alternate branches so a saved pattern cannot slow down form submission.
 

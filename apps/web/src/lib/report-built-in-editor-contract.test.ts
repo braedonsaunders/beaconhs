@@ -1,35 +1,40 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const hubPreview = readFileSync(
-  new URL('../app/(app)/reports/_hub/preview-pane.tsx', import.meta.url),
+const list = readFileSync(new URL('../app/(app)/reports/page.tsx', import.meta.url), 'utf8')
+const definitions = readFileSync(
+  new URL('../app/(app)/reports/_definitions.ts', import.meta.url),
   'utf8',
 )
 const viewer = readFileSync(
-  new URL('../app/(app)/reports/definitions/[id]/page.tsx', import.meta.url),
+  new URL('../app/(app)/reports/_viewer/viewer.client.tsx', import.meta.url),
   'utf8',
 )
 const editor = readFileSync(
   new URL('../app/(app)/reports/definitions/[id]/edit/page.tsx', import.meta.url),
   'utf8',
 )
-const newReport = readFileSync(
-  new URL('../app/(app)/reports/definitions/new/page.tsx', import.meta.url),
-  'utf8',
-)
 
-describe('built-in report execution contract', () => {
-  it('uses the full viewer row cap in both catalogue and report previews', () => {
-    expect(hubPreview).toContain('runReportForViewer(ctx, definition)')
-    expect(hubPreview).toContain('DOCUMENT_PREVIEW_MAX_ROWS')
-    expect(hubPreview).not.toContain('HUB_PREVIEW_MAX_ROWS')
+describe('unified AppKit report contract', () => {
+  it('has no list-side alternate preview or built-in/custom execution branch', () => {
+    expect(list).toContain('loadVisibleDefinitions')
+    expect(list).not.toContain('preview-pane')
+    expect(list).not.toMatch(/\bkind\b/)
+    expect(definitions).not.toContain('queryKind')
+    expect(definitions).not.toContain('customQuery')
   })
 
-  it('never presents a best-effort custom query as an edit of a built-in report', () => {
-    expect(hubPreview).toContain("canBuild && definition.kind === 'custom'")
-    expect(viewer).toContain('const editHref = isCustom ? `/reports/definitions/${id}/edit` : null')
-    expect(editor).toContain('redirect(`/reports/definitions/${id}` as never)')
-    expect(newReport).toContain("if (requestedClone?.kind === 'built_in')")
-    expect(newReport).not.toContain('builtInSeedQuery')
+  it('makes every authorized definition editable through the AppKit studio', () => {
+    expect(viewer).toContain('href={`/reports/definitions/${definition.id}/edit`}')
+    expect(viewer).not.toContain('definition.kind')
+    expect(editor).toContain('BeaconReportStudio')
+    expect(editor).not.toContain('built_in')
+  })
+
+  it('uses one runtime filter and grouping state for preview and export', () => {
+    expect(viewer).toContain('runReportWithControls')
+    expect(viewer).toContain("params.set('filters', JSON.stringify(activeFilters))")
+    expect(viewer).toContain("params.set('groupBy', groupBy)")
+    expect(viewer).toContain("tGenerated('m_1df37ea02bdc43')")
   })
 })

@@ -9,7 +9,8 @@ import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { reportRuns, reportSchedules } from '@beaconhs/db/schema'
 import { enqueueReportRun } from '@beaconhs/jobs'
-import { claimReportRun, computeNextRunAt } from '@beaconhs/reports'
+import { computeNextRunAt } from '@beaconhs/reports'
+import { claimBeaconReportRun } from '@beaconhs/reports/server'
 import {
   durablePublicationClaimPredicate,
   durablePublicationError,
@@ -86,7 +87,7 @@ export async function scanReportSchedules(now: Date = new Date()): Promise<void>
     const runs: { id: string; tenantId: string; scheduleId: string }[] = []
     for (const schedule of due) {
       const occurrence = schedule.nextRunAt ?? new Date(Math.floor(now.getTime() / 60_000) * 60_000)
-      const run = await claimReportRun(tx, {
+      const run = await claimBeaconReportRun(tx, {
         scheduleId: schedule.id,
         scheduledFor: occurrence,
         trigger: 'scheduled',

@@ -9,6 +9,7 @@ import { addTrustedSystemFormEntity, discoverEntityMap } from './discover'
 
 export { runBhql } from './execute'
 export { compileBhql } from './compile'
+export { compileRuleGroup as compileAnalyticsRuleGroup } from './filter-sql'
 export { addTrustedSystemFormEntity, discoverEntities, discoverEntityMap } from './discover'
 export { discoverEntitiesWithScopedApps, discoverEntityMapWithScopedApps } from './custom-fields'
 

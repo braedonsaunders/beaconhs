@@ -10,8 +10,8 @@
 // trusts a caller-supplied physical column name.
 
 import { z } from 'zod'
+import { REPORT_FILTER_OPERATORS } from '@beaconhs/reports'
 import {
-  REPORT_OPERATORS,
   entityColumn,
   type ReportEntity,
   type ReportEntityColumn,
@@ -30,7 +30,7 @@ const MAX_TREE_DEPTH = 5
 const MAX_TREE_RULES = 60
 const ALIAS_RE = /^[a-z][a-z0-9_]{0,40}$/
 
-const OP_SET = new Set<string>(REPORT_OPERATORS.map((o) => o.key))
+const OP_SET = new Set<string>(REPORT_FILTER_OPERATORS)
 
 // ---- structural schema (shape only; semantics validated below) -------------
 

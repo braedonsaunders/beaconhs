@@ -12,18 +12,39 @@ import 'server-only'
 // module renders the companion VALUES.
 
 import { entityDisplayName, entityKindForPicker, type FormField } from '@beaconhs/forms-core'
+import type { Annotation } from '@beaconhs/db/schema'
+import { photoDocumentUrl } from '../photo-document-url'
 
-type AttachedFileRow = { attachmentId?: string; filename?: string; url?: string }
+type AttachedFileRow = {
+  attachmentId?: string
+  filename?: string
+  url?: string
+  caption?: string
+  annotations?: Annotation[]
+  width?: number
+  height?: number
+}
 
-/** Flatten photo_ai / photo_annotated nested attachments to {url, filename} rows. */
-export function nestedPhotoRows(raw: unknown): { url: string; filename: string }[] {
+/** Flatten photo attachments and render their non-destructive markup for documents. */
+export function nestedPhotoRows(
+  raw: unknown,
+): { url: string; filename: string; caption: string }[] {
   const atts =
     raw && typeof raw === 'object' && Array.isArray((raw as { attachments?: unknown }).attachments)
       ? ((raw as { attachments: unknown[] }).attachments as AttachedFileRow[])
       : []
   return atts
     .filter((a) => a && typeof a === 'object' && typeof a.url === 'string' && a.url.length > 0)
-    .map((a) => ({ url: a.url!, filename: a.filename ?? '' }))
+    .map((a) => ({
+      url: photoDocumentUrl({
+        url: a.url!,
+        annotations: Array.isArray(a.annotations) ? a.annotations : null,
+        width: typeof a.width === 'number' ? a.width : null,
+        height: typeof a.height === 'number' ? a.height : null,
+      }),
+      filename: a.filename ?? '',
+      caption: a.caption ?? '',
+    }))
 }
 
 /** Sketch value → embeddable image URL ('' when unset). */
@@ -121,9 +142,12 @@ export function renderFormFieldText(
       const ids = Array.isArray(raw) ? raw : []
       return ids.length ? `${ids.length} record${ids.length === 1 ? '' : 's'} selected` : ''
     }
-    case 'photo_ai': {
-      const val = raw as {
-        attachments?: unknown[]
+    case 'photo': {
+      const val = (raw && typeof raw === 'object' ? raw : {}) as {
+        attachments?: Array<{
+          caption?: string
+          annotations?: Array<{ type?: string; text?: string }>
+        }>
         analysis?: {
           summary?: string
           overallRisk?: string
@@ -133,25 +157,28 @@ export function renderFormFieldText(
       }
       const n = val.attachments?.length ?? 0
       const a = val.analysis
-      if (!a) return `${n} photo${n === 1 ? '' : 's'}`
       const parts = [
-        `${n} photo${n === 1 ? '' : 's'}${a.overallRisk ? ` · risk ${a.overallRisk}` : ''}`,
+        `${n} photo${n === 1 ? '' : 's'}${a?.overallRisk ? ` · risk ${a.overallRisk}` : ''}`,
       ]
+      const notes = (val.attachments ?? []).flatMap((attachment) => [
+        ...(attachment.caption?.trim() ? [attachment.caption.trim()] : []),
+        ...(attachment.annotations ?? [])
+          .filter(
+            (annotation) =>
+              annotation.type === 'text' &&
+              typeof annotation.text === 'string' &&
+              annotation.text.trim().length > 0,
+          )
+          .map((annotation) => annotation.text!.trim()),
+      ])
+      if (notes.length) parts.push(`Notes: ${notes.join('; ')}`)
+      if (!a) return parts.join('; ')
       if (a.summary) parts.push(a.summary)
       if (a.hazards?.length)
         parts.push(`Hazards: ${a.hazards.map((h) => `${h.type} (${h.severity})`).join(', ')}`)
       const badPpe = (a.ppe ?? []).filter((p) => p.status !== 'present')
       if (badPpe.length) parts.push(`PPE: ${badPpe.map((p) => p.item).join(', ')}`)
       return parts.join('; ')
-    }
-    case 'photo_annotated': {
-      const val = raw as { attachments?: unknown[]; markers?: { label: string }[] }
-      const n = val.attachments?.length ?? 0
-      const markers = Array.isArray(val.markers) ? val.markers : []
-      const head = `${n} photo${n === 1 ? '' : 's'}, ${markers.length} marker${markers.length === 1 ? '' : 's'}`
-      return markers.length
-        ? `${head}: ${markers.map((m, i) => `${i + 1}. ${m.label || '(no note)'}`).join('; ')}`
-        : head
     }
     case 'datetime':
       return fmtDateTimeText(raw)

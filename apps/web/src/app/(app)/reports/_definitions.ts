@@ -1,68 +1,45 @@
-// Shared loader for report definitions visible to a tenant. Returns the union
-// of every built-in definition (tenant_id IS NULL) and any custom definition
-// owned by the active tenant. The report_definitions RLS policy deliberately
-// exposes that exact union while keeping global built-ins read-only.
-
-import { and, asc, eq, isNull, or } from 'drizzle-orm'
+import { and, asc, eq, ne } from 'drizzle-orm'
 import { db, withTenant } from '@beaconhs/db'
-import {
-  reportDefinitions,
-  type ReportCustomQuery,
-  type ReportLayoutConfig,
-} from '@beaconhs/db/schema'
+import { reportDefinitions } from '@beaconhs/db/schema'
+import type { CustomReportDefinition } from '@beaconhs/reports'
 
-export type ReportDefinitionRow = {
-  id: string
-  tenantId: string | null
-  kind: 'built_in' | 'custom'
-  slug: string
-  name: string
-  description: string | null
-  category: string | null
-  queryKind: string
-  customQuery: ReportCustomQuery | null
-  layout: ReportLayoutConfig | null
-  createdAt: Date
-  updatedAt: Date
+export type ReportDefinitionRow = typeof reportDefinitions.$inferSelect
+
+export function toAppKitDefinition(row: ReportDefinitionRow): CustomReportDefinition {
+  return {
+    schemaVersion: 1,
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    description: row.description ?? undefined,
+    query: row.query,
+    layout: row.layout,
+    state: row.state,
+    tags: row.tags,
+    builtIn: row.seedKey != null,
+  }
 }
 
 export async function loadVisibleDefinitions(tenantId: string): Promise<ReportDefinitionRow[]> {
-  return await withTenant(db, tenantId, async (tx) => {
-    const rows = await tx
+  return withTenant(db, tenantId, (tx) =>
+    tx
       .select()
       .from(reportDefinitions)
-      .where(or(isNull(reportDefinitions.tenantId), eq(reportDefinitions.tenantId, tenantId)))
-      .orderBy(asc(reportDefinitions.category), asc(reportDefinitions.name))
-    return rows.map((r) => ({
-      ...r,
-      tenantId: r.tenantId ?? null,
-      customQuery: (r.customQuery as ReportCustomQuery | null) ?? null,
-      layout: (r.layout as ReportLayoutConfig | null) ?? null,
-    }))
-  })
+      .where(and(eq(reportDefinitions.tenantId, tenantId), ne(reportDefinitions.state, 'archived')))
+      .orderBy(asc(reportDefinitions.category), asc(reportDefinitions.name)),
+  )
 }
 
 export async function loadDefinitionById(
   tenantId: string,
   id: string,
 ): Promise<ReportDefinitionRow | null> {
-  return await withTenant(db, tenantId, async (tx) => {
-    const [r] = await tx
+  return withTenant(db, tenantId, async (tx) => {
+    const [row] = await tx
       .select()
       .from(reportDefinitions)
-      .where(
-        and(
-          eq(reportDefinitions.id, id),
-          or(isNull(reportDefinitions.tenantId), eq(reportDefinitions.tenantId, tenantId)),
-        ),
-      )
+      .where(and(eq(reportDefinitions.tenantId, tenantId), eq(reportDefinitions.id, id)))
       .limit(1)
-    if (!r) return null
-    return {
-      ...r,
-      tenantId: r.tenantId ?? null,
-      customQuery: (r.customQuery as ReportCustomQuery | null) ?? null,
-      layout: (r.layout as ReportLayoutConfig | null) ?? null,
-    }
+    return row ?? null
   })
 }

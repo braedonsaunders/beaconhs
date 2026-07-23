@@ -110,6 +110,7 @@ type FormSchemaV1 = {
         options?: Array<{ value: string; label: { en: string } }>
         min?: number; max?: number; minLength?: number; maxLength?: number
       }
+      config?: Record<string, unknown>
       formula?: FormulaExpression  // ONLY for computed fields (type "formula"); see grammar below
     }>
   }>
@@ -141,6 +142,7 @@ Rules:
 - For a value derived from other fields (totals, conversions, scores), add a type "formula" field with a \`formula\` rather than asking the user to compute it.
 - For radio/select/multi_select/checkbox_group fields you MUST include validation.options.
 - Use pass_fail_na for inspection checkpoints, signature for sign-offs, person_picker/site_picker for people/sites, photo for evidence.
+- There is one photo type. For photo fields, config may contain only multiple (boolean), maxFiles (1–50), and aiAnalysis (boolean). Captions and freehand markup are always available.
 - Group fields into sensible sections. Keep i18n labels under the "en" key.
 - workflow.steps MUST contain at least one step (use key "submit", title {en:"Submit"}, assignee {type:"expression",expr:"$submitter"}).
 - Output ONLY the JSON object.`

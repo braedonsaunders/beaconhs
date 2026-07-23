@@ -6,96 +6,86 @@ import {
   reportSchedules,
   type ReportRunRequestSnapshot,
 } from '@beaconhs/db/schema'
+import { claimReportRun, type ReportRunStore, type ReportRunTrigger } from '@appkit/reports'
 
-export type ClaimedReportRun = {
-  id: string
-  scheduledFor: Date
-  created: boolean
-}
+type BeaconRunDefinition = ReportRunRequestSnapshot['definition']
+type BeaconRunFilters = ReportRunRequestSnapshot['filters']
 
-function snapshotRequest(
-  schedule: typeof reportSchedules.$inferSelect,
-  definition: typeof reportDefinitions.$inferSelect,
-): ReportRunRequestSnapshot {
+function beaconReportRunStore(tx: Database): ReportRunStore<BeaconRunDefinition, BeaconRunFilters> {
   return {
-    scheduleName: schedule.name,
-    definition: {
-      id: definition.id,
-      slug: definition.slug,
-      name: definition.name,
-      queryKind: definition.queryKind,
-      customQuery: definition.customQuery ?? null,
-      layout: definition.layout ?? null,
+    async loadContext(scheduleId) {
+      const [row] = await tx
+        .select({ schedule: reportSchedules, definition: reportDefinitions })
+        .from(reportSchedules)
+        .innerJoin(
+          reportDefinitions,
+          and(
+            eq(reportDefinitions.tenantId, reportSchedules.tenantId),
+            eq(reportDefinitions.id, reportSchedules.definitionId),
+          ),
+        )
+        .where(eq(reportSchedules.id, scheduleId))
+        .limit(1)
+      if (!row) return null
+      return {
+        tenantId: row.schedule.tenantId,
+        scheduleId: row.schedule.id,
+        scheduleName: row.schedule.name,
+        definition: {
+          id: row.definition.id,
+          slug: row.definition.slug,
+          name: row.definition.name,
+          query: row.definition.query,
+          layout: row.definition.layout,
+          state: row.definition.state,
+          tags: row.definition.tags,
+        },
+        filters: row.schedule.filters,
+        recipientUserIds: row.schedule.recipientUserIds,
+        recipientEmails: row.schedule.recipientEmails,
+        emailSubject: row.schedule.emailSubject,
+        emailMessage: row.schedule.emailMessage,
+        runAsTenantUserId: row.schedule.runAsTenantUserId,
+        runAsRoleId: row.schedule.runAsRoleId,
+      }
     },
-    filters: { ...schedule.filters },
-    recipientUserIds: [...schedule.recipientUserIds],
-    recipientEmails: [...schedule.recipientEmails],
-    emailSubject: schedule.emailSubject,
-    emailMessage: schedule.emailMessage,
-    runAsTenantUserId: schedule.runAsTenantUserId,
-    runAsRoleId: schedule.runAsRoleId,
+    async insert(input) {
+      const [created] = await tx
+        .insert(reportRuns)
+        .values({
+          tenantId: input.tenantId,
+          scheduleId: input.scheduleId,
+          scheduledFor: input.scheduledFor,
+          trigger: input.trigger,
+          requestSnapshot: input.requestSnapshot as ReportRunRequestSnapshot,
+          status: input.status,
+        })
+        .onConflictDoNothing({
+          target: [reportRuns.scheduleId, reportRuns.scheduledFor],
+        })
+        .returning({ id: reportRuns.id })
+      return created ?? null
+    },
+    async find(scheduleId, scheduledFor) {
+      const [run] = await tx
+        .select({ id: reportRuns.id, trigger: reportRuns.trigger })
+        .from(reportRuns)
+        .where(
+          and(eq(reportRuns.scheduleId, scheduleId), eq(reportRuns.scheduledFor, scheduledFor)),
+        )
+        .limit(1)
+      return run ?? null
+    },
   }
 }
 
-/**
- * Create the durable execution record before a BullMQ job is published.
- *
- * Scheduled occurrences are idempotent at (scheduleId, scheduledFor). Manual
- * requests are always distinct; in the extremely small same-millisecond case,
- * the timestamp is advanced until it identifies a new occurrence.
- */
-export async function claimReportRun(
+export function claimBeaconReportRun(
   tx: Database,
   input: {
     scheduleId: string
     scheduledFor: Date
-    trigger: 'scheduled' | 'manual'
+    trigger: ReportRunTrigger
   },
-): Promise<ClaimedReportRun> {
-  const [context] = await tx
-    .select({ schedule: reportSchedules, definition: reportDefinitions })
-    .from(reportSchedules)
-    .innerJoin(reportDefinitions, eq(reportDefinitions.id, reportSchedules.definitionId))
-    .where(eq(reportSchedules.id, input.scheduleId))
-    .limit(1)
-  if (!context) throw new Error(`Report schedule ${input.scheduleId} was not found`)
-
-  const requestSnapshot = snapshotRequest(context.schedule, context.definition)
-  let scheduledFor = input.scheduledFor
-
-  for (;;) {
-    const [inserted] = await tx
-      .insert(reportRuns)
-      .values({
-        tenantId: context.schedule.tenantId,
-        scheduleId: context.schedule.id,
-        scheduledFor,
-        trigger: input.trigger,
-        requestSnapshot,
-        status: 'queued',
-      })
-      .onConflictDoNothing({
-        target: [reportRuns.scheduleId, reportRuns.scheduledFor],
-      })
-      .returning({ id: reportRuns.id })
-    if (inserted) return { id: inserted.id, scheduledFor, created: true }
-
-    const [existing] = await tx
-      .select({ id: reportRuns.id, trigger: reportRuns.trigger })
-      .from(reportRuns)
-      .where(
-        and(
-          eq(reportRuns.scheduleId, context.schedule.id),
-          eq(reportRuns.scheduledFor, scheduledFor),
-        ),
-      )
-      .limit(1)
-    if (!existing) {
-      throw new Error('Report run conflict was not visible after insertion')
-    }
-    if (input.trigger === 'scheduled' && existing.trigger === 'scheduled') {
-      return { id: existing.id, scheduledFor, created: false }
-    }
-    scheduledFor = new Date(scheduledFor.getTime() + 1)
-  }
+) {
+  return claimReportRun(beaconReportRunStore(tx), input)
 }

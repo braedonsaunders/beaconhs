@@ -19,6 +19,7 @@ const assessmentChoiceSnapshotSql = readFileSync(
   new URL('0023_gorgeous_sheva_callister.sql', drizzleFolder),
   'utf8',
 )
+const reportCutoverSql = readFileSync(new URL('0024_flawless_la_nuit.sql', drizzleFolder), 'utf8')
 
 function position(fragment: string): number {
   const value = finalSection.indexOf(fragment)
@@ -56,6 +57,8 @@ describe('production cutover migration integrity', () => {
       '0021_training_assessment_history.sql',
       '0022_hazid_submit_trigger_cutover.sql',
       '0023_gorgeous_sheva_callister.sql',
+      '0024_flawless_la_nuit.sql',
+      '0025_unify_builder_photo_fields.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -86,13 +89,15 @@ describe('production cutover migration integrity', () => {
       { idx: 21, tag: '0021_training_assessment_history' },
       { idx: 22, tag: '0022_hazid_submit_trigger_cutover' },
       { idx: 23, tag: '0023_gorgeous_sheva_callister' },
+      { idx: 24, tag: '0024_flawless_la_nuit' },
+      { idx: 25, tag: '0025_unify_builder_photo_fields' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)
     }
 
     const snapshots = [
-      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
     ].map(
       (index) =>
         JSON.parse(
@@ -145,6 +150,22 @@ describe('production cutover migration integrity', () => {
     expect(assessmentChoiceSnapshotSql).toContain(
       'ALTER TABLE "training_assessment_results" FORCE ROW LEVEL SECURITY',
     )
+  })
+
+  it('clearcuts split report definitions into tenant-owned AppKit definitions', () => {
+    expect(reportCutoverSql).toContain(
+      'ALTER TABLE "report_definitions" RENAME COLUMN "custom_query" TO "query"',
+    )
+    expect(reportCutoverSql).toContain('CROSS JOIN seeds AS seed')
+    expect(reportCutoverSql).toContain(
+      'AppKit report cutover blocked: % schedule(s) still reference a global definition',
+    )
+    expect(reportCutoverSql).toContain('SET "filters" = \'{}\'::jsonb')
+    expect(reportCutoverSql).toContain('ALTER TABLE "report_definitions" DROP COLUMN "kind"')
+    expect(reportCutoverSql).toContain('ALTER TABLE "report_definitions" DROP COLUMN "query_kind"')
+    expect(reportCutoverSql).toContain('ADD CONSTRAINT "report_schedules_tenant_definition_fk"')
+    expect(reportCutoverSql).toContain('ALTER TABLE "report_definitions" FORCE ROW LEVEL SECURITY')
+    expect(reportCutoverSql).toContain('ALTER TABLE "report_schedules" FORCE ROW LEVEL SECURITY')
   })
 
   it('preflights and backfills training owners before removing legacy columns', () => {

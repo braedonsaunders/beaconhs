@@ -218,9 +218,6 @@ export const fieldTypeSchema = z.enum([
   'area_picker', // org_units at level='area'
   // media
   'photo',
-  'photo_upload', // alias of photo — preferred name for camera-first capture
-  'photo_ai', // photo capture + AI safety analysis (missing PPE / hazards)
-  'photo_annotated', // photo + tap-to-drop numbered hazard markers
   'file',
   'video',
   'audio',
@@ -242,6 +239,118 @@ export const fieldTypeSchema = z.enum([
 ])
 
 export type FieldType = z.infer<typeof fieldTypeSchema>
+
+// Builder and native record photos share this non-destructive markup contract.
+const photoPointSchema = z.tuple([
+  z.number().finite().min(0).max(1_000),
+  z.number().finite().min(0).max(1_000),
+])
+const photoColorSchema = z.string().regex(/^#[0-9a-f]{6}$/iu)
+const photoStrokeWidthSchema = z.number().finite().min(1).max(50)
+export const MAX_PHOTO_ANNOTATION_POINTS = 5_000
+
+export const photoAnnotationSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('arrow'),
+      from: photoPointSchema,
+      to: photoPointSchema,
+      color: photoColorSchema,
+      width: photoStrokeWidthSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('circle'),
+      cx: z.number().finite().min(0).max(1_000),
+      cy: z.number().finite().min(0).max(1_000),
+      r: z.number().finite().min(0).max(1_500),
+      color: photoColorSchema,
+      width: photoStrokeWidthSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('rect'),
+      x: z.number().finite().min(0).max(1_000),
+      y: z.number().finite().min(0).max(1_000),
+      w: z.number().finite().min(0).max(1_000),
+      h: z.number().finite().min(0).max(1_000),
+      color: photoColorSchema,
+      width: photoStrokeWidthSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('text'),
+      x: z.number().finite().min(0).max(1_000),
+      y: z.number().finite().min(0).max(1_000),
+      text: z.string().max(500),
+      color: photoColorSchema,
+      size: z.number().finite().min(4).max(200),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('free'),
+      points: z.array(photoPointSchema).min(1).max(MAX_PHOTO_ANNOTATION_POINTS),
+      color: photoColorSchema,
+      width: photoStrokeWidthSchema,
+    })
+    .strict(),
+])
+export type PhotoAnnotation = z.infer<typeof photoAnnotationSchema>
+// Allows the former 500 numbered markers plus up to 200 freehand edits after
+// those records are migrated to the shared annotation contract.
+export const MAX_PHOTO_ANNOTATIONS = 700
+
+// Builder photos use one value contract regardless of whether optional AI
+// analysis is enabled. Captions and markup live on each response attachment so
+// the same uploaded image can be described differently in different records.
+
+export type PhotoAttachmentValue = {
+  attachmentId: string
+  filename: string
+  contentType: string
+  url: string
+  caption?: string
+  annotations?: PhotoAnnotation[]
+  width?: number
+  height?: number
+}
+
+export type PhotoFieldValue = {
+  attachments: PhotoAttachmentValue[]
+  analysis?: {
+    summary: string
+    overallRisk: 'none' | 'low' | 'medium' | 'high'
+    ppe: Array<{
+      item: string
+      status: 'present' | 'missing' | 'incorrect'
+      detail: string | null
+    }>
+    hazards: Array<{
+      type: string
+      severity: 'low' | 'medium' | 'high'
+      detail: string
+    }>
+  }
+  analyzedAt?: string
+}
+
+export type PhotoFieldConfig = {
+  multiple?: boolean
+  maxFiles?: number
+  aiAnalysis?: boolean
+}
+
+export const photoFieldConfigSchema = z
+  .object({
+    multiple: z.boolean().optional(),
+    maxFiles: z.number().int().min(1).max(50).optional(),
+    aiAnalysis: z.boolean().optional(),
+  })
+  .strict()
 
 // --- Table field config -----------------------------------------------------
 //
@@ -797,6 +906,22 @@ function schemaInvariantIssues(schema: z.infer<typeof formSchemaV1Base>): Schema
           path: ['sections', sectionIndex, 'fields', fieldIndex, 'config', 'maxRows'],
           message: `Table maxRows (${tableMaxRows}) must be greater than or equal to minRows (${tableMinRows})`,
         })
+      }
+      if (field.type === 'photo') {
+        const photoConfig = photoFieldConfigSchema.safeParse(field.config ?? {})
+        if (!photoConfig.success) {
+          issues.push({
+            path: [...fieldBasePath, 'config'],
+            message: 'Photo configuration is invalid',
+          })
+        } else if (photoConfig.data.multiple === false && photoConfig.data.maxFiles !== undefined) {
+          if (photoConfig.data.maxFiles !== 1) {
+            issues.push({
+              path: [...fieldBasePath, 'config', 'maxFiles'],
+              message: 'Single-photo fields must have a maximum of 1 photo',
+            })
+          }
+        }
       }
 
       if (

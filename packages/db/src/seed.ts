@@ -93,457 +93,12 @@ import { CANONICAL_TEMPLATES } from './canonical-templates'
 import { seedHazardAssessmentAppTemplates } from './seed/hazard-assessment-app-templates'
 import { seedLiftPlanTemplate } from './seed/lift-plan-template'
 import { seedFormPdfTemplates, seedPdfTemplates } from './seed/pdf-templates'
+import { BEACON_REPORT_SEEDS } from './seed/report-definitions'
 import { seedToolboxTemplate } from './seed/toolbox-template'
 
 async function main() {
   const { db, sql: pg } = createSuperClient()
   console.log('▶ Seeding…')
-
-  // --- Report definitions (cross-tenant catalogue) ---------------------
-  // Run every seed invocation so new definitions land even on re-seed.
-  await db.transaction(async (tx) => {
-    await tx
-      .insert(reportDefinitions)
-      .values([
-        {
-          slug: 'incidents_weekly',
-          kind: 'built_in',
-          name: 'Weekly Incidents Summary',
-          description:
-            'All incidents in the configured date range (default last 7 days), grouped by severity, with status summary cards.',
-          category: 'incidents',
-          queryKind: 'incidents_summary',
-        },
-        {
-          slug: 'corrective_actions_open',
-          kind: 'built_in',
-          name: 'Open Corrective Actions',
-          description:
-            'All open, in-progress, and pending-verification corrective actions grouped by status, sorted by due date.',
-          category: 'corrective_actions',
-          queryKind: 'corrective_actions_open',
-        },
-        {
-          slug: 'inspections_completed_weekly',
-          kind: 'built_in',
-          name: 'Inspections Completed (weekly)',
-          description: 'Completed inspections in the configured date range, grouped by template.',
-          category: 'inspections',
-          queryKind: 'inspections_completed',
-        },
-        {
-          slug: 'documents_overdue_review',
-          kind: 'built_in',
-          name: 'Documents Overdue Review',
-          description:
-            'Published documents whose next-review date has passed, grouped by category.',
-          category: 'documents',
-          queryKind: 'documents_overdue_review',
-        },
-        // ----- Cross-module shared infrastructure reports ----------------
-        {
-          slug: 'safety_kpi_monthly',
-          kind: 'built_in',
-          name: 'Monthly Safety KPI Pack',
-          description:
-            'Headline safety KPIs over the configured window (default last 30 days): incident totals by severity, open CA aging, training compliance %, document compliance %, and inspection volume.',
-          category: 'cross_module',
-          queryKind: 'safety_kpi_summary',
-        },
-        {
-          slug: 'site_safety_scorecard',
-          kind: 'built_in',
-          name: 'Site Safety Scorecard',
-          description:
-            'Per-site rollup of incidents, open CAs, completed inspections, and lone-worker activity in the configured window. Sorted by incident count desc.',
-          category: 'cross_module',
-          queryKind: 'site_scorecard',
-        },
-        {
-          slug: 'overdue_everything',
-          kind: 'built_in',
-          name: 'Overdue Items (All Modules)',
-          description:
-            'Single roll-up of every overdue item across CAs, documents, training, equipment annual inspections, and PPE inspections. Useful as a weekly Monday-morning blast.',
-          category: 'cross_module',
-          queryKind: 'overdue_rollup',
-        },
-        {
-          slug: 'lone_worker_weekly',
-          kind: 'built_in',
-          name: 'Weekly Monitored Sessions',
-          description:
-            'Monitored sessions started in the configured window, grouped by status — useful for spotting missed/escalated patterns.',
-          category: 'lone_worker',
-          queryKind: 'lone_worker_summary',
-        },
-        {
-          slug: 'training_compliance_snapshot',
-          kind: 'built_in',
-          name: 'Training Compliance Snapshot',
-          description:
-            'Audience-assignment compliance summary as of report time, grouped by status (pending / in_progress / completed / overdue) with per-assignment counts.',
-          category: 'training',
-          queryKind: 'training_compliance_snapshot',
-        },
-        {
-          slug: 'document_compliance_snapshot',
-          kind: 'built_in',
-          name: 'Document Compliance Snapshot',
-          description:
-            'Per-assignment document acknowledgment compliance: how many of the audience have acknowledged the current version vs. still owe.',
-          category: 'documents',
-          queryKind: 'document_compliance_snapshot',
-        },
-        {
-          slug: 'incidents_trend_12m',
-          kind: 'built_in',
-          name: 'Incidents Trend (12 months)',
-          description:
-            'Monthly incident counts by severity for the last 12 calendar months. Useful for board packs.',
-          category: 'incidents',
-          queryKind: 'incidents_trend_12m',
-        },
-        {
-          slug: 'osha_300_log',
-          kind: 'built_in',
-          name: 'OSHA 300 Recordable Log',
-          description:
-            'OSHA 300/300A-style log of recordable incidents in the configured window (default last 12 months): case number, employee, classification, days away / restricted, and outcome. Export to PDF for filing.',
-          category: 'incidents',
-          queryKind: 'osha_300_log',
-        },
-        // ----- Legacy BeaconHS report parity --------------------------------
-        // Faithful ports of the legacy Laravel app's on-demand + scheduled
-        // reports. Reports with legacy runtime selectors use dedicated,
-        // validated runners; operational equipment reports use curated views.
-        {
-          slug: 'compliance_by_entity',
-          kind: 'built_in',
-          name: 'Compliance — By Entity',
-          description:
-            'Every subject covered by selected compliance requirements, with completion, expected count, percentage, period, and due date. Replaces the legacy assignment-specific report across all modules.',
-          category: 'cross_module',
-          queryKind: 'compliance_by_entity',
-        },
-        {
-          slug: 'compliance_by_person',
-          kind: 'built_in',
-          name: 'Compliance — By Person',
-          description:
-            'All current compliance requirements grouped by person across journals, inspections, documents, training, skills, hazard assessments, equipment, PPE, and corrective actions.',
-          category: 'cross_module',
-          queryKind: 'compliance_by_person',
-        },
-        {
-          slug: 'hazid_signatures',
-          kind: 'built_in',
-          name: 'Hazard ID — Signatures',
-          description:
-            'Hazard-assessment creation and signature compliance by person for the current materialized periods, including expected and completed counts.',
-          category: 'hazid',
-          queryKind: 'hazid_signatures',
-        },
-        {
-          slug: 'training_certificates',
-          kind: 'built_in',
-          name: 'Training — Certificates',
-          description:
-            'Held training certificates. Filter by employee, group, department, course, course type, and delivery type; include or exclude expired records and group by employee or course.',
-          category: 'training',
-          queryKind: 'training_certificates',
-        },
-        {
-          slug: 'training_expired_upcoming',
-          kind: 'built_in',
-          name: 'Training — Expired & Upcoming',
-          description:
-            'Expired certificates and certificates expiring within a selectable 30–365 day window. Filter people and courses, then group by employee or course.',
-          category: 'training',
-          queryKind: 'training_expired_upcoming',
-        },
-        {
-          slug: 'training_missing',
-          kind: 'built_in',
-          name: 'Training — Missing',
-          description:
-            'Assigned course requirements that are missing, expired, or expiring. Filter people and courses, then group by employee or course.',
-          category: 'training',
-          queryKind: 'training_missing',
-        },
-        {
-          slug: 'skills_matrix',
-          kind: 'built_in',
-          name: 'Skills — Matrix',
-          description:
-            'Externally-issued skills & certifications per person — authority, certificate, granted/expiry, and current status — grouped by issuing authority. Mirrors the legacy Training Skills Matrix.',
-          category: 'training',
-          queryKind: 'skills_matrix',
-        },
-        {
-          slug: 'skills_expired_upcoming',
-          kind: 'built_in',
-          name: 'Skills — Expired & Upcoming',
-          description:
-            'Skills & certifications expiring within 90 days or already expired, grouped by certification. Mirrors the legacy Training Skills Expired & Upcoming report.',
-          category: 'training',
-          queryKind: 'skills_expired_upcoming',
-        },
-        {
-          slug: 'skills_missing',
-          kind: 'built_in',
-          name: 'Skills — Missing & Expired',
-          description:
-            'Active people who are missing or overdue for a required externally-issued skill, based on certification compliance assignments.',
-          category: 'training',
-          queryKind: 'skills_missing',
-        },
-        {
-          slug: 'skills_cwb',
-          kind: 'built_in',
-          name: 'Skills — CWB (Welding)',
-          description:
-            'Canadian Welding Bureau qualifications roster — qualified people with certificate, granted/expiry, and status. Mirrors the legacy CWB report (the W47 Type/Process/Position/Level fields live on each skill record).',
-          category: 'training',
-          queryKind: 'skills_cwb',
-        },
-        {
-          slug: 'corrective_actions_list',
-          kind: 'built_in',
-          name: 'Corrective Actions — List',
-          description:
-            'Every corrective action across all statuses, grouped by status and sorted by due date. Mirrors the legacy Corrective Actions List report.',
-          category: 'corrective_actions',
-          queryKind: 'corrective_actions_list',
-        },
-        {
-          slug: 'ppe_list',
-          kind: 'built_in',
-          name: 'PPE — List',
-          description:
-            'All active PPE items (issued or in stock) with serial, size, status, and inspection dates. Mirrors the legacy PPE List report.',
-          category: 'ppe',
-          queryKind: 'ppe_list',
-        },
-        {
-          slug: 'ppe_expired_upcoming',
-          kind: 'built_in',
-          name: 'PPE — Expired & Upcoming',
-          description:
-            'Active PPE whose annual inspection is overdue or due within 90 days, soonest first. Mirrors the legacy PPE Expired & Upcoming report.',
-          category: 'ppe',
-          queryKind: 'ppe_expired_upcoming',
-        },
-        {
-          slug: 'ppe_expiring',
-          kind: 'built_in',
-          name: 'PPE — Expiring soon',
-          description: 'Active PPE whose service life expires within 30 days, soonest first.',
-          category: 'ppe',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'ppe_items',
-            mode: 'rows',
-            columns: ['serial_number', 'size', 'status', 'expires_on'],
-            filters: {
-              combinator: 'and',
-              rules: [
-                { field: 'status', op: 'in', value: ['issued', 'in_stock'] },
-                { field: 'expires_on', op: 'gte', value: '2000-01-01' },
-                { field: 'expires_on', op: 'due_within_days', value: 30 },
-              ],
-            },
-            sort: { column: 'expires_on', direction: 'asc' },
-            limit: 5000,
-          },
-        },
-        {
-          slug: 'ppe_inspection_due',
-          kind: 'built_in',
-          name: 'PPE — Inspection due',
-          description:
-            'Active PPE whose next pre-use inspection is overdue or due within 14 days, soonest first.',
-          category: 'ppe',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'ppe_items',
-            mode: 'rows',
-            columns: [
-              'serial_number',
-              'size',
-              'status',
-              'last_inspection_on',
-              'next_inspection_due',
-            ],
-            filters: {
-              combinator: 'and',
-              rules: [
-                { field: 'status', op: 'in', value: ['issued', 'in_stock'] },
-                { field: 'next_inspection_due', op: 'gte', value: '2000-01-01' },
-                { field: 'next_inspection_due', op: 'due_within_days', value: 14 },
-              ],
-            },
-            sort: { column: 'next_inspection_due', direction: 'asc' },
-            limit: 5000,
-          },
-        },
-      ])
-      .onConflictDoUpdate({
-        target: reportDefinitions.slug,
-        targetWhere: sql`${reportDefinitions.tenantId} is null`,
-        set: {
-          name: sql`excluded.name`,
-          description: sql`excluded.description`,
-          category: sql`excluded.category`,
-          queryKind: sql`excluded.query_kind`,
-          customQuery: sql`excluded.custom_query`,
-          updatedAt: sql`now()`,
-        },
-      })
-
-    // Equipment reports — migrated out of the retired native /equipment/reports
-    // pages into the global engine. Upserted (not insert-once) so the upgraded
-    // definitions reach already-seeded tenants too. They read the join-baked
-    // report_equipment_fleet view, so type/site/holder names and YTD usage all
-    // resolve. Operational only — equipment financials live in a separate financial system.
-    await tx
-      .insert(reportDefinitions)
-      .values([
-        {
-          slug: 'vehicle_log_monthly',
-          kind: 'built_in',
-          name: 'Vehicle Log - Monthly Summary',
-          description:
-            'Asset-by-month vehicle log summary with driver, km, hours, crew counts, import coverage, and site counts. Uses the native report engine over the vehicle-log monthly reporting view.',
-          category: 'equipment',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'vehicle_log_monthly',
-            mode: 'rows',
-            columns: [
-              'asset_tag',
-              'vehicle_name',
-              'driver_name',
-              'month',
-              'logged_days',
-              'business_km',
-              'personal_km',
-              'total_km',
-              'hours_on_site',
-              'manpower_count',
-              'imported_days',
-              'manual_days',
-              'site_count',
-            ],
-            groupBy: 'asset_tag',
-            sort: { column: 'month', direction: 'asc' },
-            limit: 10000,
-          },
-        },
-        {
-          slug: 'equipment_fleet',
-          kind: 'built_in',
-          name: 'Equipment — Fleet',
-          description:
-            'In-service assets with type, current site/holder, YTD usage, and next inspection due — the fleet register.',
-          category: 'equipment',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'equipment_fleet',
-            mode: 'rows',
-            columns: [
-              'asset_tag',
-              'name',
-              'equipment_type',
-              'status',
-              'site_name',
-              'holder_name',
-              'hours_ytd',
-              'km_ytd',
-              'last_inspection_on',
-              'next_inspection_due',
-            ],
-            filters: {
-              combinator: 'and',
-              rules: [{ field: 'status', op: 'eq', value: 'in_service' }],
-            },
-            sort: { column: 'asset_tag', direction: 'asc' },
-            limit: 5000,
-          },
-        },
-        {
-          slug: 'equipment_inspections',
-          kind: 'built_in',
-          name: 'Equipment — Upcoming & overdue inspections',
-          description:
-            'Assets whose next scheduled inspection is overdue or due within 30 days, soonest first.',
-          category: 'equipment',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'equipment_fleet',
-            mode: 'rows',
-            columns: [
-              'asset_tag',
-              'name',
-              'equipment_type',
-              'site_name',
-              'holder_name',
-              'last_inspection_on',
-              'next_inspection_due',
-            ],
-            filters: {
-              combinator: 'and',
-              rules: [{ field: 'next_inspection_due', op: 'due_within_days', value: 30 }],
-            },
-            sort: { column: 'next_inspection_due', direction: 'asc' },
-            limit: 5000,
-          },
-        },
-        {
-          slug: 'equipment_oil_change_due',
-          kind: 'built_in',
-          name: 'Equipment — Upcoming & overdue oil changes',
-          description: 'Assets whose oil change is overdue or due within 30 days, soonest first.',
-          category: 'equipment',
-          queryKind: 'custom_query',
-          customQuery: {
-            entity: 'equipment_fleet',
-            mode: 'rows',
-            columns: [
-              'asset_tag',
-              'name',
-              'equipment_type',
-              'site_name',
-              'holder_name',
-              'last_oil_change_on',
-              'next_oil_change_due',
-              'oil_change_interval_months',
-            ],
-            filters: {
-              combinator: 'and',
-              rules: [
-                { field: 'requires_oil_change', op: 'is_true' },
-                { field: 'next_oil_change_due', op: 'due_within_days', value: 30 },
-              ],
-            },
-            sort: { column: 'next_oil_change_due', direction: 'asc' },
-            limit: 5000,
-          },
-        },
-      ])
-      .onConflictDoUpdate({
-        target: reportDefinitions.slug,
-        targetWhere: sql`${reportDefinitions.tenantId} is null`,
-        set: {
-          name: sql`excluded.name`,
-          description: sql`excluded.description`,
-          category: sql`excluded.category`,
-          queryKind: sql`excluded.query_kind`,
-          customQuery: sql`excluded.custom_query`,
-          updatedAt: sql`now()`,
-        },
-      })
-  })
 
   await db.transaction(async (tx) => {
     // --- Super-admin ----------------------------------------------------
@@ -1840,6 +1395,32 @@ async function main() {
       `  · seeded: ${insertedPeople.length} people, ${courses.length} courses, 4 incidents (1 rich), ${caRows.length} CAs, ${docDefs.length} documents w/ versions+acks, 8 equipment, 6 harnesses w/ inspections, 5 toolbox talks`,
     )
     console.log(`  · sign in via Magic link (Mailpit: http://localhost:8025)`)
+  })
+
+  // Every report is an ordinary tenant-owned AppKit definition. Seed identity
+  // is insert-only so re-running the seed restores missing defaults without
+  // overwriting a tenant's edits.
+  await db.transaction(async (tx) => {
+    const all = await tx.select({ id: tenants.id }).from(tenants)
+    for (const tenant of all) {
+      await tx
+        .insert(reportDefinitions)
+        .values(
+          BEACON_REPORT_SEEDS.map((definition) => ({
+            tenantId: tenant.id,
+            seedKey: definition.seedKey,
+            slug: definition.slug,
+            name: definition.name,
+            description: definition.description,
+            category: definition.category,
+            query: definition.query,
+            layout: definition.layout,
+            state: definition.state,
+            tags: definition.tags ?? [],
+          })),
+        )
+        .onConflictDoNothing()
+    }
   })
 
   // Canonical templates (JSHA / Toolbox Talk / Lift Plan / WAH Rescue) ----
@@ -4025,6 +3606,7 @@ export async function seedInspectionRecords(tx: any, tenantId: string): Promise<
         reference: ref,
         typeId: type.id,
         status: i < 2 ? 'submitted' : i === 2 ? 'in_progress' : 'closed',
+        locked: i >= 3,
         occurredAt,
         siteOrgUnitId: siteId,
         inspectorTenantUserId: inspectorId,

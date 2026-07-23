@@ -7,7 +7,7 @@
 import { and, eq, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import { insightCards, type BhqlMeasure, type BhqlPivot, type BhqlQuery } from '@beaconhs/db/schema'
-import { extractRows } from '@beaconhs/reports'
+import { extractRows } from '@beaconhs/db'
 import { parseBhqlQuery } from '../ast-schema'
 import { discoverEntityMapWithCustomFields } from './custom-fields'
 import type { AnalyticsEntity } from '../semantic'

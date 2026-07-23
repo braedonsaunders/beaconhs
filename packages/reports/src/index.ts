@@ -1,14 +1,13 @@
-export * from './types'
-export * from './training-filters'
-export * from './operational-filters'
-export * from './document'
-export * from './entities'
-export * from './refine'
-export * from './custom-columns'
-export * from './filters'
-export * from './custom-query'
-export * from './built-ins'
-export * from './run'
-export * from './cadence'
-export * from './schedule-run'
-export * from './schedule-policy'
+// BeaconHS owns only the HSE entity catalogue and database adapter. The report
+// definition, compiler, studio, paper viewer, schedules, and result contracts
+// come directly from AppKit.
+export * from '@appkit/reports'
+export {
+  BEACON_REPORT_CATALOG,
+  REPORT_ENTITIES,
+  REPORT_ENTITY_MAP,
+  columnRef,
+  entityColumn,
+  entityColumnSql,
+} from './entities'
+export type { ReportColumnKind, ReportEntityCatalog, ReportEntityColumn } from './entities'

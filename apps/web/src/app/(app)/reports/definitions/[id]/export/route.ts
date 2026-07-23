@@ -1,231 +1,163 @@
-// CSV / XLSX / PDF export of a report definition, executed live under the
-// caller's tenant RLS scope (same engine as the viewer; rows are NOT
-// viewer-capped — custom plans export up to their stored row limit). PDF uses
-// the same branded renderer as scheduled email deliveries.
-
 import { notFound } from 'next/navigation'
 import { NextResponse, type NextRequest } from 'next/server'
 import ExcelJS from 'exceljs'
+import { assertBoundedReportFilters, type ReportRuleGroup } from '@beaconhs/reports'
 import { assertCan } from '@beaconhs/tenant'
-import {
-  isTrainingReportQueryKind,
-  isOperationalFilterReportSlug,
-  normalizeOperationalReportFilters,
-  normalizeTrainingReportFilters,
-  operationalReportFiltersToRecord,
-  resolveReportLayout,
-  trainingReportFiltersToRecord,
-} from '@beaconhs/reports'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 import { loadDefinitionById } from '../../../_definitions'
 import { loadTenantBranding, runReportForViewer } from '../../../_run'
-import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params
   if (!isUuid(id)) notFound()
-
   const ctx = await requireRequestContext()
   assertCan(ctx, 'reports.read')
   const definition = await loadDefinitionById(ctx.tenantId!, id)
   if (!definition) notFound()
-
-  const url = new URL(req.url)
-  const formatRaw = url.searchParams.get('format')
-  const format = formatRaw === 'xlsx' ? 'xlsx' : formatRaw === 'pdf' ? 'pdf' : 'csv'
-  const daysRaw = url.searchParams.get('days')
-  const days = daysRaw ? Number(daysRaw) : null
-  const runtimeFilters = isTrainingReportQueryKind(definition.queryKind)
-    ? trainingReportFiltersToRecord(
-        normalizeTrainingReportFilters({
-          personIds: url.searchParams.get('personIds'),
-          departmentIds: url.searchParams.get('departmentIds'),
-          groupIds: url.searchParams.get('groupIds'),
-          courseIds: url.searchParams.get('courseIds'),
-          courseTypes: url.searchParams.get('courseTypes'),
-          deliveryTypes: url.searchParams.get('deliveryTypes'),
-          groupBy: url.searchParams.get('groupBy'),
-          expiryWindowDays: url.searchParams.get('expiryWindowDays'),
-          includeExpired: url.searchParams.get('includeExpired'),
-        }),
-      )
-    : isOperationalFilterReportSlug(definition.slug)
-      ? operationalReportFiltersToRecord(
-          definition.slug,
-          normalizeOperationalReportFilters(definition.slug, {
-            personIds: url.searchParams.get('personIds'),
-            departmentIds: url.searchParams.get('departmentIds'),
-            groupIds: url.searchParams.get('groupIds'),
-            obligationIds: url.searchParams.get('obligationIds'),
-            sourceModules: url.searchParams.get('sourceModules'),
-            complianceStatuses: url.searchParams.get('complianceStatuses'),
-            skillTypeIds: url.searchParams.get('skillTypeIds'),
-            authorityIds: url.searchParams.get('authorityIds'),
-            siteIds: url.searchParams.get('siteIds'),
-            correctiveStatuses: url.searchParams.get('correctiveStatuses'),
-            ppeTypeIds: url.searchParams.get('ppeTypeIds'),
-            groupBy: url.searchParams.get('groupBy'),
-            expiryWindowDays: url.searchParams.get('expiryWindowDays'),
-            cwbStandard: url.searchParams.get('cwbStandard'),
-            fromDate: url.searchParams.get('fromDate'),
-            toDate: url.searchParams.get('toDate'),
-          }),
-        )
-      : {}
-
-  const run = await runReportForViewer(ctx, definition, {
-    days,
-    maxRows: 10_000,
-    filters: runtimeFilters,
-  })
-  if (run.error) {
-    return NextResponse.json({ error: run.error }, { status: 422 })
+  const format = request.nextUrl.searchParams.get('format')
+  const resolvedFormat = format === 'xlsx' || format === 'pdf' ? format : 'csv'
+  let filters: ReportRuleGroup | null | undefined
+  const filtersParam = request.nextUrl.searchParams.get('filters')
+  if (filtersParam) {
+    if (filtersParam.length > 65_536) {
+      return NextResponse.json({ error: 'Report filters are too large.' }, { status: 400 })
+    }
+    try {
+      const parsed: unknown = JSON.parse(filtersParam)
+      assertBoundedReportFilters(parsed)
+      filters = parsed as ReportRuleGroup
+    } catch {
+      return NextResponse.json({ error: 'Report filters are invalid.' }, { status: 400 })
+    }
   }
+  const groupByParam = request.nextUrl.searchParams.get('groupBy')
+  const groupBy = groupByParam?.trim() || undefined
+  if (groupBy && groupBy.length > 128) {
+    return NextResponse.json({ error: 'Report grouping is invalid.' }, { status: 400 })
+  }
+  const run = await runReportForViewer(ctx, definition, {
+    maxRows: 10_000,
+    filters,
+    groupBy,
+  })
+  if (run.error) return NextResponse.json({ error: run.error }, { status: 422 })
 
   await recordAudit(ctx, {
     entityType: 'report_definition',
     entityId: id,
     action: 'export',
-    summary: `Exported "${definition.name}" to ${format.toUpperCase()} (${run.result.rowCount} rows)`,
-    metadata: {
-      format,
-      rowCount: run.result.rowCount,
-      rangeLabel: run.rangeLabel,
-      filters: runtimeFilters,
-    },
+    summary: `Exported "${definition.name}" to ${resolvedFormat.toUpperCase()}`,
+    metadata: { format: resolvedFormat, rowCount: run.result.rowCount },
   })
 
-  const stamp = new Date().toISOString().slice(0, 10)
-  const base = `${definition.slug}-${stamp}`
-
-  if (format === 'csv') {
-    const csv = buildCsv(run.result.groups, definition.name, run.rangeLabel)
-    return new NextResponse(csv, {
+  const filename = `${definition.slug}-${new Date().toISOString().slice(0, 10)}`
+  if (resolvedFormat === 'csv') {
+    return new NextResponse(toCsv(run.result), {
       headers: {
         'content-type': 'text/csv; charset=utf-8',
-        'content-disposition': `attachment; filename="${base}.csv"`,
+        'content-disposition': `attachment; filename="${filename}.csv"`,
       },
     })
   }
-
-  if (format === 'pdf') {
-    const branding = await loadTenantBranding(ctx)
-    const pdf = await renderReportPdf({
-      tenantName: branding.name,
-      tenantLogoUrl: branding.logoUrl,
-      primaryColor: branding.primaryColor,
-      reportName: definition.name,
-      dateRangeLabel: run.rangeLabel,
-      generatedAt: new Date(),
-      summary: run.result.summary,
-      groups: run.result.groups,
-      layout: resolveReportLayout(definition.layout),
-    })
-    return new NextResponse(new Uint8Array(pdf), {
+  if (resolvedFormat === 'xlsx') {
+    const workbook = await toWorkbook(run.result, definition.name)
+    return new NextResponse(new Uint8Array(workbook), {
       headers: {
-        'content-type': 'application/pdf',
-        'content-disposition': `attachment; filename="${base}.pdf"`,
+        'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'content-disposition': `attachment; filename="${filename}.xlsx"`,
       },
     })
   }
 
-  const buffer = await buildXlsx(run.result, definition.name, run.rangeLabel)
-  return new NextResponse(new Uint8Array(buffer), {
+  const branding = await loadTenantBranding(ctx)
+  const pdf = await renderReportPdf({
+    tenantName: branding.name,
+    tenantLogoUrl: branding.logoUrl,
+    primaryColor: branding.primaryColor,
+    reportName: definition.name,
+    dateRangeLabel: definition.description ?? '',
+    generatedAt: new Date(),
+    summary: run.result.summary,
+    groups: run.result.groups,
+    layout: definition.layout,
+  })
+  return new NextResponse(new Uint8Array(pdf), {
     headers: {
-      'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'content-disposition': `attachment; filename="${base}.xlsx"`,
+      'content-type': 'application/pdf',
+      'content-disposition': `attachment; filename="${filename}.pdf"`,
     },
   })
 }
 
-// --- CSV ---------------------------------------------------------------------
+type Result = Awaited<ReturnType<typeof runReportForViewer>>['result']
 
-type Groups = Awaited<ReturnType<typeof runReportForViewer>>['result']['groups']
-
-function buildCsv(groups: Groups, reportName: string, rangeLabel: string): string {
-  const lines: string[] = [csvRow([reportName, rangeLabel]), '']
-  for (const g of groups) {
-    lines.push(csvRow([g.title + (g.subtitle ? ` — ${g.subtitle}` : '')]))
-    lines.push(csvRow(g.columns))
-    for (const row of g.rows) {
-      lines.push(csvRow(row.map((c) => (c === null || typeof c === 'undefined' ? '' : String(c)))))
+function toCsv(result: Result): string {
+  const lines: string[] = []
+  for (const group of result.groups) {
+    lines.push(csvRow([group.title]))
+    lines.push(csvRow(group.columns.map((column) => column.label)))
+    for (const row of group.rows) {
+      lines.push(csvRow(group.columns.map((column) => display(row[column.key]))))
     }
     lines.push('')
   }
-  // BOM so Excel opens UTF-8 correctly.
-  return '﻿' + lines.join('\r\n')
+  return `﻿${lines.join('\r\n')}`
 }
 
-function csvRow(cells: (string | number)[]): string {
-  return cells
-    .map((c) => {
-      const s = String(c)
-      return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-    })
+function csvRow(values: string[]): string {
+  return values
+    .map((value) => (/[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value))
     .join(',')
 }
 
-// --- XLSX --------------------------------------------------------------------
-
-async function buildXlsx(
-  result: Awaited<ReturnType<typeof runReportForViewer>>['result'],
-  reportName: string,
-  rangeLabel: string,
-): Promise<ExcelJS.Buffer> {
-  const wb = new ExcelJS.Workbook()
-  wb.creator = 'BeaconHS'
-  wb.created = new Date()
-
-  const seen = new Set<string>()
-  const sheets = result.groups.length
-    ? result.groups
-    : [{ title: 'Results', columns: ['(empty)'], rows: [], subtitle: undefined, isEmpty: true }]
-
-  for (const g of sheets) {
-    const ws = wb.addWorksheet(sheetName(g.title, seen))
-    ws.addRow([reportName])
-    ws.addRow([g.title + (g.subtitle ? ` — ${g.subtitle}` : ''), rangeLabel])
-    ws.addRow([])
-    const header = ws.addRow(g.columns)
+async function toWorkbook(result: Result, reportName: string): Promise<ExcelJS.Buffer> {
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'BeaconHS'
+  for (const [index, group] of result.groups.entries()) {
+    const sheet = workbook.addWorksheet(sheetName(group.title || `Results ${index + 1}`))
+    sheet.addRow([reportName])
+    sheet.addRow([group.title])
+    sheet.addRow([])
+    const header = sheet.addRow(group.columns.map((column) => column.label))
     header.font = { bold: true }
-    header.eachCell((cell) => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } }
-      cell.border = { bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } } }
-    })
-    for (const row of g.rows) {
-      ws.addRow(row.map((c) => (c === null || typeof c === 'undefined' ? '' : c)))
+    for (const row of group.rows) {
+      sheet.addRow(group.columns.map((column) => display(row[column.key])))
     }
-    ws.getRow(1).font = { bold: true, size: 13 }
-    ws.views = [{ state: 'frozen', ySplit: 4 }]
-    ws.columns.forEach((col, i) => {
-      let width = String(g.columns[i] ?? '').length
-      for (const row of g.rows.slice(0, 200)) {
-        width = Math.max(width, String(row[i] ?? '').length)
-      }
-      col.width = Math.min(Math.max(width + 2, 10), 56)
+    sheet.views = [{ state: 'frozen', ySplit: 4 }]
+    sheet.columns.forEach((column, columnIndex) => {
+      const values = group.rows
+        .slice(0, 200)
+        .map((row) => display(row[group.columns[columnIndex]?.key ?? '']).length)
+      column.width = Math.min(
+        56,
+        Math.max(10, group.columns[columnIndex]?.label.length ?? 0, ...values) + 2,
+      )
     })
   }
-
-  return wb.xlsx.writeBuffer()
+  if (!result.groups.length) workbook.addWorksheet('Results')
+  return workbook.xlsx.writeBuffer()
 }
 
-/** Excel sheet names: ≤31 chars, no \\/?*[]: and unique per workbook. */
-function sheetName(title: string, seen: Set<string>): string {
-  const cleaned =
-    title
+function display(value: unknown): string {
+  if (value == null) return ''
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+function sheetName(value: string): string {
+  return (
+    value
       .replace(/[\\/?*[\]:]/g, ' ')
       .trim()
-      .slice(0, 28) || 'Sheet'
-  let name = cleaned
-  let n = 2
-  while (seen.has(name.toLowerCase())) name = `${cleaned} ${n++}`.slice(0, 31)
-  seen.add(name.toLowerCase())
-  return name
+      .slice(0, 31) || 'Results'
+  )
 }

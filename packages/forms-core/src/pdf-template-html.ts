@@ -82,14 +82,7 @@ function headingRow(title: string, colspan: number, gate?: string): string {
 }
 
 // Long-form values read better on a full-width row than in a 2-up grid.
-const LONG_VALUE_TYPES = new Set([
-  'rich_text',
-  'matrix',
-  'ranking',
-  'address',
-  'photo_ai',
-  'photo_annotated',
-])
+const LONG_VALUE_TYPES = new Set(['rich_text', 'matrix', 'ranking', 'address', 'photo'])
 
 type KvRow =
   | { kind: 'pair'; label: string; value: string } // short — packed 2-up
@@ -151,14 +144,15 @@ function collectionTable(
   )
 }
 
-/** A gated photo list: heading + one image-per-row with its filename. */
+/** A gated photo list: heading + one marked-up image per row with its caption. */
 function photoBlock(title: string, eachKey: string): string {
   return (
     `<table style="${TABLE}">` +
     headingRow(title, 1, eachKey) +
     `<tr data-each="${eachKey}" style="${ROW}"><td style="border:none;padding:4px 0 8px;">` +
     `<img src="{{url}}" width="320" style="border:1px solid #e2e8f0;border-radius:4px;display:block;" alt="" />` +
-    `<div style="font-size:10px;color:#64748b;padding-top:3px;">{{filename}}</div>` +
+    `<div style="font-size:11px;color:#334155;padding-top:4px;">{{caption}}</div>` +
+    `<div style="font-size:9px;color:#94a3b8;padding-top:2px;">{{filename}}</div>` +
     `</td></tr></table>`
   )
 }
@@ -210,10 +204,15 @@ export function generateFormPdfTemplate(
           { header: '#', cell: '{{@number}}' },
           ...fields.map((f) => ({
             header: labelText(f.label, f.id, locale, locale),
-            cell: `{{${f.id}}}`,
+            cell: hasTextCompanion(f.type) ? `{{${f.id}_text}}` : `{{${f.id}}}`,
           })),
         ]),
       )
+      for (const field of fields) {
+        if (!hasPhotosCompanion(field.type)) continue
+        const label = labelText(field.label, field.id, locale, locale)
+        blocks.push(photoBlock(`${secTitle} — ${label}`, `${sec.id}_${field.id}_photos`))
+      }
       continue
     }
 
@@ -243,19 +242,15 @@ export function generateFormPdfTemplate(
         continue
       }
       if (isAttachmentArrayField(f.type)) {
-        if (f.type === 'photo' || f.type === 'photo_upload') {
-          trailing.push(photoBlock(label, f.id))
-        } else {
-          // file / video / audio — list the filenames.
-          kv.push({
-            kind: 'row',
-            html: `<tr data-each="${f.id}" style="${ROW}"><td style="${LBL}">${esc(label)}</td><td colspan="3" style="${VAL}">{{filename}}</td></tr>`,
-          })
-        }
+        // file / video / audio — list the filenames.
+        kv.push({
+          kind: 'row',
+          html: `<tr data-each="${f.id}" style="${ROW}"><td style="${LBL}">${esc(label)}</td><td colspan="3" style="${VAL}">{{filename}}</td></tr>`,
+        })
         continue
       }
       if (hasPhotosCompanion(f.type)) {
-        // photo_ai / photo_annotated: readable summary + the photos.
+        // Photos use one compound value, with readable summary and rendered markup.
         kv.push(fullRow(label, `{{${f.id}_text}}`, f.id))
         trailing.push(photoBlock(`${label} — photos`, `${f.id}_photos`))
         continue

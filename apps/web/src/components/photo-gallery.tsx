@@ -10,6 +10,7 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import { Check, Pencil, RotateCcw, Trash2, Undo2, X } from 'lucide-react'
 import { Button, Input, Label, cn } from '@beaconhs/ui'
 import type { Annotation } from '@beaconhs/db/schema'
+import { MAX_PHOTO_ANNOTATIONS, MAX_PHOTO_ANNOTATION_POINTS } from '@beaconhs/forms-core'
 import { RawImage } from '@/components/raw-image'
 import { confirmDialog } from '@/lib/confirm'
 import { toast } from 'sonner'
@@ -168,6 +169,7 @@ function PhotoEditor({
   }
 
   function begin(event: React.PointerEvent<SVGSVGElement>) {
+    if (annotations.length >= MAX_PHOTO_ANNOTATIONS) return
     event.currentTarget.setPointerCapture(event.pointerId)
     const next: Annotation = {
       type: 'free',
@@ -187,7 +189,13 @@ function PhotoEditor({
     setAnnotations((current) =>
       current.map((annotation, index) =>
         index === drawing && annotation.type === 'free'
-          ? { ...annotation, points: [...annotation.points, nextPoint] }
+          ? {
+              ...annotation,
+              points:
+                annotation.points.length < MAX_PHOTO_ANNOTATION_POINTS
+                  ? [...annotation.points, nextPoint]
+                  : annotation.points,
+            }
           : annotation,
       ),
     )
@@ -483,23 +491,32 @@ export function PhotoGallery({
                 <X size={20} />
               </button>
               <div
-                className="relative max-h-full max-w-full"
-                style={{
-                  aspectRatio:
-                    lightbox.width && lightbox.height
-                      ? lightbox.width / lightbox.height
-                      : undefined,
-                }}
+                className="max-h-full max-w-full overflow-auto"
                 onClick={(event) => event.stopPropagation()}
               >
-                <RawImage
-                  src={lightbox.url}
-                  alt={tGeneratedValue(lightbox.caption ?? lightbox.filename)}
-                  optimizationReason="authenticated"
-                  className="max-h-[85vh] max-w-[90vw] rounded-md object-contain"
-                />
-                {lightbox.annotations?.length ? (
-                  <AnnotationLayer annotations={lightbox.annotations} />
+                <div
+                  className="relative max-h-full max-w-full"
+                  style={{
+                    aspectRatio:
+                      lightbox.width && lightbox.height
+                        ? lightbox.width / lightbox.height
+                        : undefined,
+                  }}
+                >
+                  <RawImage
+                    src={lightbox.url}
+                    alt={tGeneratedValue(lightbox.caption ?? lightbox.filename)}
+                    optimizationReason="authenticated"
+                    className="max-h-[80vh] max-w-[90vw] rounded-md object-contain"
+                  />
+                  {lightbox.annotations?.length ? (
+                    <AnnotationLayer annotations={lightbox.annotations} />
+                  ) : null}
+                </div>
+                {lightbox.caption ? (
+                  <p className="mx-auto mt-2 max-w-[90vw] rounded bg-black/65 px-3 py-2 text-center text-sm whitespace-pre-wrap text-white">
+                    <GeneratedValue value={lightbox.caption} />
+                  </p>
                 ) : null}
               </div>
             </div>

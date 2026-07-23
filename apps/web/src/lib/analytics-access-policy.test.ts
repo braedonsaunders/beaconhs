@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { parseBhqlQuery, type AnalyticsEntity } from '@beaconhs/analytics'
 import { discoverEntityMap, runBhql } from '@beaconhs/analytics/server'
 import type { Database } from '@beaconhs/db'
-import { REPORT_ENTITY_MAP, runCustomQuery } from '@beaconhs/reports'
+import { REPORT_ENTITY_MAP } from '@beaconhs/reports'
+import { runBeaconReport } from '@beaconhs/reports/server'
 import type { RequestContext } from '@beaconhs/tenant'
 import {
   accessibleAnalyticsTemplates,
@@ -226,12 +227,13 @@ describe('analytics Builder authorization policy', () => {
       },
     } as unknown as Database
     await expect(
-      runCustomQuery(
+      runBeaconReport(
         tx,
+        'tenant-1',
         { entity: 'form_responses', mode: 'rows', columns: ['status'] },
-        { entityMap: { incidents: INCIDENTS } },
+        { entities: [INCIDENTS] },
       ),
-    ).rejects.toThrow(/unknown entity/i)
+    ).rejects.toThrow(/unknown report entity/i)
   })
 
   it('isolates dashboard cache namespaces by active role and authorized apps', () => {

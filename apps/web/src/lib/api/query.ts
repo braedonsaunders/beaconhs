@@ -7,17 +7,13 @@
 import { getTableColumns, getTableName, is, sql, type SQL } from 'drizzle-orm'
 import { PgTable } from 'drizzle-orm/pg-core'
 import type { RequestContext } from '@beaconhs/tenant'
+import { extractRows } from '@beaconhs/db'
+import { compileAnalyticsRuleGroup } from '@beaconhs/analytics/server'
 import * as dbSchema from '@beaconhs/db/schema'
 import type { ReportFilterOperator, ReportRule } from '@beaconhs/db/schema'
-import {
-  augmentReportEntityWithCustomFields,
-  columnRef,
-  compileRuleGroup,
-  entityColumnSql,
-  extractRows,
-  type ReportColumnKind,
-  type ReportEntity,
-} from '@beaconhs/reports'
+import { columnRef, entityColumnSql, type ReportColumnKind } from '@beaconhs/reports'
+import { augmentBeaconReportEntityWithCustomFields } from '@beaconhs/reports/server'
+import type { ReportEntity } from '@beaconhs/reports/entities'
 import { ApiError } from './errors'
 import { recordIdColumn } from './records'
 import { documentReadFilter } from '../assistant/doc-access'
@@ -148,13 +144,13 @@ export async function readEntityRows(
 ): Promise<EntityPage> {
   // Append the tenant's custom-field columns so they're selectable, filterable
   // and sortable through the public API like any other column.
-  const entity = await ctx.db((tx) => augmentReportEntityWithCustomFields(tx, baseEntity))
+  const entity = await ctx.db((tx) => augmentBeaconReportEntityWithCustomFields(tx, baseEntity))
   const limit = clampInt(params.get('limit'), DEFAULT_LIMIT, 1, MAX_LIMIT)
   const offset = clampInt(params.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER)
   const fields = resolveFields(entity, params)
   const filters = buildFilters(entity, params)
   const filterSql = filters.length
-    ? compileRuleGroup(entity, {
+    ? compileAnalyticsRuleGroup(entity, {
         combinator: 'and',
         rules: filters.map(({ column, ...filter }) => ({ field: column, ...filter })),
       })
@@ -240,7 +236,7 @@ export async function getEntityRecord(
 ): Promise<Record<string, unknown> | null> {
   const idCol = recordIdColumn(baseEntity)
   if (!idCol) return null
-  const entity = await ctx.db((tx) => augmentReportEntityWithCustomFields(tx, baseEntity))
+  const entity = await ctx.db((tx) => augmentBeaconReportEntityWithCustomFields(tx, baseEntity))
   const fields = entity.columns.map((c) => c.key)
   const selectList = sql.raw(
     [

@@ -63,8 +63,7 @@ const RESPONSE_STATUSES = [
 ] as const
 type ResponseStatus = (typeof RESPONSE_STATUSES)[number]
 
-// Pull attachment ids out of a photo / photo_upload (AttachedFile[]) or photo_ai
-// ({ attachments: AttachedFile[] }) field value.
+// Pull attachment ids out of canonical photo values and ordinary file arrays.
 function attachmentIdsFromValue(raw: unknown): string[] {
   const pick = (arr: unknown[]) =>
     arr
@@ -219,6 +218,34 @@ export function createFormFlowAdapter(ctx: RequestContext, responseId: string): 
         rowsMap[sec.id] = Array.isArray(v) ? (v as Array<Record<string, unknown>>) : []
       }
       const evalCtx: EvalContext = { values: data, rows: rowsMap, entities }
+
+      for (const sec of schema.sections ?? []) {
+        if (!sec.repeating) continue
+        const rawRows = rowsMap[sec.id] ?? []
+        const resolvedRows = Array.isArray(resolvedData[sec.id])
+          ? (resolvedData[sec.id] as Array<Record<string, unknown>>)
+          : []
+        const projectedRows = rawRows.map((rawRow, rowIndex) => {
+          const resolvedRow = resolvedRows[rowIndex] ?? rawRow
+          const projected: Record<string, unknown> = { ...resolvedRow }
+          for (const field of sec.fields ?? []) {
+            if (SKIP_FIELD_TYPES.has(field.type)) continue
+            if (hasTextCompanion(field.type)) {
+              projected[`${field.id}_text`] = renderFormFieldText(field, rawRow[field.id], {
+                personNameById: (id) => personNames.get(id),
+              })
+            }
+          }
+          return projected
+        })
+        out[sec.id] = projectedRows
+        for (const field of sec.fields ?? []) {
+          if (!hasPhotosCompanion(field.type)) continue
+          out[`${sec.id}_${field.id}_photos`] = resolvedRows.flatMap((row) =>
+            nestedPhotoRows(row[field.id]),
+          )
+        }
+      }
 
       for (const sec of schema.sections ?? []) {
         if (sec.repeating) continue

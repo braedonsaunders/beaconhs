@@ -117,7 +117,10 @@ export function valueForResponseExportColumn(
   ctx: ResponseExportContext,
 ): string | number | null | undefined {
   if (column.source === 'field') {
-    return formatExportValue(column.fieldId ? ctx.values[column.fieldId] : undefined)
+    return formatExportValue(
+      column.fieldId ? ctx.values[column.fieldId] : undefined,
+      column.fieldType,
+    )
   }
   if (column.source === 'section') {
     return formatExportValue(column.sectionId ? ctx.values[column.sectionId] : undefined)
@@ -181,7 +184,10 @@ function sectionTitle(section: FormSection, locale: AppLocale, defaultLocale: Ap
   return localizeText(section.title, locale, section.id, defaultLocale)
 }
 
-function formatExportValue(value: unknown): string | number | null | undefined {
+function formatExportValue(
+  value: unknown,
+  fieldType?: FieldType,
+): string | number | null | undefined {
   if (value === null || value === undefined || value === '') return ''
   if (typeof value === 'string' || typeof value === 'number') return value
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
@@ -194,6 +200,19 @@ function formatExportValue(value: unknown): string | number | null | undefined {
   }
   if (typeof value === 'object') {
     const record = value as Record<string, unknown>
+    if (fieldType === 'photo' && Array.isArray(record.attachments)) {
+      return record.attachments
+        .filter(
+          (attachment): attachment is Record<string, unknown> =>
+            typeof attachment === 'object' && attachment !== null,
+        )
+        .map((attachment) => {
+          const filename = typeof attachment.filename === 'string' ? attachment.filename : 'Photo'
+          const caption = typeof attachment.caption === 'string' ? attachment.caption.trim() : ''
+          return caption ? `${filename}: ${caption}` : filename
+        })
+        .join('; ')
+    }
     if ('answer' in record || 'comment' in record) {
       return [formatExportValue(record.answer), formatExportValue(record.comment)]
         .filter(Boolean)

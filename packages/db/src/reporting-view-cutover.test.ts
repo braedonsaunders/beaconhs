@@ -34,12 +34,30 @@ describe('reporting view cutover', () => {
     expect(training).toContain('p.department_id                   AS department_id')
     expect(training).toContain('c.delivery_type                   AS delivery_type')
     expect(training).toContain('AS group_ids')
+    expect(training).toContain('AS group_id_list')
     expect(training).toContain('FROM compliance_status cs')
     expect(training).toContain('AS is_required')
     expect(training).toContain('c.course_type                     AS course_type')
     expect(training?.indexOf('AS course_type')).toBeGreaterThan(
       training?.indexOf('AS is_required') ?? -1,
     )
+  })
+
+  it('provides readable PPE and corrective-action parity dimensions', () => {
+    const ppe = REPORT_VIEWS_SQL.find((statement) =>
+      statement.includes('CREATE OR REPLACE VIEW report_ppe_items'),
+    )
+    const correctiveActions = REPORT_VIEWS_SQL.find((statement) =>
+      statement.includes('CREATE OR REPLACE VIEW report_corrective_actions'),
+    )
+    expect(ppe).toContain('type.name AS ppe_type')
+    expect(ppe).toContain('AS holder_name')
+    expect(ppe).toContain('department.name AS department_name')
+    expect(ppe).toContain('AS group_id_list')
+    expect(correctiveActions).toContain('owner.display_name AS owner_name')
+    expect(correctiveActions).toContain('department.name AS department_name')
+    expect(correctiveActions).toContain('AS group_id_list')
+    expect(correctiveActions).toContain('location.name AS location_name')
   })
 
   it('retires the installed legacy fleet view before dropping its source column', () => {

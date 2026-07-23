@@ -71,6 +71,15 @@ export const REPORT_VIEWS_SQL: string[] = [
      ) AS group_ids
      ,t.id AS skill_type_id
      ,au.id AS authority_id
+     ,array_to_string(
+       ARRAY(
+         SELECT gm.group_id::text
+         FROM person_group_memberships gm
+         WHERE gm.tenant_id = p.tenant_id AND gm.person_id = p.id
+         ORDER BY gm.group_id
+       ),
+       ','
+     ) AS group_id_list
    FROM training_skill_assignments a
    JOIN training_skill_types t ON t.id = a.skill_type_id
    JOIN training_skill_authorities au ON au.id = t.authority_id
@@ -140,7 +149,16 @@ export const REPORT_VIEWS_SQL: string[] = [
      )                                 AS is_required,
      -- Keep new fields at the end so CREATE OR REPLACE remains compatible
      -- with the column order of the installed production view.
-     c.course_type                     AS course_type
+     c.course_type                     AS course_type,
+     array_to_string(
+       ARRAY(
+         SELECT gm.group_id::text
+         FROM person_group_memberships gm
+         WHERE gm.tenant_id = p.tenant_id AND gm.person_id = p.id
+         ORDER BY gm.group_id
+       ),
+       ','
+     )                                 AS group_id_list
    FROM people p
    CROSS JOIN training_courses c
    LEFT JOIN latest l
@@ -333,4 +351,89 @@ export const REPORT_VIEWS_SQL: string[] = [
      WHERE tl.equipment_item_id = e.id AND tl.tenant_id = e.tenant_id
    ) usage ON true
    WHERE e.deleted_at IS NULL`,
+
+  // PPE report projection with the legacy filter/group dimensions resolved to
+  // readable names. The raw ids remain available for exact runtime filters.
+  `CREATE OR REPLACE VIEW report_ppe_items AS
+   SELECT
+     item.id,
+     item.tenant_id,
+     item.type_id,
+     type.name AS ppe_type,
+     item.serial_number,
+     item.size,
+     item.status,
+     item.current_holder_person_id,
+     CASE WHEN holder.id IS NULL THEN NULL
+          ELSE holder.last_name || ', ' || holder.first_name END AS holder_name,
+     holder.department_id,
+     department.name AS department_name,
+     array_to_string(
+       ARRAY(
+         SELECT membership.group_id::text
+         FROM person_group_memberships membership
+         WHERE membership.tenant_id = item.tenant_id
+           AND membership.person_id = holder.id
+         ORDER BY membership.group_id
+       ),
+       ','
+     ) AS group_id_list,
+     item.last_inspection_on,
+     item.next_inspection_due,
+     item.next_annual_inspection_due,
+     item.purchase_date,
+     item.expires_on,
+     item.metadata,
+     item.deleted_at
+   FROM ppe_items item
+   JOIN ppe_types type
+     ON type.id = item.type_id AND type.tenant_id = item.tenant_id
+   LEFT JOIN people holder
+     ON holder.id = item.current_holder_person_id AND holder.tenant_id = item.tenant_id
+   LEFT JOIN departments department
+     ON department.id = holder.department_id AND department.tenant_id = item.tenant_id`,
+
+  // Corrective-action projection with owner, department, group, and location
+  // dimensions used by the legacy report filters.
+  `CREATE OR REPLACE VIEW report_corrective_actions AS
+   SELECT
+     action.id,
+     action.tenant_id,
+     action.reference,
+     action.title,
+     action.description,
+     action.severity,
+     action.status,
+     action.due_on,
+     action.assigned_on,
+     action.source,
+     action.owner_tenant_user_id,
+     owner.display_name AS owner_name,
+     owner_person.department_id,
+     department.name AS department_name,
+     array_to_string(
+       ARRAY(
+         SELECT membership.group_id::text
+         FROM person_group_memberships membership
+         WHERE membership.tenant_id = action.tenant_id
+           AND membership.person_id = owner_person.id
+         ORDER BY membership.group_id
+       ),
+       ','
+     ) AS group_id_list,
+     action.site_org_unit_id,
+     location.name AS location_name,
+     action.metadata,
+     action.deleted_at
+   FROM corrective_actions action
+   LEFT JOIN tenant_users owner
+     ON owner.id = action.owner_tenant_user_id AND owner.tenant_id = action.tenant_id
+   LEFT JOIN people owner_person
+     ON owner_person.user_id = owner.user_id
+    AND owner_person.tenant_id = action.tenant_id
+    AND owner_person.deleted_at IS NULL
+   LEFT JOIN departments department
+     ON department.id = owner_person.department_id AND department.tenant_id = action.tenant_id
+   LEFT JOIN org_units location
+     ON location.id = action.site_org_unit_id AND location.tenant_id = action.tenant_id`,
 ]

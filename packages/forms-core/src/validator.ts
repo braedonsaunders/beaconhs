@@ -2,7 +2,9 @@ import { evaluateLogicRule, type EvalContext, type FieldValueMap, type RowMap } 
 import { storesResponseValue } from './field-types'
 import { isApplicationAttachmentUrl } from './sanitize'
 import {
+  MAX_PHOTO_ANNOTATIONS,
   matrixConfigSchema,
+  photoAnnotationSchema,
   tableConfigSchema,
   validationPatternError,
   type FormField,
@@ -16,7 +18,6 @@ const MAX_REPEATING_ROWS = 500
 const MAX_TABLE_ROWS = 500
 const MAX_SELECTIONS = 100
 const MAX_ATTACHMENTS = 50
-const MAX_PHOTO_MARKERS = 500
 const MAX_SHORT_TEXT_LENGTH = 10_000
 const MAX_LONG_TEXT_LENGTH = 100_000
 const MAX_RICH_TEXT_HTML_LENGTH = 500_000
@@ -248,12 +249,60 @@ function isAttachmentArray(value: unknown): value is unknown[] {
   return Array.isArray(value) && value.length <= MAX_ATTACHMENTS && value.every(isAttachmentValue)
 }
 
-const PHOTO_AI_KEYS = new Set(['attachments', 'analysis', 'analyzedAt'])
-const PHOTO_ANNOTATED_KEYS = new Set(['attachments', 'markers'])
+const PHOTO_KEYS = new Set(['attachments', 'analysis', 'analyzedAt'])
+const PHOTO_ATTACHMENT_KEYS = new Set([
+  'attachmentId',
+  'filename',
+  'contentType',
+  'url',
+  'caption',
+  'annotations',
+  'width',
+  'height',
+])
 const SAFETY_VISION_KEYS = new Set(['summary', 'overallRisk', 'ppe', 'hazards'])
 const SAFETY_VISION_PPE_KEYS = new Set(['item', 'status', 'detail'])
 const SAFETY_VISION_HAZARD_KEYS = new Set(['type', 'severity', 'detail'])
-const PHOTO_MARKER_KEYS = new Set(['id', 'x', 'y', 'label'])
+function isPhotoAnnotation(value: unknown): boolean {
+  return photoAnnotationSchema.safeParse(value).success
+}
+
+function isPhotoAttachmentValue(value: unknown): boolean {
+  if (!isRecord(value) || !hasOnlyKeys(value, PHOTO_ATTACHMENT_KEYS)) return false
+  if (
+    !isAttachmentValue(
+      Object.fromEntries(Object.entries(value).filter(([key]) => ATTACHMENT_KEYS.has(key))),
+    )
+  ) {
+    return false
+  }
+  if (
+    value.caption !== undefined &&
+    (typeof value.caption !== 'string' || value.caption.length > 1_000)
+  ) {
+    return false
+  }
+  if (
+    value.annotations !== undefined &&
+    (!Array.isArray(value.annotations) ||
+      value.annotations.length > MAX_PHOTO_ANNOTATIONS ||
+      !value.annotations.every(isPhotoAnnotation))
+  ) {
+    return false
+  }
+  for (const dimension of [value.width, value.height]) {
+    if (
+      dimension !== undefined &&
+      (typeof dimension !== 'number' ||
+        !Number.isInteger(dimension) ||
+        dimension < 1 ||
+        dimension > 100_000)
+    ) {
+      return false
+    }
+  }
+  return true
+}
 
 function isSafetyVisionAnalysis(value: unknown): value is Record<string, unknown> {
   if (
@@ -292,61 +341,34 @@ function isSafetyVisionAnalysis(value: unknown): value is Record<string, unknown
   return validPpe && validHazards
 }
 
-function isPhotoMarker(value: unknown): value is Record<string, unknown> {
-  return (
-    isRecord(value) &&
-    hasOnlyKeys(value, PHOTO_MARKER_KEYS) &&
-    nonBlankString(value.id) &&
-    value.id.length <= 128 &&
-    typeof value.x === 'number' &&
-    Number.isFinite(value.x) &&
-    value.x >= 0 &&
-    value.x <= 1 &&
-    typeof value.y === 'number' &&
-    Number.isFinite(value.y) &&
-    value.y >= 0 &&
-    value.y <= 1 &&
-    typeof value.label === 'string' &&
-    value.label.length <= 2_000
-  )
-}
-
-function isPhotoCompoundValue(
-  type: 'photo_ai' | 'photo_annotated',
+function isPhotoValue(
   value: unknown,
-): value is Record<string, unknown> {
-  if (!isRecord(value)) return false
-  if (type === 'photo_ai') {
-    if (!hasOnlyKeys(value, PHOTO_AI_KEYS)) return false
-    if (value.attachments !== undefined && !isAttachmentArray(value.attachments)) return false
-    if (value.analysis !== undefined && !isSafetyVisionAnalysis(value.analysis)) return false
-    if (value.analyzedAt !== undefined) {
-      if (value.analysis === undefined || !nonBlankString(value.analyzedAt)) return false
-      if (!isValidDateTime(value.analyzedAt)) return false
-    }
-    if (
-      (value.analysis === undefined) !== (value.analyzedAt === undefined) ||
-      (value.analysis !== undefined && (!value.attachments || value.attachments.length === 0))
-    ) {
-      return false
-    }
-    return true
+): value is Record<string, unknown> & { attachments: unknown[] } {
+  if (!isRecord(value) || !hasOnlyKeys(value, PHOTO_KEYS)) return false
+  if (
+    !Array.isArray(value.attachments) ||
+    value.attachments.length > MAX_ATTACHMENTS ||
+    !value.attachments.every(isPhotoAttachmentValue)
+  ) {
+    return false
   }
-  if (!hasOnlyKeys(value, PHOTO_ANNOTATED_KEYS)) return false
-  if (value.attachments !== undefined && !isAttachmentArray(value.attachments)) return false
-  if (value.markers !== undefined) {
-    if (
-      !Array.isArray(value.markers) ||
-      value.markers.length > MAX_PHOTO_MARKERS ||
-      !value.markers.every(isPhotoMarker)
-    ) {
-      return false
-    }
-    const markerIds = value.markers.map((marker) => marker.id)
-    if (new Set(markerIds).size !== markerIds.length) return false
-    if (value.markers.length > 0 && (!value.attachments || value.attachments.length === 0)) {
-      return false
-    }
+  if (
+    new Set(
+      value.attachments.map((attachment) => (attachment as { attachmentId: string }).attachmentId),
+    ).size !== value.attachments.length
+  ) {
+    return false
+  }
+  if (value.analysis !== undefined && !isSafetyVisionAnalysis(value.analysis)) return false
+  if (value.analyzedAt !== undefined) {
+    if (value.analysis === undefined || !nonBlankString(value.analyzedAt)) return false
+    if (!isValidDateTime(value.analyzedAt)) return false
+  }
+  if (
+    (value.analysis === undefined) !== (value.analyzedAt === undefined) ||
+    (value.analysis !== undefined && value.attachments.length === 0)
+  ) {
+    return false
   }
   return true
 }
@@ -697,13 +719,13 @@ function isFieldValueEmpty(field: FormField, value: unknown): boolean {
     case 'ranking':
     case 'multi_person_picker':
     case 'data_table':
-    case 'photo':
-    case 'photo_upload':
     case 'file':
     case 'video':
     case 'audio':
     case 'table':
       return Array.isArray(value) && value.length === 0
+    case 'photo':
+      return isPhotoValue(value) && value.attachments.length === 0
     case 'rich_text':
       // Images do not carry a response value and sanitized rich text does not
       // permit them, so image-only markup is intentionally visually empty.
@@ -712,12 +734,6 @@ function isFieldValueEmpty(field: FormField, value: unknown): boolean {
       return isAddressValue(value) && !nonBlankString(value.line1) && !nonBlankString(value.query)
     case 'matrix':
       return isMatrixValue(field, value) && !hasMeaningfulMatrixValue(value)
-    case 'photo_ai':
-    case 'photo_annotated':
-      return (
-        isPhotoCompoundValue(field.type, value) &&
-        (!Array.isArray(value.attachments) || value.attachments.length === 0)
-      )
     case 'sketch':
       return isSketchValue(value) && !nonBlankString(value.attachmentId)
     case 'yes_no_comment':
@@ -747,8 +763,7 @@ function requiredMessage(field: FormField): string {
   switch (field.type) {
     case 'matrix':
       return 'Rate at least one row'
-    case 'photo_ai':
-    case 'photo_annotated':
+    case 'photo':
       return 'Add a photo'
     case 'sketch':
       return 'Add a diagram'
@@ -951,8 +966,6 @@ export function validateFieldValue(
       if (new Set(value).size !== value.length) return v?.message ?? 'Selections must be unique'
       return null
     }
-    case 'photo':
-    case 'photo_upload':
     case 'file':
     case 'video':
     case 'audio': {
@@ -978,11 +991,22 @@ export function validateFieldValue(
       return isAddressValue(value) ? null : (v?.message ?? 'Must be an address')
     case 'matrix':
       return isMatrixValue(field, value) ? null : (v?.message ?? 'Must be a rating grid')
-    case 'photo_ai':
-    case 'photo_annotated':
-      return isPhotoCompoundValue(field.type, value) && Array.isArray(value.attachments)
-        ? null
-        : (v?.message ?? 'Invalid photo value')
+    case 'photo':
+      if (!isPhotoValue(value)) return v?.message ?? 'Invalid photo value'
+      {
+        const configuredMax =
+          field.config?.multiple === false
+            ? 1
+            : typeof field.config?.maxFiles === 'number'
+              ? field.config.maxFiles
+              : 10
+        if (value.attachments.length > configuredMax) {
+          return (
+            v?.message ?? `Use no more than ${configuredMax} photo${configuredMax === 1 ? '' : 's'}`
+          )
+        }
+      }
+      return null
     case 'sketch':
       return isSketchValue(value) && nonBlankString(value.attachmentId)
         ? null

@@ -208,7 +208,18 @@ function ElementInput({
         </div>
       )
     case 'photo':
-    case 'photo_upload':
+      return (
+        <div className="space-y-1.5">
+          <div className="flex h-16 items-center justify-center rounded border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
+            <GeneratedText id="m_10e50435ff2693" />
+          </div>
+          {cfg(field).aiAnalysis === true ? (
+            <span className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] text-violet-700">
+              <Sparkles size={12} /> <GeneratedText id="m_0fec93e95858fc" />
+            </span>
+          ) : null}
+        </div>
+      )
     case 'file':
     case 'video':
     case 'audio':
@@ -221,21 +232,6 @@ function ElementInput({
       return (
         <div className="flex h-20 items-center justify-center rounded border border-dashed border-slate-300 bg-[repeating-linear-gradient(45deg,transparent,transparent_9px,rgba(148,163,184,0.12)_9px,rgba(148,163,184,0.12)_10px)] text-xs text-slate-400 italic">
           <GeneratedText id="m_1abf555859c0a8" />
-        </div>
-      )
-    case 'photo_ai':
-      return (
-        <div className="space-y-1.5">
-          <div className="flex h-14 items-center justify-center rounded border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
-            <GeneratedText id="m_18010438ac7907" />
-          </div>
-          <span className="inline-flex items-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] text-violet-700">
-            <Sparkles size={12} /> <GeneratedText id="m_0fec93e95858fc" />
-          </span>
-          <div className="flex items-center gap-1 text-[10px] text-slate-400">
-            <AlertTriangle size={11} className="text-amber-500" />{' '}
-            <GeneratedText id="m_0289ca8aa7b891" />
-          </div>
         </div>
       )
     case 'typed_attestation':
@@ -334,23 +330,6 @@ function ElementInput({
               return <span key={i} className={`h-3.5 w-3.5 rounded-sm ${tone}`} />
             })}
           />
-        </div>
-      )
-    case 'photo_annotated':
-      return (
-        <div className="space-y-1">
-          <div className="relative flex h-24 items-center justify-center rounded border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-400">
-            <GeneratedText id="m_18010438ac7907" />
-            <span className="absolute top-1/3 left-1/3 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white ring-2 ring-white">
-              1
-            </span>
-            <span className="absolute top-1/2 left-2/3 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white ring-2 ring-white">
-              2
-            </span>
-          </div>
-          <div className="text-[10px] text-slate-400">
-            <GeneratedText id="m_18c006b02858b9" />
-          </div>
         </div>
       )
     case 'qr_scanner':

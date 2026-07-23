@@ -7,47 +7,36 @@
 // fan out recipient emails.
 
 import type { Job } from 'bullmq'
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { db, withTenant, withSuperAdmin, type Database } from '@beaconhs/db'
 import {
   attachments,
-  formTemplates,
   people,
   reportRunDeliveries,
   reportRuns,
   reportSchedules,
-  roleAssignments,
-  roles,
   tenants,
   tenantUsers,
   users,
-  type ReportCustomQuery,
   type ReportRunRequestSnapshot,
 } from '@beaconhs/db/schema'
 import { assertReportRunJobData, enqueueEmail, type ReportRunJobData } from '@beaconhs/jobs'
 import { resolveLocalePreferences } from '@beaconhs/i18n'
 import { createSystemTranslator } from '@beaconhs/i18n/messages'
 import {
-  computeRangeFor,
-  refineEntityMapForDocuments,
-  resolveReportLayout,
-  runReport,
-} from '@beaconhs/reports'
-import {
   assertBoundedReportFilters,
   assertReportRecipientLimit,
   normalizeReportRecipientEmails,
   normalizeReportRecipientUserIds,
   REPORT_SCHEDULE_LIMITS,
-} from '@beaconhs/reports/schedule-policy'
-import { discoverEntityMapWithScopedApps } from '@beaconhs/analytics/server'
+  resolveReportLayout,
+} from '@beaconhs/reports'
 import {
-  can,
-  canAccessTemplate,
-  effectiveRoleAssignments,
-  makeTenantContext,
-  resolveMembershipAccess,
-} from '@beaconhs/tenant'
+  loadBeaconReportCatalog,
+  normalizeReportRuntimeFilters,
+  runBeaconReport,
+} from '@beaconhs/reports/server'
+import { can, makeTenantContext, resolveMembershipAccess } from '@beaconhs/tenant'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
 import {
   deleteObject,
@@ -122,21 +111,26 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
     const recipientEmails = normalizeReportRecipientEmails(snapshot.recipientEmails)
     assertReportRecipientLimit(recipientUserIds, recipientEmails)
     assertBoundedReportFilters(snapshot.filters)
-    const range = computeRangeFor(snapshot.definition.queryKind, snapshot.filters)
+    const rangeLabel = `As of ${new Intl.DateTimeFormat('en-CA', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'UTC',
+    }).format(ctx.run.scheduledFor)} UTC`
     let artifact = await loadArtifact(tenantId, ctx.run.pdfAttachmentId, ctx.run.rowCount)
 
     if (!artifact) {
       const { groups, summary, rowCount, locale } = await withTenant(db, tenantId, async (tx) => {
-        const { entityMap, locale } = await resolveScheduledEntityMap(tx, tenantId, snapshot)
-        const result = await runReport(tx, {
-          queryKind: snapshot.definition.queryKind,
-          definitionSlug: snapshot.definition.slug,
-          filters: snapshot.filters,
-          range,
-          customQuery: (snapshot.definition.customQuery as ReportCustomQuery | null) ?? null,
-          entityMap,
+        const { catalog, locale } = await resolveScheduledReportContext(tx, tenantId, snapshot)
+        const result = await runBeaconReport(tx, tenantId, snapshot.definition.query, catalog, {
+          maxRows: 10_000,
+          runtimeFilters: normalizeReportRuntimeFilters(snapshot.filters),
         })
-        return { ...result, locale }
+        return {
+          groups: result.groups,
+          summary: result.summary,
+          rowCount: result.rowCount,
+          locale,
+        }
       })
       const pdf = await renderReportPdf({
         tenantName: ctx.tenant.name,
@@ -146,7 +140,7 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
         }),
         primaryColor: ctx.tenant.branding.primaryColor ?? null,
         reportName: snapshot.scheduleName || snapshot.definition.name,
-        dateRangeLabel: range.label,
+        dateRangeLabel: rangeLabel,
         generatedAt: new Date(),
         summary,
         groups,
@@ -269,7 +263,7 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
 
     const subject =
       snapshot.emailSubject?.trim() ||
-      `${snapshot.scheduleName || snapshot.definition.name} for ${range.label}`
+      `${snapshot.scheduleName || snapshot.definition.name} — ${rangeLabel}`
     const runLink = `${appBaseUrl()}/reports/schedules/${scheduleId}/runs/${runId}`
     const pdfLink = await presignGet({
       key: artifact.r2Key,
@@ -284,11 +278,11 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
       ? `<p>${escapeHtml(customMessage).replace(/\r?\n/g, '<br/>')}</p>`
       : ''
     const html = `${customHtml}<p>Your scheduled report <strong>${escapeHtml(snapshot.scheduleName || snapshot.definition.name)}</strong> is ready.</p>
-      <p>Date range: ${escapeHtml(range.label)}<br/>Rows: ${artifact.rowCount}</p>
+      <p>${escapeHtml(rangeLabel)}<br/>Rows: ${artifact.rowCount}</p>
       <p><a href="${escapeHtml(runLink)}">View in app</a> &middot; <a href="${escapeHtml(pdfLink)}">Download PDF</a></p>
       <p style="color:#666;font-size:12px;">${footnote}</p>`
     const text = `${customMessage ? `${customMessage}\n\n` : ''}Your scheduled report "${snapshot.scheduleName || snapshot.definition.name}" is ready.
-Date range: ${range.label}
+${rangeLabel}
 Rows: ${artifact.rowCount}
 
 View in app: ${runLink}
@@ -435,7 +429,7 @@ async function loadArtifact(
   }
 }
 
-async function resolveScheduledEntityMap(
+async function resolveScheduledReportContext(
   tx: Database,
   tenantId: string,
   snapshot: ReportRunRequestSnapshot,
@@ -513,34 +507,8 @@ async function resolveScheduledEntityMap(
     throw new Error('Scheduled report run-as member no longer has Reports access')
   }
 
-  const [templates, assignedRoles] = await Promise.all([
-    tx
-      .select({
-        id: formTemplates.id,
-        name: formTemplates.name,
-        status: formTemplates.status,
-        allowedRoles: formTemplates.allowedRoles,
-        deletedAt: formTemplates.deletedAt,
-      })
-      .from(formTemplates)
-      .where(isNull(formTemplates.deletedAt))
-      .orderBy(asc(formTemplates.name)),
-    tx
-      .select({ roleId: roles.id, key: roles.key })
-      .from(roleAssignments)
-      .innerJoin(roles, eq(roles.id, roleAssignments.roleId))
-      .where(eq(roleAssignments.tenantUserId, principal.id)),
-  ])
-  const roleKeys = new Set(
-    effectiveRoleAssignments(resolved.appliedRoleId, assignedRoles).map((role) => role.key),
-  )
-  const accessibleApps = templates
-    .filter((template) => canAccessTemplate(requestCtx, template, roleKeys, 'operate'))
-    .map(({ id, name }) => ({ id, name }))
   return {
-    entityMap: refineEntityMapForDocuments(
-      await discoverEntityMapWithScopedApps(tx, accessibleApps),
-    ),
+    catalog: await loadBeaconReportCatalog(tx),
     locale: localePolicy.locale,
   }
 }

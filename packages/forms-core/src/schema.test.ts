@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { formSchemaV1, lintFormSchema, type FormSchemaV1 } from './schema'
+import { fieldTypeSchema, formSchemaV1, lintFormSchema, type FormSchemaV1 } from './schema'
+
+describe('photo field type cutover', () => {
+  it('keeps one canonical photo type and rejects retired variants', () => {
+    expect(fieldTypeSchema.safeParse('photo').success).toBe(true)
+    for (const retired of ['photo_upload', 'photo_ai', 'photo_annotated']) {
+      expect(fieldTypeSchema.safeParse(retired).success).toBe(false)
+    }
+  })
+})
 
 function schemaWithIdentifierCollisions(): unknown {
   return {
@@ -368,6 +377,28 @@ describe('formSchemaV1 field configuration invariants', () => {
       },
       ['sections', 0, 'fields', 0, 'config', 'step'],
       'slider step must be greater than zero',
+    ],
+    [
+      'photo options',
+      {
+        id: 'photo',
+        type: 'photo',
+        label: { en: 'Photo' },
+        config: { multiple: true, maxFiles: 51 },
+      },
+      ['sections', 0, 'fields', 0, 'config'],
+      'Photo configuration is invalid',
+    ],
+    [
+      'single photo maximum',
+      {
+        id: 'photo',
+        type: 'photo',
+        label: { en: 'Photo' },
+        config: { multiple: false, maxFiles: 2 },
+      },
+      ['sections', 0, 'fields', 0, 'config', 'maxFiles'],
+      'Single-photo fields must have a maximum of 1 photo',
     ],
     [
       'fixed table rows',

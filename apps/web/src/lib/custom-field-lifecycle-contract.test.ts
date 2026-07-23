@@ -81,7 +81,7 @@ describe('custom-field lifecycle contract', () => {
     )
     const reportActions = source('../app/(app)/reports/_studio/actions.ts')
     const cardActions = source('../app/(app)/insights/cards/_actions.ts')
-    const customColumns = source('../../../../packages/reports/src/custom-columns.ts')
+    const customColumns = source('../../../../packages/reports/src/custom-fields.ts')
     expect(save).toContain('existing.isActive && !input.isActive')
     expect(save).toContain('findCustomFieldAnalyticsDependencies(')
     expect(customColumns).toContain(".for('key share')")

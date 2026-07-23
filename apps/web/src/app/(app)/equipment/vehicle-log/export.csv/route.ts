@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { and, asc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
-import { extractRows } from '@beaconhs/reports'
+import { extractRows } from '@beaconhs/db'
 import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'

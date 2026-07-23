@@ -4,7 +4,8 @@
 // Builder app paths and schemas.
 
 import { NextResponse } from 'next/server'
-import { REPORT_ENTITIES, loadCustomFieldColumns, type ReportEntityColumn } from '@beaconhs/reports'
+import { REPORT_ENTITIES, type ReportEntityColumn } from '@beaconhs/reports'
+import { loadBeaconCustomReportColumns } from '@beaconhs/reports/server'
 import { authenticateApiKey } from '@/lib/api/auth'
 import { BUILDER_APP_READ_PERMISSION, listBuilderAppOpenApiEntities } from '@/lib/api/builder-apps'
 import { ApiError, errorResponse, noStore } from '@/lib/api/errors'
@@ -32,7 +33,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     const customColumns = await ctx.db(async (tx) => {
       const out: Record<string, ReportEntityColumn[]> = {}
       for (const entity of REPORT_ENTITIES) {
-        const cols = await loadCustomFieldColumns(tx, entity.table)
+        const cols = await loadBeaconCustomReportColumns(tx, entity.table)
         if (cols.length) out[entity.key] = cols
       }
       return out

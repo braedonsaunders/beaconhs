@@ -114,6 +114,7 @@ export async function loadSubjectCollections(
     const photoFields: SubjectFieldOption[] = [
       { key: 'url', label: 'File URL' },
       { key: 'filename', label: 'Filename' },
+      { key: 'caption', label: 'Caption' },
     ]
     for (const sec of schema.sections ?? []) {
       // Repeating sections: the response stores the rows array at the section
@@ -122,7 +123,7 @@ export async function loadSubjectCollections(
         const fields = (sec.fields ?? [])
           .filter((f) => !SKIP_FIELD_TYPES.has(f.type))
           .map((f) => ({
-            key: f.id,
+            key: hasTextCompanion(f.type) ? `${f.id}_text` : f.id,
             label: labelText(f.label, f.id, ctx.locale, ctx.defaultLocale),
           }))
         if (fields.length > 0) {
@@ -130,6 +131,15 @@ export async function loadSubjectCollections(
             key: sec.id,
             label: labelText(sec.title, sec.id, ctx.locale, ctx.defaultLocale),
             fields,
+          })
+        }
+        for (const field of sec.fields ?? []) {
+          if (!hasPhotosCompanion(field.type)) continue
+          const label = labelText(field.label, field.id, ctx.locale, ctx.defaultLocale)
+          out.push({
+            key: `${sec.id}_${field.id}_photos`,
+            label: `${label} (photos)`,
+            fields: photoFields,
           })
         }
         continue
@@ -141,7 +151,7 @@ export async function loadSubjectCollections(
           out.push({ key: f.id, label, fields: photoFields })
           continue
         }
-        // photo_ai / photo_annotated: nested attachments flattened by the
+        // Canonical photo values: nested attachments flattened by the
         // adapter into a `<id>_photos` companion collection.
         if (hasPhotosCompanion(f.type)) {
           out.push({ key: `${f.id}_photos`, label: `${label} (photos)`, fields: photoFields })

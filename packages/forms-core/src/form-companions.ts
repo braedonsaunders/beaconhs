@@ -8,8 +8,8 @@
 //   {{<fieldId>_text}}     human-readable text (pickers → names, joins, …)
 //   {{<fieldId>_image}}    an embeddable image URL (sketch; signature values
 //                          are projected to a signed URL at render time)
-//   {{#each <fieldId>}}    photo/file fields — AttachedFile {url, filename}
-//   {{#each <fieldId>_photos}}  photo_ai / photo_annotated attachments
+//   {{#each <fieldId>}}    file fields — AttachedFile {url, filename}
+//   {{#each <fieldId>_photos}}  photo attachments with rendered markup
 //   {{#each <sectionId>}}  repeating-section rows keyed by field id
 //   {{#each <fieldId>}}    table-field rows keyed by column key
 
@@ -44,8 +44,7 @@ const TEXT_COMPANION_TYPES = new Set([
   'risk_matrix',
   'typed_attestation',
   'data_table',
-  'photo_ai',
-  'photo_annotated',
+  'photo',
   'datetime',
 ])
 
@@ -60,10 +59,10 @@ export function hasImageCompanion(type: string): boolean {
 
 /** Object-valued photo fields whose attachments nest under `.attachments`. */
 export function hasPhotosCompanion(type: string): boolean {
-  return type === 'photo_ai' || type === 'photo_annotated'
+  return type === 'photo'
 }
 
 /** Array-of-AttachedFile fields — raw rows already carry {url, filename}. */
 export function isAttachmentArrayField(type: string): boolean {
-  return ['photo', 'photo_upload', 'file', 'video', 'audio'].includes(type)
+  return ['file', 'video', 'audio'].includes(type)
 }

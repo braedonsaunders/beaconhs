@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { attachmentIdsEqual, singlePrimaryPhoto } from './photo-field-state'
+import { attachmentIdsEqual } from './photo-field-state'
 
 describe('photo field state', () => {
   const first = { attachmentId: 'first', filename: 'first.jpg' }
@@ -10,10 +10,5 @@ describe('photo field state', () => {
     expect(attachmentIdsEqual([first, second], [second, first])).toBe(false)
     expect(attachmentIdsEqual([first], [second])).toBe(false)
     expect(attachmentIdsEqual([first], [])).toBe(false)
-  })
-
-  it('keeps only the newest primary photo for annotation', () => {
-    expect(singlePrimaryPhoto([first, second])).toEqual([second])
-    expect(singlePrimaryPhoto([])).toEqual([])
   })
 })

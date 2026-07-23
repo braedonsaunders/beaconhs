@@ -1,6 +1,7 @@
 {
   "name": "@beaconhs/reports",
   "version": "0.1.0",
+  "description": "BeaconHS domain catalogue and persistence adapter for AppKit Reports.",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -9,10 +10,9 @@
     ".": "./src/index.ts",
     "./document": "./src/document.ts",
     "./entities": "./src/entities.ts",
-    "./filters": "./src/filters.ts",
-    "./operational-filters": "./src/operational-filters.ts",
-    "./schedule-policy": "./src/schedule-policy.ts",
-    "./training-filters": "./src/training-filters.ts"
+    "./react": "./src/react.ts",
+    "./server": "./src/server.ts",
+    "./styles.css": "./src/styles.css"
   },
   "scripts": {
     "test": "vitest run",
@@ -20,8 +20,13 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@appkit/analytics": "file:../../vendor/appkit/appkit-analytics-0.2.0.tgz",
+    "@appkit/reports": "file:../../vendor/appkit/appkit-reports-0.2.0-1e69bf8.tgz",
+    "@appkit/ui": "file:../../vendor/appkit/appkit-ui-0.1.1.tgz",
     "@beaconhs/db": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "lucide-react": "^1.24.0",
+    "react": "19.2.7"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

@@ -2,7 +2,8 @@
 // Physical-table entities carry a stable `id` uuid PK; the `report_*` join-baked
 // views in the registry do not, so they're list-only.
 
-import { REPORT_ENTITIES, type ReportEntity } from '@beaconhs/reports'
+import { REPORT_ENTITIES } from '@beaconhs/reports'
+import type { ReportEntity } from '@beaconhs/reports/entities'
 export { isUuid } from '../list-params'
 
 const ID_COLUMN = 'id'

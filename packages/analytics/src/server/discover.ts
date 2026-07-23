@@ -343,10 +343,14 @@ function discoverSchemaEntities(): AnalyticsEntity[] {
     })
   }
 
-  // The reporting VIEWs aren't Drizzle tables — pull the curated ones in.
-  // Normalize their (lower-case) report category to match the discovered ones.
+  // Reporting VIEWs that do not have a first-class table counterpart are also
+  // useful in Insights. Never let a report-only projection shadow a discovered
+  // business entity with the same key, though: system and tenant-authored cards
+  // must retain the complete table schema (relations, lifecycle timestamps,
+  // status fields, etc.). Reports use their own AppKit catalogue directly.
+  const discoveredKeys = new Set(entities.map((entity) => entity.key))
   for (const e of curatedEntities) {
-    if (e.table.startsWith('report_')) {
+    if (e.table.startsWith('report_') && !discoveredKeys.has(e.key)) {
       const category = e.category.charAt(0).toUpperCase() + e.category.slice(1)
       entities.push({ ...e, category, primary: true })
     }

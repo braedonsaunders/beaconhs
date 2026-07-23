@@ -9,13 +9,9 @@ import { Camera, FileUp, Loader2, Trash2 } from 'lucide-react'
 import { Button, uploadReservedFile } from '@beaconhs/ui'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { RawImage } from '@/components/raw-image'
+import type { PhotoAttachmentValue } from '@beaconhs/forms-core'
 
-export type AttachedFile = {
-  attachmentId: string
-  filename: string
-  contentType: string
-  url: string
-}
+export type AttachedFile = PhotoAttachmentValue
 
 const KIND_FROM_TYPE = (mime: string): 'image' | 'document' | 'video' | 'audio' | 'other' => {
   if (mime.startsWith('image/')) return 'image'
@@ -34,6 +30,7 @@ export function FileUpload({
   maxFiles,
   onUploadingChange,
   variant = 'file',
+  showFileList = true,
 }: {
   value: AttachedFile[]
   onChange: (files: AttachedFile[]) => void
@@ -42,6 +39,7 @@ export function FileUpload({
   maxFiles?: number
   onUploadingChange?: (uploading: boolean) => void
   variant?: 'photo' | 'file' | 'video' | 'audio'
+  showFileList?: boolean
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
@@ -91,11 +89,22 @@ export function FileUpload({
       setError(tGeneratedValue(fin.error))
       return null
     }
+    let dimensions: Pick<AttachedFile, 'width' | 'height'> = {}
+    if (variant === 'photo' && kind === 'image' && 'createImageBitmap' in globalThis) {
+      try {
+        const bitmap = await createImageBitmap(file)
+        dimensions = { width: bitmap.width, height: bitmap.height }
+        bitmap.close()
+      } catch {
+        // Dimension metadata is optional; upload success must not depend on it.
+      }
+    }
     return {
       attachmentId: fin.attachmentId,
       filename: file.name,
       contentType: file.type || 'application/octet-stream',
       url: fin.url,
+      ...dimensions,
     }
   }
 
@@ -187,7 +196,7 @@ export function FileUpload({
 
       <GeneratedValue
         value={
-          value.length > 0 ? (
+          showFileList && value.length > 0 ? (
             <ul className="space-y-1.5">
               <GeneratedValue
                 value={value.map((f) => (

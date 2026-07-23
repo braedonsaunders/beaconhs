@@ -93,6 +93,8 @@ import {
   type FormSection,
   type FormulaExpression,
   type DefaultValueExpression,
+  type PhotoFieldConfig,
+  type PhotoFieldValue,
   type TableColumn,
   type TableConfig,
 } from '@beaconhs/forms-core'
@@ -119,13 +121,14 @@ import { RawImage } from '@/components/raw-image'
 import { SketchPad, type SketchScene } from '@/components/sketch-pad'
 import { RiskMatrixField } from '@/components/risk-matrix'
 import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-upload'
+import { PhotoGallery, type PhotoEdits } from '@/components/photo-gallery'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { WizardLayout } from '@/components/page-layout'
 import { PremiumSection } from '@/components/premium-section'
 import { Section } from '@/components/section'
 import { toast } from '@/lib/toast'
 import { canvasCss, columnsCss, gridClass, resolveCanvas } from '@/app/(app)/apps/_lib/canvas'
-import { attachmentIdsEqual, singlePrimaryPhoto } from './photo-field-state'
+import { attachmentIdsEqual } from './photo-field-state'
 
 type CurrentUser = {
   personId: string | null
@@ -2602,18 +2605,7 @@ function FieldInput({
     case 'sketch':
       return <SketchField value={value} onChange={onChange} />
     case 'photo':
-    case 'photo_upload':
-      return (
-        <FileUpload
-          variant="photo"
-          value={Array.isArray(value) ? (value as AttachedFile[]) : []}
-          onChange={(files) => onChange(files)}
-        />
-      )
-    case 'photo_ai':
-      return <PhotoAiInput value={value} onChange={onChange} />
-    case 'photo_annotated':
-      return <PhotoAnnotateInput value={value} onChange={onChange} />
+      return <PhotoInput field={field} value={value} onChange={onChange} />
     case 'file':
       return (
         <FileUpload
@@ -3859,23 +3851,28 @@ function sevTone(sev: string): string {
   return sev === 'high' ? 'text-red-600' : sev === 'medium' ? 'text-amber-600' : 'text-yellow-600'
 }
 
-type PhotoAiValue = {
-  attachments?: AttachedFile[]
-  analysis?: SafetyVisionAnalysis
-  analyzedAt?: string
-}
-
-// Photo capture + on-demand AI safety analysis (missing PPE / hazards). Stores a
-// compound value { attachments, analysis?, analyzedAt? }. Editing the photos
-// clears a stale analysis.
-function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
+// Builder photos use the same gallery/editor as native frontline records.
+// Attachment changes invalidate AI analysis; caption/markup-only edits do not.
+function PhotoInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: FormField
+  value: unknown
+  onChange: (v: unknown) => void
+}) {
   const v = (
     value && typeof value === 'object' && !Array.isArray(value) ? value : {}
-  ) as PhotoAiValue
+  ) as Partial<PhotoFieldValue>
   const attachments = Array.isArray(v.attachments) ? v.attachments : []
+  const config = (field.config ?? {}) as PhotoFieldConfig
+  const readOnly = useContext(FillReadOnlyContext)
+  const multiple = config.multiple !== false
+  const maxFiles = multiple ? (config.maxFiles ?? 10) : 1
   const [analyzing, setAnalyzing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const a = v.analysis
+  const a = v.analysis as SafetyVisionAnalysis | undefined
 
   const setFiles = (files: AttachedFile[]) => {
     const unchanged = attachmentIdsEqual(attachments, files)
@@ -3884,6 +3881,27 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
       analysis: unchanged ? v.analysis : undefined,
       analyzedAt: unchanged ? v.analyzedAt : undefined,
     })
+  }
+  const updatePhoto = (photoId: string, edits: PhotoEdits) => {
+    const caption = edits.caption.trim()
+    onChange({
+      attachments: attachments.map((photo) => {
+        if (photo.attachmentId !== photoId) return photo
+        const { caption: _caption, annotations: _annotations, ...base } = photo
+        return {
+          ...base,
+          ...(caption ? { caption } : {}),
+          ...(edits.annotations.length > 0 ? { annotations: edits.annotations } : {}),
+        }
+      }),
+      analysis: v.analysis,
+      analyzedAt: v.analyzedAt,
+    })
+    return Promise.resolve()
+  }
+  const removePhoto = (photoId: string) => {
+    setFiles(attachments.filter((photo) => photo.attachmentId !== photoId))
+    return Promise.resolve()
   }
   const analyze = () => {
     if (attachments.length === 0 || analyzing) return
@@ -3901,49 +3919,75 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
 
   return (
     <div className="space-y-2">
-      <FileUpload variant="photo" value={attachments} onChange={setFiles} />
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={attachments.length === 0 || analyzing}
-          onClick={analyze}
-        >
-          <Sparkles size={14} />
-          <GeneratedValue value={' '} />
+      {!readOnly ? (
+        <FileUpload
+          variant="photo"
+          value={attachments}
+          onChange={setFiles}
+          multiple={multiple}
+          maxFiles={maxFiles}
+          showFileList={false}
+        />
+      ) : null}
+      <PhotoGallery
+        photos={attachments.map((photo) => ({
+          id: photo.attachmentId,
+          attachmentId: photo.attachmentId,
+          url: photo.url,
+          filename: photo.filename,
+          caption: photo.caption,
+          annotations: photo.annotations,
+          width: photo.width,
+          height: photo.height,
+        }))}
+        editable={!readOnly}
+        onUpdate={updatePhoto}
+        onRemove={removePhoto}
+      />
+      {config.aiAnalysis && !readOnly ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={attachments.length === 0 || analyzing}
+            onClick={analyze}
+          >
+            <Sparkles size={14} />
+            <GeneratedValue value={' '} />
+            <GeneratedValue
+              value={
+                analyzing ? (
+                  <GeneratedText id="m_03e83706cf8b10" />
+                ) : a ? (
+                  <GeneratedText id="m_0535300396f0de" />
+                ) : (
+                  <GeneratedText id="m_0fec93e95858fc" />
+                )
+              }
+            />
+          </Button>
           <GeneratedValue
             value={
-              analyzing ? (
-                <GeneratedText id="m_03e83706cf8b10" />
-              ) : a ? (
-                <GeneratedText id="m_0535300396f0de" />
-              ) : (
-                <GeneratedText id="m_0fec93e95858fc" />
-              )
+              a ? (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${riskTone(a.overallRisk)}`}
+                >
+                  <GeneratedValue
+                    value={
+                      a.overallRisk === 'none' ? (
+                        <GeneratedText id="m_01711e3b6ef4b1" />
+                      ) : (
+                        <GeneratedText id="m_114202332342ab" values={{ value0: a.overallRisk }} />
+                      )
+                    }
+                  />
+                </span>
+              ) : null
             }
           />
-        </Button>
-        <GeneratedValue
-          value={
-            a ? (
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs font-medium ${riskTone(a.overallRisk)}`}
-              >
-                <GeneratedValue
-                  value={
-                    a.overallRisk === 'none' ? (
-                      <GeneratedText id="m_01711e3b6ef4b1" />
-                    ) : (
-                      <GeneratedText id="m_114202332342ab" values={{ value0: a.overallRisk }} />
-                    )
-                  }
-                />
-              </span>
-            ) : null
-          }
-        />
-      </div>
+        </div>
+      ) : null}
       <GeneratedValue
         value={
           err ? (
@@ -3955,7 +3999,7 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
       />
       <GeneratedValue
         value={
-          a ? (
+          config.aiAnalysis && a ? (
             <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-sm">
               <GeneratedValue
                 value={
@@ -4054,122 +4098,6 @@ function PhotoAiInput({ value, onChange }: { value: unknown; onChange: (v: unkno
           ) : null
         }
       />
-    </div>
-  )
-}
-
-// --- Photo annotation (tap-to-drop hazard markers) -------------------------
-
-type PhotoMarker = { id: string; x: number; y: number; label: string }
-type PhotoAnnotatedValue = { attachments?: AttachedFile[]; markers?: PhotoMarker[] }
-
-function PhotoAnnotateInput({
-  value,
-  onChange,
-}: {
-  value: unknown
-  onChange: (v: unknown) => void
-}) {
-  const tGenerated = useGeneratedTranslations()
-  const v = (
-    value && typeof value === 'object' && !Array.isArray(value) ? value : {}
-  ) as PhotoAnnotatedValue
-  const attachments = Array.isArray(v.attachments) ? v.attachments : []
-  const markers = Array.isArray(v.markers) ? v.markers : []
-  const imgWrapRef = useRef<HTMLDivElement>(null)
-  const photo = attachments[0]
-
-  const setFiles = (files: AttachedFile[]) => {
-    const next = singlePrimaryPhoto(files)
-    const samePrimary = attachments[0]?.attachmentId === next[0]?.attachmentId
-    onChange({ attachments: next, markers: samePrimary ? markers : [] })
-  }
-  const newId = () =>
-    globalThis.crypto?.randomUUID?.() ??
-    `m_${markers.length}_${markers.reduce((a, m) => a + m.x, 0)}`
-  const addMarker = (e: React.MouseEvent) => {
-    const rect = imgWrapRef.current?.getBoundingClientRect()
-    if (!rect || rect.width === 0) return
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
-    onChange({ attachments, markers: [...markers, { id: newId(), x, y, label: '' }] })
-  }
-  const setLabel = (id: string, label: string) =>
-    onChange({ attachments, markers: markers.map((m) => (m.id === id ? { ...m, label } : m)) })
-  const removeMarker = (id: string) =>
-    onChange({ attachments, markers: markers.filter((m) => m.id !== id) })
-
-  if (attachments.length === 0 || !photo) {
-    return <FileUpload variant="photo" value={attachments} onChange={setFiles} multiple={false} />
-  }
-
-  return (
-    <div className="space-y-2">
-      <div
-        ref={imgWrapRef}
-        onClick={addMarker}
-        className="relative inline-block max-w-full cursor-crosshair select-none"
-      >
-        <RawImage
-          src={photo.url}
-          alt={tGenerated('m_0fe28938af7e45')}
-          optimizationReason="authenticated"
-          draggable={false}
-          className="max-h-80 max-w-full rounded border border-slate-200"
-        />
-        <GeneratedValue
-          value={markers.map((m, i) => (
-            <span
-              key={m.id}
-              className="absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-rose-600 text-xs font-bold text-white ring-2 ring-white"
-              style={{ left: `${m.x * 100}%`, top: `${m.y * 100}%` }}
-            >
-              <GeneratedValue value={i + 1} />
-            </span>
-          ))}
-        />
-      </div>
-      <p className="text-[11px] text-slate-400">
-        <GeneratedText id="m_02961df16c552c" />
-      </p>
-      <GeneratedValue
-        value={
-          markers.length > 0 ? (
-            <ul className="space-y-1">
-              <GeneratedValue
-                value={markers.map((m, i) => (
-                  <li key={m.id} className="flex items-center gap-2">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-600 text-[10px] font-bold text-white">
-                      <GeneratedValue value={i + 1} />
-                    </span>
-                    <Input
-                      value={m.label}
-                      placeholder={tGenerated('m_16fb1210fc864b', { value0: i + 1 })}
-                      onChange={(e) => setLabel(m.id, e.target.value)}
-                      className="h-8 flex-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeMarker(m.id)}
-                      className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-500"
-                      title={tGenerated('m_0079038e85c06d')}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </li>
-                ))}
-              />
-            </ul>
-          ) : null
-        }
-      />
-      <button
-        type="button"
-        onClick={() => setFiles([])}
-        className="text-xs text-slate-500 hover:underline"
-      >
-        <GeneratedText id="m_0b4d2076c64fbb" />
-      </button>
     </div>
   )
 }

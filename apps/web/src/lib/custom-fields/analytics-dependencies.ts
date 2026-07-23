@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { and, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, eq, isNull, ne } from 'drizzle-orm'
 import { parseBhqlQuery } from '@beaconhs/analytics'
 import { discoverEntitiesWithScopedApps } from '@beaconhs/analytics/server'
 import type { Database } from '@beaconhs/db'
@@ -39,14 +39,10 @@ export async function findCustomFieldAnalyticsDependencies(
       .from(formTemplates)
       .where(isNull(formTemplates.deletedAt)),
     tx
-      .select({ query: reportDefinitions.customQuery })
+      .select({ query: reportDefinitions.query })
       .from(reportDefinitions)
       .where(
-        and(
-          eq(reportDefinitions.tenantId, tenantId),
-          eq(reportDefinitions.kind, 'custom'),
-          isNotNull(reportDefinitions.customQuery),
-        ),
+        and(eq(reportDefinitions.tenantId, tenantId), ne(reportDefinitions.state, 'archived')),
       ),
     tx
       .select({ query: insightCards.query })

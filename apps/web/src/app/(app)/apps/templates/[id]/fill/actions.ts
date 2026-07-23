@@ -675,7 +675,7 @@ export async function updateResponseField(input: {
   }
 }
 
-// Fill-time safety analysis for a `photo_ai` element. Gated by forms.ai.generate
+// Fill-time safety analysis for an AI-enabled photo field. Gated by forms.ai.generate
 // + a configured AI provider; returns a friendly error rather than throwing so
 // the filler can surface it inline. Never persists — the client stores the
 // returned findings on the field value.

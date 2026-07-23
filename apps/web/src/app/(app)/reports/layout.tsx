@@ -9,6 +9,7 @@ import type { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import '@beaconhs/reports/styles.css'
 
 export default async function ReportsLayout({ children }: { children: ReactNode }) {
   const ctx = await requireRequestContext()

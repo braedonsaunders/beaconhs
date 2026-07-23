@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
+import type { PhotoAnnotation } from '@beaconhs/forms-core'
 import { id, timestamps } from './_helpers'
 import { tenants, users } from './core'
 
@@ -97,9 +98,4 @@ export const attachmentUploadReservations = pgTable(
   }),
 )
 
-export type Annotation =
-  | { type: 'arrow'; from: [number, number]; to: [number, number]; color: string; width: number }
-  | { type: 'circle'; cx: number; cy: number; r: number; color: string; width: number }
-  | { type: 'rect'; x: number; y: number; w: number; h: number; color: string; width: number }
-  | { type: 'text'; x: number; y: number; text: string; color: string; size: number }
-  | { type: 'free'; points: [number, number][]; color: string; width: number }
+export type Annotation = PhotoAnnotation

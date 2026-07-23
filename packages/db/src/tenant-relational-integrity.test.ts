@@ -377,8 +377,8 @@ describe('tenant relational integrity', () => {
     // This is a deliberate ratchet, not acceptance that the residual edges are
     // safe. Any added, removed, or retargeted edge requires a fresh integrity
     // review. The architecture audit ranks the remaining conversion batches.
-    expect(residual).toHaveLength(22)
-    expect(digest).toBe('0db8a7b7190966ad47e0f41e2aec03faf1052ffd70758799f5f9c5cdd184a2f9')
+    expect(residual).toHaveLength(21)
+    expect(digest).toBe('32359ab4ef458799a19b26fcf7ada16672ce32c35bcad094f081f24f640bb075')
     expect(residual).toMatchSnapshot()
   })
 })

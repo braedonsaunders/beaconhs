@@ -15,7 +15,7 @@ const schema: FormSchemaV1 = {
       fields: [
         { id: 'notes', type: 'long_text', label: { en: 'Notes' } },
         { id: 'minutes', type: 'number', label: { en: 'Minutes' } },
-        { id: 'photos', type: 'photo_upload', label: { en: 'Photos' } },
+        { id: 'photos', type: 'photo', label: { en: 'Photos' } },
         { id: 'heading', type: 'heading', label: { en: 'Heading' } },
       ],
     },

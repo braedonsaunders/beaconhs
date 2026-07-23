@@ -6,7 +6,8 @@
 // compiler resolves through `columnRef`.
 
 import type { Database } from '@beaconhs/db'
-import { loadCustomFieldColumns, type ReportEntityColumn } from '@beaconhs/reports'
+import type { ReportEntityColumn } from '@beaconhs/reports'
+import { loadBeaconCustomReportColumns } from '@beaconhs/reports/server'
 import { deriveSemanticType, type AnalyticsColumn, type AnalyticsEntity } from '../semantic'
 import { discoverEntities, scopedFormAppEntity } from './discover'
 
@@ -30,7 +31,7 @@ async function discoverEntitiesWithCustomFields(tx: Database): Promise<Analytics
   const base = discoverEntities()
   const out: AnalyticsEntity[] = []
   for (const entity of base) {
-    const cols = await loadCustomFieldColumns(tx, entity.table)
+    const cols = await loadBeaconCustomReportColumns(tx, entity.table)
     if (!cols.length) {
       out.push(entity)
       continue

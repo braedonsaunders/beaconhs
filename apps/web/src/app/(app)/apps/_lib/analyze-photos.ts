@@ -1,7 +1,7 @@
 import 'server-only'
 
 // Shared safety photo-analysis helper — resolves attachment bytes + runs the
-// vision model. Reused by the fill-time `photo_ai` element (via a 'use server'
+// vision model. Reused by AI-enabled Builder photo fields (via a 'use server'
 // action) and the `analyze_photos` flow action (called directly in the on-submit
 // runner). RLS-bound: attachments are read through ctx.db so a caller can only
 // reach their own tenant's images.

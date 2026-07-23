@@ -217,7 +217,7 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   }),
   z.object({
     action: z.literal('analyze_photos'),
-    // Photo field to analyse (photo / photo_upload / photo_ai).
+    // Canonical photo field to analyse.
     fieldId: z.string(),
     // Optional: write the AI summary into this text field on the response.
     storeInField: z.string().optional(),
