@@ -25,6 +25,7 @@ import {
   incidentLostTimeEvents,
   incidents,
   inspectionRecords,
+  inspectionTypes,
   orgUnits,
   people,
   personGroupMemberships,
@@ -587,59 +588,62 @@ export async function queryCorrectiveActionsOpen(
 
 export async function queryInspectionsCompleted(
   tx: Database,
-  _filters: Filters,
+  filters: Filters,
   range: ReportRange,
 ): Promise<ReportRunResult> {
+  const siteId = pickUuid(filters.siteOrgUnitId ?? filters.locationId)
+  const typeId = pickUuid(filters.inspectionTypeId ?? filters.typeId)
   const rows = await tx
     .select({
-      id: formResponses.id,
-      submittedAt: formResponses.submittedAt,
-      status: formResponses.status,
-      templateId: formTemplates.id,
-      templateName: formTemplates.name,
-      siteName: orgUnits.name,
+      id: inspectionRecords.id,
+      submittedAt: inspectionRecords.submittedAt,
+      status: inspectionRecords.status,
+      typeId: inspectionTypes.id,
+      typeName: inspectionTypes.name,
+      location: inspectionRecords.location,
     })
-    .from(formResponses)
-    .innerJoin(formTemplates, eq(formTemplates.id, formResponses.templateId))
-    .leftJoin(orgUnits, eq(orgUnits.id, formResponses.siteOrgUnitId))
+    .from(inspectionRecords)
+    .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
     .where(
       and(
-        isNull(formResponses.deletedAt),
-        eq(formTemplates.category, 'inspection'),
-        isNotNull(formResponses.submittedAt),
-        gte(formResponses.submittedAt, range.from),
-        lte(formResponses.submittedAt, range.to),
+        isNull(inspectionRecords.deletedAt),
+        inArray(inspectionRecords.status, ['submitted', 'closed']),
+        isNotNull(inspectionRecords.submittedAt),
+        gte(inspectionRecords.submittedAt, range.from),
+        lte(inspectionRecords.submittedAt, range.to),
+        siteId ? eq(inspectionRecords.siteOrgUnitId, siteId) : undefined,
+        typeId ? eq(inspectionRecords.typeId, typeId) : undefined,
       ),
     )
-    .orderBy(desc(formResponses.submittedAt))
+    .orderBy(desc(inspectionRecords.submittedAt))
 
-  const byTemplate = new Map<string, { name: string; list: typeof rows }>()
+  const byType = new Map<string, { name: string; list: typeof rows }>()
   for (const r of rows) {
-    const e = byTemplate.get(r.templateId) ?? { name: r.templateName, list: [] }
+    const e = byType.get(r.typeId) ?? { name: r.typeName, list: [] }
     e.list.push(r)
-    byTemplate.set(r.templateId, e)
+    byType.set(r.typeId, e)
   }
 
   const groups: ReportGroup[] = []
   if (rows.length === 0) {
     groups.push({
       title: 'Completed inspections',
-      columns: ['Submitted', 'Template', 'Status', 'Site'],
+      columns: ['Submitted', 'Inspection type', 'Status', 'Location'],
       rows: [],
       isEmpty: true,
     })
   } else {
-    for (const [, { name, list }] of [...byTemplate.entries()].sort((a, b) =>
+    for (const [, { name, list }] of [...byType.entries()].sort((a, b) =>
       a[1].name.localeCompare(b[1].name),
     )) {
       groups.push({
         title: name,
         subtitle: `${list.length} completed`,
-        columns: ['Submitted', 'Status', 'Site'],
+        columns: ['Submitted', 'Status', 'Location'],
         rows: list.map((r) => [
           r.submittedAt ? r.submittedAt.toISOString().slice(0, 16).replace('T', ' ') : null,
           formatLabel(r.status),
-          r.siteName ?? null,
+          r.location ?? null,
         ]),
       })
     }
@@ -649,7 +653,7 @@ export async function queryInspectionsCompleted(
     groups,
     summary: [
       { label: 'Total completed', value: rows.length },
-      { label: 'Templates', value: byTemplate.size },
+      { label: 'Inspection types', value: byType.size },
     ],
     rowCount: rows.length,
   }

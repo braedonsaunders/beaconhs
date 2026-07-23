@@ -235,13 +235,13 @@ Regular inspections catch unsafe conditions before they hurt someone. The record
 
 Open **Inspections** in the left menu. Records live at [Inspection records](/inspections/records).
 
-On **Inspection records**, use **All inspection types**, **All sites**, and **All inspectors** to search across the records you are allowed to open. If a picker says more results exist, add more of the type, site, inspector name, or email to the search.
+On **Inspection records**, use **All inspection types**, **All sites**, and **All inspectors** to search across the records you are allowed to open. The **Location** column shows the specific place where the inspection happened. If a picker says more results exist, add more of the type, site, inspector name, or email to the search.
 
 ## Starting an inspection
 
 1. Tap **New inspection**.
 2. Use the search box to find the inspection type and tap it. The list shows how many checks each type has.
-3. A new draft record opens. Fill in the details at the top — site, foreman, notes. Fields save as you go.
+3. A new draft record opens. Choose the **Customer / site**, enter the specific **Location**, then fill in the foreman and notes. Fields save as you go.
 
 ## Answering the criteria
 

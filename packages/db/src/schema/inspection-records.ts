@@ -48,8 +48,11 @@ export const inspectionRecords = pgTable(
     // When did the inspection actually happen (not when the row was created)
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
 
-    // Site / location
+    // Org-unit scope and the specific free-text place where the check happened
+    // are separate concepts. `siteOrgUnitId` drives tenant visibility and
+    // grouping; `location` preserves the on-site location entered by crews.
     siteOrgUnitId: uuid('site_org_unit_id'),
+    location: text('location'),
 
     // Who performed the inspection
     inspectorTenantUserId: uuid('inspector_tenant_user_id'),

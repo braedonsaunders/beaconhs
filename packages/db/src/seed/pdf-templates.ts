@@ -368,7 +368,8 @@ const INSPECTION = wrap(
     heading('General information') +
     grid([
       p('Occurred', '{{occurred_at}}'),
-      p('Site', '{{site_name}}'),
+      p('Location', '{{location}}'),
+      pIf('site_name', 'Customer / site', '{{site_name}}'),
       p('Inspector', '{{inspector_name}}'),
       p('Supervisor', '{{supervisor_name}}'),
       p('Foreman', '{{foreman_text}}'),

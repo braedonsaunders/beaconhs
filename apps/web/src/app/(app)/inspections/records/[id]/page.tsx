@@ -347,7 +347,7 @@ async function updateRecordField(formData: FormData) {
   const field = String(formData.get('field') ?? '')
   const value = String(formData.get('value') ?? '')
   if (!isUuid(id) || !field) throw new Error('Missing or invalid id/field')
-  const ALLOWED = new Set(['occurredAt', 'siteOrgUnitId', 'foremanText', 'notes'])
+  const ALLOWED = new Set(['occurredAt', 'siteOrgUnitId', 'location', 'foremanText', 'notes'])
   if (!ALLOWED.has(field)) throw new Error('Field not allowed')
 
   const NULLABLE_IDS = new Set(['siteOrgUnitId'])
@@ -1614,12 +1614,23 @@ export default async function InspectionRecordDetailPage({
               <LiveRemoteSelect
                 id={record.id}
                 field="siteOrgUnitId"
-                label={tGenerated('m_020146dd3d3d5a')}
+                label={tGenerated('m_09ec32e549824e')}
                 initialValue={record.siteOrgUnitId}
                 lookup="inspection-sites"
                 disabled={recordImmutable}
                 updateAction={updateRecordField}
               />
+              <div className="sm:col-span-2">
+                <LiveField
+                  id={record.id}
+                  field="location"
+                  label={tGenerated('m_055f11420b2da4')}
+                  initialValue={record.location}
+                  placeholder={tGenerated('m_0300804afcc3bb')}
+                  disabled={recordImmutable}
+                  updateAction={updateRecordField}
+                />
+              </div>
               <div className="sm:col-span-2">
                 <LiveField
                   id={record.id}

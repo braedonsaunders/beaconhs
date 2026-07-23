@@ -37,7 +37,6 @@ import {
   inspectionRecords,
   inspectionTypeCriteria,
   inspectionTypes,
-  orgUnits,
   tenantUsers,
   users as user,
 } from '@beaconhs/db/schema'
@@ -122,6 +121,7 @@ export default async function InspectionRecordsPage({
       const c = or(
         ilike(inspectionRecords.reference, term),
         ilike(inspectionTypes.name, term),
+        ilike(inspectionRecords.location, term),
         ilike(inspectionRecords.foremanText, term),
       )
       if (c) filters.push(c)
@@ -174,7 +174,6 @@ export default async function InspectionRecordsPage({
       .select({
         record: inspectionRecords,
         type: inspectionTypes,
-        site: orgUnits,
         inspectorName: user.name,
         passCount:
           sql<number>`coalesce(sum(case when ${inspectionRecordCriteria.answer} = 'pass' then 1 else 0 end), 0)`.mapWith(
@@ -192,7 +191,6 @@ export default async function InspectionRecordsPage({
       })
       .from(inspectionRecords)
       .innerJoin(inspectionTypes, eq(inspectionTypes.id, inspectionRecords.typeId))
-      .leftJoin(orgUnits, eq(orgUnits.id, inspectionRecords.siteOrgUnitId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, inspectionRecords.inspectorTenantUserId))
       .leftJoin(user, eq(user.id, tenantUsers.userId))
       .leftJoin(
@@ -200,7 +198,7 @@ export default async function InspectionRecordsPage({
         eq(inspectionRecordCriteria.recordId, inspectionRecords.id),
       )
       .where(whereClause)
-      .groupBy(inspectionRecords.id, inspectionTypes.id, orgUnits.id, user.id)
+      .groupBy(inspectionRecords.id, inspectionTypes.id, user.id)
       .orderBy(...orderBy)
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
@@ -421,7 +419,7 @@ export default async function InspectionRecordsPage({
                           }
                           person={r.inspectorName}
                           meta={`${formatDate(new Date(r.record.occurredAt), ctx.timezone, ctx.locale)}${
-                            r.site?.name ? ` · ${r.site.name}` : ''
+                            r.record.location ? ` · ${r.record.location}` : ''
                           }`}
                           footer={
                             <>
@@ -490,7 +488,7 @@ export default async function InspectionRecordsPage({
                           <GeneratedText id="m_14a5e97535a15a" />
                         </SortableTh>
                         <TableHead>
-                          <GeneratedText id="m_020146dd3d3d5a" />
+                          <GeneratedText id="m_055f11420b2da4" />
                         </TableHead>
                         <TableHead>
                           <GeneratedText id="m_08412ea75fe5da" />
@@ -549,7 +547,7 @@ export default async function InspectionRecordsPage({
                                 />
                               </TableCell>
                               <TableCell className="text-slate-600 dark:text-slate-400">
-                                <GeneratedValue value={r.site?.name ?? '—'} />
+                                <GeneratedValue value={r.record.location ?? '—'} />
                               </TableCell>
                               <TableCell className="text-slate-600 dark:text-slate-400">
                                 <GeneratedValue value={r.inspectorName ?? '—'} />
