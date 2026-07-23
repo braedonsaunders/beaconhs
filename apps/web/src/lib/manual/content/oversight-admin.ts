@@ -669,7 +669,7 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 4. Turn on **Enable this provider**, then click **Save provider**. Secrets are encrypted in the database; leave a secret box blank later to keep the stored value.
 5. Open an issued ID badge, course wallet card, or external certification wallet card and use the matching **Print with…** button.
 
-On **Notifications → Rules**, each delivery channel shows whether its provider is **Ready**, **Not set up**, or **Disabled by platform policy**. Disabled means a platform kill switch is active; it does not mean the saved credential is missing. The **Compliance detection schedule** has an **Automatic detection** switch: turn it **Off** to pause every overdue and expiring reminder for the whole workspace without losing the configured schedule.
+On **Notifications → Rules**, each delivery channel shows whether its provider is **Ready**, **Not set up**, or **Disabled by platform policy**. Disabled means a platform kill switch is active; it does not mean the saved credential is missing. Turn a category **Off** to stop every automatic in-app, email, push, and text alert in that category, including alerts already waiting in a queue. The **Compliance detection schedule** has an **Automatic detection** switch: turn it **Off** to pause scheduled overdue and expiring detection for the whole workspace without losing the configured schedule.
 
 ## Set workspace languages
 

@@ -20,6 +20,8 @@ export type EmailJobData = {
     tenantId?: string
     userId?: string
     category?: string
+    /** Re-check the tenant category kill switch immediately before delivery. */
+    automaticNotification?: boolean
     reportRunDeliveryId?: string
   }
 }

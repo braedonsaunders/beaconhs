@@ -51,7 +51,10 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
   const requestedUserIds = d.userIds
   const plan = await withTenant(db, d.tenantId, async (tx) => {
     const [catCfg] = await tx
-      .select({ channels: tenantNotificationSettings.channels })
+      .select({
+        enabled: tenantNotificationSettings.enabled,
+        channels: tenantNotificationSettings.channels,
+      })
       .from(tenantNotificationSettings)
       .where(
         and(
@@ -60,6 +63,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
         ),
       )
       .limit(1)
+    if (catCfg?.enabled === false) return { disabled: true as const }
     const [policy] = await tx
       .select({
         digestMode: tenantNotificationPolicy.digestMode,
@@ -147,6 +151,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
             )
         : []
     return {
+      disabled: false as const,
       targets,
       prefRows,
       emailAllowed,
@@ -156,6 +161,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
       subscriptions,
     }
   })
+  if (plan.disabled) return
 
   const prefsByUser = new Map<string, Map<string, boolean>>()
   for (const row of plan.prefRows) {
@@ -177,7 +183,12 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
         subject: d.title,
         html: `<p>${escapeHtml(d.body ?? d.title)}</p>${d.linkPath ? `<p><a href="${escapeHtml(`${baseUrl}${d.linkPath}`)}">Open in app</a></p>` : ''}`,
         text: `${d.body ?? d.title}${d.linkPath ? `\n${baseUrl}${d.linkPath}` : ''}`,
-        meta: { tenantId: d.tenantId, userId: target.id, category: d.category },
+        meta: {
+          tenantId: d.tenantId,
+          userId: target.id,
+          category: d.category,
+          automaticNotification: true,
+        },
       },
       {
         ...(plan.emailDelayMs > 0 ? { delay: plan.emailDelayMs } : {}),

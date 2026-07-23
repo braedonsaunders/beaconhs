@@ -16,7 +16,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import { db as defaultDb, withSuperAdmin, type Database } from '@beaconhs/db'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
-import { resolveNotificationAudienceUserIds } from './recipients'
+import { isNotificationCategoryEnabled, resolveNotificationAudienceUserIds } from './recipients'
 import { complianceRollupEmailHtml, maintenanceRollupEmailHtml } from './email-html'
 import {
   complianceDispatches,
@@ -387,6 +387,9 @@ export async function emitComplianceTransitions(
   const managerActionable = actionable.filter(
     (transition) => transition.to === 'overdue' || transition.to === 'expiring',
   )
+  if (!(await ctx.db((tx) => isNotificationCategoryEnabled(tx, tenantId, 'compliance')))) {
+    return false
+  }
 
   const linkPath = `/compliance/obligations/${ob.id}`
   const url = appUrl(linkPath)
@@ -461,7 +464,7 @@ export async function emitComplianceTransitions(
           subject: title,
           html: complianceRollupEmailHtml({ body, entries: managerActionable, url }),
           text: `${body}\n${url}`,
-          meta: { tenantId, category: 'compliance' },
+          meta: { tenantId, category: 'compliance', automaticNotification: true },
         },
         { jobId: stableJobId('compliance-email', dispatchId) },
       )
@@ -499,6 +502,9 @@ export async function emitEquipmentMaintenanceDue(
 ): Promise<void> {
   if (entries.length === 0) return
   const ctx = workerEventCtx(tenantId)
+  if (!(await ctx.db((tx) => isNotificationCategoryEnabled(tx, tenantId, 'equipment')))) {
+    return
+  }
   // Map reminder assignees → their login user, for self-targeting.
   const personIds = [...new Set(entries.map((e) => e.assigneePersonId).filter(Boolean))] as string[]
   const personUser = new Map<string, string>()
@@ -568,7 +574,7 @@ export async function emitEquipmentMaintenanceDue(
           subject: title,
           html: maintenanceRollupEmailHtml({ title, entries, url }),
           text: `${title}.\n${url}`,
-          meta: { tenantId, category: 'equipment' },
+          meta: { tenantId, category: 'equipment', automaticNotification: true },
         },
         { jobId: stableJobId('equipment-email', deliveryKey) },
       )

@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { sendVia } from '@beaconhs/emails'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { emailLog, reportRunDeliveries, reportRuns } from '@beaconhs/db/schema'
+import { isNotificationCategoryEnabled } from '@beaconhs/events'
 import type { EmailJobData } from '@beaconhs/jobs'
 import { requireEmailTransport, resolveEmailDelivery } from '../lib/resolve-email-transport'
 
@@ -91,11 +92,17 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
     }
   }
 
+  const categorySuppressed =
+    Boolean(job.data.meta?.automaticNotification) &&
+    Boolean(tenantId) &&
+    Boolean(categoryKey) &&
+    !(await withSuperAdmin(db, (tx) => isNotificationCategoryEnabled(tx, tenantId!, categoryKey!)))
+
   // Resolve the effective transport first so we can record the provider used
   // (and the actual sender) on the log row, and honour the global kill switch.
-  const delivery = await resolveEmailDelivery(tenantId)
-  const suppressed = delivery.kind === 'suppressed'
-  const transport = delivery.kind === 'transport' ? delivery.transport : null
+  const delivery = categorySuppressed ? null : await resolveEmailDelivery(tenantId)
+  const suppressed = categorySuppressed || delivery?.kind === 'suppressed'
+  const transport = delivery?.kind === 'transport' ? delivery.transport : null
   const providerKey = suppressed ? 'suppressed' : (transport?.provider ?? 'unconfigured')
   const from = transport?.from ?? 'unconfigured'
 
@@ -122,13 +129,20 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
         status: suppressed ? 'failed' : 'queued',
         categoryKey,
         errorMessage: suppressed
-          ? 'Email delivery is disabled by the platform administrator.'
+          ? categorySuppressed
+            ? `Automatic ${categoryKey} notifications are disabled for this workspace.`
+            : 'Email delivery is disabled by the platform administrator.'
           : null,
         meta: {
           ...(job.data.meta ?? {}),
           attempt: job.attemptsMade,
           provider: providerKey,
-          ...(suppressed ? { suppressed: true } : {}),
+          ...(suppressed
+            ? {
+                suppressed: true,
+                ...(categorySuppressed ? { suppression: 'tenant-category' } : {}),
+              }
+            : {}),
         },
       })
       .returning({ id: emailLog.id })
@@ -139,10 +153,13 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
   if (suppressed) {
     await updateReportDelivery(reportRunDeliveryId, {
       status: 'failed',
-      error: 'Email delivery is disabled by the platform administrator.',
+      error: categorySuppressed
+        ? `Automatic ${categoryKey} notifications are disabled for this workspace.`
+        : 'Email delivery is disabled by the platform administrator.',
     })
     return
   }
+  if (!delivery) throw new Error('Email delivery policy resolution failed')
 
   // 2. Actually send via the resolved database-managed transport. On
   // failure we update the row + rethrow so BullMQ can retry; on success we

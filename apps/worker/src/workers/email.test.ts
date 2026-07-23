@@ -4,6 +4,7 @@ import type { EmailJobData } from '@beaconhs/jobs'
 
 const mocks = vi.hoisted(() => ({
   inserted: [] as Record<string, unknown>[],
+  categoryEnabled: vi.fn(),
   resolveDelivery: vi.fn(),
   sendVia: vi.fn(),
   updated: [] as Record<string, unknown>[],
@@ -13,6 +14,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('drizzle-orm', () => ({ and: vi.fn(), eq: vi.fn() }))
 vi.mock('@beaconhs/emails', () => ({ sendVia: mocks.sendVia }))
 vi.mock('@beaconhs/db', () => ({ db: {}, withSuperAdmin: mocks.withSuperAdmin }))
+vi.mock('@beaconhs/events', () => ({
+  isNotificationCategoryEnabled: mocks.categoryEnabled,
+}))
 vi.mock('@beaconhs/db/schema', () => ({
   emailLog: {
     id: 'email_log.id',
@@ -68,6 +72,7 @@ beforeEach(() => {
   mocks.updated.length = 0
   mocks.withSuperAdmin.mockImplementation(async (_db, callback) => callback(tx))
   mocks.sendVia.mockResolvedValue({ id: 'provider-message-1' })
+  mocks.categoryEnabled.mockResolvedValue(true)
 })
 
 describe('email worker provider policy', () => {
@@ -127,6 +132,30 @@ describe('email worker provider policy', () => {
       status: 'sent',
       providerMessageId: 'provider-message-1',
       sentAt: expect.any(Date),
+    })
+  })
+
+  it('suppresses a queued automatic email when its tenant category was turned off', async () => {
+    const queued = job()
+    queued.data.meta = {
+      tenantId: 'tenant-1',
+      category: 'compliance',
+      automaticNotification: true,
+    }
+    mocks.categoryEnabled.mockResolvedValue(false)
+    const { processEmail } = await import('./email')
+
+    await expect(processEmail(queued)).resolves.toBeUndefined()
+
+    expect(mocks.resolveDelivery).not.toHaveBeenCalled()
+    expect(mocks.sendVia).not.toHaveBeenCalled()
+    expect(mocks.inserted[0]).toMatchObject({
+      status: 'failed',
+      errorMessage: 'Automatic compliance notifications are disabled for this workspace.',
+      meta: expect.objectContaining({
+        suppressed: true,
+        suppression: 'tenant-category',
+      }),
     })
   })
 })

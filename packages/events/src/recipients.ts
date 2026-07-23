@@ -27,6 +27,28 @@ export const DEFAULT_ROLES_BY_CATEGORY: Readonly<Record<string, string[]>> = {
 }
 
 /**
+ * Check the authoritative tenant kill switch for an automatic notification
+ * category. Missing rows retain the documented default-on behaviour.
+ */
+export async function isNotificationCategoryEnabled(
+  tx: Database,
+  tenantId: string,
+  category: string,
+): Promise<boolean> {
+  const [settings] = await tx
+    .select({ enabled: tenantNotificationSettings.enabled })
+    .from(tenantNotificationSettings)
+    .where(
+      and(
+        eq(tenantNotificationSettings.tenantId, tenantId),
+        eq(tenantNotificationSettings.category, category),
+      ),
+    )
+    .limit(1)
+  return settings?.enabled !== false
+}
+
+/**
  * Canonical automatic-notification audience resolver. A saved category row is
  * authoritative; a missing row uses the built-in roles. Every returned user is
  * an active member of this tenant.

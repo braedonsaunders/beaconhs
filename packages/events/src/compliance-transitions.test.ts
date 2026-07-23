@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   whereClause: null as SQL | null,
   enqueueEmail: vi.fn(),
   enqueueNotification: vi.fn(),
+  categoryEnabled: vi.fn(),
   resolveAudience: vi.fn(),
 }))
 
@@ -46,6 +47,7 @@ vi.mock('@beaconhs/jobs', () => ({
 }))
 
 vi.mock('./recipients', () => ({
+  isNotificationCategoryEnabled: mocks.categoryEnabled,
   resolveNotificationAudienceUserIds: mocks.resolveAudience,
 }))
 
@@ -65,6 +67,7 @@ describe('emitComplianceTransitions', () => {
     vi.clearAllMocks()
     mocks.obligationRows = []
     mocks.whereClause = null
+    mocks.categoryEnabled.mockResolvedValue(true)
     mocks.resolveAudience.mockResolvedValue([])
   })
 
@@ -145,6 +148,32 @@ describe('emitComplianceTransitions', () => {
 
     expect(emitted).toBe(true)
     expect(mocks.resolveAudience).toHaveBeenCalledTimes(1)
+    expect(mocks.enqueueNotification).not.toHaveBeenCalled()
+    expect(mocks.enqueueEmail).not.toHaveBeenCalled()
+  })
+
+  it('suppresses self-targeted compliance alerts when the tenant category is disabled', async () => {
+    mocks.obligationRows = [
+      {
+        id: 'obligation-1',
+        title: 'Weekly journal requirement',
+        sourceModule: 'journal',
+        targetRef: {},
+      },
+    ]
+    mocks.categoryEnabled.mockResolvedValue(false)
+
+    const emitted = await emitComplianceTransitions(
+      'tenant-1',
+      'obligation-1',
+      [{ ...overdueTransition, userId: 'user-1' }],
+      'dispatch-1',
+      'lease-1',
+    )
+
+    expect(emitted).toBe(false)
+    expect(mocks.categoryEnabled).toHaveBeenCalledTimes(1)
+    expect(mocks.resolveAudience).not.toHaveBeenCalled()
     expect(mocks.enqueueNotification).not.toHaveBeenCalled()
     expect(mocks.enqueueEmail).not.toHaveBeenCalled()
   })
