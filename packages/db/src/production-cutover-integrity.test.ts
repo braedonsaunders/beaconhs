@@ -157,6 +157,8 @@ describe('production cutover migration integrity', () => {
       'ALTER TABLE "report_definitions" RENAME COLUMN "custom_query" TO "query"',
     )
     expect(reportCutoverSql).toContain('CROSS JOIN seeds AS seed')
+    expect(reportCutoverSql).toContain('\'built_in\'::"report_definition_kind"')
+    expect(reportCutoverSql).toContain("'appkit',")
     expect(reportCutoverSql).toContain(
       'AppKit report cutover blocked: % schedule(s) still reference a global definition',
     )

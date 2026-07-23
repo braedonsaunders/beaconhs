@@ -59,11 +59,13 @@ WITH seeds AS (
 )
 INSERT INTO "report_definitions" (
   "tenant_id",
+  "kind",
   "seed_key",
   "slug",
   "name",
   "description",
   "category",
+  "query_kind",
   "query",
   "layout",
   "state",
@@ -71,11 +73,13 @@ INSERT INTO "report_definitions" (
 )
 SELECT
   tenant.id,
+  'built_in'::"report_definition_kind",
   seed."seedKey",
   seed.slug,
   seed.name,
   seed.description,
   seed.category,
+  'appkit',
   seed.query,
   seed.layout,
   seed.state,
