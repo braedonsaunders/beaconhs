@@ -9,6 +9,7 @@ import { and, eq, inArray, isNull, notInArray } from 'drizzle-orm'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import {
+  attachments,
   equipmentInspectionRecordCriteria,
   equipmentInspectionRecords,
   equipmentInspectionTypes,
@@ -26,6 +27,7 @@ import {
   normalizeInspectionTextAnswer,
 } from '@/lib/inspection-response-config'
 import { isUuid } from '@/lib/list-params'
+import { parsePhotoEdits } from '@/lib/photo-edits'
 import { canSeeRecord } from '@/lib/visibility'
 import {
   finaliseEquipmentInspection,
@@ -498,6 +500,93 @@ export async function addCriterionPhotos(formData: FormData) {
     },
   )
   if (changed) revalidateRecord(recordId)
+}
+
+export async function updateCriterionPhoto(
+  recordId: string,
+  rowId: string,
+  attachmentId: string,
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
+  if (!isUuid(attachmentId)) return { ok: false, error: 'Photo not found.' }
+  const edits = parsePhotoEdits(input)
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, _record, criterion) => {
+      if (!(criterion.photoAttachmentIds ?? []).includes(attachmentId)) return false
+      const [updated] = await tx
+        .update(attachments)
+        .set({ caption: edits.caption, annotations: edits.annotations })
+        .where(
+          and(
+            eq(attachments.tenantId, ctx.tenantId),
+            eq(attachments.id, attachmentId),
+            eq(attachments.kind, 'image'),
+          ),
+        )
+        .returning({ id: attachments.id })
+      if (!updated) return false
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'equipment_inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: 'Updated criterion photo caption and markup',
+        metadata: { rowId, attachmentId, annotationCount: edits.annotations?.length ?? 0 },
+      })
+      return true
+    },
+  )
+  if (!changed) return { ok: false, error: 'Photo not found.' }
+  revalidateRecord(recordId)
+  return { ok: true }
+}
+
+export async function removeCriterionPhoto(
+  recordId: string,
+  rowId: string,
+  attachmentId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
+  if (!isUuid(attachmentId)) return { ok: false, error: 'Photo not found.' }
+  const changed = await withLockedCriterionMutation(
+    ctx,
+    recordId,
+    rowId,
+    async (tx, _record, criterion) => {
+      const previousIds = criterion.photoAttachmentIds ?? []
+      if (!previousIds.includes(attachmentId)) return false
+      const nextIds = previousIds.filter((id) => id !== attachmentId)
+      const [updated] = await tx
+        .update(equipmentInspectionRecordCriteria)
+        .set({ photoAttachmentIds: nextIds })
+        .where(
+          and(
+            eq(equipmentInspectionRecordCriteria.tenantId, ctx.tenantId),
+            eq(equipmentInspectionRecordCriteria.recordId, recordId),
+            eq(equipmentInspectionRecordCriteria.id, rowId),
+          ),
+        )
+        .returning({ id: equipmentInspectionRecordCriteria.id })
+      if (!updated) return false
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'equipment_inspection_record',
+        entityId: recordId,
+        action: 'update',
+        summary: 'Removed photo from an inspection item',
+        before: { rowId, photoAttachmentIds: previousIds },
+        after: { rowId, photoAttachmentIds: nextIds },
+      })
+      return true
+    },
+  )
+  if (!changed) return { ok: false, error: 'Photo not found.' }
+  revalidateRecord(recordId)
+  return { ok: true }
 }
 
 export async function passAllEquipmentInspection(formData: FormData) {

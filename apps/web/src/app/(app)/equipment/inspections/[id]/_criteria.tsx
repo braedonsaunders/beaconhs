@@ -12,6 +12,7 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 import { useState } from 'react'
 import { Badge, Input, Label, cn } from '@beaconhs/ui'
 import { Camera } from 'lucide-react'
+import type { GalleryPhoto, PhotoEdits } from '@/components/photo-gallery'
 import type { InspectionSeverity } from '@/components/builder/inspection-severity'
 import {
   AutosaveTextarea as AutoTextarea,
@@ -38,6 +39,17 @@ type CriterionActions = {
   setActionTaken: (fd: FormData) => Promise<void>
   setValue: (fd: FormData) => Promise<void>
   addPhotos: (fd: FormData) => Promise<void>
+  updatePhoto: (
+    recordId: string,
+    rowId: string,
+    attachmentId: string,
+    input: PhotoEdits,
+  ) => Promise<{ ok: boolean; error?: string }>
+  removePhoto: (
+    recordId: string,
+    rowId: string,
+    attachmentId: string,
+  ) => Promise<{ ok: boolean; error?: string }>
 }
 
 export function CriterionCard({
@@ -76,7 +88,7 @@ export function CriterionCard({
   actionTaken: string | null
   textValue: string | null
   numericValue: string | null
-  photoPreviews: { id: string; url: string; filename: string }[]
+  photoPreviews: GalleryPhoto[]
   workOrderRef: string | null
   locked: boolean
   actions: CriterionActions
@@ -289,6 +301,8 @@ export function CriterionCard({
               recordId={recordId}
               rowId={rowId}
               addPhotos={actions.addPhotos}
+              updatePhoto={actions.updatePhoto}
+              removePhoto={actions.removePhoto}
               onDone={refresh}
             />
           ) : null

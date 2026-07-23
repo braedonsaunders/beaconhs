@@ -32,12 +32,14 @@ import {
   addCriterionPhotos,
   passAllEquipmentInspection,
   reopenEquipmentInspection,
+  removeCriterionPhoto,
   setActionTaken,
   setAnswer,
   setComment,
   setSeverity,
   setValue,
   submitEquipmentInspection,
+  updateCriterionPhoto,
 } from '../_actions'
 
 export const dynamic = 'force-dynamic'
@@ -137,10 +139,28 @@ export default async function EquipmentInspectionRecordPage({
       .orderBy(asc(equipmentInspectionRecordCriteria.sequence))
 
     const allPhotoIds = Array.from(new Set(criteria.flatMap((c) => c.photoAttachmentIds ?? [])))
-    const photoMap = new Map<string, { id: string; url: string; filename: string }>()
+    const photoMap = new Map<
+      string,
+      {
+        id: string
+        url: string
+        filename: string
+        caption: string | null
+        annotations: (typeof attachments.$inferSelect)['annotations']
+        width: number | null
+        height: number | null
+      }
+    >()
     if (allPhotoIds.length > 0) {
       const rows = await tx
-        .select({ id: attachments.id, key: attachments.r2Key, filename: attachments.filename })
+        .select({
+          id: attachments.id,
+          filename: attachments.filename,
+          caption: attachments.caption,
+          annotations: attachments.annotations,
+          width: attachments.width,
+          height: attachments.height,
+        })
         .from(attachments)
         .where(
           and(
@@ -149,8 +169,7 @@ export default async function EquipmentInspectionRecordPage({
             inArray(attachments.id, allPhotoIds),
           ),
         )
-      for (const r of rows)
-        photoMap.set(r.id, { id: r.id, url: attachmentUrl(r.id), filename: r.filename })
+      for (const r of rows) photoMap.set(r.id, { ...r, url: attachmentUrl(r.id) })
     }
     const recordPhotos = await tx
       .select({
@@ -214,6 +233,8 @@ export default async function EquipmentInspectionRecordPage({
     setActionTaken,
     setValue,
     addPhotos: addCriterionPhotos,
+    updatePhoto: updateCriterionPhoto,
+    removePhoto: removeCriterionPhoto,
   }
   const activity = await recentActivityForEntity(ctx, 'equipment_inspection_record', id, 25)
 
@@ -403,9 +424,7 @@ export default async function EquipmentInspectionRecordPage({
                         numericValue={c.numericValue}
                         photoPreviews={(c.photoAttachmentIds ?? [])
                           .map((pid) => photoMap.get(pid))
-                          .filter((p): p is { id: string; url: string; filename: string } =>
-                            Boolean(p),
-                          )}
+                          .filter((p): p is NonNullable<typeof p> => Boolean(p))}
                         workOrderRef={c.workOrderId ? 'Work order' : null}
                         locked={!editable}
                         actions={actions}

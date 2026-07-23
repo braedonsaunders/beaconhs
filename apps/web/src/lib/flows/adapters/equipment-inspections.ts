@@ -25,6 +25,7 @@ import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDate, fmtDateTime, personName, titleize, yesNo } from '../format'
 import type { FlowSubjectAdapter } from '../types'
+import { photoDocumentUrl } from '@/lib/photo-document-url'
 
 function answerLabel(a: string | null): string {
   if (!a) return ''
@@ -144,6 +145,9 @@ export function createEquipmentInspectionFlowAdapter(
             filename: attachments.filename,
             caption: equipmentInspectionRecordAttachments.caption,
             r2Key: attachments.r2Key,
+            annotations: attachments.annotations,
+            width: attachments.width,
+            height: attachments.height,
           })
           .from(equipmentInspectionRecordAttachments)
           .innerJoin(
@@ -173,6 +177,9 @@ export function createEquipmentInspectionFlowAdapter(
                   filename: attachments.filename,
                   caption: attachments.caption,
                   r2Key: attachments.r2Key,
+                  annotations: attachments.annotations,
+                  width: attachments.width,
+                  height: attachments.height,
                 })
                 .from(attachments)
                 .where(
@@ -242,10 +249,18 @@ export function createEquipmentInspectionFlowAdapter(
           action_taken: c.actionTaken ?? '',
         })),
         photos: await Promise.all(
-          [...photosById.values()].map(async (p) => ({
-            url: await presignGet({ key: p.r2Key, expiresInSeconds: 900 }),
-            caption: p.caption ?? '',
-          })),
+          [...photosById.values()].map(async (p) => {
+            const url = await presignGet({ key: p.r2Key, expiresInSeconds: 900 })
+            return {
+              url: photoDocumentUrl({
+                url,
+                annotations: p.annotations,
+                width: p.width,
+                height: p.height,
+              }),
+              caption: p.caption ?? '',
+            }
+          }),
         ),
       }
     },
