@@ -23,6 +23,11 @@ const MAX_REMOTE_RESOURCES = 100
 const MAX_CONCURRENT_RESOURCES = 4
 const MAX_REPORTED_RESOURCE_ERRORS = 20
 const MAX_DOCUMENT_HTML_BYTES = 16 * 1024 * 1024
+// Shared GitHub runners and freshly started worker containers can take longer
+// than Puppeteer's 30-second default to expose Chromium's websocket endpoint.
+// PDF jobs already have bounded queue timeouts, so allow a realistic cold boot
+// without turning transient CPU contention into a failed report.
+const BROWSER_LAUNCH_TIMEOUT_MS = 120_000
 const ALLOWED_RESOURCE_TYPES = new Set(['image', 'stylesheet', 'font'])
 type PdfResourceState = {
   errors: Error[]
@@ -348,8 +353,9 @@ function resolveExecutablePath(): string {
 
 export function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
-    browserPromise = puppeteer.launch({
+    const launch = puppeteer.launch({
       executablePath: resolveExecutablePath(),
+      timeout: BROWSER_LAUNCH_TIMEOUT_MS,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -357,6 +363,20 @@ export function getBrowser(): Promise<Browser> {
         '--font-render-hinting=none',
       ],
     })
+    browserPromise = launch
+    void launch.catch(() => {
+      // Do not poison the worker process with a permanently rejected shared
+      // promise. A later job may retry after transient host pressure clears.
+      if (browserPromise === launch) browserPromise = null
+    })
+    void launch.then(
+      (instance) => {
+        instance.once('disconnected', () => {
+          if (browserPromise === launch) browserPromise = null
+        })
+      },
+      () => undefined,
+    )
   }
   return browserPromise
 }
