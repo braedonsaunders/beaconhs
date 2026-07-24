@@ -11,7 +11,7 @@ import {
   type ReportRunResult,
 } from '@beaconhs/reports'
 import { ReportFilterTree, ReportResultView } from '@beaconhs/reports/react'
-import { Button, Select } from '@beaconhs/ui'
+import { Button, PageHeader, Select } from '@beaconhs/ui'
 import { GeneratedText, useGeneratedTranslations } from '@/i18n/generated'
 import { runReportWithControls } from './actions'
 
@@ -21,6 +21,7 @@ export function BeaconReportViewer({
   definition,
   catalog,
   organization,
+  description,
   initialResult,
   initialError,
   canBuild,
@@ -38,6 +39,7 @@ export function BeaconReportViewer({
   }
   catalog: ReportEntityCatalog
   organization: string
+  description: string
   initialResult: ReportRunResult
   initialError: string | null
   canBuild: boolean
@@ -85,94 +87,104 @@ export function BeaconReportViewer({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button asChild variant="outline">
-          <Link href={href('csv')}>
-            <Download size={14} />
-            <GeneratedText id="m_13bc18467bfb44" />
-          </Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link href={href('xlsx')}>
-            <Download size={14} />
-            <GeneratedText id="m_0c81eece17490f" />
-          </Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link href={href('pdf')}>
-            <Download size={14} />
-            <GeneratedText id="m_1a2b2ed6729166" />
-          </Link>
-        </Button>
-        {canBuild ? (
-          <Button asChild>
-            <Link href={`/reports/definitions/${definition.id}/edit`}>
-              <Pencil size={14} />
-              <GeneratedText id="m_186e85e2d4fd61" />
-            </Link>
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title={definition.name}
+        description={description}
+        actions={
+          <>
+            <Button asChild variant="outline" size="sm">
+              <Link href={href('csv')}>
+                <Download size={14} />
+                <GeneratedText id="m_13bc18467bfb44" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={href('xlsx')}>
+                <Download size={14} />
+                <GeneratedText id="m_0c81eece17490f" />
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={href('pdf')}>
+                <Download size={14} />
+                <GeneratedText id="m_1a2b2ed6729166" />
+              </Link>
+            </Button>
+            {canBuild ? (
+              <Button asChild size="sm">
+                <Link href={`/reports/definitions/${definition.id}/edit`}>
+                  <Pencil size={14} />
+                  <GeneratedText id="m_186e85e2d4fd61" />
+                </Link>
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
-      {entity ? (
-        <details className="border-border bg-surface rounded-lg border" open>
-          <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold">
-            <Filter size={15} />
-            <GeneratedText id="m_128cb01c068b95" />
-          </summary>
-          <div className="border-border space-y-4 border-t p-4">
-            <div className="max-w-sm space-y-1">
-              <label htmlFor="report-runtime-group" className="text-sm font-medium">
-                <GeneratedText id="m_1063fd45cc34b2" />
-              </label>
-              <Select
-                id="report-runtime-group"
-                value={groupBy}
-                onChange={(event) => setGroupBy(event.target.value)}
-              >
-                <option value="">
-                  <GeneratedText id="m_023e5c19efd4cc" />
-                </option>
-                {entity.columns.map((column) => (
-                  <option key={column.key} value={column.key}>
-                    {column.label}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {entity ? (
+          <aside className="lg:col-span-1">
+            <div className="border-border bg-surface space-y-4 rounded-lg border p-4 lg:sticky lg:top-0">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Filter size={15} />
+                <GeneratedText id="m_128cb01c068b95" />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="report-runtime-group" className="text-sm font-medium">
+                  <GeneratedText id="m_1063fd45cc34b2" />
+                </label>
+                <Select
+                  id="report-runtime-group"
+                  value={groupBy}
+                  onChange={(event) => setGroupBy(event.target.value)}
+                >
+                  <option value="">
+                    <GeneratedText id="m_023e5c19efd4cc" />
                   </option>
-                ))}
-              </Select>
-              <p className="text-fg-muted text-xs">
-                <GeneratedText id="m_176a68ad690d1e" />
-              </p>
+                  {entity.columns.map((column) => (
+                    <option key={column.key} value={column.key}>
+                      {column.label}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-fg-muted text-xs">
+                  <GeneratedText id="m_176a68ad690d1e" />
+                </p>
+              </div>
+              <ReportFilterTree entity={entity} group={filters} onChange={setFilters} />
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={run} disabled={pending}>
+                  {pending ? tGenerated('m_1f2c7907712729') : tGenerated('m_1df37ea02bdc43')}
+                </Button>
+                <Button type="button" variant="outline" onClick={reset} disabled={pending}>
+                  <RotateCcw size={14} />
+                  <GeneratedText id="m_1f8b8825b90200" />
+                </Button>
+              </div>
             </div>
-            <ReportFilterTree entity={entity} group={filters} onChange={setFilters} />
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={run} disabled={pending}>
-                {pending ? tGenerated('m_1f2c7907712729') : tGenerated('m_1df37ea02bdc43')}
-              </Button>
-              <Button type="button" variant="outline" onClick={reset} disabled={pending}>
-                <RotateCcw size={14} />
-                <GeneratedText id="m_1f8b8825b90200" />
-              </Button>
-            </div>
-          </div>
-        </details>
-      ) : null}
+          </aside>
+        ) : null}
 
-      {error ? (
-        <div
-          role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
-        >
-          {error}
+        <div className={entity ? 'min-w-0 lg:col-span-2' : 'min-w-0 lg:col-span-3'}>
+          {error ? (
+            <div
+              role="alert"
+              className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+            >
+              {error}
+            </div>
+          ) : (
+            <ReportResultView
+              organization={organization}
+              title={definition.name}
+              description={definition.description ?? undefined}
+              layout={definition.layout}
+              result={result}
+            />
+          )}
         </div>
-      ) : (
-        <ReportResultView
-          organization={organization}
-          title={definition.name}
-          description={definition.description ?? undefined}
-          layout={definition.layout}
-          result={result}
-        />
-      )}
+      </div>
     </div>
   )
 }

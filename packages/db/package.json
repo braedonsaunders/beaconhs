@@ -27,7 +27,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@appkit/reports": "file:../../vendor/appkit/appkit-reports-0.2.0-1e69bf8.tgz",
+    "@appkit/reports": "file:../../vendor/appkit/appkit-reports-0.2.0-6f32016.tgz",
     "@beaconhs/forms-core": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9",

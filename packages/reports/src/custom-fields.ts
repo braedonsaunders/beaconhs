@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
   customFieldDefinitions,
@@ -19,6 +19,39 @@ import {
   type ReportEntityColumn,
 } from '@appkit/reports'
 import { REPORT_ENTITIES, type ReportEntity } from './entities'
+
+/** Title-cases a raw pg enum label ('near_miss' → 'Near miss') for pickers. */
+function prettifyEnumLabel(value: string): string {
+  const spaced = value.replace(/[_-]+/g, ' ').trim()
+  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : value
+}
+
+/**
+ * Introspects every public enum-backed column and returns its ordered labels
+ * keyed by `table.column`, so enum filter fields (status/severity/type/source)
+ * render as dropdowns instead of free text — with values that can never drift
+ * from the database because they come from `pg_enum` itself.
+ */
+async function loadEnumOptionsByColumn(
+  tx: Database,
+): Promise<Map<string, { value: string; label: string }[]>> {
+  const rows = (await tx.execute(sql`
+    SELECT c.table_name, c.column_name, e.enumlabel AS value
+    FROM information_schema.columns c
+    JOIN pg_type t ON t.typname = c.udt_name
+    JOIN pg_enum e ON e.enumtypid = t.oid
+    WHERE c.table_schema = 'public'
+    ORDER BY c.table_name, c.column_name, e.enumsortorder
+  `)) as unknown as Array<{ table_name: string; column_name: string; value: string }>
+  const map = new Map<string, { value: string; label: string }[]>()
+  for (const row of rows) {
+    const key = `${row.table_name}.${row.column_name}`
+    const list = map.get(key) ?? []
+    list.push({ value: row.value, label: prettifyEnumLabel(row.value) })
+    map.set(key, list)
+  }
+  return map
+}
 
 const TABLE_TO_KIND: Record<string, 'equipment' | 'ppe' | 'person' | 'location'> = {
   equipment_items: 'equipment',
@@ -70,6 +103,7 @@ export async function augmentBeaconReportEntityWithCustomFields(
 /** Tenant-aware AppKit catalogue used by the studio and every executor. */
 export async function loadBeaconReportCatalog(tx: Database): Promise<ReportEntityCatalog> {
   const [
+    enumOptionsByColumn,
     personRows,
     departmentRows,
     groupRows,
@@ -80,6 +114,7 @@ export async function loadBeaconReportCatalog(tx: Database): Promise<ReportEntit
     ownerRows,
     locationRows,
   ] = await Promise.all([
+    loadEnumOptionsByColumn(tx),
     tx
       .select({ value: people.id, firstName: people.firstName, lastName: people.lastName })
       .from(people)
@@ -134,6 +169,14 @@ export async function loadBeaconReportCatalog(tx: Database): Promise<ReportEntit
       'current_holder_person_id',
       personRows.map((row) => ({ value: row.value, label: `${row.lastName}, ${row.firstName}` })),
     ],
+    [
+      'driver_person_id',
+      personRows.map((row) => ({ value: row.value, label: `${row.lastName}, ${row.firstName}` })),
+    ],
+    [
+      'subject_person_id',
+      personRows.map((row) => ({ value: row.value, label: `${row.lastName}, ${row.firstName}` })),
+    ],
     ['department_id', departmentRows],
     ['group_id_list', groupRows],
     [
@@ -160,6 +203,7 @@ export async function loadBeaconReportCatalog(tx: Database): Promise<ReportEntit
             enumOptions:
               optionsByColumn.get(`${entity.key}.${column.key}`) ??
               optionsByColumn.get(column.key) ??
+              enumOptionsByColumn.get(`${entity.table}.${column.key}`) ??
               column.enumOptions,
           })),
         }

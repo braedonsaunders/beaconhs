@@ -6,10 +6,12 @@ packages:
 
 overrides:
   # Immutable package artifacts built from AppKit release commit
-  # d955f747f05517bf5116e1a26792dfb0dde957f8. The release workflow validated
-  # successfully, but the repository npm publisher is not authenticated yet.
+  # d955f747f05517bf5116e1a26792dfb0dde957f8, except reports which tracks the
+  # commit-qualified build 6f32016 (searchable filter pickers + paper-matched
+  # PDF). The release workflow validated successfully, but the repository npm
+  # publisher is not authenticated yet.
   '@appkit/analytics': 'file:./vendor/appkit/appkit-analytics-0.2.0.tgz'
-  '@appkit/reports': 'file:./vendor/appkit/appkit-reports-0.2.0-1e69bf8.tgz'
+  '@appkit/reports': 'file:./vendor/appkit/appkit-reports-0.2.0-6f32016.tgz'
   '@appkit/tokens': 'file:./vendor/appkit/appkit-tokens-0.1.1.tgz'
   '@appkit/ui': 'file:./vendor/appkit/appkit-ui-0.1.1.tgz'
   # The published Excalidraw runtime ships precompiled JS/CSS but mistakenly

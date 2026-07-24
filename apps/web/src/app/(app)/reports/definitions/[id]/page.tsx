@@ -1,6 +1,5 @@
 import { notFound } from 'next/navigation'
 import { loadBeaconReportCatalog } from '@beaconhs/reports/server'
-import { PageHeader } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
 import { PageContainer } from '@/components/page-layout'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
@@ -26,14 +25,11 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
   return (
     <PageContainer className="space-y-4">
-      <PageHeader
-        title={definition.name}
-        description={definition.description ?? tGenerated('m_06cf662b44bd2f')}
-      />
       <BeaconReportViewer
         definition={definition}
         catalog={catalog}
         organization={branding.name}
+        description={definition.description ?? tGenerated('m_06cf662b44bd2f')}
         initialResult={result}
         initialError={error}
         canBuild={canBuild}
