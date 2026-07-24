@@ -36,8 +36,6 @@ export function BeaconReportStudio({
       organization={organization}
       logoUrl={logoUrl}
       primaryColor={primaryColor}
-      backHref="/reports"
-      backLabel="Back to reports"
       pdfHref={
         definition.id === 'new'
           ? undefined
@@ -45,7 +43,7 @@ export function BeaconReportStudio({
       }
       autoPreviewMs={350}
       autoSaveMs={700}
-      className="min-h-[calc(100dvh-8rem)]"
+      className="min-h-[calc(100dvh-12rem)] rounded-xl border border-slate-200 dark:border-slate-800"
     />
   )
 }

@@ -1,8 +1,10 @@
 import { notFound } from 'next/navigation'
 import { loadBeaconReportCatalog } from '@beaconhs/reports/server'
 import { assertCan } from '@beaconhs/tenant'
+import { PageContainer } from '@/components/page-layout'
 import { requireRequestContext } from '@/lib/auth'
 import { isUuid } from '@/lib/list-params'
+import { ReportsBackLink } from '../../../_back-link'
 import { loadDefinitionById, toAppKitDefinition } from '../../../_definitions'
 import { loadTenantBranding, runReportForViewer } from '../../../_run'
 import { BeaconReportStudio } from '../../../_studio/studio.client'
@@ -20,13 +22,16 @@ export default async function EditReportPage({ params }: { params: Promise<{ id:
     ctx.db((tx) => loadBeaconReportCatalog(tx)),
   ])
   return (
-    <BeaconReportStudio
-      definition={toAppKitDefinition(definition)}
-      initialResult={result}
-      organization={branding.name}
-      logoUrl={branding.logoUrl}
-      primaryColor={branding.primaryColor}
-      catalog={catalog}
-    />
+    <PageContainer className="flex min-h-full flex-col gap-3">
+      <ReportsBackLink />
+      <BeaconReportStudio
+        definition={toAppKitDefinition(definition)}
+        initialResult={result}
+        organization={branding.name}
+        logoUrl={branding.logoUrl}
+        primaryColor={branding.primaryColor}
+        catalog={catalog}
+      />
+    </PageContainer>
   )
 }

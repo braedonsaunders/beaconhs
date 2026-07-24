@@ -5,8 +5,10 @@ import {
   type CustomReportDefinition,
 } from '@beaconhs/reports'
 import { loadBeaconReportCatalog } from '@beaconhs/reports/server'
+import { PageContainer } from '@/components/page-layout'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { requireRequestContext } from '@/lib/auth'
+import { ReportsBackLink } from '../../_back-link'
 import { loadTenantBranding } from '../../_run'
 import { BeaconReportStudio } from '../../_studio/studio.client'
 
@@ -40,13 +42,16 @@ export default async function NewReportPage() {
     tags: [source.category],
   }
   return (
-    <BeaconReportStudio
-      definition={definition}
-      initialResult={null}
-      organization={branding.name}
-      logoUrl={branding.logoUrl}
-      primaryColor={branding.primaryColor}
-      catalog={catalog}
-    />
+    <PageContainer className="flex min-h-full flex-col gap-3">
+      <ReportsBackLink />
+      <BeaconReportStudio
+        definition={definition}
+        initialResult={null}
+        organization={branding.name}
+        logoUrl={branding.logoUrl}
+        primaryColor={branding.primaryColor}
+        catalog={catalog}
+      />
+    </PageContainer>
   )
 }

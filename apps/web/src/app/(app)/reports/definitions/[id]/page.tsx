@@ -5,6 +5,7 @@ import { PageContainer } from '@/components/page-layout'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { requireRequestContext } from '@/lib/auth'
 import { isUuid } from '@/lib/list-params'
+import { ReportsBackLink } from '../../_back-link'
 import { loadDefinitionById } from '../../_definitions'
 import { loadTenantBranding, runReportForViewer } from '../../_run'
 import { BeaconReportViewer } from '../../_viewer/viewer.client'
@@ -25,6 +26,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
 
   return (
     <PageContainer className="space-y-4">
+      <ReportsBackLink />
       <BeaconReportViewer
         definition={definition}
         catalog={catalog}

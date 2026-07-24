@@ -18,6 +18,14 @@ const studio = readFileSync(
   new URL('../app/(app)/reports/_studio/studio.client.tsx', import.meta.url),
   'utf8',
 )
+const backLink = readFileSync(
+  new URL('../app/(app)/reports/_back-link.tsx', import.meta.url),
+  'utf8',
+)
+const runPage = readFileSync(
+  new URL('../app/(app)/reports/definitions/[id]/page.tsx', import.meta.url),
+  'utf8',
+)
 
 describe('unified AppKit report contract', () => {
   it('has no list-side alternate preview or built-in/custom execution branch', () => {
@@ -42,9 +50,13 @@ describe('unified AppKit report contract', () => {
     expect(viewer).toContain("tGenerated('m_1df37ea02bdc43')")
   })
 
-  it('keeps editor navigation and PDF export on the shared AppKit studio', () => {
-    expect(studio).toContain('backHref="/reports"')
-    expect(studio).toContain('backLabel="Back to reports"')
+  it('keeps route navigation in the host shell and PDF export in the AppKit studio', () => {
+    expect(backLink).toContain('SmartBackLink')
+    expect(backLink).toContain('href="/reports"')
+    expect(backLink).not.toContain('<a')
+    expect(editor).toContain('<ReportsBackLink />')
+    expect(runPage).toContain('<ReportsBackLink />')
+    expect(studio).not.toContain('backHref')
     expect(studio).toContain('`/reports/definitions/${definition.id}/export?format=pdf`')
   })
 })
