@@ -3,7 +3,7 @@
 // The unified hub's CREATE form only handles audience-on-cadence assignments
 // (the 5 kinds). But compliance across the platform is mostly a DIFFERENT shape:
 // per-record expiries (certs, permits, equipment/PPE due dates), recurring
-// per-record check-ins (lone worker), document review cadence, and single-owner
+// per-record timed check-ins, document review cadence, and single-owner
 // tasks (corrective actions, work orders, incident preventative steps).
 //
 // This aggregator READS those signals from each module's own tables and projects

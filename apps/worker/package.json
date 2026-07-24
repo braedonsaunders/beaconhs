@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@beaconhs/audit": "workspace:*",
+    "@beaconhs/analytics": "workspace:*",
     "@beaconhs/compliance": "workspace:*",
     "@beaconhs/db": "workspace:*",
     "@beaconhs/email-render": "workspace:*",

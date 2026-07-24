@@ -51,7 +51,7 @@ export type DashboardMetrics = {
   overdueCAs: number
   submissionsToday: number
   expiringCertsCount: number
-  lwActive: number
+  monitoredSessionsActive: number
   ppeOpenIssues: number
   ppeInspectionsOverdue: number
   peopleCount: number
@@ -353,7 +353,7 @@ export async function loadDashboardMetrics(
       caOverdue,
       subRow,
       certRow,
-      lwActive,
+      monitoredSessionsActive,
       ppeOpen,
       ppeOverdue,
       peopleCount,
@@ -1091,7 +1091,7 @@ export async function loadDashboardMetrics(
       overdueCAs: Number(caOverdue?.c ?? 0),
       submissionsToday: Number(subRow?.c ?? 0),
       expiringCertsCount: Number(certRow?.c ?? 0),
-      lwActive: Number(lwActive?.c ?? 0),
+      monitoredSessionsActive: Number(monitoredSessionsActive?.c ?? 0),
       ppeOpenIssues: Number(ppeOpen?.c ?? 0),
       ppeInspectionsOverdue: Number(ppeOverdue?.c ?? 0),
       peopleCount: headcount,

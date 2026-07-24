@@ -98,8 +98,8 @@ itself editable per tenant — modules are registered, not hard-coded.
 - **Documents** — a Word-class rich-text editor with version control, comments
   and track-changes, or uploaded PDF/DOCX sources; acknowledgment tracking,
   periodic reviews, document books, and DOCX import/export.
-- **Lone Worker** — timed check-in sessions with overdue escalation, built on a
-  reusable monitored-session engine.
+- **Monitored sessions** — reusable timed check-ins and overdue escalation for
+  any app created in Builder.
 
 ### Assets & people
 

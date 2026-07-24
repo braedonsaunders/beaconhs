@@ -138,7 +138,7 @@ export async function runSessionOverdueFlows(args: {
               subject: rendered.subject,
               text: rendered.text,
               html: rendered.html,
-              meta: { tenantId, category: 'lone_worker' },
+              meta: { tenantId, category: 'monitored_session' },
             },
             { jobId: `session-overdue-email|${suffix}` },
           )

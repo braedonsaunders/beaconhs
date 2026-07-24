@@ -19,7 +19,7 @@ journals, safe-distance, training courses/classes, equipment & PPE items, docume
 - No `/new` form page.
 - The fresh record is a **draft** until "committed" (validated for required fields). Two flavors:
   - **Hidden draft** (compliance/audit-sensitive: incidents, CAs, hazard assessments,
-    lone-worker): excluded from lists, dashboards, compliance counts & notifications until
+    monitored sessions): excluded from lists, dashboards, compliance counts & notifications until
     committed; a worker sweeps drafts untouched > 48h; a small "Drafts (N)" affordance lets the
     user resume/discard.
   - **Badged draft** (operational: equipment, PPE, safe-distance, training): shows in the list

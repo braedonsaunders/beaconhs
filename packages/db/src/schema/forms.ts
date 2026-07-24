@@ -215,7 +215,7 @@ export const formResponseComplianceStatus = pgEnum('form_response_compliance_sta
 ])
 
 // Monitored-session lifecycle — for apps that run a live, timed check-in session
-// (Lone Worker, permit timers, periodic checks…). A NULL `monitorStatus` on a
+// (permit timers, periodic safety checks, timed check-ins…). A NULL `monitorStatus` on a
 // response means it's an ordinary response, not a session. See
 // docs/monitored-sessions-design.md.
 export const formMonitorStatus = pgEnum('form_monitor_status', [

@@ -131,8 +131,7 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
   }
 }
 
-// Generic monitored-session overdue scan — the Builder-app successor to
-// scanLoneWorkerOverdue. A monitored response is overdue once now passes
+// Generic monitored-session overdue scan. A monitored response is overdue once now passes
 // nextCheckinDueAt + grace; we flip it to 'escalated', log a 'missed' check-in,
 // and fire the generic escalation. See docs/monitored-sessions-design.md.
 const SESSION_SCAN_BATCH = 100

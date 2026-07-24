@@ -17,7 +17,7 @@ const DEFAULT_AUDIENCE = ['safety_manager', 'tenant_admin']
 const defaults = (): string[] => [...DEFAULT_AUDIENCE]
 
 // Only the NATIVE engines that emit alerts in code — incidents, corrective
-// actions, and the compliance engine. Builder apps (lone worker, any custom or
+// actions, and the compliance engine. Builder apps (timed check-ins, any custom or
 // monitored app) and module-specific alerts route through Flows, where the
 // audience is per-app and dynamic, so they don't belong in this fixed list.
 export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [

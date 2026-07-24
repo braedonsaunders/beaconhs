@@ -93,7 +93,7 @@ export const DEFAULT_LAYOUTS: Record<RoleTier, DashboardLayoutData> = {
   foreman: {
     widgets: [
       // Row 1 — today's operational status
-      { id: 'op-lone-worker-active', x: 0, y: 0, w: 3, h: 2 },
+      { id: 'op-monitored-sessions-active', x: 0, y: 0, w: 3, h: 2 },
       { id: 'op-submissions-today', x: 3, y: 0, w: 3, h: 2 },
       { id: 'op-inspections-mtd', x: 6, y: 0, w: 3, h: 2 },
       // Row 2 — quick actions

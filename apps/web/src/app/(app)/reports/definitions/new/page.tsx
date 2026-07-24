@@ -4,10 +4,10 @@ import {
   defaultColumnsFor,
   type CustomReportDefinition,
 } from '@beaconhs/reports'
-import { loadBeaconReportCatalog } from '@beaconhs/reports/server'
 import { PageContainer } from '@/components/page-layout'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { requireRequestContext } from '@/lib/auth'
+import { loadAuthorizedReportCatalog } from '@/lib/report-catalog'
 import { ReportsBackLink } from '../../_back-link'
 import { loadTenantBranding } from '../../_run'
 import { BeaconReportStudio } from '../../_studio/studio.client'
@@ -18,7 +18,7 @@ export default async function NewReportPage() {
   assertCan(ctx, 'reports.builder')
   const [branding, catalog] = await Promise.all([
     loadTenantBranding(ctx),
-    ctx.db((tx) => loadBeaconReportCatalog(tx)),
+    loadAuthorizedReportCatalog(ctx),
   ])
   const source = catalog.entities[0]!
   const definition: CustomReportDefinition = {

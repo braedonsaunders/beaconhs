@@ -65,7 +65,7 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 | PPE                | ✅                    | ✅ Inspection log + new-inspection form + issue-report form + issuance log + status changer                       | —                                                                        |
 | Documents          | ✅                    | ✅ 4-tab detail (Overview / Versions / Acknowledgments / Reviews) + publish/unpublish                             | ⬜ Acknowledge action wired; ⬜ Versioning editor                        |
 | **Confined Space** | ✅                    | ✅ Permit detail + atmospheric-readings table + new-reading form + out-of-spec alarm + activate/close actions     | ✅ New-permit form (auto-ref + hours-based expiry)                       |
-| **Lone Worker**    | ✅                    | ✅ Session detail + check-in log + manual check-in + end-session + overdue alert                                  | ✅ Start-session form                                                    |
+| **Monitored apps** | ✅                    | ✅ Session detail + check-in log + manual check-in + end-session + overdue alert                                  | ✅ Start-session form                                                    |
 
 ### Phase 4 — Dashboards + reports + integrations
 
@@ -95,9 +95,9 @@ Every list has search + sort + pagination + filter chips. Every row clicks throu
 ### Cross-cutting
 
 - ✅ **Container-app shell**: AppShell is `h-screen overflow-hidden`. Pages choose `PageContainer` (whole-page scroll), `ListPageLayout` (sticky header + scrolling body), `DetailPageLayout` (sticky header + subtabs + scrolling body), or `WizardLayout` (sticky header + scrolling body + sticky footer for forms).
-- ✅ **Horizontal subtabs everywhere**: Incident (Overview/Medical/Injuries/Investigation/Photos/Activity), Corrective Action (Overview/Work/Status/Activity), PPE (Overview/Inspections/Issues/History/Status), Confined Space (Overview/Atmospheric readings), Lone Worker (Overview/Check-ins), Document (Overview/Versions/Acknowledgments/Reviews), Forms Template (Overview/Schema/Assignments/Recent responses/Raw JSON), plus existing tabs on People, Equipment, Locations.
+- ✅ **Horizontal subtabs everywhere**: Incident (Overview/Medical/Injuries/Investigation/Photos/Activity), Corrective Action (Overview/Work/Status/Activity), PPE (Overview/Inspections/Issues/History/Status), Confined Space (Overview/Atmospheric readings), monitored app sessions (Overview/Check-ins), Document (Overview/Versions/Acknowledgments/Reviews), Forms Template (Overview/Schema/Assignments/Recent responses/Raw JSON), plus existing tabs on People, Equipment, Locations.
 - ✅ **Notifications inbox** at /notifications + bell-icon unread count in header + mark-read / mark-all-read actions
-- ✅ App-shell sidebar grouped: Overview / Frontline (Forms / Inspections / Inspection Banks / Incidents / CAs) / Programs (Training + Skills + Authorities / Documents / CS + Sensors / Lone Worker) / Assets & people (People / Locations / Equipment / PPE) / Insight / Settings
+- ✅ App-shell sidebar grouped: Overview / Frontline (Forms / Inspections / Inspection Banks / Incidents / CAs) / Programs (Training + Skills + Authorities / Documents / CS + Sensors / Builder apps) / Assets & people (People / Locations / Equipment / PPE) / Insight / Settings
 - ✅ `/verify/<token>` certificate verification page (handles valid / expired / revoked / not-found)
 - ✅ `/manifest.webmanifest` + service worker for PWA install
 
@@ -127,7 +127,7 @@ audit-logged — matching the depth of the legacy Laravel modules.
 - ✅ **PPE depth** — `/ppe/types` admin with per-type inspection criteria + sizing scheme, `/ppe/inspection-criteria` cross-type overview, `/ppe/issue` dashboard-level issuance with single-tx ledger+state mutation, `/ppe/reports/{expired,expiring,by-person,inspection-due}`, **annual third-party recertification records** with certificate attachment, **auto-CA spawn** on inspection fail with severity≥high.
 - ✅ **Corrective Actions depth** — 6-tab detail (Overview/Work/Photos/Verification/Status/Activity), `ca_photos` + `ca_complete_steps` schemas, verification workflow (requires before close), cost-impact prompt on close, reports (overdue / by-source / by-assignee / aging-buckets), **bulk reassign** on list page, PDF print sheet.
 - ✅ **Lift Plans** (`/lift-plans`) — real first-class module (complementary to the form-builder version). 7 new tables. 8-tab detail (Overview/Loads/Equipment/Hazards/PPE/Signatures/Photos/Activity), auto-computed capacity utilisation %, role-flagged signatures (supervisor/operator/rigger/signaler/spotter).
-- ✅ **Reports + Dashboard expansion** — 8 new built-in report definitions, **custom report builder** at `/reports/definitions/new` (pick entity → pick columns → pick filters → group-by → save). Dashboard adds TRIR/DART/training-compliance/doc-compliance/CA-aging/inspections-this-month/active-lone-worker/PPE-overdue tiles + top-5 widgets.
+- ✅ **Reports + Dashboard expansion** — 8 new built-in report definitions, **custom report builder** at `/reports/definitions/new` (pick entity → pick columns → pick filters → group-by → save). Dashboard adds TRIR/DART/training-compliance/doc-compliance/CA-aging/inspections-this-month/active-monitored-sessions/PPE-overdue tiles + top-5 widgets.
 - ✅ **Compliance dashboard** (`/compliance`) — 4-tab cross-module: By entity (filter per assignment kind) / By person / By site / Aging summary.
 - ✅ **Safe Distance tool** (`/tools/safe-distance`) — engineering calc for electrical/drone/overhead-crane/vehicle proximity with IEEE/CSA limits-of-approach table, auto-compliance flag, lock-after-signoff, print PDF.
 - ✅ **Data Utilities** (`/utilities`) — export hub (links to per-module CSV routes), `/utilities/analyze` runs 7 server-side data-quality checks (people no dept/trade, equipment no type, CAs no source, incidents missing context, toolbox missing foreman/site, non-compliant unlocked safe-distance records).
@@ -143,9 +143,9 @@ App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; I
 - ✅ **Document Books** (`/documents/books`): orderable groupings of documents with publish + render-book-as-one-PDF actions.
 - ✅ **Kiosk mode** (`/kiosk?t=<slug>`): full-screen kiosk page outside AppShell — workers sign in/out on a shared tablet with an employee picker, optional site + crew pickers, PIN-gated by tenant; records to `kiosk_scans`.
 - ✅ **Training Classes** (`/training/classes`): schedule classes for courses, roster attendees, mark-complete spawns `training_records` per attendee.
-- ✅ **CSV export route handlers** on 12 list pages (people, equipment, incidents, CAs, documents, PPE, locations, lone-worker, confined-space, inspections, forms/responses, training/courses). Each is a Route Handler streaming a properly-formatted download, audit-logged as `action: 'export'`.
+- ✅ **CSV export route handlers** on list pages (people, equipment, incidents, CAs, documents, PPE, locations, app sessions, confined-space, inspections, forms/responses, training/courses). Each is a Route Handler streaming a properly-formatted download, audit-logged as `action: 'export'`.
 - ✅ **Admin Library hub** (`/admin/library`): home for reference-data catalogues (inspection banks, skill authorities, skill types, atmospheric sensors) that were demoted from the top-level nav.
-- ✅ **Audit-log everywhere**: every server action across the new pages calls `recordAudit()` (incidents/new, CA/new, CS permit/new, lone-worker/new, people/new, every reports schedule action, every PPE action, every document workflow action).
+- ✅ **Audit-log everywhere**: every server action across the new pages calls `recordAudit()` (incidents/new, CA/new, CS permit/new, monitored app sessions, people/new, every reports schedule action, every PPE action, every document workflow action).
 
 ### Stack
 
@@ -340,7 +340,7 @@ JSONB for response data (flexible across template versions). Selected indexed co
 - **Documentation** — `documents`, `document_versions`, `document_acknowledgments`, `document_reviews`, `document_books`, `document_book_acknowledgments`.
 - **Corrective Actions** — `corrective_actions` (tenant_id, source_type, source_id, owner, due, severity, status, root_cause, verification).
 - **Confined Space Permits** — `cs_permits`, `cs_atmospheric_readings`, `cs_rescue_plans`. Atmospheric readings tied to sensor IDs and timestamped.
-- **Lone Worker** — `lw_sessions`, `lw_checkins`, escalation policy per tenant.
+- **Monitored app sessions** — form responses, response check-ins, and escalation flows configured per app.
 
 ### 4.5 Integrations
 
@@ -526,7 +526,7 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - "My CA inbox" view per user.
 - Verification step: a CA isn't closed until a verifier (different from the owner) confirms.
 
-### 6.9 Lone Worker
+### 6.9 Monitored app sessions
 
 - Worker starts a session: site, expected end, check-in interval (15 / 30 / 60 min).
 - App prompts at interval; missed check-in escalates after grace period (push + SMS to supervisor + 911-back-up phone tree if tenant enables).
@@ -734,7 +734,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 - Equipment registry + work orders + QR labels.
 - PPE issue/inspection lifecycle.
 - Confined Space permit + atmospheric readings.
-- Lone Worker check-in.
+- Monitored-session check-in.
 
 ### Phase 4 — Dashboards + Reports + Integrations (4–6 weeks)
 
@@ -772,7 +772,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 2. **What exactly lives in adminapp2 today vs what the new app should own?** Need a working session with whoever owns adminapp2 to draw the line. Particularly: customers, projects, employees — which is canonical where?
 3. **How are external training systems implemented for each adopter?** Scan those systems before finalizing a private migration adapter.
 4. **How do you want to handle the existing field-worker user base re: passwords on cutover day?** Magic-link first-login is the friendliest path; let me know if you want a different choice.
-5. **Lone Worker — is SMS escalation built day-one or later?** SMS is the only critical-channel use case for v1; either way you need a Twilio account if you want it.
+5. **Monitored sessions — is SMS escalation built day-one or later?** SMS is the only critical-channel use case for v1; either way you need a Twilio account if you want it.
 6. **Risk matrix configuration UX.** The "configurable per tenant — none / 3×3 / 5×5 / custom" requirement is broad. Recommend shipping with three built-in presets and a custom editor in v1.1.
 7. **Integration catalog boundaries.** Decide which external systems are first-class launch connectors and which remain tenant-specific ETL/import work.
 8. **MFA timing.** You said no MFA for v1; recommend at minimum a hidden toggle so super-admins can MFA themselves before opening up to customers.

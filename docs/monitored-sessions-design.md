@@ -1,22 +1,20 @@
-# Monitored Sessions — design + plan (Lone Worker → Builder app)
+# Monitored Sessions — Builder capability
 
 Status: FINALIZED design for autonomous build. 2026-06.
 
 ## Goal
 
-Abstract Lone Worker into a **reusable Builder capability**: any published app can run a live
+Provide a **reusable Builder capability**: any published app can run a live
 **monitored session** — recurring worker check-ins, a per-session next-due timer, automatic
-overdue detection, and escalation — all configured via Builder UI controls. Lone Worker becomes
-the first seeded app on it. The same primitive later powers permit-to-work timers, periodic
-equipment/atmospheric checks, confined-space watch, etc.
+overdue detection, and escalation — all configured via Builder UI controls. The same primitive
+powers worker check-ins, permit-to-work timers, periodic equipment or atmospheric checks,
+confined-space watch, and similar tenant-built workflows.
 
 ## Principles
 
-- **Reusable primitive, not a Lone-Worker special case.** No LW-specific logic in the engine.
-- **Safety-first cutover.** The native `/lone-worker` module stays fully operational until the
-  Builder version is built AND live-verified end-to-end (escalation proven), then retire it.
-- **Reuse escalation infra.** Generalize the existing `emitLoneWorkerOverdue` → notify/email
-  queues rather than reinventing.
+- **Reusable primitive, not a product-specific module.** No workflow-specific logic in the engine.
+- **Builder-owned experience.** Session configuration and runtime UI belong to tenant apps.
+- **Reuse escalation infrastructure.** Dispatch through the standard notification and email queues.
 - **Everything UI-configurable** in the Builder (interval/grace/duration, GPS, escalation flow).
 
 ## Data model
@@ -52,8 +50,7 @@ monitor?: {
 
 1. New trigger `{ trigger: 'session_overdue' }` in automation.ts (type + zod). Fires when a
    monitored session passes `nextCheckinDueAt + grace`.
-2. Execution — worker scan `form_session_overdue_scan` (every minute), parallel to the existing
-   `lone_worker_overdue_scan`:
+2. Execution — worker scan `form_session_overdue_scan` (every minute):
    - find `form_responses` where `monitorStatus='active' AND nextCheckinDueAt + grace <= now`
    - set `monitorStatus='escalated'`, stamp `escalatedAt`, write a `missed` check-in row
    - run the template's flows with trigger `session_overdue` via `planAutomation` → dispatch
@@ -75,14 +72,15 @@ monitor?: {
 2. **Check-in** — `recordSessionCheckin(responseId,{geo,note})`: insert a check-in + reset
    `nextCheckinDueAt`, clear escalation (re-activate). One-tap, mobile, GPS "I'm OK" button.
 3. **Live monitor** — a response session view (countdown, check-ins, map, status, end/cancel),
-   generalized from the LW `[id]` page; plus an active-sessions dashboard.
+   shared by every monitored app; plus an active-sessions dashboard.
 4. **End/cancel** — set `monitorStatus='completed'|'cancelled'`, stamp `endedAt`.
 
-## Lone Worker app (seed)
+## Example worker check-in app
 
-Canonical Builder app: moduleBinding `lone_worker`; fields worker/supervisor/site/task +
-interval/grace/duration; monitor config bound to those fields, requireGeo; a `session_overdue`
-flow → notify_role(safety_manager, tenant_admin) + email(supervisor), critical. Check-in GPS+note.
+A tenant can create a Builder app with worker, supervisor, site, task, interval, grace, and
+duration fields; monitor configuration bound to those fields; required geolocation; and a
+`session_overdue` flow that notifies configured roles and the supervisor. Check-ins can capture
+GPS and a note.
 
 ## Phases (each: typecheck + lint + dev-server tested)
 
@@ -92,17 +90,17 @@ flow → notify_role(safety_manager, tenant_admin) + email(supervisor), critical
   `session_overdue`; default critical escalation; generalize the notify/email emitter. Integration-test the scan against the dev DB.
 - **C. Runtime** — start-session→live response; `recordSessionCheckin` + GPS button; session
   monitor view + active-sessions dashboard; end/cancel.
-- **D. Lone Worker app seed + nav** — seed the LW app; bind `/lone-worker` launcher.
-- **E. Cutover** — LIVE-VERIFY escalation end-to-end (short interval → overdue → notify+email →
-  check-in resets); migrate `lw_sessions`/`lw_checkins` → responses+checkins; flip nav; replace the
-  native `lone_worker_overdue_scan` with the generic scan; retire the native LW module.
+- **D. App examples + navigation** — create monitored-session apps in Builder and expose them
+  through the standard app navigation.
+- **E. Verification** — LIVE-VERIFY escalation end-to-end (short interval → overdue →
+  notify+email → check-in resets).
 
 ## Testing (guaranteed tested)
 
 - Unit: forms-core monitor-config + trigger validation; the due/escalation predicate.
 - Integration: seed a monitored response with a past due-time, run the scan, assert it escalates +
   enqueues notification/email; check-in resets the timer.
-- Live (dev server on :3000): drive the LW app — start (short interval), let it go overdue, confirm
-  the scan escalates (worker/queue logs), check-in re-activates, end completes.
+- Live (dev server on :3000): drive a monitored app — start (short interval), let it go overdue,
+  confirm the scan escalates (worker/queue logs), check-in re-activates, end completes.
 - Per phase: `pnpm --filter @beaconhs/web typecheck`, forms-core/db typecheck, vitest, prettier.
-- Schema is pushed to the dev DB (`db:push`) before live tests; native LW stays until Phase E proves the replacement.
+- Schema is pushed to the dev DB (`db:push`) before live tests.

@@ -20,6 +20,10 @@ const assessmentChoiceSnapshotSql = readFileSync(
   'utf8',
 )
 const reportCutoverSql = readFileSync(new URL('0024_flawless_la_nuit.sql', drizzleFolder), 'utf8')
+const monitoredSessionCutoverSql = readFileSync(
+  new URL('0028_generalize_monitored_sessions.sql', drizzleFolder),
+  'utf8',
+)
 
 function position(fragment: string): number {
   const value = finalSection.indexOf(fragment)
@@ -61,6 +65,7 @@ describe('production cutover migration integrity', () => {
       '0025_unify_builder_photo_fields.sql',
       '0026_order_frontline_photos.sql',
       '0027_report_portrait_cutover.sql',
+      '0028_generalize_monitored_sessions.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -95,6 +100,7 @@ describe('production cutover migration integrity', () => {
       { idx: 25, tag: '0025_unify_builder_photo_fields' },
       { idx: 26, tag: '0026_order_frontline_photos' },
       { idx: 27, tag: '0027_report_portrait_cutover' },
+      { idx: 28, tag: '0028_generalize_monitored_sessions' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)
@@ -172,6 +178,17 @@ describe('production cutover migration integrity', () => {
     expect(reportCutoverSql).toContain('ADD CONSTRAINT "report_schedules_tenant_definition_fk"')
     expect(reportCutoverSql).toContain('ALTER TABLE "report_definitions" FORCE ROW LEVEL SECURITY')
     expect(reportCutoverSql).toContain('ALTER TABLE "report_schedules" FORCE ROW LEVEL SECURITY')
+  })
+
+  it('generalizes monitored-session data and repairs managed app-response cards', () => {
+    expect(monitoredSessionCutoverSql).toContain("to_jsonb('app_responses'::text)")
+    expect(monitoredSessionCutoverSql).toContain(
+      `"query" #>> '{stages,0,source}' = 'form_responses'`,
+    )
+    expect(monitoredSessionCutoverSql).toContain(`"seed_key" = 'monitored_sessions_weekly'`)
+    expect(monitoredSessionCutoverSql).toContain(`"category" = 'monitored_session'`)
+    expect(monitoredSessionCutoverSql).toContain('"op-monitored-sessions-active"')
+    expect(monitoredSessionCutoverSql).toContain('"kpi-monitored-sessions-active"')
   })
 
   it('preflights and backfills training owners before removing legacy columns', () => {

@@ -312,6 +312,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@beaconhs/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@beaconhs/audit':
         specifier: workspace:*
         version: link:../../packages/audit

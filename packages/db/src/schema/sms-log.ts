@@ -34,7 +34,7 @@ export const smsLog = pgTable(
     body: text('body'),
     bodyLength: integer('body_length').default(0).notNull(),
     status: smsLogStatus('status').default('sent').notNull(),
-    // Notification category for filtering — e.g. 'incident', 'ca', 'lone_worker'.
+    // Notification category for filtering — e.g. 'incident', 'ca', 'monitored_session'.
     categoryKey: text('category_key'),
     // Free-form metadata: { userEmail, recipients, attempt, … }
     meta: jsonb('meta').$type<Record<string, unknown>>().default({}).notNull(),

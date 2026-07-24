@@ -13,10 +13,11 @@ import {
   type ReportEntityCatalog,
   type ReportRunResult,
 } from '@beaconhs/reports'
-import { loadBeaconReportCatalog, runBeaconReport } from '@beaconhs/reports/server'
+import { runBeaconReport } from '@beaconhs/reports/server'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
+import { loadAuthorizedReportCatalogInTransaction } from '@/lib/report-catalog'
 
 export async function previewReportDefinition(
   definition: CustomReportDefinition,
@@ -25,7 +26,7 @@ export async function previewReportDefinition(
   assertCan(ctx, 'reports.builder')
   assertCustomReportDefinition(definition)
   return ctx.db(async (tx) => {
-    const catalog = await loadBeaconReportCatalog(tx)
+    const catalog = await loadAuthorizedReportCatalogInTransaction(ctx, tx)
     validateDefinition(definition, ctx.tenantId!, catalog)
     return runBeaconReport(tx, ctx.tenantId!, definition.query, catalog, {
       maxRows: 500,
@@ -44,7 +45,7 @@ export async function saveReportDefinition(
     const definitionId = creating ? randomUUID() : definition.id
 
     await ctx.db(async (tx) => {
-      const catalog = await loadBeaconReportCatalog(tx)
+      const catalog = await loadAuthorizedReportCatalogInTransaction(ctx, tx)
       validateDefinition(definition, ctx.tenantId!, catalog)
       const entity = reportEntity(catalog, definition.query.entity)
       if (!entity) throw new Error('Choose an available report source.')

@@ -95,9 +95,9 @@ const OVERLAY: Record<string, Overlay> = {
   },
   compliance_status: { label: 'Compliance status', category: 'Compliance', primary: true },
   form_responses: {
-    label: 'Builder apps',
-    description: 'Submitted Builder app responses across every app / form template.',
-    category: 'Builder apps',
+    label: 'App responses',
+    description: 'Submitted responses from tenant-built apps.',
+    category: 'Apps',
     primary: true,
   },
   org_units: { label: 'Locations & org units', category: 'People & org', primary: true },
@@ -413,6 +413,7 @@ export function scopedFormAppEntity(templateId: string, label?: string): Analyti
     ...base,
     key: `${FORM_ENTITY_KEY}:${templateId}`,
     label: label ?? base.label,
+    category: 'Apps',
     description: label ? `Submitted responses for the “${label}” app.` : base.description,
     primary: false,
     baseFilter: {
@@ -432,9 +433,20 @@ export function discoverEntityMap(): Record<string, AnalyticsEntity> {
  * Narrowly trusted addition for code-owned system cards. Never use this for a
  * stored/custom query: it intentionally exposes a tenant-wide aggregate source.
  */
-export function addTrustedSystemFormEntity(
+export function addTrustedSystemAppResponsesEntity(
   entityMap: Record<string, AnalyticsEntity>,
 ): Record<string, AnalyticsEntity> {
   const formResponses = baseEntityMap()[FORM_ENTITY_KEY]
-  return formResponses ? { ...entityMap, [FORM_ENTITY_KEY]: formResponses } : { ...entityMap }
+  return formResponses
+    ? {
+        ...entityMap,
+        app_responses: {
+          ...formResponses,
+          key: 'app_responses',
+          label: 'All app responses',
+          category: 'Apps',
+          description: 'Tenant-wide app responses for managed system cards.',
+        },
+      }
+    : { ...entityMap }
 }

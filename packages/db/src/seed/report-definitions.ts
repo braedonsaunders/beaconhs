@@ -226,10 +226,10 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
     ),
   ),
   seed(
-    'lone_worker_weekly',
+    'monitored_sessions_weekly',
     'Weekly Monitored Sessions',
     'Monitored sessions started this week, grouped by session status.',
-    'lone_worker',
+    'apps',
     rows(
       'monitored_sessions',
       [

@@ -5,12 +5,12 @@
 // Client code uses the pure root export instead.
 
 import { parseBhqlQuery } from '../ast-schema'
-import { addTrustedSystemFormEntity, discoverEntityMap } from './discover'
+import { addTrustedSystemAppResponsesEntity, discoverEntityMap } from './discover'
 
 export { runBhql } from './execute'
 export { compileBhql } from './compile'
 export { compileRuleGroup as compileAnalyticsRuleGroup } from './filter-sql'
-export { addTrustedSystemFormEntity, discoverEntities, discoverEntityMap } from './discover'
+export { addTrustedSystemAppResponsesEntity, discoverEntities, discoverEntityMap } from './discover'
 export { discoverEntitiesWithScopedApps } from './custom-fields'
 
 /** Validate untrusted BHQL against the live, schema-discovered registry. The
@@ -23,5 +23,5 @@ export function validateBhql(raw: unknown) {
  *  response source used by managed operational KPIs; never use it for
  *  tenant-authored cards. */
 export function validateTrustedSystemBhql(raw: unknown) {
-  return parseBhqlQuery(raw, addTrustedSystemFormEntity(discoverEntityMap()))
+  return parseBhqlQuery(raw, addTrustedSystemAppResponsesEntity(discoverEntityMap()))
 }

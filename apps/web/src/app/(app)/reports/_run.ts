@@ -3,8 +3,9 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { resolveTenantLogoUrl } from '@beaconhs/storage'
 import { type ReportRuleGroup, type ReportRunResult } from '@beaconhs/reports'
-import { loadBeaconReportCatalog, runBeaconReport } from '@beaconhs/reports/server'
+import { runBeaconReport } from '@beaconhs/reports/server'
 import type { RequestContext } from '@beaconhs/tenant'
+import { loadAuthorizedReportCatalogInTransaction } from '@/lib/report-catalog'
 import type { ReportDefinitionRow } from './_definitions'
 
 const DOCUMENT_PREVIEW_MAX_ROWS = 500
@@ -20,7 +21,7 @@ export async function runReportForViewer(
 ): Promise<{ result: ReportRunResult; error: string | null }> {
   try {
     const result = await ctx.db(async (tx) => {
-      const catalog = await loadBeaconReportCatalog(tx)
+      const catalog = await loadAuthorizedReportCatalogInTransaction(ctx, tx)
       return runBeaconReport(
         tx,
         ctx.tenantId!,

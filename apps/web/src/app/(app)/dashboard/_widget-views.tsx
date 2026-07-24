@@ -256,17 +256,19 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
       )
 
     // Operational status
-    case 'op-lone-worker-active':
+    case 'op-monitored-sessions-active':
       return (
         <CountTile
           label={tGenerated('m_163e07fa713535')}
-          value={data.lwActive}
+          value={data.monitoredSessionsActive}
           href="/apps/sessions"
           icon={Radio}
           caption={tGeneratedValue(
-            data.lwActive > 0 ? tGenerated('m_09630c4cb6c820') : tGenerated('m_184c0ee5147b97'),
+            data.monitoredSessionsActive > 0
+              ? tGenerated('m_09630c4cb6c820')
+              : tGenerated('m_184c0ee5147b97'),
           )}
-          tone={data.lwActive > 0 ? 'warning' : 'normal'}
+          tone={data.monitoredSessionsActive > 0 ? 'warning' : 'normal'}
         />
       )
     case 'op-submissions-today':

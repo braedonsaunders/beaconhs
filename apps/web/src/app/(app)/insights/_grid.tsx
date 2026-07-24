@@ -24,7 +24,7 @@ const Responsive = dynamic(() => import('react-grid-layout').then((m) => m.Respo
   ssr: false,
 }) as unknown as React.ComponentType<any>
 
-type LW = InsightDashboardLayout['widgets'][number]
+type DashboardWidget = InsightDashboardLayout['widgets'][number]
 
 export type GridItem = {
   id: string
@@ -47,13 +47,13 @@ export function InsightsGrid({
   paletteOpen,
   onChange,
 }: {
-  widgets: LW[]
+  widgets: DashboardWidget[]
   nodes: Record<string, ReactNode>
   items: GridItem[]
   categoryLabels: Record<string, string>
   editing: boolean
   paletteOpen: boolean
-  onChange: (next: LW[]) => void
+  onChange: (next: DashboardWidget[]) => void
 }) {
   const tGenerated = useGeneratedTranslations()
   const ref = useRef<HTMLDivElement>(null)
@@ -113,7 +113,7 @@ export function InsightsGrid({
   function commit(next: Layout) {
     if (!editing) return
     const map = new Map(widgets.map((w) => [w.id, w]))
-    const updated: LW[] = []
+    const updated: DashboardWidget[] = []
     for (const it of next) {
       if (map.has(it.i)) updated.push({ id: it.i, x: it.x, y: it.y, w: it.w, h: it.h })
     }

@@ -1,9 +1,9 @@
 import { notFound } from 'next/navigation'
-import { loadBeaconReportCatalog } from '@beaconhs/reports/server'
 import { assertCan } from '@beaconhs/tenant'
 import { PageContainer } from '@/components/page-layout'
 import { requireRequestContext } from '@/lib/auth'
 import { isUuid } from '@/lib/list-params'
+import { loadAuthorizedReportCatalog } from '@/lib/report-catalog'
 import { ReportsBackLink } from '../../../_back-link'
 import { loadDefinitionById, toAppKitDefinition } from '../../../_definitions'
 import { loadTenantBranding, runReportForViewer } from '../../../_run'
@@ -19,7 +19,7 @@ export default async function EditReportPage({ params }: { params: Promise<{ id:
   const [{ result }, branding, catalog] = await Promise.all([
     runReportForViewer(ctx, definition),
     loadTenantBranding(ctx),
-    ctx.db((tx) => loadBeaconReportCatalog(tx)),
+    loadAuthorizedReportCatalog(ctx),
   ])
   return (
     <PageContainer className="flex min-h-full flex-col gap-3">

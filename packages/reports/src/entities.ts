@@ -414,8 +414,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   {
     key: 'monitored_sessions',
     label: 'Monitored sessions',
-    category: 'lone_worker',
-    description: 'Live monitored form sessions such as Lone Worker check-ins.',
+    category: 'apps',
+    description: 'Live timed check-in sessions started from any Builder app.',
     table: 'report_monitored_sessions',
     from: `(
       SELECT
@@ -473,6 +473,25 @@ export const BEACON_REPORT_CATALOG: ReportEntityCatalog = { entities: REPORT_ENT
 export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.fromEntries(
   REPORT_ENTITIES.map((e) => [e.key, e]),
 )
+
+/**
+ * Keep the host-authorized Insights inventory while retaining report-specific
+ * projections for entities that need flattened joins or calculated fields.
+ */
+export function mergeAuthorizedReportSources(
+  authorizedSources: readonly ReportEntity[],
+): ReportEntity[] {
+  return authorizedSources.map((source) => {
+    const authored = REPORT_ENTITY_MAP[source.key]
+    if (!authored) return source
+    return {
+      ...authored,
+      label: source.label,
+      category: source.category,
+      description: source.description ?? authored.description,
+    }
+  })
+}
 
 export function entityColumn(entity: ReportEntity, key: string): ReportEntityColumn | null {
   return reportColumn(entity, key)

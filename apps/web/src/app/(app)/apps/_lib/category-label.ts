@@ -10,7 +10,7 @@ const FORM_CATEGORY_LABELS: Record<string, string> = {
   equipment_inspection: 'Equipment Inspection',
   incident_investigation: 'Incident Investigation',
   lift_plan: 'Lift Plan',
-  lone_worker: 'Lone Worker',
+  monitored_session: 'Monitored Session',
   wah: 'Working at Heights',
   custom: 'Custom',
 }

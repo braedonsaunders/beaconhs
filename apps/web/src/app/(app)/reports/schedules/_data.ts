@@ -6,7 +6,7 @@ import type {
   ReportScheduleMemberOption,
 } from '@beaconhs/reports/react'
 import { reportEntity } from '@beaconhs/reports'
-import { loadBeaconReportCatalog } from '@beaconhs/reports/server'
+import { loadAuthorizedReportCatalogInTransaction } from '@/lib/report-catalog'
 import { loadVisibleDefinitions } from '../_definitions'
 
 export async function loadScheduleFormData(ctx: RequestContext): Promise<{
@@ -15,7 +15,7 @@ export async function loadScheduleFormData(ctx: RequestContext): Promise<{
 }> {
   const definitionRows = await loadVisibleDefinitions(ctx.tenantId!)
   const { catalog, members } = await ctx.db(async (tx) => ({
-    catalog: await loadBeaconReportCatalog(tx),
+    catalog: await loadAuthorizedReportCatalogInTransaction(ctx, tx),
     members: await tx
       .select({
         userId: tenantUsers.userId,

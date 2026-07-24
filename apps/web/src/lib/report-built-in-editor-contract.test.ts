@@ -26,6 +26,8 @@ const runPage = readFileSync(
   new URL('../app/(app)/reports/definitions/[id]/page.tsx', import.meta.url),
   'utf8',
 )
+const reportCatalog = readFileSync(new URL('./report-catalog.ts', import.meta.url), 'utf8')
+const reportRun = readFileSync(new URL('../app/(app)/reports/_run.ts', import.meta.url), 'utf8')
 
 describe('unified AppKit report contract', () => {
   it('has no list-side alternate preview or built-in/custom execution branch', () => {
@@ -58,5 +60,15 @@ describe('unified AppKit report contract', () => {
     expect(runPage).toContain('<ReportsBackLink />')
     expect(studio).not.toContain('backHref')
     expect(studio).toContain('`/reports/definitions/${definition.id}/export?format=pdf`')
+  })
+
+  it('uses the same authorized source inventory as Insights, including scoped Builder apps', () => {
+    expect(reportCatalog).toContain('resolveAnalyticsAccess(ctx, tx)')
+    expect(reportCatalog).toContain('loadBeaconReportCatalog(tx, access.entities)')
+    expect(editor).toContain('loadAuthorizedReportCatalog(ctx)')
+    expect(runPage).toContain('loadAuthorizedReportCatalog(ctx)')
+    expect(reportRun).toContain('loadAuthorizedReportCatalogInTransaction(ctx, tx)')
+    expect(editor).not.toContain('loadBeaconReportCatalog')
+    expect(runPage).not.toContain('loadBeaconReportCatalog')
   })
 })

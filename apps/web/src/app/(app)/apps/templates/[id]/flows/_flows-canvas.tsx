@@ -931,7 +931,7 @@ const FLOW_TEMPLATES: FlowTemplate[] = [
   },
   {
     key: 'monitored_session',
-    label: 'Monitored session (lone worker)',
+    label: 'Monitored session',
     description:
       'On submit, start a recurring check-in timer; if a check-in is missed past the grace period, notify a role.',
     build: () => ({

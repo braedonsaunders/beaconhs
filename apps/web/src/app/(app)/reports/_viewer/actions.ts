@@ -8,8 +8,9 @@ import {
   type ReportRuleGroup,
   type ReportRunResult,
 } from '@beaconhs/reports'
-import { loadBeaconReportCatalog, runBeaconReport } from '@beaconhs/reports/server'
+import { runBeaconReport } from '@beaconhs/reports/server'
 import { requireRequestContext } from '@/lib/auth'
+import { loadAuthorizedReportCatalogInTransaction } from '@/lib/report-catalog'
 import { loadDefinitionById } from '../_definitions'
 
 export async function runReportWithControls(
@@ -23,7 +24,7 @@ export async function runReportWithControls(
     const definition = await loadDefinitionById(ctx.tenantId!, definitionId)
     if (!definition) throw new Error('Report not found.')
     const result = await ctx.db(async (tx) => {
-      const catalog = await loadBeaconReportCatalog(tx)
+      const catalog = await loadAuthorizedReportCatalogInTransaction(ctx, tx)
       const entity = reportEntity(catalog, definition.query.entity)
       if (!entity) throw new Error('The report data source is no longer available.')
       if (controls.groupBy && !reportColumn(entity, controls.groupBy)) {

@@ -13,7 +13,7 @@ import {
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { BhqlResult } from '@beaconhs/analytics'
-import { addTrustedSystemFormEntity, runBhql } from '@beaconhs/analytics/server'
+import { addTrustedSystemAppResponsesEntity, runBhql } from '@beaconhs/analytics/server'
 import { resolveAnalyticsAccess } from '@/lib/analytics-access'
 import { applyParams } from './_params'
 import { canSeePublishedInsight, getInsightRoleKeys } from './_visibility'
@@ -45,7 +45,7 @@ async function runCardCached(
     const result = await runBhql(tx, query, {
       maxRows: 20_000,
       entityMap: trustedSystemCard
-        ? addTrustedSystemFormEntity(access.entityMap)
+        ? addTrustedSystemAppResponsesEntity(access.entityMap)
         : access.entityMap,
     })
     CARD_RESULT_CACHE.set(cacheKey, { at: now, result })

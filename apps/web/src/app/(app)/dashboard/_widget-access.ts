@@ -32,7 +32,7 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'kpi-training-compliance': [...TRAINING, ...ANALYTICS],
   'kpi-document-compliance': ['documents.manage', ...ANALYTICS],
   // Operations
-  'op-lone-worker-active': [...INCIDENTS, ...ANALYTICS],
+  'op-monitored-sessions-active': [...FORMS, ...ANALYTICS],
   'op-submissions-today': [...FORMS, ...ANALYTICS],
   'op-inspections-mtd': [...INSPECT, ...ANALYTICS],
   // Incidents

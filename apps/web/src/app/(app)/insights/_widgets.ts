@@ -181,7 +181,7 @@ const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
 
   // Operations
   {
-    id: 'kpi-lw-active',
+    id: 'kpi-monitored-sessions-active',
     label: 'Active monitored sessions',
     description: 'Live monitored sessions across every app.',
     category: 'operations',
@@ -664,7 +664,7 @@ export const BUILTIN_QUERIES: Record<
       pivot: null,
       stages: [
         {
-          source: 'form_responses',
+          source: 'app_responses',
           filter: { combinator: 'and', rules: [{ field: 'submitted_at', op: 'since_today' }] },
           aggregations: [{ fn: 'count', alias: 'count' }],
         },
@@ -722,7 +722,7 @@ export const BUILTIN_QUERIES: Record<
       ],
     },
   },
-  'kpi-lw-active': {
+  'kpi-monitored-sessions-active': {
     vizType: 'scalar',
     query: {
       version: 'bhql/1',
@@ -730,7 +730,7 @@ export const BUILTIN_QUERIES: Record<
       pivot: null,
       stages: [
         {
-          source: 'form_responses',
+          source: 'app_responses',
           filter: {
             combinator: 'and',
             rules: [{ field: 'monitor_status', op: 'eq', value: 'active' }],

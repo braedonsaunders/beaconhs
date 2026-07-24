@@ -8,9 +8,11 @@
 
 import type { Job } from 'bullmq'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { discoverEntitiesWithScopedApps } from '@beaconhs/analytics/server'
 import { db, withTenant, withSuperAdmin, type Database } from '@beaconhs/db'
 import {
   attachments,
+  formTemplates,
   people,
   reportRunDeliveries,
   reportRuns,
@@ -36,7 +38,12 @@ import {
   normalizeReportRuntimeFilters,
   runBeaconReport,
 } from '@beaconhs/reports/server'
-import { can, makeTenantContext, resolveMembershipAccess } from '@beaconhs/tenant'
+import {
+  can,
+  canAccessTemplate,
+  makeTenantContext,
+  resolveMembershipAccess,
+} from '@beaconhs/tenant'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
 import {
   deleteObject,
@@ -506,9 +513,26 @@ async function resolveScheduledReportContext(
   ) {
     throw new Error('Scheduled report run-as member no longer has Reports access')
   }
+  const templates = await tx
+    .select({
+      id: formTemplates.id,
+      name: formTemplates.name,
+      status: formTemplates.status,
+      allowedRoles: formTemplates.allowedRoles,
+      deletedAt: formTemplates.deletedAt,
+    })
+    .from(formTemplates)
+    .where(isNull(formTemplates.deletedAt))
+  const accessibleApps = templates.filter((template) =>
+    canAccessTemplate(requestCtx, template, resolved.roleKeys, 'operate'),
+  )
+  const sources = await discoverEntitiesWithScopedApps(
+    tx,
+    accessibleApps.map(({ id, name }) => ({ id, name })),
+  )
 
   return {
-    catalog: await loadBeaconReportCatalog(tx),
+    catalog: await loadBeaconReportCatalog(tx, sources),
     locale: localePolicy.locale,
   }
 }

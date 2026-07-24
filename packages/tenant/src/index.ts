@@ -175,10 +175,16 @@ export async function resolveMembershipAccess(
   tx: Database,
   membershipId: string,
   activeRoleId?: string | null,
-): Promise<{ permissions: Set<string>; scopes: RoleScope[]; appliedRoleId: string | null }> {
+): Promise<{
+  permissions: Set<string>
+  scopes: RoleScope[]
+  appliedRoleId: string | null
+  roleKeys: Set<string>
+}> {
   const assignments = await tx
     .select({
       roleId: roleAssignments.roleId,
+      roleKey: roles.key,
       permissions: roles.permissions,
       scope: roleAssignments.scope,
     })
@@ -194,6 +200,7 @@ export async function resolveMembershipAccess(
     : assignments
   const permissions = new Set<string>()
   const scopes = effective.map((assignment) => assignment.scope)
+  const roleKeys = new Set(effective.map((assignment) => assignment.roleKey))
   for (const assignment of effective) {
     for (const permission of assignment.permissions) permissions.add(permission)
   }
@@ -213,7 +220,7 @@ export async function resolveMembershipAccess(
       .filter((override) => override.effect === 'deny')
       .map((override) => override.permission),
   )
-  return { permissions, scopes, appliedRoleId }
+  return { permissions, scopes, appliedRoleId, roleKeys }
 }
 
 function applyPermissionDenies(permissions: Set<string>, denies: string[]): void {

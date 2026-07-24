@@ -1,10 +1,10 @@
 import { notFound } from 'next/navigation'
-import { loadBeaconReportCatalog } from '@beaconhs/reports/server'
 import { can } from '@beaconhs/tenant'
 import { PageContainer } from '@/components/page-layout'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { requireRequestContext } from '@/lib/auth'
 import { isUuid } from '@/lib/list-params'
+import { loadAuthorizedReportCatalog } from '@/lib/report-catalog'
 import { ReportsBackLink } from '../../_back-link'
 import { loadDefinitionById } from '../../_definitions'
 import { loadTenantBranding, runReportForViewer } from '../../_run'
@@ -20,7 +20,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const [{ result, error }, branding, catalog] = await Promise.all([
     runReportForViewer(ctx, definition),
     loadTenantBranding(ctx),
-    ctx.db((tx) => loadBeaconReportCatalog(tx)),
+    loadAuthorizedReportCatalog(ctx),
   ])
   const canBuild = ctx.isSuperAdmin || can(ctx, 'reports.builder')
 

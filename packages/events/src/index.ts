@@ -76,7 +76,7 @@ function appUrl(linkPath: string): string {
 // with the same defaults the dispatcher falls back to.
 // Only NATIVE, guaranteed-to-exist sources get a built-in category: the
 // incidents module, corrective actions, and the compliance engine. Builder apps
-// (lone worker, any monitored/custom app) route their alerts through Flows —
+// (timed check-ins and any other monitored app) route their alerts through Flows —
 // they're per-tenant + dynamic, so they must NOT have hardcoded categories here.
 export { DEFAULT_ROLES_BY_CATEGORY } from './recipients'
 

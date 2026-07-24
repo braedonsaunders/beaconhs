@@ -22,7 +22,7 @@ import {
   type ReportEntityCatalog,
   type ReportEntityColumn,
 } from '@appkit/reports'
-import { REPORT_ENTITIES, type ReportEntity } from './entities'
+import { mergeAuthorizedReportSources, REPORT_ENTITIES, type ReportEntity } from './entities'
 
 /** Title-cases a raw pg enum label ('near_miss' → 'Near miss') for pickers. */
 function prettifyEnumLabel(value: string): string {
@@ -112,7 +112,18 @@ export async function augmentBeaconReportEntityWithCustomFields(
 }
 
 /** Tenant-aware AppKit catalogue used by the studio and every executor. */
-export async function loadBeaconReportCatalog(tx: Database): Promise<ReportEntityCatalog> {
+/**
+ * Build the tenant-aware AppKit catalogue from the host's authorized source list.
+ *
+ * Insights owns schema discovery and per-Builder-app authorization. Reports keeps
+ * its authored flat projections for keys that need report-specific joins, then
+ * adds every other discovered source unchanged. This gives both studios the same
+ * source inventory without moving Beacon domain discovery into AppKit.
+ */
+export async function loadBeaconReportCatalog(
+  tx: Database,
+  authorizedSources: readonly ReportEntity[] = REPORT_ENTITIES,
+): Promise<ReportEntityCatalog> {
   const [
     enumOptionsByColumn,
     personRows,
@@ -329,9 +340,10 @@ export async function loadBeaconReportCatalog(tx: Database): Promise<ReportEntit
       })),
     ],
   ])
+  const reportSources = mergeAuthorizedReportSources(authorizedSources)
   return {
     entities: await Promise.all(
-      REPORT_ENTITIES.map(async (entity) => {
+      reportSources.map(async (entity) => {
         const augmented = await augmentBeaconReportEntityWithCustomFields(tx, entity)
         return {
           ...augmented,

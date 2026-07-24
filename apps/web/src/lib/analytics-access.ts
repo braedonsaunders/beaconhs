@@ -5,7 +5,7 @@ import type { Database } from '@beaconhs/db'
 import { formTemplates, type BhqlQuery } from '@beaconhs/db/schema'
 import type { AnalyticsEntity, BhqlResult } from '@beaconhs/analytics'
 import {
-  addTrustedSystemFormEntity,
+  addTrustedSystemAppResponsesEntity,
   discoverEntitiesWithScopedApps,
   runBhql,
 } from '@beaconhs/analytics/server'
@@ -68,7 +68,7 @@ export async function runAuthorizedBhql(
   return ctx.db(async (tx) => {
     const access = await resolveAnalyticsAccess(ctx, tx)
     const entityMap = opts.trustedSystemCard
-      ? addTrustedSystemFormEntity(access.entityMap)
+      ? addTrustedSystemAppResponsesEntity(access.entityMap)
       : access.entityMap
     return runBhql(tx, query, { maxRows: opts.maxRows, entityMap })
   })

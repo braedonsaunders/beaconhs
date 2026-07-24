@@ -12,13 +12,13 @@ import {
 } from '@beaconhs/reports'
 import {
   claimBeaconReportRun,
-  loadBeaconReportCatalog,
   normalizeReportRuntimeFilters,
   validateBeaconReportRuntimeFilters,
 } from '@beaconhs/reports/server'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
+import { loadAuthorizedReportCatalogInTransaction } from '@/lib/report-catalog'
 
 export async function saveSchedule(
   id: string | null,
@@ -43,7 +43,7 @@ export async function saveSchedule(
         )
         .limit(1)
       if (!definition) throw new Error('Choose an available report.')
-      const catalog = await loadBeaconReportCatalog(tx)
+      const catalog = await loadAuthorizedReportCatalogInTransaction(ctx, tx)
       validateBeaconReportRuntimeFilters(
         ctx.tenantId!,
         definition.query,

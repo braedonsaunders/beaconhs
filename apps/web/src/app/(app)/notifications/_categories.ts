@@ -30,7 +30,6 @@ const LABELS: Record<string, string> = {
   sds: 'SDS',
   kpi: 'KPI',
   wah: 'Work at Height',
-  lone_worker: 'Lone Worker',
   monitored_session: 'Monitored Sessions',
   cross_module: 'Cross-module',
   toolbox_talk: 'Toolbox Talk',
@@ -47,7 +46,6 @@ const ICONS: Record<string, LucideIcon> = {
   document: FileText,
   documents: FileText,
   compliance: ShieldCheck,
-  lone_worker: Radio,
   monitored_session: Radio,
   ppe: HardHat,
   equipment: Boxes,
@@ -80,10 +78,6 @@ const TINTS: Record<string, Tint> = {
   document: { bg: 'bg-sky-100 dark:bg-sky-950/40', fg: 'text-sky-600 dark:text-sky-300' },
   documents: { bg: 'bg-sky-100 dark:bg-sky-950/40', fg: 'text-sky-600 dark:text-sky-300' },
   compliance: { bg: 'bg-teal-100 dark:bg-teal-950/40', fg: 'text-teal-600 dark:text-teal-300' },
-  lone_worker: {
-    bg: 'bg-orange-100 dark:bg-orange-950/40',
-    fg: 'text-orange-600 dark:text-orange-300',
-  },
   monitored_session: {
     bg: 'bg-orange-100 dark:bg-orange-950/40',
     fg: 'text-orange-600 dark:text-orange-300',

@@ -30,7 +30,7 @@ import { templateAccessWhere } from '../_lib/access'
 // Monitored sessions = any Builder-app response with a live monitor (recurring
 // check-ins + automatic overdue escalation). This dashboard is app-agnostic: it
 // spans EVERY monitored response the caller may see and assumes no specific app
-// (e.g. Lone Worker) exists — deployments without a monitored app just see the
+// timed check-in app exists — deployments without a monitored app just see the
 // empty state. A session's live monitor lives on its response page. See
 // docs/monitored-sessions-design.md.
 
@@ -81,7 +81,7 @@ export default async function MonitoredSessionsPage({
   const { rows, total, page } = await ctx.db(async (tx) => {
     // Per-user record visibility (same tiers as /apps/responses): read.all →
     // every session; read.site → sessions at my sites + my own; else → my own.
-    // Without this any tenant member could see every worker's live lone-worker
+    // Without this any tenant member could see every worker's live monitored
     // roster and check-in schedule.
     const vis = await moduleScopeWhere(ctx, tx, {
       prefix: 'forms.response',

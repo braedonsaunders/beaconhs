@@ -92,8 +92,8 @@ export const WIDGETS: Record<string, WidgetMeta> = {
   },
 
   // ---- Operational status -------------------------------------------------
-  'op-lone-worker-active': {
-    id: 'op-lone-worker-active',
+  'op-monitored-sessions-active': {
+    id: 'op-monitored-sessions-active',
     category: 'operations',
     label: 'Active monitored sessions',
     description: 'Live count of in-progress monitored sessions across every app.',
@@ -343,7 +343,7 @@ export const WIDGET_CARD_KEY: Record<string, string> = {
   'chart-top-sites': 'chart-top-sites',
   'op-submissions-today': 'kpi-submissions',
   'op-inspections-mtd': 'kpi-inspections',
-  'op-lone-worker-active': 'kpi-lw-active',
+  'op-monitored-sessions-active': 'kpi-monitored-sessions-active',
   'kpi-ppe-open-issues': 'kpi-ppe-issues',
   'kpi-people-active': 'kpi-people',
 }
