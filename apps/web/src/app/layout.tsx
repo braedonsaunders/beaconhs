@@ -42,9 +42,13 @@ export const viewport: Viewport = {
 export const dynamic = 'force-dynamic'
 
 // Applied before first paint so a dark-mode user never sees a white flash. Reads
-// the persisted preference ('light' | 'dark' | 'system') and toggles `.dark` on
-// <html>; 'system' (the default) follows the OS setting.
-const THEME_INIT = `(function(){try{var t=localStorage.getItem('theme')||'system';var m=window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',t==='dark'||(t==='system'&&m));}catch(e){}})();`
+// the persisted preference ('light' | 'dark' | 'system') and sets an explicit
+// `.light`/`.dark` class on <html> ('system', the default, follows the OS). We
+// stamp `.light` too — never leaving <html> class-less — because vendored design
+// tokens (AppKit) fall back to `prefers-color-scheme` when neither class is
+// present, which would force those surfaces dark on a dark-OS machine even while
+// the app is in light mode.
+const THEME_INIT = `(function(){try{var t=localStorage.getItem('theme')||'system';var m=window.matchMedia('(prefers-color-scheme: dark)').matches;var d=t==='dark'||(t==='system'&&m);var e=document.documentElement;e.classList.toggle('dark',d);e.classList.toggle('light',!d);}catch(e){}})();`
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const [headerStore, locale, messages, timeZone] = await Promise.all([

@@ -65,7 +65,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const mounted = useHydrated()
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', resolvedTheme === 'dark')
+    // Stamp an explicit light/dark class (never class-less) so vendored design
+    // tokens don't fall back to the OS `prefers-color-scheme`. Mirrors THEME_INIT.
+    const root = document.documentElement
+    root.classList.toggle('dark', resolvedTheme === 'dark')
+    root.classList.toggle('light', resolvedTheme === 'light')
   }, [resolvedTheme])
 
   const setTheme = useCallback((t: Theme) => {
