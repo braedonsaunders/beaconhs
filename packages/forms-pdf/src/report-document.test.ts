@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { renderReportPdf } from './index'
 
-// A cold Chromium launch can be delayed while the package's PNG regression
-// runs concurrently on shared CI runners. The render itself retains its own
-// bounded page timeouts; this outer bound matches the existing browser test.
+// A cold Chromium launch and full document print can exceed Vitest's default
+// timeout on shared CI runners. The package runs test files serially so the
+// browser-backed regressions do not compete for runner resources.
 const RENDER_TEST_TIMEOUT_MS = 90_000
 
 describe('AppKit report PDF document', () => {
