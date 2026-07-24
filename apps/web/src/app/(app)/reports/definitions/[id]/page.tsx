@@ -29,6 +29,8 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         definition={definition}
         catalog={catalog}
         organization={branding.name}
+        logoUrl={branding.logoUrl}
+        primaryColor={branding.primaryColor}
         description={definition.description ?? tGenerated('m_06cf662b44bd2f')}
         initialResult={result}
         initialError={error}

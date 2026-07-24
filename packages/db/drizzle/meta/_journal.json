@@ -190,6 +190,13 @@
       "when": 1784835600000,
       "tag": "0026_order_frontline_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1784894400000,
+      "tag": "0027_report_portrait_cutover",
+      "breakpoints": true
     }
   ]
 }

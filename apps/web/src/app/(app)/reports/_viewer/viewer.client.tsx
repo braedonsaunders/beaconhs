@@ -21,6 +21,8 @@ export function BeaconReportViewer({
   definition,
   catalog,
   organization,
+  logoUrl,
+  primaryColor,
   description,
   initialResult,
   initialError,
@@ -39,6 +41,8 @@ export function BeaconReportViewer({
   }
   catalog: ReportEntityCatalog
   organization: string
+  logoUrl: string | null
+  primaryColor: string | null
   description: string
   initialResult: ReportRunResult
   initialError: string | null
@@ -177,6 +181,8 @@ export function BeaconReportViewer({
           ) : (
             <ReportResultView
               organization={organization}
+              logoUrl={logoUrl}
+              primaryColor={primaryColor}
               title={definition.name}
               description={definition.description ?? undefined}
               layout={definition.layout}

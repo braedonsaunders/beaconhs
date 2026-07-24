@@ -44,6 +44,8 @@ export default async function NewReportPage() {
       definition={definition}
       initialResult={null}
       organization={branding.name}
+      logoUrl={branding.logoUrl}
+      primaryColor={branding.primaryColor}
       catalog={catalog}
     />
   )

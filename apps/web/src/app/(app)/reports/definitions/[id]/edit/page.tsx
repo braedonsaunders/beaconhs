@@ -24,6 +24,8 @@ export default async function EditReportPage({ params }: { params: Promise<{ id:
       definition={toAppKitDefinition(definition)}
       initialResult={result}
       organization={branding.name}
+      logoUrl={branding.logoUrl}
+      primaryColor={branding.primaryColor}
       catalog={catalog}
     />
   )

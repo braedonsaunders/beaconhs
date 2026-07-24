@@ -13,11 +13,15 @@ export function BeaconReportStudio({
   definition,
   initialResult,
   organization,
+  logoUrl,
+  primaryColor,
   catalog,
 }: {
   definition: CustomReportDefinition
   initialResult: ReportRunResult | null
   organization: string
+  logoUrl: string | null
+  primaryColor: string | null
   catalog: ReportEntityCatalog
 }) {
   const [value, setValue] = useState({ definition })
@@ -30,6 +34,8 @@ export function BeaconReportStudio({
       onPreview={({ definition: next }) => previewReportDefinition(next)}
       onSave={({ definition: next }) => saveReportDefinition(next)}
       organization={organization}
+      logoUrl={logoUrl}
+      primaryColor={primaryColor}
       autoPreviewMs={350}
       autoSaveMs={700}
       className="min-h-[calc(100dvh-8rem)]"
