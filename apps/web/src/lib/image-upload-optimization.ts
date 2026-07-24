@@ -16,7 +16,7 @@ const STATIC_IMAGE_TYPES = new Set([
   'image/webp',
 ])
 
-export type OptimizedUploadedImage = {
+type OptimizedUploadedImage = {
   body: Buffer
   contentType: string
   filename: string
