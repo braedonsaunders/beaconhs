@@ -12,7 +12,7 @@ overrides:
   # validated successfully, but the repository npm
   # publisher is not authenticated yet.
   '@appkit/analytics': 'file:./vendor/appkit/appkit-analytics-0.2.0.tgz'
-  '@appkit/reports': 'file:./vendor/appkit/appkit-reports-0.2.0-b7a5ee2.tgz'
+  '@appkit/reports': 'file:./vendor/appkit/appkit-reports-0.2.0-6ee2330.tgz'
   '@appkit/tokens': 'file:./vendor/appkit/appkit-tokens-0.1.1.tgz'
   '@appkit/ui': 'file:./vendor/appkit/appkit-ui-0.1.1.tgz'
   # The published Excalidraw runtime ships precompiled JS/CSS but mistakenly

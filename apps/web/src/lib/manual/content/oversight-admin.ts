@@ -265,7 +265,8 @@ Seeded and team-created reports use the same editable report definition. There i
 4. Set the saved filters, grouping, and sorting.
 5. Under **Page setup**, choose **Letter**, **A4**, or **Legal**, **Portrait** or **Landscape**, the page margin, row density, and whether to show summary cards.
 6. Check the live paper preview.
-7. Save the report.
+7. Click **Save** to keep your changes. Click **PDF** beside **Run** and **Save** to save the current report and download the matching paper preview.
+8. Click **Back to reports** to return to the report list.
 
 The report list, full viewer, exports, and schedules all run this same saved definition. Seed provenance only lets BeaconHS restore a missing default during setup; it does not make the report read-only.`,
   },

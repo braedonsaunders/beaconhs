@@ -6,7 +6,7 @@ settings:
 
 overrides:
   '@appkit/analytics': file:./vendor/appkit/appkit-analytics-0.2.0.tgz
-  '@appkit/reports': file:./vendor/appkit/appkit-reports-0.2.0-b7a5ee2.tgz
+  '@appkit/reports': file:./vendor/appkit/appkit-reports-0.2.0-6ee2330.tgz
   '@appkit/tokens': file:./vendor/appkit/appkit-tokens-0.1.1.tgz
   '@appkit/ui': file:./vendor/appkit/appkit-ui-0.1.1.tgz
   '@excalidraw/excalidraw@0.18.1>sass': '-'
@@ -544,8 +544,8 @@ importers:
   packages/db:
     dependencies:
       '@appkit/reports':
-        specifier: file:../../vendor/appkit/appkit-reports-0.2.0-b7a5ee2.tgz
-        version: file:vendor/appkit/appkit-reports-0.2.0-b7a5ee2.tgz(@appkit/ui@file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
+        specifier: file:../../vendor/appkit/appkit-reports-0.2.0-6ee2330.tgz
+        version: file:vendor/appkit/appkit-reports-0.2.0-6ee2330.tgz(@appkit/ui@file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
       '@beaconhs/forms-core':
         specifier: workspace:*
         version: link:../forms-core
@@ -808,8 +808,8 @@ importers:
   packages/reports:
     dependencies:
       '@appkit/reports':
-        specifier: file:../../vendor/appkit/appkit-reports-0.2.0-b7a5ee2.tgz
-        version: file:vendor/appkit/appkit-reports-0.2.0-b7a5ee2.tgz(@appkit/ui@file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
+        specifier: file:../../vendor/appkit/appkit-reports-0.2.0-6ee2330.tgz
+        version: file:vendor/appkit/appkit-reports-0.2.0-6ee2330.tgz(@appkit/ui@file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
       '@appkit/ui':
         specifier: file:../../vendor/appkit/appkit-ui-0.1.1.tgz
         version: file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2)
@@ -1047,8 +1047,8 @@ packages:
     version: 0.2.0
     engines: {node: '>=22'}
 
-  '@appkit/reports@file:vendor/appkit/appkit-reports-0.2.0-b7a5ee2.tgz':
-    resolution: {integrity: sha512-MSgyy0ByLRZA5rlnpi/5eBImd0pIYuCA6OVbwvxtaaqi/jk0u/3SuYZLwxxyWAwXIhWrKXPsnYdl2nlGTb7rxw==, tarball: file:vendor/appkit/appkit-reports-0.2.0-b7a5ee2.tgz}
+  '@appkit/reports@file:vendor/appkit/appkit-reports-0.2.0-6ee2330.tgz':
+    resolution: {integrity: sha512-Pa89HQd4Jqigy/c0wY6R/ZmXX6MoiOtBkM0hry+BcEznrk4SWk811Q/3OKQBeDCn1s6h4oYSIR90HGcv8gsNkw==, tarball: file:vendor/appkit/appkit-reports-0.2.0-6ee2330.tgz}
     version: 0.2.0
     engines: {node: '>=22'}
     peerDependencies:
@@ -8419,7 +8419,7 @@ snapshots:
 
   '@appkit/analytics@file:vendor/appkit/appkit-analytics-0.2.0.tgz': {}
 
-  '@appkit/reports@file:vendor/appkit/appkit-reports-0.2.0-b7a5ee2.tgz(@appkit/ui@file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)':
+  '@appkit/reports@file:vendor/appkit/appkit-reports-0.2.0-6ee2330.tgz(@appkit/ui@file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@appkit/analytics': file:vendor/appkit/appkit-analytics-0.2.0.tgz
     optionalDependencies:

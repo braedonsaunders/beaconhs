@@ -179,10 +179,9 @@ function wrapDocument(body: string, title: string): string {
 
 // --- Scheduled-report PDF -------------------------------------------------
 //
-// Prints the SAME document body the in-app Paged.js preview paginates, on the
-// definition's configured paper (size/orientation/margins). Page numbers come
-// from Puppeteer's footerTemplate — the preview's @page margin boxes are
-// deliberately NOT emitted here (they would double up the footer).
+// Prints the SAME document body and CSS as the in-app paper preview, on the
+// definition's configured paper (size/orientation/margins). There is no
+// PDF-only header/footer chrome, which would introduce a second font and layout.
 
 export async function renderReportPdf(
   input: ReportDocumentInput & { layout?: Partial<ReportLayoutConfig> | null },
@@ -199,16 +198,11 @@ export async function renderReportPdf(
   const b = await browser()
   const page = await newPdfPage(b)
   try {
-    await setPdfContent(page, html)
+    await setPdfContent(page, html, { waitForFonts: true })
     const pdf = await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,
-      displayHeaderFooter: true,
-      headerTemplate: `<div></div>`,
-      footerTemplate: `<div style="font-size:8px;width:100%;padding:0 ${m};display:flex;justify-content:space-between;color:#666;">
-        <span>${escapeHtml(input.tenantName)} - ${escapeHtml(input.reportName)}</span>
-        <span><span class="pageNumber"></span> / <span class="totalPages"></span></span>
-      </div>`,
+      displayHeaderFooter: false,
       margin: { top: m, bottom: m, left: m, right: m },
     })
     return Buffer.from(pdf)

@@ -36,6 +36,13 @@ export function BeaconReportStudio({
       organization={organization}
       logoUrl={logoUrl}
       primaryColor={primaryColor}
+      backHref="/reports"
+      backLabel="Back to reports"
+      pdfHref={
+        definition.id === 'new'
+          ? undefined
+          : `/reports/definitions/${definition.id}/export?format=pdf`
+      }
       autoPreviewMs={350}
       autoSaveMs={700}
       className="min-h-[calc(100dvh-8rem)]"

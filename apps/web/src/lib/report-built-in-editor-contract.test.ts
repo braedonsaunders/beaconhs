@@ -14,6 +14,10 @@ const editor = readFileSync(
   new URL('../app/(app)/reports/definitions/[id]/edit/page.tsx', import.meta.url),
   'utf8',
 )
+const studio = readFileSync(
+  new URL('../app/(app)/reports/_studio/studio.client.tsx', import.meta.url),
+  'utf8',
+)
 
 describe('unified AppKit report contract', () => {
   it('has no list-side alternate preview or built-in/custom execution branch', () => {
@@ -36,5 +40,11 @@ describe('unified AppKit report contract', () => {
     expect(viewer).toContain("params.set('filters', JSON.stringify(activeFilters))")
     expect(viewer).toContain("params.set('groupBy', groupBy)")
     expect(viewer).toContain("tGenerated('m_1df37ea02bdc43')")
+  })
+
+  it('keeps editor navigation and PDF export on the shared AppKit studio', () => {
+    expect(studio).toContain('backHref="/reports"')
+    expect(studio).toContain('backLabel="Back to reports"')
+    expect(studio).toContain('`/reports/definitions/${definition.id}/export?format=pdf`')
   })
 })
