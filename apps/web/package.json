@@ -58,7 +58,7 @@
     "@tiptap/react": "^3.27.4",
     "@tiptap/starter-kit": "^3.27.4",
     "@xyflow/react": "^12.11.2",
-    "ai": "^6.0.224",
+    "ai": "^7.0.37",
     "better-auth": "^1.6.23",
     "drizzle-orm": "^0.45.2",
     "echarts": "^6.1.0",
