@@ -10,6 +10,7 @@ import {
   createMultipartUpload,
   deleteObject,
   ensureBucket,
+  getObject,
   getObjectRange,
   headObject,
   MULTIPART_UPLOAD_PART_SIZE_BYTES,
@@ -19,6 +20,7 @@ import {
   presignMultipartPart,
   presignPut,
   promoteObject,
+  putObject,
   shouldUseMultipartUpload,
 } from '@beaconhs/storage'
 import { MAX_PPTX_FILE_BYTES } from '@beaconhs/office/limits'
@@ -34,6 +36,7 @@ import {
   uploadContentTypeError,
   uploadedFileHeaderError,
 } from './upload-policy'
+import { optimizeUploadedImage } from './image-upload-optimization'
 
 const MAX_UPLOAD_BYTES = {
   image: 50 * 1024 * 1024,
@@ -245,9 +248,19 @@ export async function requestUpload(input: z.infer<typeof requestSchema>): Promi
   }
 }
 
-export async function finalizeUpload(
-  input: z.infer<typeof finalizeSchema>,
-): Promise<{ ok: true; attachmentId: string; url: string } | { ok: false; error: string }> {
+export async function finalizeUpload(input: z.infer<typeof finalizeSchema>): Promise<
+  | {
+      ok: true
+      attachmentId: string
+      url: string
+      filename: string
+      contentType: string
+      sizeBytes: number
+      width?: number
+      height?: number
+    }
+  | { ok: false; error: string }
+> {
   const ctx = await requireRequestContext()
   const parsed = finalizeSchema.safeParse(input)
   if (!parsed.success) return { ok: false, error: 'Invalid upload reservation' }
@@ -292,10 +305,28 @@ export async function finalizeUpload(
         return { ok: false as const, error: 'Upload reservation not found' }
       }
       if (reservation.attachmentId) {
+        const [attachment] = await tx
+          .select({
+            id: attachments.id,
+            filename: attachments.filename,
+            contentType: attachments.contentType,
+            sizeBytes: attachments.sizeBytes,
+            width: attachments.width,
+            height: attachments.height,
+          })
+          .from(attachments)
+          .where(eq(attachments.id, reservation.attachmentId))
+          .limit(1)
+        if (!attachment) throw new Error('Consumed upload reservation has no attachment')
         return {
           ok: true as const,
-          attachmentId: reservation.attachmentId,
+          attachmentId: attachment.id,
           stagingKey: reservation.stagingKey,
+          filename: attachment.filename,
+          contentType: attachment.contentType,
+          sizeBytes: attachment.sizeBytes,
+          width: attachment.width,
+          height: attachment.height,
         }
       }
       if (reservation.expiresAt.getTime() <= Date.now()) {
@@ -322,26 +353,53 @@ export async function finalizeUpload(
       const headerError = uploadedFileHeaderError(reservation.kind, reservation.contentType, header)
       if (headerError) return { ok: false as const, error: headerError }
 
-      const contentDisposition = uploadContentDisposition(reservation.kind, reservation.contentType)
+      let image: Awaited<ReturnType<typeof optimizeUploadedImage>> | null = null
+      if (reservation.kind === 'image') {
+        const imageBody = await getObject({ key: reservation.stagingKey })
+        if (imageBody.length !== reservation.sizeBytes) {
+          throw new Error('Uploaded image size changed during finalization')
+        }
+        image = await optimizeUploadedImage({
+          body: imageBody,
+          contentType: reservation.contentType,
+          filename: reservation.filename,
+        })
+      }
+      if (image && image.body.length !== image.sizeBytes) {
+        throw new Error('Optimized image size did not match its storage metadata')
+      }
+      const finalContentType = image?.contentType ?? reservation.contentType
+      const finalFilename = image?.filename ?? reservation.filename
+      const finalSizeBytes = image?.sizeBytes ?? reservation.sizeBytes
+      const contentDisposition = uploadContentDisposition(reservation.kind, finalContentType)
       const existingFinal = await headObject({ key: reservation.r2Key })
       let promoted = false
       try {
         if (!existingFinal) {
-          await promoteObject({
-            sourceKey: reservation.stagingKey,
-            sourceEtag: staged.etag,
-            destinationKey: reservation.r2Key,
-            contentType: reservation.contentType,
-            contentDisposition,
-          })
+          if (image?.optimized) {
+            await putObject({
+              key: reservation.r2Key,
+              body: image.body,
+              contentType: finalContentType,
+              contentDisposition,
+            })
+          } else {
+            await promoteObject({
+              sourceKey: reservation.stagingKey,
+              sourceEtag: staged.etag,
+              destinationKey: reservation.r2Key,
+              contentType: finalContentType,
+              contentDisposition,
+            })
+          }
           promoted = true
         }
         const finalObject = existingFinal ?? (await headObject({ key: reservation.r2Key }))
         if (
           !finalObject ||
-          finalObject.contentLength !== reservation.sizeBytes ||
+          finalObject.contentLength !== finalSizeBytes ||
           normalizedContentType(finalObject.contentType) !==
-            normalizedContentType(reservation.contentType) ||
+            normalizedContentType(finalContentType) ||
           finalObject.contentDisposition !== contentDisposition
         ) {
           if (promoted) await deleteObject({ key: reservation.r2Key })
@@ -355,9 +413,11 @@ export async function finalizeUpload(
             uploadedBy: ctx.userId,
             kind: reservation.kind,
             r2Key: reservation.r2Key,
-            contentType: reservation.contentType,
-            sizeBytes: reservation.sizeBytes,
-            filename: reservation.filename,
+            contentType: finalContentType,
+            sizeBytes: finalSizeBytes,
+            filename: finalFilename,
+            width: image?.width,
+            height: image?.height,
           })
           .returning({ id: attachments.id })
         if (!created) throw new Error('attachment insert failed')
@@ -372,6 +432,11 @@ export async function finalizeUpload(
           ok: true as const,
           attachmentId: created.id,
           stagingKey: reservation.stagingKey,
+          filename: finalFilename,
+          contentType: finalContentType,
+          sizeBytes: finalSizeBytes,
+          width: image?.width ?? null,
+          height: image?.height ?? null,
         }
       } catch (error) {
         // The row lock prevents another finalizer from linking this key before
@@ -405,6 +470,11 @@ export async function finalizeUpload(
       ok: true,
       attachmentId: outcome.attachmentId,
       url: attachmentUrl(outcome.attachmentId),
+      filename: outcome.filename,
+      contentType: outcome.contentType,
+      sizeBytes: outcome.sizeBytes,
+      ...(outcome.width ? { width: outcome.width } : {}),
+      ...(outcome.height ? { height: outcome.height } : {}),
     }
   } catch (error) {
     try {

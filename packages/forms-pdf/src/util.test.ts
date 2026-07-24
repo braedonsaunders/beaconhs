@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { injectPdfBase, pdfResourceDecision } from './util'
+import sharp from 'sharp'
+import {
+  injectPdfBase,
+  optimizePdfImageResource,
+  PDF_RESOURCE_LIMITS,
+  pdfResourceDecision,
+} from './util'
 
 describe('PDF document base injection', () => {
   it('inserts after a real head tag and falls back to a safe prefix', () => {
@@ -122,5 +128,31 @@ describe('PDF resource policy', () => {
         appOrigin,
       ),
     ).toBe('block')
+  })
+
+  it('accepts the same maximum image size as the upload contract', () => {
+    expect(PDF_RESOURCE_LIMITS.singleBytes).toBe(50 * 1024 * 1024)
+    expect(PDF_RESOURCE_LIMITS.totalBytes).toBeGreaterThan(PDF_RESOURCE_LIMITS.singleBytes)
+  })
+
+  it('downsamples large raster images without changing the stored original', async () => {
+    const original = await sharp({
+      create: {
+        width: 4_096,
+        height: 3_072,
+        channels: 3,
+        background: { r: 40, g: 120, b: 200 },
+      },
+    })
+      .jpeg({ quality: 95 })
+      .toBuffer()
+
+    const optimized = await optimizePdfImageResource(original, 'image/jpeg')
+    const metadata = await sharp(optimized.body).metadata()
+
+    expect(optimized.contentType).toBe('image/jpeg')
+    expect(metadata.width).toBeLessThanOrEqual(PDF_RESOURCE_LIMITS.imageDimension)
+    expect(metadata.height).toBeLessThanOrEqual(PDF_RESOURCE_LIMITS.imageDimension)
+    expect(optimized.body.length).toBeLessThanOrEqual(PDF_RESOURCE_LIMITS.renderedImageBytes)
   })
 })

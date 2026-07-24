@@ -4,15 +4,23 @@
 
 import { existsSync } from 'node:fs'
 import puppeteer, { type Browser, type HTTPRequest, type Page } from 'puppeteer-core'
+import sharp from 'sharp'
 import { secureFetch } from '@beaconhs/sync/egress'
 
 let browserPromise: Promise<Browser> | null = null
-const MAX_RESOURCE_BYTES = 8 * 1024 * 1024
+// Image uploads accepted by the platform can be as large as 50 MiB. PDF
+// rendering must accept that same input contract; a lower hidden ceiling makes
+// an otherwise valid inspection photo strand every attach-PDF email.
+export const PDF_RESOURCE_LIMITS = {
+  singleBytes: 50 * 1024 * 1024,
+  totalBytes: 64 * 1024 * 1024,
+  renderedImageBytes: 8 * 1024 * 1024,
+  imageDimension: 2_048,
+} as const
 const MAX_RESOURCE_REDIRECTS = 2
 const RESOURCE_TIMEOUT_MS = 10_000
 const MAX_REMOTE_RESOURCES = 100
 const MAX_CONCURRENT_RESOURCES = 4
-const MAX_TOTAL_RESOURCE_BYTES = 32 * 1024 * 1024
 const MAX_REPORTED_RESOURCE_ERRORS = 20
 const MAX_DOCUMENT_HTML_BYTES = 16 * 1024 * 1024
 const ALLOWED_RESOURCE_TYPES = new Set(['image', 'stylesheet', 'font'])
@@ -127,9 +135,71 @@ type PdfResourceResponse = {
   body: Buffer
 }
 
+const OPTIMIZABLE_RASTER_TYPES = new Set([
+  'image/avif',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+  'image/jpeg',
+  'image/png',
+  'image/tiff',
+  'image/webp',
+])
+
+export async function optimizePdfImageResource(
+  body: Buffer,
+  contentType: string,
+): Promise<{ contentType: string; body: Buffer }> {
+  const normalizedType = contentType.split(';', 1)[0]!.trim().toLowerCase()
+  if (!OPTIMIZABLE_RASTER_TYPES.has(normalizedType)) return { contentType, body }
+
+  const source = sharp(body, {
+    animated: false,
+    failOn: 'warning',
+    limitInputPixels: 100_000_000,
+  })
+  const metadata = await source.metadata()
+  const width = metadata.autoOrient.width ?? metadata.width ?? 0
+  const height = metadata.autoOrient.height ?? metadata.height ?? 0
+  if (
+    body.length <= 1024 * 1024 &&
+    width <= PDF_RESOURCE_LIMITS.imageDimension &&
+    height <= PDF_RESOURCE_LIMITS.imageDimension
+  ) {
+    return { contentType, body }
+  }
+
+  const encode = async (dimension: number, quality: number) => {
+    const resized = source.clone().autoOrient().resize({
+      width: dimension,
+      height: dimension,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    return metadata.hasAlpha
+      ? {
+          contentType: 'image/webp',
+          body: await resized.webp({ quality, alphaQuality: 90, effort: 4 }).toBuffer(),
+        }
+      : {
+          contentType: 'image/jpeg',
+          body: await resized.jpeg({ quality, progressive: true, mozjpeg: true }).toBuffer(),
+        }
+  }
+
+  const optimized = await encode(PDF_RESOURCE_LIMITS.imageDimension, 82)
+  if (optimized.body.length <= PDF_RESOURCE_LIMITS.renderedImageBytes) return optimized
+
+  const fallback = await encode(1_600, 70)
+  if (fallback.body.length > PDF_RESOURCE_LIMITS.renderedImageBytes) {
+    throw new Error('PDF image could not be reduced to the safe render size')
+  }
+  return fallback
+}
+
 async function readBoundedBody(response: Response): Promise<Buffer> {
   const declaredLength = Number(response.headers.get('content-length'))
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_RESOURCE_BYTES) {
+  if (Number.isFinite(declaredLength) && declaredLength > PDF_RESOURCE_LIMITS.singleBytes) {
     throw new Error('PDF resource exceeded the maximum allowed size')
   }
   if (!response.body) return Buffer.alloc(0)
@@ -142,7 +212,7 @@ async function readBoundedBody(response: Response): Promise<Buffer> {
       const result = await reader.read()
       if (result.done) break
       total += result.value.byteLength
-      if (total > MAX_RESOURCE_BYTES) {
+      if (total > PDF_RESOURCE_LIMITS.singleBytes) {
         await reader.cancel().catch(() => undefined)
         throw new Error('PDF resource exceeded the maximum allowed size')
       }
@@ -172,7 +242,7 @@ async function fetchPdfResource(
         ? await secureFetch(url, {
             method: 'GET',
             timeoutMs: RESOURCE_TIMEOUT_MS,
-            maxResponseBytes: MAX_RESOURCE_BYTES,
+            maxResponseBytes: PDF_RESOURCE_LIMITS.singleBytes,
             maxRedirects: MAX_RESOURCE_REDIRECTS - redirect,
           })
         : await fetch(url, {
@@ -194,10 +264,14 @@ async function fetchPdfResource(
     if (!response.ok || !allowedContentType(resourceType, contentType)) {
       throw new Error(`PDF resource returned HTTP ${response.status} or an invalid content type`)
     }
+    const body = await readBoundedBody(response)
+    const resource =
+      resourceType === 'image'
+        ? await optimizePdfImageResource(body, contentType)
+        : { contentType, body }
     return {
       status: response.status,
-      contentType,
-      body: await readBoundedBody(response),
+      ...resource,
     }
   }
   throw new Error('PDF resource exceeded the redirect limit')
@@ -238,7 +312,7 @@ async function handlePdfResourceRequest(
     const response = await withResourceSlot(state, () =>
       fetchPdfResource(request.url(), request.resourceType(), storageOrigin, appOrigin),
     )
-    if (state.totalBytes + response.body.length > MAX_TOTAL_RESOURCE_BYTES) {
+    if (state.totalBytes + response.body.length > PDF_RESOURCE_LIMITS.totalBytes) {
       throw new Error('PDF exceeded the aggregate remote resource size limit')
     }
     state.totalBytes += response.body.length
@@ -324,7 +398,17 @@ export async function setPdfContent(
   if (options.waitForFonts) await page.evaluateHandle('document.fonts.ready')
   const state = resourceStates.get(page)
   if (state && state.errors.length > 0) {
-    throw new AggregateError(state.errors, 'One or more PDF resources could not be loaded safely')
+    const details = [
+      ...new Set(
+        state.errors.map((error) =>
+          error.message.replace(/https?:\/\/\S+/giu, '[resource]').slice(0, 300),
+        ),
+      ),
+    ]
+    throw new AggregateError(
+      state.errors,
+      `One or more PDF resources could not be loaded safely: ${details.join('; ')}`,
+    )
   }
 }
 

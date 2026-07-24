@@ -58,7 +58,7 @@ BeaconHS leaves your original words in place until the AI response finishes. If 
 
 1. Scroll to the **Photos** section under the text.
 2. Tap the upload area to take a photo or pick one from your phone.
-3. Tap the pencil button to add a caption or draw attention to something in the photo.
+3. Tap the pencil button to add a caption or draw attention to something in the photo. The editor keeps the photo's original shape while you work. Large camera photos are optimized automatically when they upload.
 4. To remove a photo, tap the trash button on it.
 5. Use the left and right arrow buttons to put several photos in the order you want.
 
@@ -202,7 +202,7 @@ People with permission to review hazard assessments can record an advisory decis
 1. When everything is rated and signed, tap **Submit & lock**. This makes the assessment read-only and runs its submit flows.
 2. Use **Print / PDF** for a paper copy, or **Send email** to share it.
 
-In **Photos**, use the pencil button for a caption or markup, the trash button to remove a photo, and the arrow buttons to change the order. Unlock the assessment before making photo changes. Locking it again runs the submit flows for the revised assessment.
+In **Photos**, use the pencil button for a caption or markup, the trash button to remove a photo, and the arrow buttons to change the order. The editor keeps the photo's original shape while you add captions or markup. Large camera photos are optimized automatically when they upload. Unlock the assessment before making photo changes. Locking it again runs the submit flows for the revised assessment.
 
 ## Tips
 
@@ -255,7 +255,7 @@ On **Inspection records**, use **All inspection types**, **All locations**, and 
    - **Action taken** — what was done to fix it.
    - A severity, and a person the finding is assigned to, if your company uses those.
 3. Add photos on any failed item. Some items require a photo before you can submit — they show a **Photo** tag.
-4. Tap the pencil button on a photo to add a caption or draw attention to a problem. Tap the trash button to remove the wrong photo. Use the arrow buttons to put several photos in order.
+4. Tap the pencil button on a photo to add a caption or draw attention to a problem. The editor keeps the photo's original shape. Large camera photos are optimized automatically when they upload. Tap the trash button to remove the wrong photo. Use the arrow buttons to put several photos in order.
 5. If most outcome items pass, tap **Mark unanswered as pass** in the **Status & workflow** section to fill those items in one tap. **Select one**, **Text**, **Long text**, and **Number** items are never filled by this shortcut; answer each one yourself. Only use the shortcut when you actually checked the items.
 
 ## Setting up checklist questions
@@ -323,7 +323,7 @@ Open **Incidents** in the left menu, or go to [Incidents](/incidents).
 7. Fill in **Immediate action taken** — first aid given, area barricaded, equipment locked out, and so on.
 8. Tap **Submit report**.
 
-The quick report captures the essentials. Photos, witness statements, and the full investigation happen on the incident's page after you submit. In **Photos**, tap the pencil button to add a caption or mark up a photo. Tap the trash button to remove the wrong photo, and use the arrow buttons to change the photo order before the incident is locked.
+The quick report captures the essentials. Photos, witness statements, and the full investigation happen on the incident's page after you submit. In **Photos**, tap the pencil button to add a caption or mark up a photo. The editor keeps the photo's original shape. Large camera photos are optimized automatically when they upload. Tap the trash button to remove the wrong photo, and use the arrow buttons to change the photo order before the incident is locked.
 
 ## What happens after
 
@@ -401,7 +401,7 @@ Open **Corrective Actions** in the left menu, or go to [Corrective actions](/cor
 2. Read the **General** section so you understand what is being asked, and check the due date.
 3. Do the work in the field.
 4. In the **Work** section, fill in **Action taken** — what you actually did. Fields save as you type. Add the root cause if you know it.
-5. Add photos of the finished fix in the **Photos** section. Tap the pencil button to add a caption or mark up a photo, the trash button to remove the wrong one, and the arrow buttons to put the photos in order.
+5. Add photos of the finished fix in the **Photos** section. Tap the pencil button to add a caption or mark up a photo; the editor keeps the photo's original shape. Large camera photos are optimized automatically when they upload. Tap the trash button to remove the wrong one, and use the arrow buttons to put the photos in order.
 6. Some actions have step-by-step items. Check each one off as you finish it.
 
 ## Verification and closing
@@ -564,7 +564,7 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 - In a formatted-text field, pasted content is cleaned automatically. **Link** accepts a web address, email address, phone number, app path, or page anchor.
 - In a **Risk matrix** field, tap where likelihood meets severity. The score and risk band appear above the grid. Tap the selected cell again to clear it.
 - Linked record pickers search company data as you type. Large linked tables have their own search box and **Previous** and **Next** page buttons.
-- Every Builder photo works the same way: tap the pencil button to add a caption or draw on it, tap the trash button to remove it, and use the arrow buttons to change the order. Those edits and the saved order appear in the record PDF. If AI review is available, changing the set or order of photos clears the old review so you can run it again.
+- Every Builder photo works the same way: tap the pencil button to add a caption or draw on it, tap the trash button to remove it, and use the arrow buttons to change the order. The editor keeps the photo's original shape while you work. Large camera photos are optimized automatically when they upload. Those edits and the saved order appear in the record PDF. If AI review is available, changing the set or order of photos clears the old review so you can run it again.
 - For a toolbox talk, add everyone who attended before you submit — that is your attendance record.
 - If a form you need is not in your menu, check that you are using the right role, then ask your supervisor. The form may need to be published, allowed for your role, pinned, or assigned to you.`,
   },

@@ -141,10 +141,6 @@ function PhotoEditor({
   const [drawing, setDrawing] = useState<number | null>(null)
   const [pending, startTransition] = useTransition()
   const surface = useRef<SVGSVGElement>(null)
-  const aspectRatio =
-    photo.width && photo.height && photo.width > 0 && photo.height > 0
-      ? photo.width / photo.height
-      : 4 / 3
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -249,15 +245,15 @@ function PhotoEditor({
         </div>
 
         <div className="min-h-0 overflow-auto p-3 sm:p-5">
-          <div
-            className="relative mx-auto max-h-[60vh] max-w-full touch-none overflow-hidden bg-slate-900"
-            style={{ aspectRatio, width: `min(100%, ${Math.max(320, aspectRatio * 650)}px)` }}
-          >
+          <div className="relative mx-auto w-fit max-w-full touch-none overflow-hidden bg-slate-900">
             <RawImage
               src={photo.url}
               alt={tGeneratedValue(photo.caption ?? photo.filename)}
               optimizationReason="authenticated"
-              className="absolute inset-0 h-full w-full object-fill"
+              width={photo.width ?? undefined}
+              height={photo.height ?? undefined}
+              draggable={false}
+              className="block h-auto max-h-[60vh] w-auto max-w-full object-contain select-none"
             />
             <svg
               ref={surface}

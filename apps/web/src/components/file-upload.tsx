@@ -89,22 +89,13 @@ export function FileUpload({
       setError(tGeneratedValue(fin.error))
       return null
     }
-    let dimensions: Pick<AttachedFile, 'width' | 'height'> = {}
-    if (variant === 'photo' && kind === 'image' && 'createImageBitmap' in globalThis) {
-      try {
-        const bitmap = await createImageBitmap(file)
-        dimensions = { width: bitmap.width, height: bitmap.height }
-        bitmap.close()
-      } catch {
-        // Dimension metadata is optional; upload success must not depend on it.
-      }
-    }
     return {
       attachmentId: fin.attachmentId,
-      filename: file.name,
-      contentType: file.type || 'application/octet-stream',
+      filename: fin.filename,
+      contentType: fin.contentType,
       url: fin.url,
-      ...dimensions,
+      ...(fin.width ? { width: fin.width } : {}),
+      ...(fin.height ? { height: fin.height } : {}),
     }
   }
 

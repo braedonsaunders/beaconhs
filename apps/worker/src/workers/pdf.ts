@@ -13,6 +13,7 @@ import {
   lockFormResponseForMutation,
   MAX_DOCUMENT_BOOK_ITEMS,
   resolveDocumentBookItems,
+  withSuperAdmin,
   withTenant,
 } from '@beaconhs/db'
 import {
@@ -21,6 +22,7 @@ import {
   documentBooks,
   documentVersions,
   documents,
+  emailLog,
   formResponses,
   tenants,
 } from '@beaconhs/db/schema'
@@ -70,8 +72,76 @@ export async function processPdf(job: Job<PdfJobData, unknown>): Promise<unknown
     return result
   } catch (err) {
     console.error(`[pdf] job ${job.id} failed:`, err)
+    if ('email' in data && data.email && isFinalAttempt(job)) {
+      await recordPdfEmailFailure(job, data.email, err).catch((logError: unknown) => {
+        console.error(`[pdf] job ${job.id} email failure could not be logged:`, logError)
+      })
+    }
     throw err
   }
+}
+
+function isFinalAttempt(job: Job<PdfJobData, unknown>): boolean {
+  return job.attemptsMade + 1 >= (job.opts.attempts ?? 1)
+}
+
+async function recordPdfEmailFailure(
+  job: Job<PdfJobData, unknown>,
+  email: PdfEmailPayload,
+  error: unknown,
+): Promise<void> {
+  const jobId = String(job.id ?? '')
+  const failureDetail = (error instanceof Error ? error.message : String(error))
+    .replace(/https?:\/\/\S+/giu, '[resource]')
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .trim()
+  const message = `PDF attachment generation failed: ${failureDetail || 'Unknown PDF error'}`.slice(
+    0,
+    4_000,
+  )
+  const recipients = [
+    ...new Set(email.to.map((recipient) => recipient.trim().toLowerCase())),
+  ].filter(Boolean)
+  if (!email.tenantId || recipients.length === 0) return
+
+  await withSuperAdmin(db, async (tx) => {
+    const existing = jobId
+      ? await tx
+          .select({ recipientPrimary: emailLog.recipientPrimary })
+          .from(emailLog)
+          .where(and(eq(emailLog.jobId, jobId), eq(emailLog.subject, email.subject)))
+      : []
+    const recorded = new Set(existing.map((row) => row.recipientPrimary).filter(Boolean))
+    const missing = recipients.filter((recipient) => !recorded.has(recipient))
+    if (missing.length === 0) return
+
+    await tx.insert(emailLog).values(
+      missing.map((recipient) => ({
+        tenantId: email.tenantId,
+        jobId,
+        recipients: [recipient],
+        recipientPrimary: recipient,
+        cc: [],
+        bcc: [],
+        fromAddr: 'unavailable',
+        subject: email.subject,
+        htmlSize: Buffer.byteLength(email.html, 'utf8'),
+        textSize: Buffer.byteLength(email.text, 'utf8'),
+        htmlBody: email.html,
+        textBody: email.text,
+        status: 'failed' as const,
+        categoryKey: email.category ?? null,
+        errorMessage: message,
+        meta: {
+          tenantId: email.tenantId,
+          category: email.category,
+          stage: 'pdf_attachment',
+          attempt: job.attemptsMade + 1,
+          pdfJobId: jobId,
+        },
+      })),
+    )
+  })
 }
 
 async function dispatchPdf(data: PdfJobData): Promise<unknown> {

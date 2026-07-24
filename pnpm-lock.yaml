@@ -251,6 +251,9 @@ importers:
       server-only:
         specifier: ^0.0.1
         version: 0.0.1
+      sharp:
+        specifier: 0.34.5
+        version: 0.34.5
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -294,9 +297,6 @@ importers:
       postcss:
         specifier: ^8.5.15
         version: 8.5.19
-      sharp:
-        specifier: 0.34.5
-        version: 0.34.5
       tailwindcss:
         specifier: ^4.3.2
         version: 4.3.2
@@ -708,6 +708,9 @@ importers:
       puppeteer-core:
         specifier: ^25.3.0
         version: 25.3.0
+      sharp:
+        specifier: 0.34.5
+        version: 0.34.5
     devDependencies:
       '@types/node':
         specifier: ^24.13.2

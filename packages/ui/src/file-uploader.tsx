@@ -38,9 +38,19 @@ export type RequestUploadAction = (input: {
   sizeBytes: number
 }) => Promise<UploadRequestResult>
 
-export type FinalizeUploadAction = (
-  input: FinalizeUploadInput,
-) => Promise<{ ok: true; attachmentId: string; url: string } | { ok: false; error: string }>
+export type FinalizeUploadAction = (input: FinalizeUploadInput) => Promise<
+  | {
+      ok: true
+      attachmentId: string
+      url: string
+      filename: string
+      contentType: string
+      sizeBytes: number
+      width?: number
+      height?: number
+    }
+  | { ok: false; error: string }
+>
 
 export type UploadedFile = {
   attachmentId: string
@@ -202,9 +212,9 @@ export function FileUploader({
       updateItem({ status: 'done' })
       onUploaded({
         attachmentId: finalise.attachmentId,
-        filename: file.name,
-        contentType: file.type || 'application/octet-stream',
-        sizeBytes: file.size,
+        filename: finalise.filename,
+        contentType: finalise.contentType,
+        sizeBytes: finalise.sizeBytes,
         kind,
         url: finalise.url,
       })
