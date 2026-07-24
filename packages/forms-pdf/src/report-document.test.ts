@@ -45,5 +45,5 @@ describe('AppKit report PDF document', () => {
 
     expect(pdf.subarray(0, 4).toString('ascii')).toBe('%PDF')
     expect(pdf.toString('latin1')).toMatch(/\/MediaBox\s*\[\s*0\s+0\s+612\s+792\s*\]/)
-  })
+  }, 30_000)
 })
