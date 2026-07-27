@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   type CustomReportDefinition,
   type ReportEntityCatalog,
@@ -24,6 +25,7 @@ export function BeaconReportStudio({
   primaryColor: string | null
   catalog: ReportEntityCatalog
 }) {
+  const router = useRouter()
   const [value, setValue] = useState({ definition })
   return (
     <ReportStudio
@@ -32,7 +34,15 @@ export function BeaconReportStudio({
       result={initialResult}
       onChange={setValue}
       onPreview={({ definition: next }) => previewReportDefinition(next)}
-      onSave={({ definition: next }) => saveReportDefinition(next)}
+      onSave={async ({ definition: next }) => {
+        const result = await saveReportDefinition(next)
+        return result.ok ? { ok: true, value: { definition: result.definition } } : result
+      }}
+      onSaved={(saved) => {
+        if (definition.id === 'new' && saved.definition.id !== 'new') {
+          router.replace(`/reports/definitions/${saved.definition.id}/edit`)
+        }
+      }}
       organization={organization}
       logoUrl={logoUrl}
       primaryColor={primaryColor}

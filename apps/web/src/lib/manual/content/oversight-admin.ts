@@ -261,11 +261,11 @@ Seeded and team-created reports use the same editable report definition. There i
 
 1. Open any report and click **Edit report**, or click **New report**.
 2. Choose the **Data source**. Reports and Insights use the same source catalogue, so every source available in the Insights Card editor is also available here.
-3. Select and order the columns.
+3. Select and order the columns. Relationship fields show names, references, courses, employees, and locations instead of database IDs. Internal API, credential, tenant, and storage tables are not report sources.
 4. Set the saved filters, grouping, and sorting.
 5. Under **Page setup**, choose **Letter**, **A4**, or **Legal**, **Portrait** or **Landscape**, the page margin, row density, and whether to show summary cards.
 6. Check the live paper preview.
-7. Click **Save** to keep your changes. Click **PDF** beside **Run** and **Save** to save the current report and download the matching paper preview.
+7. Click **Save** to keep your changes. A new report receives a unique untitled name and opens at its saved address after the first successful save. Click **PDF** beside **Run** and **Save** to save the current report and download the matching paper preview.
 8. Use the small **Back to reports** link at the top left to return to the report list without reloading the app. The same link appears when you run a report.
 
 Every published Builder app you can currently open appears as its own named data source under **Apps**. The source is automatically limited to that app's responses. Draft, archived, and role-restricted apps are not exposed. Timed check-ins appear as **Monitored sessions**; they are a general Builder app capability, not a separate native module.

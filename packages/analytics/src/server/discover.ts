@@ -39,6 +39,7 @@ const EXCLUDE_TABLES = new Set<string>([
   'attachments',
   'audit_log',
   'api_keys',
+  'api_idempotency_keys',
   'notifications',
   'notification_preferences',
   'webpush_subscriptions',

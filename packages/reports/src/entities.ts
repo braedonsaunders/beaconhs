@@ -419,26 +419,43 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     table: 'report_monitored_sessions',
     from: `(
       SELECT
-        id,
-        tenant_id,
-        subject_person_id,
-        site_org_unit_id,
-        monitor_status,
-        checkin_interval_minutes,
-        grace_period_minutes,
-        expected_end_at,
-        next_checkin_due_at,
-        last_checkin_at,
-        escalated_at,
-        created_at,
-        closed_at
-      FROM form_responses
-      WHERE monitor_status IS NOT NULL
-        AND deleted_at IS NULL
+        response.id,
+        response.tenant_id,
+        CASE
+          WHEN person.id IS NULL THEN NULL
+          ELSE person.last_name || ', ' || person.first_name
+        END AS subject_person_id,
+        location.name AS site_org_unit_id,
+        template.name AS app_name,
+        response.monitor_status,
+        response.checkin_interval_minutes,
+        response.grace_period_minutes,
+        response.expected_end_at,
+        response.next_checkin_due_at,
+        response.last_checkin_at,
+        response.escalated_at,
+        response.created_at,
+        response.closed_at
+      FROM form_responses response
+      JOIN form_templates template
+        ON template.tenant_id = response.tenant_id
+       AND template.id = response.template_id
+       AND template.deleted_at IS NULL
+      LEFT JOIN people person
+        ON person.tenant_id = response.tenant_id
+       AND person.id = response.subject_person_id
+       AND person.deleted_at IS NULL
+      LEFT JOIN org_units location
+        ON location.tenant_id = response.tenant_id
+       AND location.id = response.site_org_unit_id
+       AND location.deleted_at IS NULL
+      WHERE response.monitor_status IS NOT NULL
+        AND response.deleted_at IS NULL
     ) AS "report_monitored_sessions"`,
     columns: [
-      { key: 'subject_person_id', label: 'Employee (id)', kind: 'uuid' },
-      { key: 'site_org_unit_id', label: 'Location (id)', kind: 'uuid' },
+      { key: 'subject_person_id', label: 'Employee', kind: 'text' },
+      { key: 'site_org_unit_id', label: 'Location', kind: 'text' },
+      { key: 'app_name', label: 'App', kind: 'text' },
       { key: 'monitor_status', label: 'Status', kind: 'enum' },
       { key: 'checkin_interval_minutes', label: 'Check-in interval', kind: 'number' },
       { key: 'grace_period_minutes', label: 'Grace period', kind: 'number' },
@@ -457,10 +474,32 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     category: 'hazid',
     description: 'Recorded internal and external signatures on hazard assessments.',
     table: 'hazid_assessment_signatures',
+    from: `(
+      SELECT
+        signature.id,
+        signature.tenant_id,
+        assessment.reference AS assessment_id,
+        signature.signature_type,
+        CASE
+          WHEN person.id IS NULL THEN NULL
+          ELSE person.last_name || ', ' || person.first_name
+        END AS person_id,
+        signature.external_name,
+        signature.signed_at
+      FROM hazid_assessment_signatures signature
+      JOIN hazid_assessments assessment
+        ON assessment.tenant_id = signature.tenant_id
+       AND assessment.id = signature.assessment_id
+       AND assessment.deleted_at IS NULL
+      LEFT JOIN people person
+        ON person.tenant_id = signature.tenant_id
+       AND person.id = signature.person_id
+       AND person.deleted_at IS NULL
+    ) AS "hazid_assessment_signatures"`,
     columns: [
-      { key: 'assessment_id', label: 'Assessment (id)', kind: 'uuid' },
+      { key: 'assessment_id', label: 'Assessment', kind: 'text' },
       { key: 'signature_type', label: 'Signature type', kind: 'enum' },
-      { key: 'person_id', label: 'Employee (id)', kind: 'uuid' },
+      { key: 'person_id', label: 'Employee', kind: 'text' },
       { key: 'external_name', label: 'External signer', kind: 'text' },
       { key: 'signed_at', label: 'Signed at', kind: 'timestamp' },
     ],
@@ -489,8 +528,19 @@ export function mergeAuthorizedReportSources(
       label: source.label,
       category: source.category,
       description: source.description ?? authored.description,
+      relations: source.relations,
     }
   })
+}
+
+/** True when a column still exposes a storage identifier after relationship refinement. */
+export function isTechnicalIdentifierColumn(column: ReportEntityColumn): boolean {
+  return (
+    Boolean(column.hidden) ||
+    column.kind === 'uuid' ||
+    (column.key === 'id' && !column.expression) ||
+    (column.key.endsWith('_id') && /\bid\b/iu.test(column.label) && !column.expression)
+  )
 }
 
 export function entityColumn(entity: ReportEntity, key: string): ReportEntityColumn | null {

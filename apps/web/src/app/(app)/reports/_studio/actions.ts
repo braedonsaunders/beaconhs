@@ -2,7 +2,6 @@
 
 import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { and, eq, ne } from 'drizzle-orm'
 import { reportDefinitions } from '@beaconhs/db/schema'
 import {
@@ -36,7 +35,7 @@ export async function previewReportDefinition(
 
 export async function saveReportDefinition(
   definition: CustomReportDefinition,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; definition: CustomReportDefinition } | { ok: false; error: string }> {
   try {
     const ctx = await requireRequestContext()
     assertCan(ctx, 'reports.builder')
@@ -116,8 +115,13 @@ export async function saveReportDefinition(
 
     revalidatePath('/reports')
     revalidatePath(`/reports/definitions/${definitionId}`)
-    if (creating) redirect(`/reports/definitions/${definitionId}/edit`)
-    return { ok: true }
+    return {
+      ok: true,
+      definition: {
+        ...definition,
+        id: definitionId,
+      },
+    }
   } catch (cause) {
     return { ok: false, error: cause instanceof Error ? cause.message : String(cause) }
   }

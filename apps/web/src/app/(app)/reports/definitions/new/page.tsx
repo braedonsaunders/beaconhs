@@ -1,4 +1,6 @@
 import { assertCan } from '@beaconhs/tenant'
+import { asc, like } from 'drizzle-orm'
+import { reportDefinitions } from '@beaconhs/db/schema'
 import {
   DEFAULT_REPORT_LAYOUT,
   defaultColumnsFor,
@@ -20,12 +22,30 @@ export default async function NewReportPage() {
     loadTenantBranding(ctx),
     loadAuthorizedReportCatalog(ctx),
   ])
+  const defaultBaseName = tGenerated('m_017ca81c89345d')
+  const existingDefaults = await ctx.db((tx) =>
+    tx
+      .select({ name: reportDefinitions.name })
+      .from(reportDefinitions)
+      .where(like(reportDefinitions.name, `${defaultBaseName}%`))
+      .orderBy(asc(reportDefinitions.name)),
+  )
+  const existingNames = new Set(existingDefaults.map((row) => row.name))
+  let defaultName = defaultBaseName
+  for (let suffix = 2; existingNames.has(defaultName); suffix += 1) {
+    defaultName = `${defaultBaseName} ${suffix}`
+  }
+  const defaultSlug = defaultName
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
   const source = catalog.entities[0]!
   const definition: CustomReportDefinition = {
     schemaVersion: 1,
     id: 'new',
-    slug: 'untitled-report',
-    name: tGenerated('m_017ca81c89345d'),
+    slug: defaultSlug,
+    name: defaultName,
     description: tGenerated('m_0352af5525392e'),
     query: {
       entity: source.key,

@@ -9,6 +9,7 @@ export {
   columnRef,
   entityColumn,
   entityColumnSql,
+  isTechnicalIdentifierColumn,
   mergeAuthorizedReportSources,
 } from './entities'
 export type { ReportColumnKind, ReportEntityCatalog, ReportEntityColumn } from './entities'

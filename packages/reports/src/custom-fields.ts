@@ -5,6 +5,8 @@ import {
   departments,
   equipmentCategories,
   equipmentTypes,
+  formTemplates,
+  hazidAssessments,
   inspectionTypes,
   orgUnits,
   people,
@@ -18,11 +20,17 @@ import {
 } from '@beaconhs/db/schema'
 import {
   buildCustomReportColumns,
+  refineReportEntitiesForDocuments,
   type CustomReportFieldDefinition,
   type ReportEntityCatalog,
   type ReportEntityColumn,
 } from '@appkit/reports'
-import { mergeAuthorizedReportSources, REPORT_ENTITIES, type ReportEntity } from './entities'
+import {
+  isTechnicalIdentifierColumn,
+  mergeAuthorizedReportSources,
+  REPORT_ENTITIES,
+  type ReportEntity,
+} from './entities'
 
 /** Title-cases a raw pg enum label ('near_miss' → 'Near miss') for pickers. */
 function prettifyEnumLabel(value: string): string {
@@ -139,6 +147,8 @@ export async function loadBeaconReportCatalog(
     equipmentTypeRows,
     equipmentCategoryRows,
     tradeRows,
+    appRows,
+    hazidRows,
   ] = await Promise.all([
     loadEnumOptionsByColumn(tx),
     tx
@@ -206,6 +216,16 @@ export async function loadBeaconReportCatalog(
       .from(equipmentCategories)
       .orderBy(asc(equipmentCategories.name)),
     tx.select({ value: trades.id, label: trades.name }).from(trades).orderBy(asc(trades.name)),
+    tx
+      .select({ label: formTemplates.name })
+      .from(formTemplates)
+      .where(and(eq(formTemplates.status, 'published'), isNull(formTemplates.deletedAt)))
+      .orderBy(asc(formTemplates.name)),
+    tx
+      .select({ label: hazidAssessments.reference })
+      .from(hazidAssessments)
+      .where(isNull(hazidAssessments.deletedAt))
+      .orderBy(asc(hazidAssessments.reference)),
   ])
   const personIdOptions = personRows.map((row) => ({
     value: row.value,
@@ -249,6 +269,18 @@ export async function loadBeaconReportCatalog(
     label: row.label,
   }))
   const locationNameOptions = locationRows.map((row) => ({ value: row.label, label: row.label }))
+  const inspectionTypeNameOptions = inspectionTypeRows.map((row) => ({
+    value: row.label,
+    label: row.label,
+  }))
+  const departmentRelationOptions = departmentRows.map((row) => ({
+    value: row.label,
+    label: row.label,
+  }))
+  const ownerNameOptions = ownerRows.map((row) => ({
+    value: row.label ?? row.value,
+    label: row.label ?? row.value,
+  }))
   const groupOptions = groupRows.map((row) => ({ value: row.value, label: row.label }))
   const optionsByColumn = new Map<string, { value: string; label: string }[]>([
     ['person_id', personIdOptions],
@@ -323,6 +355,14 @@ export async function loadBeaconReportCatalog(
     ['vehicle_log_monthly.driver_name', holderNameOptions],
     ['vehicle_log_monthly.employee_no', employeeNumberOptions],
     ['compliance_status.person_name', personNameOptions],
+    ['monitored_sessions.subject_person_id', personNameOptions],
+    ['monitored_sessions.site_org_unit_id', locationNameOptions],
+    ['monitored_sessions.app_name', appRows.map((row) => ({ value: row.label, label: row.label }))],
+    ['hazid_signatures.person_id', personNameOptions],
+    [
+      'hazid_signatures.assessment_id',
+      hazidRows.map((row) => ({ value: row.label, label: row.label })),
+    ],
   ])
   const derivedOptionsByColumn = new Map<string, { value: string; label: string }[]>([
     [
@@ -340,7 +380,17 @@ export async function loadBeaconReportCatalog(
       })),
     ],
   ])
-  const reportSources = mergeAuthorizedReportSources(authorizedSources)
+  const relationOptionsByTarget = new Map<string, { value: string; label: string }[]>([
+    ['people', personNameOptions],
+    ['training_courses', courseNameOptions],
+    ['org_units', locationNameOptions],
+    ['departments', departmentRelationOptions],
+    ['inspection_types', inspectionTypeNameOptions],
+    ['tenant_users', ownerNameOptions],
+  ])
+  const reportSources = refineReportEntitiesForDocuments(
+    mergeAuthorizedReportSources(authorizedSources),
+  ) as ReportEntity[]
   return {
     entities: await Promise.all(
       reportSources.map(async (entity) => {
@@ -348,7 +398,13 @@ export async function loadBeaconReportCatalog(
         return {
           ...augmented,
           columns: augmented.columns.map((column) => {
+            const relation = augmented.relations?.find(
+              (candidate) => candidate.via === (column.sql ?? column.key),
+            )
             const filterOptions =
+              (column.expression && relation
+                ? relationOptionsByTarget.get(relation.target)
+                : undefined) ??
               optionsByColumn.get(`${entity.key}.${column.key}`) ??
               optionsByColumn.get(column.key) ??
               enumOptionsByColumn.get(`${entity.table}.${column.key}`) ??
@@ -356,6 +412,7 @@ export async function loadBeaconReportCatalog(
               column.filterOptions
             return {
               ...column,
+              hidden: isTechnicalIdentifierColumn(column),
               filterOptions: uniqueOptions(filterOptions),
             }
           }),

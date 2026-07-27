@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { compileCustomReport } from '@appkit/reports'
-import { mergeAuthorizedReportSources, type ReportEntity } from './entities'
+import { compileCustomReport, refineReportEntitiesForDocuments } from '@appkit/reports'
+import {
+  isTechnicalIdentifierColumn,
+  mergeAuthorizedReportSources,
+  type ReportEntity,
+} from './entities'
 
 const scopedApp: ReportEntity = {
   key: 'form_responses:018f47ba-86c4-7ee2-8d7a-5e7602f2a004',
@@ -69,5 +73,58 @@ describe('authorized report source catalogue', () => {
     expect(source?.columns.some((column) => column.key === 'owner_name')).toBe(true)
     expect(source?.label).toBe(insightCorrectiveActions.label)
     expect(source?.category).toBe(insightCorrectiveActions.category)
+  })
+
+  it('retains discovered relations when an authored report projection replaces a source', () => {
+    const incidentSource: ReportEntity = {
+      key: 'incidents',
+      label: 'Incidents',
+      category: 'Incidents',
+      table: 'incidents',
+      columns: [{ key: 'site_org_unit_id', label: 'Site org unit ID', kind: 'uuid' }],
+      relations: [
+        {
+          via: 'site_org_unit_id',
+          target: 'org_units',
+          foreignColumn: 'id',
+          label: 'Location',
+        },
+      ],
+    }
+
+    const [source] = mergeAuthorizedReportSources([incidentSource])
+
+    expect(source?.relations).toEqual(incidentSource.relations)
+  })
+
+  it('resolves relationship identifiers to names and classifies unresolved IDs as internal', () => {
+    const sources: ReportEntity[] = [
+      {
+        key: 'work',
+        label: 'Work',
+        category: 'Operations',
+        table: 'work',
+        columns: [
+          { key: 'site_id', label: 'Site ID', kind: 'uuid' },
+          { key: 'external_id', label: 'External ID', kind: 'text' },
+        ],
+        relations: [{ via: 'site_id', target: 'sites', foreignColumn: 'id', label: 'Location' }],
+      },
+      {
+        key: 'sites',
+        label: 'Sites',
+        category: 'Operations',
+        table: 'sites',
+        columns: [{ key: 'name', label: 'Name', kind: 'text' }],
+      },
+    ]
+
+    const [work] = refineReportEntitiesForDocuments(sources)
+    const site = work?.columns.find((column) => column.key === 'site_id')
+    const external = work?.columns.find((column) => column.key === 'external_id')
+
+    expect(site).toMatchObject({ label: 'Location', kind: 'text' })
+    expect(isTechnicalIdentifierColumn(site!)).toBe(false)
+    expect(isTechnicalIdentifierColumn(external!)).toBe(true)
   })
 })

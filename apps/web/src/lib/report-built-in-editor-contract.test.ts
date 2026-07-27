@@ -18,6 +18,14 @@ const studio = readFileSync(
   new URL('../app/(app)/reports/_studio/studio.client.tsx', import.meta.url),
   'utf8',
 )
+const studioActions = readFileSync(
+  new URL('../app/(app)/reports/_studio/actions.ts', import.meta.url),
+  'utf8',
+)
+const newReport = readFileSync(
+  new URL('../app/(app)/reports/definitions/new/page.tsx', import.meta.url),
+  'utf8',
+)
 const backLink = readFileSync(
   new URL('../app/(app)/reports/_back-link.tsx', import.meta.url),
   'utf8',
@@ -60,6 +68,15 @@ describe('unified AppKit report contract', () => {
     expect(runPage).toContain('<ReportsBackLink />')
     expect(studio).not.toContain('backHref')
     expect(studio).toContain('`/reports/definitions/${definition.id}/export?format=pdf`')
+  })
+
+  it('navigates a newly persisted report without catching a Next redirect as a save error', () => {
+    expect(studioActions).not.toContain("from 'next/navigation'")
+    expect(studioActions).not.toContain('redirect(')
+    expect(studioActions).toContain('id: definitionId')
+    expect(studio).toContain('onSaved=')
+    expect(studio).toContain('router.replace(')
+    expect(newReport).toContain('existingNames.has(defaultName)')
   })
 
   it('uses the same authorized source inventory as Insights, including scoped Builder apps', () => {

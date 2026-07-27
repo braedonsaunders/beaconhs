@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { discoverEntityMap } from './discover'
+import { discoverEntities, discoverEntityMap } from './discover'
 
 describe('analytics relationship discovery', () => {
   it('discovers tenant-preserving composite foreign keys by their business column', () => {
@@ -30,5 +30,12 @@ describe('analytics relationship discovery', () => {
         false,
       )
     }
+  })
+
+  it('does not expose API credential or idempotency infrastructure as business data', () => {
+    const keys = discoverEntities().map((entity) => entity.key)
+
+    expect(keys).not.toContain('api_keys')
+    expect(keys).not.toContain('api_idempotency_keys')
   })
 })
