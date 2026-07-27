@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { and, eq, ne } from 'drizzle-orm'
-import { reportDefinitions } from '@beaconhs/db/schema'
+import { reportDefinitions, reportSchedules } from '@beaconhs/db/schema'
 import {
   assertCustomReportDefinition,
   compileCustomReport,
@@ -16,6 +16,7 @@ import { runBeaconReport } from '@beaconhs/reports/server'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
+import { isUuid } from '@/lib/list-params'
 import { loadAuthorizedReportCatalogInTransaction } from '@/lib/report-catalog'
 
 export async function previewReportDefinition(
@@ -122,6 +123,63 @@ export async function saveReportDefinition(
         id: definitionId,
       },
     }
+  } catch (cause) {
+    return { ok: false, error: cause instanceof Error ? cause.message : String(cause) }
+  }
+}
+
+export async function deleteReportDefinition(
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    if (!isUuid(id)) throw new Error('Report not found.')
+    const ctx = await requireRequestContext()
+    assertCan(ctx, 'reports.builder')
+
+    await ctx.db(async (tx) => {
+      const [definition] = await tx
+        .select({
+          id: reportDefinitions.id,
+          name: reportDefinitions.name,
+          slug: reportDefinitions.slug,
+          state: reportDefinitions.state,
+          query: reportDefinitions.query,
+        })
+        .from(reportDefinitions)
+        .where(and(eq(reportDefinitions.tenantId, ctx.tenantId!), eq(reportDefinitions.id, id)))
+        .limit(1)
+      if (!definition) throw new Error('Report not found.')
+
+      const removedSchedules = await tx
+        .delete(reportSchedules)
+        .where(
+          and(eq(reportSchedules.tenantId, ctx.tenantId!), eq(reportSchedules.definitionId, id)),
+        )
+        .returning({ id: reportSchedules.id })
+      const [removedDefinition] = await tx
+        .delete(reportDefinitions)
+        .where(and(eq(reportDefinitions.tenantId, ctx.tenantId!), eq(reportDefinitions.id, id)))
+        .returning({ id: reportDefinitions.id })
+      if (!removedDefinition) throw new Error('Report not found.')
+
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'report_definition',
+        entityId: id,
+        action: 'delete',
+        summary: `Deleted report "${definition.name}"`,
+        before: {
+          name: definition.name,
+          slug: definition.slug,
+          state: definition.state,
+          entity: definition.query.entity,
+          scheduleCount: removedSchedules.length,
+        },
+      })
+    })
+
+    revalidatePath('/reports')
+    revalidatePath('/reports/schedules')
+    return { ok: true }
   } catch (cause) {
     return { ok: false, error: cause instanceof Error ? cause.message : String(cause) }
   }

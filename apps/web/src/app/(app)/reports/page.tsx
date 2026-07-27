@@ -19,6 +19,7 @@ import { SearchInput } from '@/components/search-input'
 import { GeneratedText } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { requireRequestContext } from '@/lib/auth'
+import { DeleteReportButton } from './_delete-report-button.client'
 import { loadVisibleDefinitions } from './_definitions'
 import { ReportsSubNav } from './_nav'
 
@@ -102,7 +103,7 @@ export default async function ReportsPage({
               <TableHead>
                 <GeneratedText id="m_014ca61c68ab13" />
               </TableHead>
-              <TableHead className="w-24" />
+              <TableHead className="w-48" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -128,12 +129,17 @@ export default async function ReportsPage({
                   </TableCell>
                   <TableCell>{definition.updatedAt.toLocaleDateString()}</TableCell>
                   <TableCell>
-                    <Button asChild variant="ghost" size="sm">
-                      <Link href={`/reports/definitions/${definition.id}`}>
-                        <GeneratedText id="m_107ab58c3c38bc" />
-                        <ArrowRight size={14} />
-                      </Link>
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={`/reports/definitions/${definition.id}`}>
+                          <GeneratedText id="m_107ab58c3c38bc" />
+                          <ArrowRight size={14} />
+                        </Link>
+                      </Button>
+                      {canBuild ? (
+                        <DeleteReportButton id={definition.id} name={definition.name} />
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

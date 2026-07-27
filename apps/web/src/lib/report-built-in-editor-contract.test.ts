@@ -22,6 +22,10 @@ const studioActions = readFileSync(
   new URL('../app/(app)/reports/_studio/actions.ts', import.meta.url),
   'utf8',
 )
+const deleteButton = readFileSync(
+  new URL('../app/(app)/reports/_delete-report-button.client.tsx', import.meta.url),
+  'utf8',
+)
 const newReport = readFileSync(
   new URL('../app/(app)/reports/definitions/new/page.tsx', import.meta.url),
   'utf8',
@@ -77,6 +81,20 @@ describe('unified AppKit report contract', () => {
     expect(studio).toContain('onSaved=')
     expect(studio).toContain('router.replace(')
     expect(newReport).toContain('existingNames.has(defaultName)')
+  })
+
+  it('deletes definitions and dependent schedules through one audited tenant transaction', () => {
+    expect(studioActions).toContain('export async function deleteReportDefinition')
+    expect(studioActions).toContain('.delete(reportSchedules)')
+    expect(studioActions).toContain('.delete(reportDefinitions)')
+    expect(studioActions).toContain("action: 'delete'")
+    expect(studioActions).toContain("revalidatePath('/reports/schedules')")
+    expect(studio).toContain('onDelete=')
+    expect(studio).toContain('onDeleted=')
+    expect(studio).toContain("router.replace('/reports')")
+    expect(list).toContain('<DeleteReportButton')
+    expect(deleteButton).toContain('confirmDialog')
+    expect(deleteButton).toContain('deleteReportDefinition(id)')
   })
 
   it('uses the same authorized source inventory as Insights, including scoped Builder apps', () => {

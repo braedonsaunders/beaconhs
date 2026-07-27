@@ -8,7 +8,10 @@ import {
   type ReportRunResult,
 } from '@beaconhs/reports'
 import { ReportStudio } from '@beaconhs/reports/react'
-import { previewReportDefinition, saveReportDefinition } from './actions'
+import { useGeneratedTranslations } from '@/i18n/generated'
+import { confirmDialog } from '@/lib/confirm'
+import { toast } from '@/lib/toast'
+import { deleteReportDefinition, previewReportDefinition, saveReportDefinition } from './actions'
 
 export function BeaconReportStudio({
   definition,
@@ -26,6 +29,7 @@ export function BeaconReportStudio({
   catalog: ReportEntityCatalog
 }) {
   const router = useRouter()
+  const tGenerated = useGeneratedTranslations()
   const [value, setValue] = useState({ definition })
   return (
     <ReportStudio
@@ -42,6 +46,23 @@ export function BeaconReportStudio({
         if (definition.id === 'new' && saved.definition.id !== 'new') {
           router.replace(`/reports/definitions/${saved.definition.id}/edit`)
         }
+      }}
+      onDelete={
+        definition.id === 'new'
+          ? undefined
+          : async ({ definition: current }) => {
+              const confirmed = await confirmDialog({
+                message: tGenerated('m_17a872546b7b13', { value0: current.name }),
+                confirmLabel: tGenerated('m_11773f3c3f7558'),
+                tone: 'danger',
+              })
+              if (!confirmed) return { ok: false, cancelled: true }
+              return deleteReportDefinition(current.id)
+            }
+      }
+      onDeleted={() => {
+        toast.success(tGenerated('m_0066ba1d61ce5a'))
+        router.replace('/reports')
       }}
       organization={organization}
       logoUrl={logoUrl}

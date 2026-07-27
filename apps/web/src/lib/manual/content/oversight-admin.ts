@@ -267,6 +267,7 @@ Seeded and team-created reports use the same editable report definition. There i
 6. Check the live paper preview.
 7. Click **Save** to keep your changes. A new report receives a unique untitled name and opens at its saved address after the first successful save. Click **PDF** beside **Run** and **Save** to save the current report and download the matching paper preview.
 8. Use the small **Back to reports** link at the top left to return to the report list without reloading the app. The same link appears when you run a report.
+9. To permanently remove a report, click **Delete** in the editor or on its row in the report list, then confirm. Deleting a report also permanently removes its email schedules and delivery history.
 
 Every published Builder app you can currently open appears as its own named data source under **Apps**. The source is automatically limited to that app's responses. Draft, archived, and role-restricted apps are not exposed. Timed check-ins appear as **Monitored sessions**; they are a general Builder app capability, not a separate native module.
 
