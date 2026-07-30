@@ -762,7 +762,7 @@ Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspect
 1. Tap **Fail** on the item.
 2. Set the **Severity**: **Low**, **Medium**, **High**, or **Critical**.
 3. Fill in **What's wrong?** with a short note, and **Action taken** if you did something about it.
-4. Add a photo if the item asks for one. Tap the pencil button to add a caption or mark up the photo. Tap the trash button to remove the wrong photo, and use the arrow buttons to change the order. The app will not let you submit until required comments and photos are filled in.
+4. Add a photo if the item asks for one. Tap **Take photo or upload** to use the camera or choose pictures from your phone's photo library. Tap the pencil button to add a caption or mark up the photo. Tap the trash button to remove the wrong photo, and use the arrow buttons to change the order. The app will not let you submit until required comments and photos are filled in.
 
 ## Submit the inspection
 
@@ -838,7 +838,7 @@ Items marked **Discarded** or **Expired** are historical records. They cannot be
 2. Tap **Pre-use** for a quick check, or **Annual** for the full periodic inspection.
 3. Answer every criterion: **Pass**, **Fail**, or **N/A**.
 4. If a criterion fails, describe what is wrong in **What failed?**.
-5. Add **Photo evidence** wherever it is required. You can also add optional photos to another answered criterion.
+5. Add **Photo evidence** wherever it is required. Tap **Take photo or upload** to use the camera or choose pictures from your phone's photo library. You can also add optional photos to another answered criterion.
 6. Add anything worth flagging overall in the **Notes** box.
 7. Tap **Record inspection**. If something failed, the button reads **Record failed inspection** — that is fine, record it honestly.
 

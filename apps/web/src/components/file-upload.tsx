@@ -130,12 +130,13 @@ export function FileUpload({
 
   return (
     <div className="space-y-2">
+      {/* Do not set `capture` here. On iOS it can force the camera and hide the
+          native Photo Library option that an image-accepting input provides. */}
       <input
         ref={inputRef}
         type="file"
         accept={acceptStr}
         multiple={multiple}
-        capture={variant === 'photo' ? 'environment' : undefined}
         className="hidden"
         onChange={(e) => onFiles(e.target.files)}
       />

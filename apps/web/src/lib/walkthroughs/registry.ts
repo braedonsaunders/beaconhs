@@ -98,7 +98,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Write it down',
-        body: 'Type what happened in your own words. Add photos from your phone camera and tags so it is easy to find later.',
+        body: 'Type what happened in your own words. Add photos from your phone camera or photo library, and add tags so the entry is easy to find later.',
       },
       {
         title: 'Finding old entries',
