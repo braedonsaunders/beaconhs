@@ -5,6 +5,7 @@ import { staticSecurityHeaders } from './src/lib/security-headers'
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  deploymentId: process.env.DEPLOYMENT_VERSION,
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {

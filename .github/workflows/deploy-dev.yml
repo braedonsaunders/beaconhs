@@ -73,6 +73,9 @@ jobs:
           cache-from: type=gha
           build-args: |
             NEXT_PUBLIC_SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+            DEPLOYMENT_VERSION=${{ github.sha }}
+          secrets: |
+            next_server_actions_key=${{ secrets.DEV_NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
           # ignore-error: the GHA cache backend intermittently fails the blob
           # write ("error writing layer blob: not_found") AFTER the image is
           # already pushed — don't let a cache hiccup fail the build/deploy.
