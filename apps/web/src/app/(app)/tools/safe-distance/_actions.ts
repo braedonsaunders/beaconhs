@@ -70,18 +70,12 @@ async function validateReferences(
   },
 ): Promise<string | null> {
   if (refs.siteOrgUnitId) {
-    const [site] = await tx
+    const [location] = await tx
       .select({ id: orgUnits.id })
       .from(orgUnits)
-      .where(
-        and(
-          eq(orgUnits.id, refs.siteOrgUnitId),
-          eq(orgUnits.level, 'site'),
-          isNull(orgUnits.deletedAt),
-        ),
-      )
+      .where(and(eq(orgUnits.id, refs.siteOrgUnitId), isNull(orgUnits.deletedAt)))
       .limit(1)
-    if (!site) return 'The selected site is not available in this workspace.'
+    if (!location) return 'The selected location is not available in this workspace.'
   }
   if (refs.supervisorTenantUserId) {
     const [supervisor] = await tx

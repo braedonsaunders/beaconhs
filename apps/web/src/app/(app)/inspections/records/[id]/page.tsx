@@ -403,19 +403,18 @@ async function updateRecordField(formData: FormData) {
   const changed = await ctx.db(async (tx) => {
     const current = await lockVisibleInspectionRecordForMutation(tx, ctx, id)
     if (field === 'siteOrgUnitId' && val) {
-      const [site] = await tx
+      const [location] = await tx
         .select({ id: orgUnits.id })
         .from(orgUnits)
         .where(
           and(
             eq(orgUnits.tenantId, ctx.tenantId),
             eq(orgUnits.id, String(val)),
-            eq(orgUnits.level, 'site'),
             isNull(orgUnits.deletedAt),
           ),
         )
         .limit(1)
-      if (!site) throw new Error('Site not found')
+      if (!location) throw new Error('Location not found')
     }
     const beforeValue = current[field as keyof typeof current]
     const same =

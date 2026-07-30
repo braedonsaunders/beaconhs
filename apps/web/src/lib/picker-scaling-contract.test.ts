@@ -114,6 +114,24 @@ describe('production-scale picker contract', () => {
     expect(locations).toContain("lookup === 'corrective-action-sites'")
     expect(locations).toContain('isNull(orgUnits.deletedAt)')
     expect(locations).not.toContain('eq(orgUnits.level')
+
+    const inspectionDetail = source('../app/(app)/inspections/records/[id]/page.tsx')
+    const inspectionLocationSave = between(
+      inspectionDetail,
+      "if (field === 'siteOrgUnitId' && val)",
+      'const beforeValue =',
+    )
+    expect(inspectionLocationSave).toContain('eq(orgUnits.id, String(val))')
+    expect(inspectionLocationSave).not.toContain('orgUnits.level')
+
+    const safeDistanceActions = source('../app/(app)/tools/safe-distance/_actions.ts')
+    const safeDistanceLocationSave = between(
+      safeDistanceActions,
+      'if (refs.siteOrgUnitId)',
+      'if (refs.supervisorTenantUserId)',
+    )
+    expect(safeDistanceLocationSave).toContain('eq(orgUnits.id, refs.siteOrgUnitId)')
+    expect(safeDistanceLocationSave).not.toContain('orgUnits.level')
   })
 
   it('searches the full eligible class-attendee set without a hidden first-page cap', () => {
