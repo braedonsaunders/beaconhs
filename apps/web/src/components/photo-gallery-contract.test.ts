@@ -23,3 +23,24 @@ describe('photo editor layout contract', () => {
     expect(editor).not.toContain('style={{ aspectRatio')
   })
 })
+
+describe('photo editor drawing contract', () => {
+  it('tracks strokes synchronously and saves the current annotation buffer', () => {
+    const editor = photoEditorSource()
+
+    expect(editor).toContain('const annotationsRef = useRef<Annotation[]>')
+    expect(editor).toContain('const activeStroke = useRef<number | null>(null)')
+    expect(editor).toContain('activeStroke.current = annotationsRef.current.length')
+    expect(editor).toContain('const drawing = activeStroke.current')
+    expect(editor).toContain('annotations: annotationsRef.current')
+  })
+
+  it('does not leave saving blocked by a missed pointer-end event', () => {
+    const editor = photoEditorSource()
+
+    expect(editor).toContain('onLostPointerCapture={() => {')
+    expect(editor).toContain('activeStroke.current = null')
+    expect(editor).toContain('onClick={save} disabled={pending}')
+    expect(editor).not.toContain('disabled={pending || drawing !== null}')
+  })
+})

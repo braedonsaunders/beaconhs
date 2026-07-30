@@ -138,9 +138,9 @@ function PhotoEditor({
   const [annotations, setAnnotations] = useState<Annotation[]>(photo.annotations ?? [])
   const [color, setColor] = useState<(typeof COLORS)[number]>('#ef4444')
   const [strokeWidth, setStrokeWidth] = useState(8)
-  const [drawing, setDrawing] = useState<number | null>(null)
   const [pending, startTransition] = useTransition()
-  const surface = useRef<SVGSVGElement>(null)
+  const annotationsRef = useRef<Annotation[]>(photo.annotations ?? [])
+  const activeStroke = useRef<number | null>(null)
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -164,8 +164,15 @@ function PhotoEditor({
     ]
   }
 
+  function updateAnnotations(update: (current: Annotation[]) => Annotation[]) {
+    const next = update(annotationsRef.current)
+    annotationsRef.current = next
+    setAnnotations(next)
+  }
+
   function begin(event: React.PointerEvent<SVGSVGElement>) {
-    if (annotations.length >= MAX_PHOTO_ANNOTATIONS) return
+    if (annotationsRef.current.length >= MAX_PHOTO_ANNOTATIONS) return
+    event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     const next: Annotation = {
       type: 'free',
@@ -173,16 +180,16 @@ function PhotoEditor({
       color,
       width: strokeWidth,
     }
-    setAnnotations((current) => {
-      setDrawing(current.length)
-      return [...current, next]
-    })
+    activeStroke.current = annotationsRef.current.length
+    updateAnnotations((current) => [...current, next])
   }
 
   function move(event: React.PointerEvent<SVGSVGElement>) {
+    const drawing = activeStroke.current
     if (drawing === null) return
+    event.preventDefault()
     const nextPoint = point(event)
-    setAnnotations((current) =>
+    updateAnnotations((current) =>
       current.map((annotation, index) =>
         index === drawing && annotation.type === 'free'
           ? {
@@ -197,14 +204,18 @@ function PhotoEditor({
     )
   }
 
-  function end() {
-    setDrawing(null)
+  function end(event: React.PointerEvent<SVGSVGElement>) {
+    activeStroke.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
   }
 
   function save() {
+    activeStroke.current = null
     startTransition(async () => {
       try {
-        const result = await onSave({ caption, annotations })
+        const result = await onSave({ caption, annotations: annotationsRef.current })
         if (result && !result.ok) {
           toast.error(tGeneratedValue(result.error ?? 'Photo could not be saved.'))
           return
@@ -256,7 +267,6 @@ function PhotoEditor({
               className="block h-auto max-h-[60vh] w-auto max-w-full object-contain select-none"
             />
             <svg
-              ref={surface}
               viewBox={`0 0 ${DRAWING_SIZE} ${DRAWING_SIZE}`}
               preserveAspectRatio="none"
               className="absolute inset-0 h-full w-full cursor-crosshair"
@@ -264,6 +274,9 @@ function PhotoEditor({
               onPointerMove={move}
               onPointerUp={end}
               onPointerCancel={end}
+              onLostPointerCapture={() => {
+                activeStroke.current = null
+              }}
             >
               <AnnotationMarks annotations={annotations} />
             </svg>
@@ -330,7 +343,7 @@ function PhotoEditor({
                 variant="outline"
                 size="sm"
                 disabled={annotations.length === 0}
-                onClick={() => setAnnotations((current) => current.slice(0, -1))}
+                onClick={() => updateAnnotations((current) => current.slice(0, -1))}
               >
                 <Undo2 size={14} /> <GeneratedValue value="Undo" />
               </Button>
@@ -339,7 +352,7 @@ function PhotoEditor({
                 variant="outline"
                 size="sm"
                 disabled={annotations.length === 0}
-                onClick={() => setAnnotations([])}
+                onClick={() => updateAnnotations(() => [])}
               >
                 <RotateCcw size={14} /> <GeneratedValue value="Clear" />
               </Button>
@@ -351,7 +364,7 @@ function PhotoEditor({
           <Button type="button" variant="outline" onClick={onClose}>
             <GeneratedValue value="Cancel" />
           </Button>
-          <Button type="button" onClick={save} disabled={pending || drawing !== null}>
+          <Button type="button" onClick={save} disabled={pending}>
             <GeneratedValue value={pending ? 'Saving…' : 'Save photo'} />
           </Button>
         </div>
