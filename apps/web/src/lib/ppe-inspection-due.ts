@@ -5,7 +5,7 @@ export type PpeInspectionState =
 
 type Schedule = { everyDays?: number; requiresCertificate?: boolean } | null | undefined
 
-export type PpeInspectionDue = {
+type PpeInspectionDue = {
   kind: PpeInspectionKind | null
   dueOn: string | null
   state: PpeInspectionState
