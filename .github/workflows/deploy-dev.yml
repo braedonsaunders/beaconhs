@@ -120,14 +120,6 @@ jobs:
             exit 1
           fi
           echo "Deploying immutable image ${IMAGE_NAME}@${IMAGE_DIGEST}"
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with: { node-version: 24.18.0 }
-      # Install Node first: the self-hosted runner's system Node is not a
-      # supported application runtime, and pnpm's installer invokes npm.
-      # package.json's packageManager field pins pnpm; passing a version here
-      # too errors with "Multiple versions of pnpm specified".
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-      - run: pnpm install --frozen-lockfile
 
       - name: Configure TLS-preserving Dokploy split-DNS resolution
         env:
@@ -162,10 +154,11 @@ jobs:
           printf 'DOKPLOY_CURL_RESOLVE=%s\n' \
             "${dokploy_host}:443:${DOKPLOY_RESOLVE_IP}" >> "$GITHUB_ENV"
 
-      # Read the compose target once: prove it is the local-server compose we
-      # manage, and capture the stack name plus the existing registry identity
-      # so the compose update round-trips Dokploy's private-pull credentials.
-      - name: Read the Dokploy compose target
+      # Dokploy remains the preferred control plane. If its API credential is
+      # unavailable, identify the one existing BeaconHS stack from the Swarm
+      # service specs and perform an image-only rollout later. That fallback
+      # preserves Dokploy's routing labels and every existing service setting.
+      - name: Resolve the dev deployment target
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
           DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
@@ -175,37 +168,66 @@ jobs:
           umask 077
           response="$(mktemp)"
           trap 'rm -f "$response"' EXIT
-          scripts/cluster/dokploy-curl.sh -sS --fail --connect-timeout 5 --max-time 20 \
+          http_status="$(scripts/cluster/dokploy-curl.sh -sS --connect-timeout 5 --max-time 20 \
             --retry 2 --retry-delay 2 --retry-max-time 30 \
             --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" \
-            --resolve "$DOKPLOY_CURL_RESOLVE" -G -o "$response" \
+            --resolve "$DOKPLOY_CURL_RESOLVE" -G -o "$response" -w '%{http_code}' \
             "${DOKPLOY_URL%/}/api/compose.one" \
-            --data-urlencode "composeId=$COMPOSE_ID"
-          if ! jq -e --arg id "$COMPOSE_ID" \
-              '.composeId == $id and .serverId == null' "$response" >/dev/null; then
-            echo "::error::Dokploy compose.one did not return the configured local compose target"
+            --data-urlencode "composeId=$COMPOSE_ID")" || http_status=000
+
+          if [ "$http_status" = 200 ]; then
+            if ! jq -e --arg id "$COMPOSE_ID" \
+                '.composeId == $id and .serverId == null' "$response" >/dev/null; then
+              echo "::error::Dokploy compose.one did not return the configured local compose target"
+              exit 1
+            fi
+            target_stack="$(jq -er '.appName | select(type=="string" and length>0)' "$response")"
+            existing_registry_id_json="$(jq -c '
+              if (has("registryId") | not) or .registryId == null then null
+              elif (.registryId | type) == "string" and (.registryId | length) > 0 then
+                .registryId
+              else
+                error("invalid registryId")
+              end
+            ' "$response")" \
+              || { echo "::error::Dokploy compose target returned an invalid registry identity"; exit 1; }
+            deploy_mode=api
+          elif [[ "$http_status" =~ ^(000|401|403|500|502|503|504)$ ]]; then
+            mapfile -t stacks < <(
+              docker service ls --format '{{.Name}} {{.Image}}' \
+                | awk '$2 ~ /^ghcr\.io\/braedonsaunders\/beaconhs(@|:)/ && $1 ~ /_web$/ {sub(/_web$/, "", $1); print $1}'
+            )
+            if [ "${#stacks[@]}" -ne 1 ]; then
+              echo "::error::Direct deployment requires exactly one existing BeaconHS Swarm stack"
+              exit 1
+            fi
+            target_stack="${stacks[0]}"
+            for role in web worker scheduler storage-init; do
+              service="${target_stack}_${role}"
+              image="$(docker service inspect "$service" \
+                --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')"
+              if [[ ! "$image" =~ ^ghcr\.io/braedonsaunders/beaconhs(@|:) ]]; then
+                echo "::error::Direct deployment target $service is not a BeaconHS service"
+                exit 1
+              fi
+            done
+            existing_registry_id_json=null
+            deploy_mode=direct
+            echo "::warning::Dokploy API returned HTTP $http_status; using the validated image-only Swarm rollout"
+          else
+            echo "::error::Dokploy compose.one returned unexpected HTTP $http_status"
             exit 1
           fi
-          target_stack="$(jq -er '.appName | select(type=="string" and length>0)' "$response")"
+
           if [[ ! "$target_stack" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]]; then
-            echo "::error::Dokploy compose target returned an invalid Swarm stack name"
+            echo "::error::Deployment target returned an invalid Swarm stack name"
             exit 1
           fi
-          existing_registry_id_json="$(jq -c '
-            # Newer Dokploy releases removed registryId from the compose
-            # schema. Normalize that omitted nullable field to null while
-            # continuing to reject malformed values and preserve real IDs.
-            if (has("registryId") | not) or .registryId == null then null
-            elif (.registryId | type) == "string" and (.registryId | length) > 0 then
-              .registryId
-            else
-              error("invalid registryId")
-            end
-          ' "$response")" \
-            || { echo "::error::Dokploy compose target returned an invalid registry identity"; exit 1; }
-          printf 'DOKPLOY_TARGET_STACK=%s\n' "$target_stack" >> "$GITHUB_ENV"
-          printf 'DOKPLOY_EXISTING_REGISTRY_ID_JSON=%s\n' \
-            "$existing_registry_id_json" >> "$GITHUB_ENV"
+          {
+            printf 'DOKPLOY_TARGET_STACK=%s\n' "$target_stack"
+            printf 'DOKPLOY_EXISTING_REGISTRY_ID_JSON=%s\n' "$existing_registry_id_json"
+            printf 'DOKPLOY_DEPLOY_MODE=%s\n' "$deploy_mode"
+          } >> "$GITHUB_ENV"
 
       # Prove this run's least-privilege package token can read the exact
       # private image before touching anything. The token stays in a temporary
@@ -230,6 +252,15 @@ jobs:
           docker image inspect "$IMAGE" --format 'pulled {{.Id}}'
           docker pull "$COLLABORA_IMAGE"
           docker image inspect "$COLLABORA_IMAGE" --format 'pulled Collabora {{.Id}}'
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with: { node-version: 24.18.0 }
+      # Install Node first: the self-hosted runner's system Node is not a
+      # supported application runtime, and pnpm's installer invokes npm.
+      # package.json's packageManager field pins pnpm; passing a version here
+      # too errors with "Multiple versions of pnpm specified".
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - run: pnpm install --frozen-lockfile
 
       # Forward-only schema migrations run before the redeploy. The unpooled
       # migrator login can SET ROLE to the NOLOGIN owner; neither credential
@@ -268,6 +299,7 @@ jobs:
           fi
 
       - name: Update the Dokploy compose environment
+        if: env.DOKPLOY_DEPLOY_MODE == 'api'
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
           DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
@@ -356,6 +388,7 @@ jobs:
           echo "Updated Dokploy compose environment for $IMAGE"
 
       - name: Deploy the compose on Dokploy
+        if: env.DOKPLOY_DEPLOY_MODE == 'api'
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
           DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
@@ -369,6 +402,21 @@ jobs:
                 -X POST "${DOKPLOY_URL%/}/api/compose.deploy" \
                 -H "content-type: application/json" --data @- >/dev/null
           echo "Dokploy compose deployment requested"
+
+      - name: Roll the immutable image directly on Swarm
+        if: env.DOKPLOY_DEPLOY_MODE == 'direct'
+        run: |
+          set -euo pipefail
+          image="${IMAGE_NAME}@${IMAGE_DIGEST}"
+          for role in web worker scheduler; do
+            service="${DOKPLOY_TARGET_STACK}_${role}"
+            docker service update --detach=true --with-registry-auth \
+              --image "$image" --env-rm APP_VERSION \
+              --env-add "APP_VERSION=$GITHUB_SHA" "$service"
+          done
+          docker service update --detach=true --with-registry-auth \
+            --image "$image" "${DOKPLOY_TARGET_STACK}_storage-init"
+          echo "Requested direct immutable-image rollout for $DOKPLOY_TARGET_STACK"
 
       - name: Wait for external readiness
         env:
