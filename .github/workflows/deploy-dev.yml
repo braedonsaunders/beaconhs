@@ -91,6 +91,24 @@ jobs:
     env:
       IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
     steps:
+      # The deploy runner shares storage with Dokploy. Keep stale build cache
+      # and superseded images from exhausting the host and taking the Dokploy
+      # API offline. Active service images and all volumes are preserved.
+      - name: Reclaim stale deployment-runner storage
+        run: |
+          set -euo pipefail
+          echo "Storage before cleanup:"
+          df -h /
+          docker system df
+          docker builder prune --force --filter until=168h
+          docker image prune --all --force --filter until=168h
+          echo "Storage after cleanup:"
+          df -h /
+          available_kb="$(df -Pk / | awk 'NR==2 {print $4}')"
+          if ! [[ "$available_kb" =~ ^[0-9]+$ ]] || [ "$available_kb" -lt 2097152 ]; then
+            echo "::error::The Dokploy runner requires at least 2 GiB free after safe Docker cleanup"
+            exit 1
+          fi
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
