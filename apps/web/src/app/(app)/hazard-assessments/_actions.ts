@@ -229,6 +229,19 @@ async function createAssessmentAppResponse(
     submittedBy?: string | null
   },
 ) {
+  const [assessment] = await tx
+    .select({ siteOrgUnitId: hazidAssessments.siteOrgUnitId })
+    .from(hazidAssessments)
+    .where(
+      and(
+        eq(hazidAssessments.tenantId, args.tenantId),
+        eq(hazidAssessments.id, args.assessmentId),
+        isNull(hazidAssessments.deletedAt),
+      ),
+    )
+    .limit(1)
+  if (!assessment) return null
+
   const version = await latestTemplateVersion(tx, args.templateId)
   if (!version) return null
 
@@ -240,6 +253,7 @@ async function createAssessmentAppResponse(
       templateVersionId: version.id,
       status: 'draft',
       submittedBy: args.submittedBy ?? null,
+      siteOrgUnitId: assessment.siteOrgUnitId,
       data: {},
       sourceEntityType: 'hazid_assessment',
       sourceEntityId: args.assessmentId,
@@ -878,6 +892,32 @@ export async function updateTextField(formData: FormData) {
       .update(hazidAssessments)
       .set(updates as any)
       .where(eq(hazidAssessments.id, id))
+    if (field === 'siteOrgUnitId') {
+      const linkedResponses = await tx
+        .select({ id: hazidAssessmentAppResponses.responseId })
+        .from(hazidAssessmentAppResponses)
+        .where(
+          and(
+            eq(hazidAssessmentAppResponses.tenantId, ctx.tenantId),
+            eq(hazidAssessmentAppResponses.assessmentId, id),
+          ),
+        )
+      if (linkedResponses.length > 0) {
+        await tx
+          .update(formResponses)
+          .set({ siteOrgUnitId: val as string | null })
+          .where(
+            and(
+              eq(formResponses.tenantId, ctx.tenantId),
+              inArray(
+                formResponses.id,
+                linkedResponses.map((response) => response.id),
+              ),
+              isNull(formResponses.deletedAt),
+            ),
+          )
+      }
+    }
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'hazid_assessment',
       entityId: id,

@@ -298,7 +298,11 @@ export async function submitFormResponseLifecycle(
     const submittedAt = new Date()
 
     const siteOrgUnitId =
-      args.siteOrgUnitId === undefined ? (existing?.siteOrgUnitId ?? null) : args.siteOrgUnitId
+      existing?.sourceEntityType === 'hazid_assessment'
+        ? existing.siteOrgUnitId
+        : args.siteOrgUnitId === undefined
+          ? (existing?.siteOrgUnitId ?? null)
+          : args.siteOrgUnitId
     const subjectPersonId =
       args.subjectPersonId === undefined
         ? (existing?.subjectPersonId ?? null)
@@ -331,10 +335,21 @@ export async function submitFormResponseLifecycle(
             .limit(1)
         : Promise.resolve([]),
     ])
+    if (existing?.sourceEntityType === 'hazid_assessment' && !siteOrgUnitId) {
+      return {
+        ok: false as const,
+        errors: [
+          {
+            fieldId: 'siteOrgUnitId',
+            message: 'Choose a Location on the Hazard Assessment before submitting this app',
+          },
+        ],
+      }
+    }
     if (siteOrgUnitId && !site[0]) {
       return {
         ok: false as const,
-        errors: [{ fieldId: 'siteOrgUnitId', message: 'Site not found in this workspace' }],
+        errors: [{ fieldId: 'siteOrgUnitId', message: 'Location not found in this workspace' }],
       }
     }
     if (subjectPersonId && !subject[0]) {

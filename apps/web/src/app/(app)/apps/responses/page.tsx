@@ -259,7 +259,7 @@ export default async function FormResponsesPage({
                       <GeneratedText id="m_1928431de4aaf1" />
                     </TableHead>
                     <TableHead>
-                      <GeneratedText id="m_020146dd3d3d5a" />
+                      <GeneratedText id="m_055f11420b2da4" />
                     </TableHead>
                     <TableHead>
                       <GeneratedText id="m_0cff7e37da2b3f" />

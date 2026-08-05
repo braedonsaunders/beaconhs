@@ -551,9 +551,10 @@ Only published forms allowed for the role you are currently using appear. If you
 
 1. Tap the form in the left menu — for example **Toolbox talks**. You land on the list of past entries.
 2. Tap **New entry**. A fresh entry opens.
-3. Fill in the fields. Your answers save as you go, so you can stop and come back.
-4. Some forms ask for signatures — sign in the signature box, and pass the phone around if the whole crew signs.
-5. Tap **Submit** when you are done. Some entries use a **Finalize** button instead — it does the same job: it marks the entry complete and locks it.
+3. Search **Location** and choose the customer, project, site, or area where the form is being recorded. Hazard-assessment apps inherit the assessment's Location.
+4. Fill in the fields. Your answers save as you go, so you can stop and come back.
+5. Some forms ask for signatures — sign in the signature box, and pass the phone around if the whole crew signs.
+6. Tap **Submit** when you are done. Some entries use a **Finalize** button instead — it does the same job: it marks the entry complete and locks it.
 
 ## Filling out an assigned form
 

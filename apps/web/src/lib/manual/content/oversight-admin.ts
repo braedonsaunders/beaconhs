@@ -137,7 +137,7 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 
 ## What this is for
 
-Almost every record in the app — incidents, inspections, forms — asks for a site. Picking the right site is what makes reports, dashboards, and compliance views line up by location. If your locations are set up well, everything else sorts itself.
+Almost every record in the app — incidents, inspections, forms — asks for a Location. Picking the right customer, project, site, or area makes reports, dashboards, and compliance views line up. If your locations are set up well, everything else sorts itself.
 
 ## Where to find it
 
@@ -167,15 +167,15 @@ Locations sit at the top of the tree. You add projects and sites underneath from
 
 The field type is fixed after creation. Removing a choice option or tightening a number range can clear saved values that no longer fit; BeaconHS warns you before it saves. **Delete field** permanently removes the field and every value captured under it. If a saved report or Insights Card uses the field, BeaconHS blocks **Hidden** and **Delete field** until you remove that reference.
 
-## What picking a site on a record means
+## What picking a Location on a record means
 
-When someone fills out a form or reports an incident, they pick a site. That choice controls:
+When someone fills out a form or reports an incident, they pick a Location. That choice controls:
 
 - Which location's tabs the record shows up on (each location page has **Incidents** and **Equipment** tabs).
-- How reports and dashboards group results by site or project.
+- How reports and dashboards group results by location or project.
 - Who gets notified, when notifications are set up by location.
 
-Tell your crews which site to pick for each job. A record filed against the wrong site is easy to miss later.
+Tell your crews which Location to pick for each job. A record filed against the wrong Location is easy to miss later.
 
 ## See the whole tree at once
 
@@ -442,6 +442,8 @@ When the built-in modules do not cover something — a site orientation form, a 
 
 Open [Builder](/apps) from the sidebar. People who can build templates see every live app, including **published**, **draft**, and **archived** apps. Everyone else sees only published apps allowed for the role they are currently using.
 
+Every Builder response uses **Location** from the shared Locations catalogue. Workers can choose a customer, project, site, or area. Apps attached to a Hazard Assessment inherit the assessment's Location, so do not add a second site field to those apps.
+
 ## Create and publish a form
 
 1. Open [Builder](/apps) and click **New app**.
@@ -507,7 +509,7 @@ To send a filled Excel form, add an **XLSX template** under **Spreadsheet attach
 
 **Export PDF** saves the generated file on that form response. The response list shows a **PDF** badge when it is ready. Running the action again replaces that response's previous generated file.
 
-Use **Start another form** to choose a published target app. Each run creates one draft and carries over the source record's owner, person, and site. The quick **Record actions** panel offers only actions that are complete as soon as they are added; configure actions that need recipients, fields, statuses, or a target app on the full **Flows** surface.
+Use **Start another form** to choose a published target app. Each run creates one draft and carries over the source record's owner, person, and Location. The quick **Record actions** panel offers only actions that are complete as soon as they are added; configure actions that need recipients, fields, statuses, or a target app on the full **Flows** surface.
 
 Webhook actions send the record payload as JSON to a public **HTTPS** URL. BeaconHS owns the request headers, rejects local or private network destinations when you save the flow, and checks the destination again every time the flow runs.
 
@@ -515,7 +517,7 @@ Webhook actions send the record payload as JSON to a public **HTTPS** URL. Beaco
 
 Every submission lands in [Form responses](/apps/responses). Filter by app and status, open any record, or click **Export CSV** to download the list.
 
-The [Builder gallery](/apps) is paged for large workspaces. Search app names or descriptions, filter by app type, then use **Sort** and **Direction** to change the order. Open an app to see its records. On that record list, search by record ID, subject, site, or submitter; filter by status; and click a column heading to sort. Your search, filters, sort, and page stay in the address so a shared link opens the same view.
+The [Builder gallery](/apps) is paged for large workspaces. Search app names or descriptions, filter by app type, then use **Sort** and **Direction** to change the order. Open an app to see its records. On that record list, search by record ID, subject, Location, or submitter; filter by status; and click a column heading to sort. Your search, filters, sort, and page stay in the address so a shared link opens the same view.
 
 Inside a response, use **Response** for the saved answers and workflow. If the response created corrective actions or incidents, search and filter each list under **Spawned from this response**. Use **Comments** to search the full discussion or post a new note. Use **Audit trail** to search and filter the complete change history. A monitored response also shows the complete **Check-in history**, with search, kind, order, and page controls.
 

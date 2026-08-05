@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { getTableConfig } from 'drizzle-orm/pg-core'
 import { describe, expect, it } from 'vitest'
 import {
@@ -9,6 +10,14 @@ import {
 import { readProductionCutoverSection } from './test/read-production-cutover-section'
 
 const migrationSql = readProductionCutoverSection('0007_pink_marvex.sql')
+const locationCutoverSql = readFileSync(
+  new URL('../drizzle/0030_unify_hazid_app_locations.sql', import.meta.url),
+  'utf8',
+)
+const builtInAppsSource = readFileSync(
+  new URL('./seed/hazard-assessment-app-templates.ts', import.meta.url),
+  'utf8',
+)
 
 function foreignKeySignatures(table: Parameters<typeof getTableConfig>[0]): Map<string, string> {
   return new Map(
@@ -88,5 +97,19 @@ describe('HazID Builder relational integrity', () => {
     expect(migrationSql).toContain('parent."id" IS NULL')
     expect(migrationSql).toContain('child."tenant_id" IS DISTINCT FROM parent."tenant_id"')
     expect(migrationSql).toContain('child."template_id" IS DISTINCT FROM parent."template_id"')
+  })
+
+  it('uses the parent assessment Location for every built-in attached app', () => {
+    expect(builtInAppsSource).not.toContain("id: 'site', type: 'site_picker'")
+    expect(locationCutoverSql).toContain("field_value->>'id' = 'site'")
+    expect(locationCutoverSql).toContain("field_value->>'type' = 'site_picker'")
+    expect(locationCutoverSql).toContain('SET "site_org_unit_id" = assessment."site_org_unit_id"')
+    expect(locationCutoverSql).toContain(
+      'response."site_org_unit_id" IS DISTINCT FROM assessment."site_org_unit_id"',
+    )
+    expect(locationCutoverSql).toContain('ALTER TABLE "form_responses" FORCE ROW LEVEL SECURITY')
+    expect(locationCutoverSql).toContain(
+      'ALTER TABLE "form_template_versions" FORCE ROW LEVEL SECURITY',
+    )
   })
 })

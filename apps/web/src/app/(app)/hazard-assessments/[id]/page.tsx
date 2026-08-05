@@ -455,7 +455,7 @@ export default async function HazidAssessmentDetailPage({
     templateName: string
     version: number
     schema: FormSchemaV1
-    sites: { id: string; name: string }[]
+    initialLocation?: { value: string; label: string }
     people: { id: string; firstName: string; lastName: string; employeeNo: string | null }[]
     entitiesByField: EntityAttrsByField
     currentUser: { personId: string | null; name: string | null }
@@ -489,12 +489,7 @@ export default async function HazidAssessmentDetailPage({
           )
           .limit(1)
         if (!version) return null
-        const [sitesList, allPeople, currentPersonRow] = await Promise.all([
-          tx
-            .select({ id: orgUnits.id, name: orgUnits.name })
-            .from(orgUnits)
-            .where(eq(orgUnits.level, 'site'))
-            .orderBy(asc(orgUnits.name)),
+        const [allPeople, currentPersonRow] = await Promise.all([
           tx
             .select({
               id: people.id,
@@ -511,7 +506,7 @@ export default async function HazidAssessmentDetailPage({
             .where(eq(people.userId, ctx.userId ?? ''))
             .limit(1),
         ])
-        return { version, sitesList, allPeople, currentPerson: currentPersonRow[0] ?? null }
+        return { version, allPeople, currentPerson: currentPersonRow[0] ?? null }
       })
       if (loaded) {
         const resp = response
@@ -531,7 +526,7 @@ export default async function HazidAssessmentDetailPage({
           templateName: typeApp.app.label || typeApp.template.name,
           version: loaded.version.version,
           schema: loaded.version.schema,
-          sites: loaded.sitesList,
+          initialLocation: site ? { value: site.id, label: site.name } : undefined,
           people: loaded.allPeople,
           entitiesByField,
           currentUser: {
@@ -1657,7 +1652,8 @@ export default async function HazidAssessmentDetailPage({
                 templateName={appFill.templateName}
                 version={appFill.version}
                 schema={appFill.schema}
-                sites={appFill.sites}
+                initialLocation={appFill.initialLocation}
+                locationReadOnly
                 people={appFill.people}
                 entitiesByField={appFill.entitiesByField}
                 currentUser={appFill.currentUser}

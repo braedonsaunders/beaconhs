@@ -482,12 +482,7 @@ export default async function FormResponsePage({
 
     // Loaders for the inline record editor (same shapes as the fill page) plus
     // the template's enabled manual-button flows for the configurable action bar.
-    const [sites, allPeople, currentPersonRows, manualFlows] = await Promise.all([
-      tx
-        .select({ id: orgUnits.id, name: orgUnits.name })
-        .from(orgUnits)
-        .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt)))
-        .orderBy(asc(orgUnits.name)),
+    const [allPeople, currentPersonRows, manualFlows] = await Promise.all([
       tx
         .select({
           id: people.id,
@@ -521,7 +516,6 @@ export default async function FormResponsePage({
       },
       scoreRows,
       spawned,
-      sites,
       allPeople,
       currentPerson: currentPersonRows[0] ?? null,
       manualFlows,
@@ -537,7 +531,6 @@ export default async function FormResponsePage({
     comments,
     scoreRows,
     spawned,
-    sites,
     allPeople,
     currentPerson,
     manualFlows,
@@ -1141,7 +1134,6 @@ export default async function FormResponsePage({
                         templateName={template.name}
                         version={version.version}
                         schema={version.schema}
-                        sites={sites}
                         people={allPeople}
                         entitiesByField={entitiesByField}
                         currentUser={{

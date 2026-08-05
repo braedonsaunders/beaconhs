@@ -33,6 +33,7 @@ export const PICKER_LOOKUPS = [
   'journal-locations',
   'journal-supervisors',
   'hazard-assessment-locations',
+  'form-response-locations',
   'safe-distance-sites',
   'safe-distance-supervisors',
   'safe-distance-operators',

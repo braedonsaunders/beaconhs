@@ -166,12 +166,14 @@ export default async function FillTemplatePage({
       .limit(1)
     if (!version) return null
 
-    const [sites, allPeople, currentPerson] = await Promise.all([
-      tx
-        .select({ id: orgUnits.id, name: orgUnits.name })
-        .from(orgUnits)
-        .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt)))
-        .orderBy(asc(orgUnits.name)),
+    const [selectedLocations, allPeople, currentPerson] = await Promise.all([
+      responseRow?.siteOrgUnitId
+        ? tx
+            .select({ id: orgUnits.id, name: orgUnits.name })
+            .from(orgUnits)
+            .where(eq(orgUnits.id, responseRow.siteOrgUnitId))
+            .limit(1)
+        : Promise.resolve([]),
       tx
         .select({
           id: people.id,
@@ -193,7 +195,9 @@ export default async function FillTemplatePage({
     return {
       tmpl,
       version,
-      sites,
+      initialLocation: selectedLocations[0]
+        ? { value: selectedLocations[0].id, label: selectedLocations[0].name }
+        : undefined,
       people: allPeople,
       currentPerson: currentPerson[0] ?? null,
       responseRow,
@@ -269,7 +273,7 @@ export default async function FillTemplatePage({
       templateName={data.tmpl.name}
       version={data.version.version}
       schema={data.version.schema}
-      sites={data.sites}
+      initialLocation={data.initialLocation}
       people={data.people}
       entitiesByField={entitiesByField}
       currentUser={{

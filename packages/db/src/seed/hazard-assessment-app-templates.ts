@@ -80,7 +80,6 @@ const HAZID_CONFINED_SPACE_APP_SCHEMA: FormSchemaV1 = {
       title: { en: 'Entry setup' },
       step: 'setup',
       fields: [
-        { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
         {
           id: 'space_name',
           type: 'text',
@@ -250,7 +249,6 @@ const HAZID_ARC_FLASH_APP_SCHEMA: FormSchemaV1 = {
       id: 'equipment',
       title: { en: 'Equipment & job' },
       fields: [
-        { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
         { id: 'equipment_name', type: 'text', label: { en: 'Equipment / panel' }, required: true },
         {
           id: 'work_date',
@@ -450,7 +448,6 @@ const HAZID_FALL_PROTECTION_APP_SCHEMA: FormSchemaV1 = {
       title: { en: 'Work at heights' },
       step: 'setup',
       fields: [
-        { id: 'site', type: 'site_picker', label: { en: 'Site' }, required: true },
         {
           id: 'work_description',
           type: 'long_text',

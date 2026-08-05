@@ -76,7 +76,7 @@ type ListConfig = {
 const BUILTIN_LABEL: Record<string, string> = {
   id: 'ID',
   subject: 'Subject',
-  site: 'Site',
+  site: 'Location',
   status: 'Status',
   created_at: 'Started',
   submitted_at: 'Submitted',

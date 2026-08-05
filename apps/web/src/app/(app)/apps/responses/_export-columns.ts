@@ -53,7 +53,7 @@ const RESPONSE_EXPORT_BASE_COLUMNS: ResponseExportColumn[] = [
   { key: 'version', label: 'Version', source: 'response' },
   { key: 'status', label: 'Status', source: 'response' },
   { key: 'current_step', label: 'Current step', source: 'response' },
-  { key: 'site', label: 'Site', source: 'response' },
+  { key: 'site', label: 'Location', source: 'response' },
   { key: 'subject', label: 'Subject', source: 'response' },
   { key: 'submitted_by', label: 'Submitted by', source: 'response' },
   { key: 'created_at', label: 'Created', source: 'response' },

@@ -113,6 +113,7 @@ describe('production-scale picker contract', () => {
     expect(locations).toContain("lookup === 'incident-sites'")
     expect(locations).toContain("lookup === 'corrective-action-sites'")
     expect(locations).toContain("lookup === 'hazard-assessment-locations'")
+    expect(locations).toContain("lookup === 'form-response-locations'")
     expect(locations).toContain('isNull(orgUnits.deletedAt)')
     expect(locations).not.toContain('eq(orgUnits.level')
 
@@ -141,6 +142,14 @@ describe('production-scale picker contract', () => {
     const hazardMutations = source('../app/(app)/hazard-assessments/_actions.ts')
     expect(hazardMutations).toContain("if (field === 'siteOrgUnitId' && val)")
     expect(hazardMutations).toContain('isNull(orgUnits.deletedAt)')
+    expect(hazardMutations).toContain('siteOrgUnitId: assessment.siteOrgUnitId')
+    expect(hazardMutations).toContain('eq(hazidAssessmentAppResponses.assessmentId, id)')
+
+    const formRenderer = source('../app/(app)/apps/templates/[id]/fill/form-renderer.tsx')
+    expect(formRenderer).toContain('lookup="form-response-locations"')
+    expect(formRenderer).toContain("title={tGenerated('m_055f11420b2da4')}")
+    expect(formRenderer).toContain('disabled={readOnly || locationReadOnly}')
+    expect(formRenderer).not.toContain('sites.map')
   })
 
   it('searches the full eligible class-attendee set without a hidden first-page cap', () => {

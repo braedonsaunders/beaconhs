@@ -125,7 +125,9 @@ import { PhotoGallery, type PhotoEdits } from '@/components/photo-gallery'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { WizardLayout } from '@/components/page-layout'
 import { PremiumSection } from '@/components/premium-section'
+import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { Section } from '@/components/section'
+import type { PickerOption } from '@/lib/picker-options'
 import { toast } from '@/lib/toast'
 import { canvasCss, columnsCss, gridClass, resolveCanvas } from '@/app/(app)/apps/_lib/canvas'
 import { attachmentIdsEqual } from './photo-field-state'
@@ -197,7 +199,8 @@ export function FormRenderer({
   templateName,
   version,
   schema,
-  sites,
+  initialLocation,
+  locationReadOnly = false,
   people,
   entitiesByField: initialEntitiesByField,
   currentUser,
@@ -218,7 +221,8 @@ export function FormRenderer({
   templateName: string
   version: number
   schema: FormSchemaV1
-  sites: { id: string; name: string }[]
+  initialLocation?: PickerOption
+  locationReadOnly?: boolean
   people: { id: string; firstName: string; lastName: string; employeeNo?: string | null }[]
   // Per-picker entity-attribute maps preloaded server-side. Keyed by picker
   // field id (NOT entity id) so the runtime can pick up the right map by
@@ -279,7 +283,7 @@ export function FormRenderer({
   const [rowsByStep, setRowsByStep] = useState<Record<string, Record<string, unknown>[]>>(
     normalizedInitial.rows,
   )
-  const [siteId, setSiteId] = useState<string | ''>('')
+  const [siteId, setSiteId] = useState(initialLocation?.value ?? '')
   const [errors, setErrors] = useState<Map<string, string>>(new Map())
   const [serverError, setServerError] = useState<string | null>(null)
   const [pending, start] = useTransition()
@@ -1379,23 +1383,27 @@ export function FormRenderer({
               value={
                 stepIndex === 0 ? (
                   <PremiumSection
-                    title={tGenerated('m_020146dd3d3d5a')}
+                    title={tGenerated('m_055f11420b2da4')}
                     subtitle={tGenerated('m_16bca608598e31')}
                     icon={<MapPin size={20} />}
                     tone="teal"
                   >
                     <div className="space-y-1">
                       <Label>
-                        <GeneratedText id="m_020146dd3d3d5a" />
+                        <GeneratedText id="m_055f11420b2da4" />
                       </Label>
-                      <Select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
-                        <option value="">{'— select —'}</option>
-                        {sites.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </Select>
+                      <RemoteSearchSelect
+                        lookup="form-response-locations"
+                        value={siteId}
+                        onChange={setSiteId}
+                        initialOption={initialLocation}
+                        placeholder={tGenerated('m_1ad901c0a1f003')}
+                        searchPlaceholder={tGenerated('m_016e087c3c8544')}
+                        sheetTitle={tGenerated('m_055f11420b2da4')}
+                        ariaLabel={tGenerated('m_055f11420b2da4')}
+                        emptyLabel={tGenerated('m_1ad901c0a1f003')}
+                        disabled={readOnly || locationReadOnly}
+                      />
                     </div>
                   </PremiumSection>
                 ) : null

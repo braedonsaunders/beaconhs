@@ -215,6 +215,8 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
       )
     case 'hazard-assessment-locations':
       return can(ctx, 'hazid.create') || can(ctx, 'hazid.update')
+    case 'form-response-locations':
+      return can(ctx, 'forms.response.create') || can(ctx, 'forms.response.update.own')
     case 'safe-distance-sites':
     case 'safe-distance-supervisors':
     case 'safe-distance-operators':
@@ -1323,6 +1325,7 @@ async function loadOptions(
     if (
       lookup === 'journal-locations' ||
       lookup === 'hazard-assessment-locations' ||
+      lookup === 'form-response-locations' ||
       lookup === 'safe-distance-sites' ||
       lookup === 'location-parent-units' ||
       lookup === 'incident-sites' ||
