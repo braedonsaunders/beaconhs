@@ -10,9 +10,10 @@
 // The per-criterion answers live in equipment_inspection_record_criteria,
 // materialised from the type's groups + criteria at record creation time.
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   date,
   foreignKey,
   index,
@@ -66,7 +67,11 @@ export const equipmentInspectionRecords = pgTable(
     // the record still renders.
     inspectionTypeId: uuid('inspection_type_id'),
     // What was inspected.
-    equipmentItemId: uuid('equipment_item_id').notNull(),
+    equipmentItemId: uuid('equipment_item_id'),
+    // Durable target identity. Registered inspections keep the item FK and a
+    // display snapshot; rental/unregistered inspections use the snapshot only.
+    equipmentNameSnapshot: text('equipment_name_snapshot'),
+    rentalProvider: text('rental_provider'),
 
     status: equipmentInspectionRecordStatus('status').default('draft').notNull(),
     result: equipmentInspectionResult('result'),
@@ -158,6 +163,13 @@ export const equipmentInspectionRecords = pgTable(
     statusIdx: index('equipment_inspection_records_status_idx').on(t.tenantId, t.status),
     occurredIdx: index('equipment_inspection_records_occurred_idx').on(t.tenantId, t.occurredAt),
     nextDueIdx: index('equipment_inspection_records_next_due_idx').on(t.tenantId, t.nextDueOn),
+    targetModeCk: check(
+      'equipment_inspection_records_target_mode_ck',
+      sql`(
+        (${t.isRental} = false and ${t.equipmentItemId} is not null)
+        or (${t.isRental} = true and ${t.equipmentItemId} is null and nullif(trim(${t.equipmentNameSnapshot}), '') is not null)
+      )`,
+    ),
     itemFk: foreignKey({
       name: 'equipment_inspection_records_tenant_item_fk',
       columns: [t.tenantId, t.equipmentItemId],

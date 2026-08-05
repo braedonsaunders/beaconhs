@@ -213,6 +213,8 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
         can(ctx, 'journals.update.own') ||
         can(ctx, 'journals.assign')
       )
+    case 'hazard-assessment-locations':
+      return can(ctx, 'hazid.create') || can(ctx, 'hazid.update')
     case 'safe-distance-sites':
     case 'safe-distance-supervisors':
     case 'safe-distance-operators':
@@ -292,6 +294,8 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'equipment-edit-categories':
     case 'equipment-item-inspection-types':
     case 'equipment-item-pre-use-inspection-types':
+    case 'equipment-inspection-sites':
+    case 'equipment-inspection-types':
       return can(ctx, 'equipment.manage') || can(ctx, 'equipment.inspect')
     case 'incident-classification-parents':
       return canManage('incidents')
@@ -1318,6 +1322,7 @@ async function loadOptions(
 
     if (
       lookup === 'journal-locations' ||
+      lookup === 'hazard-assessment-locations' ||
       lookup === 'safe-distance-sites' ||
       lookup === 'location-parent-units' ||
       lookup === 'incident-sites' ||
@@ -1728,15 +1733,19 @@ async function loadOptions(
 
     if (
       lookup === 'equipment-item-inspection-types' ||
-      lookup === 'equipment-item-pre-use-inspection-types'
+      lookup === 'equipment-item-pre-use-inspection-types' ||
+      lookup === 'equipment-inspection-types'
     ) {
       const preUseOnly = lookup === 'equipment-item-pre-use-inspection-types'
-      const applicable = input.contextId
-        ? or(
-            isNull(equipmentInspectionTypes.appliesToTypeId),
-            eq(equipmentInspectionTypes.appliesToTypeId, input.contextId),
-          )
-        : isNull(equipmentInspectionTypes.appliesToTypeId)
+      const applicable =
+        lookup === 'equipment-inspection-types'
+          ? undefined
+          : input.contextId
+            ? or(
+                isNull(equipmentInspectionTypes.appliesToTypeId),
+                eq(equipmentInspectionTypes.appliesToTypeId, input.contextId),
+              )
+            : isNull(equipmentInspectionTypes.appliesToTypeId)
       const eligible = and(
         eq(equipmentInspectionTypes.tenantId, ctx.tenantId),
         eq(equipmentInspectionTypes.isActive, true),
@@ -1882,7 +1891,7 @@ async function loadOptions(
       return boundPickerOptions(personOptions(rows))
     }
 
-    if (lookup === 'equipment-custody-sites') {
+    if (lookup === 'equipment-custody-sites' || lookup === 'equipment-inspection-sites') {
       const match = input.hasQuery
         ? or(
             ilike(orgUnits.name, input.term),

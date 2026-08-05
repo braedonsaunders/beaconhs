@@ -15,6 +15,7 @@ import { MobileNavToggle } from './mobile-nav-toggle'
 import { MobileTabBar } from './mobile-tab-bar'
 import { ServiceWorkerRegistrar } from './service-worker-registrar'
 import { ImpersonationBanner } from './impersonation-banner'
+import { AppScrollReset } from './app-scroll-reset'
 
 type Ctx = {
   isSuperAdmin: boolean
@@ -59,7 +60,7 @@ export function AppShell({
 }) {
   const t = useTranslations('Shell')
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex [height:100dvh] h-screen overflow-hidden">
       <ServiceWorkerRegistrar unreadCount={unreadCount} />
       <AppSidebar groups={groups} defaultCollapsed={defaultCollapsed} />
 
@@ -115,7 +116,11 @@ export function AppShell({
             </div>
           </header>
 
-          <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
+          <main
+            data-app-main
+            className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-slate-950"
+          >
+            <AppScrollReset />
             <GeneratedValue value={children} />
           </main>
 

@@ -752,10 +752,12 @@ Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspect
 ## Perform an inspection
 
 1. Open [Inspections](/equipment/inspections) and tap **New inspection**.
-2. On the **Start an inspection** screen, pick the **Equipment item** and the **Inspection type**. The checklist loads from the type.
-3. Tap **Start inspection**.
-4. Go through each required item and tap **Pass**, **Fail**, or **N/A**. An item marked **Optional** may be left blank.
-5. Your answers save as you go — watch for **Saved** at the top. You can stop and come back later; the inspection stays **In progress**.
+2. Choose **Registered unit** to search the fleet, or **Rental / unregistered** for a unit that is not in the equipment register.
+3. For a registered unit, pick the **Equipment item** and a compatible **Inspection type**.
+4. For a rental, enter the equipment name, serial or asset identifier, provider, and site. Then choose any active **Inspection type**.
+5. Tap **Start inspection**.
+6. Go through each required item and tap **Pass**, **Fail**, or **N/A**. An item marked **Optional** may be left blank.
+7. Your answers save as you go — watch for **Saved** at the top. You can stop and come back later; the inspection stays **In progress**.
 
 ## Record a failed item
 
@@ -769,6 +771,10 @@ Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspect
 1. If **Pass all remaining** is shown and everything left is fine, tap it to fill in the remaining pass/fail items. Some inspection types turn this shortcut off.
 2. Tap **Submit**.
 3. The result shows as **pass** or **fail** in the list. Failed items can spawn a work order automatically, so the shop sees the defect without a phone call. A small **Work order** tag appears on the failed item when that happens.
+
+Rental inspections do not create fleet work orders because there is no registered unit to attach them to. A failed rental inspection opens a corrective action instead.
+
+From the dashboard, use **Inspect any unit** on **My equipment** to start this same flow even when no unit is checked out to you.
 
 Imported or inspection-level evidence appears under **Record photos**. Reopen the inspection before editing, removing, or reordering those photos. Photos added to a checklist item stay on that item and are also available to the submitted-inspection email flow.
 
@@ -820,13 +826,15 @@ Every serialized item has its own record: who holds it, when it was last inspect
 
 ## Where to find it
 
-Open **PPE** in the left menu. That opens the list at [PPE](/ppe). It starts filtered to **Issued** items. You can search by type or serial number, or switch the status filter to **In stock**, **Returned**, **Damaged**, **Discarded**, or **Expired**.
+Open **PPE** in the left menu. That opens the list at [PPE](/ppe). It starts filtered to **Issued** items. Search by type, serial number, or holder. Use **Status**, **Inspection**, **PPE type**, and **Holder** to narrow the register.
 
 ## See your issued gear
 
 1. Open [PPE](/ppe).
-2. Find your items — the **Holder** column shows who each item is issued to.
+2. Find your items — **Assigned to** shows the holder and assignment date. **Inspection** shows **Overdue**, **Due today**, **Due soon**, **Current**, **Never inspected**, or **Not required**.
 3. Tap an item to open it. The **Status & schedule** panel shows **Currently with**, **Last inspection**, and **Next inspection due**.
+
+The **My PPE** dashboard card only shows inspections that need action now. It does not list issued gear whose inspection is current or not required. Tap **Inspect** to open the due pre-use or annual checklist directly.
 
 ## Inspect your PPE
 

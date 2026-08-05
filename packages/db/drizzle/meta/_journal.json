@@ -204,6 +204,13 @@
       "when": 1784916000000,
       "tag": "0028_generalize_monitored_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785940083986,
+      "tag": "0029_faulty_thunderball",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import type { Database } from '@beaconhs/db'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import {
+  correctiveActions,
   equipmentInspectionCriteria,
   equipmentInspectionGroups,
   equipmentInspectionRecordCriteria,
@@ -58,26 +59,28 @@ export async function lockVisibleEquipmentInspectionForMutation(
 ): Promise<typeof equipmentInspectionRecords.$inferSelect> {
   const record = await lockEquipmentInspectionRecordForMutation(tx, ctx.tenantId, recordId)
   if (!record) throw new Error('Equipment inspection not found')
-  const [item] = await tx
-    .select({
-      currentSiteOrgUnitId: equipmentItems.currentSiteOrgUnitId,
-      currentHolderPersonId: equipmentItems.currentHolderPersonId,
-    })
-    .from(equipmentItems)
-    .where(
-      and(
-        eq(equipmentItems.tenantId, ctx.tenantId),
-        eq(equipmentItems.id, record.equipmentItemId),
-        isNull(equipmentItems.deletedAt),
-      ),
-    )
-    .limit(1)
-  if (!item) throw new Error('Equipment item not found')
+  const [item] = record.equipmentItemId
+    ? await tx
+        .select({
+          currentSiteOrgUnitId: equipmentItems.currentSiteOrgUnitId,
+          currentHolderPersonId: equipmentItems.currentHolderPersonId,
+        })
+        .from(equipmentItems)
+        .where(
+          and(
+            eq(equipmentItems.tenantId, ctx.tenantId),
+            eq(equipmentItems.id, record.equipmentItemId),
+            isNull(equipmentItems.deletedAt),
+          ),
+        )
+        .limit(1)
+    : []
+  if (!item && !record.isRental) throw new Error('Equipment item not found')
   const visible = await canSeeRecord(ctx, tx, {
     prefix: 'equipment',
     ownerIds: [record.inspectorTenantUserId, record.submittedByTenantUserId],
-    siteId: record.siteOrgUnitId ?? item.currentSiteOrgUnitId,
-    personId: record.inspectorPersonId ?? item.currentHolderPersonId,
+    siteId: record.siteOrgUnitId ?? item?.currentSiteOrgUnitId,
+    personId: record.inspectorPersonId ?? item?.currentHolderPersonId,
   })
   if (!visible) throw new Error('Equipment inspection not found')
   if (
@@ -203,19 +206,21 @@ export async function finaliseEquipmentInspection(
 
     // The item lock serializes schedule advancement with schedule editing and
     // type/status changes. Compliance is refreshed from this exact snapshot.
-    const [item] = await tx
-      .select({ typeId: equipmentItems.typeId })
-      .from(equipmentItems)
-      .where(
-        and(
-          eq(equipmentItems.tenantId, ctx.tenantId),
-          eq(equipmentItems.id, record.equipmentItemId),
-          isNull(equipmentItems.deletedAt),
-        ),
-      )
-      .limit(1)
-      .for('update')
-    if (!item) return { ok: false, error: 'Equipment item not found.' }
+    const [item] = record.equipmentItemId
+      ? await tx
+          .select({ id: equipmentItems.id, typeId: equipmentItems.typeId })
+          .from(equipmentItems)
+          .where(
+            and(
+              eq(equipmentItems.tenantId, ctx.tenantId),
+              eq(equipmentItems.id, record.equipmentItemId),
+              isNull(equipmentItems.deletedAt),
+            ),
+          )
+          .limit(1)
+          .for('update')
+      : []
+    if (!item && !record.isRental) return { ok: false, error: 'Equipment item not found.' }
 
     const rows = await tx
       .select()
@@ -275,9 +280,10 @@ export async function finaliseEquipmentInspection(
     // Spawn work orders for failed criteria (legacy fail = WO). A critical
     // criterion always spawns; otherwise the type-level flag gates it.
     let spawned = 0
-    const typeAllowsWo = record.failsSpawnWorkOrders
+    const typeAllowsWo = Boolean(item) && !record.isRental && record.failsSpawnWorkOrders
 
     for (const f of fails) {
+      if (!item || record.isRental) continue
       if (f.workOrderId) continue
       if (!typeAllowsWo && !f.isCritical) continue
       const yr = record.occurredAt.getFullYear()
@@ -286,7 +292,7 @@ export async function finaliseEquipmentInspection(
         .insert(equipmentWorkOrders)
         .values({
           tenantId: ctx.tenantId,
-          itemId: record.equipmentItemId,
+          itemId: item.id,
           reference: woRef,
           summary: `Inspection fail: ${f.questionTextSnapshot.slice(0, 80)}`,
           description: f.comment ?? f.questionTextSnapshot,
@@ -321,7 +327,7 @@ export async function finaliseEquipmentInspection(
           action: 'create',
           summary: `Auto-opened ${wo.reference} from failed equipment inspection ${record.reference}`,
           after: {
-            equipmentItemId: record.equipmentItemId,
+            equipmentItemId: item.id,
             inspectionRecordId: record.id,
             criterionRowId: f.id,
             priority:
@@ -329,6 +335,67 @@ export async function finaliseEquipmentInspection(
           },
         })
         spawned++
+      }
+    }
+
+    if (record.isRental && fails.length > 0) {
+      const [existing] = await tx
+        .select({ id: correctiveActions.id })
+        .from(correctiveActions)
+        .where(
+          and(
+            eq(correctiveActions.tenantId, ctx.tenantId),
+            eq(correctiveActions.sourceEntityType, 'equipment_inspection_record'),
+            eq(correctiveActions.sourceEntityId, record.id),
+            isNull(correctiveActions.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!existing) {
+        const caReference = await nextReference(
+          tx,
+          ctx.tenantId,
+          'corrective_action',
+          record.occurredAt.getFullYear(),
+        )
+        const severity = fails.some(
+          (failure) => failure.isCritical || failure.severity === 'critical',
+        )
+          ? 'critical'
+          : fails.some((failure) => failure.severity === 'high')
+            ? 'high'
+            : 'medium'
+        const [ca] = await tx
+          .insert(correctiveActions)
+          .values({
+            tenantId: ctx.tenantId,
+            reference: caReference,
+            title: `Rental inspection findings: ${record.equipmentNameSnapshot ?? record.reference}`,
+            description: fails
+              .map(
+                (failure) =>
+                  `${failure.questionTextSnapshot}${failure.comment ? ` — ${failure.comment}` : ''}`,
+              )
+              .join('\n'),
+            severity,
+            status: 'open',
+            source: 'inspection',
+            sourceEntityType: 'equipment_inspection_record',
+            sourceEntityId: record.id,
+            siteOrgUnitId: record.siteOrgUnitId,
+            assignedByTenantUserId: ctx.membership?.id ?? null,
+            ownerTenantUserId: ctx.membership?.id ?? null,
+            assignedOn: record.occurredAt.toISOString().slice(0, 10),
+          })
+          .returning({ id: correctiveActions.id, reference: correctiveActions.reference })
+        if (!ca) throw new Error('Corrective action could not be created for rental findings')
+        await recordAuditInTransaction(tx, ctx, {
+          entityType: 'corrective_action',
+          entityId: ca.id,
+          action: 'create',
+          summary: `Opened ${ca.reference} from failed rental inspection ${record.reference}`,
+          after: { inspectionRecordId: record.id, failedCriteria: fails.length },
+        })
       }
     }
 
@@ -366,26 +433,26 @@ export async function finaliseEquipmentInspection(
     // cadences drive overdue tracking, the maintenance cockpit, and compliance
     // signals). Each schedule advances by its OWN interval, from this
     // inspection's date.
-    if (record.isPreUse) {
+    if (item && record.isPreUse) {
       await tx
         .update(equipmentItems)
         .set({ lastPreUseInspectionAt: record.occurredAt })
         .where(
           and(
             eq(equipmentItems.tenantId, ctx.tenantId),
-            eq(equipmentItems.id, record.equipmentItemId),
+            eq(equipmentItems.id, item.id),
             isNull(equipmentItems.deletedAt),
           ),
         )
     }
-    if (record.inspectionTypeId) {
+    if (item && record.inspectionTypeId) {
       const schedules = await tx
         .select()
         .from(equipmentInspectionSchedules)
         .where(
           and(
             eq(equipmentInspectionSchedules.tenantId, ctx.tenantId),
-            eq(equipmentInspectionSchedules.equipmentItemId, record.equipmentItemId),
+            eq(equipmentInspectionSchedules.equipmentItemId, item.id),
             eq(equipmentInspectionSchedules.inspectionTypeId, record.inspectionTypeId),
             eq(equipmentInspectionSchedules.isActive, true),
           ),
@@ -402,7 +469,7 @@ export async function finaliseEquipmentInspection(
             and(
               eq(equipmentInspectionSchedules.tenantId, ctx.tenantId),
               eq(equipmentInspectionSchedules.id, s.id),
-              eq(equipmentInspectionSchedules.equipmentItemId, record.equipmentItemId),
+              eq(equipmentInspectionSchedules.equipmentItemId, item.id),
             ),
           )
       }
@@ -415,7 +482,7 @@ export async function finaliseEquipmentInspection(
       occurrenceKey: randomUUID(),
     })
 
-    await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
+    if (item) await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
 
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'equipment_inspection_record',

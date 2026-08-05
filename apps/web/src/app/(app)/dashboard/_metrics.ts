@@ -26,6 +26,7 @@ import {
   ppeItems,
   ppeIssueReports,
   ppeTypes,
+  ppeTypeInspectionCriteria,
   trainingCourses,
   trainingRecords,
   truckLogEntries,
@@ -35,6 +36,7 @@ import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { resolveComplianceLink } from '../compliance/_resolve-link'
 import { templateAccessWhere } from '../apps/_lib/access'
 import { moduleScope } from '../feed/_data'
+import { resolvePpeInspectionDue, type PpeInspectionState } from '@/lib/ppe-inspection-due'
 
 /**
  * One 12-element series of monthly values, oldest -> newest. Used to draw the
@@ -147,10 +149,9 @@ export type DashboardMetrics = {
     typeName: string
     serialNumber: string | null
     size: string | null
-    status: string
-    nextInspectionDue: string | null
-    nextAnnualInspectionDue: string | null
-    expiresOn: string | null
+    inspectionKind: 'pre_use' | 'annual'
+    inspectionState: PpeInspectionState
+    inspectionDueOn: string | null
   }>
   myEquipment: Array<{
     id: string
@@ -173,16 +174,22 @@ export type DashboardMetrics = {
     pending: number
     /** completed ÷ total, or null when nothing is assigned. */
     percent: number | null
-    outstanding: Array<{
+    currentPeriod: Array<{
       obligationId: string
       kind: string
       title: string
       status: string
       dueOn: string | null
+      periodStart: string
+      periodEnd: string
+      count: number
+      expected: number
+      percent: number
       /** Deep-link straight to where this obligation is completed/reviewed. */
       href: string
       prefetch: boolean
     }>
+    documents: { total: number; completed: number; outstanding: number }
   }
 
   // In-progress entries the current user has started but not finished, across
@@ -897,7 +904,8 @@ export async function loadDashboardMetrics(
       : []
     const myPersonId = myPerson?.id ?? null
 
-    // PPE currently issued to me — soonest pre-use inspection first.
+    // PPE currently issued to me that has an actionable checklist. Resolve the
+    // state in one canonical helper so the dashboard and PPE register agree.
     const myPpe = myPersonId
       ? (
           await tx
@@ -905,11 +913,20 @@ export async function loadDashboardMetrics(
               id: ppeItems.id,
               serialNumber: ppeItems.serialNumber,
               size: ppeItems.size,
-              status: ppeItems.status,
+              lastInspectionOn: ppeItems.lastInspectionOn,
               nextInspectionDue: ppeItems.nextInspectionDue,
+              lastAnnualInspectionOn: ppeItems.lastAnnualInspectionOn,
               nextAnnualInspectionDue: ppeItems.nextAnnualInspectionDue,
-              expiresOn: ppeItems.expiresOn,
               typeName: ppeTypes.name,
+              isInspectable: ppeTypes.isInspectable,
+              preUseCriteriaCount: sql<number>`(
+                select count(*)::int from ${ppeTypeInspectionCriteria} c
+                where c.ppe_type_id = ${ppeTypes.id} and c.inspection_kind = 'pre_use'
+              )`,
+              annualCriteriaCount: sql<number>`(
+                select count(*)::int from ${ppeTypeInspectionCriteria} c
+                where c.ppe_type_id = ${ppeTypes.id} and c.inspection_kind = 'annual'
+              )`,
             })
             .from(ppeItems)
             .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
@@ -920,20 +937,47 @@ export async function loadDashboardMetrics(
                 isNull(ppeItems.deletedAt),
               ),
             )
-            .orderBy(asc(ppeItems.nextInspectionDue))
-            .limit(12)
-        ).map((r) => ({
-          id: r.id,
-          typeName: r.typeName,
-          serialNumber: r.serialNumber,
-          size: r.size,
-          status: r.status,
-          nextInspectionDue: r.nextInspectionDue ? String(r.nextInspectionDue) : null,
-          nextAnnualInspectionDue: r.nextAnnualInspectionDue
-            ? String(r.nextAnnualInspectionDue)
-            : null,
-          expiresOn: r.expiresOn ? String(r.expiresOn) : null,
-        }))
+            .orderBy(asc(ppeTypes.name), asc(ppeItems.serialNumber))
+        )
+          .map((r) => ({
+            row: r,
+            due: resolvePpeInspectionDue({
+              todayIso,
+              isInspectable: r.isInspectable,
+              preUseCriteriaCount: Number(r.preUseCriteriaCount),
+              annualCriteriaCount: Number(r.annualCriteriaCount),
+              lastInspectionOn: r.lastInspectionOn ? String(r.lastInspectionOn) : null,
+              nextInspectionDue: r.nextInspectionDue ? String(r.nextInspectionDue) : null,
+              lastAnnualInspectionOn: r.lastAnnualInspectionOn
+                ? String(r.lastAnnualInspectionOn)
+                : null,
+              nextAnnualInspectionDue: r.nextAnnualInspectionDue
+                ? String(r.nextAnnualInspectionDue)
+                : null,
+            }),
+          }))
+          .filter(
+            (
+              entry,
+            ): entry is typeof entry & { due: typeof entry.due & { kind: 'pre_use' | 'annual' } } =>
+              entry.due.actionable && entry.due.kind !== null,
+          )
+          .sort((a, b) => {
+            const rank = { overdue: 0, never_inspected: 1, required: 2, due_today: 3 } as const
+            const aRank = rank[a.due.state as keyof typeof rank] ?? 4
+            const bRank = rank[b.due.state as keyof typeof rank] ?? 4
+            return aRank - bRank || (a.due.dueOn ?? '').localeCompare(b.due.dueOn ?? '')
+          })
+          .slice(0, 12)
+          .map(({ row, due }) => ({
+            id: row.id,
+            typeName: row.typeName,
+            serialNumber: row.serialNumber,
+            size: row.size,
+            inspectionKind: due.kind,
+            inspectionState: due.state,
+            inspectionDueOn: due.dueOn,
+          }))
       : []
 
     // Equipment checked out to me — open checkouts (returnedAt IS NULL) are the
@@ -980,8 +1024,8 @@ export async function loadDashboardMetrics(
         }))
       : []
 
-    // My compliance — aggregate the complete materialised scoreboard in SQL,
-    // then fetch only the five rows the card can render.
+    // My compliance — current recurring period work stays visible even when it
+    // is complete. One-time documents are summarized separately below it.
     const complianceData = myPersonId
       ? await (async () => {
           const baseWhere = and(
@@ -990,7 +1034,7 @@ export async function loadDashboardMetrics(
             isNull(complianceObligations.deletedAt),
             eq(complianceObligations.status, 'active'),
           )
-          const [summaryRows, outstanding] = await Promise.all([
+          const [summaryRows, currentPeriod, documentRows] = await Promise.all([
             tx
               .select({
                 total: count(),
@@ -1012,6 +1056,11 @@ export async function loadDashboardMetrics(
                 title: complianceObligations.title,
                 status: complianceStatus.status,
                 dueOn: complianceStatus.dueOn,
+                periodStart: complianceStatus.periodStart,
+                periodEnd: complianceStatus.periodEnd,
+                count: complianceStatus.count,
+                expected: complianceStatus.expected,
+                percent: complianceStatus.percent,
                 targetRef: complianceObligations.targetRef,
               })
               .from(complianceStatus)
@@ -1022,19 +1071,18 @@ export async function loadDashboardMetrics(
               .where(
                 and(
                   baseWhere,
-                  inArray(complianceStatus.status, [
-                    'overdue',
-                    'expiring',
-                    'in_progress',
-                    'pending',
-                  ]),
+                  isNotNull(complianceStatus.periodStart),
+                  isNotNull(complianceStatus.periodEnd),
+                  lte(complianceStatus.periodStart, todayIso),
+                  gte(complianceStatus.periodEnd, todayIso),
+                  sql`${complianceObligations.sourceModule} <> 'document'`,
                 ),
               )
               .orderBy(
                 asc(sql`case ${complianceStatus.status}
                   when 'overdue' then 0
-                  when 'expiring' then 1
-                  when 'in_progress' then 2
+                  when 'in_progress' then 1
+                  when 'pending' then 2
                   else 3
                 end`),
                 asc(sql`coalesce(${complianceStatus.dueOn}, '9999-12-31'::date)`),
@@ -1042,30 +1090,51 @@ export async function loadDashboardMetrics(
                 asc(complianceObligations.id),
               )
               .limit(5),
+            tx
+              .select({
+                total: count(),
+                completed: sql<number>`count(*) filter (where ${complianceStatus.status} = 'completed')::int`,
+              })
+              .from(complianceStatus)
+              .innerJoin(
+                complianceObligations,
+                eq(complianceObligations.id, complianceStatus.obligationId),
+              )
+              .where(and(baseWhere, eq(complianceObligations.sourceModule, 'document'))),
           ])
-          return { summary: summaryRows[0], outstanding }
+          return { summary: summaryRows[0], currentPeriod, documents: documentRows[0] }
         })()
-      : { summary: null, outstanding: [] }
+      : { summary: null, currentPeriod: [], documents: null }
     const cTotal = Number(complianceData.summary?.total ?? 0)
     const cCompleted = Number(complianceData.summary?.completed ?? 0)
     const cOverdue = Number(complianceData.summary?.overdue ?? 0)
     const cDueSoon = Number(complianceData.summary?.dueSoon ?? 0)
     const cPending = Number(complianceData.summary?.pending ?? 0)
-    const cOutstanding = complianceData.outstanding.map((r) => {
+    const cCurrentPeriod = complianceData.currentPeriod.flatMap((r) => {
+      if (!r.periodStart || !r.periodEnd) return []
       const link = resolveComplianceLink(r.kind, r.targetRef, {
         personId: myPersonId,
         obligationId: r.obligationId,
       })
-      return {
-        obligationId: r.obligationId,
-        kind: r.kind as string,
-        title: r.title,
-        status: r.status,
-        dueOn: r.dueOn ? String(r.dueOn) : null,
-        href: link?.href ?? '/compliance/mine',
-        prefetch: link?.prefetch ?? true,
-      }
+      return [
+        {
+          obligationId: r.obligationId,
+          kind: r.kind as string,
+          title: r.title,
+          status: r.status,
+          dueOn: r.dueOn ? String(r.dueOn) : null,
+          periodStart: String(r.periodStart),
+          periodEnd: String(r.periodEnd),
+          count: Number(r.count),
+          expected: Number(r.expected),
+          percent: Number(r.percent),
+          href: link?.href ?? '/compliance/mine',
+          prefetch: link?.prefetch ?? true,
+        },
+      ]
     })
+    const documentTotal = Number(complianceData.documents?.total ?? 0)
+    const documentCompleted = Number(complianceData.documents?.completed ?? 0)
     const myCompliance = {
       linked: myPersonId !== null,
       total: cTotal,
@@ -1074,7 +1143,12 @@ export async function loadDashboardMetrics(
       dueSoon: cDueSoon,
       pending: cPending,
       percent: cTotal === 0 ? null : Math.round((cCompleted / cTotal) * 100),
-      outstanding: cOutstanding,
+      currentPeriod: cCurrentPeriod,
+      documents: {
+        total: documentTotal,
+        completed: documentCompleted,
+        outstanding: Math.max(0, documentTotal - documentCompleted),
+      },
     }
 
     // --- In-progress entries (current user's unfinished work) ------------

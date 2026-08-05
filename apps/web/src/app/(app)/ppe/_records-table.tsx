@@ -9,6 +9,11 @@ import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
 import { useRowSelection } from '@/lib/row-selection'
 import { BulkPpeBar } from './_bulk-bar'
+import {
+  ppeInspectionStateLabel,
+  type PpeInspectionKind,
+  type PpeInspectionState,
+} from '@/lib/ppe-inspection-due'
 
 export type PpeTableRow = {
   id: string
@@ -19,7 +24,27 @@ export type PpeTableRow = {
   holderName: string | null
   assignedOn: string | null
   lastInspectionOn: string | null
-  nextInspectionDue: string | null
+  inspectionKind: PpeInspectionKind | null
+  inspectionState: PpeInspectionState
+  inspectionDueOn: string | null
+  inspectionActionable: boolean
+}
+
+function InspectionBadge({ state }: { state: PpeInspectionState }) {
+  const variant =
+    state === 'overdue'
+      ? 'destructive'
+      : state === 'due_today' || state === 'never_inspected' || state === 'required'
+        ? 'warning'
+        : state === 'current'
+          ? 'success'
+          : 'secondary'
+  return <Badge variant={variant}>{ppeInspectionStateLabel(state)}</Badge>
+}
+
+function inspectionHref(row: PpeTableRow): string {
+  if (!row.inspectionActionable || !row.inspectionKind) return `/ppe/${row.id}`
+  return `/ppe/${row.id}?tab=${row.inspectionKind === 'annual' ? 'annual' : 'inspections'}&drawer=record-inspection&kind=${row.inspectionKind}`
 }
 
 export function PpeRecordsTable({
@@ -48,32 +73,20 @@ export function PpeRecordsTable({
           value={rows.map((r) => (
             <ListCard
               key={r.id}
-              href={`/ppe/${r.id}`}
+              href={inspectionHref(r)}
               leading={
                 <RowSelectionButton id={r.id} selected={selected.has(r.id)} onToggle={toggleOne} />
               }
               person={r.holderName}
               reference={r.serialNumber ?? undefined}
-              status={
-                <Badge
-                  variant={
-                    r.status === 'issued'
-                      ? 'success'
-                      : r.status === 'in_stock'
-                        ? 'secondary'
-                        : 'warning'
-                  }
-                >
-                  <GeneratedValue value={r.status.replace('_', ' ')} />
-                </Badge>
-              }
+              status={<InspectionBadge state={r.inspectionState} />}
               title={tGeneratedValue(r.typeName)}
               meta={
                 [
                   r.size,
                   r.assignedOn ? `Assigned ${r.assignedOn}` : null,
-                  r.lastInspectionOn ? `Inspected ${r.lastInspectionOn}` : null,
-                  r.nextInspectionDue ? `Due ${r.nextInspectionDue}` : null,
+                  r.inspectionDueOn ? `Due ${r.inspectionDueOn}` : null,
+                  r.status !== 'issued' ? r.status.replace('_', ' ') : null,
                 ]
                   .filter(Boolean)
                   .join(' · ') || undefined
@@ -92,28 +105,16 @@ export function PpeRecordsTable({
                 <SelectVisibleRowsButton allSelected={allSelected} onToggleAll={toggleAll} />
               </th>
               <SortTh column="type" {...sortProps}>
-                <GeneratedText id="m_074ba2f160c506" />
+                <GeneratedText id="m_01b37a056e66e4" />
               </SortTh>
-              <SortTh column="serial" {...sortProps}>
-                <GeneratedText id="m_179218139b624a" />
+              <SortTh column="holder" {...sortProps}>
+                <GeneratedText id="m_1a298419b85cba" />
               </SortTh>
-              <SortTh column="size" {...sortProps}>
-                <GeneratedText id="m_11ad4bbeced31b" />
+              <SortTh column="next_inspection" {...sortProps}>
+                <GeneratedText id="m_0ef24e5f31b073" />
               </SortTh>
               <SortTh column="status" {...sortProps}>
                 <GeneratedText id="m_0b9da892d6faf0" />
-              </SortTh>
-              <SortTh column="holder" {...sortProps}>
-                <GeneratedText id="m_1dd437d2b4ab7f" />
-              </SortTh>
-              <SortTh column="assigned" {...sortProps}>
-                <GeneratedText id="m_016857a3d2e2bf" />
-              </SortTh>
-              <SortTh column="last_inspection" {...sortProps}>
-                <GeneratedText id="m_0dfaff1020582b" />
-              </SortTh>
-              <SortTh column="next_inspection" {...sortProps}>
-                <GeneratedText id="m_1fb9055f09702d" />
               </SortTh>
             </tr>
           </thead>
@@ -140,12 +141,51 @@ export function PpeRecordsTable({
                       >
                         <GeneratedValue value={r.typeName} />
                       </Link>
+                      <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedValue
+                          value={
+                            [r.serialNumber, r.size].filter(Boolean).join(' · ') || 'No identifier'
+                          }
+                        />
+                      </div>
                     </td>
                     <td className="px-3 py-2">
-                      <GeneratedValue value={r.serialNumber ?? '—'} />
+                      <div className="text-slate-700 dark:text-slate-300">
+                        <GeneratedValue value={r.holderName ?? 'Unassigned'} />
+                      </div>
+                      <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedValue
+                          value={r.assignedOn ? `Assigned ${r.assignedOn}` : 'Not assigned'}
+                        />
+                      </div>
                     </td>
                     <td className="px-3 py-2">
-                      <GeneratedValue value={r.size ?? '—'} />
+                      <div className="flex items-center gap-2">
+                        <InspectionBadge state={r.inspectionState} />
+                        <GeneratedValue
+                          value={
+                            r.inspectionActionable && r.inspectionKind ? (
+                              <Link
+                                href={inspectionHref(r) as any}
+                                className="text-xs font-semibold text-teal-700 hover:underline dark:text-teal-300"
+                              >
+                                <GeneratedText id="m_1282216b6c0ab5" />
+                              </Link>
+                            ) : null
+                          }
+                        />
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        <GeneratedValue
+                          value={
+                            r.inspectionDueOn
+                              ? `Due ${r.inspectionDueOn}`
+                              : r.lastInspectionOn
+                                ? `Last inspected ${r.lastInspectionOn}`
+                                : null
+                          }
+                        />
+                      </div>
                     </td>
                     <td className="px-3 py-2">
                       <Badge
@@ -159,18 +199,6 @@ export function PpeRecordsTable({
                       >
                         <GeneratedValue value={r.status.replace('_', ' ')} />
                       </Badge>
-                    </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                      <GeneratedValue value={r.holderName ?? '—'} />
-                    </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                      <GeneratedValue value={r.assignedOn ?? '—'} />
-                    </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                      <GeneratedValue value={r.lastInspectionOn ?? '—'} />
-                    </td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                      <GeneratedValue value={r.nextInspectionDue ?? '—'} />
                     </td>
                   </tr>
                 )

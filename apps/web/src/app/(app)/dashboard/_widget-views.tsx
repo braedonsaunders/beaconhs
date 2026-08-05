@@ -39,6 +39,7 @@ import {
   Minus,
   NotebookPen,
   PencilLine,
+  Plus,
   Radio,
   ShieldAlert,
   ShieldCheck,
@@ -56,6 +57,7 @@ import { AnimatedBar } from './_bar'
 import { QuickActions } from './_quick-actions'
 import type { QuickAction } from './_quick-actions-shared'
 import { checkInEquipment } from '../equipment/_actions'
+import { ppeInspectionStateLabel, type PpeInspectionState } from '@/lib/ppe-inspection-due'
 
 // =====================================================================
 // Public entry — switch on widget id and render the right card
@@ -316,7 +318,7 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
 
     // Personal
     case 'personal-my-ppe':
-      return <MyPpeCard items={data.myPpe} todayIso={todayIso} />
+      return <MyPpeCard items={data.myPpe} />
     case 'personal-my-equipment':
       return <MyEquipmentCard items={data.myEquipment} todayIso={todayIso} />
     case 'personal-my-compliance':
@@ -1432,17 +1434,15 @@ function inspectDueBadge(dueIso: string | null, todayIso: string) {
   return null
 }
 
-function MyPpeCard({ items, todayIso }: { items: DashboardMetrics['myPpe']; todayIso: string }) {
-  const tGeneratedValue = useGeneratedValueTranslations()
+function MyPpeCard({ items }: { items: DashboardMetrics['myPpe'] }) {
   const tGenerated = useGeneratedTranslations()
   return (
     <CardShell
       title={tGenerated('m_1dc869deae5302')}
-      caption={tGeneratedValue(
-        items.length === 1
-          ? tGenerated('m_1746cab06519e3')
-          : tGenerated('m_0df35f9d91b038', { value0: items.length }),
-      )}
+      caption={tGenerated('m_1016c228103293', {
+        value0: items.length,
+        value1: items.length === 1 ? '' : 's',
+      })}
       icon={HardHat}
       href="/ppe"
       accent="teal"
@@ -1451,19 +1451,14 @@ function MyPpeCard({ items, todayIso }: { items: DashboardMetrics['myPpe']; toda
         value={
           items.length === 0 ? (
             <EmptyRow>
-              <GeneratedText id="m_006251fd870c40" />
+              <GeneratedText id="m_1cfc961e45cf3d" />
             </EmptyRow>
           ) : (
             <ul className="space-y-0.5 px-2 pb-2">
               <GeneratedValue
                 value={items.map((p, idx) => {
-                  const due = p.nextInspectionDue
                   const sub =
-                    [
-                      p.serialNumber,
-                      p.size,
-                      due ? `Inspection due ${due}` : 'No inspection scheduled',
-                    ]
+                    [p.serialNumber, p.size, p.inspectionDueOn ? `Due ${p.inspectionDueOn}` : null]
                       .filter(Boolean)
                       .join(' · ') || '—'
                   return (
@@ -1485,14 +1480,14 @@ function MyPpeCard({ items, todayIso }: { items: DashboardMetrics['myPpe']; toda
                           >
                             <GeneratedValue value={p.typeName} />
                           </Link>
-                          <GeneratedValue value={inspectDueBadge(due, todayIso)} />
+                          <PpeInspectionBadge state={p.inspectionState} />
                         </div>
                         <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
                           <GeneratedValue value={sub} />
                         </div>
                       </div>
                       <InspectButton
-                        href={`/ppe/${p.id}?tab=inspections&drawer=record-inspection&kind=pre_use`}
+                        href={`/ppe/${p.id}?tab=${p.inspectionKind === 'annual' ? 'annual' : 'inspections'}&drawer=record-inspection&kind=${p.inspectionKind}`}
                         tone="teal"
                       />
                     </motion.li>
@@ -1504,6 +1499,20 @@ function MyPpeCard({ items, todayIso }: { items: DashboardMetrics['myPpe']; toda
         }
       />
     </CardShell>
+  )
+}
+
+function PpeInspectionBadge({ state }: { state: PpeInspectionState }) {
+  const variant =
+    state === 'overdue'
+      ? 'destructive'
+      : state === 'due_today' || state === 'never_inspected' || state === 'required'
+        ? 'warning'
+        : 'secondary'
+  return (
+    <Badge variant={variant} className="shrink-0">
+      <GeneratedValue value={ppeInspectionStateLabel(state)} />
+    </Badge>
   )
 }
 
@@ -1529,11 +1538,19 @@ function MyEquipmentCard({
       hrefLabel="Check in / out"
       accent="sky"
     >
+      <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+        <Link
+          href="/equipment/inspections/new"
+          className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-sky-700 hover:bg-sky-100 dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-300"
+        >
+          <Plus size={13} /> <GeneratedText id="m_049b4444412e2b" />
+        </Link>
+      </div>
       <GeneratedValue
         value={
           items.length === 0 ? (
             <EmptyRow>
-              <GeneratedText id="m_1ed44dbc68ec2a" />
+              <GeneratedText id="m_0a361d6033a99b" />
             </EmptyRow>
           ) : (
             <ul className="space-y-0.5 px-2 pb-2">
@@ -1677,6 +1694,12 @@ function MiniStat({
 }
 
 function complianceStatusBadge(status: string) {
+  if (status === 'completed')
+    return (
+      <Badge variant="success" className="shrink-0">
+        <GeneratedText id="m_1aef882ac60efc" />
+      </Badge>
+    )
   if (status === 'overdue')
     return (
       <Badge variant="destructive" className="shrink-0">
@@ -1746,25 +1769,16 @@ function MyComplianceCard({ data }: { data: DashboardMetrics['myCompliance'] }) 
       accent="teal"
     >
       <div className="flex h-full flex-col">
-        <div className="flex items-center gap-4 px-4 pt-3 pb-3">
-          <ComplianceRing percent={data.percent ?? 0} />
-          <div className="grid flex-1 grid-cols-2 gap-2">
-            <MiniStat label={tGenerated('m_1e40bdcf2d1ba1')} value={data.overdue} tone="danger" />
-            <MiniStat label={tGenerated('m_0971fcc40acc3d')} value={data.dueSoon} tone="warning" />
-            <MiniStat label={tGenerated('m_131b7246255b65')} value={data.pending} tone="normal" />
-            <MiniStat label={tGenerated('m_0ba7a5e1b2fa32')} value={data.completed} tone="good" />
-          </div>
-        </div>
         <GeneratedValue
           value={
-            data.outstanding.length > 0 ? (
-              <div className="border-t border-slate-100 px-2 pt-2 pb-2 dark:border-slate-800">
+            data.currentPeriod.length > 0 ? (
+              <div className="px-2 pt-2 pb-2">
                 <div className="px-2 pb-1 text-[10px] font-semibold tracking-[0.14em] text-slate-400 uppercase dark:text-slate-500">
-                  <GeneratedText id="m_1874cfa97860c2" />
+                  <GeneratedText id="m_0829fdcdafb32f" />
                 </div>
                 <ul className="space-y-0.5">
                   <GeneratedValue
-                    value={data.outstanding.map((o, idx) => (
+                    value={data.currentPeriod.map((o, idx) => (
                       <motion.li
                         key={`${o.obligationId}-${idx}`}
                         initial={{ opacity: 0, x: -6 }}
@@ -1781,19 +1795,8 @@ function MyComplianceCard({ data }: { data: DashboardMetrics['myCompliance'] }) 
                               <GeneratedValue value={o.title} />
                             </div>
                             <div className="mt-0.5 truncate text-[11px] text-slate-500 capitalize dark:text-slate-400">
-                              <GeneratedValue value={o.kind.replace(/_/g, ' ')} />
-                              <GeneratedValue
-                                value={
-                                  o.dueOn ? (
-                                    <GeneratedText
-                                      id="m_0530312e93a8c8"
-                                      values={{ value0: o.dueOn }}
-                                    />
-                                  ) : (
-                                    ''
-                                  )
-                                }
-                              />
+                              <GeneratedValue value={`${o.count}/${o.expected || 1}`} /> ·{' '}
+                              <GeneratedValue value={`${o.periodStart} – ${o.periodEnd}`} />
                             </div>
                           </div>
                           <GeneratedValue value={complianceStatusBadge(o.status)} />
@@ -1803,9 +1806,38 @@ function MyComplianceCard({ data }: { data: DashboardMetrics['myCompliance'] }) 
                   />
                 </ul>
               </div>
-            ) : null
+            ) : (
+              <div className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
+                <GeneratedText id="m_0808c7941b65d0" />
+              </div>
+            )
           }
         />
+        <div className="flex items-center gap-4 border-t border-slate-100 px-4 py-3 dark:border-slate-800">
+          <ComplianceRing percent={data.percent ?? 0} />
+          <div className="grid flex-1 grid-cols-2 gap-2">
+            <MiniStat label={tGenerated('m_1e40bdcf2d1ba1')} value={data.overdue} tone="danger" />
+            <MiniStat label={tGenerated('m_0971fcc40acc3d')} value={data.dueSoon} tone="warning" />
+            <MiniStat label={tGenerated('m_131b7246255b65')} value={data.pending} tone="normal" />
+            <MiniStat label={tGenerated('m_0ba7a5e1b2fa32')} value={data.completed} tone="good" />
+          </div>
+        </div>
+        <Link
+          href="/compliance/mine?kind=document"
+          className="flex items-center justify-between border-t border-slate-100 px-4 py-2.5 text-sm hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
+        >
+          <span className="font-medium text-slate-700 dark:text-slate-200">
+            <GeneratedText id="m_05caa6a53f9b7f" />
+          </span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            <GeneratedValue
+              value={`${data.documents.completed}/${data.documents.total} acknowledged`}
+            />
+            <GeneratedValue
+              value={data.documents.outstanding > 0 ? ` · ${data.documents.outstanding} due` : ''}
+            />
+          </span>
+        </Link>
       </div>
     </CardShell>
   )

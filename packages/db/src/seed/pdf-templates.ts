@@ -189,8 +189,8 @@ const HAZID = wrap(
     heading('General information') +
     grid([
       p('Occurred', '{{occurred_at}}'),
-      p('Site', '{{site_name}}'),
-      p('Location on site', '{{location_on_site}}'),
+      p('Location', '{{site_name}}'),
+      p('Specific location', '{{location_on_site}}'),
       p('Project', '{{project_name}}'),
       p('Supervisor', '{{supervisor_name}}'),
       p('Reported by', '{{reported_by_name}}'),

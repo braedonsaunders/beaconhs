@@ -7,7 +7,17 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 // hand), with quick filters, On-This-Day memories, and the activity heatmap.
 
 import { useEffect, useState } from 'react'
-import { CalendarClock, ChevronRight, Loader2, Plus, Search, Sparkles, X } from 'lucide-react'
+import Link from 'next/link'
+import {
+  CalendarClock,
+  ChevronRight,
+  Loader2,
+  Plus,
+  Search,
+  Settings,
+  Sparkles,
+  X,
+} from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import {
   GROUP_BY_OPTIONS,
@@ -337,8 +347,20 @@ export function SidebarTree({
         <Heatmap data={data.heatmap} onPick={onPickDate} />
       </div>
 
-      {/* Admin (Records / Tags / Compliance) lives in the Journals → Manage hub,
-          reached from the workspace's top sub-nav — not crammed in here. */}
+      <GeneratedValue
+        value={
+          data.canManage && !authorMode ? (
+            <div className="border-t border-slate-200 p-2 lg:hidden dark:border-slate-800">
+              <Link
+                href="/journals/manage"
+                className="flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Settings size={16} /> <GeneratedText id="m_1eba1be1ba3296" />
+              </Link>
+            </div>
+          ) : null
+        }
+      />
     </div>
   )
 }

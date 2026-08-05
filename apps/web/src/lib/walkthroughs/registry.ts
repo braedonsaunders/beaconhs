@@ -126,6 +126,10 @@ export const WALKTHROUGHS: Walkthrough[] = [
         body: 'Tap New assessment. Pick the assessment type your supervisor told you to use.',
       },
       {
+        title: 'Location and job details',
+        body: 'In General information, search Location and choose the customer, project, site or area from your company Locations list. Add the Specific location when the work area needs more detail.',
+      },
+      {
         title: 'Tasks and hazards',
         body: 'Add each task, then the hazards that come with it. Rate the risk before and after your controls — the colours follow your company risk matrix.',
       },
@@ -235,11 +239,11 @@ export const WALKTHROUGHS: Walkthrough[] = [
       {
         path: '/ppe',
         title: 'PPE',
-        body: 'This shows the PPE issued to you — harnesses, lanyards, respirators and more — and when each item is due for a check.',
+        body: 'This register shows who holds each item and its inspection state. Use the Inspection filter to find overdue, due-soon, current, or not-required gear.',
       },
       {
         title: 'Inspect an item',
-        body: 'Open the item and start its inspection. Answer each check honestly, describe every failure, and add photo evidence when the checklist requires it.',
+        body: 'Items that need action show an Inspect link. It opens the due pre-use or annual checklist. Answer each check honestly, describe every failure, and add required photos.',
       },
       {
         title: 'Damaged gear',

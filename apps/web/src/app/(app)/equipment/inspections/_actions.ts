@@ -15,6 +15,7 @@ import {
   equipmentInspectionRecords,
   equipmentInspectionTypes,
   equipmentItems,
+  orgUnits,
 } from '@beaconhs/db/schema'
 import { assertCan, type RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -140,9 +141,21 @@ export async function startEquipmentInspection(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.inspect')
   const typeId = String(formData.get('typeId') ?? '').trim()
-  const equipmentItemId = String(formData.get('equipmentItemId') ?? '').trim()
+  const targetMode = formData.get('targetMode') === 'rental' ? 'rental' : 'registered'
+  const equipmentItemIdRaw = String(formData.get('equipmentItemId') ?? '').trim()
+  const rentalName = String(formData.get('rentalName') ?? '').trim()
+  const rentalSerial = String(formData.get('rentalSerial') ?? '').trim()
+  const rentalProvider = String(formData.get('rentalProvider') ?? '').trim()
+  const siteOrgUnitIdRaw = String(formData.get('siteOrgUnitId') ?? '').trim()
   if (!isUuid(typeId)) throw new Error('Inspection type is invalid')
-  if (!isUuid(equipmentItemId)) throw new Error('Equipment item is invalid')
+  if (targetMode === 'registered' && !isUuid(equipmentItemIdRaw)) {
+    throw new Error('Equipment item is invalid')
+  }
+  if (targetMode === 'rental' && !rentalName) throw new Error('Equipment name is required')
+  if (rentalName.length > 200 || rentalSerial.length > 200 || rentalProvider.length > 200) {
+    throw new Error('Rental equipment details are too long')
+  }
+  if (siteOrgUnitIdRaw && !isUuid(siteOrgUnitIdRaw)) throw new Error('Inspection site is invalid')
 
   const occurredAt = new Date()
   const row = await ctx.db(async (tx) => {
@@ -160,29 +173,49 @@ export async function startEquipmentInspection(formData: FormData) {
       .for('share')
     if (!type) throw new Error('Active inspection type not found')
 
-    const [item] = await tx
-      .select()
-      .from(equipmentItems)
-      .where(
-        and(
-          eq(equipmentItems.tenantId, ctx.tenantId),
-          eq(equipmentItems.id, equipmentItemId),
-          eq(equipmentItems.isDraft, false),
-          notInArray(equipmentItems.status, ['retired', 'lost']),
-          isNull(equipmentItems.deletedAt),
-        ),
-      )
-      .limit(1)
-      .for('share')
-    if (!item) throw new Error('Equipment item not found')
-    const visible = await canSeeRecord(ctx, tx, {
-      prefix: 'equipment',
-      siteId: item.currentSiteOrgUnitId,
-      personId: item.currentHolderPersonId,
-    })
-    if (!visible) throw new Error('Equipment item not found')
-    if (type.appliesToTypeId && item.typeId !== type.appliesToTypeId) {
-      throw new Error('This inspection type does not apply to the selected equipment item')
+    const [item] =
+      targetMode === 'registered'
+        ? await tx
+            .select()
+            .from(equipmentItems)
+            .where(
+              and(
+                eq(equipmentItems.tenantId, ctx.tenantId),
+                eq(equipmentItems.id, equipmentItemIdRaw),
+                eq(equipmentItems.isDraft, false),
+                notInArray(equipmentItems.status, ['retired', 'lost']),
+                isNull(equipmentItems.deletedAt),
+              ),
+            )
+            .limit(1)
+            .for('share')
+        : []
+    if (targetMode === 'registered' && !item) throw new Error('Equipment item not found')
+    if (item) {
+      const visible = await canSeeRecord(ctx, tx, {
+        prefix: 'equipment',
+        siteId: item.currentSiteOrgUnitId,
+        personId: item.currentHolderPersonId,
+      })
+      if (!visible) throw new Error('Equipment item not found')
+      if (type.appliesToTypeId && item.typeId !== type.appliesToTypeId) {
+        throw new Error('This inspection type does not apply to the selected equipment item')
+      }
+    }
+    if (siteOrgUnitIdRaw) {
+      const [site] = await tx
+        .select({ id: orgUnits.id })
+        .from(orgUnits)
+        .where(
+          and(
+            eq(orgUnits.tenantId, ctx.tenantId),
+            eq(orgUnits.id, siteOrgUnitIdRaw),
+            eq(orgUnits.level, 'site'),
+            isNull(orgUnits.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!site) throw new Error('Inspection site was not found')
     }
 
     const reference = await nextEquipmentInspectionReferenceInTx(tx, ctx.tenantId, occurredAt)
@@ -192,7 +225,10 @@ export async function startEquipmentInspection(formData: FormData) {
         tenantId: ctx.tenantId,
         reference,
         inspectionTypeId: typeId,
-        equipmentItemId,
+        equipmentItemId: item?.id ?? null,
+        equipmentNameSnapshot: item?.name ?? rentalName,
+        rentalProvider: targetMode === 'rental' ? rentalProvider || null : null,
+        isRental: targetMode === 'rental',
         status: 'draft',
         occurredAt,
         intervalLabel: formatInterval(type.intervalValue, type.intervalUnit, {
@@ -202,10 +238,10 @@ export async function startEquipmentInspection(formData: FormData) {
         intervalUnit: type.intervalUnit,
         isPreUse: type.isPreUse,
         allowPassAll: type.allowPassAll,
-        failsSpawnWorkOrders: type.failsSpawnWorkOrders,
-        siteOrgUnitId: item.currentSiteOrgUnitId ?? null,
+        failsSpawnWorkOrders: targetMode === 'registered' && type.failsSpawnWorkOrders,
+        siteOrgUnitId: (item?.currentSiteOrgUnitId ?? siteOrgUnitIdRaw) || null,
         inspectorTenantUserId: ctx.membership?.id ?? null,
-        serial: item.serialNumber ?? null,
+        serial: (item?.serialNumber ?? rentalSerial) || null,
         foremanPersonIds: [],
       })
       .returning()
@@ -224,11 +260,13 @@ export async function startEquipmentInspection(formData: FormData) {
       entityType: 'equipment_inspection_record',
       entityId: created.id,
       action: 'create',
-      summary: `Started ${created.reference} (${type.name}) on ${item.name} — ${materialised} criteria`,
+      summary: `Started ${created.reference} (${type.name}) on ${item?.name ?? rentalName} — ${materialised} criteria`,
       after: {
         reference: created.reference,
         inspectionTypeId: typeId,
-        equipmentItemId,
+        equipmentItemId: item?.id ?? null,
+        isRental: targetMode === 'rental',
+        equipmentNameSnapshot: item?.name ?? rentalName,
         occurredAt,
         criteriaCount: materialised,
       },
@@ -977,18 +1015,20 @@ export async function reopenEquipmentInspection(formData: FormData) {
       allowFinalized: true,
     })
     if (record.status !== 'submitted' && record.status !== 'closed') return false
-    const [item] = await tx
-      .select({ typeId: equipmentItems.typeId })
-      .from(equipmentItems)
-      .where(
-        and(
-          eq(equipmentItems.tenantId, ctx.tenantId),
-          eq(equipmentItems.id, record.equipmentItemId),
-          isNull(equipmentItems.deletedAt),
-        ),
-      )
-      .limit(1)
-    if (!item) throw new Error('Equipment item not found')
+    const [item] = record.equipmentItemId
+      ? await tx
+          .select({ typeId: equipmentItems.typeId })
+          .from(equipmentItems)
+          .where(
+            and(
+              eq(equipmentItems.tenantId, ctx.tenantId),
+              eq(equipmentItems.id, record.equipmentItemId),
+              isNull(equipmentItems.deletedAt),
+            ),
+          )
+          .limit(1)
+      : []
+    if (!item && !record.isRental) throw new Error('Equipment item not found')
 
     const [updated] = await tx
       .update(equipmentInspectionRecords)
@@ -1014,7 +1054,7 @@ export async function reopenEquipmentInspection(formData: FormData) {
         locked: equipmentInspectionRecords.locked,
       })
     if (!updated) throw new Error('Equipment inspection changed before it could be reopened')
-    await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
+    if (item) await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'equipment_inspection_record',
       entityId: recordId,

@@ -126,8 +126,8 @@ export async function sendHazidEmail(
     `${data.a.reference}${data.type ? ` · ${data.type.name}` : ''}`,
     ``,
     `Occurred: ${formatDateTime(data.a.occurredAt, ctx.timezone, ctx.defaultLocale)}`,
-    `Site: ${data.site?.name ?? '—'}`,
-    `Location on site: ${data.a.locationOnSite ?? '—'}`,
+    `Location: ${data.site?.name ?? '—'}`,
+    `Specific location: ${data.a.locationOnSite ?? '—'}`,
     `Supervisor: ${supervisorName}`,
     ...(showJobScope ? [`Job scope: ${htmlToText(data.a.jobScope) || '—'}`] : []),
     `Status: ${data.a.locked ? 'locked / completed' : 'in progress'}`,
@@ -208,9 +208,9 @@ export async function sendHazidEmail(
           : ''
       }
       <table style="border-collapse:collapse;font-size:13px;margin-bottom:12px;">
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Site</td>
-            <td style="padding:4px 0;">${escapeHtml(data.site?.name ?? '—')}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Location</td>
+            <td style="padding:4px 0;">${escapeHtml(data.site?.name ?? '—')}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Specific location</td>
             <td style="padding:4px 0;">${escapeHtml(data.a.locationOnSite ?? '—')}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Supervisor</td>
             <td style="padding:4px 0;">${escapeHtml(supervisorName)}</td></tr>

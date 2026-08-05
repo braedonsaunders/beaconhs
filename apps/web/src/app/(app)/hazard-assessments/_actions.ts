@@ -32,6 +32,7 @@ import {
   hazidHazardTypes,
   hazidLocationTasks,
   hazidTasks,
+  orgUnits,
   people,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
@@ -863,6 +864,15 @@ export async function updateTextField(formData: FormData) {
 
   await ctx.db(async (tx) => {
     await lockEditableAssessment(ctx, tx, id)
+    if (field === 'siteOrgUnitId' && val) {
+      if (!isUuid(String(val))) throw new Error('Invalid location')
+      const [location] = await tx
+        .select({ id: orgUnits.id })
+        .from(orgUnits)
+        .where(and(eq(orgUnits.id, String(val)), isNull(orgUnits.deletedAt)))
+        .limit(1)
+      if (!location) throw new Error('Location not found')
+    }
     const updates: Record<string, unknown> = { [field]: val }
     await tx
       .update(hazidAssessments)

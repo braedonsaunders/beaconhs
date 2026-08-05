@@ -22,6 +22,7 @@ describe('picker options contract', () => {
     expect(isPickerLookup('inspection-record-filter-inspectors')).toBe(true)
     expect(isPickerLookup('equipment-work-order-filter-types')).toBe(true)
     expect(isPickerLookup('equipment-item-inspection-types')).toBe(true)
+    expect(isPickerLookup('hazard-assessment-locations')).toBe(true)
     expect(isPickerLookup('training-course-classes')).toBe(true)
     expect(isPickerLookup('training-course-library-content')).toBe(true)
     expect(isPickerLookup('compliance-obligation-form-templates')).toBe(true)

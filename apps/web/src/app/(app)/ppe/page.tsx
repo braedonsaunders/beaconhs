@@ -5,10 +5,17 @@ import Link from 'next/link'
 import { HardHat } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
-import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
+import {
+  people,
+  ppeIssues,
+  ppeItems,
+  ppeTypeInspectionCriteria,
+  ppeTypes,
+} from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, isUuid, parseListParams, pickString } from '@/lib/list-params'
+import { resolvePpeInspectionDue } from '@/lib/ppe-inspection-due'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
@@ -44,6 +51,14 @@ const STATUS_OPTIONS = [
   { value: 'expired', label: 'Expired' },
 ]
 
+const INSPECTION_OPTIONS = [
+  { value: 'needs_inspection', label: 'Needs inspection' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'due_soon', label: 'Due soon' },
+  { value: 'current', label: 'Current' },
+  { value: 'not_required', label: 'Not required' },
+] as const
+
 export default async function PpePage({
   searchParams,
 }: {
@@ -53,8 +68,8 @@ export default async function PpePage({
   const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
-    sort: 'assigned',
-    dir: 'desc',
+    sort: 'next_inspection',
+    dir: 'asc',
     perPage: 25,
     allowedSorts: SORTS,
   })
@@ -63,15 +78,34 @@ export default async function PpePage({
   // would throw a Postgres enum error, so they're whitelisted to "no filter".
   const statusRaw = pickString(sp.status) ?? 'issued'
   const statusFilter = STATUS_OPTIONS.some((o) => o.value === statusRaw) ? statusRaw : undefined
+  const inspectionRaw = pickString(sp.inspection)
+  const inspectionFilter = INSPECTION_OPTIONS.some((option) => option.value === inspectionRaw)
+    ? inspectionRaw
+    : undefined
+  const typeRaw = pickString(sp.type)
+  const typeFilter = typeRaw && isUuid(typeRaw) ? typeRaw : undefined
+  const holderRaw = pickString(sp.holder)
+  const holderFilter = holderRaw && isUuid(holderRaw) ? holderRaw : undefined
   const ctx = await requireRequestContext()
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'ppe.read.all')
   const canIssue = can(ctx, 'ppe.issue') || can(ctx, 'ppe.manage')
 
-  const { rows, total, statusCounts, types } = await ctx.db(async (tx) => {
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const dueSoonDate = new Date(`${todayIso}T00:00:00.000Z`)
+  dueSoonDate.setUTCDate(dueSoonDate.getUTCDate() + 7)
+  const dueSoonIso = dueSoonDate.toISOString().slice(0, 10)
+
+  const { rows, total, statusCounts, types, holders } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(ppeItems.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
-      const cond = or(ilike(ppeItems.serialNumber, term), ilike(ppeTypes.name, term))
+      const cond = or(
+        ilike(ppeItems.serialNumber, term),
+        ilike(ppeTypes.name, term),
+        ilike(people.firstName, term),
+        ilike(people.lastName, term),
+        ilike(sql<string>`concat_ws(' ', ${people.firstName}, ${people.lastName})`, term),
+      )
       if (cond) filters.push(cond)
     }
     if (statusFilter) {
@@ -82,6 +116,47 @@ export default async function PpePage({
         ),
       )
     }
+    if (typeFilter) filters.push(eq(ppeItems.typeId, typeFilter))
+    if (holderFilter) filters.push(eq(ppeItems.currentHolderPersonId, holderFilter))
+
+    const preUseCriteriaExists = sql<boolean>`exists (
+      select 1 from ${ppeTypeInspectionCriteria} c
+      where c.ppe_type_id = ${ppeTypes.id} and c.inspection_kind = 'pre_use'
+    )`
+    const annualCriteriaExists = sql<boolean>`exists (
+      select 1 from ${ppeTypeInspectionCriteria} c
+      where c.ppe_type_id = ${ppeTypes.id} and c.inspection_kind = 'annual'
+    )`
+    const inspectionRequired = sql<boolean>`(
+      ${ppeTypes.isInspectable} = true and (${preUseCriteriaExists} or ${annualCriteriaExists})
+    )`
+    const inspectionActionable = sql<boolean>`(
+      ${inspectionRequired} and (
+        (${preUseCriteriaExists} and (${ppeItems.nextInspectionDue} is null or ${ppeItems.nextInspectionDue} <= ${todayIso}))
+        or (${annualCriteriaExists} and (${ppeItems.nextAnnualInspectionDue} is null or ${ppeItems.nextAnnualInspectionDue} <= ${todayIso}))
+      )
+    )`
+    if (inspectionFilter === 'needs_inspection') filters.push(inspectionActionable)
+    if (inspectionFilter === 'overdue') {
+      filters.push(sql`(${inspectionRequired} and (
+        (${preUseCriteriaExists} and ${ppeItems.nextInspectionDue} < ${todayIso})
+        or (${annualCriteriaExists} and ${ppeItems.nextAnnualInspectionDue} < ${todayIso})
+      ))`)
+    }
+    if (inspectionFilter === 'due_soon') {
+      filters.push(sql`(${inspectionRequired} and not ${inspectionActionable} and (
+        (${preUseCriteriaExists} and ${ppeItems.nextInspectionDue} <= ${dueSoonIso})
+        or (${annualCriteriaExists} and ${ppeItems.nextAnnualInspectionDue} <= ${dueSoonIso})
+      ))`)
+    }
+    if (inspectionFilter === 'current') {
+      filters.push(sql`(${inspectionRequired} and not ${inspectionActionable} and
+        least(
+          coalesce(${ppeItems.nextInspectionDue}, '9999-12-31'::date),
+          coalesce(${ppeItems.nextAnnualInspectionDue}, '9999-12-31'::date)
+        ) > ${dueSoonIso})`)
+    }
+    if (inspectionFilter === 'not_required') filters.push(sql`not ${inspectionRequired}`)
     const whereClause = and(...filters)
 
     // "Date assigned" = the most recent issue/replace event for the item (when
@@ -119,16 +194,36 @@ export default async function PpePage({
                         : sql`${ppeItems.lastInspectionOn} desc nulls last`,
                     ]
                   : params.sort === 'next_inspection'
-                    ? [dirFn(ppeItems.nextInspectionDue)]
+                    ? [
+                        sql`case when ${inspectionActionable} then 0 else 1 end asc`,
+                        sql`least(
+                          coalesce(${ppeItems.nextInspectionDue}, '9999-12-31'::date),
+                          coalesce(${ppeItems.nextAnnualInspectionDue}, '9999-12-31'::date)
+                        ) ${params.dir === 'asc' ? sql`asc` : sql`desc`}`,
+                      ]
                     : [dirFn(ppeTypes.name)]
 
     const [tot] = await tx
       .select({ c: count() })
       .from(ppeItems)
       .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
+      .leftJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
       .where(whereClause)
     const data = await tx
-      .select({ item: ppeItems, type: ppeTypes, holder: people, assignedAt: assignedAtSql })
+      .select({
+        item: ppeItems,
+        type: ppeTypes,
+        holder: people,
+        assignedAt: assignedAtSql,
+        preUseCriteriaCount: sql<number>`(
+          select count(*)::int from ${ppeTypeInspectionCriteria} c
+          where c.ppe_type_id = ${ppeTypes.id} and c.inspection_kind = 'pre_use'
+        )`,
+        annualCriteriaCount: sql<number>`(
+          select count(*)::int from ${ppeTypeInspectionCriteria} c
+          where c.ppe_type_id = ${ppeTypes.id} and c.inspection_kind = 'annual'
+        )`,
+      })
       .from(ppeItems)
       .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
       .leftJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
@@ -150,27 +245,52 @@ export default async function PpePage({
       })
       .from(ppeTypes)
       .orderBy(asc(ppeTypes.name))
+    const holderRows = await tx
+      .selectDistinct({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+      .from(ppeItems)
+      .innerJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
+      .where(and(isNull(ppeItems.deletedAt), eq(ppeItems.status, 'issued')))
+      .orderBy(asc(people.lastName), asc(people.firstName))
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
       statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
       types: typeRows,
+      holders: holderRows,
     }
   })
 
   const issueDrawer = pickString(sp.drawer) === 'issue' ? 'issue' : null
 
-  const tableRows: PpeTableRow[] = rows.map(({ item, type, holder, assignedAt }) => ({
-    id: item.id,
-    typeName: type.name,
-    serialNumber: item.serialNumber,
-    size: item.size,
-    status: item.status,
-    holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
-    assignedOn: assignedAt ? new Date(assignedAt).toISOString().slice(0, 10) : null,
-    lastInspectionOn: item.lastInspectionOn,
-    nextInspectionDue: item.nextInspectionDue,
-  }))
+  const tableRows: PpeTableRow[] = rows.map(
+    ({ item, type, holder, assignedAt, preUseCriteriaCount, annualCriteriaCount }) => {
+      const inspection = resolvePpeInspectionDue({
+        todayIso,
+        isInspectable: type.isInspectable,
+        preUseCriteriaCount: Number(preUseCriteriaCount),
+        annualCriteriaCount: Number(annualCriteriaCount),
+        lastInspectionOn: item.lastInspectionOn,
+        nextInspectionDue: item.nextInspectionDue,
+        lastAnnualInspectionOn: item.lastAnnualInspectionOn,
+        nextAnnualInspectionDue: item.nextAnnualInspectionDue,
+      })
+      return {
+        id: item.id,
+        typeName: type.name,
+        serialNumber: item.serialNumber,
+        size: item.size,
+        status: item.status,
+        holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
+        assignedOn: assignedAt ? new Date(assignedAt).toISOString().slice(0, 10) : null,
+        lastInspectionOn:
+          inspection.kind === 'annual' ? item.lastAnnualInspectionOn : item.lastInspectionOn,
+        inspectionKind: inspection.kind,
+        inspectionState: inspection.state,
+        inspectionDueOn: inspection.dueOn,
+        inspectionActionable: inspection.actionable,
+      }
+    },
+  )
 
   return (
     <ListPageLayout
@@ -211,6 +331,33 @@ export default async function PpePage({
               allLabel="All statuses"
               defaultValue="issued"
               options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+            />
+            <FilterChips
+              basePath="/ppe"
+              currentParams={sp}
+              paramKey="inspection"
+              label={tGenerated('m_0ef24e5f31b073')}
+              allLabel="All inspection states"
+              options={INSPECTION_OPTIONS.map((option) => option)}
+            />
+            <FilterChips
+              basePath="/ppe"
+              currentParams={sp}
+              paramKey="type"
+              label={tGenerated('m_0bdc13fe741bfd')}
+              allLabel="All PPE types"
+              options={types.map((type) => ({ value: type.id, label: type.name }))}
+            />
+            <FilterChips
+              basePath="/ppe"
+              currentParams={sp}
+              paramKey="holder"
+              label={tGenerated('m_1dd437d2b4ab7f')}
+              allLabel="All holders"
+              options={holders.map((holder) => ({
+                value: holder.id,
+                label: `${holder.lastName}, ${holder.firstName}`,
+              }))}
             />
           </TableToolbar>
         </>

@@ -65,12 +65,12 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
     fields: [
       { key: 'reference', label: 'Reference', kind: 'text' },
       { key: 'job_scope', label: 'Job scope', kind: 'text' },
-      { key: 'location_on_site', label: 'Location on site', kind: 'text' },
+      { key: 'location_on_site', label: 'Specific location', kind: 'text' },
       { key: 'locked', label: 'Locked', kind: 'bool' },
       { key: 'in_progress', label: 'In progress', kind: 'bool' },
       { key: 'status_label', label: 'Status', kind: 'text' },
       { key: 'occurred_at', label: 'Occurred at', kind: 'date' },
-      { key: 'site_name', label: 'Site name', kind: 'text' },
+      { key: 'site_name', label: 'Location', kind: 'text' },
       { key: 'project_name', label: 'Project name', kind: 'text' },
       { key: 'type_name', label: 'Assessment type name', kind: 'text' },
       { key: 'supervisor_name', label: 'Supervisor name', kind: 'text' },
@@ -83,7 +83,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'show_tasks', label: 'Show tasks section', kind: 'bool' },
       { key: 'show_hazards', label: 'Show hazards section', kind: 'bool' },
       // FK ids kept for conditions / recipient `field` targets.
-      { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
+      { key: 'site_org_unit_id', label: 'Location (id)', kind: 'org_unit' },
       { key: 'project_org_unit_id', label: 'Project (id)', kind: 'org_unit' },
       {
         key: 'project_superintendent_person_id',

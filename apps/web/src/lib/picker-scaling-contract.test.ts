@@ -112,6 +112,7 @@ describe('production-scale picker contract', () => {
     expect(locations).toContain("lookup === 'inspection-sites'")
     expect(locations).toContain("lookup === 'incident-sites'")
     expect(locations).toContain("lookup === 'corrective-action-sites'")
+    expect(locations).toContain("lookup === 'hazard-assessment-locations'")
     expect(locations).toContain('isNull(orgUnits.deletedAt)')
     expect(locations).not.toContain('eq(orgUnits.level')
 
@@ -132,6 +133,14 @@ describe('production-scale picker contract', () => {
     )
     expect(safeDistanceLocationSave).toContain('eq(orgUnits.id, refs.siteOrgUnitId)')
     expect(safeDistanceLocationSave).not.toContain('orgUnits.level')
+
+    const hazardDetail = source('../app/(app)/hazard-assessments/[id]/page.tsx')
+    expect(hazardDetail).toContain('<LiveRemoteSelect')
+    expect(hazardDetail).toContain('lookup="hazard-assessment-locations"')
+
+    const hazardMutations = source('../app/(app)/hazard-assessments/_actions.ts')
+    expect(hazardMutations).toContain("if (field === 'siteOrgUnitId' && val)")
+    expect(hazardMutations).toContain('isNull(orgUnits.deletedAt)')
   })
 
   it('searches the full eligible class-attendee set without a hidden first-page cap', () => {

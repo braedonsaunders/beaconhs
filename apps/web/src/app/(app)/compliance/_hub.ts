@@ -135,6 +135,11 @@ export type PersonStatusRow = {
   status: string
   dueOn: string | null
   completedOn: string | null
+  periodStart: string | null
+  periodEnd: string | null
+  count: number
+  expected: number
+  percent: number
   /** Module target (documentId / courseId / formTemplateId / …) for deep-linking. */
   targetRef: ComplianceTargetRef | null
   /** Exact completion record when an evaluator can provide one. */
@@ -152,6 +157,11 @@ export async function personCompliance(ctx: Ctx, personId: string): Promise<Pers
         status: complianceStatus.status,
         dueOn: complianceStatus.dueOn,
         completedOn: complianceStatus.completedOn,
+        periodStart: complianceStatus.periodStart,
+        periodEnd: complianceStatus.periodEnd,
+        count: complianceStatus.count,
+        expected: complianceStatus.expected,
+        percent: complianceStatus.percent,
         targetRef: complianceObligations.targetRef,
         subjectRef: complianceStatus.subjectRef,
       })
@@ -175,6 +185,11 @@ export async function personCompliance(ctx: Ctx, personId: string): Promise<Pers
       status: r.status,
       dueOn: r.dueOn,
       completedOn: r.completedOn,
+      periodStart: r.periodStart,
+      periodEnd: r.periodEnd,
+      count: Number(r.count),
+      expected: Number(r.expected),
+      percent: Number(r.percent),
       targetRef: r.targetRef,
       subjectRef: r.subjectRef,
     }))

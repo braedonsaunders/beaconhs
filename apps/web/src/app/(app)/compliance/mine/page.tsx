@@ -79,6 +79,17 @@ export default async function MyCompliancePage({
   )
 
   const allRows = person ? await personCompliance(ctx, person.id) : []
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const currentPeriodRows = allRows.filter(
+    (row) =>
+      row.kind !== 'document' &&
+      row.periodStart &&
+      row.periodEnd &&
+      row.periodStart <= todayIso &&
+      row.periodEnd >= todayIso,
+  )
+  const documentRows = allRows.filter((row) => row.kind === 'document')
+  const acknowledgedDocuments = documentRows.filter((row) => row.status === 'completed').length
 
   const isOverdue = (s: string) => s === 'overdue' || s === 'expiring'
   const totals = {
@@ -138,6 +149,70 @@ export default async function MyCompliancePage({
                   totals={totals}
                   title={tGenerated('m_17f7f13a1100a2')}
                 />
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr]">
+                  <section className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+                    <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      <GeneratedText id="m_0829fdcdafb32f" />
+                    </h2>
+                    <GeneratedValue
+                      value={
+                        currentPeriodRows.length === 0 ? (
+                          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                            <GeneratedText id="m_0822c7a425f6b5" />
+                          </p>
+                        ) : (
+                          <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
+                            {currentPeriodRows.map((row) => {
+                              const link = resolveComplianceLink(row.kind, row.targetRef, {
+                                personId: person.id,
+                                obligationId: row.obligationId,
+                              })
+                              return (
+                                <li
+                                  key={`${row.obligationId}:${row.periodStart}`}
+                                  className="flex items-center justify-between gap-3 py-2"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                                      {link ? (
+                                        <Link href={link.href as never} prefetch={link.prefetch}>
+                                          {row.title}
+                                        </Link>
+                                      ) : (
+                                        row.title
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                                      {row.count}/{row.expected || 1} · {row.periodStart} –{' '}
+                                      {row.periodEnd}
+                                    </div>
+                                  </div>
+                                  <StatusBadge status={row.status} />
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        )
+                      }
+                    />
+                  </section>
+                  <Link
+                    href="/compliance/mine?kind=document"
+                    className="rounded-lg border border-slate-200 bg-white p-4 hover:border-teal-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
+                  >
+                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      <GeneratedText id="m_05caa6a53f9b7f" />
+                    </div>
+                    <div className="mt-2 text-2xl font-semibold text-slate-900 tabular-nums dark:text-slate-100">
+                      {acknowledgedDocuments}/{documentRows.length}
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_094ea50df759a3" />{' '}
+                      {Math.max(0, documentRows.length - acknowledgedDocuments)}{' '}
+                      <GeneratedText id="m_0fed2a204aff5a" />
+                    </div>
+                  </Link>
+                </div>
                 <TableToolbar>
                   <SearchInput placeholder={tGenerated('m_1e16c5f9400e36')} />
                   <FilterChips

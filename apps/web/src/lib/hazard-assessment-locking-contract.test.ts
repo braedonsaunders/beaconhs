@@ -14,6 +14,10 @@ const headerActions = readFileSync(
   new URL('../app/(app)/hazard-assessments/[id]/_header-actions.tsx', import.meta.url),
   'utf8',
 )
+const sharedHeaderActions = readFileSync(
+  new URL('../components/record-header-actions.tsx', import.meta.url),
+  'utf8',
+)
 
 function between(start: string, end: string): string {
   const startIndex = actions.indexOf(start)
@@ -177,7 +181,7 @@ describe('hazard-assessment transactional locking contract', () => {
     expect(detailPage).toContain("const canReview = can(ctx, 'hazid.review')")
     expect(detailPage).toContain("reviewHref={drawerHref('safety-review')}")
     expect(detailPage).toContain("open={drawerKey === 'safety-review' && canReview}")
-    expect(headerActions).toContain('canReview ? (')
-    expect(headerActions).toContain('<GeneratedText id="m_039fc01243fb46" />')
+    expect(headerActions).toContain('review={canReview ? { href: reviewHref } : null}')
+    expect(sharedHeaderActions).toContain('<GeneratedText id="m_039fc01243fb46" />')
   })
 })

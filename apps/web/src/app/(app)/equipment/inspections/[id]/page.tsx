@@ -261,7 +261,7 @@ export default async function EquipmentInspectionRecordPage({
         <PageHeader
           title={tGeneratedValue(record.reference)}
           description={tGeneratedValue(
-            `${item?.name ?? 'Equipment'}${type ? ` · ${type.name}` : ''}`,
+            `${item?.name ?? record.equipmentNameSnapshot ?? 'Rental equipment'}${type ? ` · ${type.name}` : ''}`,
           )}
           back={{ href: '/equipment/inspections', label: 'Back to inspections' }}
           actions={
@@ -332,14 +332,45 @@ export default async function EquipmentInspectionRecordPage({
 
         <GeneratedValue
           value={
-            item ? (
+            item || record.isRental ? (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                <Link
-                  href={`/equipment/${item.id}`}
-                  className="inline-flex items-center gap-1 font-medium text-teal-700 hover:underline dark:text-teal-400"
-                >
-                  <Wrench size={12} /> <GeneratedValue value={item.assetTag} />
-                </Link>
+                <GeneratedValue
+                  value={
+                    item ? (
+                      <Link
+                        href={`/equipment/${item.id}`}
+                        className="inline-flex items-center gap-1 font-medium text-teal-700 hover:underline dark:text-teal-400"
+                      >
+                        <Wrench size={12} /> <GeneratedValue value={item.assetTag} />
+                      </Link>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-300">
+                        <Wrench size={12} /> <GeneratedText id="m_1bff1917923224" />{' '}
+                        <GeneratedValue
+                          value={record.equipmentNameSnapshot ?? 'Unregistered unit'}
+                        />
+                      </span>
+                    )
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    record.serial ? (
+                      <span>
+                        <GeneratedText id="m_036a8b80373228" /> {record.serial}
+                      </span>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    record.rentalProvider ? (
+                      <span>
+                        <GeneratedText id="m_1b8c7327ab77c7" /> {record.rentalProvider}
+                      </span>
+                    ) : null
+                  }
+                />
                 <GeneratedValue
                   value={
                     inspectorName ? (

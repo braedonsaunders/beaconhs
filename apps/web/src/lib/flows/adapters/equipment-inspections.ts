@@ -222,13 +222,14 @@ export function createEquipmentInspectionFlowAdapter(
         result: r.result ?? null,
         result_label: titleize(r.result),
         type_name: head.typeName ?? '',
-        equipment_name: head.equipmentName ?? '',
+        equipment_name: head.equipmentName ?? r.equipmentNameSnapshot ?? '',
         asset_tag: head.assetTag ?? '',
         equipment_division:
           typeof head.equipmentMetadata?.division === 'string'
             ? head.equipmentMetadata.division
             : '',
         serial: r.serial ?? '',
+        rental_provider: r.rentalProvider ?? '',
         interval_label: r.intervalLabel ?? '',
         occurred_at: fmtDateTime(r.occurredAt),
         next_due_on: fmtDate(r.nextDueOn),

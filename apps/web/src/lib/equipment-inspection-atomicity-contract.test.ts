@@ -52,7 +52,9 @@ describe('equipment inspection atomicity contract', () => {
     expect(create).toContain('nextEquipmentInspectionReferenceInTx(')
     expect(create).toContain('.insert(equipmentInspectionRecords)')
     expect(create).toContain('allowPassAll: type.allowPassAll')
-    expect(create).toContain('failsSpawnWorkOrders: type.failsSpawnWorkOrders')
+    expect(create).toContain(
+      "failsSpawnWorkOrders: targetMode === 'registered' && type.failsSpawnWorkOrders",
+    )
     expect(create).toContain('isPreUse: type.isPreUse')
     expect(create).toContain('intervalValue: type.intervalValue')
     expect(create).toContain('intervalUnit: type.intervalUnit')
@@ -68,12 +70,15 @@ describe('equipment inspection atomicity contract', () => {
       "isPreUse: boolean('is_pre_use')",
       "allowPassAll: boolean('allow_pass_all')",
       "failsSpawnWorkOrders: boolean('fails_spawn_work_orders')",
+      "equipmentNameSnapshot: text('equipment_name_snapshot')",
+      "rentalProvider: text('rental_provider')",
       "isRequired: boolean('is_required')",
     ]) {
       expect(schema).toContain(column)
     }
     expect(library).toContain('isRequired: r.criterion.isRequired')
     expect(library).toContain('row.isRequired && !hasValue(row)')
+    expect(schema).toContain('equipment_inspection_records_target_mode_ck')
   })
 
   it('submits exclusively from record snapshots, even if the source type changes or disappears', () => {
@@ -168,7 +173,12 @@ describe('equipment inspection atomicity contract', () => {
   it('uses bounded permission-aware equipment and type pickers on creation', () => {
     expect(newPage).not.toContain('.orderBy(asc(')
     expect(newForm).toContain('lookup="equipment-inspection-items"')
-    expect(newForm).toContain('lookup="equipment-item-inspection-types"')
-    expect(newForm).toContain('contextId={equipmentTypeId}')
+    expect(newForm).toContain("'equipment-item-inspection-types'")
+    expect(newForm).toContain("'equipment-inspection-types'")
+    expect(newForm).toContain('lookup="equipment-inspection-sites"')
+    expect(newForm).toContain("targetMode === 'registered' ? equipmentTypeId : undefined")
+    expect(actions).toContain("targetMode === 'rental'")
+    expect(library).toContain('record.isRental && fails.length > 0')
+    expect(library).toContain("sourceEntityType: 'equipment_inspection_record'")
   })
 })

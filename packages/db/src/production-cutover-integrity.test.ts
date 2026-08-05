@@ -66,6 +66,7 @@ describe('production cutover migration integrity', () => {
       '0026_order_frontline_photos.sql',
       '0027_report_portrait_cutover.sql',
       '0028_generalize_monitored_sessions.sql',
+      '0029_faulty_thunderball.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -101,13 +102,14 @@ describe('production cutover migration integrity', () => {
       { idx: 26, tag: '0026_order_frontline_photos' },
       { idx: 27, tag: '0027_report_portrait_cutover' },
       { idx: 28, tag: '0028_generalize_monitored_sessions' },
+      { idx: 29, tag: '0029_faulty_thunderball' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)
     }
 
     const snapshots = [
-      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 29,
     ].map(
       (index) =>
         JSON.parse(

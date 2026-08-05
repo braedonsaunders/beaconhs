@@ -405,10 +405,10 @@ export async function AssessmentsListPage({
                 basePath={basePath}
                 currentParams={sp}
                 paramKey="site"
-                placeholder={tGenerated('m_1f5ad6ec6b5d2a')}
-                allLabel="All sites"
-                searchPlaceholder={tGenerated('m_008b0b4bd263a4')}
-                ariaLabel="Filter hazard assessments by site"
+                placeholder={tGenerated('m_1a37e747f6006b')}
+                allLabel={tGenerated('m_1a37e747f6006b')}
+                searchPlaceholder={tGenerated('m_1b2904e42cf38c')}
+                ariaLabel="Filter hazard assessments by location"
               />
             </TableToolbar>
           </>
@@ -526,7 +526,7 @@ export async function AssessmentsListPage({
                             <GeneratedText id="m_074ba2f160c506" />
                           </SortableTh>
                           <SortableTh {...sortProps} column="site" active={params.sort === 'site'}>
-                            <GeneratedText id="m_020146dd3d3d5a" />
+                            <GeneratedText id="m_055f11420b2da4" />
                           </SortableTh>
                           <SortableTh
                             {...sortProps}
@@ -660,7 +660,7 @@ export async function AssessmentsListPage({
         open={drawerKey === 'new'}
         closeHref={basePath}
         title={tGenerated('m_09ea1faa2a45cf')}
-        description={tGenerated('m_15452a730a15cb')}
+        description={tGenerated('m_04ab2ab9608f6d')}
         size="md"
       >
         <NewAssessmentDrawer types={newTypes} startAction={startAssessment} />

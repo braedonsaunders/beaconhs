@@ -11,13 +11,11 @@ import {
   Camera,
   CheckCircle2,
   ClipboardCheck,
-  FileText,
   History,
   ListChecks,
   Lock,
   PenLine,
   ShieldAlert,
-  Unlock,
 } from 'lucide-react'
 import {
   Alert,
@@ -26,6 +24,7 @@ import {
   Badge,
   Button,
   DetailHeader,
+  UrlDrawer,
   Label,
   Select,
 } from '@beaconhs/ui'
@@ -44,13 +43,13 @@ import {
 } from '@beaconhs/db/schema'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { parsePhotoEdits } from '@/lib/photo-edits'
-import { assertCan } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
-import { isUuid } from '@/lib/list-params'
+import { isUuid, pickString } from '@/lib/list-params'
 import { canSeeRecord } from '@/lib/visibility'
 import {
   inspectionCriterionIsAnswered,
@@ -82,6 +81,10 @@ import {
 import { localDatetimeValue } from '../../_datetime'
 import { CustomerSignatureCard } from './customer-signature'
 import { CriterionCard, type CriterionResponseType, type CriterionSeverity } from './_criteria'
+import { GenericSendEmailDialog } from '@/components/send-email-dialog'
+import { RecordHeaderActions } from '@/components/record-header-actions'
+import { copyInspection, deleteInspection } from '../_actions'
+import { sendInspectionEmail } from './_send-email'
 
 export const dynamic = 'force-dynamic'
 
@@ -373,6 +376,38 @@ async function toggleLock(formData: FormData) {
     return true
   })
   if (!changed) return
+  revalidatePath(`/inspections/records/${id}`)
+}
+
+async function lockInspection(formData: FormData) {
+  'use server'
+  formData.set('lock', 'true')
+  await toggleLock(formData)
+}
+
+async function unlockInspection(formData: FormData) {
+  'use server'
+  formData.set('lock', 'false')
+  await toggleLock(formData)
+}
+
+async function sendInspectionEmailAction(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
+  const id = String(formData.get('id') ?? '')
+  if (!isUuid(id)) throw new Error('Inspection record was not found')
+  const splitEmails = (raw: string) =>
+    raw
+      .split(/[;,\n]/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+  await sendInspectionEmail(ctx, id, {
+    recipients: splitEmails(String(formData.get('recipients') ?? '')),
+    cc: splitEmails(String(formData.get('cc') ?? '')),
+    subjectPrefix: String(formData.get('subjectPrefix') ?? '').trim() || undefined,
+    messageOverride: String(formData.get('messageOverride') ?? '').trim() || undefined,
+  })
   revalidatePath(`/inspections/records/${id}`)
 }
 
@@ -1495,16 +1530,22 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function InspectionRecordDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const tGeneratedValue = await getGeneratedValueTranslations()
   const tGenerated = await getGeneratedTranslations()
   const { id } = await params
+  const sp = await searchParams
   if (!isUuid(id)) notFound()
 
   const ctx = await requireRequestContext()
   assertCan(ctx, 'inspections.read.self')
+  const canUpdate = can(ctx, 'inspections.update')
+  const canCreate = can(ctx, 'inspections.create')
+  const canManage = can(ctx, 'inspections.manage')
   const pendingGates = await getPendingFlowGatesForSubject(
     ctx,
     'module',
@@ -1793,40 +1834,21 @@ export default async function InspectionRecordDetailPage({
             </div>
           }
           actions={
-            <div className="flex items-center gap-2">
-              <Link
-                href={`/inspections/records/${id}/pdf`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800/60"
-              >
-                <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
-              </Link>
-              <form action={toggleLock}>
-                <input type="hidden" name="id" value={id} />
-                <input type="hidden" name="lock" value={recordImmutable ? 'false' : 'true'} />
-                <Button variant="outline" type="submit">
-                  <GeneratedValue
-                    value={
-                      recordImmutable ? (
-                        <>
-                          <Unlock size={14} /> <GeneratedText id="m_0ca830c9381fd6" />
-                        </>
-                      ) : (
-                        <>
-                          <Lock size={14} />{' '}
-                          <GeneratedValue
-                            value={
-                              record.status === 'submitted' ? 'Resubmit & lock' : 'Submit & lock'
-                            }
-                          />
-                        </>
-                      )
-                    }
-                  />
-                </Button>
-              </form>
-            </div>
+            <RecordHeaderActions
+              id={id}
+              locked={recordImmutable}
+              canDelete={canManage}
+              canCopy={canCreate}
+              canEmail={canUpdate}
+              canLock={canUpdate}
+              pdfHref={`/inspections/records/${id}/pdf`}
+              emailHref={`/inspections/records/${id}?send=1`}
+              deleteHref={`/inspections/records/${id}?drawer=confirm-delete`}
+              copyAction={copyInspection}
+              lockAction={lockInspection}
+              unlockAction={unlockInspection}
+              lockLabel={record.status === 'submitted' ? 'Resubmit & lock' : 'Submit & lock'}
+            />
           }
         />
       }
@@ -2340,6 +2362,47 @@ export default async function InspectionRecordDetailPage({
           </Section>
         </section>
       </div>
+
+      <UrlDrawer
+        open={pickString(sp.drawer) === 'confirm-delete' && canManage}
+        closeHref={`/inspections/records/${id}`}
+        title={tGenerated('m_03f20477ddbf1f')}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            <GeneratedText id="m_11773f3c3f7558" />{' '}
+            <span className="font-mono font-medium">{record.reference}</span>
+            <GeneratedText id="m_1879aa51c63378" />
+          </p>
+          <div className="flex justify-end gap-2">
+            <Link href={`/inspections/records/${id}` as never}>
+              <Button type="button" variant="outline">
+                <GeneratedText id="m_112e2e8ecda428" />
+              </Button>
+            </Link>
+            <form action={deleteInspection}>
+              <input type="hidden" name="id" value={id} />
+              <Button type="submit" className="bg-red-600 text-white hover:bg-red-700">
+                <GeneratedText id="m_03f20477ddbf1f" />
+              </Button>
+            </form>
+          </div>
+        </div>
+      </UrlDrawer>
+
+      <GenericSendEmailDialog
+        open={pickString(sp.send) === '1' && canUpdate}
+        title={tGenerated('m_10ed98a684040e')}
+        description={tGenerated('m_0ebf382d7f253f')}
+        reference={record.reference}
+        defaultSubjectPrefix="Inspection"
+        sendAction={async (formData) => {
+          'use server'
+          formData.set('id', id)
+          await sendInspectionEmailAction(formData)
+        }}
+      />
     </DetailPageLayout>
   )
 }

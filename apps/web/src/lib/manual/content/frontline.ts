@@ -36,6 +36,8 @@ A journal entry protects you and your crew. If a question comes up months later,
 
 Open **Journals** in the left menu. The page opens on your most recent entry. On a desktop your past entries sit in a list on the left. On a phone, tap **Browse** to see them.
 
+Journal managers can tap **Browse**, then **Manage journals**, on a phone. The Manage hub contains company records, tags, and automations.
+
 ## Writing today's entry
 
 1. Open [Journals](/journals).
@@ -148,13 +150,13 @@ Walking through the hazards as a crew catches problems while they are still chea
 
 Open **Hazard Assessments** in the left menu, or go to [Hazard assessments](/hazard-assessments).
 
-Use **All sites** to search the complete set of sites used by assessments you are allowed to open. On **My hazard assessments**, it searches only sites used by assessments you started. If the picker says more results exist, add more of the site name or code.
+Use **All locations** to search the complete set of locations used by assessments you are allowed to open. On **My hazard assessments**, it searches only locations used by assessments you started. If the picker says more results exist, add more of the location name or code.
 
 ## Starting a new assessment
 
 1. Tap **New assessment**.
 2. Use the search box to find the right assessment type (for example a daily FLHA or a task-specific JSHA). Each card shows the PPE, questions, and Builder apps that the type includes. Tap the type to start.
-3. Fill in the **General Information** section: who, what, where, and when. Fields save as you type.
+3. Fill in the **General Information** section: who, what, where, and when. Search **Location** to choose any customer, project, site, or area from the same Locations list used by Journals. Use **Specific location** for the exact work area. Fields save as you type.
 
 ## Tasks, hazards, and risk ratings
 
@@ -273,6 +275,14 @@ A record stays a draft while you work — you can leave and come back. When ever
 If an edit removes required information from a submitted record, it returns to **In progress**. Complete the missing item and submit it again.
 
 To correct a locked or closed record, tap **Unlock**. A closed record reopens as **Submitted** so you can make the correction. Tap **Resubmit & lock** when you are done; this locks the revised record and runs its submit flows again.
+
+## Record actions
+
+Use the buttons in the header to **PDF**, **Email**, **Copy**, lock, unlock, or delete an inspection. On a phone, keep the lock button visible and tap **More actions** for the rest.
+
+- **Copy** starts a new draft with the same setup and checklist. Answers, photos, signatures, approvals, and corrective-action history are not copied.
+- **Email** sends the inspection summary and saved checklist only to the addresses you enter.
+- **Delete** is available to inspection managers. Confirm it carefully; the record leaves operational lists, while its audit history is retained.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
@@ -600,6 +610,8 @@ Open **Compliance** in the left menu, or go to [Compliance](/compliance). Most p
 ## Reading the page
 
 - The bar at the top shows your progress — how many items are done out of the total.
+- The **My compliance** dashboard card keeps recurring journals, inspections, and apps visible for the current period, including completed work. Each row shows the completed and expected count plus the period dates.
+- Document acknowledgements appear in the **Documents** summary below current-period work. Tap it to open the document-filtered list.
 - Each row is one obligation. The **Due** column shows the deadline; overdue items are flagged.
 - The **Completed** column shows when you finished it.
 - Use the search box or the **Status** and **Kind** filters when your list is long. Click a heading to sort it.

@@ -137,6 +137,7 @@ import {
   LiveDateTime,
   LiveField,
   LivePersonSelect,
+  LiveRemoteSelect,
   LiveRichText,
   LiveSelect,
 } from '@/components/live-field'
@@ -337,21 +338,9 @@ export default async function HazidAssessmentDetailPage({
             .where(inArray(hazidHazards.id, referencedHazardIds))
         : []
 
-    // General-info pickers for the inline (live) selects.
-    const siteOptions = await tx
-      .select({ id: orgUnits.id, name: orgUnits.name })
-      .from(orgUnits)
-      // active sites only, plus this assessment's current site even if it was archived
-      .where(
-        and(
-          eq(orgUnits.level, 'site'),
-          or(
-            isNull(orgUnits.deletedAt),
-            row.a.siteOrgUnitId ? eq(orgUnits.id, row.a.siteOrgUnitId) : undefined,
-          ),
-        ),
-      )
-      .orderBy(asc(orgUnits.name))
+    // General-info pickers for the inline (live) selects. The linked Location
+    // uses the same bounded, full Locations catalogue as Journals; projects
+    // remain a separate, project-level field.
     const projectOptions = await tx
       .select({ id: orgUnits.id, name: orgUnits.name })
       .from(orgUnits)
@@ -413,7 +402,6 @@ export default async function HazidAssessmentDetailPage({
       taskLibrary,
       peopleList,
       referencedHazards,
-      siteOptions,
       projectOptions,
       typeOptions,
     }
@@ -450,7 +438,6 @@ export default async function HazidAssessmentDetailPage({
     taskLibrary,
     peopleList,
     referencedHazards,
-    siteOptions,
     projectOptions,
     typeOptions,
   } = data
@@ -1028,12 +1015,13 @@ export default async function HazidAssessmentDetailPage({
                   disabled={locked}
                   updateAction={updateTextField}
                 />
-                <LiveSelect
+                <LiveRemoteSelect
                   id={a.id}
                   field="siteOrgUnitId"
-                  label={tGenerated('m_020146dd3d3d5a')}
+                  label={tGenerated('m_055f11420b2da4')}
                   initialValue={a.siteOrgUnitId}
-                  options={siteOptions.map((s) => ({ value: s.id, label: s.name }))}
+                  initialOption={site ? { value: site.id, label: site.name } : undefined}
+                  lookup="hazard-assessment-locations"
                   disabled={locked}
                   updateAction={updateTextField}
                 />
@@ -1050,7 +1038,7 @@ export default async function HazidAssessmentDetailPage({
                   <LiveField
                     id={a.id}
                     field="locationOnSite"
-                    label={tGenerated('m_0300804afcc3bb')}
+                    label={tGenerated('m_0352b4ecd48a3a')}
                     initialValue={a.locationOnSite}
                     placeholder={tGenerated('m_051443bf0b9acf')}
                     disabled={locked}

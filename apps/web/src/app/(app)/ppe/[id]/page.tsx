@@ -89,6 +89,7 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { RawImage } from '@/components/raw-image'
 import { sendPpeIssueEmail } from './_send-email'
+import { nextPpeInspectionDue } from '@/lib/ppe-inspection-due'
 import {
   daysUntil,
   deriveAnnualYear,
@@ -380,8 +381,10 @@ async function recordInspection(formData: FormData) {
         typeId: ppeItems.typeId,
         status: ppeItems.status,
         deletedAt: ppeItems.deletedAt,
+        inspectionSchedule: ppeTypes.inspectionSchedule,
       })
       .from(ppeItems)
+      .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
       .where(eq(ppeItems.id, itemId))
       .limit(1)
       .for('update')
@@ -389,6 +392,7 @@ async function recordInspection(formData: FormData) {
     if (item.deletedAt || item.status === 'discarded' || item.status === 'expired') {
       throw new Error('Discarded or expired PPE cannot be inspected')
     }
+    const nextDueOn = nextPpeInspectionDue(kind, today, item.inspectionSchedule)
 
     if (allPhotoIds.length > 0) {
       const ownedPhotos = await tx
@@ -416,7 +420,7 @@ async function recordInspection(formData: FormData) {
         status: 'submitted',
         result: finalResult,
         inspectedOn: today,
-        nextDueOn: nextDueDate(kind, today),
+        nextDueOn,
         notes,
         inspectedByTenantUserId: ctx.membership?.id,
         inspectorNameSnapshot: ctx.membership?.displayName ?? null,
@@ -460,8 +464,8 @@ async function recordInspection(formData: FormData) {
 
     const set =
       kind === 'pre_use'
-        ? { lastInspectionOn: today, nextInspectionDue: nextDueDate(kind, today) }
-        : { lastAnnualInspectionOn: today, nextAnnualInspectionDue: nextDueDate(kind, today) }
+        ? { lastInspectionOn: today, nextInspectionDue: nextDueOn }
+        : { lastAnnualInspectionOn: today, nextAnnualInspectionDue: nextDueOn }
     await tx.update(ppeItems).set(set).where(eq(ppeItems.id, itemId))
     const correctiveActionId = correctiveActionInput
       ? await createCorrectiveActionForFailedPpeInspection(tx, ctx, {
@@ -788,13 +792,6 @@ async function sendEmailAction(formData: FormData) {
     messageOverride,
   })
   revalidatePath(`/ppe/${id}`)
-}
-
-function nextDueDate(kind: 'pre_use' | 'annual', iso: string): string {
-  const d = new Date(iso)
-  if (kind === 'annual') d.setFullYear(d.getFullYear() + 1)
-  else d.setDate(d.getDate() + 30)
-  return d.toISOString().slice(0, 10)
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {

@@ -86,7 +86,7 @@ export default async function EquipmentInspectionsPage({
   const sortCol: Record<Sort, AnyColumn> = {
     occurred: equipmentInspectionRecords.occurredAt,
     reference: equipmentInspectionRecords.reference,
-    equipment: equipmentItems.name,
+    equipment: equipmentInspectionRecords.equipmentNameSnapshot,
     type: equipmentInspectionTypes.name,
     result: equipmentInspectionRecords.result,
     status: equipmentInspectionRecords.status,
@@ -105,6 +105,9 @@ export default async function EquipmentInspectionsPage({
       ilike(equipmentInspectionRecords.reference, term),
       ilike(equipmentItems.name, term),
       ilike(equipmentItems.assetTag, term),
+      ilike(equipmentInspectionRecords.equipmentNameSnapshot, term),
+      ilike(equipmentInspectionRecords.serial, term),
+      ilike(equipmentInspectionRecords.rentalProvider, term),
       ilike(equipmentInspectionTypes.name, term),
     )
     if (cond) filters.push(cond)
@@ -150,6 +153,10 @@ export default async function EquipmentInspectionsPage({
         status: equipmentInspectionRecords.status,
         itemName: equipmentItems.name,
         itemTag: equipmentItems.assetTag,
+        equipmentNameSnapshot: equipmentInspectionRecords.equipmentNameSnapshot,
+        serial: equipmentInspectionRecords.serial,
+        isRental: equipmentInspectionRecords.isRental,
+        rentalProvider: equipmentInspectionRecords.rentalProvider,
         typeName: equipmentInspectionTypes.name,
         inspectorUser: user.name,
         inspectorFirst: people.firstName,
@@ -297,13 +304,22 @@ export default async function EquipmentInspectionsPage({
                         </TableCell>
                         <TableCell>
                           <div className="text-slate-900 dark:text-slate-100">
-                            <GeneratedValue value={r.itemName ?? '—'} />
+                            <GeneratedValue
+                              value={r.itemName ?? r.equipmentNameSnapshot ?? 'Unregistered unit'}
+                            />
                           </div>
                           <GeneratedValue
                             value={
-                              r.itemTag ? (
+                              r.itemTag || r.serial || r.isRental ? (
                                 <div className="font-mono text-xs text-slate-500">
-                                  <GeneratedValue value={r.itemTag} />
+                                  <GeneratedValue
+                                    value={[r.isRental ? 'Rental' : null, r.itemTag ?? r.serial]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  />
+                                  <GeneratedValue
+                                    value={r.rentalProvider ? ` · ${r.rentalProvider}` : ''}
+                                  />
                                 </div>
                               ) : null
                             }
