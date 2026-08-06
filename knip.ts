@@ -15,6 +15,9 @@ const config: KnipConfig = {
         'scripts/backfill-tenant-storage-keys.ts',
         'scripts/generate-brand-icons.mjs',
         'scripts/materialize-compliance.ts',
+        'scripts/normalize-ppe-inspection-notes.ts',
+        'scripts/restore-equipment-preuse-links.ts',
+        'scripts/restore-ppe-serial-numbers.ts',
       ],
     },
     'apps/worker': {

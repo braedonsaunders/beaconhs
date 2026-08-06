@@ -107,7 +107,7 @@ export async function createCorrectiveActionForFailedPpeInspection(
   return ca.id
 }
 
-export type PpeLedgerAction =
+type PpeLedgerAction =
   | 'issue'
   | 'return'
   | 'replace'
@@ -145,7 +145,7 @@ const AUDIT_SUMMARY: Record<PpeLedgerAction, string> = {
   discard: 'Discarded PPE',
 }
 
-export type PpeStatusTransitionArgs = {
+type PpeStatusTransitionArgs = {
   itemId: string
   personId: string | null
   action: PpeLedgerAction
