@@ -66,6 +66,7 @@ export function createHazidFlowAdapter(
             typeStyle: hazidAssessmentTypes.style,
             typeHasPPE: hazidAssessmentTypes.hasPPE,
             typeHasQuestions: hazidAssessmentTypes.hasQuestions,
+            typeHasRiskRatings: hazidAssessmentTypes.hasRiskRatings,
             siteName: orgUnits.name,
             supFirst: people.firstName,
             supLast: people.lastName,
@@ -218,6 +219,7 @@ export function createHazidFlowAdapter(
         show_questions: head.typeHasQuestions ?? true,
         show_tasks: (head.typeStyle ?? 'task_based') === 'task_based',
         show_hazards: (head.typeStyle ?? 'task_based') === 'hazard_based',
+        show_risk_ratings: head.typeHasRiskRatings ?? true,
         supervisor_name: personName({
           firstName: head.supFirst,
           lastName: head.supLast,

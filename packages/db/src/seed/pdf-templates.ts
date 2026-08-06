@@ -202,6 +202,9 @@ const HAZID = wrap(
       ['Task', '{{name}}', 'width:30%;'],
       ['Controls', '{{controls}}'],
     ]) +
+    // Checklist (no-rating) assessment types drop the matrix columns and lead
+    // with applicability, mirroring the in-app hazards section.
+    '{{#if show_risk_ratings}}' +
     collection('Hazards & controls', 'hazards', [
       ['#', '{{@number}}', 'width:4%;'],
       ['Hazard', '{{name}}'],
@@ -211,6 +214,15 @@ const HAZID = wrap(
       ['Post L/S (risk)', '{{post_likelihood}} / {{post_severity}} ({{post_risk}})', 'width:9%;'],
       ['Applies', '{{applicable}}', 'width:6%;'],
     ]) +
+    '{{else}}' +
+    collection('Hazards & controls', 'hazards', [
+      ['#', '{{@number}}', 'width:4%;'],
+      ['Hazard', '{{name}}'],
+      ['Applies', '{{applicable}}', 'width:8%;'],
+      ['Standard controls', '{{standard_controls}}'],
+      ['Specific controls', '{{specific_controls}}'],
+    ]) +
+    '{{/if}}' +
     collection('PPE manifest', 'ppe', [
       ['PPE', '{{name}}', 'width:22%;'],
       ['Description', '{{description}}'],

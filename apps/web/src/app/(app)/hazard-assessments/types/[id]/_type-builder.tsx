@@ -61,6 +61,7 @@ type BuilderType = {
   defaultHazardSetId: string | null
   hasPPE: boolean
   hasQuestions: boolean
+  hasRiskRatings: boolean
   availableToGroupIds: string[]
 }
 type PPE = {
@@ -994,6 +995,7 @@ function SettingsPanel({
   const [defaultHazardSetId, setDefaultHazardSetId] = React.useState(type.defaultHazardSetId ?? '')
   const [hasPPE, setHasPPE] = React.useState(type.hasPPE)
   const [hasQuestions, setHasQuestions] = React.useState(type.hasQuestions)
+  const [hasRiskRatings, setHasRiskRatings] = React.useState(type.hasRiskRatings)
   const [groupIds, setGroupIds] = React.useState<string[]>(type.availableToGroupIds)
   const isHazardBased = style === 'hazard_based'
 
@@ -1011,6 +1013,7 @@ function SettingsPanel({
           defaultHazardSetId: isHazardBased ? defaultHazardSetId || null : null,
           hasPPE,
           hasQuestions,
+          hasRiskRatings,
           availableToGroupIds: groupIds,
         })
         toast.success(tGenerated('m_0a0569b726b225'))
@@ -1095,6 +1098,22 @@ function SettingsPanel({
           label={tGenerated('m_049fefa2074149')}
           checked={hasQuestions}
           onChange={setHasQuestions}
+        />
+        <GeneratedValue
+          value={
+            isHazardBased ? (
+              <div className="space-y-1">
+                <CheckRow
+                  label={tGenerated('m_1d730de6d2e952')}
+                  checked={hasRiskRatings}
+                  onChange={setHasRiskRatings}
+                />
+                <p className="pl-6 text-xs text-slate-500 dark:text-slate-400">
+                  <GeneratedText id="m_062e2719e54cd8" />
+                </p>
+              </div>
+            ) : null
+          }
         />
       </fieldset>
       <GeneratedValue

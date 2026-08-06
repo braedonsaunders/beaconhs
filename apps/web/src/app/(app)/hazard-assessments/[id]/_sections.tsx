@@ -29,9 +29,10 @@ import {
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { Button, Input, Label, Select, Textarea } from '@beaconhs/ui'
 import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
+import { SaveDot, useAutoSave } from '@/components/live-field'
 import { RiskDelta, RiskMatrixField } from '../_risk'
 
 // ============================================================================
@@ -661,6 +662,7 @@ export function EditHazardDrawerBody({
   closeHref,
   row,
   libraryName,
+  showRiskRatings = true,
   updateAction,
 }: {
   assessmentId: string
@@ -679,6 +681,8 @@ export function EditHazardDrawerBody({
     postSeverity: number | null
   }
   libraryName: string | null
+  /** Off = checklist type: the drawer hides the risk-matrix blocks. */
+  showRiskRatings?: boolean
   updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
@@ -711,14 +715,17 @@ export function EditHazardDrawerBody({
     if (!libraryName) fd.set('name', name)
     fd.set('standardControls', standard)
     fd.set('specificControls', specific)
-    if (applicable) fd.set('applicable', 'on')
+    fd.set('applicable', applicable ? 'true' : 'false')
     // Always send risk-rating fields so the server can null them out when
-    // cleared by the user.
-    fd.set('preLikelihood', preLikelihood)
-    fd.set('preSeverity', preSeverity)
-    fd.set('controls', controls)
-    fd.set('postLikelihood', postLikelihood)
-    fd.set('postSeverity', postSeverity)
+    // cleared by the user. Checklist types omit them entirely so historical
+    // ratings survive a type being switched back to rated mode.
+    if (showRiskRatings) {
+      fd.set('preLikelihood', preLikelihood)
+      fd.set('preSeverity', preSeverity)
+      fd.set('controls', controls)
+      fd.set('postLikelihood', postLikelihood)
+      fd.set('postSeverity', postSeverity)
+    }
     start(async () => {
       await updateAction(fd)
       close()
@@ -757,47 +764,56 @@ export function EditHazardDrawerBody({
         {/* ---------------------------------------------------------------- */}
         {/* Risk-rating block — pre-control 5×5 matrix, controls textarea,  */}
         {/* then post-control matrix so the residual-risk reduction is      */}
-        {/* visible while the user picks values.                            */}
+        {/* visible while the user picks values. Hidden entirely for       */}
+        {/* checklist (no-rating) assessment types.                        */}
         {/* ---------------------------------------------------------------- */}
-        <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">
-          <RiskMatrixField
-            label={tGenerated('m_0db23760897db4')}
-            likelihoodName="preLikelihood"
-            severityName="preSeverity"
-            defaultLikelihood={row.preLikelihood}
-            defaultSeverity={row.preSeverity}
-            onChange={({ likelihood, severity }) => {
-              setPreLikelihood(likelihood == null ? '' : String(likelihood))
-              setPreSeverity(severity == null ? '' : String(severity))
-            }}
-          />
-        </div>
+        <GeneratedValue
+          value={
+            showRiskRatings ? (
+              <>
+                <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+                  <RiskMatrixField
+                    label={tGenerated('m_0db23760897db4')}
+                    likelihoodName="preLikelihood"
+                    severityName="preSeverity"
+                    defaultLikelihood={row.preLikelihood}
+                    defaultSeverity={row.preSeverity}
+                    onChange={({ likelihood, severity }) => {
+                      setPreLikelihood(likelihood == null ? '' : String(likelihood))
+                      setPreSeverity(severity == null ? '' : String(severity))
+                    }}
+                  />
+                </div>
 
-        <div className="space-y-1.5">
-          <Label>
-            <GeneratedText id="m_19b78594439f75" />
-          </Label>
-          <Textarea
-            value={controls}
-            onChange={(e) => setControls(e.target.value)}
-            rows={3}
-            placeholder={tGenerated('m_08eb3f746c12fb')}
-          />
-        </div>
+                <div className="space-y-1.5">
+                  <Label>
+                    <GeneratedText id="m_19b78594439f75" />
+                  </Label>
+                  <Textarea
+                    value={controls}
+                    onChange={(e) => setControls(e.target.value)}
+                    rows={3}
+                    placeholder={tGenerated('m_08eb3f746c12fb')}
+                  />
+                </div>
 
-        <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">
-          <RiskMatrixField
-            label={tGenerated('m_05dbd720c56577')}
-            likelihoodName="postLikelihood"
-            severityName="postSeverity"
-            defaultLikelihood={row.postLikelihood}
-            defaultSeverity={row.postSeverity}
-            onChange={({ likelihood, severity }) => {
-              setPostLikelihood(likelihood == null ? '' : String(likelihood))
-              setPostSeverity(severity == null ? '' : String(severity))
-            }}
-          />
-        </div>
+                <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+                  <RiskMatrixField
+                    label={tGenerated('m_05dbd720c56577')}
+                    likelihoodName="postLikelihood"
+                    severityName="postSeverity"
+                    defaultLikelihood={row.postLikelihood}
+                    defaultSeverity={row.postSeverity}
+                    onChange={({ likelihood, severity }) => {
+                      setPostLikelihood(likelihood == null ? '' : String(likelihood))
+                      setPostSeverity(severity == null ? '' : String(severity))
+                    }}
+                  />
+                </div>
+              </>
+            ) : null
+          }
+        />
 
         {/* ---------------------------------------------------------------- */}
         {/* Legacy free-text controls — kept so existing data still renders */}
@@ -852,8 +868,10 @@ export function HazardRow({
   libraryName,
   basePath,
   disabled,
+  showRiskRatings = true,
   moveAction,
   deleteAction,
+  updateAction,
 }: {
   row: {
     id: string
@@ -875,12 +893,15 @@ export function HazardRow({
   libraryName: string | null
   basePath: string
   disabled?: boolean
+  /** Off = legacy checklist: inline Applicable/N/A toggle + typed controls. */
+  showRiskRatings?: boolean
   moveAction: (formData: FormData) => Promise<void>
   deleteAction: (formData: FormData) => Promise<void>
+  updateAction: (formData: FormData) => Promise<void>
 }) {
   return (
     <li
-      className={`space-y-2 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 ${row.applicable ? '' : 'opacity-60'}`}
+      className={`space-y-2 rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 ${row.applicable || !showRiskRatings ? '' : 'opacity-60'}`}
     >
       {/* Header: index + name + risk delta + row actions */}
       <div className="flex items-start justify-between gap-2">
@@ -890,7 +911,7 @@ export function HazardRow({
             <GeneratedValue value={index + 1} />
             <GeneratedValue
               value={
-                row.applicable ? null : (
+                row.applicable || !showRiskRatings ? null : (
                   <span className="ml-2 text-slate-400">
                     <GeneratedText id="m_170d7555e9e90d" />
                   </span>
@@ -910,14 +931,20 @@ export function HazardRow({
               }
             />
           </div>
-          <div className="mt-1.5">
-            <RiskDelta
-              preLikelihood={row.preLikelihood}
-              preSeverity={row.preSeverity}
-              postLikelihood={row.postLikelihood}
-              postSeverity={row.postSeverity}
-            />
-          </div>
+          <GeneratedValue
+            value={
+              showRiskRatings ? (
+                <div className="mt-1.5">
+                  <RiskDelta
+                    preLikelihood={row.preLikelihood}
+                    preSeverity={row.preSeverity}
+                    postLikelihood={row.postLikelihood}
+                    postSeverity={row.postSeverity}
+                  />
+                </div>
+              ) : null
+            }
+          />
         </div>
         <GeneratedValue
           value={
@@ -945,55 +972,261 @@ export function HazardRow({
         />
       </div>
 
-      {/* Controls applied to buy the risk down */}
-      <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
-        <GeneratedValue
-          value={
-            row.controls ? (
-              <>
-                <span className="font-medium tracking-wide text-slate-500 uppercase">
-                  <GeneratedText id="m_1cf9abb5566412" />
-                </span>
-                <GeneratedValue value={' '} />
-                <GeneratedValue value={row.controls} />
-              </>
-            ) : (
-              <span className="text-slate-400 italic">
-                <GeneratedText id="m_0447c23bd275b8" />
-              </span>
-            )
-          }
-        />
-      </div>
+      <GeneratedValue
+        value={
+          showRiskRatings ? (
+            <>
+              {/* Controls applied to buy the risk down */}
+              <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
+                <GeneratedValue
+                  value={
+                    row.controls ? (
+                      <>
+                        <span className="font-medium tracking-wide text-slate-500 uppercase">
+                          <GeneratedText id="m_1cf9abb5566412" />
+                        </span>
+                        <GeneratedValue value={' '} />
+                        <GeneratedValue value={row.controls} />
+                      </>
+                    ) : (
+                      <span className="text-slate-400 italic">
+                        <GeneratedText id="m_0447c23bd275b8" />
+                      </span>
+                    )
+                  }
+                />
+              </div>
 
-      {/* Legacy standard/specific control snapshots — kept for parity. */}
-      <GeneratedValue
-        value={
-          row.standardControls ? (
-            <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
-              <span className="font-medium tracking-wide text-slate-500 uppercase">
-                <GeneratedText id="m_0807af7d2f1773" />
-              </span>
-              <GeneratedValue value={' '} />
-              <GeneratedValue value={row.standardControls} />
-            </div>
-          ) : null
-        }
-      />
-      <GeneratedValue
-        value={
-          row.specificControls ? (
-            <div className="rounded bg-amber-50 px-2 py-1 text-xs text-slate-700 dark:bg-amber-950/40 dark:text-slate-300">
-              <span className="font-medium tracking-wide text-slate-500 uppercase">
-                <GeneratedText id="m_0b2e8dbe0d0825" />
-              </span>
-              <GeneratedValue value={' '} />
-              <GeneratedValue value={row.specificControls} />
-            </div>
-          ) : null
+              {/* Legacy standard/specific control snapshots — kept for parity. */}
+              <GeneratedValue
+                value={
+                  row.standardControls ? (
+                    <div className="rounded bg-slate-50 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
+                      <span className="font-medium tracking-wide text-slate-500 uppercase">
+                        <GeneratedText id="m_0807af7d2f1773" />
+                      </span>
+                      <GeneratedValue value={' '} />
+                      <GeneratedValue value={row.standardControls} />
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  row.specificControls ? (
+                    <div className="rounded bg-amber-50 px-2 py-1 text-xs text-slate-700 dark:bg-amber-950/40 dark:text-slate-300">
+                      <span className="font-medium tracking-wide text-slate-500 uppercase">
+                        <GeneratedText id="m_0b2e8dbe0d0825" />
+                      </span>
+                      <GeneratedValue value={' '} />
+                      <GeneratedValue value={row.specificControls} />
+                    </div>
+                  ) : null
+                }
+              />
+            </>
+          ) : (
+            <HazardChecklistBody
+              rowId={row.id}
+              assessmentId={assessmentId}
+              applicable={row.applicable}
+              standardControls={row.standardControls}
+              specificControls={row.specificControls}
+              disabled={disabled}
+              updateAction={updateAction}
+            />
+          )
         }
       />
     </li>
+  )
+}
+
+/**
+ * Legacy checklist flow for no-rating assessment types: the hazard starts as
+ * N/A; tapping Applicable reveals the library's default controls and requires
+ * typed site-specific controls. Both widgets auto-save (partial updateHazard
+ * writes), so the whole section works inline without opening the edit drawer.
+ */
+function HazardChecklistBody({
+  rowId,
+  assessmentId,
+  applicable,
+  standardControls,
+  specificControls,
+  disabled,
+  updateAction,
+}: {
+  rowId: string
+  assessmentId: string
+  applicable: boolean
+  standardControls: string | null
+  specificControls: string | null
+  disabled?: boolean
+  updateAction: (formData: FormData) => Promise<void>
+}) {
+  const tGenerated = useGeneratedTranslations()
+  const [applies, setApplies] = useState<boolean>(applicable)
+  const applicableSave = useAutoSave({
+    prepare: (value) => {
+      const fd = new FormData()
+      fd.set('id', rowId)
+      fd.set('assessmentId', assessmentId)
+      fd.set('applicable', value)
+      return fd
+    },
+    updateAction,
+  })
+  const [controls, setControls] = useState<string>(specificControls ?? '')
+  const controlsBaseline = useRef(specificControls ?? '')
+  const controlsSave = useAutoSave({
+    prepare: (value) => {
+      const fd = new FormData()
+      fd.set('id', rowId)
+      fd.set('assessmentId', assessmentId)
+      fd.set('specificControls', value)
+      return fd
+    },
+    updateAction,
+    onSaved: (value) => {
+      controlsBaseline.current = value
+    },
+  })
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function setApplicable(next: boolean) {
+    if (disabled || next === applies) return
+    setApplies(next)
+    applicableSave.save(next ? 'true' : 'false')
+  }
+  function onControlsChange(next: string) {
+    setControls(next)
+    controlsSave.setState('dirty')
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => commitControls(next), 1200)
+  }
+  function commitControls(next: string) {
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+    }
+    if (next === controlsBaseline.current && !controlsSave.hasPending()) {
+      controlsSave.setState('idle')
+      return
+    }
+    controlsSave.save(next)
+  }
+
+  const missingControls = applies && controls.trim().length === 0
+  const segBase =
+    'min-h-10 px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60'
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <div
+          role="group"
+          className="inline-flex overflow-hidden rounded-md border border-slate-200 dark:border-slate-700"
+        >
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setApplicable(true)}
+            className={`${segBase} ${
+              applies
+                ? 'bg-teal-600 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            <GeneratedText id="m_10c22a1d0e3321" />
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setApplicable(false)}
+            className={`${segBase} border-l border-slate-200 dark:border-slate-700 ${
+              applies
+                ? 'bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                : 'bg-slate-600 text-white'
+            }`}
+          >
+            <GeneratedText id="m_06702e4064e393" />
+          </button>
+        </div>
+        <SaveDot state={applicableSave.state} onRetry={applicableSave.retry} />
+      </div>
+
+      <GeneratedValue
+        value={
+          applies ? (
+            <>
+              <GeneratedValue
+                value={
+                  standardControls ? (
+                    <div className="rounded bg-slate-50 px-2 py-1.5 text-xs text-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
+                      <span className="font-medium tracking-wide text-slate-500 uppercase">
+                        <GeneratedText id="m_0807af7d2f1773" />
+                      </span>
+                      <GeneratedValue value={' '} />
+                      <GeneratedValue value={standardControls} />
+                    </div>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  disabled ? (
+                    <GeneratedValue
+                      value={
+                        specificControls ? (
+                          <div className="rounded bg-amber-50 px-2 py-1.5 text-xs text-slate-700 dark:bg-amber-950/40 dark:text-slate-300">
+                            <span className="font-medium tracking-wide text-slate-500 uppercase">
+                              <GeneratedText id="m_0b2e8dbe0d0825" />
+                            </span>
+                            <GeneratedValue value={' '} />
+                            <GeneratedValue value={specificControls} />
+                          </div>
+                        ) : null
+                      }
+                    />
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+                          <GeneratedText id="m_1d748b07675565" />
+                        </label>
+                        <SaveDot state={controlsSave.state} onRetry={controlsSave.retry} />
+                      </div>
+                      <Textarea
+                        rows={2}
+                        value={controls}
+                        onChange={(e) => onControlsChange(e.target.value)}
+                        onBlur={() => commitControls(controls)}
+                        placeholder={tGenerated('m_0ddf30e0532923')}
+                        className={
+                          missingControls
+                            ? 'border-amber-400 focus-visible:ring-amber-400 dark:border-amber-600'
+                            : undefined
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          missingControls ? (
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                              <GeneratedText id="m_1bea27463e8b50" />
+                            </p>
+                          ) : null
+                        }
+                      />
+                    </div>
+                  )
+                }
+              />
+            </>
+          ) : null
+        }
+      />
+    </div>
   )
 }
 

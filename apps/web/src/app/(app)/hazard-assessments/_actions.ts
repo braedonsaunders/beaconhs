@@ -483,6 +483,9 @@ async function createAssessment(formData: FormData): Promise<{ id: string }> {
                   assessmentId: row.id,
                   hazardId: h.id,
                   standardControls: h.standardControls,
+                  // No-rating (checklist) types seed the legacy way: every
+                  // hazard starts as not applicable and the crew opts in.
+                  applicable: type.hasRiskRatings,
                   entityOrder: i + 1,
                 })),
               )
@@ -1438,6 +1441,18 @@ export async function addHazardSet(formData: FormData) {
       .from(hazidHazards)
       .where(and(inArray(hazidHazards.id, set.hazardIds), isNull(hazidHazards.deletedAt)))
     if (hazRows.length === 0) return
+    // Checklist (no-rating) types bulk-add the legacy way: hazards start as
+    // not applicable and the crew opts each one in.
+    const [assessmentType] = await tx
+      .select({ hasRiskRatings: hazidAssessmentTypes.hasRiskRatings })
+      .from(hazidAssessments)
+      .innerJoin(
+        hazidAssessmentTypes,
+        eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId),
+      )
+      .where(eq(hazidAssessments.id, assessmentId))
+      .limit(1)
+    const defaultApplicable = assessmentType?.hasRiskRatings ?? true
     const [maxOrder] = await tx
       .select({ m: max(hazidAssessmentHazards.entityOrder) })
       .from(hazidAssessmentHazards)
@@ -1449,7 +1464,7 @@ export async function addHazardSet(formData: FormData) {
         assessmentId,
         hazardId: h.id,
         standardControls: h.standardControls,
-        applicable: true,
+        applicable: defaultApplicable,
         entityOrder: next++,
       })),
     )
@@ -1469,15 +1484,20 @@ export async function updateHazard(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
   await assertAssessmentEditable(ctx, assessmentId)
-  const specificControls = nullable(formData.get('specificControls'))
-  const applicable = formData.get('applicable') === 'on' || formData.get('applicable') === 'true'
-  const standardControls = nullable(formData.get('standardControls'))
-  const name = nullable(formData.get('name'))
+  // Partial update: only fields present on the FormData are written, so the
+  // inline checklist widgets (applicable toggle, specific-controls autosave)
+  // can save one field without clobbering the rest of the row.
+  const updates: Record<string, unknown> = {}
+  if (formData.has('specificControls'))
+    updates.specificControls = nullable(formData.get('specificControls'))
+  if (formData.has('applicable'))
+    updates.applicable =
+      formData.get('applicable') === 'on' || formData.get('applicable') === 'true'
+  if (formData.has('standardControls'))
+    updates.standardControls = nullable(formData.get('standardControls'))
+  if (formData.has('name')) updates.name = nullable(formData.get('name'))
   // Risk-rating fields are optional 1..RISK_AXIS_MAX ints; absent → leave the
   // column alone, empty → null it out, otherwise clamp into the valid range.
-  const updates: Record<string, unknown> = { specificControls, applicable }
-  if (standardControls !== undefined) updates.standardControls = standardControls
-  if (name !== undefined) updates.name = name
   if (formData.has('preLikelihood'))
     updates.preLikelihood = riskRating(formData.get('preLikelihood'))
   if (formData.has('preSeverity')) updates.preSeverity = riskRating(formData.get('preSeverity'))
@@ -1485,6 +1505,7 @@ export async function updateHazard(formData: FormData) {
     updates.postLikelihood = riskRating(formData.get('postLikelihood'))
   if (formData.has('postSeverity')) updates.postSeverity = riskRating(formData.get('postSeverity'))
   if (formData.has('controls')) updates.controls = nullable(formData.get('controls'))
+  if (Object.keys(updates).length === 0) return
   await ctx.db(async (tx) => {
     await lockEditableAssessment(ctx, tx, assessmentId)
     await tx
@@ -2455,6 +2476,7 @@ export async function createAssessmentType(formData: FormData) {
         style,
         hasPPE: flag('hasPPE'),
         hasQuestions: flag('hasQuestions'),
+        hasRiskRatings: style === 'hazard_based' ? flag('hasRiskRatings') : true,
         defaultHazardSetId:
           style === 'hazard_based' ? nullable(formData.get('defaultHazardSetId')) : null,
         availableToGroupIds,

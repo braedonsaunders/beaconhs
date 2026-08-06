@@ -602,6 +602,9 @@ export default async function HazidAssessmentDetailPage({
   const showTasks = assessmentStyle === 'task_based'
   const showHazards = assessmentStyle === 'hazard_based'
   const showJobScope = assessmentStyle === 'hazard_based'
+  // Off = legacy checklist flow: no before/after matrix, hazards start as N/A
+  // and applicable hazards need typed site-specific controls instead.
+  const showRiskRatings = type?.hasRiskRatings ?? true
 
   // ------------------------------------------------------------------
   // Readiness — how complete is this assessment? Drives the progress
@@ -614,9 +617,12 @@ export default async function HazidAssessmentDetailPage({
   )
   const tasksControlled = tasks.filter((t) => (t.row.controls ?? '').trim().length > 0).length
   const applicableHazards = hazards.filter((h) => h.row.applicable)
-  const hazardsRated = applicableHazards.filter(
-    (h) => h.row.preLikelihood != null && h.row.preSeverity != null,
-  ).length
+  // Rated types: every applicable hazard needs a pre-control rating. Checklist
+  // types: every applicable hazard needs typed site-specific controls.
+  const hazardsReady = showRiskRatings
+    ? applicableHazards.filter((h) => h.row.preLikelihood != null && h.row.preSeverity != null)
+        .length
+    : applicableHazards.filter((h) => (h.row.specificControls ?? '').trim().length > 0).length
   const signedCount = signatures.filter((s) => s.row.signatureAttachmentId).length
   const highestResidual = applicableHazards.reduce<{ l: number; s: number } | null>((acc, h) => {
     const l = h.row.postLikelihood ?? h.row.preLikelihood
@@ -647,8 +653,8 @@ export default async function HazidAssessmentDetailPage({
     })
   if (showHazards)
     readiness.push({
-      label: 'Hazards risk-rated',
-      done: hazardsRated,
+      label: showRiskRatings ? 'Hazards risk-rated' : 'Hazards controlled',
+      done: hazardsReady,
       total: applicableHazards.length,
     })
   if (requiredEmbeddedApps.length > 0)
@@ -704,7 +710,7 @@ export default async function HazidAssessmentDetailPage({
             id: 'hazards',
             label: 'Hazards',
             count: hazards.length,
-            done: applicableHazards.length > 0 && hazardsRated === applicableHazards.length,
+            done: applicableHazards.length > 0 && hazardsReady === applicableHazards.length,
           },
         ]
       : []),
@@ -910,17 +916,23 @@ export default async function HazidAssessmentDetailPage({
                   </div>
                 </div>
               </div>
-              <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
-                <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
-                  <GeneratedText id="m_11db8e60406ba7" />
-                </div>
-                <div className="mt-1.5">
-                  <RiskScoreBadge
-                    likelihood={highestResidual?.l ?? null}
-                    severity={highestResidual?.s ?? null}
-                  />
-                </div>
-              </div>
+              <GeneratedValue
+                value={
+                  showRiskRatings ? (
+                    <div className="rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/50">
+                      <div className="text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+                        <GeneratedText id="m_11db8e60406ba7" />
+                      </div>
+                      <div className="mt-1.5">
+                        <RiskScoreBadge
+                          likelihood={highestResidual?.l ?? null}
+                          severity={highestResidual?.s ?? null}
+                        />
+                      </div>
+                    </div>
+                  ) : null
+                }
+              />
             </div>
 
             {/* Readiness tiles */}
@@ -1297,8 +1309,10 @@ export default async function HazidAssessmentDetailPage({
                                   libraryName={row.library?.name ?? null}
                                   basePath={basePath}
                                   disabled={locked}
+                                  showRiskRatings={showRiskRatings}
                                   moveAction={moveHazard}
                                   deleteAction={deleteHazard}
+                                  updateAction={updateHazard}
                                 />
                               ))}
                             />
@@ -1761,6 +1775,7 @@ export default async function HazidAssessmentDetailPage({
                 closeHref={tabHref}
                 row={editHazardRow.row}
                 libraryName={editHazardRow.library?.name ?? null}
+                showRiskRatings={showRiskRatings}
                 updateAction={updateHazard}
               />
             ) : null

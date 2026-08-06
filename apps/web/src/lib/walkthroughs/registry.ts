@@ -131,7 +131,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Tasks and hazards',
-        body: 'Add each task, then the hazards that come with it. Rate the risk before and after your controls — the colours follow your company risk matrix.',
+        body: 'Add each task, then the hazards that come with it. Rate the risk before and after your controls — the colours follow your company risk matrix. Some types skip ratings: mark each hazard Applicable or N/A and type your site-specific controls.',
       },
       {
         title: 'PPE and sign-on',

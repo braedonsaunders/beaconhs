@@ -167,6 +167,11 @@ Depending on the type, you list either the steps of the job or the hazards on si
 3. Write the controls that reduce the risk — things like lockout/tagout, barricades, or signage.
 4. Rate the risk again after controls. This is the residual risk, and it should be lower.
 
+Some assessment types skip risk ratings and work as a simple checklist instead. Every hazard starts as **N/A**. For each hazard that applies to your job:
+
+1. Tap **Applicable**. The hazard's standard controls appear.
+2. Type your site-specific controls in the box. Every applicable hazard needs them before the assessment counts as complete.
+
 ## PPE
 
 1. Tap **Add PPE** to list the gear the task needs.
@@ -194,6 +199,8 @@ An app can depend on one of the assessment questions. It appears as soon as the 
 ## Set up assessment types
 
 If your role manages Hazard Assessments, open **Types** to set up the templates crews choose when they start an assessment. Use **Search assessment types…** to find one, and use **Style** to show task-based or hazard-based types. When you attach a Builder app, use **Show only for an answer** and **Required answer** to make it conditional on a type question.
+
+Hazard-based types include a **Risk matrix ratings** setting. Turn it off to run the type as a checklist: hazards start as N/A, and applicable hazards need typed site-specific controls instead of before/after ratings. Turn it back on at any time to restore the matrix.
 
 ## Safety review
 

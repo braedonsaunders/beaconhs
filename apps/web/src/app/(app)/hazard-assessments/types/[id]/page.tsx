@@ -129,6 +129,15 @@ export default async function AssessmentTypeDetailPage({
                   ) : null
                 }
               />
+              <GeneratedValue
+                value={
+                  type.style === 'hazard_based' && !type.hasRiskRatings ? (
+                    <Badge variant="outline">
+                      <GeneratedText id="m_0f459138198325" />
+                    </Badge>
+                  ) : null
+                }
+              />
             </div>
           }
         />
@@ -144,6 +153,7 @@ export default async function AssessmentTypeDetailPage({
           defaultHazardSetId: type.defaultHazardSetId,
           hasPPE: type.hasPPE,
           hasQuestions: type.hasQuestions,
+          hasRiskRatings: type.hasRiskRatings,
           availableToGroupIds: type.availableToGroupIds ?? [],
         }}
         ppe={ppe}

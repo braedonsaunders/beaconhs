@@ -82,6 +82,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'show_questions', label: 'Show questions section', kind: 'bool' },
       { key: 'show_tasks', label: 'Show tasks section', kind: 'bool' },
       { key: 'show_hazards', label: 'Show hazards section', kind: 'bool' },
+      { key: 'show_risk_ratings', label: 'Show hazard risk ratings', kind: 'bool' },
       // FK ids kept for conditions / recipient `field` targets.
       { key: 'site_org_unit_id', label: 'Location (id)', kind: 'org_unit' },
       { key: 'project_org_unit_id', label: 'Project (id)', kind: 'org_unit' },

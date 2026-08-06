@@ -116,6 +116,7 @@ export async function sendHazidEmail(
   })
   const hazardSummary = data.hazards.map((h) => {
     const name = h.library?.name ?? h.row.name ?? '—'
+    if (!h.row.applicable) return `  - ${name} (N/A)`
     const controls = [h.row.standardControls, h.row.specificControls].filter(Boolean).join(' / ')
     return `  - ${name}${controls ? `\n      Controls: ${controls}` : ''}`
   })
@@ -175,10 +176,13 @@ export async function sendHazidEmail(
           ? '<div style="font-size:13px;color:#64748b;">None recorded.</div>'
           : `<ul style="font-size:13px;margin:0 0 12px 18px;padding:0;">${data.hazards
               .map((h) => {
+                const name = escapeHtml(h.library?.name ?? h.row.name ?? '—')
+                if (!h.row.applicable)
+                  return `<li><strong>${name}</strong> <span style="color:#94a3b8">(N/A)</span></li>`
                 const controls = [h.row.standardControls, h.row.specificControls]
                   .filter(Boolean)
                   .join(' / ')
-                return `<li><strong>${escapeHtml(h.library?.name ?? h.row.name ?? '—')}</strong>${controls ? `<br/><span style="color:#64748b">Controls: ${escapeHtml(controls)}</span>` : ''}</li>`
+                return `<li><strong>${name}</strong>${controls ? `<br/><span style="color:#64748b">Controls: ${escapeHtml(controls)}</span>` : ''}</li>`
               })
               .join('')}</ul>`
       }`

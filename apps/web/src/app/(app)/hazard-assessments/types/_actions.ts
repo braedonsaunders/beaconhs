@@ -48,6 +48,7 @@ export async function updateAssessmentType(input: {
   defaultHazardSetId: string | null
   hasPPE: boolean
   hasQuestions: boolean
+  hasRiskRatings: boolean
   availableToGroupIds: string[]
 }) {
   const ctx = await manageCtx()
@@ -64,6 +65,7 @@ export async function updateAssessmentType(input: {
           input.style === 'hazard_based' ? input.defaultHazardSetId || null : null,
         hasPPE: input.hasPPE,
         hasQuestions: input.hasQuestions,
+        hasRiskRatings: input.style === 'hazard_based' ? input.hasRiskRatings : true,
         availableToGroupIds: input.availableToGroupIds,
       })
       .where(eq(hazidAssessmentTypes.id, input.id)),

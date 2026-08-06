@@ -71,6 +71,22 @@ export function NewAssessmentTypeForm({
             </legend>
             <CheckRow name="hasPPE" label={tGenerated('m_18391e161b9ed6')} defaultChecked />
             <CheckRow name="hasQuestions" label={tGenerated('m_049fefa2074149')} defaultChecked />
+            <GeneratedValue
+              value={
+                style === 'hazard_based' ? (
+                  <div className="space-y-1">
+                    <CheckRow
+                      name="hasRiskRatings"
+                      label={tGenerated('m_1d730de6d2e952')}
+                      defaultChecked
+                    />
+                    <p className="pl-6 text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_062e2719e54cd8" />
+                    </p>
+                  </div>
+                ) : null
+              }
+            />
           </fieldset>
           <GeneratedValue
             value={
