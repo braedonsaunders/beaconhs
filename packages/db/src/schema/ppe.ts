@@ -53,7 +53,10 @@ export const ppeItemStatus = pgEnum('ppe_item_status', [
   'in_stock',
   'issued',
   'returned',
-  'damaged',
+  // Failed an inspection and is not safe to use. The item KEEPS its holder —
+  // it is physically still with them — but cannot be issued or re-issued until
+  // someone with ppe.return_to_service records a passing inspection.
+  'out_of_service',
   'discarded',
   'expired',
 ])
@@ -80,6 +83,12 @@ export const ppeItems = pgTable(
     nextInspectionDue: date('next_inspection_due'),
     lastAnnualInspectionOn: date('last_annual_inspection_on'),
     nextAnnualInspectionDue: date('next_annual_inspection_due'),
+    // Denormalised from the newest ppe_issues ledger row. `updatedAt` moves on
+    // any write (a note edit, an inspection), so it cannot answer "what changed
+    // status recently" — these can, and they keep the register sortable without
+    // a correlated subquery per row.
+    statusChangedAt: timestamp('status_changed_at', { withTimezone: true }),
+    statusChangedByTenantUserId: uuid('status_changed_by_tenant_user_id'),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}).notNull(),
     ...timestamps,
     ...softDelete,
@@ -89,6 +98,7 @@ export const ppeItems = pgTable(
     tenantIdIdUx: uniqueIndex('ppe_items_tenant_id_id_ux').on(t.tenantId, t.id),
     typeIdx: index('ppe_items_type_idx').on(t.tenantId, t.typeId),
     holderIdx: index('ppe_items_holder_idx').on(t.tenantId, t.currentHolderPersonId),
+    statusChangedIdx: index('ppe_items_status_changed_idx').on(t.tenantId, t.statusChangedAt),
     tenantSerialUx: uniqueIndex('ppe_items_tenant_serial_ux').on(t.tenantId, t.serialNumber),
     // Accelerate jsonb containment over custom-field values (metadata.custom).
     metadataGin: index('ppe_items_metadata_gin').using('gin', t.metadata),
@@ -102,14 +112,24 @@ export const ppeItems = pgTable(
       columns: [t.tenantId, t.currentHolderPersonId],
       foreignColumns: [people.tenantId, people.id],
     }),
+    statusChangedByFk: foreignKey({
+      name: 'ppe_items_tenant_status_changed_by_fk',
+      columns: [t.tenantId, t.statusChangedByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
   }),
 )
 
+// Every status transition has a representable ledger action, so the History
+// tab can always answer "who changed this, when, and why".
 export const ppeIssueAction = pgEnum('ppe_issue_action', [
   'issue',
   'return',
   'replace',
-  'mark_damaged',
+  'mark_out_of_service',
+  'return_to_service',
+  'return_to_stock',
+  'expire',
   'discard',
 ])
 
@@ -181,6 +201,10 @@ export const ppeInspections = pgTable(
     // optional actor FK remains authoritative when the account still exists,
     // while this snapshot survives account renames or an unmapped legacy user.
     inspectorNameSnapshot: text('inspector_name_snapshot'),
+    // The supervisor who oversaw or signed off the check. A person rather than
+    // a tenant user: crews name a foreman from the people directory, who often
+    // has no login.
+    supervisorPersonId: uuid('supervisor_person_id'),
     inspectedOn: date('inspected_on'),
     nextDueOn: date('next_due_on'),
     notes: text('notes'),
@@ -193,6 +217,7 @@ export const ppeInspections = pgTable(
       t.tenantId,
       t.inspectedByTenantUserId,
     ),
+    supervisorIdx: index('ppe_inspections_supervisor_idx').on(t.tenantId, t.supervisorPersonId),
     siteIdx: index('ppe_inspections_site_idx').on(t.tenantId, t.siteOrgUnitId),
     tenantIdx: index('ppe_inspections_tenant_idx').on(t.tenantId),
     itemFk: foreignKey({
@@ -204,6 +229,11 @@ export const ppeInspections = pgTable(
       name: 'ppe_inspections_tenant_inspected_by_fk',
       columns: [t.tenantId, t.inspectedByTenantUserId],
       foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+    supervisorFk: foreignKey({
+      name: 'ppe_inspections_tenant_supervisor_fk',
+      columns: [t.tenantId, t.supervisorPersonId],
+      foreignColumns: [people.tenantId, people.id],
     }),
     siteFk: foreignKey({
       name: 'ppe_inspections_tenant_site_fk',

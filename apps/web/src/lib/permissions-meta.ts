@@ -83,6 +83,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'ppe.issue': 'Issue PPE',
   'ppe.return': 'Return PPE',
   'ppe.inspect': 'Inspect PPE',
+  'ppe.return_to_service': 'Return failed PPE to service',
 
   'documents.read': 'View documents',
   'documents.manage': 'Manage documents',

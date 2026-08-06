@@ -27,7 +27,7 @@ import { spawnCorrectiveActionForSubject } from '../spawn'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDate, personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
-import { recordAudit } from '@/lib/audit'
+import { recordPpeIssueAction } from '@/app/(app)/ppe/_lib'
 
 function kindLabel(kind: string | null): string {
   if (kind === 'pre_use') return 'Pre-use'
@@ -215,7 +215,7 @@ export function createPpeInspectionFlowAdapter(
       }
       const status = fieldPatch.item_status
       if (
-        !['in_stock', 'issued', 'returned', 'damaged', 'discarded', 'expired'].includes(
+        !['in_stock', 'issued', 'returned', 'out_of_service', 'discarded', 'expired'].includes(
           String(status),
         )
       ) {
@@ -229,24 +229,25 @@ export function createPpeInspectionFlowAdapter(
           .limit(1),
       )
       if (!inspection) throw new Error('The PPE inspection no longer exists.')
-      await ctx.db((tx) =>
-        tx
-          .update(ppeItems)
-          .set({
-            status: status as
-              'in_stock' | 'issued' | 'returned' | 'damaged' | 'discarded' | 'expired',
-            ...(status === 'discarded' || status === 'expired'
-              ? { currentHolderPersonId: null }
-              : {}),
-          })
-          .where(eq(ppeItems.id, inspection.itemId)),
-      )
-      await recordAudit(ctx, {
-        entityType: 'ppe_item',
-        entityId: inspection.itemId,
-        action: 'update',
-        summary: `Flow changed PPE item status to ${String(status)}`,
-        metadata: { inspectionId },
+      // Route through the shared transition so a Flow-driven status change is
+      // as visible and attributable in History as a human one. Issuing needs a
+      // holder, which a Flow cannot supply, so it is not offered here.
+      const ACTION_FOR_STATUS = {
+        returned: 'return',
+        out_of_service: 'mark_out_of_service',
+        discarded: 'discard',
+        in_stock: 'return_to_stock',
+        expired: 'expire',
+      } as const
+      const action = ACTION_FOR_STATUS[status as keyof typeof ACTION_FOR_STATUS]
+      if (!action) {
+        throw new Error('A Flow cannot issue PPE — it has no holder to issue to.')
+      }
+      await recordPpeIssueAction(ctx, {
+        itemId: inspection.itemId,
+        personId: null,
+        action,
+        note: `Set by a Flow on inspection ${inspectionId}`,
       })
     },
   }

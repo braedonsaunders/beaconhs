@@ -1975,6 +1975,13 @@ async function updatePpe(ctx: RequestContext, id: string, raw: unknown): Promise
     if (hasOwn(b, 'serialNumber')) patch.serialNumber = stripEmpty(b.serialNumber)
     if (hasOwn(b, 'size')) patch.size = stripEmpty(b.size)
     if (hasOwn(b, 'status')) patch.status = b.status
+    // A status set through the API still has to answer "who changed this and
+    // when" — the register sorts on these and the record page displays them.
+    if (hasOwn(b, 'status') && b.status !== before.status) {
+      patch.statusChangedAt = new Date()
+      patch.statusChangedByTenantUserId =
+        ctx.membership?.id && ctx.membership.id !== 'super-admin' ? ctx.membership.id : null
+    }
     if (hasOwn(b, 'currentHolderPersonId')) {
       patch.currentHolderPersonId = b.currentHolderPersonId ?? null
     }

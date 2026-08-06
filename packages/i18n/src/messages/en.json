@@ -9012,6 +9012,12 @@
     "m_0f459138198325": "No risk ratings",
     "m_12db73cd8daf56": "Hazards controlled",
     "m_1bea27463e8b50": "Type the site-specific controls for this job.",
-    "m_0e88ea74e65231": "Show hazard risk ratings"
+    "m_0e88ea74e65231": "Show hazard risk ratings",
+    "m_14e77e41d87c85": "Changed by",
+    "m_1a930e4669e75e": "Return to service",
+    "m_07ca31c7af475f": "Returned to service",
+    "m_02fe3caefba8cc": "Returned to stock",
+    "m_00032fe33e8231": "Issue date",
+    "m_1045d684f7a2d8": "View checklist"
   }
 }

@@ -3,9 +3,9 @@
 // What lives here:
 //   - shouldSpawnCorrectiveAction(): the severity-threshold guard
 //   - createCorrectiveActionForFailedPpeInspection(): mints + audits the CA
-//   - issuePpeToPerson() / returnPpeFromPerson() / discardPpe() / replacePpe(): the
-//     four issuance transactions, each one inserts the ledger row AND
-//     mutates the item state in the same tx
+//   - recordPpeIssueAction() / applyPpeStatusTransition(): the single path for
+//     every status change, writing the ledger row, the item state, and the
+//     who/when attribution in one transaction
 //
 // We keep these in a server-only module so that every place in the UI that
 // touches a PPE item lifecycle goes through the same hardened path.
@@ -107,20 +107,77 @@ export async function createCorrectiveActionForFailedPpeInspection(
   return ca.id
 }
 
+export type PpeLedgerAction =
+  | 'issue'
+  | 'return'
+  | 'replace'
+  | 'mark_out_of_service'
+  | 'return_to_service'
+  | 'return_to_stock'
+  | 'expire'
+  | 'discard'
+
+/** The item state each ledger action lands the item in. */
+const STATUS_AFTER: Record<
+  PpeLedgerAction,
+  'in_stock' | 'issued' | 'returned' | 'out_of_service' | 'discarded' | 'expired'
+> = {
+  issue: 'issued',
+  replace: 'issued',
+  return: 'returned',
+  mark_out_of_service: 'out_of_service',
+  // Cleared items go back to their holder when they still have one; the
+  // holder is preserved through the out-of-service period.
+  return_to_service: 'issued',
+  return_to_stock: 'in_stock',
+  expire: 'expired',
+  discard: 'discarded',
+}
+
+const AUDIT_SUMMARY: Record<PpeLedgerAction, string> = {
+  issue: 'Issued PPE to holder',
+  return: 'Returned PPE',
+  replace: 'Replaced PPE',
+  mark_out_of_service: 'Took PPE out of service',
+  return_to_service: 'Returned PPE to service',
+  return_to_stock: 'Returned PPE to stock',
+  expire: 'Marked PPE expired',
+  discard: 'Discarded PPE',
+}
+
+export type PpeStatusTransitionArgs = {
+  itemId: string
+  personId: string | null
+  action: PpeLedgerAction
+  note?: string | null
+  /** Back-dated issue date. Defaults to now. */
+  occurredAt?: Date | null
+}
+
 /**
- * The four issuance actions all funnel through this helper so that the ledger
- * row + the item state mutation happen atomically. The caller is expected to
- * have already validated the inputs (e.g. holder exists, item not discarded).
+ * EVERY PPE status change funnels through here so the ledger row, the item
+ * state, and the who/when attribution are written atomically. Nothing should
+ * call `update(ppeItems).set({ status })` directly — a status that changes
+ * without a ledger row is invisible in History and unattributable.
  */
 export async function recordPpeIssueAction(
   ctx: RequestContext,
-  args: {
-    itemId: string
-    personId: string | null
-    action: 'issue' | 'return' | 'replace' | 'mark_damaged' | 'discard'
-    note?: string | null
-  },
+  args: PpeStatusTransitionArgs,
 ): Promise<{ issueId: string | null }> {
+  const issueId = await ctx.db((tx) => applyPpeStatusTransition(tx, ctx, args))
+  return { issueId }
+}
+
+/**
+ * Transaction-scoped form, for callers that already hold a tx and need the
+ * status change to commit atomically with their own writes (e.g. recording an
+ * inspection that fails the item out of service).
+ */
+export async function applyPpeStatusTransition(
+  tx: Database,
+  ctx: RequestContext,
+  args: PpeStatusTransitionArgs,
+): Promise<string | null> {
   // The ledger row is attributed to a tenant user (NOT NULL FK). A super-admin
   // viewing a tenant has no membership, so refuse with a clear error instead of
   // letting Postgres reject an empty uuid.
@@ -129,12 +186,13 @@ export async function recordPpeIssueAction(
   if (!issuedByTenantUserId) {
     throw new Error('Super-admin cannot change PPE custody — switch to a tenant user.')
   }
-  const issueId = await ctx.db(async (tx) => {
+  {
     const [item] = await tx
       .select({
         id: ppeItems.id,
         typeId: ppeItems.typeId,
         status: ppeItems.status,
+        currentHolderPersonId: ppeItems.currentHolderPersonId,
         deletedAt: ppeItems.deletedAt,
       })
       .from(ppeItems)
@@ -142,15 +200,22 @@ export async function recordPpeIssueAction(
       .limit(1)
       .for('update')
     if (!item || item.deletedAt) throw new Error('PPE item was not found.')
-    if (
-      (args.action === 'issue' || args.action === 'replace') &&
-      (item.status === 'discarded' || item.status === 'expired')
-    ) {
+    const isIssuing = args.action === 'issue' || args.action === 'replace'
+    if (isIssuing && (item.status === 'discarded' || item.status === 'expired')) {
       throw new Error('Discarded or expired PPE cannot be issued.')
     }
-    if ((args.action === 'issue' || args.action === 'replace') && !args.personId) {
+    if (isIssuing && item.status === 'out_of_service') {
+      throw new Error(
+        'This PPE is out of service. It must pass a return-to-service inspection before it can be issued.',
+      )
+    }
+    if (isIssuing && !args.personId) {
       throw new Error('Select a holder before issuing PPE.')
     }
+    if (args.action === 'return_to_service' && item.status !== 'out_of_service') {
+      throw new Error('Only out-of-service PPE can be returned to service.')
+    }
+    const occurredAt = args.occurredAt ?? new Date()
     const [iss] = await tx
       .insert(ppeIssues)
       .values({
@@ -160,52 +225,49 @@ export async function recordPpeIssueAction(
         action: args.action,
         quantity: 1,
         issuedByTenantUserId,
+        occurredAt,
         note: args.note ?? null,
       })
       .returning({ id: ppeIssues.id })
 
-    // Apply the side-effect on the item itself.
-    if (args.action === 'issue' || args.action === 'replace') {
-      await tx
-        .update(ppeItems)
-        .set({ status: 'issued', currentHolderPersonId: args.personId ?? null })
-        .where(eq(ppeItems.id, args.itemId))
-    } else if (args.action === 'return') {
-      await tx
-        .update(ppeItems)
-        .set({ status: 'returned', currentHolderPersonId: null })
-        .where(eq(ppeItems.id, args.itemId))
-    } else if (args.action === 'mark_damaged') {
-      await tx.update(ppeItems).set({ status: 'damaged' }).where(eq(ppeItems.id, args.itemId))
-    } else if (args.action === 'discard') {
-      await tx
-        .update(ppeItems)
-        .set({ status: 'discarded', currentHolderPersonId: null })
-        .where(eq(ppeItems.id, args.itemId))
-    }
+    // Apply the side-effect on the item itself. Only these transitions clear
+    // the holder: an item taken out of service stays physically with the
+    // person who has it, so its holder is deliberately preserved.
+    const clearsHolder =
+      args.action === 'return' || args.action === 'discard' || args.action === 'return_to_stock'
+    const status =
+      args.action === 'return_to_service' && !item.currentHolderPersonId
+        ? 'in_stock'
+        : STATUS_AFTER[args.action]
+    await tx
+      .update(ppeItems)
+      .set({
+        status,
+        ...(isIssuing ? { currentHolderPersonId: args.personId ?? null } : {}),
+        ...(clearsHolder ? { currentHolderPersonId: null } : {}),
+        statusChangedAt: occurredAt,
+        statusChangedByTenantUserId: issuedByTenantUserId,
+      })
+      .where(eq(ppeItems.id, args.itemId))
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'ppe_item',
       entityId: args.itemId,
       action: 'update',
-      summary:
-        args.action === 'issue'
-          ? 'Issued PPE to holder'
-          : args.action === 'return'
-            ? 'Returned PPE'
-            : args.action === 'replace'
-              ? 'Replaced PPE'
-              : args.action === 'mark_damaged'
-                ? 'Marked PPE damaged'
-                : 'Discarded PPE',
-      after: { action: args.action, personId: args.personId ?? null, note: args.note ?? null },
+      summary: AUDIT_SUMMARY[args.action],
+      before: { status: item.status },
+      after: {
+        status,
+        action: args.action,
+        personId: args.personId ?? null,
+        note: args.note ?? null,
+      },
     })
     await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
       sourceModule: 'ppe_inspection',
       targetRef: { ppeTypeId: item.typeId },
     })
     return iss?.id ?? null
-  })
-  return { issueId }
+  }
 }
 
 /**

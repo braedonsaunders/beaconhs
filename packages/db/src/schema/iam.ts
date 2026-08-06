@@ -213,6 +213,10 @@ export const PERMISSION_CATALOGUE = [
   'ppe.issue',
   'ppe.return',
   'ppe.inspect',
+  // Clearing failed PPE back into service is deliberately NOT part of
+  // ppe.inspect: crews must keep doing pre-use checks, but only H&S/admin may
+  // declare a failed item safe again.
+  'ppe.return_to_service',
   // Documents
   'documents.read',
   'documents.manage',
@@ -395,6 +399,7 @@ export const BUILTIN_ROLES: Record<
       'ppe.issue',
       'ppe.return',
       'ppe.inspect',
+      'ppe.return_to_service',
       'documents.read',
       'documents.manage',
       'documents.review',

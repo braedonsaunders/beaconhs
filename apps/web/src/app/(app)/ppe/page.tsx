@@ -46,7 +46,7 @@ const STATUS_OPTIONS = [
   { value: 'in_stock', label: 'In stock' },
   { value: 'issued', label: 'Issued' },
   { value: 'returned', label: 'Returned' },
-  { value: 'damaged', label: 'Damaged' },
+  { value: 'out_of_service', label: 'Out of service' },
   { value: 'discarded', label: 'Discarded' },
   { value: 'expired', label: 'Expired' },
 ]
@@ -112,7 +112,7 @@ export default async function PpePage({
       filters.push(
         eq(
           ppeItems.status,
-          statusFilter as 'in_stock' | 'issued' | 'returned' | 'damaged' | 'discarded' | 'expired',
+          statusFilter as 'in_stock' | 'issued' | 'returned' | 'out_of_service' | 'discarded' | 'expired',
         ),
       )
     }

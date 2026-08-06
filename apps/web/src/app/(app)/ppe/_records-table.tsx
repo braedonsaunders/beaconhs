@@ -20,7 +20,7 @@ export type PpeTableRow = {
   typeName: string
   serialNumber: string | null
   size: string | null
-  status: 'in_stock' | 'issued' | 'returned' | 'damaged' | 'discarded' | 'expired'
+  status: 'in_stock' | 'issued' | 'returned' | 'out_of_service' | 'discarded' | 'expired'
   holderName: string | null
   assignedOn: string | null
   lastInspectionOn: string | null

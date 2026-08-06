@@ -17,7 +17,14 @@ export const dynamic = 'force-dynamic'
 
 const SORTS = ['type', 'serial', 'size', 'status', 'holder'] as const
 
-const STATUS_VALUES = ['in_stock', 'issued', 'returned', 'damaged', 'discarded', 'expired'] as const
+const STATUS_VALUES = [
+  'in_stock',
+  'issued',
+  'returned',
+  'out_of_service',
+  'discarded',
+  'expired',
+] as const
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)

@@ -87,18 +87,21 @@ describe('equipment and PPE compliance evidence lifecycle', () => {
       'async function recordInspection',
       'async function setStatus',
     )
-    const status = between(ppeDetail, 'async function setStatus', 'async function reportIssue')
-    const certificate = between(
-      ppeDetail,
-      'async function addCertificate',
-      'async function sendEmailAction',
-    )
+    const certificate = between(ppeDetail, 'async function addCertificate', '')
 
-    for (const mutation of [update, inspection, status, certificate]) {
+    for (const mutation of [update, inspection, certificate]) {
       expect(mutation).toContain(".for('update')")
       expect(mutation).toContain('await materializePpeTypeEvidence(tx, ctx.tenantId')
       expect(mutation).toContain('await recordAuditInTransaction(tx, ctx')
     }
+
+    // Status changes no longer hand-roll the transaction: every one of them
+    // delegates to the shared lifecycle helper, which is where the row lock,
+    // the evidence refresh, and the audit record now live. That is what keeps
+    // a status change from ever landing without attribution.
+    const status = between(ppeDetail, 'async function setStatus', 'async function reportIssue')
+    expect(status).toContain('await recordPpeIssueAction(ctx, {')
+    expect(status).not.toContain('.update(ppeItems)')
     expect(update).toContain("field === 'expiresOn' || field === 'typeId'")
   })
 
@@ -121,6 +124,10 @@ describe('equipment and PPE compliance evidence lifecycle', () => {
     expect(custody).toContain('Discarded or expired PPE cannot be issued.')
     expect(custody).toContain("sourceModule: 'ppe_inspection'")
     expect(custody).toContain('await recordAuditInTransaction(tx, ctx')
+    // Out-of-service gear must not be issuable, and every transition stamps
+    // who changed it — both are the point of routing through this helper.
+    expect(custody).toContain("item.status === 'out_of_service'")
+    expect(custody).toContain('statusChangedByTenantUserId: issuedByTenantUserId')
     for (const mutation of [create, discard, apiEquipment, apiPpe]) {
       expect(mutation).toMatch(/materialize(?:Equipment|Ppe)TypeEvidence\(/u)
     }

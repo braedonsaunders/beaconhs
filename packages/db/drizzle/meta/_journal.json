@@ -225,6 +225,13 @@
       "when": 1785954317001,
       "tag": "0031_hazid_optional_risk_ratings",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1785954317002,
+      "tag": "0032_ppe_status_lifecycle",
+      "breakpoints": true
     }
   ]
 }

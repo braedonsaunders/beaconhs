@@ -147,7 +147,7 @@ const PPE_STATUSES: ExportSelectOption[] = [
   { value: 'in_stock', label: 'In stock' },
   { value: 'issued', label: 'Issued' },
   { value: 'returned', label: 'Returned' },
-  { value: 'damaged', label: 'Damaged' },
+  { value: 'out_of_service', label: 'Out of service' },
   { value: 'discarded', label: 'Discarded' },
   { value: 'expired', label: 'Expired' },
 ]

@@ -64,6 +64,7 @@ import {
   ppeIssues,
   ppeItems,
   ppeTypes,
+  tenantUsers,
 } from '@beaconhs/db/schema'
 import { isUniqueViolation, safeDbErrorMessage } from '@beaconhs/db'
 import { assertCan, can } from '@beaconhs/tenant'
@@ -94,6 +95,7 @@ import { nextPpeInspectionDue } from '@/lib/ppe-inspection-due'
 import {
   PPE_ANNUAL_RECORD_YEAR_UNIQUE_CONSTRAINT,
   PPE_SERIAL_UNIQUE_CONSTRAINT,
+  applyPpeStatusTransition,
   daysUntil,
   deriveAnnualYear,
   loadInspectionCriteriaForType,
@@ -127,7 +129,10 @@ const HISTORY_ACTIONS = [
   { value: 'issue', label: 'Issued' },
   { value: 'return', label: 'Returned' },
   { value: 'replace', label: 'Replaced' },
-  { value: 'mark_damaged', label: 'Damaged' },
+  { value: 'mark_out_of_service', label: 'Out of service' },
+  { value: 'return_to_service', label: 'Returned to service' },
+  { value: 'return_to_stock', label: 'Returned to stock' },
+  { value: 'expire', label: 'Expired' },
   { value: 'discard', label: 'Discarded' },
 ] as const
 
@@ -284,7 +289,9 @@ async function recordInspection(formData: FormData) {
   const kindRaw = String(formData.get('kind') ?? 'pre_use')
   const kind: 'pre_use' | 'annual' = kindRaw === 'annual' ? 'annual' : 'pre_use'
   const notes = String(formData.get('notes') ?? '').trim() || null
+  const supervisorPersonId = String(formData.get('supervisorPersonId') ?? '').trim() || null
   if (!isUuid(itemId) || !isUuid(typeId)) throw new Error('Invalid PPE item')
+  if (supervisorPersonId && !isUuid(supervisorPersonId)) throw new Error('Invalid supervisor')
   if (notes && notes.length > 10_000) throw new Error('Inspection notes are too long')
   const today = new Date().toISOString().slice(0, 10)
 
@@ -406,6 +413,22 @@ async function recordInspection(formData: FormData) {
     if (item.deletedAt || item.status === 'discarded' || item.status === 'expired') {
       throw new Error('Discarded or expired PPE cannot be inspected')
     }
+    // Inspecting out-of-service gear IS the return-to-service decision, so it
+    // needs the narrower permission — ppe.inspect alone (which every foreman
+    // holds for pre-use checks) must not be able to declare failed PPE safe.
+    if (item.status === 'out_of_service' && !can(ctx, 'ppe.return_to_service')) {
+      throw new Error(
+        'This PPE is out of service. Only someone with permission to return PPE to service can inspect it.',
+      )
+    }
+    if (supervisorPersonId) {
+      const [supervisor] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(and(eq(people.id, supervisorPersonId), isNull(people.deletedAt)))
+        .limit(1)
+      if (!supervisor) throw new Error('Supervisor was not found')
+    }
     const nextDueOn = nextPpeInspectionDue(kind, today, item.inspectionSchedule)
 
     if (allPhotoIds.length > 0) {
@@ -438,6 +461,7 @@ async function recordInspection(formData: FormData) {
         notes,
         inspectedByTenantUserId: ctx.membership?.id,
         inspectorNameSnapshot: ctx.membership?.displayName ?? null,
+        supervisorPersonId,
       })
       .returning({ id: ppeInspections.id })
     if (!row) throw new Error('Inspection could not be recorded')
@@ -481,6 +505,28 @@ async function recordInspection(formData: FormData) {
         ? { lastInspectionOn: today, nextInspectionDue: nextDueOn }
         : { lastAnnualInspectionOn: today, nextAnnualInspectionDue: nextDueOn }
     await tx.update(ppeItems).set(set).where(eq(ppeItems.id, itemId))
+
+    // A failed inspection takes the item out of service immediately; a pass on
+    // out-of-service gear clears it. The holder is preserved either way — the
+    // item is physically still with whoever has it. Same transaction as the
+    // inspection itself, so the two can never disagree.
+    const transition =
+      finalResult === 'fail' && item.status !== 'out_of_service'
+        ? ('mark_out_of_service' as const)
+        : finalResult === 'pass' && item.status === 'out_of_service'
+          ? ('return_to_service' as const)
+          : null
+    if (transition) {
+      await applyPpeStatusTransition(tx, ctx, {
+        itemId,
+        personId: null,
+        action: transition,
+        note:
+          transition === 'mark_out_of_service'
+            ? `Failed ${kind === 'pre_use' ? 'pre-use' : 'annual'} inspection`
+            : `Passed ${kind === 'pre_use' ? 'pre-use' : 'annual'} return-to-service inspection`,
+      })
+    }
     const correctiveActionId = correctiveActionInput
       ? await createCorrectiveActionForFailedPpeInspection(tx, ctx, {
           inspectionId: row.id,
@@ -526,7 +572,7 @@ async function setStatus(formData: FormData) {
     'in_stock',
     'issued',
     'returned',
-    'damaged',
+    'out_of_service',
     'discarded',
     'expired',
   ] as const
@@ -538,47 +584,29 @@ async function setStatus(formData: FormData) {
   const personId = String(formData.get('personId') ?? '').trim() || null
   const note = String(formData.get('note') ?? '').trim() || null
 
-  // Permission split mirrors the transition: issuing needs issue, returning needs
-  // return, everything else (damage/discard/in-stock/expire) is a manage write.
+  // Permission split mirrors the transition: issuing needs issue, returning
+  // needs return, everything else is a manage write.
   if (status === 'issued') assertCan(ctx, 'ppe.issue')
   else if (status === 'returned') assertCan(ctx, 'ppe.return')
   else assertCan(ctx, 'ppe.manage')
 
-  if (status === 'issued') {
-    if (!personId) return
-    await recordPpeIssueAction(ctx, { itemId, personId, action: 'issue', note })
-  } else if (status === 'returned') {
-    await recordPpeIssueAction(ctx, { itemId, personId: null, action: 'return', note })
-  } else if (status === 'damaged') {
-    await recordPpeIssueAction(ctx, { itemId, personId: null, action: 'mark_damaged', note })
-  } else if (status === 'discarded') {
-    await recordPpeIssueAction(ctx, { itemId, personId: null, action: 'discard', note })
-  } else {
-    // 'in_stock' / 'expired' — no ledger row, just flip the flag.
-    await ctx.db(async (tx) => {
-      const [item] = await tx
-        .select({ typeId: ppeItems.typeId })
-        .from(ppeItems)
-        .where(and(eq(ppeItems.id, itemId), isNull(ppeItems.deletedAt)))
-        .limit(1)
-        .for('update')
-      if (!item) throw new Error('PPE item was not found')
-      const [updated] = await tx
-        .update(ppeItems)
-        .set({ status, ...(status === 'in_stock' ? { currentHolderPersonId: null } : {}) })
-        .where(and(eq(ppeItems.id, itemId), isNull(ppeItems.deletedAt)))
-        .returning({ id: ppeItems.id })
-      if (!updated) throw new Error('PPE status was not updated')
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'ppe_item',
-        entityId: itemId,
-        action: 'update',
-        summary: `Set PPE status → ${status}`,
-        after: { status },
-      })
-      await materializePpeTypeEvidence(tx, ctx.tenantId, [item.typeId])
-    })
-  }
+  // Every transition writes a ledger row, so History can always name who
+  // changed the status and why. The note travels with it.
+  const ACTION_FOR_STATUS = {
+    issued: 'issue',
+    returned: 'return',
+    out_of_service: 'mark_out_of_service',
+    discarded: 'discard',
+    in_stock: 'return_to_stock',
+    expired: 'expire',
+  } as const
+  if (status === 'issued' && !personId) return
+  await recordPpeIssueAction(ctx, {
+    itemId,
+    personId: status === 'issued' ? personId : null,
+    action: ACTION_FOR_STATUS[status],
+    note,
+  })
   revalidatePath(`/ppe/${itemId}`)
   revalidatePath('/ppe')
   redirect(`/ppe/${itemId}?tab=overview`)
@@ -831,6 +859,9 @@ export default async function PpeDetailPage({
   const canManage = can(ctx, 'ppe.manage')
   const canIssue = can(ctx, 'ppe.issue')
   const canChangeStatus = can(ctx, 'ppe.return') || canManage
+  // Clearing failed gear is deliberately narrower than ppe.inspect — crews
+  // still run pre-use checks, but only H&S/admin may declare it safe again.
+  const canReturnToService = can(ctx, 'ppe.return_to_service')
   const drawerKey = pickString(sp.drawer)
 
   const baseData = await ctx.db(async (tx) => {
@@ -848,6 +879,11 @@ export default async function PpeDetailPage({
 
   if (!baseData) notFound()
   const { item, type, holder } = baseData
+  // An item already with a holder is re-issued via Change status → Returned
+  // first; offering "Issue to person" here just appended a duplicate ledger
+  // row for the same holder. Out-of-service gear cannot be issued at all.
+  const isOutOfService = item.status === 'out_of_service'
+  const canBeIssued = item.status === 'in_stock' || item.status === 'returned'
   const [preUseCriteria, annualCriteria, countData] = await Promise.all([
     loadInspectionCriteriaForType(ctx, type.id, 'pre_use'),
     loadInspectionCriteriaForType(ctx, type.id, 'annual'),
@@ -896,6 +932,9 @@ export default async function PpeDetailPage({
   //     recertification (configurable on the type), or it already has records.
   const hasPreUse = preUseCriteria.length > 0
   const hasAnnual = annualCriteria.length > 0
+  // Returning to service means passing the fullest check the type defines —
+  // prefer the annual checklist when it exists.
+  const returnToServiceKind = hasAnnual ? 'annual' : 'pre_use'
   const hasInspections = hasPreUse || hasAnnual
   const requiresCertificate = type.inspectionSchedule?.requiresCertificate ?? false
   const showCertificates = requiresCertificate || countData.annual > 0
@@ -1099,9 +1138,16 @@ export default async function PpeDetailPage({
           .leftJoin(people, eq(people.id, ppeIssues.personId))
           .where(where),
         tx
-          .select({ issue: ppeIssues, person: people })
+          // `person` is who the item went TO; `actor` is who performed the
+          // change. They are different people and the table shows both.
+          .select({
+            issue: ppeIssues,
+            person: people,
+            actorName: tenantUsers.displayName,
+          })
           .from(ppeIssues)
           .leftJoin(people, eq(people.id, ppeIssues.personId))
+          .leftJoin(tenantUsers, eq(tenantUsers.id, ppeIssues.issuedByTenantUserId))
           .where(where)
           .orderBy(desc(ppeIssues.occurredAt), desc(ppeIssues.id))
           .limit(listParams.perPage)
@@ -1228,13 +1274,29 @@ export default async function PpeDetailPage({
             <div className="flex flex-wrap items-center gap-2">
               <GeneratedValue
                 value={
-                  canIssue ? (
+                  canIssue && canBeIssued ? (
                     <Link
                       href={`${basePath}?tab=${active}&drawer=issue-to-person` as any}
                       scroll={false}
                     >
                       <Button>
                         <UserPlus size={14} /> <GeneratedText id="m_10b50a35e0953a" />
+                      </Button>
+                    </Link>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  isOutOfService && canReturnToService ? (
+                    <Link
+                      href={
+                        `${basePath}?tab=inspections&drawer=record-inspection&kind=${returnToServiceKind}` as any
+                      }
+                      scroll={false}
+                    >
+                      <Button>
+                        <ShieldCheck size={14} /> <GeneratedText id="m_1a930e4669e75e" />
                       </Button>
                     </Link>
                   ) : null
@@ -1254,14 +1316,6 @@ export default async function PpeDetailPage({
                   ) : null
                 }
               />
-              <Link
-                href={`/ppe/${id}?send=1${active !== 'overview' ? `&tab=${active}` : ''}` as any}
-                scroll={false}
-              >
-                <Button variant="outline">
-                  <Mail size={14} /> <GeneratedText id="m_09dfca28fc95ba" />
-                </Button>
-              </Link>
             </div>
           }
         />
@@ -2287,6 +2341,9 @@ export default async function PpeDetailPage({
                               <GeneratedText id="m_12e926c9216094" />
                             </TableHead>
                             <TableHead>
+                              <GeneratedText id="m_14e77e41d87c85" />
+                            </TableHead>
+                            <TableHead>
                               <GeneratedText id="m_16d241f76641bb" />
                             </TableHead>
                           </TableRow>
@@ -2307,10 +2364,12 @@ export default async function PpeDetailPage({
                                 <TableCell>
                                   <Badge
                                     variant={
-                                      row.issue.action === 'issue'
+                                      row.issue.action === 'issue' ||
+                                      row.issue.action === 'return_to_service'
                                         ? 'success'
                                         : row.issue.action === 'discard' ||
-                                            row.issue.action === 'mark_damaged'
+                                            row.issue.action === 'mark_out_of_service' ||
+                                            row.issue.action === 'expire'
                                           ? 'destructive'
                                           : 'secondary'
                                     }
@@ -2333,6 +2392,9 @@ export default async function PpeDetailPage({
                                       )
                                     }
                                   />
+                                </TableCell>
+                                <TableCell className="text-slate-600">
+                                  <GeneratedValue value={row.actorName ?? '—'} />
                                 </TableCell>
                                 <TableCell className="text-slate-600">
                                   <GeneratedValue value={row.issue.note ?? '—'} />
@@ -2505,7 +2567,7 @@ export default async function PpeDetailPage({
             >
               <option value="returned">{'Returned'}</option>
               <option value="in_stock">{'In stock'}</option>
-              <option value="damaged">{'Damaged'}</option>
+              <option value="out_of_service">{'Out of service'}</option>
               <option value="discarded">{'Discarded'}</option>
               <option value="expired">{'Expired'}</option>
             </Select>
