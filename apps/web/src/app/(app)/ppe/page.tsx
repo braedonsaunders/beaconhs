@@ -112,7 +112,8 @@ export default async function PpePage({
       filters.push(
         eq(
           ppeItems.status,
-          statusFilter as 'in_stock' | 'issued' | 'returned' | 'out_of_service' | 'discarded' | 'expired',
+          statusFilter as
+            'in_stock' | 'issued' | 'returned' | 'out_of_service' | 'discarded' | 'expired',
         ),
       )
     }

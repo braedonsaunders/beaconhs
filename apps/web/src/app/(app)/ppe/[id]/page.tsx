@@ -25,7 +25,6 @@ import {
   AlertTriangle,
   ClipboardCheck,
   FileText,
-  Mail,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -88,9 +87,7 @@ import { Section } from '@/components/section'
 import { TableToolbar } from '@/components/table-toolbar'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { RawImage } from '@/components/raw-image'
-import { sendPpeIssueEmail } from './_send-email'
 import { nextPpeInspectionDue } from '@/lib/ppe-inspection-due'
 import {
   PPE_ANNUAL_RECORD_YEAR_UNIQUE_CONSTRAINT,
@@ -583,6 +580,19 @@ async function setStatus(formData: FormData) {
   const status = statusRaw as (typeof STATUS_VALUES)[number]
   const personId = String(formData.get('personId') ?? '').trim() || null
   const note = String(formData.get('note') ?? '').trim() || null
+  // Optional back-dated issue date. Midday avoids a timezone shift dragging
+  // the date onto the previous day for anyone west of UTC.
+  const issuedOnRaw = String(formData.get('issuedOn') ?? '').trim()
+  let occurredAt: Date | null = null
+  if (issuedOnRaw) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(issuedOnRaw)) throw new Error('Issue date is invalid')
+    const parsed = new Date(`${issuedOnRaw}T12:00:00Z`)
+    if (Number.isNaN(parsed.getTime())) throw new Error('Issue date is invalid')
+    if (parsed.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+      throw new Error('Issue date cannot be in the future')
+    }
+    occurredAt = parsed
+  }
 
   // Permission split mirrors the transition: issuing needs issue, returning
   // needs return, everything else is a manage write.
@@ -606,6 +616,7 @@ async function setStatus(formData: FormData) {
     personId: status === 'issued' ? personId : null,
     action: ACTION_FOR_STATUS[status],
     note,
+    occurredAt,
   })
   revalidatePath(`/ppe/${itemId}`)
   revalidatePath('/ppe')
@@ -809,33 +820,6 @@ async function deleteCertificate(formData: FormData) {
   revalidatePath(`/ppe/${itemId}`)
 }
 
-// Inline server action for the Send-email dialog. Allows shipping an
-// open issue report (or the item summary when no issue is open) to a
-// maintenance distribution list or any explicit recipients.
-async function sendEmailAction(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'ppe.read.all')
-  const id = String(formData.get('id') ?? '')
-  if (!id) return
-  const subjectPrefix = String(formData.get('subjectPrefix') ?? '').trim() || undefined
-  const messageOverride = String(formData.get('message') ?? '').trim() || undefined
-  const splitEmails = (raw: string) =>
-    raw
-      .split(/[,\s]+/)
-      .map((s) => s.trim())
-      .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
-  const recipients = splitEmails(String(formData.get('recipients') ?? ''))
-  const cc = splitEmails(String(formData.get('cc') ?? ''))
-  await sendPpeIssueEmail(ctx, id, {
-    recipients: recipients.length > 0 ? recipients : undefined,
-    cc: cc.length > 0 ? cc : undefined,
-    subjectPrefix,
-    messageOverride,
-  })
-  revalidatePath(`/ppe/${id}`)
-}
-
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const tGenerated = await getGeneratedTranslations()
   const { id } = await params
@@ -1011,8 +995,9 @@ export default async function PpeDetailPage({
       const [[filteredRow], inspections] = await Promise.all([
         tx.select({ c: count() }).from(ppeInspections).where(where),
         tx
-          .select({ insp: ppeInspections })
+          .select({ insp: ppeInspections, supervisor: people })
           .from(ppeInspections)
+          .leftJoin(people, eq(people.id, ppeInspections.supervisorPersonId))
           .where(where)
           .orderBy(desc(ppeInspections.inspectedOn), desc(ppeInspections.id))
           .limit(listParams.perPage)
@@ -1172,43 +1157,48 @@ export default async function PpeDetailPage({
     }
   })
   const { inspections, annualRecords, issueReports, issuesLog, itemCAs } = listData
-  const inspectionEvidence =
-    inspections.length > 0
-      ? await ctx.db(async (tx) => {
-          const inspectionIds = inspections.map(({ insp }) => insp.id)
-          const [criteria, photoLinks] = await Promise.all([
-            tx
-              .select()
-              .from(ppeInspectionCriteria)
-              .where(inArray(ppeInspectionCriteria.inspectionId, inspectionIds))
-              .orderBy(
-                asc(ppeInspectionCriteria.inspectionId),
-                asc(ppeInspectionCriteria.sequence),
+  // The checklist lives in a drawer, so its evidence is fetched only for the
+  // one inspection being opened — previously every inspection on the page paid
+  // for two extra queries whether or not anyone looked.
+  const openInspectionId = pickString(sp.inspectionId) ?? ''
+  const openInspection =
+    drawerKey === 'inspection' && isUuid(openInspectionId)
+      ? inspections.find(({ insp }) => insp.id === openInspectionId)
+      : undefined
+  const inspectionEvidence = openInspection
+    ? await ctx.db(async (tx) => {
+        const inspectionIds = [openInspection.insp.id]
+        const [criteria, photoLinks] = await Promise.all([
+          tx
+            .select()
+            .from(ppeInspectionCriteria)
+            .where(inArray(ppeInspectionCriteria.inspectionId, inspectionIds))
+            .orderBy(asc(ppeInspectionCriteria.inspectionId), asc(ppeInspectionCriteria.sequence)),
+          tx
+            .select({ link: ppeInspectionAttachments, attachment: attachments })
+            .from(ppeInspectionAttachments)
+            .innerJoin(attachments, eq(attachments.id, ppeInspectionAttachments.attachmentId))
+            .leftJoin(
+              ppeInspectionCriteria,
+              eq(ppeInspectionCriteria.id, ppeInspectionAttachments.criterionResultId),
+            )
+            .where(
+              or(
+                inArray(ppeInspectionAttachments.inspectionId, inspectionIds),
+                inArray(ppeInspectionCriteria.inspectionId, inspectionIds),
               ),
-            tx
-              .select({ link: ppeInspectionAttachments, attachment: attachments })
-              .from(ppeInspectionAttachments)
-              .innerJoin(attachments, eq(attachments.id, ppeInspectionAttachments.attachmentId))
-              .leftJoin(
-                ppeInspectionCriteria,
-                eq(ppeInspectionCriteria.id, ppeInspectionAttachments.criterionResultId),
-              )
-              .where(
-                or(
-                  inArray(ppeInspectionAttachments.inspectionId, inspectionIds),
-                  inArray(ppeInspectionCriteria.inspectionId, inspectionIds),
-                ),
-              ),
-          ])
-          return { criteria, photoLinks }
-        })
-      : { criteria: [], photoLinks: [] }
+            ),
+        ])
+        return { criteria, photoLinks }
+      })
+    : { criteria: [], photoLinks: [] }
   const openIssues = countData.openIssues
 
   const basePath = `/ppe/${id}`
   // Drawer state is URL-driven; preserve the active tab in the close URL so
   // that closing the drawer doesn't kick you back to Overview.
   const closeHref = `${basePath}?tab=${active}`
+  const todayIso = new Date().toISOString().slice(0, 10)
   return (
     <DetailPageLayout
       header={
@@ -1711,6 +1701,9 @@ export default async function PpeDetailPage({
                                 <GeneratedText id="m_08412ea75fe5da" />
                               </TableHead>
                               <TableHead>
+                                <GeneratedText id="m_0ccb8e5b917b17" />
+                              </TableHead>
+                              <TableHead>
                                 <GeneratedText id="m_11af411751990f" />
                               </TableHead>
                               <TableHead>
@@ -1718,6 +1711,9 @@ export default async function PpeDetailPage({
                               </TableHead>
                               <TableHead>
                                 <GeneratedText id="m_1dc5fc53bbcb19" />
+                              </TableHead>
+                              <TableHead>
+                                <GeneratedText id="m_1045d684f7a2d8" />
                               </TableHead>
                             </TableRow>
                           </TableHeader>
@@ -1769,6 +1765,15 @@ export default async function PpeDetailPage({
                                         />
                                       </TableCell>
                                       <TableCell>
+                                        <GeneratedValue
+                                          value={
+                                            row.supervisor
+                                              ? `${row.supervisor.lastName}, ${row.supervisor.firstName}`
+                                              : '—'
+                                          }
+                                        />
+                                      </TableCell>
+                                      <TableCell>
                                         <GeneratedValue value={row.insp.nextDueOn ?? '—'} />
                                       </TableCell>
                                       <TableCell className="text-slate-600">
@@ -1790,163 +1795,16 @@ export default async function PpeDetailPage({
                                           }
                                         />
                                       </TableCell>
-                                    </TableRow>
-                                    <TableRow className="bg-slate-50/70 hover:bg-slate-50/70 dark:bg-slate-950/30 dark:hover:bg-slate-950/30">
-                                      <TableCell colSpan={7} className="py-2">
-                                        <details>
-                                          <summary className="cursor-pointer text-sm font-medium text-teal-700 dark:text-teal-300">
-                                            <GeneratedText id="m_11bbc82ecbc827" />
-                                            <GeneratedValue value={criteria.length} />{' '}
-                                            <GeneratedText id="m_089f2b1abdb347" />
-                                            <GeneratedValue
-                                              value={
-                                                criteria.length === 1 ? (
-                                                  ''
-                                                ) : (
-                                                  <GeneratedText id="m_00ded356f0f424" />
-                                                )
-                                              }
-                                            />
-                                            <GeneratedValue
-                                              value={
-                                                recordPhotos.length > 0 ? (
-                                                  <GeneratedText
-                                                    id="m_060016377c914d"
-                                                    values={{
-                                                      value0: recordPhotos.length,
-                                                      value1: recordPhotos.length === 1 ? '' : 's',
-                                                    }}
-                                                  />
-                                                ) : (
-                                                  ''
-                                                )
-                                              }
-                                            />
-                                            )
-                                          </summary>
-                                          <div className="mt-3 space-y-2">
-                                            <GeneratedValue
-                                              value={
-                                                criteria.length === 0 ? (
-                                                  <p className="text-sm text-slate-500">
-                                                    <GeneratedText id="m_0b4b0b10211872" />
-                                                  </p>
-                                                ) : (
-                                                  <ol className="space-y-2">
-                                                    {criteria.map((criterion) => {
-                                                      const photos =
-                                                        inspectionEvidence.photoLinks.filter(
-                                                          ({ link }) =>
-                                                            link.criterionResultId === criterion.id,
-                                                        )
-                                                      return (
-                                                        <li
-                                                          key={criterion.id}
-                                                          className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
-                                                        >
-                                                          <div className="flex flex-wrap items-start justify-between gap-2">
-                                                            <div className="min-w-0">
-                                                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                                                {criterion.sequence + 1}.{' '}
-                                                                {criterion.questionTextSnapshot}
-                                                              </p>
-                                                              {criterion.descriptionSnapshot ? (
-                                                                <p className="mt-1 text-xs text-slate-500">
-                                                                  {criterion.descriptionSnapshot}
-                                                                </p>
-                                                              ) : null}
-                                                            </div>
-                                                            <div className="flex items-center gap-1.5">
-                                                              <Badge variant="secondary">
-                                                                {criterion.severity}
-                                                              </Badge>
-                                                              <Badge
-                                                                variant={
-                                                                  criterion.answer === 'pass'
-                                                                    ? 'success'
-                                                                    : criterion.answer === 'fail'
-                                                                      ? 'destructive'
-                                                                      : 'secondary'
-                                                                }
-                                                              >
-                                                                {criterion.answer?.replace(
-                                                                  '_',
-                                                                  ' ',
-                                                                ) ?? (
-                                                                  <GeneratedText id="m_001b53ad38955a" />
-                                                                )}
-                                                              </Badge>
-                                                            </div>
-                                                          </div>
-                                                          {criterion.nonComplianceReason ? (
-                                                            <p className="mt-2 text-sm text-red-700 dark:text-red-300">
-                                                              {criterion.nonComplianceReason}
-                                                            </p>
-                                                          ) : null}
-                                                          {photos.length > 0 ? (
-                                                            <div className="mt-3 flex flex-wrap gap-2">
-                                                              {photos.map(({ attachment }) => (
-                                                                <a
-                                                                  key={attachment.id}
-                                                                  href={attachmentUrl(
-                                                                    attachment.id,
-                                                                  )}
-                                                                  target="_blank"
-                                                                  rel="noreferrer"
-                                                                  title={attachment.filename}
-                                                                  className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
-                                                                >
-                                                                  <RawImage
-                                                                    src={attachmentUrl(
-                                                                      attachment.id,
-                                                                    )}
-                                                                    alt={attachment.filename}
-                                                                    optimizationReason="authenticated"
-                                                                    className="h-full w-full object-cover"
-                                                                  />
-                                                                </a>
-                                                              ))}
-                                                            </div>
-                                                          ) : null}
-                                                        </li>
-                                                      )
-                                                    })}
-                                                  </ol>
-                                                )
-                                              }
-                                            />
-                                            <GeneratedValue
-                                              value={
-                                                recordPhotos.length > 0 ? (
-                                                  <div>
-                                                    <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                                                      <GeneratedText id="m_020f32bc59d098" />
-                                                    </p>
-                                                    <div className="flex flex-wrap gap-2">
-                                                      {recordPhotos.map(({ attachment }) => (
-                                                        <a
-                                                          key={attachment.id}
-                                                          href={attachmentUrl(attachment.id)}
-                                                          target="_blank"
-                                                          rel="noreferrer"
-                                                          title={attachment.filename}
-                                                          className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
-                                                        >
-                                                          <RawImage
-                                                            src={attachmentUrl(attachment.id)}
-                                                            alt={attachment.filename}
-                                                            optimizationReason="authenticated"
-                                                            className="h-full w-full object-cover"
-                                                          />
-                                                        </a>
-                                                      ))}
-                                                    </div>
-                                                  </div>
-                                                ) : null
-                                              }
-                                            />
-                                          </div>
-                                        </details>
+                                      <TableCell>
+                                        <Link
+                                          href={
+                                            `${basePath}?tab=inspections&drawer=inspection&inspectionId=${row.insp.id}` as any
+                                          }
+                                          scroll={false}
+                                          className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
+                                        >
+                                          <GeneratedText id="m_1045d684f7a2d8" />
+                                        </Link>
                                       </TableCell>
                                     </TableRow>
                                   </Fragment>
@@ -2421,24 +2279,6 @@ export default async function PpeDetailPage({
         />
       </div>
 
-      <GenericSendEmailDialog
-        open={pickString(sp.send) === '1'}
-        title={tGeneratedValue(
-          openIssues.length > 0 ? tGenerated('m_00d95acdc378ae') : tGenerated('m_10f9f5d1746a3a'),
-        )}
-        description={tGeneratedValue(
-          openIssues.length > 0 ? tGenerated('m_083a8588b6b8ae') : tGenerated('m_121f949b83c154'),
-        )}
-        recipientsHint="Enter at least one recipient — each gets their own copy. Nothing is sent if this is left blank."
-        reference={item.serialNumber ?? id.slice(0, 8)}
-        defaultSubjectPrefix={openIssues.length > 0 ? 'Action required' : 'FYI'}
-        sendAction={async (fd) => {
-          'use server'
-          fd.set('id', id)
-          await sendEmailAction(fd)
-        }}
-      />
-
       {/*
        * Sub-entity drawers. Mounted once per page; only one is open at a time
        * (URL-driven via `?drawer=…`). Each form inside the drawer has an id
@@ -2536,11 +2376,158 @@ export default async function PpeDetailPage({
           </div>
           <div className="space-y-1.5">
             <Label>
+              <GeneratedText id="m_00032fe33e8231" />
+            </Label>
+            {/* Gear is often handed over before anyone reaches a screen, so the
+                date is editable rather than pinned to the server clock. */}
+            <Input type="date" name="issuedOn" defaultValue={todayIso} max={todayIso} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>
               <GeneratedText id="m_16d241f76641bb" />
             </Label>
             <Textarea name="note" rows={3} placeholder={tGenerated('m_13a81f587a96fe')} />
           </div>
         </form>
+      </UrlDrawer>
+
+      <UrlDrawer
+        open={Boolean(openInspection)}
+        closeHref={`${basePath}?tab=inspections`}
+        title={tGenerated('m_1045d684f7a2d8')}
+        description={
+          openInspection
+            ? tGeneratedValue(
+                `${openInspection.insp.kind === 'pre_use' ? 'Pre-use' : 'Annual'} · ${openInspection.insp.inspectedOn ?? '—'} · ${openInspection.insp.result ?? '—'}`,
+              )
+            : undefined
+        }
+        size="lg"
+      >
+        <GeneratedValue
+          value={
+            openInspection
+              ? (() => {
+                  const criteria = inspectionEvidence.criteria
+                  const recordPhotos = inspectionEvidence.photoLinks.filter(
+                    ({ link }) => link.criterionResultId === null,
+                  )
+                  return (
+                    <div className="mt-3 space-y-2">
+                      <GeneratedValue
+                        value={
+                          criteria.length === 0 ? (
+                            <p className="text-sm text-slate-500">
+                              <GeneratedText id="m_0b4b0b10211872" />
+                            </p>
+                          ) : (
+                            <ol className="space-y-2">
+                              {criteria.map((criterion) => {
+                                const photos = inspectionEvidence.photoLinks.filter(
+                                  ({ link }) => link.criterionResultId === criterion.id,
+                                )
+                                return (
+                                  <li
+                                    key={criterion.id}
+                                    className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+                                  >
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                          {criterion.sequence + 1}. {criterion.questionTextSnapshot}
+                                        </p>
+                                        {criterion.descriptionSnapshot ? (
+                                          <p className="mt-1 text-xs text-slate-500">
+                                            {criterion.descriptionSnapshot}
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <Badge variant="secondary">{criterion.severity}</Badge>
+                                        <Badge
+                                          variant={
+                                            criterion.answer === 'pass'
+                                              ? 'success'
+                                              : criterion.answer === 'fail'
+                                                ? 'destructive'
+                                                : 'secondary'
+                                          }
+                                        >
+                                          {criterion.answer?.replace('_', ' ') ?? (
+                                            <GeneratedText id="m_001b53ad38955a" />
+                                          )}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                    {criterion.nonComplianceReason ? (
+                                      <p className="mt-2 text-sm text-red-700 dark:text-red-300">
+                                        {criterion.nonComplianceReason}
+                                      </p>
+                                    ) : null}
+                                    {photos.length > 0 ? (
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        {photos.map(({ attachment }) => (
+                                          <a
+                                            key={attachment.id}
+                                            href={attachmentUrl(attachment.id)}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            title={attachment.filename}
+                                            className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
+                                          >
+                                            <RawImage
+                                              src={attachmentUrl(attachment.id)}
+                                              alt={attachment.filename}
+                                              optimizationReason="authenticated"
+                                              className="h-full w-full object-cover"
+                                            />
+                                          </a>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </li>
+                                )
+                              })}
+                            </ol>
+                          )
+                        }
+                      />
+                      <GeneratedValue
+                        value={
+                          recordPhotos.length > 0 ? (
+                            <div>
+                              <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                                <GeneratedText id="m_020f32bc59d098" />
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {recordPhotos.map(({ attachment }) => (
+                                  <a
+                                    key={attachment.id}
+                                    href={attachmentUrl(attachment.id)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title={attachment.filename}
+                                    className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
+                                  >
+                                    <RawImage
+                                      src={attachmentUrl(attachment.id)}
+                                      alt={attachment.filename}
+                                      optimizationReason="authenticated"
+                                      className="h-full w-full object-cover"
+                                    />
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null
+                        }
+                      />
+                    </div>
+                  )
+                })()
+              : null
+          }
+        />
       </UrlDrawer>
 
       <UrlDrawer
@@ -2588,7 +2575,7 @@ export default async function PpeDetailPage({
         open={drawerKey === 'add-certificate'}
         closeHref={closeHref}
         itemId={id}
-        todayIso={new Date().toISOString().slice(0, 10)}
+        todayIso={todayIso}
         saveAction={async (input: CertificateInput) => {
           'use server'
           return addCertificate({ ...input, itemId: id })

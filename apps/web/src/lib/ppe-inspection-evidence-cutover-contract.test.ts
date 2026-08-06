@@ -31,7 +31,11 @@ describe('PPE inspection evidence cutover contract', () => {
 
   it('keeps the saved checklist and photos visible from inspection history', () => {
     const page = source('../app/(app)/ppe/[id]/page.tsx')
-    expect(page).toContain('<GeneratedText id="m_11bbc82ecbc827" />')
+    // The checklist opens in a drawer keyed by inspection id, so its evidence
+    // is fetched for that one inspection instead of every row on the page.
+    expect(page).toContain('drawer=inspection&inspectionId=')
+    expect(page).toContain('<GeneratedText id="m_1045d684f7a2d8" />')
+    expect(page).toContain('open={Boolean(openInspection)}')
     expect(page).toContain('criterion.questionTextSnapshot')
     expect(page).toContain('criterion.nonComplianceReason')
     expect(page).toContain('<GeneratedText id="m_020f32bc59d098" />')

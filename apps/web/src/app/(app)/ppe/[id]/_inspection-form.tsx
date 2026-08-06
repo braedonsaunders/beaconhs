@@ -18,6 +18,7 @@ import * as React from 'react'
 import { CheckCircle2, CircleDashed, XCircle } from 'lucide-react'
 import { Badge, Button, Input, Label, Textarea, cn } from '@beaconhs/ui'
 import { FileUpload, type AttachedFile } from '@/components/file-upload'
+import { RemoteSelectField } from '@/components/remote-search-select'
 
 type Answer = 'pass' | 'fail' | 'n_a'
 type Criterion = {
@@ -255,6 +256,19 @@ export function PpeInspectionForm({
             ))}
           />
         </ul>
+
+        <div className="space-y-1.5">
+          <Label>
+            <GeneratedText id="m_0ccb8e5b917b17" />
+          </Label>
+          {/* A person, not a tenant user — the foreman who watched the check
+              is often someone without a login. */}
+          <RemoteSelectField
+            name="supervisorPersonId"
+            lookup="ppe-active-people"
+            placeholder={tGenerated('m_0ba815306341be')}
+          />
+        </div>
 
         <div className="space-y-1.5">
           <Label>
