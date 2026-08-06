@@ -471,14 +471,24 @@ function providerOperationError(
   return new Error(`${provider}: ${detail}`)
 }
 
-/** Send an email through a resolved transport. Throws on provider error. */
+/**
+ * Send an email through a resolved transport. Throws on provider error.
+ *
+ * Delivery is single-recipient by default: notification and auth mail must not
+ * disclose one user's address to another. `allowMultipleRecipients` is the
+ * explicit opt-out, for a message a caller has decided is a shared
+ * conversation (identical body, everyone on the same To line).
+ */
 export async function sendVia(
   transport: EmailTransport,
   input: SendEmailInput,
+  options?: { allowMultipleRecipients?: boolean },
 ): Promise<{ id: string }> {
   const from = transport.from
   const replyTo = transport.replyTo
-  const normalizedInput = normalizeEmailDeliveryInput(input, { requireSingleRecipient: true })
+  const normalizedInput = normalizeEmailDeliveryInput(input, {
+    requireSingleRecipient: !options?.allowMultipleRecipients,
+  })
   switch (transport.provider) {
     case 'resend':
       return sendResend(transport, normalizedInput, from, replyTo)

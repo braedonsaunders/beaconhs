@@ -674,6 +674,9 @@ export async function executeFlowPlan(
               category: adapter.notifyCategory,
               tenantId: ctx.tenantId,
               attachments: spreadsheetAttachments,
+              // One shared message, so the PDF is attached once instead of
+              // duplicating its base64 into a job per recipient.
+              deliverAsSingleMessage: true,
             }
             // Resolve the PDF DOCUMENT template: the flow's explicit pick, else
             // (unless the flow forces the field summary) the subject's assigned
@@ -740,6 +743,11 @@ export async function executeFlowPlan(
               html,
               attachments: spreadsheetAttachments,
               meta: { tenantId: ctx.tenantId, category: adapter.notifyCategory },
+              // The body is rendered ONCE, before recipients are resolved, and
+              // carries no per-recipient token — so everyone belongs on one
+              // message rather than receiving N identical private copies.
+              // Notification and auth mail keep the private-copy default.
+              deliverAsSingleMessage: true,
             },
             jobId(nodeId, 'email') ? { jobId: jobId(nodeId, 'email') } : undefined,
           )

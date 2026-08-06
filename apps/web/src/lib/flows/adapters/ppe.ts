@@ -9,6 +9,7 @@ import 'server-only'
 // by the PPE automation profile; the detail UI retains the full evidence.
 
 import { asc, eq, or } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/pg-core'
 import {
   attachments,
   orgUnits,
@@ -28,6 +29,10 @@ import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDate, personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
 import { recordPpeIssueAction } from '@/app/(app)/ppe/_lib'
+
+// `people` is already joined for the holder, so the supervisor needs its own
+// alias or the two would collapse onto the same row.
+const supervisorPeople = alias(people, 'supervisor_people')
 
 function kindLabel(kind: string | null): string {
   if (kind === 'pre_use') return 'Pre-use'
@@ -78,6 +83,9 @@ export function createPpeInspectionFlowAdapter(
             holderLast: people.lastName,
             holderFormal: people.formalName,
             inspectorName: users.name,
+            supervisorFirst: supervisorPeople.firstName,
+            supervisorLast: supervisorPeople.lastName,
+            supervisorFormal: supervisorPeople.formalName,
             siteName: orgUnits.name,
           })
           .from(ppeInspections)
@@ -86,6 +94,7 @@ export function createPpeInspectionFlowAdapter(
           .leftJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
           .leftJoin(tenantUsers, eq(tenantUsers.id, ppeInspections.inspectedByTenantUserId))
           .leftJoin(users, eq(users.id, tenantUsers.userId))
+          .leftJoin(supervisorPeople, eq(supervisorPeople.id, ppeInspections.supervisorPersonId))
           .leftJoin(orgUnits, eq(orgUnits.id, ppeInspections.siteOrgUnitId))
           .where(eq(ppeInspections.id, inspectionId))
           .limit(1),
@@ -148,6 +157,11 @@ export function createPpeInspectionFlowAdapter(
           formalName: head.holderFormal,
         }),
         inspector_name: i.inspectorNameSnapshot ?? head.inspectorName ?? '',
+        supervisor_name: personName({
+          firstName: head.supervisorFirst,
+          lastName: head.supervisorLast,
+          formalName: head.supervisorFormal,
+        }),
         site_name: head.siteName ?? '',
         // FK ids for conditions / recipient `field` targets.
         item_id: i.itemId ?? null,
@@ -155,6 +169,7 @@ export function createPpeInspectionFlowAdapter(
         site_org_unit_id: i.siteOrgUnitId ?? null,
         holder_person_id: item.currentHolderPersonId ?? null,
         inspected_by_tenant_user_id: i.inspectedByTenantUserId ?? null,
+        supervisor_person_id: i.supervisorPersonId ?? null,
         criteria: criteria.map((criterion) => ({
           question: criterion.question,
           answer: criterion.answer === 'n_a' ? 'N/A' : titleize(criterion.answer),

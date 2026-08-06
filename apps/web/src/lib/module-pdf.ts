@@ -33,6 +33,7 @@ const MODULE_PDF_TARGETS: { moduleKey: string; label: string }[] = [
   { moduleKey: 'hazid', label: 'Hazard assessments' },
   { moduleKey: 'corrective-actions', label: 'Corrective actions' },
   { moduleKey: 'equipment', label: 'Equipment work orders' },
+  { moduleKey: 'ppe', label: 'PPE inspections' },
   { moduleKey: 'ppe-issues', label: 'PPE issue reports' },
   { moduleKey: 'journals', label: 'Journals' },
   { moduleKey: 'inspections', label: 'Inspections' },

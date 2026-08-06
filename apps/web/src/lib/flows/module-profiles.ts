@@ -729,6 +729,8 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'site_org_unit_id', label: 'Site (id)', kind: 'org_unit' },
       { key: 'holder_person_id', label: 'Holder (person id)', kind: 'person' },
       { key: 'inspected_by_tenant_user_id', label: 'Inspector (user id)', kind: 'person' },
+      { key: 'supervisor_name', label: 'Supervisor name', kind: 'text' },
+      { key: 'supervisor_person_id', label: 'Supervisor (person id)', kind: 'person' },
     ],
     collections: [
       {

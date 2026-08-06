@@ -814,6 +814,8 @@ If you manage equipment, submitted inspections can send emails on their own — 
       'fall arrest',
       'issued',
       'damaged',
+      'out of service',
+      'return to service',
       'defect',
       'return gear',
       'custom fields',
@@ -826,7 +828,7 @@ Every serialized item has its own record: who holds it, when it was last inspect
 
 ## Where to find it
 
-Open **PPE** in the left menu. That opens the list at [PPE](/ppe). It starts filtered to **Issued** items. Search by type, serial number, or holder. Use **Status**, **Inspection**, **PPE type**, and **Holder** to narrow the register.
+Open **PPE** in the left menu. That opens the list at [PPE](/ppe). It starts on **Active** gear — everything in stock, issued, returned, or out of service. Discarded and expired items are still there: pick **Discarded**, **Expired**, or **All statuses** from the **Status** filter. Search by type, serial number, or holder. **Holder** is a search box — start typing a name, and it finds people who hold gear now or ever did, so returned and discarded items stay findable. Sort by **Status changed** to see what moved most recently.
 
 ## See your issued gear
 
@@ -852,7 +854,17 @@ Items marked **Discarded** or **Expired** are historical records. They cannot be
 
 The result is worked out from your answers. An all-**N/A** checklist stays **N/A** instead of being shown as a pass. A high-severity failure automatically opens a corrective action, so it gets dealt with.
 
-To review the evidence later, open the **Inspections** tab and tap **View checklist** below the inspection. The inspector name, saved question, answer, failure reason, severity, and photos stay with that historical inspection even if the PPE checklist or user account changes later.
+**A failed inspection takes the item out of service.** It stays with you — it is physically in your hands — but it cannot be issued to anyone until it passes again. Stop using it.
+
+## Return failed gear to service
+
+Only people with permission to return PPE to service (usually health and safety or an admin) can clear an out-of-service item. Everyone else can still record ordinary pre-use checks.
+
+1. Open the item. Tap **Return to service** in the header.
+2. Work through the checklist as normal.
+3. If everything passes, the item goes back into service with its holder. If anything fails, it stays out of service.
+
+To review the evidence later, open the **Inspections** tab and tap **View checklist** on the inspection. It opens a panel with every question, answer, failure reason, severity, and photo — all kept exactly as recorded even if the checklist or a user account changes later. Tap **Print / PDF** in that panel for a printable copy with each item listed line by line.
 
 ## Report damaged gear
 
@@ -878,7 +890,7 @@ The **Custom fields** count on [PPE types](/ppe/types) shows definitions scoped 
 
 ## Return an item
 
-When you leave a site or swap out gear, hand the item back to your supervisor or whoever issued it. They will mark it **Returned** in the system, and the **History** tab on the item keeps the record.
+When you leave a site or swap out gear, hand the item back to your supervisor or whoever issued it. They will mark it **Returned** in the system. The **History** tab keeps every change with the date, who made it, who the gear went to, and any note. Whoever issues gear can set the **Issue date** if it was handed over earlier than it was entered.
 
 ## Automatic emails and alerts (managers)
 

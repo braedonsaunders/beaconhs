@@ -9,8 +9,14 @@ import { getConnection } from '../connection'
 export type EmailAttachment = EmailAttachmentPayload
 
 export type EmailJobData = {
-  /** One recipient per durable job prevents address disclosure between users. */
-  to: string
+  /**
+   * Normally ONE recipient per durable job — that is what keeps addresses from
+   * leaking between users on notification and auth mail. An array here means a
+   * caller deliberately opted into a single shared message (see
+   * `deliverAsSingleMessage`), which is only appropriate when the body carries
+   * no per-recipient personalization.
+   */
+  to: string | string[]
   subject: string
   html: string
   text: string
@@ -26,7 +32,15 @@ export type EmailJobData = {
   }
 }
 
-export type EnqueueEmailData = Omit<EmailJobData, 'to'> & { to: string | string[] }
+export type EnqueueEmailData = Omit<EmailJobData, 'to'> & {
+  to: string | string[]
+  /**
+   * Send ONE message addressed to everyone instead of a private copy each.
+   * Recipients become visible to one another, so this is opt-in and only safe
+   * where the rendered body is identical for all of them.
+   */
+  deliverAsSingleMessage?: boolean
+}
 
 let emailQueue: Queue<EmailJobData> | undefined
 
@@ -57,16 +71,22 @@ function fanoutOptions(
 }
 
 export async function enqueueEmail(data: EnqueueEmailData, options?: JobsOptions) {
+  const { deliverAsSingleMessage, ...jobData } = data
   const normalized = normalizeEmailDeliveryInput(data)
   const queue = getEmailQueue()
   if (normalized.to.length === 1) {
-    return [await queue.add('send', { ...data, ...normalized, to: normalized.to[0]! }, options)]
+    return [await queue.add('send', { ...jobData, ...normalized, to: normalized.to[0]! }, options)]
+  }
+  // One shared message: everyone is on the same To line, so the thread reads
+  // as a single conversation rather than N private copies.
+  if (deliverAsSingleMessage) {
+    return [await queue.add('send', { ...jobData, ...normalized, to: normalized.to }, options)]
   }
 
   return queue.addBulk(
     normalized.to.map((recipient) => ({
       name: 'send',
-      data: { ...data, ...normalized, to: recipient },
+      data: { ...jobData, ...normalized, to: recipient },
       opts: fanoutOptions(options, recipient),
     })),
   )

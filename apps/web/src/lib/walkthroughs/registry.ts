@@ -239,7 +239,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       {
         path: '/ppe',
         title: 'PPE',
-        body: 'This register shows who holds each item and its inspection state. Use the Inspection filter to find overdue, due-soon, current, or not-required gear.',
+        body: 'This register shows who holds each item and its inspection state. It starts on Active gear; pick Discarded or All statuses to find retired items. Use the Inspection filter to find overdue, due-soon, current, or not-required gear.',
       },
       {
         title: 'Inspect an item',
@@ -247,7 +247,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Damaged gear',
-        body: 'If something fails, say so in the inspection. Tag the gear out and tell your supervisor — do not keep using it.',
+        body: 'If something fails, say so in the inspection. The item goes out of service automatically and cannot be issued again until someone from health and safety records a passing return-to-service check. Tag the gear out and tell your supervisor — do not keep using it.',
       },
     ],
   },

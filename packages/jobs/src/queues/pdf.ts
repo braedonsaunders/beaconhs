@@ -23,6 +23,8 @@ export type PdfEmailPayload = {
   category?: string
   tenantId?: string
   attachments?: EmailAttachment[]
+  /** Deliver one shared message rather than a private copy each. */
+  deliverAsSingleMessage?: boolean
 }
 
 export type PdfArtifactTarget = { kind: 'form_response'; responseId: string }

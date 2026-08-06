@@ -127,6 +127,9 @@ describe('email worker provider policy', () => {
     expect(mocks.sendVia).toHaveBeenCalledWith(
       transport,
       expect.objectContaining({ to: 'operator@example.com', subject: 'Safety alert' }),
+      // A single-recipient job keeps the private-copy guarantee: the transport
+      // is only allowed to address several people when the job carries several.
+      { allowMultipleRecipients: false },
     )
     expect(mocks.updated).toContainEqual({
       status: 'sent',

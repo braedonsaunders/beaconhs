@@ -172,7 +172,11 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
       text: job.data.text,
       attachments: job.data.attachments,
     }
-    const result = await sendVia(requireEmailTransport(delivery), payload)
+    // A job carrying several recipients was enqueued as a deliberate shared
+    // message; the fan-out path still produces one address per job.
+    const result = await sendVia(requireEmailTransport(delivery), payload, {
+      allowMultipleRecipients: Array.isArray(job.data.to) && job.data.to.length > 1,
+    })
 
     if (logId) {
       await withSuperAdmin(db, (tx) =>

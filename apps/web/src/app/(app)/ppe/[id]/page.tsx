@@ -26,6 +26,7 @@ import {
   ClipboardCheck,
   FileText,
   Plus,
+  Printer,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -2403,6 +2404,21 @@ export default async function PpeDetailPage({
             : undefined
         }
         size="lg"
+        footer={
+          openInspection ? (
+            // Plain anchor, never <Link>: router prefetch on a <Link> would
+            // log a phantom export against the audit trail.
+            <a
+              href={`/ppe/${id}/inspections/${openInspection.insp.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button variant="outline">
+                <Printer size={14} /> <GeneratedText id="m_016088be0b1e51" />
+              </Button>
+            </a>
+          ) : undefined
+        }
       >
         <GeneratedValue
           value={

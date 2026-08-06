@@ -578,6 +578,7 @@ const PPE_INSPECTION = wrap(
       p('Inspected on', '{{inspected_on}}'),
       p('Next due on', '{{next_due_on}}'),
       p('Inspected by', '{{inspector_name}}'),
+      p('Supervisor', '{{supervisor_name}}'),
       p('Result', '{{result_label}}'),
     ]) +
     heading('PPE item') +
@@ -588,7 +589,16 @@ const PPE_INSPECTION = wrap(
       p('Size', '{{item_size}}'),
       p('Issued to', '{{holder_name}}'),
     ]) +
-    narrative('Notes', '{{notes}}'),
+    collection('Inspection items', 'criteria', [
+      ['#', '{{@number}}', 'width:4%;'],
+      ['Item', '{{question}}'],
+      ['Answer', '{{answer}}', 'width:9%;'],
+      ['Severity', '{{severity}}', 'width:9%;'],
+      ['Failure description', '{{non_compliance}}', 'width:28%;'],
+    ]) +
+    narrative('Notes', '{{notes}}') +
+    photos() +
+    signoff(['Inspector', 'Supervisor', 'Date']),
 )
 
 const PPE_ISSUE = wrap(

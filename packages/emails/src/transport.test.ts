@@ -497,6 +497,28 @@ describe('sendVia (HTTP providers)', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('delivers to every address when multiple recipients are explicitly allowed', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('', { status: 202, headers: { 'x-message-id': 'sg-1' } }))
+    const t: EmailTransport = { provider: 'sendgrid', apiKey: 'SG.k', from: 'a@b.io' }
+
+    await sendVia(
+      t,
+      { ...INPUT, to: ['one@example.com', 'two@example.com'] },
+      {
+        allowMultipleRecipients: true,
+      },
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body))
+    expect(body.personalizations[0].to).toEqual([
+      { email: 'one@example.com' },
+      { email: 'two@example.com' },
+    ])
+  })
+
   it('sendgrid → sanitizes structured API errors and redacts its credential', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(

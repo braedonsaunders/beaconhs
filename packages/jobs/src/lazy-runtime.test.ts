@@ -142,6 +142,32 @@ describe('lazy jobs runtime', () => {
     expect(ids.every((id: string) => /^email-fanout\|[a-f0-9]{64}$/.test(id))).toBe(true)
   })
 
+  it('delivers one shared message when the caller opts in', async () => {
+    process.env.REDIS_URL = 'redis://runtime.example.test:6379'
+    const jobs = await import('./index')
+
+    await jobs.enqueueEmail(
+      {
+        to: [' First@Example.com ', 'first@example.com', 'second@example.com'],
+        subject: 'Queued',
+        html: '<p>Queued</p>',
+        text: 'Queued',
+        deliverAsSingleMessage: true,
+      },
+      { jobId: 'domain-event|one' },
+    )
+
+    // One job carrying every deduplicated address, keeping the caller's own
+    // idempotency key rather than a per-recipient fan-out id.
+    expect(mocks.queueAddBulk).not.toHaveBeenCalled()
+    expect(mocks.queueAdd).toHaveBeenCalledTimes(1)
+    const [, data, opts] = mocks.queueAdd.mock.calls[0]!
+    expect((data as { to: string[] }).to).toEqual(['First@Example.com', 'second@example.com'])
+    expect((opts as { jobId: string }).jobId).toBe('domain-event|one')
+    // The opt-in flag is a queueing concern and must not reach the job payload.
+    expect(data).not.toHaveProperty('deliverAsSingleMessage')
+  })
+
   it('bounds notification fan-out and deduplicates sync runs across manual and scheduled producers', async () => {
     process.env.REDIS_URL = 'redis://runtime.example.test:6379'
     const jobs = await import('./index')
