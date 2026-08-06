@@ -28,6 +28,11 @@ type PpeInspectionKind = 'pre_use' | 'annual'
 type PpeCriterionAnswer = 'pass' | 'fail' | 'n_a'
 type PpeSeverity = 'low' | 'medium' | 'high' | 'critical'
 
+// Unique indexes we translate into user-facing messages. Naming them keeps a
+// collision on some *other* index from being reported as the wrong problem.
+export const PPE_SERIAL_UNIQUE_CONSTRAINT = 'ppe_items_tenant_serial_ux'
+export const PPE_ANNUAL_RECORD_YEAR_UNIQUE_CONSTRAINT = 'ppe_annual_records_item_year_ux'
+
 /**
  * Spec: severity ≥ high on a fail → spawn a CA. Same rule as inspections.
  */

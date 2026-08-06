@@ -1,7 +1,7 @@
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
 import { and, asc, eq, gte, inArray, isNull, lt, or, sql, type SQL } from 'drizzle-orm'
-import type { Database } from '@beaconhs/db'
+import { type Database, isUniqueViolation } from '@beaconhs/db'
 import {
   equipmentCategories,
   equipmentItems,
@@ -747,7 +747,7 @@ export async function updateVehicleLogEntry(
         .returning()
       updated = rows[0]
     } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === '23505') {
+      if (isUniqueViolation(error)) {
         throw new Error(
           'An entry already exists for that vehicle, driver, and date. Edit that entry instead.',
         )

@@ -1,3 +1,4 @@
+import { isUniqueViolation } from '@beaconhs/db'
 import { DOCUMENT_METADATA_LIMITS } from './document-metadata-limits'
 
 export const MAX_DOCUMENT_KEY_LENGTH = DOCUMENT_METADATA_LIMITS.key
@@ -32,8 +33,5 @@ export function documentKeyFromTitle(title: string): string {
 }
 
 export function isDocumentKeyConflict(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  const candidate = error as { code?: unknown; constraint?: unknown; constraint_name?: unknown }
-  const constraint = candidate.constraint_name ?? candidate.constraint
-  return candidate.code === '23505' && constraint === DOCUMENT_KEY_UNIQUE_CONSTRAINT
+  return isUniqueViolation(error, DOCUMENT_KEY_UNIQUE_CONSTRAINT)
 }

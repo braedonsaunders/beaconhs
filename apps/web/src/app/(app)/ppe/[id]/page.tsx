@@ -65,6 +65,7 @@ import {
   ppeItems,
   ppeTypes,
 } from '@beaconhs/db/schema'
+import { isUniqueViolation, safeDbErrorMessage } from '@beaconhs/db'
 import { assertCan, can } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { attachmentUrl } from '@/lib/attachment-url'
@@ -91,6 +92,8 @@ import { RawImage } from '@/components/raw-image'
 import { sendPpeIssueEmail } from './_send-email'
 import { nextPpeInspectionDue } from '@/lib/ppe-inspection-due'
 import {
+  PPE_ANNUAL_RECORD_YEAR_UNIQUE_CONSTRAINT,
+  PPE_SERIAL_UNIQUE_CONSTRAINT,
   daysUntil,
   deriveAnnualYear,
   loadInspectionCriteriaForType,
@@ -201,62 +204,73 @@ async function updatePpeField(formData: FormData) {
     if (!value) throw new Error('This field is required')
     val = value
   } else {
+    // Store the trimmed value: a stray space would otherwise make two serials
+    // that read identically collide-free against the unique index.
     const trimmed = value.trim()
-    val = trimmed === '' ? null : value
+    val = trimmed === '' ? null : trimmed
   }
 
-  await ctx.db(async (tx) => {
-    const [prior] = await tx
-      .select({ typeId: ppeItems.typeId })
-      .from(ppeItems)
-      .where(and(eq(ppeItems.id, id), isNull(ppeItems.deletedAt)))
-      .limit(1)
-      .for('update')
-    if (!prior) throw new Error('PPE item was not found')
-    let values: Partial<typeof ppeItems.$inferInsert>
-    switch (field) {
-      case 'serialNumber':
-        values = { serialNumber: val }
-        break
-      case 'size':
-        values = { size: val }
-        break
-      case 'notes':
-        values = { notes: val }
-        break
-      case 'purchaseDate':
-        values = { purchaseDate: val }
-        break
-      case 'expiresOn':
-        values = { expiresOn: val }
-        break
-      case 'typeId':
-        if (!val) throw new Error('Type is required')
-        values = { typeId: val }
-        break
-      default:
-        throw new Error('Field not allowed')
-    }
-    const [updated] = await tx
-      .update(ppeItems)
-      .set(values)
-      .where(and(eq(ppeItems.id, id), isNull(ppeItems.deletedAt)))
-      .returning({ id: ppeItems.id })
-    if (!updated) throw new Error('PPE item was not updated')
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'ppe_item',
-      entityId: id,
-      action: 'update',
-      summary: `Updated ${field}`,
-      after: { [field]: val },
+  try {
+    await ctx.db(async (tx) => {
+      const [prior] = await tx
+        .select({ typeId: ppeItems.typeId })
+        .from(ppeItems)
+        .where(and(eq(ppeItems.id, id), isNull(ppeItems.deletedAt)))
+        .limit(1)
+        .for('update')
+      if (!prior) throw new Error('PPE item was not found')
+      let values: Partial<typeof ppeItems.$inferInsert>
+      switch (field) {
+        case 'serialNumber':
+          values = { serialNumber: val }
+          break
+        case 'size':
+          values = { size: val }
+          break
+        case 'notes':
+          values = { notes: val }
+          break
+        case 'purchaseDate':
+          values = { purchaseDate: val }
+          break
+        case 'expiresOn':
+          values = { expiresOn: val }
+          break
+        case 'typeId':
+          if (!val) throw new Error('Type is required')
+          values = { typeId: val }
+          break
+        default:
+          throw new Error('Field not allowed')
+      }
+      const [updated] = await tx
+        .update(ppeItems)
+        .set(values)
+        .where(and(eq(ppeItems.id, id), isNull(ppeItems.deletedAt)))
+        .returning({ id: ppeItems.id })
+      if (!updated) throw new Error('PPE item was not updated')
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'ppe_item',
+        entityId: id,
+        action: 'update',
+        summary: `Updated ${field}`,
+        after: { [field]: val },
+      })
+      if (field === 'expiresOn' || field === 'typeId') {
+        await materializePpeTypeEvidence(tx, ctx.tenantId, [
+          prior.typeId,
+          field === 'typeId' ? val : prior.typeId,
+        ])
+      }
     })
-    if (field === 'expiresOn' || field === 'typeId') {
-      await materializePpeTypeEvidence(tx, ctx.tenantId, [
-        prior.typeId,
-        field === 'typeId' ? val : prior.typeId,
-      ])
+  } catch (e) {
+    // Serial numbers are unique per tenant — say so plainly instead of letting
+    // drizzle's "Failed query: update …" dump reach the field's error state.
+    if (isUniqueViolation(e, PPE_SERIAL_UNIQUE_CONSTRAINT)) {
+      throw new Error(`Serial number "${val}" is already used by another PPE item.`)
     }
-  })
+    throw new Error(safeDbErrorMessage(e, 'Could not save that change.'))
+  }
   revalidatePath(`/ppe/${id}`)
   revalidatePath('/ppe')
 }
@@ -705,12 +719,12 @@ async function addCertificate(
   } catch (e) {
     // Only the (itemId, year) unique constraint means "duplicate year" — report
     // everything else truthfully instead of masking real failures.
-    if ((e as { code?: string })?.code === '23505') {
+    if (isUniqueViolation(e, PPE_ANNUAL_RECORD_YEAR_UNIQUE_CONSTRAINT)) {
       return { ok: false, error: `A certificate for ${year} already exists on this item.` }
     }
     return {
       ok: false,
-      error: e instanceof Error ? e.message : 'Failed to save the certificate.',
+      error: safeDbErrorMessage(e, 'Failed to save the certificate.'),
     }
   }
   revalidatePath(`/ppe/${itemId}`)

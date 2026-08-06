@@ -1,3 +1,4 @@
+import { isUniqueViolation as isPgUniqueViolation } from '@beaconhs/db'
 import { InvalidCategoryParentError } from './_category-parent-policy'
 
 export const CATEGORY_NAME_CONFLICT_MESSAGE =
@@ -15,14 +16,12 @@ export class CategoryNameConflictError extends Error {
 export function categoryMutationErrorMessage(error: unknown): string | null {
   if (error instanceof InvalidCategoryParentError) return error.message
   if (error instanceof CategoryNameConflictError) return error.message
-  if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
-    return CATEGORY_NAME_CONFLICT_MESSAGE
-  }
+  if (isUniqueViolation(error)) return CATEGORY_NAME_CONFLICT_MESSAGE
   return null
 }
 
 export function isUniqueViolation(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505'
+  return isPgUniqueViolation(error)
 }
 
 export function safeCategoryReturnTo(value: FormDataEntryValue | null): string {

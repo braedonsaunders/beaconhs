@@ -14,8 +14,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+import { isUniqueViolation, safeDbErrorMessage } from '@beaconhs/db'
 import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
+import { PPE_SERIAL_UNIQUE_CONSTRAINT } from './_lib'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { materializePpeTypeEvidence } from '@/lib/compliance-type-evidence'
@@ -399,10 +401,10 @@ export async function createAndIssuePpe(input: {
       return row.id
     })
   } catch (e) {
-    if ((e as { code?: string })?.code === '23505') {
+    if (isUniqueViolation(e, PPE_SERIAL_UNIQUE_CONSTRAINT)) {
       return { ok: false, error: 'That serial number is already in use for this tenant.' }
     }
-    return { ok: false, error: e instanceof Error ? e.message : 'Failed to create PPE item.' }
+    return { ok: false, error: safeDbErrorMessage(e, 'Failed to create PPE item.') }
   }
   if (!itemId) return { ok: false, error: 'Failed to create PPE item.' }
 

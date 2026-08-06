@@ -34,6 +34,7 @@ import {
   TableRow,
 } from '@beaconhs/ui'
 import { incidentClassifications, incidents } from '@beaconhs/db/schema'
+import { isForeignKeyViolation, isUniqueViolation } from '@beaconhs/db'
 import { requireRequestContext } from '@/lib/auth'
 import { getRegulatoryTerminology } from '@beaconhs/tenant'
 import { requireModuleManage, assertCanManageModule } from '@/lib/module-admin/guard'
@@ -68,9 +69,9 @@ type ClassificationRow = {
 }
 
 function classificationWriteError(error: unknown): string {
-  const code = (error as { code?: unknown })?.code
-  if (code === '23505') return 'A classification with that name already exists at this level.'
-  if (code === '23503') return 'The selected parent classification no longer exists.'
+  if (isUniqueViolation(error))
+    return 'A classification with that name already exists at this level.'
+  if (isForeignKeyViolation(error)) return 'The selected parent classification no longer exists.'
   return 'Could not save the classification. Please try again.'
 }
 

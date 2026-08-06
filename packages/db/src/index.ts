@@ -1,6 +1,7 @@
 export * from './client'
 export * as schema from './schema'
 export * from './rls'
+export * from './pg-error'
 export * from './attachment-integrity'
 export * from './storage-object-deletion-outbox'
 export * from './maintenance'
