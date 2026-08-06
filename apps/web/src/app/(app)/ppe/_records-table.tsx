@@ -28,6 +28,7 @@ export type PpeTableRow = {
   inspectionState: PpeInspectionState
   inspectionDueOn: string | null
   inspectionActionable: boolean
+  statusChangedOn: string | null
 }
 
 function InspectionBadge({ state }: { state: PpeInspectionState }) {
@@ -116,6 +117,9 @@ export function PpeRecordsTable({
               <SortTh column="status" {...sortProps}>
                 <GeneratedText id="m_0b9da892d6faf0" />
               </SortTh>
+              <SortTh column="status_changed" {...sortProps}>
+                <GeneratedText id="m_123f40ae4eeb3d" />
+              </SortTh>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -199,6 +203,9 @@ export function PpeRecordsTable({
                       >
                         <GeneratedValue value={r.status.replace('_', ' ')} />
                       </Badge>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedValue value={r.statusChangedOn ?? '—'} />
                     </td>
                   </tr>
                 )

@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, inArray, isNull, or, type SQL } from 'drizzle-orm'
 import { people, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
@@ -35,13 +35,17 @@ export async function GET(req: NextRequest) {
     perPage: 25,
     allowedSorts: SORTS,
   })
-  // Mirror the register's status handling exactly: default to issued when no
-  // param is present, `all` clears the filter, and unknown values are ignored
-  // instead of reaching Postgres as invalid enum input.
-  const statusRaw = pickString(sp.status) ?? 'issued'
-  const statusFilter = (STATUS_VALUES as readonly string[]).includes(statusRaw)
-    ? (statusRaw as (typeof STATUS_VALUES)[number])
-    : undefined
+  // Mirror the register's status handling exactly: default to in-circulation
+  // gear, `all` clears the filter, and unknown values are ignored instead of
+  // reaching Postgres as invalid enum input. Drifting from the register here
+  // would silently export a different set of rows than the screen showed.
+  const statusRaw = pickString(sp.status) ?? 'active'
+  const statusFilter =
+    statusRaw === 'active'
+      ? 'active'
+      : (STATUS_VALUES as readonly string[]).includes(statusRaw)
+        ? (statusRaw as (typeof STATUS_VALUES)[number])
+        : undefined
   const ctx = await requireExportContext()
   // PPE has a single read tier (read.all); gate the tenant-wide export on it.
   assertCan(ctx, 'ppe.read.all')
@@ -53,7 +57,11 @@ export async function GET(req: NextRequest) {
       const cond = or(ilike(ppeItems.serialNumber, term), ilike(ppeTypes.name, term))
       if (cond) filters.push(cond)
     }
-    if (statusFilter) filters.push(eq(ppeItems.status, statusFilter))
+    if (statusFilter === 'active') {
+      filters.push(inArray(ppeItems.status, ['in_stock', 'issued', 'returned', 'out_of_service']))
+    } else if (statusFilter) {
+      filters.push(eq(ppeItems.status, statusFilter))
+    }
     const whereClause = and(...filters)
 
     const orderBy =

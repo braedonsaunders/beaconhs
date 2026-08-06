@@ -62,6 +62,12 @@ describe('production-scale picker contract', () => {
     expect(workOrderPage).not.toContain('.slice(0, 12)')
     expect(workOrderPage).not.toContain('.limit(20)')
     expect(workOrderPage).not.toContain('.limit(50)')
+
+    // The PPE register's holder filter searches remotely rather than
+    // materializing every holder into a scroll-only popover.
+    const ppePage = source('../app/(app)/ppe/page.tsx')
+    expect(ppePage).toContain('lookup="ppe-register-filter-holders"')
+    expect(ppePage).not.toContain('selectDistinct')
   })
 
   it('keeps edit catalogs remote while hydrating saved selections', () => {
@@ -191,8 +197,8 @@ describe('production-scale picker contract', () => {
       'ilike(primaryPersonTitleName(people.id, people.tenantId), input.term)',
     )
     expect(sharedPersonPicker).toContain('[row.employeeNo, row.jobTitle]')
-    expect(route.match(/\.select\(PERSON_OPTION_SELECTION\)/g)).toHaveLength(8)
-    expect(route.match(/personOptions\(rows\)/g)).toHaveLength(8)
+    expect(route.match(/\.select\(PERSON_OPTION_SELECTION\)/g)).toHaveLength(9)
+    expect(route.match(/personOptions\(rows\)/g)).toHaveLength(9)
   })
 
   it('keeps the public people kiosk PIN-gated, tenant-scoped, and bounded', () => {

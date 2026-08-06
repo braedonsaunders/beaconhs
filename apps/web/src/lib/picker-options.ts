@@ -58,6 +58,7 @@ export const PICKER_LOOKUPS = [
   'management-review-actions',
   'document-book-documents',
   'ppe-active-people',
+  'ppe-register-filter-holders',
   'ppe-types',
   'vehicle-equipment',
   'vehicle-customers',

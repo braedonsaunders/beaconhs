@@ -3,7 +3,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { HardHat } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import {
   people,
@@ -19,6 +19,7 @@ import { resolvePpeInspectionDue } from '@/lib/ppe-inspection-due'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
@@ -40,6 +41,8 @@ const SORTS = [
   'assigned',
   'last_inspection',
   'next_inspection',
+  'status_changed',
+  'updated',
 ] as const
 
 const STATUS_OPTIONS = [
@@ -50,6 +53,15 @@ const STATUS_OPTIONS = [
   { value: 'discarded', label: 'Discarded' },
   { value: 'expired', label: 'Expired' },
 ]
+
+/**
+ * The register defaults to gear that is still in circulation. Discarded and
+ * expired items stay one chip away rather than being the silent majority of
+ * every search — the old default was `issued` alone, which hid returned stock
+ * too and made a discarded item look deleted.
+ */
+const ACTIVE_STATUSES = ['in_stock', 'issued', 'returned', 'out_of_service'] as const
+const STATUS_FILTER_OPTIONS = [{ value: 'active', label: 'Active' }, ...STATUS_OPTIONS]
 
 const INSPECTION_OPTIONS = [
   { value: 'needs_inspection', label: 'Needs inspection' },
@@ -73,11 +85,13 @@ export default async function PpePage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  // Default the register to issued items; an explicit `status=all` (the "All
-  // statuses" chip) clears the default so every status shows. Unknown values
-  // would throw a Postgres enum error, so they're whitelisted to "no filter".
-  const statusRaw = pickString(sp.status) ?? 'issued'
-  const statusFilter = STATUS_OPTIONS.some((o) => o.value === statusRaw) ? statusRaw : undefined
+  // Default to in-circulation gear; `status=active` is that default made
+  // explicit, and `status=all` clears it. Unknown values would throw a
+  // Postgres enum error, so they're whitelisted to "no filter".
+  const statusRaw = pickString(sp.status) ?? 'active'
+  const statusFilter = STATUS_FILTER_OPTIONS.some((o) => o.value === statusRaw)
+    ? statusRaw
+    : undefined
   const inspectionRaw = pickString(sp.inspection)
   const inspectionFilter = INSPECTION_OPTIONS.some((option) => option.value === inspectionRaw)
     ? inspectionRaw
@@ -95,7 +109,7 @@ export default async function PpePage({
   dueSoonDate.setUTCDate(dueSoonDate.getUTCDate() + 7)
   const dueSoonIso = dueSoonDate.toISOString().slice(0, 10)
 
-  const { rows, total, statusCounts, types, holders } = await ctx.db(async (tx) => {
+  const { rows, total, statusCounts, types, selectedHolder } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = [isNull(ppeItems.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
@@ -108,7 +122,9 @@ export default async function PpePage({
       )
       if (cond) filters.push(cond)
     }
-    if (statusFilter) {
+    if (statusFilter === 'active') {
+      filters.push(inArray(ppeItems.status, [...ACTIVE_STATUSES]))
+    } else if (statusFilter) {
       filters.push(
         eq(
           ppeItems.status,
@@ -118,7 +134,21 @@ export default async function PpePage({
       )
     }
     if (typeFilter) filters.push(eq(ppeItems.typeId, typeFilter))
-    if (holderFilter) filters.push(eq(ppeItems.currentHolderPersonId, holderFilter))
+    if (holderFilter) {
+      // Match the CURRENT holder or anyone the item was ever issued to.
+      // Discarding and returning both null the holder column, so a
+      // current-holder-only match made returned and discarded gear
+      // unfindable by the person who actually had it.
+      filters.push(
+        or(
+          eq(ppeItems.currentHolderPersonId, holderFilter),
+          sql`exists (
+            select 1 from ${ppeIssues} pi
+            where pi.item_id = ${ppeItems.id} and pi.person_id = ${holderFilter}
+          )`,
+        )!,
+      )
+    }
 
     const preUseCriteriaExists = sql<boolean>`exists (
       select 1 from ${ppeTypeInspectionCriteria} c
@@ -202,7 +232,16 @@ export default async function PpePage({
                           coalesce(${ppeItems.nextAnnualInspectionDue}, '9999-12-31'::date)
                         ) ${params.dir === 'asc' ? sql`asc` : sql`desc`}`,
                       ]
-                    : [dirFn(ppeTypes.name)]
+                    : params.sort === 'status_changed'
+                      ? // Items whose status never moved sink to the bottom.
+                        [
+                          params.dir === 'asc'
+                            ? sql`${ppeItems.statusChangedAt} asc nulls last`
+                            : sql`${ppeItems.statusChangedAt} desc nulls last`,
+                        ]
+                      : params.sort === 'updated'
+                        ? [dirFn(ppeItems.updatedAt)]
+                        : [dirFn(ppeTypes.name)]
 
     const [tot] = await tx
       .select({ c: count() })
@@ -246,18 +285,23 @@ export default async function PpePage({
       })
       .from(ppeTypes)
       .orderBy(asc(ppeTypes.name))
-    const holderRows = await tx
-      .selectDistinct({ id: people.id, firstName: people.firstName, lastName: people.lastName })
-      .from(ppeItems)
-      .innerJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
-      .where(and(isNull(ppeItems.deletedAt), eq(ppeItems.status, 'issued')))
-      .orderBy(asc(people.lastName), asc(people.firstName))
+    // Only the selected holder needs resolving — the picker searches remotely,
+    // so the page no longer materializes every holder just to build a dropdown.
+    const [selected] = holderFilter
+      ? await tx
+          .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+          .from(people)
+          .where(eq(people.id, holderFilter))
+          .limit(1)
+      : []
     return {
       rows: data,
       total: Number(tot?.c ?? 0),
       statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
       types: typeRows,
-      holders: holderRows,
+      selectedHolder: selected
+        ? { value: selected.id, label: `${selected.lastName}, ${selected.firstName}` }
+        : undefined,
     }
   })
 
@@ -289,6 +333,9 @@ export default async function PpePage({
         inspectionState: inspection.state,
         inspectionDueOn: inspection.dueOn,
         inspectionActionable: inspection.actionable,
+        statusChangedOn: item.statusChangedAt
+          ? new Date(item.statusChangedAt).toISOString().slice(0, 10)
+          : null,
       }
     },
   )
@@ -330,8 +377,14 @@ export default async function PpePage({
               paramKey="status"
               label={tGenerated('m_0b9da892d6faf0')}
               allLabel="All statuses"
-              defaultValue="issued"
-              options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+              defaultValue="active"
+              options={STATUS_FILTER_OPTIONS.map((o) => ({
+                ...o,
+                count:
+                  o.value === 'active'
+                    ? ACTIVE_STATUSES.reduce((sum, s) => sum + (statusCounts[s] ?? 0), 0)
+                    : statusCounts[o.value],
+              }))}
             />
             <FilterChips
               basePath="/ppe"
@@ -349,16 +402,15 @@ export default async function PpePage({
               allLabel="All PPE types"
               options={types.map((type) => ({ value: type.id, label: type.name }))}
             />
-            <FilterChips
+            <RemoteSearchFilter
+              lookup="ppe-register-filter-holders"
               basePath="/ppe"
               currentParams={sp}
               paramKey="holder"
-              label={tGenerated('m_1dd437d2b4ab7f')}
+              placeholder={tGenerated('m_1dd437d2b4ab7f')}
               allLabel="All holders"
-              options={holders.map((holder) => ({
-                value: holder.id,
-                label: `${holder.lastName}, ${holder.firstName}`,
-              }))}
+              searchPlaceholder={tGenerated('m_0ba815306341be')}
+              initialOption={selectedHolder}
             />
           </TableToolbar>
         </>

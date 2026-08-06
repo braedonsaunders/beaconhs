@@ -33,6 +33,8 @@ import {
   people,
   personGroups,
   personTitles,
+  ppeIssues,
+  ppeItems,
   ppeTypes,
   roles,
   tenantUsers,
@@ -262,6 +264,10 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
       return can(ctx, 'documents.manage')
     case 'ppe-active-people':
       return can(ctx, 'ppe.issue') || can(ctx, 'ppe.manage')
+    // Filtering the register is a READ. Gating this on the write
+    // permissions would deny the filter to read-only PPE users.
+    case 'ppe-register-filter-holders':
+      return canAny('ppe.read.all', 'ppe.manage', 'ppe.issue', 'ppe.inspect')
     case 'ppe-types':
       return can(ctx, 'ppe.manage')
     case 'vehicle-equipment':
@@ -1561,6 +1567,27 @@ async function loadOptions(
       return boundPickerOptions(
         rows.map((row) => option(row.id, `${row.reference} · ${row.title}`)),
       )
+    }
+
+    if (lookup === 'ppe-register-filter-holders') {
+      // Everyone who holds PPE now OR was ever issued some, so a discarded or
+      // returned item stays findable by the person who actually had it.
+      const rows = await tx
+        .select(PERSON_OPTION_SELECTION)
+        .from(people)
+        .where(
+          and(
+            isNull(people.deletedAt),
+            personMatch(input),
+            or(
+              sql`exists (select 1 from ${ppeItems} pi where pi.current_holder_person_id = ${people.id})`,
+              sql`exists (select 1 from ${ppeIssues} pl where pl.person_id = ${people.id})`,
+            ),
+          ),
+        )
+        .orderBy(...personOrder(input.selected))
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(personOptions(rows))
     }
 
     if (lookup === 'ppe-active-people') {
