@@ -72,6 +72,8 @@ export const PICKER_LOOKUPS = [
   'equipment-inspection-items',
   'equipment-inspection-sites',
   'equipment-inspection-types',
+  'equipment-item-scheduled-inspection-types',
+  'equipment-rental-inspection-types',
   'equipment-work-order-assignees',
   'equipment-work-order-reporters',
   'equipment-work-order-items',

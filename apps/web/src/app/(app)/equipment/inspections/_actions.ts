@@ -13,6 +13,7 @@ import {
   equipmentInspectionRecordAttachments,
   equipmentInspectionRecordCriteria,
   equipmentInspectionRecords,
+  equipmentInspectionSchedules,
   equipmentInspectionTypes,
   equipmentItems,
   orgUnits,
@@ -201,6 +202,33 @@ export async function startEquipmentInspection(formData: FormData) {
       if (type.appliesToTypeId && item.typeId !== type.appliesToTypeId) {
         throw new Error('This inspection type does not apply to the selected equipment item')
       }
+      // Rented gear is only ever checked before use — we do not own its
+      // periodic certification programme, the rental company does.
+      if (item.ownership === 'rented' && !type.isPreUse) {
+        throw new Error('Rented equipment can only have pre-use inspections')
+      }
+      // A registered unit inherits its inspection from what is set up ON the
+      // unit: its pre-use checklist or one of its schedules. Anything else is
+      // someone hand-picking a type that nobody scheduled.
+      const offered = new Set<string>()
+      if (item.preUseInspectionTypeId) offered.add(item.preUseInspectionTypeId)
+      for (const row of await tx
+        .select({ typeId: equipmentInspectionSchedules.inspectionTypeId })
+        .from(equipmentInspectionSchedules)
+        .where(
+          and(
+            eq(equipmentInspectionSchedules.tenantId, ctx.tenantId),
+            eq(equipmentInspectionSchedules.equipmentItemId, item.id),
+            eq(equipmentInspectionSchedules.isActive, true),
+          ),
+        )) {
+        if (row.typeId) offered.add(row.typeId)
+      }
+      // A unit with nothing set up yet stays open, so the first inspection on
+      // a freshly registered unit is still possible.
+      if (offered.size > 0 && !offered.has(typeId)) {
+        throw new Error('That inspection is not set up on this equipment item')
+      }
     }
     if (siteOrgUnitIdRaw) {
       const [site] = await tx
@@ -210,12 +238,11 @@ export async function startEquipmentInspection(formData: FormData) {
           and(
             eq(orgUnits.tenantId, ctx.tenantId),
             eq(orgUnits.id, siteOrgUnitIdRaw),
-            eq(orgUnits.level, 'site'),
             isNull(orgUnits.deletedAt),
           ),
         )
         .limit(1)
-      if (!site) throw new Error('Inspection site was not found')
+      if (!site) throw new Error('Location was not found')
     }
 
     const reference = await nextEquipmentInspectionReferenceInTx(tx, ctx.tenantId, occurredAt)

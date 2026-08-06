@@ -17,7 +17,7 @@ const library = source('../app/(app)/equipment/inspections/_lib.ts')
 const detail = source('../app/(app)/equipment/inspections/[id]/page.tsx')
 const list = source('../app/(app)/equipment/inspections/page.tsx')
 const newPage = source('../app/(app)/equipment/inspections/new/page.tsx')
-const newForm = source('../app/(app)/equipment/inspections/new/_new-form.tsx')
+const newDrawer = source('../app/(app)/equipment/inspections/_new-drawer.tsx')
 const schema = source('../../../../packages/db/src/schema/equipment-inspection-records.ts')
 const flow = source('./flows/adapters/equipment-inspections.ts')
 const samples = source('./flows/sample-record.ts')
@@ -171,13 +171,22 @@ describe('equipment inspection atomicity contract', () => {
   })
 
   it('uses bounded permission-aware equipment and type pickers on creation', () => {
+    // Creation happens in a flyout; the old full page is a redirect shim that
+    // must never write, so it holds no query at all.
     expect(newPage).not.toContain('.orderBy(asc(')
-    expect(newForm).toContain('lookup="equipment-inspection-items"')
-    expect(newForm).toContain("'equipment-item-inspection-types'")
-    expect(newForm).toContain("'equipment-inspection-types'")
-    expect(newForm).toContain('lookup="equipment-inspection-sites"')
-    expect(newForm).toContain("targetMode === 'registered' ? equipmentTypeId : undefined")
+    expect(newPage).toContain('redirect(')
+    expect(newDrawer).toContain('lookup="equipment-inspection-items"')
+    // A registered unit inherits its inspections — the picker is scoped to the
+    // ITEM's own pre-use checklist and schedules, not the tenant catalogue.
+    expect(newDrawer).toContain("'equipment-item-scheduled-inspection-types'")
+    // Unregistered rental gear is pre-use only.
+    expect(newDrawer).toContain("'equipment-rental-inspection-types'")
+    expect(newDrawer).toContain('lookup="equipment-inspection-sites"')
+    expect(newDrawer).toContain("contextId={targetMode === 'registered' ? itemId || undefined")
     expect(actions).toContain("targetMode === 'rental'")
+    // Server-side the same two rules are enforced, not just hinted at in the UI.
+    expect(actions).toContain("item.ownership === 'rented' && !type.isPreUse")
+    expect(actions).toContain('That inspection is not set up on this equipment item')
     expect(library).toContain('record.isRental && fails.length > 0')
     expect(library).toContain("sourceEntityType: 'equipment_inspection_record'")
   })

@@ -747,15 +747,17 @@ Before you run a unit — or on its service schedule — you walk through a chec
 
 ## Where to find it
 
-Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspections). You can also start a pre-use check straight from a unit's page: open the unit, tap the **Inspections** tab, and tap **Start pre-use inspection**.
+Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspections). You can also start a check straight from a unit's page: open the unit and tap the **Inspections** tab. That tab is split into **Pre-use**, **Schedules**, **Reminders**, and **History** — pre-use opens first because it is the check most crews run every shift.
 
 ## Perform an inspection
 
-1. Open [Inspections](/equipment/inspections) and tap **New inspection**.
+1. Open [Inspections](/equipment/inspections) and tap **New inspection**. A panel opens — there is no separate page to fill in first.
 2. Choose **Registered unit** to search the fleet, or **Rental / unregistered** for a unit that is not in the equipment register.
-3. For a registered unit, pick the **Equipment item** and a compatible **Inspection type**.
-4. For a rental, enter the equipment name, serial or asset identifier, provider, and site. Then choose any active **Inspection type**.
+3. For a registered unit, pick the **Equipment item**. The **Inspection** list then shows only what is set up on that unit — its pre-use checklist and its schedules. If what you expect is missing, the unit needs it set up on the **Pre-use** or **Schedules** sub-tab first.
+4. For a rental, enter the equipment name, serial or asset identifier, and provider, then choose the **Location** — the customer, project, site, or area the unit is working at. Rentals can only take pre-use inspections; their periodic certification belongs to the rental company.
 5. Tap **Start inspection**.
+
+Starting from a unit's own page skips straight to the inspection list for that unit — the equipment is already chosen.
 6. Go through each required item and tap **Pass**, **Fail**, or **N/A**. An item marked **Optional** may be left blank.
 7. Your answers save as you go — watch for **Saved** at the top. You can stop and come back later; the inspection stays **In progress**.
 

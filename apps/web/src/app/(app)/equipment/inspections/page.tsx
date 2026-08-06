@@ -13,6 +13,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  UrlDrawer,
 } from '@beaconhs/ui'
 import {
   equipmentInspectionRecords,
@@ -25,12 +26,13 @@ import {
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { formatDate } from '@/lib/datetime'
 import { ListPageLayout } from '@/components/page-layout'
 import { Pagination } from '@/components/pagination'
 import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
+import { NewEquipmentInspectionDrawer } from './_new-drawer'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { SortableTh } from '@/components/sortable-th'
 
@@ -112,6 +114,25 @@ export default async function EquipmentInspectionsPage({
     )
     if (cond) filters.push(cond)
   }
+
+  // Opening the flyout from a unit's own page fixes the equipment, so resolve
+  // its label here rather than making the client re-fetch what we already know.
+  const drawerItemId = pickString(sp.itemId)
+  const drawerItem =
+    pickString(sp.drawer) === 'new' && drawerItemId && isUuid(drawerItemId)
+      ? await ctx.db(async (tx) => {
+          const [row] = await tx
+            .select({
+              id: equipmentItems.id,
+              name: equipmentItems.name,
+              assetTag: equipmentItems.assetTag,
+            })
+            .from(equipmentItems)
+            .where(and(eq(equipmentItems.id, drawerItemId), isNull(equipmentItems.deletedAt)))
+            .limit(1)
+          return row ? { value: row.id, label: `${row.assetTag} · ${row.name}` } : undefined
+        })
+      : undefined
 
   const { rows, total } = await ctx.db(async (tx) => {
     // Read-tier scope: all → everything; site → records at the caller's sites
@@ -214,7 +235,7 @@ export default async function EquipmentInspectionsPage({
             })}
             actions={
               canInspect ? (
-                <Link href="/equipment/inspections/new">
+                <Link href="/equipment/inspections?drawer=new" scroll={false}>
                   <Button>
                     <Plus size={14} /> <GeneratedText id="m_0f060bce7a52ef" />
                   </Button>
@@ -379,6 +400,15 @@ export default async function EquipmentInspectionsPage({
       <p className="flex items-center gap-1.5 text-xs text-slate-400">
         <ClipboardCheck size={12} /> <GeneratedText id="m_0235f132f871e4" />
       </p>
+
+      <UrlDrawer
+        open={pickString(sp.drawer) === 'new'}
+        closeHref={BASE}
+        title={tGenerated('m_1edf2b8e0e3013')}
+        size="md"
+      >
+        <NewEquipmentInspectionDrawer initialItem={drawerItem} lockedItem={Boolean(drawerItem)} />
+      </UrlDrawer>
     </ListPageLayout>
   )
 }

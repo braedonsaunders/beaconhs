@@ -150,6 +150,11 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]
 
+// Sub-tabs inside the Inspections tab. Pre-use leads because it is the check a
+// crew runs every shift; the rest were three tables stacked on one screen.
+const INSPECTION_TABS = ['preuse', 'schedules', 'reminders', 'history'] as const
+type InspectionTab = (typeof INSPECTION_TABS)[number]
+
 // Sub-tables share one page; each gets prefixed search/pagination params
 // (e.g. ?wo_q=&wo_p=2) so filtering work orders never resets the log table.
 const SUB_PER_PAGE = 15
@@ -817,6 +822,7 @@ export default async function EquipmentDetailPage({
   if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
+  const itab: InspectionTab = pickActiveTab(sp, INSPECTION_TABS, 'preuse', 'itab')
 
   // Per-table search + pagination state (URL-driven, prefixed per table).
   const woP = subParams(sp, 'wo')
@@ -2441,61 +2447,124 @@ export default async function EquipmentDetailPage({
                 value={
                   active === 'inspections' ? (
                     <div className="space-y-4">
+                      <TabNav
+                        variant="pills"
+                        paramKey="itab"
+                        basePath={basePath}
+                        currentParams={sp}
+                        active={itab}
+                        tabs={[
+                          { key: 'preuse', label: 'Pre-use' },
+                          { key: 'schedules', label: 'Schedules', count: scheduleStats.active },
+                          { key: 'reminders', label: 'Reminders', count: openReminderCount },
+                          { key: 'history', label: 'History', count: inspectionsTotal },
+                        ]}
+                      />
+                      {/*
+                       * Pre-use is the check a crew actually runs every shift,
+                       * so it leads the tab in its own section rather than
+                       * sitting under the schedules table's pagination.
+                       */}
+                      <GeneratedValue
+                        value={
+                          itab === 'preuse' ? (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle>
+                                  <GeneratedText id="m_0169e159d93a5b" />
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                  <LiveToggle
+                                    id={id}
+                                    field="requiresPreUseInspection"
+                                    label={tGenerated('m_0001f9d2929552')}
+                                    initialValue={item.requiresPreUseInspection}
+                                    disabled={locked}
+                                    updateAction={updateEquipmentField}
+                                  />
+                                  <LiveRemoteSelect
+                                    id={id}
+                                    field="preUseInspectionTypeId"
+                                    label={tGenerated('m_054ca9b2975cac')}
+                                    initialValue={item.preUseInspectionTypeId}
+                                    initialOption={
+                                      selectedPreUseType
+                                        ? {
+                                            value: selectedPreUseType.id,
+                                            label: selectedPreUseType.name,
+                                          }
+                                        : undefined
+                                    }
+                                    lookup="equipment-item-pre-use-inspection-types"
+                                    contextId={item.typeId ?? undefined}
+                                    emptyLabel={tGenerated('m_045c03d42f2f53')}
+                                    disabled={locked}
+                                    updateAction={updateEquipmentField}
+                                  />
+                                  <ReadOnlyStat
+                                    label={tGenerated('m_066ea9befbd59e')}
+                                    value={
+                                      item.lastPreUseInspectionAt
+                                        ? formatDateTime(
+                                            new Date(item.lastPreUseInspectionAt),
+                                            ctx.timezone,
+                                            ctx.locale,
+                                          )
+                                        : '—'
+                                    }
+                                  />
+                                  <GeneratedValue
+                                    value={
+                                      item.requiresPreUseInspection &&
+                                      item.preUseInspectionTypeId ? (
+                                        <div className="sm:col-span-3">
+                                          <Link
+                                            href={
+                                              `/equipment/inspections?drawer=new&itemId=${id}` as Route
+                                            }
+                                            scroll={false}
+                                          >
+                                            <Button size="sm">
+                                              <ClipboardCheck size={14} />{' '}
+                                              <GeneratedText id="m_0c0448292f2325" />
+                                            </Button>
+                                          </Link>
+                                        </div>
+                                      ) : null
+                                    }
+                                  />
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ) : null
+                        }
+                      />
+
                       {/*
                        * Recurring schedules — the per-unit cadences (any interval:
                        * daily, monthly, every 3 months, annual, 5-year, …) that
                        * drive the maintenance cockpit and overdue tracking.
                        */}
-                      <Card>
-                        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                          <CardTitle>
-                            <GeneratedText id="m_0fc16ae9bd180d" />
-                            <GeneratedValue value={scheduleStats.active} />)
-                          </CardTitle>
-                          <GeneratedValue
-                            value={
-                              locked ? null : (
-                                <Link
-                                  href={`${basePath}?tab=inspections&drawer=schedule-new` as Route}
-                                >
-                                  <Button size="sm">
-                                    <CalendarClock size={14} />{' '}
-                                    <GeneratedText id="m_0009414f09bdd1" />
-                                  </Button>
-                                </Link>
-                              )
-                            }
-                          />
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <SearchInput
-                            paramKey="sch_q"
-                            pageParamKey="sch_p"
-                            placeholder={tGenerated('m_193581bf81b594')}
-                          />
-                          <GeneratedValue
-                            value={
-                              schedules.length === 0 ? (
-                                <EmptyState
-                                  icon={<CalendarClock size={24} />}
-                                  title={tGeneratedValue(
-                                    schP.q
-                                      ? tGenerated('m_0deb45ba5d4218')
-                                      : tGenerated('m_0867daf3f85e1e'),
-                                  )}
-                                  description={tGeneratedValue(
-                                    schP.q
-                                      ? tGenerated('m_1216539ec285b3')
-                                      : tGenerated('m_08a5da9cb43769'),
-                                  )}
-                                  action={
-                                    locked || schP.q ? undefined : (
+                      <GeneratedValue
+                        value={
+                          itab === 'schedules' ? (
+                            <Card>
+                              <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                                <CardTitle>
+                                  <GeneratedText id="m_0fc16ae9bd180d" />
+                                  <GeneratedValue value={scheduleStats.active} />)
+                                </CardTitle>
+                                <GeneratedValue
+                                  value={
+                                    locked ? null : (
                                       <Link
                                         href={
                                           `${basePath}?tab=inspections&drawer=schedule-new` as Route
                                         }
                                       >
-                                        <Button size="sm" variant="outline">
+                                        <Button size="sm">
                                           <CalendarClock size={14} />{' '}
                                           <GeneratedText id="m_0009414f09bdd1" />
                                         </Button>
@@ -2503,497 +2572,510 @@ export default async function EquipmentDetailPage({
                                     )
                                   }
                                 />
-                              ) : (
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>
-                                        <GeneratedText id="m_0ef24e5f31b073" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_0a847756f27f7f" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_0db0ed865d584f" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_11af411751990f" />
-                                      </TableHead>
-                                      <TableHead></TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    <GeneratedValue
-                                      value={schedules.map(({ schedule, type: schedType }) => {
-                                        const overdue =
-                                          schedule.isActive && schedule.nextDueOn < todayIso
-                                        const dueSoon =
-                                          schedule.isActive &&
-                                          !overdue &&
-                                          schedule.nextDueOn <= dueSoonCutoffIso
-                                        return (
-                                          <TableRow key={schedule.id}>
-                                            <TableCell className="font-medium">
-                                              <GeneratedValue
-                                                value={
-                                                  schedType?.name ??
-                                                  schedule.label ?? (
-                                                    <GeneratedText id="m_0ef24e5f31b073" />
-                                                  )
-                                                }
-                                              />
-                                              <GeneratedValue
-                                                value={
-                                                  !schedule.isActive ? (
-                                                    <Badge variant="secondary" className="ml-2">
-                                                      <GeneratedText id="m_07690e88572a6c" />
-                                                    </Badge>
-                                                  ) : null
-                                                }
-                                              />
-                                              <GeneratedValue
-                                                value={
-                                                  schedule.notes ? (
-                                                    <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
-                                                      {schedule.notes}
-                                                    </div>
-                                                  ) : null
-                                                }
-                                              />
-                                            </TableCell>
-                                            <TableCell>
-                                              <Badge variant="secondary">
-                                                <GeneratedValue
-                                                  value={formatInterval(
-                                                    schedule.intervalValue,
-                                                    schedule.intervalUnit,
-                                                  )}
-                                                />
-                                              </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-slate-600 dark:text-slate-300">
-                                              <GeneratedValue
-                                                value={schedule.lastCompletedOn ?? '—'}
-                                              />
-                                            </TableCell>
-                                            <TableCell>
-                                              <span className="flex items-center gap-2">
-                                                <GeneratedValue value={schedule.nextDueOn} />
-                                                <GeneratedValue
-                                                  value={
-                                                    overdue ? (
-                                                      <Badge variant="destructive">
-                                                        <GeneratedText id="m_06e3b632d95096" />
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <SearchInput
+                                  paramKey="sch_q"
+                                  pageParamKey="sch_p"
+                                  placeholder={tGenerated('m_193581bf81b594')}
+                                />
+                                <GeneratedValue
+                                  value={
+                                    schedules.length === 0 ? (
+                                      <EmptyState
+                                        icon={<CalendarClock size={24} />}
+                                        title={tGeneratedValue(
+                                          schP.q
+                                            ? tGenerated('m_0deb45ba5d4218')
+                                            : tGenerated('m_0867daf3f85e1e'),
+                                        )}
+                                        description={tGeneratedValue(
+                                          schP.q
+                                            ? tGenerated('m_1216539ec285b3')
+                                            : tGenerated('m_08a5da9cb43769'),
+                                        )}
+                                        action={
+                                          locked || schP.q ? undefined : (
+                                            <Link
+                                              href={
+                                                `${basePath}?tab=inspections&drawer=schedule-new` as Route
+                                              }
+                                            >
+                                              <Button size="sm" variant="outline">
+                                                <CalendarClock size={14} />{' '}
+                                                <GeneratedText id="m_0009414f09bdd1" />
+                                              </Button>
+                                            </Link>
+                                          )
+                                        }
+                                      />
+                                    ) : (
+                                      <Table>
+                                        <TableHeader>
+                                          <TableRow>
+                                            <TableHead>
+                                              <GeneratedText id="m_0ef24e5f31b073" />
+                                            </TableHead>
+                                            <TableHead>
+                                              <GeneratedText id="m_0a847756f27f7f" />
+                                            </TableHead>
+                                            <TableHead>
+                                              <GeneratedText id="m_0db0ed865d584f" />
+                                            </TableHead>
+                                            <TableHead>
+                                              <GeneratedText id="m_11af411751990f" />
+                                            </TableHead>
+                                            <TableHead></TableHead>
+                                          </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                          <GeneratedValue
+                                            value={schedules.map(
+                                              ({ schedule, type: schedType }) => {
+                                                const overdue =
+                                                  schedule.isActive && schedule.nextDueOn < todayIso
+                                                const dueSoon =
+                                                  schedule.isActive &&
+                                                  !overdue &&
+                                                  schedule.nextDueOn <= dueSoonCutoffIso
+                                                return (
+                                                  <TableRow key={schedule.id}>
+                                                    <TableCell className="font-medium">
+                                                      <GeneratedValue
+                                                        value={
+                                                          schedType?.name ??
+                                                          schedule.label ?? (
+                                                            <GeneratedText id="m_0ef24e5f31b073" />
+                                                          )
+                                                        }
+                                                      />
+                                                      <GeneratedValue
+                                                        value={
+                                                          !schedule.isActive ? (
+                                                            <Badge
+                                                              variant="secondary"
+                                                              className="ml-2"
+                                                            >
+                                                              <GeneratedText id="m_07690e88572a6c" />
+                                                            </Badge>
+                                                          ) : null
+                                                        }
+                                                      />
+                                                      <GeneratedValue
+                                                        value={
+                                                          schedule.notes ? (
+                                                            <div className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                                                              {schedule.notes}
+                                                            </div>
+                                                          ) : null
+                                                        }
+                                                      />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <Badge variant="secondary">
+                                                        <GeneratedValue
+                                                          value={formatInterval(
+                                                            schedule.intervalValue,
+                                                            schedule.intervalUnit,
+                                                          )}
+                                                        />
                                                       </Badge>
-                                                    ) : dueSoon ? (
-                                                      <Badge variant="warning">
-                                                        <GeneratedText id="m_046f5560019a3a" />
-                                                      </Badge>
-                                                    ) : null
-                                                  }
-                                                />
-                                              </span>
-                                            </TableCell>
-                                            <TableCell>
-                                              <div className="flex items-center justify-end gap-3">
-                                                <GeneratedValue
-                                                  value={
-                                                    schedule.inspectionTypeId ? (
-                                                      <Link
-                                                        href={`/equipment/inspections/new?itemId=${id}&typeId=${schedule.inspectionTypeId}`}
-                                                        className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                                      >
-                                                        <GeneratedText id="m_0de51911bb80e2" />
-                                                      </Link>
-                                                    ) : null
-                                                  }
-                                                />
+                                                    </TableCell>
+                                                    <TableCell className="text-slate-600 dark:text-slate-300">
+                                                      <GeneratedValue
+                                                        value={schedule.lastCompletedOn ?? '—'}
+                                                      />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <span className="flex items-center gap-2">
+                                                        <GeneratedValue
+                                                          value={schedule.nextDueOn}
+                                                        />
+                                                        <GeneratedValue
+                                                          value={
+                                                            overdue ? (
+                                                              <Badge variant="destructive">
+                                                                <GeneratedText id="m_06e3b632d95096" />
+                                                              </Badge>
+                                                            ) : dueSoon ? (
+                                                              <Badge variant="warning">
+                                                                <GeneratedText id="m_046f5560019a3a" />
+                                                              </Badge>
+                                                            ) : null
+                                                          }
+                                                        />
+                                                      </span>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                      <div className="flex items-center justify-end gap-3">
+                                                        <GeneratedValue
+                                                          value={
+                                                            schedule.inspectionTypeId ? (
+                                                              <Link
+                                                                href={`/equipment/inspections/new?itemId=${id}&typeId=${schedule.inspectionTypeId}`}
+                                                                className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                                              >
+                                                                <GeneratedText id="m_0de51911bb80e2" />
+                                                              </Link>
+                                                            ) : null
+                                                          }
+                                                        />
+                                                        <GeneratedValue
+                                                          value={
+                                                            locked ? null : (
+                                                              <Link
+                                                                href={
+                                                                  mergeHref(basePath, sp, {
+                                                                    tab: 'inspections',
+                                                                    drawer: `schedule-${schedule.id}`,
+                                                                  }) as Route
+                                                                }
+                                                                className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                                              >
+                                                                <GeneratedText id="m_03a66f9d34ac7b" />
+                                                              </Link>
+                                                            )
+                                                          }
+                                                        />
+                                                      </div>
+                                                    </TableCell>
+                                                  </TableRow>
+                                                )
+                                              },
+                                            )}
+                                          />
+                                        </TableBody>
+                                      </Table>
+                                    )
+                                  }
+                                />
+                                <SubPagination
+                                  basePath={basePath}
+                                  sp={sp}
+                                  prefix="sch"
+                                  total={schedulesTotal}
+                                  page={schP.page}
+                                />
+                              </CardContent>
+                            </Card>
+                          ) : null
+                        }
+                      />
+
+                      {/* Ad-hoc reminders — one-off (or repeating) to-dos for this unit. */}
+                      <GeneratedValue
+                        value={
+                          itab === 'reminders' ? (
+                            <Card>
+                              <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                                <CardTitle>
+                                  <GeneratedText id="m_072abecbb75c3a" />
+                                  <GeneratedValue value={openReminderCount} />)
+                                </CardTitle>
+                                <GeneratedValue
+                                  value={
+                                    locked ? null : (
+                                      <Link
+                                        href={
+                                          `${basePath}?tab=inspections&drawer=reminder-new` as Route
+                                        }
+                                      >
+                                        <Button size="sm" variant="outline">
+                                          <BellRing size={14} />{' '}
+                                          <GeneratedText id="m_04b0444a0259a5" />
+                                        </Button>
+                                      </Link>
+                                    )
+                                  }
+                                />
+                              </CardHeader>
+                              <CardContent className="space-y-3">
+                                <SearchInput
+                                  paramKey="rem_q"
+                                  pageParamKey="rem_p"
+                                  placeholder={tGenerated('m_1e87e6122b64af')}
+                                />
+                                <GeneratedValue
+                                  value={
+                                    openReminders.length === 0 ? (
+                                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        <GeneratedValue
+                                          value={
+                                            remP.q ? (
+                                              <GeneratedText id="m_1e368e26abc872" />
+                                            ) : (
+                                              <GeneratedText id="m_10d46f2397b88e" />
+                                            )
+                                          }
+                                        />
+                                      </p>
+                                    ) : (
+                                      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                                        <GeneratedValue
+                                          value={openReminders.map(({ reminder, assignee }) => {
+                                            const overdue = reminder.dueOn < todayIso
+                                            return (
+                                              <li
+                                                key={reminder.id}
+                                                className="flex items-center justify-between gap-3 py-2.5"
+                                              >
+                                                <div className="min-w-0">
+                                                  <div className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                                                    <GeneratedValue value={reminder.title} />
+                                                    <GeneratedValue
+                                                      value={
+                                                        reminder.repeatIntervalValue &&
+                                                        reminder.repeatIntervalUnit ? (
+                                                          <Badge variant="secondary">
+                                                            {formatInterval(
+                                                              reminder.repeatIntervalValue,
+                                                              reminder.repeatIntervalUnit,
+                                                            )}
+                                                          </Badge>
+                                                        ) : null
+                                                      }
+                                                    />
+                                                  </div>
+                                                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                                                    <GeneratedText id="m_0c2eb92551e08b" />
+                                                    <GeneratedValue value={' '} />
+                                                    <span
+                                                      className={
+                                                        overdue
+                                                          ? 'font-medium text-rose-600 dark:text-rose-400'
+                                                          : undefined
+                                                      }
+                                                    >
+                                                      <GeneratedValue value={reminder.dueOn} />
+                                                    </span>
+                                                    <GeneratedValue
+                                                      value={
+                                                        assignee
+                                                          ? ` · ${assignee.firstName} ${assignee.lastName}`
+                                                          : ''
+                                                      }
+                                                    />
+                                                    <GeneratedValue
+                                                      value={
+                                                        reminder.details
+                                                          ? ` · ${reminder.details}`
+                                                          : ''
+                                                      }
+                                                    />
+                                                  </div>
+                                                </div>
                                                 <GeneratedValue
                                                   value={
                                                     locked ? null : (
-                                                      <Link
-                                                        href={
-                                                          mergeHref(basePath, sp, {
-                                                            tab: 'inspections',
-                                                            drawer: `schedule-${schedule.id}`,
-                                                          }) as Route
-                                                        }
-                                                        className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                                      >
-                                                        <GeneratedText id="m_03a66f9d34ac7b" />
-                                                      </Link>
+                                                      <div className="flex shrink-0 items-center gap-2">
+                                                        <Link
+                                                          href={
+                                                            mergeHref(basePath, sp, {
+                                                              tab: 'inspections',
+                                                              drawer: `reminder-${reminder.id}`,
+                                                            }) as Route
+                                                          }
+                                                          className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                                        >
+                                                          <GeneratedText id="m_03a66f9d34ac7b" />
+                                                        </Link>
+                                                        <form action={completeEquipmentReminder}>
+                                                          <input
+                                                            type="hidden"
+                                                            name="id"
+                                                            value={reminder.id}
+                                                          />
+                                                          <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            type="submit"
+                                                          >
+                                                            <Check size={14} />{' '}
+                                                            <GeneratedText id="m_00609f822e0571" />
+                                                          </Button>
+                                                        </form>
+                                                      </div>
                                                     )
                                                   }
                                                 />
-                                              </div>
-                                            </TableCell>
-                                          </TableRow>
-                                        )
-                                      })}
-                                    />
-                                  </TableBody>
-                                </Table>
-                              )
-                            }
-                          />
-                          <SubPagination
-                            basePath={basePath}
-                            sp={sp}
-                            prefix="sch"
-                            total={schedulesTotal}
-                            page={schP.page}
-                          />
-                          <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3 dark:border-slate-800">
-                            <LiveToggle
-                              id={id}
-                              field="requiresPreUseInspection"
-                              label={tGenerated('m_0001f9d2929552')}
-                              initialValue={item.requiresPreUseInspection}
-                              disabled={locked}
-                              updateAction={updateEquipmentField}
-                            />
-                            <LiveRemoteSelect
-                              id={id}
-                              field="preUseInspectionTypeId"
-                              label={tGenerated('m_054ca9b2975cac')}
-                              initialValue={item.preUseInspectionTypeId}
-                              initialOption={
-                                selectedPreUseType
-                                  ? {
-                                      value: selectedPreUseType.id,
-                                      label: selectedPreUseType.name,
-                                    }
-                                  : undefined
-                              }
-                              lookup="equipment-item-pre-use-inspection-types"
-                              contextId={item.typeId ?? undefined}
-                              emptyLabel={tGenerated('m_045c03d42f2f53')}
-                              disabled={locked}
-                              updateAction={updateEquipmentField}
-                            />
-                            <ReadOnlyStat
-                              label={tGenerated('m_066ea9befbd59e')}
-                              value={
-                                item.lastPreUseInspectionAt
-                                  ? formatDateTime(
-                                      new Date(item.lastPreUseInspectionAt),
-                                      ctx.timezone,
-                                      ctx.locale,
+                                              </li>
+                                            )
+                                          })}
+                                        />
+                                      </ul>
                                     )
-                                  : '—'
-                              }
-                            />
-                            <GeneratedValue
-                              value={
-                                item.requiresPreUseInspection && item.preUseInspectionTypeId ? (
-                                  <div className="sm:col-span-3">
-                                    <Link
-                                      href={`/equipment/inspections/new?itemId=${id}&typeId=${item.preUseInspectionTypeId}`}
-                                      className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                    >
-                                      <GeneratedText id="m_0c0448292f2325" />
-                                    </Link>
-                                  </div>
-                                ) : null
-                              }
-                            />
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Ad-hoc reminders — one-off (or repeating) to-dos for this unit. */}
-                      <Card>
-                        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                          <CardTitle>
-                            <GeneratedText id="m_072abecbb75c3a" />
-                            <GeneratedValue value={openReminderCount} />)
-                          </CardTitle>
-                          <GeneratedValue
-                            value={
-                              locked ? null : (
-                                <Link
-                                  href={`${basePath}?tab=inspections&drawer=reminder-new` as Route}
-                                >
-                                  <Button size="sm" variant="outline">
-                                    <BellRing size={14} /> <GeneratedText id="m_04b0444a0259a5" />
-                                  </Button>
-                                </Link>
-                              )
-                            }
-                          />
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <SearchInput
-                            paramKey="rem_q"
-                            pageParamKey="rem_p"
-                            placeholder={tGenerated('m_1e87e6122b64af')}
-                          />
-                          <GeneratedValue
-                            value={
-                              openReminders.length === 0 ? (
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                  <GeneratedValue
-                                    value={
-                                      remP.q ? (
-                                        <GeneratedText id="m_1e368e26abc872" />
-                                      ) : (
-                                        <GeneratedText id="m_10d46f2397b88e" />
-                                      )
-                                    }
-                                  />
-                                </p>
-                              ) : (
-                                <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                                  <GeneratedValue
-                                    value={openReminders.map(({ reminder, assignee }) => {
-                                      const overdue = reminder.dueOn < todayIso
-                                      return (
-                                        <li
-                                          key={reminder.id}
-                                          className="flex items-center justify-between gap-3 py-2.5"
-                                        >
-                                          <div className="min-w-0">
-                                            <div className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
-                                              <GeneratedValue value={reminder.title} />
-                                              <GeneratedValue
-                                                value={
-                                                  reminder.repeatIntervalValue &&
-                                                  reminder.repeatIntervalUnit ? (
-                                                    <Badge variant="secondary">
-                                                      {formatInterval(
-                                                        reminder.repeatIntervalValue,
-                                                        reminder.repeatIntervalUnit,
-                                                      )}
-                                                    </Badge>
-                                                  ) : null
-                                                }
-                                              />
-                                            </div>
-                                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                                              <GeneratedText id="m_0c2eb92551e08b" />
-                                              <GeneratedValue value={' '} />
-                                              <span
-                                                className={
-                                                  overdue
-                                                    ? 'font-medium text-rose-600 dark:text-rose-400'
-                                                    : undefined
-                                                }
-                                              >
-                                                <GeneratedValue value={reminder.dueOn} />
-                                              </span>
-                                              <GeneratedValue
-                                                value={
-                                                  assignee
-                                                    ? ` · ${assignee.firstName} ${assignee.lastName}`
-                                                    : ''
-                                                }
-                                              />
-                                              <GeneratedValue
-                                                value={
-                                                  reminder.details ? ` · ${reminder.details}` : ''
-                                                }
-                                              />
-                                            </div>
-                                          </div>
-                                          <GeneratedValue
-                                            value={
-                                              locked ? null : (
-                                                <div className="flex shrink-0 items-center gap-2">
-                                                  <Link
-                                                    href={
-                                                      mergeHref(basePath, sp, {
-                                                        tab: 'inspections',
-                                                        drawer: `reminder-${reminder.id}`,
-                                                      }) as Route
-                                                    }
-                                                    className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                                  >
-                                                    <GeneratedText id="m_03a66f9d34ac7b" />
-                                                  </Link>
-                                                  <form action={completeEquipmentReminder}>
-                                                    <input
-                                                      type="hidden"
-                                                      name="id"
-                                                      value={reminder.id}
-                                                    />
-                                                    <Button
-                                                      size="sm"
-                                                      variant="outline"
-                                                      type="submit"
-                                                    >
-                                                      <Check size={14} />{' '}
-                                                      <GeneratedText id="m_00609f822e0571" />
-                                                    </Button>
-                                                  </form>
-                                                </div>
-                                              )
-                                            }
-                                          />
-                                        </li>
-                                      )
-                                    })}
-                                  />
-                                </ul>
-                              )
-                            }
-                          />
-                          <SubPagination
-                            basePath={basePath}
-                            sp={sp}
-                            prefix="rem"
-                            total={remindersTotal}
-                            page={remP.page}
-                          />
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                          <CardTitle>
-                            <GeneratedText id="m_01eff32b4963db" />
-                            <GeneratedValue value={inspectionsTotal} />)
-                          </CardTitle>
-                          <Link href={`/equipment/inspections/new?itemId=${id}`}>
-                            <Button size="sm">
-                              <ClipboardCheck size={14} /> <GeneratedText id="m_0f060bce7a52ef" />
-                            </Button>
-                          </Link>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <SearchInput
-                            paramKey="ins_q"
-                            pageParamKey="ins_p"
-                            placeholder={tGenerated('m_18c4fceefc4fac')}
-                          />
-                          <GeneratedValue
-                            value={
-                              inspectionRecords.length === 0 ? (
-                                <EmptyState
-                                  icon={<ClipboardCheck size={24} />}
-                                  title={tGeneratedValue(
-                                    insP.q
-                                      ? tGenerated('m_0150c11d3f0eb8')
-                                      : tGenerated('m_128fa3f1eca160'),
-                                  )}
-                                  description={tGenerated('m_11123c53db10bc')}
-                                  action={
-                                    <Link href={`/equipment/inspections/new?itemId=${id}`}>
-                                      <Button variant="outline" size="sm">
-                                        <GeneratedText id="m_03a42f8671d199" />
-                                      </Button>
-                                    </Link>
                                   }
                                 />
-                              ) : (
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>
-                                        <GeneratedText id="m_17dc61a19b605c" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_074ba2f160c506" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_16b944034f43b6" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_100e41041dbe51" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_0b9da892d6faf0" />
-                                      </TableHead>
-                                      <TableHead></TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    <GeneratedValue
-                                      value={inspectionRecords.map(({ record, type }) => (
-                                        <TableRow key={record.id}>
-                                          <TableCell className="font-medium">
-                                            <Link
-                                              href={`/equipment/inspections/${record.id}`}
-                                              className="text-teal-700 hover:underline dark:text-teal-400"
-                                            >
-                                              <GeneratedValue value={record.reference} />
-                                            </Link>
-                                          </TableCell>
-                                          <TableCell className="text-slate-600 dark:text-slate-300">
-                                            <GeneratedValue value={type?.name ?? '—'} />
-                                          </TableCell>
-                                          <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
-                                            <GeneratedValue
-                                              value={
-                                                record.occurredAt
-                                                  ? formatDate(
-                                                      new Date(record.occurredAt),
-                                                      ctx.timezone,
-                                                      ctx.locale,
-                                                    )
-                                                  : '—'
-                                              }
-                                            />
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue
-                                              value={
-                                                record.result ? (
+                                <SubPagination
+                                  basePath={basePath}
+                                  sp={sp}
+                                  prefix="rem"
+                                  total={remindersTotal}
+                                  page={remP.page}
+                                />
+                              </CardContent>
+                            </Card>
+                          ) : null
+                        }
+                      />
+
+                      <GeneratedValue
+                        value={
+                          itab === 'history' ? (
+                            <Card>
+                              <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                                <CardTitle>
+                                  <GeneratedText id="m_01eff32b4963db" />
+                                  <GeneratedValue value={inspectionsTotal} />)
+                                </CardTitle>
+                                <Link
+                                  href={`/equipment/inspections?drawer=new&itemId=${id}` as Route}
+                                  scroll={false}
+                                >
+                                  <Button size="sm">
+                                    <ClipboardCheck size={14} />{' '}
+                                    <GeneratedText id="m_0f060bce7a52ef" />
+                                  </Button>
+                                </Link>
+                              </CardHeader>
+                              <CardContent className="space-y-3">
+                                <SearchInput
+                                  paramKey="ins_q"
+                                  pageParamKey="ins_p"
+                                  placeholder={tGenerated('m_18c4fceefc4fac')}
+                                />
+                                <GeneratedValue
+                                  value={
+                                    inspectionRecords.length === 0 ? (
+                                      <EmptyState
+                                        icon={<ClipboardCheck size={24} />}
+                                        title={tGeneratedValue(
+                                          insP.q
+                                            ? tGenerated('m_0150c11d3f0eb8')
+                                            : tGenerated('m_128fa3f1eca160'),
+                                        )}
+                                        description={tGenerated('m_11123c53db10bc')}
+                                        action={
+                                          <Link href={`/equipment/inspections/new?itemId=${id}`}>
+                                            <Button variant="outline" size="sm">
+                                              <GeneratedText id="m_03a42f8671d199" />
+                                            </Button>
+                                          </Link>
+                                        }
+                                      />
+                                    ) : (
+                                      <Table>
+                                        <TableHeader>
+                                          <TableRow>
+                                            <TableHead>
+                                              <GeneratedText id="m_17dc61a19b605c" />
+                                            </TableHead>
+                                            <TableHead>
+                                              <GeneratedText id="m_074ba2f160c506" />
+                                            </TableHead>
+                                            <TableHead>
+                                              <GeneratedText id="m_16b944034f43b6" />
+                                            </TableHead>
+                                            <TableHead>
+                                              <GeneratedText id="m_100e41041dbe51" />
+                                            </TableHead>
+                                            <TableHead>
+                                              <GeneratedText id="m_0b9da892d6faf0" />
+                                            </TableHead>
+                                            <TableHead></TableHead>
+                                          </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                          <GeneratedValue
+                                            value={inspectionRecords.map(({ record, type }) => (
+                                              <TableRow key={record.id}>
+                                                <TableCell className="font-medium">
+                                                  <Link
+                                                    href={`/equipment/inspections/${record.id}`}
+                                                    className="text-teal-700 hover:underline dark:text-teal-400"
+                                                  >
+                                                    <GeneratedValue value={record.reference} />
+                                                  </Link>
+                                                </TableCell>
+                                                <TableCell className="text-slate-600 dark:text-slate-300">
+                                                  <GeneratedValue value={type?.name ?? '—'} />
+                                                </TableCell>
+                                                <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-300">
+                                                  <GeneratedValue
+                                                    value={
+                                                      record.occurredAt
+                                                        ? formatDate(
+                                                            new Date(record.occurredAt),
+                                                            ctx.timezone,
+                                                            ctx.locale,
+                                                          )
+                                                        : '—'
+                                                    }
+                                                  />
+                                                </TableCell>
+                                                <TableCell>
+                                                  <GeneratedValue
+                                                    value={
+                                                      record.result ? (
+                                                        <Badge
+                                                          variant={
+                                                            record.result === 'pass'
+                                                              ? 'success'
+                                                              : record.result === 'fail'
+                                                                ? 'destructive'
+                                                                : 'secondary'
+                                                          }
+                                                        >
+                                                          {record.result}
+                                                        </Badge>
+                                                      ) : (
+                                                        <span className="text-slate-400">—</span>
+                                                      )
+                                                    }
+                                                  />
+                                                </TableCell>
+                                                <TableCell>
                                                   <Badge
                                                     variant={
-                                                      record.result === 'pass'
+                                                      record.status === 'closed' ||
+                                                      record.status === 'submitted'
                                                         ? 'success'
-                                                        : record.result === 'fail'
-                                                          ? 'destructive'
-                                                          : 'secondary'
+                                                        : 'warning'
                                                     }
                                                   >
-                                                    {record.result}
+                                                    <GeneratedValue
+                                                      value={record.status.replace('_', ' ')}
+                                                    />
                                                   </Badge>
-                                                ) : (
-                                                  <span className="text-slate-400">—</span>
-                                                )
-                                              }
-                                            />
-                                          </TableCell>
-                                          <TableCell>
-                                            <Badge
-                                              variant={
-                                                record.status === 'closed' ||
-                                                record.status === 'submitted'
-                                                  ? 'success'
-                                                  : 'warning'
-                                              }
-                                            >
-                                              <GeneratedValue
-                                                value={record.status.replace('_', ' ')}
-                                              />
-                                            </Badge>
-                                          </TableCell>
-                                          <TableCell>
-                                            <Link
-                                              href={`/equipment/inspections/${record.id}`}
-                                              className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                            >
-                                              <GeneratedText id="m_1be345fc118df8" />
-                                            </Link>
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
-                                    />
-                                  </TableBody>
-                                </Table>
-                              )
-                            }
-                          />
-                          <SubPagination
-                            basePath={basePath}
-                            sp={sp}
-                            prefix="ins"
-                            total={inspectionsTotal}
-                            page={insP.page}
-                          />
-                        </CardContent>
-                      </Card>
+                                                </TableCell>
+                                                <TableCell>
+                                                  <Link
+                                                    href={`/equipment/inspections/${record.id}`}
+                                                    className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                                                  >
+                                                    <GeneratedText id="m_1be345fc118df8" />
+                                                  </Link>
+                                                </TableCell>
+                                              </TableRow>
+                                            ))}
+                                          />
+                                        </TableBody>
+                                      </Table>
+                                    )
+                                  }
+                                />
+                                <SubPagination
+                                  basePath={basePath}
+                                  sp={sp}
+                                  prefix="ins"
+                                  total={inspectionsTotal}
+                                  page={insP.page}
+                                />
+                              </CardContent>
+                            </Card>
+                          ) : null
+                        }
+                      />
                     </div>
                   ) : null
                 }

@@ -5,6 +5,7 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   ne,
@@ -20,6 +21,7 @@ import {
   departments,
   documents,
   equipmentCategories,
+  equipmentInspectionSchedules,
   equipmentInspectionTypes,
   equipmentItems,
   equipmentTypes,
@@ -302,6 +304,8 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'equipment-edit-categories':
     case 'equipment-item-inspection-types':
     case 'equipment-item-pre-use-inspection-types':
+    case 'equipment-item-scheduled-inspection-types':
+    case 'equipment-rental-inspection-types':
     case 'equipment-inspection-sites':
     case 'equipment-inspection-types':
       return can(ctx, 'equipment.manage') || can(ctx, 'equipment.inspect')
@@ -1336,6 +1340,7 @@ async function loadOptions(
       lookup === 'location-parent-units' ||
       lookup === 'incident-sites' ||
       lookup === 'inspection-sites' ||
+      lookup === 'equipment-inspection-sites' ||
       lookup === 'corrective-action-sites'
     ) {
       const match = input.hasQuery
@@ -1761,14 +1766,81 @@ async function loadOptions(
       return boundPickerOptions(rows.map((row) => option(row.id, row.name)))
     }
 
+    // What inspections are actually SET UP on one unit: its pre-use checklist
+    // plus every active schedule's type. contextId is the EQUIPMENT ITEM id
+    // (not its type) — a unit inherits its inspections, it does not shop for
+    // them from the tenant-wide catalogue.
+    if (lookup === 'equipment-item-scheduled-inspection-types') {
+      const [item] = input.contextId
+        ? await tx
+            .select({
+              preUseTypeId: equipmentItems.preUseInspectionTypeId,
+              ownership: equipmentItems.ownership,
+            })
+            .from(equipmentItems)
+            .where(
+              and(
+                eq(equipmentItems.tenantId, ctx.tenantId),
+                eq(equipmentItems.id, input.contextId),
+              ),
+            )
+            .limit(1)
+        : []
+      if (!item) return boundPickerOptions([])
+      const scheduled = await tx
+        .select({ typeId: equipmentInspectionSchedules.inspectionTypeId })
+        .from(equipmentInspectionSchedules)
+        .where(
+          and(
+            eq(equipmentInspectionSchedules.tenantId, ctx.tenantId),
+            eq(equipmentInspectionSchedules.equipmentItemId, input.contextId!),
+            eq(equipmentInspectionSchedules.isActive, true),
+          ),
+        )
+      const ids = [
+        ...new Set(
+          [item.preUseTypeId, ...scheduled.map((row) => row.typeId)].filter((id): id is string =>
+            Boolean(id),
+          ),
+        ),
+      ]
+      if (ids.length === 0) return boundPickerOptions([])
+      const rows = await tx
+        .select({
+          id: equipmentInspectionTypes.id,
+          name: equipmentInspectionTypes.name,
+          isPreUse: equipmentInspectionTypes.isPreUse,
+        })
+        .from(equipmentInspectionTypes)
+        .where(
+          and(
+            eq(equipmentInspectionTypes.tenantId, ctx.tenantId),
+            inArray(equipmentInspectionTypes.id, ids),
+            eq(equipmentInspectionTypes.isActive, true),
+            // Rented gear is only ever checked before use; its periodic
+            // certification belongs to the rental company.
+            item.ownership === 'rented' ? eq(equipmentInspectionTypes.isPreUse, true) : undefined,
+            input.hasQuery ? ilike(equipmentInspectionTypes.name, input.term) : undefined,
+          ),
+        )
+        .orderBy(desc(equipmentInspectionTypes.isPreUse), asc(equipmentInspectionTypes.name))
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(
+        rows.map((row) => option(row.id, row.name, row.isPreUse ? 'Pre-use' : 'Scheduled')),
+      )
+    }
+
     if (
       lookup === 'equipment-item-inspection-types' ||
       lookup === 'equipment-item-pre-use-inspection-types' ||
+      lookup === 'equipment-rental-inspection-types' ||
       lookup === 'equipment-inspection-types'
     ) {
-      const preUseOnly = lookup === 'equipment-item-pre-use-inspection-types'
+      const preUseOnly =
+        lookup === 'equipment-item-pre-use-inspection-types' ||
+        lookup === 'equipment-rental-inspection-types'
       const applicable =
-        lookup === 'equipment-inspection-types'
+        lookup === 'equipment-inspection-types' || lookup === 'equipment-rental-inspection-types'
           ? undefined
           : input.contextId
             ? or(
@@ -1921,7 +1993,7 @@ async function loadOptions(
       return boundPickerOptions(personOptions(rows))
     }
 
-    if (lookup === 'equipment-custody-sites' || lookup === 'equipment-inspection-sites') {
+    if (lookup === 'equipment-custody-sites') {
       const match = input.hasQuery
         ? or(
             ilike(orgUnits.name, input.term),
