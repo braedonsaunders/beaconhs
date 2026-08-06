@@ -68,6 +68,7 @@ describe('production cutover migration integrity', () => {
       '0028_generalize_monitored_sessions.sql',
       '0029_faulty_thunderball.sql',
       '0030_unify_hazid_app_locations.sql',
+      '0031_hazid_optional_risk_ratings.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -105,6 +106,7 @@ describe('production cutover migration integrity', () => {
       { idx: 28, tag: '0028_generalize_monitored_sessions' },
       { idx: 29, tag: '0029_faulty_thunderball' },
       { idx: 30, tag: '0030_unify_hazid_app_locations' },
+      { idx: 31, tag: '0031_hazid_optional_risk_ratings' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)

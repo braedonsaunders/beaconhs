@@ -196,6 +196,10 @@ export const hazidAssessmentTypes = pgTable(
     // Optional sections. Tasks vs hazards are determined by `style` above.
     hasPPE: boolean('has_ppe').default(true).notNull(),
     hasQuestions: boolean('has_questions').default(true).notNull(),
+    // Before/after risk-matrix ratings on hazard rows. Off = legacy checklist
+    // flow: seeded hazards start as not applicable, and marking one applicable
+    // requires typed site-specific controls instead of matrix ratings.
+    hasRiskRatings: boolean('has_risk_ratings').default(true).notNull(),
     // Working-at-Heights, Confined Space, and Arc Flash are Builder Apps now,
     // not native sections — so there are no has_wah / has_cs / has_arc_flash
     // toggles on the type.

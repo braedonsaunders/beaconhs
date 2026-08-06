@@ -218,6 +218,13 @@
       "when": 1785954317000,
       "tag": "0030_unify_hazid_app_locations",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1785954317001,
+      "tag": "0031_hazid_optional_risk_ratings",
+      "breakpoints": true
     }
   ]
 }
