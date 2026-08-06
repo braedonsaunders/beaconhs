@@ -307,7 +307,6 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'equipment-item-scheduled-inspection-types':
     case 'equipment-rental-inspection-types':
     case 'equipment-inspection-sites':
-    case 'equipment-inspection-types':
       return can(ctx, 'equipment.manage') || can(ctx, 'equipment.inspect')
     case 'incident-classification-parents':
       return canManage('incidents')
@@ -1833,14 +1832,13 @@ async function loadOptions(
     if (
       lookup === 'equipment-item-inspection-types' ||
       lookup === 'equipment-item-pre-use-inspection-types' ||
-      lookup === 'equipment-rental-inspection-types' ||
-      lookup === 'equipment-inspection-types'
+      lookup === 'equipment-rental-inspection-types'
     ) {
       const preUseOnly =
         lookup === 'equipment-item-pre-use-inspection-types' ||
         lookup === 'equipment-rental-inspection-types'
       const applicable =
-        lookup === 'equipment-inspection-types' || lookup === 'equipment-rental-inspection-types'
+        lookup === 'equipment-rental-inspection-types'
           ? undefined
           : input.contextId
             ? or(

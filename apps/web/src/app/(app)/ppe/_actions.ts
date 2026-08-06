@@ -110,7 +110,12 @@ export async function bulkIssuePpeToPerson(args: {
     // 2) Flip every item to "issued + held by this person".
     await tx
       .update(ppeItems)
-      .set({ status: 'issued', currentHolderPersonId: args.personId })
+      .set({
+        status: 'issued',
+        currentHolderPersonId: args.personId,
+        statusChangedAt: new Date(),
+        statusChangedByTenantUserId: issuedByTenantUserId,
+      })
       .where(inArray(ppeItems.id, editable))
 
     await materializePpeTypeEvidence(
@@ -207,7 +212,12 @@ export async function bulkDiscardPpe(args: {
 
     await tx
       .update(ppeItems)
-      .set({ status: 'discarded', currentHolderPersonId: null })
+      .set({
+        status: 'discarded',
+        currentHolderPersonId: null,
+        statusChangedAt: new Date(),
+        statusChangedByTenantUserId: issuedByTenantUserId,
+      })
       .where(inArray(ppeItems.id, editable))
 
     await materializePpeTypeEvidence(
@@ -340,7 +350,10 @@ export async function createAndIssuePpe(input: {
     return { ok: false, error: 'Super-admin cannot issue PPE — switch to a tenant user.' }
   }
 
-  const issuedByTenantUserId = input.personId ? safeTenantUserId(ctx) : null
+  // Attributed for the item's status stamp either way; the ledger row is
+  // only written (and only NOT NULL) when the item is issued to someone.
+  const actorTenantUserId = safeTenantUserId(ctx)
+  const issuedByTenantUserId = input.personId ? actorTenantUserId : null
   let itemId: string | null
   try {
     itemId = await ctx.db(async (tx) => {
@@ -370,6 +383,10 @@ export async function createAndIssuePpe(input: {
           notes: input.notes?.trim() || null,
           status: input.personId ? 'issued' : 'in_stock',
           currentHolderPersonId: input.personId ?? null,
+          // Registration is the item's first status, so the register can sort
+          // new gear by "recently changed" like everything else.
+          statusChangedAt: new Date(),
+          statusChangedByTenantUserId: actorTenantUserId,
         })
         .returning({ id: ppeItems.id })
       if (!row) return null

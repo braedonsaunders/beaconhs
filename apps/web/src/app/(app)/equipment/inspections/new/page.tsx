@@ -15,10 +15,9 @@ export default async function NewEquipmentInspectionRedirect({
 }: {
   searchParams: Promise<{ typeId?: string; itemId?: string }>
 }) {
-  const { itemId } = await searchParams
-  redirect(
-    itemId
-      ? `/equipment/inspections?drawer=new&itemId=${encodeURIComponent(itemId)}`
-      : '/equipment/inspections?drawer=new',
-  )
+  const { itemId, typeId } = await searchParams
+  const params = new URLSearchParams({ drawer: 'new' })
+  if (itemId) params.set('itemId', itemId)
+  if (typeId) params.set('typeId', typeId)
+  redirect(`/equipment/inspections?${params.toString()}`)
 }

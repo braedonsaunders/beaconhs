@@ -20,16 +20,19 @@ type TargetMode = 'registered' | 'rental'
 
 export function NewEquipmentInspectionDrawer({
   initialItem,
+  initialType,
   lockedItem = false,
 }: {
   initialItem?: PickerOption
+  /** Pre-selected when a schedule's "Start" link named the inspection. */
+  initialType?: PickerOption
   /** Started from a unit's own page: the equipment is fixed. */
   lockedItem?: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
   const [targetMode, setTargetMode] = useState<TargetMode>('registered')
   const [itemId, setItemId] = useState(initialItem?.value ?? '')
-  const [typeId, setTypeId] = useState('')
+  const [typeId, setTypeId] = useState(initialType?.value ?? '')
   const [siteOrgUnitId, setSiteOrgUnitId] = useState('')
   const [pending, start] = useTransition()
 
@@ -149,6 +152,7 @@ export function NewEquipmentInspectionDrawer({
           }
           contextId={targetMode === 'registered' ? itemId || undefined : undefined}
           value={typeId}
+          initialOption={initialType}
           onChange={setTypeId}
           disabled={targetMode === 'registered' && !itemId}
           placeholder={tGenerated('m_00823ac933297d')}

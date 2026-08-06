@@ -134,6 +134,19 @@ export default async function EquipmentInspectionsPage({
         })
       : undefined
 
+  const drawerTypeId = pickString(sp.typeId)
+  const drawerType =
+    pickString(sp.drawer) === 'new' && drawerTypeId && isUuid(drawerTypeId)
+      ? await ctx.db(async (tx) => {
+          const [row] = await tx
+            .select({ id: equipmentInspectionTypes.id, name: equipmentInspectionTypes.name })
+            .from(equipmentInspectionTypes)
+            .where(eq(equipmentInspectionTypes.id, drawerTypeId))
+            .limit(1)
+          return row ? { value: row.id, label: row.name } : undefined
+        })
+      : undefined
+
   const { rows, total } = await ctx.db(async (tx) => {
     // Read-tier scope: all → everything; site → records at the caller's sites
     // (plus their own); self → only records they performed/submitted.
@@ -407,7 +420,11 @@ export default async function EquipmentInspectionsPage({
         title={tGenerated('m_1edf2b8e0e3013')}
         size="md"
       >
-        <NewEquipmentInspectionDrawer initialItem={drawerItem} lockedItem={Boolean(drawerItem)} />
+        <NewEquipmentInspectionDrawer
+          initialItem={drawerItem}
+          initialType={drawerType}
+          lockedItem={Boolean(drawerItem)}
+        />
       </UrlDrawer>
     </ListPageLayout>
   )
