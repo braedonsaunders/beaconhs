@@ -56,7 +56,7 @@ import {
   UrlDrawer,
 } from '@beaconhs/ui'
 import { clamp, isUuid, mergeHref, pickString } from '@/lib/list-params'
-import { EquipmentInspectionPanel } from '../inspections/_inspection-panel'
+import { EquipmentInspectionDrawer } from '../inspections/_inspection-panel'
 import { NewEquipmentInspectionDrawer } from '../inspections/_new-drawer'
 import { StartInspectionButton } from '../inspections/_start-button'
 import { formatDate, formatDateTime } from '@/lib/datetime'
@@ -3587,24 +3587,13 @@ export default async function EquipmentDetailPage({
 
       {/* An inspection started from this unit is filled right here, over the
           unit's own page — same flyout the register uses. */}
-      <UrlDrawer
-        open={drawerKey === 'inspection' && isUuid(pickString(sp.inspectionId) ?? '')}
+      <EquipmentInspectionDrawer
+        open={drawerKey === 'inspection'}
         closeHref={inspectionReturnTo}
-        title={tGenerated('m_189bb91aaf5565')}
-        size="xl"
-      >
-        <GeneratedValue
-          value={
-            drawerKey === 'inspection' && isUuid(pickString(sp.inspectionId) ?? '') ? (
-              <EquipmentInspectionPanel
-                id={pickString(sp.inspectionId)!}
-                sp={sp}
-                returnTo={inspectionReturnTo}
-              />
-            ) : null
-          }
-        />
-      </UrlDrawer>
+        inspectionId={pickString(sp.inspectionId) ?? null}
+        sp={sp}
+        returnTo={inspectionReturnTo}
+      />
 
       {/* Only reached from the "New inspection" button — the schedule rows
           already know their check and start it in one tap. */}

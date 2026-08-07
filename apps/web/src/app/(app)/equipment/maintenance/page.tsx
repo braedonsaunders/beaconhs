@@ -52,7 +52,7 @@ import type { AppLocale } from '@beaconhs/i18n'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { clamp, isUuid, mergeHref, pickString } from '@/lib/list-params'
-import { EquipmentInspectionPanel } from '../inspections/_inspection-panel'
+import { EquipmentInspectionDrawer } from '../inspections/_inspection-panel'
 import { StartInspectionButton } from '../inspections/_start-button'
 import { formatDate } from '@/lib/datetime'
 import { formatInterval } from '@/lib/equipment/intervals'
@@ -789,24 +789,13 @@ export default async function EquipmentMaintenancePage({
       </UrlDrawer>
 
       {/* Work started from the cockpit is filled here, over the cockpit. */}
-      <UrlDrawer
-        open={drawerKey === 'inspection' && isUuid(pickString(sp.inspectionId) ?? '')}
+      <EquipmentInspectionDrawer
+        open={drawerKey === 'inspection'}
         closeHref={closeHref}
-        title={tGenerated('m_189bb91aaf5565')}
-        size="xl"
-      >
-        <GeneratedValue
-          value={
-            drawerKey === 'inspection' && isUuid(pickString(sp.inspectionId) ?? '') ? (
-              <EquipmentInspectionPanel
-                id={pickString(sp.inspectionId)!}
-                sp={sp}
-                returnTo={closeHref}
-              />
-            ) : null
-          }
-        />
-      </UrlDrawer>
+        inspectionId={pickString(sp.inspectionId) ?? null}
+        sp={sp}
+        returnTo={closeHref}
+      />
 
       <UnitMaintenanceDrawer
         open={drawerKey?.startsWith('unit-') ?? false}
