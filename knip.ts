@@ -17,6 +17,7 @@ const config: KnipConfig = {
         'scripts/materialize-compliance.ts',
         'scripts/normalize-ppe-inspection-notes.ts',
         'scripts/restore-equipment-preuse-links.ts',
+        'scripts/restore-ppe-custody-from-legacy.ts',
         'scripts/restore-ppe-serial-numbers.ts',
       ],
     },
