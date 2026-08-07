@@ -369,12 +369,16 @@ export function StationClient(props: StationClientProps) {
     return () => document.removeEventListener('fullscreenchange', onChange)
   }, [])
 
-  const dark = kiosk || overlay
+  // Dark chrome is a KIOSK decision, not a size one. A wall-mounted scanner
+  // station is deliberately dark; going full-screen from inside the app is just
+  // a bigger view of the page, so it follows the user's theme like everything
+  // else — forcing slate-950 there flipped a light-mode session to dark.
+  const dark = kiosk
   const visibleResults = scanValue.trim().length > 0 ? results : null
-  // Kiosk / full-screen scales everything up so it reads across a room.
-  const big = dark
+  // Both kiosk and full-screen scale up so the station reads across a room.
+  const big = kiosk || overlay
   const shell = overlay
-    ? 'fixed inset-0 z-40 overflow-y-auto bg-slate-950 text-slate-100'
+    ? 'fixed inset-0 z-40 overflow-y-auto bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100'
     : kiosk
       ? 'min-h-screen bg-slate-950 text-slate-100'
       : 'mx-auto w-full max-w-full overflow-visible rounded-none bg-transparent text-slate-900 dark:bg-transparent dark:text-slate-100 sm:overflow-hidden sm:rounded-2xl sm:border sm:border-slate-200 sm:bg-white sm:dark:border-slate-800 sm:dark:bg-slate-900'

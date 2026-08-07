@@ -2385,29 +2385,25 @@ export default async function PpeDetailPage({
        * attribute. Closing pops back to closeHref which preserves the
        * active tab.
        */}
-      <UrlDrawer
+      <PpeInspectionForm
         open={drawerKey === 'record-inspection'}
         closeHref={closeHref}
         title={tGeneratedValue(
           inspectionKind === 'annual'
-            ? tGenerated('m_0933551cc278f8')
-            : tGenerated('m_024460a277c771'),
+            ? tGenerated('m_1a86ff2774c6a1')
+            : tGenerated('m_0169e159d93a5b'),
         )}
         description={tGeneratedValue(
           inspectionKind === 'annual'
             ? tGenerated('m_1835964e76a7d5')
             : tGenerated('m_18e0e5e1c782f7'),
         )}
-        size="lg"
-      >
-        <PpeInspectionForm
-          itemId={id}
-          typeId={type.id}
-          kind={inspectionKind}
-          criteria={inspectionCriteria}
-          action={recordInspection}
-        />
-      </UrlDrawer>
+        itemId={id}
+        typeId={type.id}
+        kind={inspectionKind}
+        criteria={inspectionCriteria}
+        action={recordInspection}
+      />
 
       <UrlDrawer
         open={drawerKey === 'report-issue'}

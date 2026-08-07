@@ -152,7 +152,9 @@ type Tab = (typeof TABS)[number]
 
 // Sub-tabs inside the Inspections tab. Pre-use leads because it is the check a
 // crew runs every shift; the rest were three tables stacked on one screen.
-const INSPECTION_TABS = ['preuse', 'schedules', 'reminders', 'history'] as const
+// Pre-use is not a tab: it is a schedule like any other, so it lives as the
+// first row of the schedules table rather than a parallel place to look.
+const INSPECTION_TABS = ['schedules', 'reminders', 'history'] as const
 type InspectionTab = (typeof INSPECTION_TABS)[number]
 
 // Sub-tables share one page; each gets prefixed search/pagination params
@@ -822,7 +824,7 @@ export default async function EquipmentDetailPage({
   if (!isUuid(id)) notFound()
   const sp = await searchParams
   const active: Tab = pickActiveTab(sp, TABS, 'overview')
-  const itab: InspectionTab = pickActiveTab(sp, INSPECTION_TABS, 'preuse', 'itab')
+  const itab: InspectionTab = pickActiveTab(sp, INSPECTION_TABS, 'schedules', 'itab')
 
   // Per-table search + pagination state (URL-driven, prefixed per table).
   const woP = subParams(sp, 'wo')
@@ -1263,6 +1265,18 @@ export default async function EquipmentDetailPage({
   const customValues = readCustomFieldValues(item.metadata)
 
   const todayIso = new Date().toISOString().slice(0, 10)
+  // Named so the pre-use row reads like the scheduled ones next to it.
+  const preUseTypeName = item.preUseInspectionTypeId
+    ? ((
+        await ctx.db((tx) =>
+          tx
+            .select({ name: equipmentInspectionTypes.name })
+            .from(equipmentInspectionTypes)
+            .where(eq(equipmentInspectionTypes.id, item.preUseInspectionTypeId!))
+            .limit(1),
+        )
+      )[0]?.name ?? null)
+    : null
   const dueSoonCutoffIso = new Date(Date.parse(todayIso) + 30 * 86_400_000)
     .toISOString()
     .slice(0, 10)
@@ -2454,8 +2468,11 @@ export default async function EquipmentDetailPage({
                         currentParams={sp}
                         active={itab}
                         tabs={[
-                          { key: 'preuse', label: 'Pre-use' },
-                          { key: 'schedules', label: 'Schedules', count: scheduleStats.active },
+                          {
+                            key: 'schedules',
+                            label: 'Schedules',
+                            count: scheduleStats.active + (item.preUseInspectionTypeId ? 1 : 0),
+                          },
                           { key: 'reminders', label: 'Reminders', count: openReminderCount },
                           { key: 'history', label: 'History', count: inspectionsTotal },
                         ]}
@@ -2465,82 +2482,6 @@ export default async function EquipmentDetailPage({
                        * so it leads the tab in its own section rather than
                        * sitting under the schedules table's pagination.
                        */}
-                      <GeneratedValue
-                        value={
-                          itab === 'preuse' ? (
-                            <Card>
-                              <CardHeader>
-                                <CardTitle>
-                                  <GeneratedText id="m_0169e159d93a5b" />
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent>
-                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                  <LiveToggle
-                                    id={id}
-                                    field="requiresPreUseInspection"
-                                    label={tGenerated('m_0001f9d2929552')}
-                                    initialValue={item.requiresPreUseInspection}
-                                    disabled={locked}
-                                    updateAction={updateEquipmentField}
-                                  />
-                                  <LiveRemoteSelect
-                                    id={id}
-                                    field="preUseInspectionTypeId"
-                                    label={tGenerated('m_054ca9b2975cac')}
-                                    initialValue={item.preUseInspectionTypeId}
-                                    initialOption={
-                                      selectedPreUseType
-                                        ? {
-                                            value: selectedPreUseType.id,
-                                            label: selectedPreUseType.name,
-                                          }
-                                        : undefined
-                                    }
-                                    lookup="equipment-item-pre-use-inspection-types"
-                                    contextId={item.typeId ?? undefined}
-                                    emptyLabel={tGenerated('m_045c03d42f2f53')}
-                                    disabled={locked}
-                                    updateAction={updateEquipmentField}
-                                  />
-                                  <ReadOnlyStat
-                                    label={tGenerated('m_066ea9befbd59e')}
-                                    value={
-                                      item.lastPreUseInspectionAt
-                                        ? formatDateTime(
-                                            new Date(item.lastPreUseInspectionAt),
-                                            ctx.timezone,
-                                            ctx.locale,
-                                          )
-                                        : '—'
-                                    }
-                                  />
-                                  <GeneratedValue
-                                    value={
-                                      item.requiresPreUseInspection &&
-                                      item.preUseInspectionTypeId ? (
-                                        <div className="sm:col-span-3">
-                                          <Link
-                                            href={
-                                              `/equipment/inspections?drawer=new&itemId=${id}` as Route
-                                            }
-                                            scroll={false}
-                                          >
-                                            <Button size="sm">
-                                              <ClipboardCheck size={14} />{' '}
-                                              <GeneratedText id="m_0c0448292f2325" />
-                                            </Button>
-                                          </Link>
-                                        </div>
-                                      ) : null
-                                    }
-                                  />
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ) : null
-                        }
-                      />
 
                       {/*
                        * Recurring schedules — the per-unit cadences (any interval:
@@ -2629,6 +2570,55 @@ export default async function EquipmentDetailPage({
                                           </TableRow>
                                         </TableHeader>
                                         <TableBody>
+                                          {/* Pre-use is a schedule too — the
+                                              one the crew runs every shift —
+                                              so it leads the same table
+                                              instead of hiding in its own tab. */}
+                                          <GeneratedValue
+                                            value={
+                                              item.preUseInspectionTypeId ? (
+                                                <TableRow>
+                                                  <TableCell className="font-medium">
+                                                    <GeneratedValue
+                                                      value={preUseTypeName ?? 'Pre-use checklist'}
+                                                    />
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <Badge variant="secondary">
+                                                      <GeneratedText id="m_0169e159d93a5b" />
+                                                    </Badge>
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <GeneratedValue
+                                                      value={
+                                                        item.lastPreUseInspectionAt
+                                                          ? formatDate(
+                                                              new Date(item.lastPreUseInspectionAt),
+                                                              ctx.timezone,
+                                                              ctx.locale,
+                                                            )
+                                                          : '—'
+                                                      }
+                                                    />
+                                                  </TableCell>
+                                                  <TableCell>
+                                                    <GeneratedText id="m_00cf7da85bbbeb" />
+                                                  </TableCell>
+                                                  <TableCell className="text-right">
+                                                    <Link
+                                                      href={
+                                                        `/equipment/inspections?drawer=new&itemId=${id}&typeId=${item.preUseInspectionTypeId}` as Route
+                                                      }
+                                                      scroll={false}
+                                                      className="text-xs font-semibold text-teal-700 hover:underline dark:text-teal-300"
+                                                    >
+                                                      <GeneratedText id="m_0c0448292f2325" />
+                                                    </Link>
+                                                  </TableCell>
+                                                </TableRow>
+                                              ) : null
+                                            }
+                                          />
                                           <GeneratedValue
                                             value={schedules.map(
                                               ({ schedule, type: schedType }) => {
@@ -2756,6 +2746,52 @@ export default async function EquipmentDetailPage({
                                   total={schedulesTotal}
                                   page={schP.page}
                                 />
+                                {/* Pre-use configuration: which checklist the
+                                    crew runs every shift. It configures the row
+                                    at the top of this table. */}
+                                <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                    <LiveToggle
+                                      id={id}
+                                      field="requiresPreUseInspection"
+                                      label={tGenerated('m_0001f9d2929552')}
+                                      initialValue={item.requiresPreUseInspection}
+                                      disabled={locked}
+                                      updateAction={updateEquipmentField}
+                                    />
+                                    <LiveRemoteSelect
+                                      id={id}
+                                      field="preUseInspectionTypeId"
+                                      label={tGenerated('m_054ca9b2975cac')}
+                                      initialValue={item.preUseInspectionTypeId}
+                                      initialOption={
+                                        selectedPreUseType
+                                          ? {
+                                              value: selectedPreUseType.id,
+                                              label: selectedPreUseType.name,
+                                            }
+                                          : undefined
+                                      }
+                                      lookup="equipment-item-pre-use-inspection-types"
+                                      contextId={item.typeId ?? undefined}
+                                      emptyLabel={tGenerated('m_045c03d42f2f53')}
+                                      disabled={locked}
+                                      updateAction={updateEquipmentField}
+                                    />
+                                    <ReadOnlyStat
+                                      label={tGenerated('m_066ea9befbd59e')}
+                                      value={
+                                        item.lastPreUseInspectionAt
+                                          ? formatDateTime(
+                                              new Date(item.lastPreUseInspectionAt),
+                                              ctx.timezone,
+                                              ctx.locale,
+                                            )
+                                          : '—'
+                                      }
+                                    />
+                                  </div>
+                                </div>
                               </CardContent>
                             </Card>
                           ) : null
