@@ -9023,6 +9023,7 @@
     "m_1ba283aa90a3ee": "Issue date cannot be in the future.",
     "m_1c7685a6767311": "Pick a PPE item.",
     "m_1827730bf90a5d": "PPE item was not found.",
-    "m_03679cd5bdb048": "Deleted PPE item{value0}"
+    "m_03679cd5bdb048": "Deleted PPE item{value0}",
+    "m_17dbb904fe8283": "Pick the equipment first."
   }
 }

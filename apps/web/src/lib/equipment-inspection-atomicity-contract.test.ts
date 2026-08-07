@@ -182,7 +182,10 @@ describe('equipment inspection atomicity contract', () => {
     // Unregistered rental gear is pre-use only.
     expect(newDrawer).toContain("'equipment-rental-inspection-types'")
     expect(newDrawer).toContain('lookup="equipment-inspection-sites"')
-    expect(newDrawer).toContain("contextId={targetMode === 'registered' ? itemId || undefined")
+    // The eligible checks are fetched per item and rendered as one-tap cards,
+    // matching the hazard-assessment start flyout — not a free-text dropdown.
+    expect(newDrawer).toContain("params.set('contextId', contextId)")
+    expect(newDrawer).toContain('/api/picker-options?')
     expect(actions).toContain("targetMode === 'rental'")
     // Server-side the same two rules are enforced, not just hinted at in the UI.
     expect(actions).toContain("item.ownership === 'rented' && !type.isPreUse")
