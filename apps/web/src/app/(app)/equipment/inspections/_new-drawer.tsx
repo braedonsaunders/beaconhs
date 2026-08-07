@@ -33,12 +33,15 @@ export function NewEquipmentInspectionDrawer({
   initialItem,
   initialType,
   lockedItem = false,
+  returnTo,
 }: {
   initialItem?: PickerOption
   /** Pre-selected when a schedule's "Start" link named the inspection. */
   initialType?: PickerOption
   /** Started from a unit's own page: the equipment is fixed. */
   lockedItem?: boolean
+  /** In-app path the started inspection should open over. Defaults to the register. */
+  returnTo?: string
 }) {
   const tGenerated = useGeneratedTranslations()
   const [targetMode, setTargetMode] = useState<TargetMode>('registered')
@@ -94,6 +97,7 @@ export function NewEquipmentInspectionDrawer({
     fd.set('rentalName', rentalName)
     fd.set('rentalSerial', rentalSerial)
     fd.set('rentalProvider', rentalProvider)
+    if (returnTo) fd.set('returnTo', returnTo)
     start(async () => {
       await startEquipmentInspection(fd)
     })

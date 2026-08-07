@@ -60,9 +60,12 @@ const RESULT_VARIANT: Record<string, 'success' | 'destructive' | 'secondary'> = 
 export async function EquipmentInspectionPanel({
   id,
   sp,
+  returnTo,
 }: {
   id: string
   sp: Record<string, string | string[] | undefined>
+  /** Host page this flyout is open over, so a rejected submit comes back here. */
+  returnTo?: string
 }) {
   const tGeneratedValue = await getGeneratedValueTranslations()
   if (!isUuid(id)) notFound()
@@ -290,6 +293,11 @@ export async function EquipmentInspectionPanel({
                     />
                     <form action={submitEquipmentInspection}>
                       <input type="hidden" name="recordId" value={record.id} />
+                      <GeneratedValue
+                        value={
+                          returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null
+                        }
+                      />
                       <Button type="submit">
                         <ClipboardCheck size={14} /> <GeneratedText id="m_09ee2ce911f04f" />
                       </Button>

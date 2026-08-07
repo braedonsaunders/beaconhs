@@ -30,6 +30,7 @@ import {
   normalizeInspectionTextAnswer,
 } from '@/lib/inspection-response-config'
 import { isUuid } from '@/lib/list-params'
+import { sanitizeFrom } from '@/lib/back-nav'
 import { parsePhotoEdits } from '@/lib/photo-edits'
 import { canSeeRecord } from '@/lib/visibility'
 import {
@@ -302,7 +303,16 @@ export async function startEquipmentInspection(formData: FormData) {
   })
 
   revalidatePath('/equipment/inspections')
-  redirect(`/equipment/inspections/${row.id}`)
+  // Start where you stood. Launched from a unit's own page, the inspection
+  // opens in a flyout over that page rather than bouncing the crew to the
+  // register and losing their place.
+  const returnTo = sanitizeFrom(String(formData.get('returnTo') ?? '')) ?? '/equipment/inspections'
+  if (returnTo !== '/equipment/inspections') revalidatePath(returnTo.split('?')[0] ?? returnTo)
+  const [path, search] = returnTo.split('?')
+  const params = new URLSearchParams(search ?? '')
+  params.set('drawer', 'inspection')
+  params.set('inspectionId', row.id)
+  redirect(`${path}?${params.toString()}`)
 }
 
 // --- per-criterion autosave -------------------------------------------------
@@ -1026,7 +1036,14 @@ export async function submitEquipmentInspection(formData: FormData) {
   const outcome = await finaliseEquipmentInspection(ctx, recordId)
   if (!outcome.ok) {
     revalidateRecord(recordId)
-    redirect(`/equipment/inspections/${recordId}?issue=${encodeURIComponent(outcome.error)}`)
+    // Report the blocker on the page the inspector is actually looking at.
+    const back = sanitizeFrom(String(formData.get('returnTo') ?? ''))
+    const [path, search] = (back ?? `/equipment/inspections?inspectionId=${recordId}`).split('?')
+    const params = new URLSearchParams(search ?? '')
+    params.set('drawer', 'inspection')
+    params.set('inspectionId', recordId)
+    params.set('issue', outcome.error)
+    redirect(`${path}?${params.toString()}`)
   }
   revalidateRecord(recordId)
 }

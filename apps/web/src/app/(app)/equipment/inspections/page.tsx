@@ -427,7 +427,7 @@ export default async function EquipmentInspectionsPage({
         <GeneratedValue
           value={
             pickString(sp.drawer) === 'inspection' && isUuid(pickString(sp.inspectionId) ?? '') ? (
-              <EquipmentInspectionPanel id={pickString(sp.inspectionId)!} sp={sp} />
+              <EquipmentInspectionPanel id={pickString(sp.inspectionId)!} sp={sp} returnTo={BASE} />
             ) : null
           }
         />

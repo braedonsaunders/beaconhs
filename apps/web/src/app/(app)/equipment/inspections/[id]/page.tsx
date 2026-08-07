@@ -10,10 +10,15 @@ export const dynamic = 'force-dynamic'
 // bookmark) still land on the right record with its flyout open.
 export default async function EquipmentInspectionRecordRedirect({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ issue?: string }>
 }) {
   const { id } = await params
+  const { issue } = await searchParams
   if (!isUuid(id)) notFound()
-  redirect(`/equipment/inspections?drawer=inspection&inspectionId=${encodeURIComponent(id)}`)
+  const search = new URLSearchParams({ drawer: 'inspection', inspectionId: id })
+  if (issue) search.set('issue', issue)
+  redirect(`/equipment/inspections?${search.toString()}`)
 }

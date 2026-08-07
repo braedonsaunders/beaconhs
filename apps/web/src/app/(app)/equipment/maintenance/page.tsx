@@ -52,6 +52,8 @@ import type { AppLocale } from '@beaconhs/i18n'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { clamp, isUuid, mergeHref, pickString } from '@/lib/list-params'
+import { EquipmentInspectionPanel } from '../inspections/_inspection-panel'
+import { StartInspectionButton } from '../inspections/_start-button'
 import { formatDate } from '@/lib/datetime'
 import { formatInterval } from '@/lib/equipment/intervals'
 import { ListPageLayout } from '@/components/page-layout'
@@ -84,8 +86,8 @@ type Entry = {
   title: string
   detail: string | null
   dueOn: string
-  /** Link to start the work (fill the inspection) when one exists. */
-  startHref: string | null
+  /** The inspection this row starts, when the schedule names one. */
+  startTypeId: string | null
   reminderId: string | null
 }
 
@@ -381,9 +383,7 @@ export default async function EquipmentMaintenancePage({
       title: r.typeName ?? r.schedule.label ?? 'Inspection',
       detail: formatInterval(r.schedule.intervalValue, r.schedule.intervalUnit),
       dueOn: r.schedule.nextDueOn,
-      startHref: r.schedule.inspectionTypeId
-        ? `/equipment/inspections/new?itemId=${r.itemId}&typeId=${r.schedule.inspectionTypeId}`
-        : null,
+      startTypeId: r.schedule.inspectionTypeId,
       reminderId: null,
     })),
     ...data.reminderRows.map((r) => ({
@@ -403,7 +403,7 @@ export default async function EquipmentMaintenancePage({
         .filter(Boolean)
         .join(' · '),
       dueOn: r.reminder.dueOn,
-      startHref: null,
+      startTypeId: null,
       reminderId: r.reminder.id,
     })),
     ...data.oilRows.map((r) => ({
@@ -415,7 +415,7 @@ export default async function EquipmentMaintenancePage({
       title: 'Oil change',
       detail: r.intervalMonths ? formatInterval(r.intervalMonths, 'month') : null,
       dueOn: r.dueOn!,
-      startHref: null,
+      startTypeId: null,
       reminderId: null,
     })),
   ]
@@ -788,6 +788,26 @@ export default async function EquipmentMaintenancePage({
         />
       </UrlDrawer>
 
+      {/* Work started from the cockpit is filled here, over the cockpit. */}
+      <UrlDrawer
+        open={drawerKey === 'inspection' && isUuid(pickString(sp.inspectionId) ?? '')}
+        closeHref={closeHref}
+        title={tGenerated('m_189bb91aaf5565')}
+        size="xl"
+      >
+        <GeneratedValue
+          value={
+            drawerKey === 'inspection' && isUuid(pickString(sp.inspectionId) ?? '') ? (
+              <EquipmentInspectionPanel
+                id={pickString(sp.inspectionId)!}
+                sp={sp}
+                returnTo={closeHref}
+              />
+            ) : null
+          }
+        />
+      </UrlDrawer>
+
       <UnitMaintenanceDrawer
         open={drawerKey?.startsWith('unit-') ?? false}
         closeHref={closeHref}
@@ -861,12 +881,13 @@ function WorkList({
             <div className="flex shrink-0 items-center gap-2">
               <GeneratedValue
                 value={
-                  e.startHref ? (
-                    <Link href={e.startHref as never}>
-                      <Button size="sm" variant="outline">
-                        <ClipboardCheck size={14} /> <GeneratedText id="m_144de7fabb13dc" />
-                      </Button>
-                    </Link>
+                  e.startTypeId ? (
+                    <StartInspectionButton
+                      itemId={e.itemId}
+                      typeId={e.startTypeId}
+                      returnTo={mergeHref(BASE, sp, { drawer: undefined })}
+                      tone="button"
+                    />
                   ) : null
                 }
               />
@@ -1062,14 +1083,12 @@ function UnitMaintenanceDrawer({
                               <GeneratedValue
                                 value={
                                   s.inspectionTypeId ? (
-                                    <Link
-                                      href={`/equipment/inspections/new?itemId=${unit.item.id}&typeId=${s.inspectionTypeId}`}
-                                    >
-                                      <Button size="sm" variant="outline">
-                                        <ClipboardCheck size={14} />{' '}
-                                        <GeneratedText id="m_144de7fabb13dc" />
-                                      </Button>
-                                    </Link>
+                                    <StartInspectionButton
+                                      itemId={unit.item.id}
+                                      typeId={s.inspectionTypeId}
+                                      returnTo={closeHref}
+                                      tone="button"
+                                    />
                                   ) : null
                                 }
                               />

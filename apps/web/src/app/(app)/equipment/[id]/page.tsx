@@ -56,6 +56,9 @@ import {
   UrlDrawer,
 } from '@beaconhs/ui'
 import { clamp, isUuid, mergeHref, pickString } from '@/lib/list-params'
+import { EquipmentInspectionPanel } from '../inspections/_inspection-panel'
+import { NewEquipmentInspectionDrawer } from '../inspections/_new-drawer'
+import { StartInspectionButton } from '../inspections/_start-button'
 import { formatDate, formatDateTime } from '@/lib/datetime'
 import {
   LiveField,
@@ -1287,6 +1290,13 @@ export default async function EquipmentDetailPage({
   // so that closing the drawer doesn't kick you back to the Overview tab.
   const drawerKey = pickString(sp.drawer)
   const closeHref = mergeHref(basePath, sp, { tab: active, drawer: undefined })
+  // Inspections started from this page open in a flyout over it, so the crew
+  // never loses the unit they were looking at.
+  const inspectionReturnTo = mergeHref(basePath, sp, {
+    tab: 'inspections',
+    drawer: undefined,
+    inspectionId: undefined,
+  })
 
   // Schedule / reminder edit drawers address their row by id in the drawer key.
   const editingScheduleRow =
@@ -2605,15 +2615,30 @@ export default async function EquipmentDetailPage({
                                                     <GeneratedText id="m_00cf7da85bbbeb" />
                                                   </TableCell>
                                                   <TableCell className="text-right">
-                                                    <Link
-                                                      href={
-                                                        `/equipment/inspections?drawer=new&itemId=${id}&typeId=${item.preUseInspectionTypeId}` as Route
-                                                      }
-                                                      scroll={false}
-                                                      className="text-xs font-semibold text-teal-700 hover:underline dark:text-teal-300"
-                                                    >
-                                                      <GeneratedText id="m_0c0448292f2325" />
-                                                    </Link>
+                                                    <div className="flex items-center justify-end gap-3">
+                                                      <StartInspectionButton
+                                                        itemId={id}
+                                                        typeId={item.preUseInspectionTypeId}
+                                                        returnTo={inspectionReturnTo}
+                                                      />
+                                                      <GeneratedValue
+                                                        value={
+                                                          locked ? null : (
+                                                            <Link
+                                                              href={
+                                                                mergeHref(basePath, sp, {
+                                                                  tab: 'inspections',
+                                                                  drawer: 'preuse',
+                                                                }) as Route
+                                                              }
+                                                              className="text-xs text-slate-500 hover:underline dark:text-slate-400"
+                                                            >
+                                                              <GeneratedText id="m_03a66f9d34ac7b" />
+                                                            </Link>
+                                                          )
+                                                        }
+                                                      />
+                                                    </div>
                                                   </TableCell>
                                                 </TableRow>
                                               ) : null
@@ -2701,12 +2726,11 @@ export default async function EquipmentDetailPage({
                                                         <GeneratedValue
                                                           value={
                                                             schedule.inspectionTypeId ? (
-                                                              <Link
-                                                                href={`/equipment/inspections/new?itemId=${id}&typeId=${schedule.inspectionTypeId}`}
-                                                                className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                                                              >
-                                                                <GeneratedText id="m_0de51911bb80e2" />
-                                                              </Link>
+                                                              <StartInspectionButton
+                                                                itemId={id}
+                                                                typeId={schedule.inspectionTypeId}
+                                                                returnTo={inspectionReturnTo}
+                                                              />
                                                             ) : null
                                                           }
                                                         />
@@ -2746,52 +2770,6 @@ export default async function EquipmentDetailPage({
                                   total={schedulesTotal}
                                   page={schP.page}
                                 />
-                                {/* Pre-use configuration: which checklist the
-                                    crew runs every shift. It configures the row
-                                    at the top of this table. */}
-                                <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
-                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                    <LiveToggle
-                                      id={id}
-                                      field="requiresPreUseInspection"
-                                      label={tGenerated('m_0001f9d2929552')}
-                                      initialValue={item.requiresPreUseInspection}
-                                      disabled={locked}
-                                      updateAction={updateEquipmentField}
-                                    />
-                                    <LiveRemoteSelect
-                                      id={id}
-                                      field="preUseInspectionTypeId"
-                                      label={tGenerated('m_054ca9b2975cac')}
-                                      initialValue={item.preUseInspectionTypeId}
-                                      initialOption={
-                                        selectedPreUseType
-                                          ? {
-                                              value: selectedPreUseType.id,
-                                              label: selectedPreUseType.name,
-                                            }
-                                          : undefined
-                                      }
-                                      lookup="equipment-item-pre-use-inspection-types"
-                                      contextId={item.typeId ?? undefined}
-                                      emptyLabel={tGenerated('m_045c03d42f2f53')}
-                                      disabled={locked}
-                                      updateAction={updateEquipmentField}
-                                    />
-                                    <ReadOnlyStat
-                                      label={tGenerated('m_066ea9befbd59e')}
-                                      value={
-                                        item.lastPreUseInspectionAt
-                                          ? formatDateTime(
-                                              new Date(item.lastPreUseInspectionAt),
-                                              ctx.timezone,
-                                              ctx.locale,
-                                            )
-                                          : '—'
-                                      }
-                                    />
-                                  </div>
-                                </div>
                               </CardContent>
                             </Card>
                           ) : null
@@ -2965,7 +2943,12 @@ export default async function EquipmentDetailPage({
                                   <GeneratedValue value={inspectionsTotal} />)
                                 </CardTitle>
                                 <Link
-                                  href={`/equipment/inspections?drawer=new&itemId=${id}` as Route}
+                                  href={
+                                    mergeHref(basePath, sp, {
+                                      tab: 'inspections',
+                                      drawer: 'new-inspection',
+                                    }) as Route
+                                  }
                                   scroll={false}
                                 >
                                   <Button size="sm">
@@ -2992,7 +2975,14 @@ export default async function EquipmentDetailPage({
                                         )}
                                         description={tGenerated('m_11123c53db10bc')}
                                         action={
-                                          <Link href={`/equipment/inspections/new?itemId=${id}`}>
+                                          <Link
+                                            href={
+                                              mergeHref(basePath, sp, {
+                                                tab: 'inspections',
+                                                drawer: 'new-inspection',
+                                              }) as Route
+                                            }
+                                          >
                                             <Button variant="outline" size="sm">
                                               <GeneratedText id="m_03a42f8671d199" />
                                             </Button>
@@ -3593,6 +3583,95 @@ export default async function EquipmentDetailPage({
             )
           }
         />
+      </UrlDrawer>
+
+      {/* An inspection started from this unit is filled right here, over the
+          unit's own page — same flyout the register uses. */}
+      <UrlDrawer
+        open={drawerKey === 'inspection' && isUuid(pickString(sp.inspectionId) ?? '')}
+        closeHref={inspectionReturnTo}
+        title={tGenerated('m_189bb91aaf5565')}
+        size="xl"
+      >
+        <GeneratedValue
+          value={
+            drawerKey === 'inspection' && isUuid(pickString(sp.inspectionId) ?? '') ? (
+              <EquipmentInspectionPanel
+                id={pickString(sp.inspectionId)!}
+                sp={sp}
+                returnTo={inspectionReturnTo}
+              />
+            ) : null
+          }
+        />
+      </UrlDrawer>
+
+      {/* Only reached from the "New inspection" button — the schedule rows
+          already know their check and start it in one tap. */}
+      <UrlDrawer
+        open={drawerKey === 'new-inspection'}
+        closeHref={inspectionReturnTo}
+        title={tGenerated('m_1edf2b8e0e3013')}
+        size="md"
+      >
+        <GeneratedValue
+          value={
+            drawerKey === 'new-inspection' ? (
+              <NewEquipmentInspectionDrawer
+                initialItem={{ value: id, label: item.name }}
+                lockedItem
+                returnTo={inspectionReturnTo}
+              />
+            ) : null
+          }
+        />
+      </UrlDrawer>
+
+      {/* Pre-use is a schedule row like any other, so it is edited the same
+          way: from the row, in a flyout. */}
+      <UrlDrawer
+        open={!locked && drawerKey === 'preuse'}
+        closeHref={inspectionReturnTo}
+        title={tGenerated('m_054ca9b2975cac')}
+        size="md"
+      >
+        <div className="grid grid-cols-1 gap-4">
+          <LiveToggle
+            id={id}
+            field="requiresPreUseInspection"
+            label={tGenerated('m_0001f9d2929552')}
+            initialValue={item.requiresPreUseInspection}
+            disabled={locked}
+            updateAction={updateEquipmentField}
+          />
+          <LiveRemoteSelect
+            id={id}
+            field="preUseInspectionTypeId"
+            label={tGenerated('m_054ca9b2975cac')}
+            initialValue={item.preUseInspectionTypeId}
+            initialOption={
+              selectedPreUseType
+                ? {
+                    value: selectedPreUseType.id,
+                    label: selectedPreUseType.name,
+                  }
+                : undefined
+            }
+            lookup="equipment-item-pre-use-inspection-types"
+            contextId={item.typeId ?? undefined}
+            emptyLabel={tGenerated('m_045c03d42f2f53')}
+            disabled={locked}
+            updateAction={updateEquipmentField}
+          />
+          <ReadOnlyStat
+            label={tGenerated('m_066ea9befbd59e')}
+            value={
+              item.lastPreUseInspectionAt
+                ? formatDateTime(new Date(item.lastPreUseInspectionAt), ctx.timezone, ctx.locale)
+                : '—'
+            }
+          />
+        </div>
       </UrlDrawer>
     </PageContainer>
   )

@@ -601,7 +601,7 @@ To update several visible units, select their checkboxes and choose **Transfer t
 
 The **Maintenance** cockpit opens a quick preview when you select a unit. It shows up to the first 25 open reminders and gives the exact total. Select **Open full record** to search and page through every reminder.
 
-Managers can change **Type** and **Category** on **Overview** by searching the complete tenant catalogue. On **Inspections**, **Pre-use checklist** and **Inspection type** also search the full set that applies to that unit's type. A saved inactive choice remains visible on an older unit or schedule. If the picker says more results exist, add more of the name or description.
+Managers can change **Type** and **Category** on **Overview** by searching the complete tenant catalogue. On **Inspections**, the **Pre-use checklist** (tap **Edit** on the pre-use schedule row) and **Inspection type** also search the full set that applies to that unit's type. A saved inactive choice remains visible on an older unit or schedule. If the picker says more results exist, add more of the name or description.
 
 Categories organize equipment in the register, filters, and reports. Billing rates and financial records are managed outside BeaconHS.
 
@@ -747,17 +747,17 @@ Before you run a unit — or on its service schedule — you walk through a chec
 
 ## Where to find it
 
-Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspections). You can also start a check straight from a unit's page: open the unit and tap the **Inspections** tab. That tab is split into **Pre-use**, **Schedules**, **Reminders**, and **History** — pre-use opens first because it is the check most crews run every shift.
+Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspections). You can also start a check straight from a unit's page: open the unit and tap the **Inspections** tab. That tab is split into **Schedules**, **Reminders**, and **History**. **Schedules** lists every check the unit is set up for, with the pre-use check first, and each row has a **Start** link that opens that inspection right there.
 
 ## Perform an inspection
 
 1. Open [Inspections](/equipment/inspections) and tap **New inspection**. A panel opens — there is no separate page to fill in first.
 2. Choose **Registered unit** to search the fleet, or **Rental / unregistered** for a unit that is not in the equipment register.
-3. For a registered unit, pick the **Equipment item**. The **Inspection** list then shows only what is set up on that unit — its pre-use checklist and its schedules. If what you expect is missing, the unit needs it set up on the **Pre-use** or **Schedules** sub-tab first.
+3. For a registered unit, pick the **Equipment item**. The **Inspection** list then shows only what is set up on that unit — its pre-use checklist and its schedules. If what you expect is missing, the unit needs it set up on the **Schedules** sub-tab first.
 4. For a rental, enter the equipment name, serial or asset identifier, and provider, then choose the **Location** — the customer, project, site, or area the unit is working at. Rentals can only take pre-use inspections; their periodic certification belongs to the rental company.
 5. Tap **Start inspection**.
 
-Starting from a unit's own page skips straight to the inspection list for that unit — the equipment is already chosen.
+Starting from a unit's own page is quicker still: on the **Inspections** tab, tap **Start** on the schedule row you need. The check is already known, so nothing is asked twice and the inspection opens over the unit's page.
 6. Go through each required item and tap **Pass**, **Fail**, or **N/A**. An item marked **Optional** may be left blank.
 7. Your answers save as you go — watch for **Saved** at the top. You can stop and come back later; the inspection stays **In progress**.
 
