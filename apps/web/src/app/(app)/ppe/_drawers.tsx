@@ -45,6 +45,7 @@ type IssueAction = (input: {
   notes?: string | null
   personId?: string | null
   note?: string | null
+  issuedOn?: string | null
 }) => Promise<{ ok: true; id: string; issued: boolean } | { ok: false; error: string }>
 
 export function PpeDrawers({
@@ -90,6 +91,9 @@ function IssueDrawer({
   const [notes, setNotes] = useState('')
   const [personId, setPersonId] = useState('')
   const [note, setNote] = useState('')
+  const [issuedOn, setIssuedOn] = useState('')
+  // Rendered client-side only, so 'today' is the user's own date, not UTC.
+  const todayIso = new Date().toISOString().slice(0, 10)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -109,6 +113,7 @@ function IssueDrawer({
         notes: notes.trim() || null,
         personId: personId || null,
         note: note.trim() || null,
+        issuedOn: issuedOn || null,
       })
       if (res.ok) {
         router.push(`/ppe/${res.id}`)
@@ -297,17 +302,33 @@ function IssueDrawer({
           <GeneratedValue
             value={
               personId ? (
-                <div className="space-y-1.5">
-                  <Label htmlFor="pi-note">
-                    <GeneratedText id="m_1f1b7fe0457e9a" />
-                  </Label>
-                  <Input
-                    id="pi-note"
-                    value={note}
-                    onChange={(e) => setNote(e.currentTarget.value)}
-                    placeholder={tGenerated('m_0bf12343056455')}
-                  />
-                </div>
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="pi-issued-on">
+                      <GeneratedText id="m_00032fe33e8231" />
+                    </Label>
+                    {/* Gear is usually handed over before anyone reaches a
+                        screen, so the date is editable rather than the clock. */}
+                    <Input
+                      id="pi-issued-on"
+                      type="date"
+                      value={issuedOn}
+                      max={todayIso}
+                      onChange={(e) => setIssuedOn(e.currentTarget.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="pi-note">
+                      <GeneratedText id="m_1f1b7fe0457e9a" />
+                    </Label>
+                    <Input
+                      id="pi-note"
+                      value={note}
+                      onChange={(e) => setNote(e.currentTarget.value)}
+                      placeholder={tGenerated('m_0bf12343056455')}
+                    />
+                  </div>
+                </>
               ) : null
             }
           />

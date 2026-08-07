@@ -1041,17 +1041,15 @@ export default async function HazidAssessmentDetailPage({
                   disabled={locked}
                   updateAction={updateTextField}
                 />
-                <div className="sm:col-span-2">
-                  <LiveField
-                    id={a.id}
-                    field="locationOnSite"
-                    label={tGenerated('m_0352b4ecd48a3a')}
-                    initialValue={a.locationOnSite}
-                    placeholder={tGenerated('m_051443bf0b9acf')}
-                    disabled={locked}
-                    updateAction={updateTextField}
-                  />
-                </div>
+                <LiveField
+                  id={a.id}
+                  field="locationOnSite"
+                  label={tGenerated('m_0352b4ecd48a3a')}
+                  initialValue={a.locationOnSite}
+                  placeholder={tGenerated('m_051443bf0b9acf')}
+                  disabled={locked}
+                  updateAction={updateTextField}
+                />
               </div>
               <GeneratedValue
                 value={

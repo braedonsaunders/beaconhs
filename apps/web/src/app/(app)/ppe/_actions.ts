@@ -19,6 +19,7 @@ import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { PPE_SERIAL_UNIQUE_CONSTRAINT } from './_lib'
 import { requireRequestContext } from '@/lib/auth'
+import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { materializePpeTypeEvidence } from '@/lib/compliance-type-evidence'
 import { csvRow } from '@/lib/csv'
@@ -339,6 +340,8 @@ export async function createAndIssuePpe(input: {
   notes?: string | null
   personId?: string | null
   note?: string | null
+  /** Back-dated handover date. Defaults to now. */
+  issuedOn?: string | null
 }): Promise<{ ok: true; id: string; issued: boolean } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
   // Registration needs manage; issuing-in-the-same-step additionally needs issue.
@@ -352,6 +355,18 @@ export async function createAndIssuePpe(input: {
 
   // Attributed for the item's status stamp either way; the ledger row is
   // only written (and only NOT NULL) when the item is issued to someone.
+  // Midday avoids a timezone shift dragging the date onto the previous day.
+  let issuedAt: Date | null = null
+  if (input.issuedOn) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.issuedOn)) {
+      return { ok: false, error: 'Issue date is invalid.' }
+    }
+    const parsed = new Date(`${input.issuedOn}T12:00:00Z`)
+    if (Number.isNaN(parsed.getTime()) || parsed.getTime() > Date.now() + 86_400_000) {
+      return { ok: false, error: 'Issue date cannot be in the future.' }
+    }
+    issuedAt = parsed
+  }
   const actorTenantUserId = safeTenantUserId(ctx)
   const issuedByTenantUserId = input.personId ? actorTenantUserId : null
   let itemId: string | null
@@ -385,7 +400,7 @@ export async function createAndIssuePpe(input: {
           currentHolderPersonId: input.personId ?? null,
           // Registration is the item's first status, so the register can sort
           // new gear by "recently changed" like everything else.
-          statusChangedAt: new Date(),
+          statusChangedAt: issuedAt ?? new Date(),
           statusChangedByTenantUserId: actorTenantUserId,
         })
         .returning({ id: ppeItems.id })
@@ -398,6 +413,7 @@ export async function createAndIssuePpe(input: {
           action: 'issue',
           quantity: 1,
           issuedByTenantUserId: issuedByTenantUserId!,
+          occurredAt: issuedAt ?? undefined,
           note: input.note?.trim() || null,
         })
       }
@@ -427,4 +443,50 @@ export async function createAndIssuePpe(input: {
 
   revalidatePath('/ppe')
   return { ok: true, id: itemId, issued: Boolean(input.personId) }
+}
+
+/**
+ * Remove a PPE item from the register.
+ *
+ * Soft delete, matching every other module: the ledger, inspections and
+ * certificates stay intact so a discarded-then-deleted item's history is still
+ * auditable — a hard delete would take evidence with it. Deleting is a
+ * module-manager action; `ppe.manage` alone is not enough, since anyone who can
+ * edit an item should not be able to erase it from the register.
+ */
+export async function deletePpeItem(args: {
+  ppeItemId: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'ppe')
+  if (!isBulkActionId(args?.ppeItemId)) return { ok: false, error: 'Pick a PPE item.' }
+
+  const removed = await ctx.db(async (tx) => {
+    const [item] = await tx
+      .select({
+        id: ppeItems.id,
+        typeId: ppeItems.typeId,
+        serialNumber: ppeItems.serialNumber,
+        deletedAt: ppeItems.deletedAt,
+      })
+      .from(ppeItems)
+      .where(eq(ppeItems.id, args.ppeItemId))
+      .limit(1)
+      .for('update')
+    if (!item || item.deletedAt) return null
+    await tx.update(ppeItems).set({ deletedAt: new Date() }).where(eq(ppeItems.id, args.ppeItemId))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'ppe_item',
+      entityId: args.ppeItemId,
+      action: 'delete',
+      summary: `Deleted PPE item${item.serialNumber ? ` ${item.serialNumber}` : ''}`,
+      before: { serialNumber: item.serialNumber, typeId: item.typeId },
+    })
+    await materializePpeTypeEvidence(tx, ctx.tenantId, [item.typeId])
+    return item
+  })
+  if (!removed) return { ok: false, error: 'PPE item was not found.' }
+
+  revalidatePath('/ppe')
+  return { ok: true }
 }

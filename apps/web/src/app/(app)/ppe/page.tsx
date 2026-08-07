@@ -80,8 +80,10 @@ export default async function PpePage({
   const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const params = parseListParams(sp, {
-    sort: 'next_inspection',
-    dir: 'asc',
+    // Most-recently-moved first: the register is read as a worklist, and a
+    // due-date sort buried anything that just changed hands.
+    sort: 'status_changed',
+    dir: 'desc',
     perPage: 25,
     allowedSorts: SORTS,
   })

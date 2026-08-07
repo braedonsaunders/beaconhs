@@ -68,6 +68,7 @@ import {
 } from '@beaconhs/db/schema'
 import { isUniqueViolation, safeDbErrorMessage } from '@beaconhs/db'
 import { assertCan, can } from '@beaconhs/tenant'
+import { canManageModule } from '@/lib/module-admin/guard'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
@@ -78,6 +79,8 @@ import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-se
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { materializePpeTypeEvidence } from '@/lib/compliance-type-evidence'
 import { CertificateDrawer, type CertificateInput } from './_certificate-drawer'
+import { deletePpeItem } from '../_actions'
+import { DeletePpeButton } from './_delete-button'
 import { PpeInspectionForm } from './_inspection-form'
 import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { DetailGrid } from '@/components/detail-grid'
@@ -508,10 +511,30 @@ async function recordInspection(formData: FormData) {
     // out-of-service gear clears it. The holder is preserved either way — the
     // item is physically still with whoever has it. Same transaction as the
     // inspection itself, so the two can never disagree.
+    // Clearing an out-of-service item requires passing the SAME check that
+    // failed it — a pre-use pass says nothing about a failed annual. If that
+    // kind no longer has criteria (type edited, or the item moved types) the
+    // item would otherwise be stuck out of service forever, so any pass clears
+    // it in that case.
+    let clearsOutOfService = false
+    if (finalResult === 'pass' && item.status === 'out_of_service') {
+      const [failed] = await tx
+        .select({ kind: ppeInspections.kind })
+        .from(ppeInspections)
+        .where(and(eq(ppeInspections.itemId, itemId), eq(ppeInspections.result, 'fail')))
+        .orderBy(desc(ppeInspections.inspectedOn), desc(ppeInspections.id))
+        .limit(1)
+      const failedKind = failed?.kind ?? null
+      const failedKindStillRuns =
+        failedKind === null
+          ? false
+          : (await loadInspectionCriteriaForType(ctx, typeId, failedKind)).length > 0
+      clearsOutOfService = !failedKindStillRuns || failedKind === kind
+    }
     const transition =
       finalResult === 'fail' && item.status !== 'out_of_service'
         ? ('mark_out_of_service' as const)
-        : finalResult === 'pass' && item.status === 'out_of_service'
+        : clearsOutOfService
           ? ('return_to_service' as const)
           : null
     if (transition) {
@@ -847,6 +870,9 @@ export default async function PpeDetailPage({
   // Clearing failed gear is deliberately narrower than ppe.inspect — crews
   // still run pre-use checks, but only H&S/admin may declare it safe again.
   const canReturnToService = can(ctx, 'ppe.return_to_service')
+  // Removing a record from the register is a module-manager action —
+  // editing an item should not imply being able to erase it.
+  const canDelete = canManageModule(ctx, 'ppe')
   const drawerKey = pickString(sp.drawer)
 
   const baseData = await ctx.db(async (tx) => {
@@ -919,7 +945,34 @@ export default async function PpeDetailPage({
   const hasAnnual = annualCriteria.length > 0
   // Returning to service means passing the fullest check the type defines —
   // prefer the annual checklist when it exists.
-  const returnToServiceKind = hasAnnual ? 'annual' : 'pre_use'
+  // Return to service must re-run the check that FAILED — clearing a failed
+  // pre-use with an annual proves nothing about why it came out of service.
+  // The failing inspection records its own kind, so read it from there rather
+  // than assuming. If that kind no longer has criteria (the type was edited or
+  // the item was moved to another type), fall back to whichever kind the
+  // current type does define; with neither, the item can only be cleared via
+  // Change status, which is a manage action anyway.
+  const failedKind = isOutOfService
+    ? await ctx.db(async (tx) => {
+        const [row] = await tx
+          .select({ kind: ppeInspections.kind })
+          .from(ppeInspections)
+          .where(and(eq(ppeInspections.itemId, id), eq(ppeInspections.result, 'fail')))
+          .orderBy(desc(ppeInspections.inspectedOn), desc(ppeInspections.id))
+          .limit(1)
+        return row?.kind ?? null
+      })
+    : null
+  const returnToServiceKind =
+    failedKind === 'annual' && hasAnnual
+      ? 'annual'
+      : failedKind === 'pre_use' && hasPreUse
+        ? 'pre_use'
+        : hasAnnual
+          ? 'annual'
+          : hasPreUse
+            ? 'pre_use'
+            : null
   const hasInspections = hasPreUse || hasAnnual
   const requiresCertificate = type.inspectionSchedule?.requiresCertificate ?? false
   const showCertificates = requiresCertificate || countData.annual > 0
@@ -1194,6 +1247,25 @@ export default async function PpeDetailPage({
       })
     : { criteria: [], photoLinks: [] }
   const openIssues = countData.openIssues
+  // When the current holder actually received it — the newest issue/replace in
+  // the ledger, which is where a back-dated handover is recorded.
+  const issuedOnDate = item.currentHolderPersonId
+    ? await ctx.db(async (tx) => {
+        const [row] = await tx
+          .select({ occurredAt: ppeIssues.occurredAt })
+          .from(ppeIssues)
+          .where(
+            and(
+              eq(ppeIssues.itemId, id),
+              inArray(ppeIssues.action, ['issue', 'replace']),
+              eq(ppeIssues.personId, item.currentHolderPersonId!),
+            ),
+          )
+          .orderBy(desc(ppeIssues.occurredAt))
+          .limit(1)
+        return row?.occurredAt ?? null
+      })
+    : null
 
   const basePath = `/ppe/${id}`
   // Drawer state is URL-driven; preserve the active tab in the close URL so
@@ -1279,7 +1351,7 @@ export default async function PpeDetailPage({
               />
               <GeneratedValue
                 value={
-                  isOutOfService && canReturnToService ? (
+                  isOutOfService && canReturnToService && returnToServiceKind ? (
                     <Link
                       href={
                         `${basePath}?tab=inspections&drawer=record-inspection&kind=${returnToServiceKind}` as any
@@ -1304,6 +1376,19 @@ export default async function PpeDetailPage({
                         <RefreshCw size={14} /> <GeneratedText id="m_118818fef81797" />
                       </Button>
                     </Link>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={
+                  canDelete ? (
+                    <DeletePpeButton
+                      itemId={id}
+                      label={tGeneratedValue(
+                        item.serialNumber ? `${type.name} · ${item.serialNumber}` : type.name,
+                      )}
+                      deleteAction={deletePpeItem}
+                    />
                   ) : null
                 }
               />
@@ -1511,6 +1596,19 @@ export default async function PpeDetailPage({
                             <GeneratedValue value={holder.firstName} />{' '}
                             <GeneratedValue value={holder.lastName} />
                           </Link>
+                        ) : (
+                          '—'
+                        ),
+                      },
+                      {
+                        // The handover date, which may be back-dated — read
+                        // from the ledger rather than the item, since that is
+                        // where the issuance actually lives.
+                        label: 'Issued on',
+                        value: issuedOnDate ? (
+                          <GeneratedValue
+                            value={formatDate(new Date(issuedOnDate), ctx.timezone, ctx.locale)}
+                          />
                         ) : (
                           '—'
                         ),

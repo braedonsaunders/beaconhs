@@ -204,7 +204,14 @@ export function PpeInspectionForm({
                 />
                 <GeneratedValue
                   value={
-                    answers[c.id] && answers[c.id] !== 'n_a' ? (
+                    // Only expand where evidence is actually wanted: a failure,
+                    // or a criterion whose type demands a photo. Opening a
+                    // photo panel under every Pass made the list lurch as you
+                    // worked down it — each answer grew the page under your
+                    // thumb — for a control almost nobody used on a pass.
+                    answers[c.id] &&
+                    answers[c.id] !== 'n_a' &&
+                    (answers[c.id] === 'fail' || c.requiresPhoto) ? (
                       <div className="mt-3 space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-800">
                         <div className="flex items-center justify-between gap-2">
                           <Label>
