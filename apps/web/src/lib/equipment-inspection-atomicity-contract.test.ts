@@ -14,7 +14,9 @@ function functionSlice(contents: string, name: string, next: string): string {
 
 const actions = source('../app/(app)/equipment/inspections/_actions.ts')
 const library = source('../app/(app)/equipment/inspections/_lib.ts')
-const detail = source('../app/(app)/equipment/inspections/[id]/page.tsx')
+// The record is filled in a flyout on the register; [id] is only a redirect
+// for old deep links, so the queries live in the panel.
+const detail = source('../app/(app)/equipment/inspections/_inspection-panel.tsx')
 const list = source('../app/(app)/equipment/inspections/page.tsx')
 const newPage = source('../app/(app)/equipment/inspections/new/page.tsx')
 const newDrawer = source('../app/(app)/equipment/inspections/_new-drawer.tsx')

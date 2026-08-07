@@ -32,6 +32,7 @@ import { ListPageLayout } from '@/components/page-layout'
 import { Pagination } from '@/components/pagination'
 import { TableToolbar } from '@/components/table-toolbar'
 import { SearchInput } from '@/components/search-input'
+import { EquipmentInspectionPanel } from './_inspection-panel'
 import { NewEquipmentInspectionDrawer } from './_new-drawer'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { SortableTh } from '@/components/sortable-th'
@@ -413,6 +414,24 @@ export default async function EquipmentInspectionsPage({
       <p className="flex items-center gap-1.5 text-xs text-slate-400">
         <ClipboardCheck size={12} /> <GeneratedText id="m_0235f132f871e4" />
       </p>
+
+      {/* The inspection is filled here, in a flyout on the register — same as a
+          PPE inspection. Answers autosave, so leaving and coming back resumes
+          the draft. */}
+      <UrlDrawer
+        open={pickString(sp.drawer) === 'inspection' && isUuid(pickString(sp.inspectionId) ?? '')}
+        closeHref={BASE}
+        title={tGenerated('m_189bb91aaf5565')}
+        size="xl"
+      >
+        <GeneratedValue
+          value={
+            pickString(sp.drawer) === 'inspection' && isUuid(pickString(sp.inspectionId) ?? '') ? (
+              <EquipmentInspectionPanel id={pickString(sp.inspectionId)!} sp={sp} />
+            ) : null
+          }
+        />
+      </UrlDrawer>
 
       <UrlDrawer
         open={pickString(sp.drawer) === 'new'}
