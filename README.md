@@ -316,3 +316,9 @@ Copyright © 2026 the BeaconHS contributors.
   <em>Built by the community. For the community.</em><br />
   If BeaconHS is useful to you, consider giving it a ⭐.
 </p>
+
+---
+
+## Also in this suite
+
+BeaconHS is safety. [OpenBooks](https://github.com/braedonsaunders/openbooks) is the books. [BidWright](https://github.com/braedonsaunders/bidwright) is estimating. Built to work together for project-based companies. Same design language. Same self-host posture. Each repo is still its own install today.
