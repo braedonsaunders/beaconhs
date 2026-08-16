@@ -160,7 +160,7 @@ require a new module.
 
 Forms can be surfaced as standalone **Apps** and even registered as **Tools** —
 the same engine powers lift plans, JSAs, confined-space permits, and toolbox
-talks as fully editable, per-tenant templates.
+ talks as fully editable, per-tenant templates.
 
 ## Tech stack
 
@@ -307,14 +307,7 @@ Copyright © 2026 the BeaconHS contributors.
 ---
 
 <p align="center">
-  <a href="https://star-history.com/#braedonsaunders/beaconhs&Date">
-    <img alt="Star history" src="https://api.star-history.com/svg?repos=braedonsaunders/beaconhs&type=Date" width="600" />
-  </a>
-</p>
-
-<p align="center">
-  <em>Built by the community. For the community.</em><br />
-  If BeaconHS is useful to you, consider giving it a ⭐.
+  <em>Pre-launch. Self-host it, extend it, or tell us where it does not match how your crews work.</em>
 </p>
 
 ---
