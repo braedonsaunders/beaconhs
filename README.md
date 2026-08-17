@@ -160,7 +160,7 @@ require a new module.
 
 Forms can be surfaced as standalone **Apps** and even registered as **Tools** —
 the same engine powers lift plans, JSAs, confined-space permits, and toolbox
- talks as fully editable, per-tenant templates.
+talks as fully editable, per-tenant templates.
 
 ## Tech stack
 

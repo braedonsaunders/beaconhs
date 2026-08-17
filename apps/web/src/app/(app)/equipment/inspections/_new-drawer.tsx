@@ -51,7 +51,7 @@ export function NewEquipmentInspectionDrawer({
   const [rentalSerial, setRentalSerial] = useState('')
   const [rentalProvider, setRentalProvider] = useState('')
   const [choices, setChoices] = useState<Choice[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(Boolean(initialItem?.value))
   const [query, setQuery] = useState('')
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [pending, start] = useTransition()
@@ -66,12 +66,8 @@ export function NewEquipmentInspectionDrawer({
   // Load the eligible checks whenever the subject changes. Abort on change so a
   // slow response for a previous unit can't overwrite the current one.
   useEffect(() => {
-    if (targetMode === 'registered' && !itemId) {
-      setChoices([])
-      return
-    }
+    if (targetMode === 'registered' && !itemId) return
     const controller = new AbortController()
-    setLoading(true)
     const params = new URLSearchParams({ lookup })
     if (contextId) params.set('contextId', contextId)
     fetch(`/api/picker-options?${params.toString()}`, { signal: controller.signal })
@@ -107,10 +103,12 @@ export function NewEquipmentInspectionDrawer({
   // mark it rather than auto-starting, so a stray back-navigation can't create
   // a record without a deliberate tap.
   const picked = initialType?.value
+  const eligibleChoices = targetMode === 'registered' && !itemId ? [] : choices
+  const choicesLoading = eligibleChoices.length === 0 && ready ? loading : false
   const filtered = (
     query.trim()
-      ? choices.filter((c) => c.label.toLowerCase().includes(query.trim().toLowerCase()))
-      : choices
+      ? eligibleChoices.filter((c) => c.label.toLowerCase().includes(query.trim().toLowerCase()))
+      : eligibleChoices
   )
     .slice()
     .sort((a, b) => (a.value === picked ? -1 : b.value === picked ? 1 : 0))
@@ -127,7 +125,12 @@ export function NewEquipmentInspectionDrawer({
               <button
                 key={mode}
                 type="button"
-                onClick={() => setTargetMode(mode)}
+                onClick={() => {
+                  if (mode === targetMode) return
+                  setTargetMode(mode)
+                  setChoices([])
+                  setLoading(mode === 'rental' || Boolean(itemId))
+                }}
                 className={
                   targetMode === mode
                     ? 'rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white'
@@ -155,7 +158,11 @@ export function NewEquipmentInspectionDrawer({
               lookup="equipment-inspection-items"
               value={itemId}
               initialOption={initialItem}
-              onChange={setItemId}
+              onChange={(value) => {
+                setItemId(value)
+                setChoices([])
+                setLoading(Boolean(value))
+              }}
               placeholder={tGenerated('m_115f6cd16bb283')}
               searchPlaceholder={tGenerated('m_05b2636288d921')}
               sheetTitle="Select equipment"
@@ -224,7 +231,7 @@ export function NewEquipmentInspectionDrawer({
 
         <GeneratedValue
           value={
-            choices.length > 6 ? (
+            eligibleChoices.length > 6 ? (
               <div className="relative">
                 <Search
                   size={15}
@@ -247,7 +254,7 @@ export function NewEquipmentInspectionDrawer({
               <p className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/50">
                 <GeneratedText id="m_17dbb904fe8283" />
               </p>
-            ) : loading ? (
+            ) : choicesLoading ? (
               <p className="flex items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/50">
                 <Loader2 size={15} className="animate-spin" />
               </p>
