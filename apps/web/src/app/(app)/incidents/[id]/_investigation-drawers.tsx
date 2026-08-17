@@ -21,6 +21,12 @@ import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
+import {
+  INCIDENT_FACTOR_CATEGORIES,
+  INCIDENT_PREVENTATIVE_STEP_STATUSES,
+  type IncidentFactorCategory,
+  type IncidentPreventativeStepStatus,
+} from '@/lib/incident-investigation'
 
 // ---- Event timeline --------------------------------------------------------
 
@@ -158,15 +164,7 @@ export function EventDrawer({
 
 // ---- Contributing factor ---------------------------------------------------
 
-export const FACTOR_CATEGORIES = [
-  'equipment',
-  'procedure',
-  'training',
-  'environment',
-  'human',
-  'other',
-] as const
-export type FactorCategory = (typeof FACTOR_CATEGORIES)[number]
+export type FactorCategory = IncidentFactorCategory
 
 type FactorInput = {
   id?: string
@@ -268,7 +266,7 @@ export function FactorDrawer({
             value={category}
             onChange={(e) => setCategory(e.currentTarget.value as FactorCategory)}
           >
-            {FACTOR_CATEGORIES.map((c) => (
+            {INCIDENT_FACTOR_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {c.charAt(0).toUpperCase() + c.slice(1)}
               </option>
@@ -445,8 +443,7 @@ export function WhyDrawer({
 
 // ---- Preventative step -----------------------------------------------------
 
-export const PREV_STEP_STATUSES = ['planned', 'in_progress', 'completed'] as const
-export type PrevStepStatus = (typeof PREV_STEP_STATUSES)[number]
+export type PrevStepStatus = IncidentPreventativeStepStatus
 
 type PrevStepInput = {
   id?: string
@@ -600,7 +597,7 @@ export function PrevStepDrawer({
               value={status}
               onChange={(e) => setStatus(e.currentTarget.value as PrevStepStatus)}
             >
-              {PREV_STEP_STATUSES.map((s) => (
+              {INCIDENT_PREVENTATIVE_STEP_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/_/g, ' ')}
                 </option>

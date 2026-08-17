@@ -12,7 +12,11 @@ import {
   trainingSkillCertificates,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
-import { renderDesignDocumentPdf, renderDesignDocumentPngs } from '@beaconhs/forms-pdf'
+import {
+  renderDesignDocumentPdf,
+  renderDesignDocumentPngs,
+  renderDesignDocumentsPdf,
+} from '@beaconhs/forms-pdf'
 import { presignGet, resolveTenantLogoUrl } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { directPrintProvider, type DirectPrintProvider } from '@beaconhs/design-studio'
@@ -234,6 +238,36 @@ export async function renderTrainingCredentialPdf(
   request: CredentialOutputRequest,
 ): Promise<RenderedCredentialPdf | null> {
   return renderPreparedCredentialPdf(await prepareTrainingCredential(ctx, certificateId, request))
+}
+
+export async function renderTrainingWalletCardBatchPdf(
+  ctx: RequestContext,
+  certificateIds: readonly string[],
+): Promise<(RenderedCredentialPdf & { rendered: number; skipped: number }) | null> {
+  const prepared = await Promise.all(
+    certificateIds.map((certificateId) =>
+      prepareTrainingCredential(ctx, certificateId, { format: 'wallet' }),
+    ),
+  )
+  const cards = prepared.filter(
+    (item): item is PreparedCredential =>
+      Boolean(item?.output.document) && item?.output.format === 'wallet',
+  )
+  if (cards.length === 0) return null
+
+  const bytes = await renderDesignDocumentsPdf(
+    cards.map((card) => ({
+      document: card.output.document!,
+      data: card.documentData,
+    })),
+    { title: 'Training wallet cards' },
+  )
+  return {
+    bytes,
+    filename: `training-wallet-cards-${new Date().toISOString().slice(0, 10)}.pdf`,
+    rendered: cards.length,
+    skipped: certificateIds.length - cards.length,
+  }
 }
 
 export async function renderSkillCredentialPdf(

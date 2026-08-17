@@ -36,6 +36,7 @@ import { requireUuidArrayInput, requireUuidInput } from '@/lib/mutation-input'
 import { parsePhotoEdits } from '@/lib/photo-edits'
 import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
 import { isUuid } from '@/lib/list-params'
+import { renderCorrectiveActionSummaryEmail } from '@/lib/corrective-action-email'
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -638,70 +639,21 @@ export async function sendCorrectiveActionEmail(args: {
   const subject = `Corrective action ${ca.reference} · ${ca.title}`
   const message = args.message?.trim() || null
 
-  const text = [
-    `CORRECTIVE ACTION`,
-    `${ca.reference} · ${ca.title}`,
-    ``,
-    `Severity: ${ca.severity}`,
-    `Status: ${ca.status.replace(/_/g, ' ')}`,
-    `Owner: ${names.owner ?? '—'}`,
-    `Site: ${names.site ?? '—'}`,
-    `Assigned on: ${ca.assignedOn ?? '—'}`,
-    `Due on: ${ca.dueOn ?? '—'}`,
-    ``,
-    message ? `Note: ${message}\n` : '',
-    `Description:`,
-    ca.description ?? '(none)',
-    ``,
-    ca.rootCause ? `Root cause:\n${ca.rootCause}\n` : '',
-    ca.actionTaken ? `Action taken:\n${ca.actionTaken}\n` : '',
-    `View the record: ${caUrl}`,
-  ]
-    .filter((line) => line !== '')
-    .join('\n')
-
-  const html = `
-    <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#0f172a;max-width:720px;">
-      <h2 style="margin:0 0 4px;font-size:18px;">${escapeHtml(ca.title)}</h2>
-      <div style="color:#64748b;font-size:13px;margin-bottom:12px;">
-        ${escapeHtml(ca.reference)} ·
-        severity ${escapeHtml(ca.severity)} ·
-        status ${escapeHtml(ca.status.replace(/_/g, ' '))}
-      </div>
-      ${
-        message
-          ? `<div style="border-left:3px solid #0f766e;padding:8px 12px;background:#ecfdf5;margin-bottom:12px;font-size:13px;">${escapeHtml(message)}</div>`
-          : ''
-      }
-      <table style="border-collapse:collapse;font-size:13px;margin-bottom:12px;">
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Owner</td>
-            <td style="padding:4px 0;">${escapeHtml(names.owner ?? '—')}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Site</td>
-            <td style="padding:4px 0;">${escapeHtml(names.site ?? '—')}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Assigned on</td>
-            <td style="padding:4px 0;">${escapeHtml(ca.assignedOn ?? '—')}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b;">Due on</td>
-            <td style="padding:4px 0;">${escapeHtml(ca.dueOn ?? '—')}</td></tr>
-      </table>
-      <h3 style="margin:18px 0 4px;font-size:14px;">Description</h3>
-      <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(ca.description ?? '(none)')}</div>
-      ${
-        ca.rootCause
-          ? `<h3 style="margin:18px 0 4px;font-size:14px;">Root cause</h3>
-             <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(ca.rootCause)}</div>`
-          : ''
-      }
-      ${
-        ca.actionTaken
-          ? `<h3 style="margin:18px 0 4px;font-size:14px;">Action taken</h3>
-             <div style="font-size:13px;white-space:pre-wrap;">${escapeHtml(ca.actionTaken)}</div>`
-          : ''
-      }
-      <p style="margin:18px 0 0;font-size:13px;">
-        <a href="${escapeHtml(caUrl)}" style="color:#0f766e;">Open the corrective action</a>
-      </p>
-    </div>
-  `
+  const { html, text } = renderCorrectiveActionSummaryEmail({
+    reference: ca.reference,
+    title: ca.title,
+    severity: ca.severity,
+    status: ca.status,
+    owner: names.owner,
+    location: names.site,
+    assignedOn: ca.assignedOn,
+    dueOn: ca.dueOn,
+    message,
+    description: ca.description,
+    rootCause: ca.rootCause,
+    actionTaken: ca.actionTaken,
+    url: caUrl,
+  })
 
   // Enqueue via BullMQ so the worker captures an email_log row + retries on
   // failure (mirrors the hazard-assessment / document send helpers).
@@ -731,15 +683,6 @@ export async function sendCorrectiveActionEmail(args: {
   })
   revalidatePath(`/corrective-actions/${args.caId}`)
   return { ok: true }
-}
-
-function escapeHtml(s: string | null | undefined): string {
-  if (s == null) return ''
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 }
 
 // ---------- Bulk reassign ------------------------------------------------

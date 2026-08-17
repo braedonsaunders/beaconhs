@@ -67,8 +67,6 @@ import {
   FactorDrawer,
   PrevStepDrawer,
   WhyDrawer,
-  FACTOR_CATEGORIES,
-  PREV_STEP_STATUSES,
   type FactorCategory,
   type PrevStepStatus,
 } from './_investigation-drawers'
@@ -91,6 +89,10 @@ import { canSeeRecord } from '@/lib/visibility'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recentActivityForEntity, recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { parseIncidentInjuryInput } from '@/lib/incident-injury-input'
+import {
+  isIncidentFactorCategory,
+  isIncidentPreventativeStepStatus,
+} from '@/lib/incident-investigation'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
@@ -1235,7 +1237,9 @@ async function saveFactorAction(input: {
   assertCan(ctx, 'incidents.investigate')
   const desc = input.description.trim()
   if (!input.incidentId || !desc) return { ok: false, error: 'Description is required.' }
-  if (!FACTOR_CATEGORIES.includes(input.category)) return { ok: false, error: 'Invalid category.' }
+  if (!isIncidentFactorCategory(input.category)) {
+    return { ok: false, error: 'Invalid category.' }
+  }
   await assertCanSeeIncident(ctx, input.incidentId)
 
   if (input.id) {
@@ -1426,7 +1430,9 @@ async function savePrevStepAction(input: {
   assertCan(ctx, 'incidents.investigate')
   const desc = input.description.trim()
   if (!input.incidentId || !desc) return { ok: false, error: 'Description is required.' }
-  if (!PREV_STEP_STATUSES.includes(input.status)) return { ok: false, error: 'Invalid status.' }
+  if (!isIncidentPreventativeStepStatus(input.status)) {
+    return { ok: false, error: 'Invalid status.' }
+  }
   await assertCanSeeIncident(ctx, input.incidentId)
 
   if (input.id) {
@@ -1710,6 +1716,7 @@ export default async function IncidentDetailPage({
   } = data
 
   const canManage = canManageModule(ctx, 'incidents')
+  const canInvestigate = can(ctx, 'incidents.investigate')
   const locked = incident.locked
   const activity = await recentActivityForEntity(ctx, 'incident', id, 25)
 
@@ -2876,7 +2883,7 @@ export default async function IncidentDetailPage({
             icon={<ListChecks size={20} />}
             tone="teal"
             actions={
-              !locked ? (
+              !locked && canInvestigate ? (
                 <Link href={drawerHref('new-event') as any} scroll={false}>
                   <Button size="sm" variant="outline">
                     <Plus size={14} /> <GeneratedText id="m_09cd8e0f2553a4" />
@@ -2915,7 +2922,7 @@ export default async function IncidentDetailPage({
                             </div>
                             <GeneratedValue
                               value={
-                                !locked ? (
+                                !locked && canInvestigate ? (
                                   <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                                     <Link
                                       href={drawerHref('edit-event', { editId: e.id }) as any}
@@ -2956,7 +2963,7 @@ export default async function IncidentDetailPage({
             icon={<AlertTriangle size={20} />}
             tone="amber"
             actions={
-              !locked ? (
+              !locked && canInvestigate ? (
                 <Link href={drawerHref('new-factor') as any} scroll={false}>
                   <Button size="sm" variant="outline">
                     <Plus size={14} /> <GeneratedText id="m_04e475dcb7d6d7" />
@@ -2990,7 +2997,7 @@ export default async function IncidentDetailPage({
                           </div>
                           <GeneratedValue
                             value={
-                              !locked ? (
+                              !locked && canInvestigate ? (
                                 <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                                   <Link
                                     href={drawerHref('edit-factor', { editId: f.id }) as any}
@@ -3030,7 +3037,7 @@ export default async function IncidentDetailPage({
             icon={<HelpCircle size={20} />}
             tone="purple"
             actions={
-              !locked && whys.length < 5 ? (
+              !locked && canInvestigate && whys.length < 5 ? (
                 <Link href={drawerHref('new-why') as any} scroll={false}>
                   <Button size="sm" variant="outline">
                     <Plus size={14} /> <GeneratedText id="m_030d3f5756f85d" />
@@ -3078,7 +3085,7 @@ export default async function IncidentDetailPage({
                               </div>
                               <GeneratedValue
                                 value={
-                                  !locked ? (
+                                  !locked && canInvestigate ? (
                                     <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                                       <Link
                                         href={drawerHref('edit-why', { editId: w.id }) as any}
@@ -3120,7 +3127,7 @@ export default async function IncidentDetailPage({
             icon={<ListChecks size={20} />}
             tone="emerald"
             actions={
-              !locked ? (
+              !locked && canInvestigate ? (
                 <Link href={drawerHref('new-prev-step') as any} scroll={false}>
                   <Button size="sm" variant="outline">
                     <Plus size={14} /> <GeneratedText id="m_0ce705b8fa979c" />
@@ -3183,7 +3190,7 @@ export default async function IncidentDetailPage({
                           </div>
                           <GeneratedValue
                             value={
-                              !locked ? (
+                              !locked && canInvestigate ? (
                                 <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                                   <Link
                                     href={
@@ -3368,14 +3375,14 @@ export default async function IncidentDetailPage({
 
       {/* Investigation */}
       <EventDrawer
-        open={drawer === 'new-event'}
+        open={canInvestigate && drawer === 'new-event'}
         closeHref={`${basePath}#section-investigation`}
         incidentId={id}
         action={saveEventAction}
         mode="create"
       />
       <EventDrawer
-        open={drawer === 'edit-event' && !!editingEvent}
+        open={canInvestigate && drawer === 'edit-event' && !!editingEvent}
         closeHref={`${basePath}#section-investigation`}
         incidentId={id}
         action={saveEventAction}
@@ -3391,14 +3398,14 @@ export default async function IncidentDetailPage({
         }
       />
       <FactorDrawer
-        open={drawer === 'new-factor'}
+        open={canInvestigate && drawer === 'new-factor'}
         closeHref={`${basePath}#section-investigation`}
         incidentId={id}
         action={saveFactorAction}
         mode="create"
       />
       <FactorDrawer
-        open={drawer === 'edit-factor' && !!editingFactor}
+        open={canInvestigate && drawer === 'edit-factor' && !!editingFactor}
         closeHref={`${basePath}#section-investigation`}
         incidentId={id}
         action={saveFactorAction}
@@ -3414,7 +3421,7 @@ export default async function IncidentDetailPage({
         }
       />
       <WhyDrawer
-        open={drawer === 'new-why' && whys.length < 5}
+        open={canInvestigate && drawer === 'new-why' && whys.length < 5}
         closeHref={`${basePath}#section-investigation`}
         incidentId={id}
         action={saveWhyAction}
@@ -3422,7 +3429,7 @@ export default async function IncidentDetailPage({
         nextOrdinal={nextWhyOrdinal}
       />
       <WhyDrawer
-        open={drawer === 'edit-why' && !!editingWhy}
+        open={canInvestigate && drawer === 'edit-why' && !!editingWhy}
         closeHref={`${basePath}#section-investigation`}
         incidentId={id}
         action={saveWhyAction}
@@ -3435,14 +3442,14 @@ export default async function IncidentDetailPage({
         }
       />
       <PrevStepDrawer
-        open={drawer === 'new-prev-step'}
+        open={canInvestigate && drawer === 'new-prev-step'}
         closeHref={`${basePath}#section-investigation`}
         incidentId={id}
         action={savePrevStepAction}
         mode="create"
       />
       <PrevStepDrawer
-        open={drawer === 'edit-prev-step' && !!editingPrev}
+        open={canInvestigate && drawer === 'edit-prev-step' && !!editingPrev}
         closeHref={`${basePath}#section-investigation`}
         incidentId={id}
         action={savePrevStepAction}

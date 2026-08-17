@@ -2,7 +2,7 @@
 
 // Bulk-action server actions for /training/records.
 //
-// Three actions surface in the floating bulk-action bar:
+// The mutation/export actions surfaced in the floating bulk-action bar:
 //   - bulkRenewTrainingRecords    for each row, create a NEW training_records
 //                                  row (same person+course, completedOn=today,
 //                                  expiresOn auto-computed from

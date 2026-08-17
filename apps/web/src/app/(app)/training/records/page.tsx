@@ -97,6 +97,7 @@ export default async function TrainingRecordsPage({
   // arbitrary ids). The server actions re-check these via assertCan.
   const canManage = can(ctx, 'training.record.create')
   const canExport = can(ctx, 'training.read.all')
+  const canPrint = can(ctx, 'training.read.all') || can(ctx, 'training.read.self')
   const today = new Date().toISOString().slice(0, 10)
   const todayMs = new Date(today).getTime()
 
@@ -381,6 +382,7 @@ export default async function TrainingRecordsPage({
                 dir={params.dir}
                 canManage={canManage}
                 canExport={canExport}
+                canPrint={canPrint}
               />
               <Pagination
                 basePath="/training/records"

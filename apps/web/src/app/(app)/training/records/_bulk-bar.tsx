@@ -9,7 +9,7 @@ import {
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, RotateCcw, ShieldOff, X } from 'lucide-react'
+import { CreditCard, Download, RotateCcw, ShieldOff, X } from 'lucide-react'
 import { Button, Select } from '@beaconhs/ui'
 import {
   bulkExportTrainingRecordsCsv,
@@ -18,13 +18,14 @@ import {
 } from './_actions'
 import { confirmDialog } from '@/lib/confirm'
 
-type BulkAction = 'renew' | 'revoke' | 'export'
+type BulkAction = 'print' | 'renew' | 'revoke' | 'export'
 
 export function BulkTrainingRecordsBar({
   selectedIds,
   onClear,
   canManage,
   canExport,
+  canPrint,
 }: {
   selectedIds: string[]
   onClear: () => void
@@ -32,12 +33,16 @@ export function BulkTrainingRecordsBar({
   canManage: boolean
   /** training.read.all — gates Export (only all-viewers may bulk-export). */
   canExport: boolean
+  /** Any visible training record can have its wallet card printed. */
+  canPrint: boolean
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [action, setAction] = useState<BulkAction>(canManage ? 'renew' : 'export')
+  const [action, setAction] = useState<BulkAction>(
+    canPrint ? 'print' : canManage ? 'renew' : 'export',
+  )
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -50,9 +55,10 @@ export function BulkTrainingRecordsBar({
             { value: 'revoke' as const, label: 'Revoke' },
           ]
         : []),
+      ...(canPrint ? [{ value: 'print' as const, label: tGenerated('m_04df2153ab0fcf') }] : []),
       ...(canExport ? [{ value: 'export' as const, label: 'Export selected to CSV' }] : []),
     ],
-    [canManage, canExport],
+    [canManage, canExport, canPrint, tGenerated],
   )
 
   const label = useMemo(
@@ -67,6 +73,39 @@ export function BulkTrainingRecordsBar({
   async function go() {
     setError(tGeneratedValue(null))
     setInfo(null)
+    if (action === 'print') {
+      start(async () => {
+        try {
+          const response = await fetch('/training/records/wallet-cards', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recordIds: selectedIds }),
+          })
+          if (!response.ok) {
+            const body = (await response.json().catch(() => null)) as { error?: string } | null
+            setError(body?.error ?? tGenerated('m_0102db1d731a26'))
+            return
+          }
+          const blob = await response.blob()
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = `training-wallet-cards-${new Date().toISOString().slice(0, 10)}.pdf`
+          document.body.appendChild(link)
+          link.click()
+          link.remove()
+          URL.revokeObjectURL(url)
+          const rendered = Number(response.headers.get('X-Rendered-Records') ?? selectedIds.length)
+          const skipped = Number(response.headers.get('X-Skipped-Records') ?? 0)
+          setInfo(
+            `Prepared ${rendered} wallet card${rendered === 1 ? '' : 's'}${skipped ? `; skipped ${skipped}` : ''}.`,
+          )
+        } catch {
+          setError(tGenerated('m_0102db1d731a26'))
+        }
+      })
+      return
+    }
     if (action === 'renew') {
       if (
         !(await confirmDialog({
@@ -180,6 +219,10 @@ export function BulkTrainingRecordsBar({
             value={
               pending ? (
                 <GeneratedText id="m_09001dc89c0edf" />
+              ) : action === 'print' ? (
+                <span className="inline-flex items-center gap-1">
+                  <CreditCard size={14} /> <GeneratedText id="m_124553ef26fbe5" />
+                </span>
               ) : action === 'renew' ? (
                 <span className="inline-flex items-center gap-1">
                   <RotateCcw size={14} /> <GeneratedText id="m_1f6557a4319c50" />

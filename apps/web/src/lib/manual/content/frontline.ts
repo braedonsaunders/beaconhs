@@ -334,7 +334,7 @@ Open **Incidents** in the left menu, or go to [Incidents](/incidents).
 1. Tap **Report incident**.
 2. Pick the **Type**: injury, illness, near miss, property damage, environmental, or security.
 3. Pick the **Severity**. For a near miss with no one hurt, pick no injury.
-4. Set **Occurred at** (date and time) and the **Site**.
+4. Set **Occurred at** (date and time) and the **Location**.
 5. Give it a short **Title**, like "Slip on wet floor near pump 3".
 6. In **Description**, write what happened: who was there, what equipment was involved, what you saw.
 7. Fill in **Immediate action taken** — first aid given, area barricaded, equipment locked out, and so on.
@@ -350,6 +350,18 @@ The quick report captures the essentials. Photos, witness statements, and the fu
 - When the investigation and fixes are done, the incident is closed.
 
 You can open your own reports any time from the [Incidents](/incidents) list to see their status.
+
+## Recording the investigation
+
+If your role can investigate incidents, open the incident's **Investigation** section.
+
+1. Use **Add event** to rebuild the timeline in order.
+2. Use **Add factor** to record each contributing factor and its category, such as equipment, procedure, training, environment, or human.
+3. Record the root cause and add the **Why** steps that led to it.
+4. Use **Add step** under **Preventative steps** for each change that will stop the incident from happening again. Assign an owner, target date, and status when known.
+5. Use the pencil and trash buttons to correct or remove investigation rows before the incident is locked.
+
+Only people with the incident-investigation permission see these controls. Closing the incident locks its investigation.
 
 ## Recording an injured person
 
@@ -560,6 +572,8 @@ Only published forms allowed for the role you are currently using appear. If you
 2. Tap **New entry**. A fresh entry opens.
 3. Search **Location** and choose the customer, project, site, or area where the form is being recorded. Hazard-assessment apps inherit the assessment's Location.
 4. Fill in the fields. Your answers save as you go, so you can stop and come back.
+   - Formatted descriptions save the newest text when you leave the field.
+   - For a lift-plan diagram or other sketch, draw on the canvas and tap **Save**. Tap **Clear** to remove the saved drawing.
 5. Some forms ask for signatures — sign in the signature box, and pass the phone around if the whole crew signs.
 6. Tap **Submit** when you are done. Some entries use a **Finalize** button instead — it does the same job: it marks the entry complete and locks it.
 

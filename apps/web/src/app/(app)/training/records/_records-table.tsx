@@ -37,6 +37,7 @@ export function TrainingRecordsTable({
   dir,
   canManage,
   canExport,
+  canPrint,
 }: {
   rows: TrainingRecordsTableRow[]
   basePath: string
@@ -47,11 +48,12 @@ export function TrainingRecordsTable({
   canManage: boolean
   /** training.read.all — gates the bulk CSV export. */
   canExport: boolean
+  canPrint: boolean
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   // No bulk action available → no row selection at all (e.g. a self-only viewer
   // who can see their own records but neither manage nor bulk-export them).
-  const bulkEnabled = canManage || canExport
+  const bulkEnabled = canManage || canExport || canPrint
   const { selected, selectedIds, allSelected, toggleOne, toggleAll, clear } = useRowSelection(rows)
 
   const sortProps = { basePath, currentParams, sort, dir }
@@ -273,6 +275,7 @@ export function TrainingRecordsTable({
               onClear={clear}
               canManage={canManage}
               canExport={canExport}
+              canPrint={canPrint}
             />
           ) : null
         }

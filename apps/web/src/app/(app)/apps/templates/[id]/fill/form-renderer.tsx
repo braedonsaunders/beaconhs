@@ -1937,6 +1937,7 @@ function InlineFieldRow({
 }) {
   const locale = useLocale()
   const formT = useTranslations('Forms')
+  const tGenerated = useGeneratedTranslations()
   const helpText = localizeText(field.helpText, locale, '')
   const nonSaving = INLINE_NON_SAVING_TYPES.has(field.type)
   const isTable = field.type === 'table'
@@ -1948,6 +1949,10 @@ function InlineFieldRow({
     ),
   )
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestValue = useRef(value)
+  useEffect(() => {
+    latestValue.current = value
+  }, [value])
 
   function commit(v: unknown) {
     if (timer.current) {
@@ -1959,14 +1964,31 @@ function InlineFieldRow({
   }
 
   function handleChange(v: unknown) {
+    latestValue.current = v
     onChange(v)
     if (readOnly || nonSaving) return
     if (timer.current) clearTimeout(timer.current)
+    if (field.type === 'sketch') {
+      commit(v)
+      return
+    }
     timer.current = setTimeout(() => commit(v), 800)
   }
 
+  async function persistImmediately(v: unknown) {
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+    }
+    latestValue.current = v
+    onChange(v)
+    if (readOnly || nonSaving) return
+    const result = isTable ? await saveArray(field.id, v) : await saveField(field, v)
+    if (!result.ok) throw new Error(result.error ?? tGenerated('m_0660fd925b42de'))
+  }
+
   return (
-    <div className="space-y-1" onBlur={() => commit(value)}>
+    <div className="space-y-1" onBlur={() => commit(latestValue.current)}>
       <div className="flex items-center justify-between gap-2">
         <Label>
           <GeneratedValue value={localizeText(field.label, locale, field.id)} />
@@ -2005,6 +2027,7 @@ function InlineFieldRow({
         people={people}
         evalCtx={evalCtx}
         onSetFieldValue={onSetFieldValue}
+        persistValue={field.type === 'sketch' ? persistImmediately : undefined}
       />
       <GeneratedValue
         value={
@@ -2026,6 +2049,7 @@ function FieldInput({
   people,
   evalCtx,
   onSetFieldValue,
+  persistValue,
 }: {
   field: FormField
   value: unknown
@@ -2033,6 +2057,7 @@ function FieldInput({
   people: { id: string; firstName: string; lastName: string; employeeNo?: string | null }[]
   evalCtx: EvalContext
   onSetFieldValue?: (fieldId: string, v: unknown) => void
+  persistValue?: (v: unknown) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
   const locale = useLocale()
@@ -2611,7 +2636,7 @@ function FieldInput({
     case 'signature':
       return <SignatureField value={(value as string | null) ?? null} onChange={onChange} />
     case 'sketch':
-      return <SketchField value={value} onChange={onChange} />
+      return <SketchField value={value} onChange={onChange} persistValue={persistValue} />
     case 'photo':
       return <PhotoInput field={field} value={value} onChange={onChange} />
     case 'file':
@@ -4620,16 +4645,19 @@ type SketchValue = { attachmentId: string; url: string; scene?: SketchScene }
 function SketchField({
   value,
   onChange,
+  persistValue,
 }: {
   value: unknown
   onChange: (v: SketchValue | null) => void
+  persistValue?: (v: SketchValue | null) => Promise<void>
 }) {
   const readOnly = useContext(FillReadOnlyContext)
   const stored = (value as SketchValue | null) ?? null
 
   async function persist(dataUrl: string | null, scene: SketchScene) {
     if (!dataUrl) {
-      onChange(null)
+      if (persistValue) await persistValue(null)
+      else onChange(null)
       return
     }
     const file = dataUrlToFile(dataUrl, `sketch-${Date.now()}.png`)
@@ -4640,22 +4668,22 @@ function SketchField({
       sizeBytes: file.size,
     })
     if (!req.ok) {
-      console.warn('[sketch] presign failed', req.error)
-      return
+      throw new Error(req.error)
     }
     let finalizeInput
     try {
       finalizeInput = await uploadReservedFile(req, file)
     } catch (error) {
-      console.warn('[sketch] upload failed', error)
-      return
+      throw error instanceof Error ? error : new Error('The sketch upload failed.')
     }
     const fin = await finalizeUpload(finalizeInput)
-    if (!fin.ok) return
-    onChange({ attachmentId: fin.attachmentId, url: fin.url, scene })
+    if (!fin.ok) throw new Error(fin.error)
+    const next = { attachmentId: fin.attachmentId, url: fin.url, scene }
+    if (persistValue) await persistValue(next)
+    else onChange(next)
   }
 
-  return <SketchPad initialScene={stored?.scene ?? null} onChange={persist} readOnly={readOnly} />
+  return <SketchPad initialScene={stored?.scene ?? null} onSave={persist} readOnly={readOnly} />
 }
 
 // --- Save status indicator -------------------------------------------------

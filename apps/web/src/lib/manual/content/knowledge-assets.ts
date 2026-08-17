@@ -24,6 +24,8 @@ export const KNOWLEDGE_ASSETS_ARTICLES: ManualArticle[] = [
       'competency',
       'expiring',
       'wallet card',
+      'print multiple cards',
+      'bulk cards',
       'my training',
     ],
     body: `Training is where you take courses and where your tickets live.
@@ -53,6 +55,15 @@ Open **Training** in the left menu. You will see tabs for **Certificates**, **Co
 4. Open a certificate. On the desktop table, select **View**. Then open **Cards & certificates**.
 5. Choose **Open PDF** for the full-size certificate or wallet card you need. Print or save it from your browser's PDF viewer.
 6. In [My training](/my/training), the **Expiring (90d)** tab lists everything coming due, with a **Days left** count for each one.
+
+## Print wallet cards for several people (managers)
+
+1. Open **Training** → **Certificates**.
+2. Search or filter the list, then select the checkbox beside each record you need. You can also select every visible row.
+3. In the action bar, choose **Print wallet cards** and tap **Print**.
+4. BeaconHS downloads one print-ready PDF with the front and back of every available card. Open that file and print the full run together.
+
+A print run can contain up to 50 records. Revoked, inaccessible, or missing wallet-card outputs are skipped, and the action bar tells you how many cards were prepared and skipped.
 
 ## See your classes
 
