@@ -13,6 +13,7 @@ import {
 } from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { resolveVehicleEquipmentWhere } from '../_equipment-policy'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,8 @@ function ymd(y: number, m: number, d: number) {
 }
 
 export async function GET(req: NextRequest) {
+  if (isRouterPrefetch(req)) return new Response(null, { status: 204 })
+
   const url = new URL(req.url)
   const yearRaw = url.searchParams.get('year')
   const year = yearRaw && /^\d{4}$/.test(yearRaw) ? Number(yearRaw) : new Date().getFullYear()

@@ -2,6 +2,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { redirect } from 'next/navigation'
 import { and, asc, count, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
 import {
@@ -262,7 +263,7 @@ export default async function TruckLogSummaryPage({
                 <GeneratedValue
                   value={
                     canExport ? (
-                      <Link
+                      <DownloadLink
                         href={{
                           pathname: '/equipment/vehicle-log/export.csv',
                           query: { year, q: params.q },
@@ -271,7 +272,7 @@ export default async function TruckLogSummaryPage({
                         <Button>
                           <GeneratedText id="m_14c6440eca1edc" />
                         </Button>
-                      </Link>
+                      </DownloadLink>
                     ) : null
                   }
                 />

@@ -2,6 +2,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -1121,12 +1122,12 @@ export default async function DocumentDetailPage({
                                         <GeneratedValue
                                           value={
                                             v.pdfAttachmentId || v.contentAttachmentId ? (
-                                              <a
+                                              <DownloadLink
                                                 href={`${basePath}/versions/${v.id}/download`}
                                                 className="text-teal-700 hover:underline dark:text-teal-300"
                                               >
                                                 <GeneratedText id="m_1a2b2ed6729166" />
-                                              </a>
+                                              </DownloadLink>
                                             ) : v.renderStatus === 'pending' ||
                                               v.renderStatus === 'processing' ? (
                                               <span className="text-slate-400 dark:text-slate-500">
@@ -1146,12 +1147,12 @@ export default async function DocumentDetailPage({
                                           value={
                                             v.docxAttachmentId ? (
                                               <>
-                                                <a
+                                                <DownloadLink
                                                   href={`${basePath}/versions/${v.id}/download?kind=docx`}
                                                   className="text-teal-700 hover:underline dark:text-teal-300"
                                                 >
                                                   <GeneratedText id="m_18c2e68821b0cd" />
-                                                </a>
+                                                </DownloadLink>
                                                 {canManage ? (
                                                   <Link
                                                     href={`${basePath}/editor?version=${v.id}`}

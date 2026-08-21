@@ -17,6 +17,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // auto-spawn a CA in the same transaction as the inspection evidence.
 
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { Fragment } from 'react'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
@@ -2229,13 +2230,13 @@ export default async function PpeDetailPage({
                                         ) : null
                                       }
                                     />
-                                    <Link
+                                    <DownloadLink
                                       href={`/ppe/${id}/issues/${r.id}/pdf` as any}
                                       target="_blank"
                                       className="text-xs text-teal-700 hover:underline"
                                     >
                                       <GeneratedText id="m_1a2b2ed6729166" />
-                                    </Link>
+                                    </DownloadLink>
                                   </div>
                                 </TableCell>
                               </TableRow>
@@ -2500,9 +2501,7 @@ export default async function PpeDetailPage({
         size="lg"
         footer={
           openInspection ? (
-            // Plain anchor, never <Link>: router prefetch on a <Link> would
-            // log a phantom export against the audit trail.
-            <a
+            <DownloadLink
               href={`/ppe/${id}/inspections/${openInspection.insp.id}/pdf`}
               target="_blank"
               rel="noopener noreferrer"
@@ -2510,7 +2509,7 @@ export default async function PpeDetailPage({
               <Button variant="outline">
                 <Printer size={14} /> <GeneratedText id="m_016088be0b1e51" />
               </Button>
-            </a>
+            </DownloadLink>
           ) : undefined
         }
       >

@@ -10,6 +10,7 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
+import { DownloadLink } from '@/components/download-link'
 import { Button, Select, cn } from '@beaconhs/ui'
 import { Copy, FileText, Lock, Mail, MoreHorizontal, Trash2, Unlock } from 'lucide-react'
 
@@ -96,11 +97,11 @@ export function IncidentHeaderActions({
       {/* Desktop: the full row */}
       <div className="hidden items-center gap-2 sm:flex">
         <GeneratedValue value={statusSelect} />
-        <Link href={pdfHref as any}>
+        <DownloadLink href={pdfHref as any}>
           <Button variant="outline">
             <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
           </Button>
-        </Link>
+        </DownloadLink>
         <Link href={emailHref as any} scroll={false}>
           <Button variant="outline">
             <Mail size={14} /> <GeneratedText id="m_09dfca28fc95ba" />
@@ -151,9 +152,13 @@ export function IncidentHeaderActions({
                   onClick={() => setOpen(false)}
                 />
                 <div className="fixed inset-x-3 bottom-3 z-50 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                  <Link href={pdfHref as any} className={menuItem} onClick={() => setOpen(false)}>
+                  <DownloadLink
+                    href={pdfHref as any}
+                    className={menuItem}
+                    onClick={() => setOpen(false)}
+                  >
                     <FileText size={15} /> <GeneratedText id="m_016088be0b1e51" />
-                  </Link>
+                  </DownloadLink>
                   <Link
                     href={emailHref as any}
                     scroll={false}

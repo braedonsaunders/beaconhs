@@ -14,6 +14,7 @@ import { recordAudit } from '@/lib/audit'
 import { pdfResponse, renderTrainingCredentialPdf } from '@/lib/training-credential-pdf'
 import { trainingCertificateForRecord } from '@/lib/training-credential-access'
 import { isUuid } from '@/lib/list-params'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -22,6 +23,8 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isRouterPrefetch(req)) return new Response(null, { status: 204 })
+
   const { id: recordId } = await params
   if (!isUuid(recordId)) {
     return NextResponse.json({ error: 'Training record not found.' }, { status: 404 })

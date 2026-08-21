@@ -27,6 +27,7 @@ import {
   users as user,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
+import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
@@ -189,11 +190,11 @@ export default async function FormResponsesPage({
             description={tGenerated('m_0f87656e2eefc7')}
             actions={
               canExport ? (
-                <Link href={buildExportHref('/apps/responses/export.csv', sp)}>
+                <DownloadLink href={buildExportHref('/apps/responses/export.csv', sp)}>
                   <Button variant="outline">
                     <GeneratedText id="m_14c6440eca1edc" />
                   </Button>
-                </Link>
+                </DownloadLink>
               ) : null
             }
           />

@@ -13,12 +13,15 @@ import {
 } from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { parseListParams, pickString } from '@/lib/list-params'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 
 const SORTS = ['name', 'code', 'delivery_type', 'valid_for_months'] as const
 
 export async function GET(req: NextRequest) {
+  if (isRouterPrefetch(req)) return new Response(null, { status: 204 })
+
   const url = new URL(req.url)
   const sp = Object.fromEntries(url.searchParams.entries())
   const params = parseListParams(sp, {

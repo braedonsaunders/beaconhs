@@ -10,6 +10,7 @@ import { departments, people, trades } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
+import { DownloadLink } from '@/components/download-link'
 import { buildExportHref, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { FilterChips } from '@/components/filter-bar'
@@ -160,11 +161,11 @@ export default async function PeoplePage({
                 <GeneratedValue
                   value={
                     canExport ? (
-                      <a href={buildExportHref('/people/export.csv', sp)}>
+                      <DownloadLink href={buildExportHref('/people/export.csv', sp)}>
                         <Button variant="outline">
                           <GeneratedText id="m_14c6440eca1edc" />
                         </Button>
-                      </a>
+                      </DownloadLink>
                     ) : null
                   }
                 />

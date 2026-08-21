@@ -7,6 +7,7 @@ import { and, asc, count, desc, ilike, isNull, or, eq, type SQL } from 'drizzle-
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
 import { documentCategories, documentTypes, documents } from '@beaconhs/db/schema'
+import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
@@ -181,11 +182,11 @@ export default async function DocumentsPage({
                   <GeneratedValue
                     value={
                       canExport ? (
-                        <a href={buildExportHref('/documents/export.csv', sp)}>
+                        <DownloadLink href={buildExportHref('/documents/export.csv', sp)}>
                           <Button variant="outline">
                             <GeneratedText id="m_14c6440eca1edc" />
                           </Button>
-                        </a>
+                        </DownloadLink>
                       ) : null
                     }
                   />

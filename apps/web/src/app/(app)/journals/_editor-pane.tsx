@@ -30,6 +30,7 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@beaconhs/ui'
 import type { AppLocale } from '@beaconhs/i18n'
+import { DownloadLink } from '@/components/download-link'
 import { confirmDialog } from '@/lib/confirm'
 import { deleteEntry, emailEntry, submitEntry, updateEntry } from './_actions'
 import { JournalEditor } from './_editor'
@@ -281,7 +282,7 @@ export function EditorPane({
               value={
                 menuOpen ? (
                   <div className="absolute top-9 right-0 z-30 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                    <a
+                    <DownloadLink
                       href={`/journals/${entry.id}/pdf`}
                       target="_blank"
                       rel="noreferrer"
@@ -289,7 +290,7 @@ export function EditorPane({
                       className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60"
                     >
                       <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
-                    </a>
+                    </DownloadLink>
                     <button
                       type="button"
                       onClick={emailRecap}

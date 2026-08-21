@@ -31,6 +31,7 @@ import {
 } from '@beaconhs/ui'
 import { customerContacts, orgUnits } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
+import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantHierarchy } from '@/lib/org-hierarchy'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -185,11 +186,11 @@ export default async function LocationsPage({
                 <GeneratedValue
                   value={
                     canExport ? (
-                      <a href={buildExportHref('/locations/export.csv', sp)}>
+                      <DownloadLink href={buildExportHref('/locations/export.csv', sp)}>
                         <Button variant="outline">
                           <GeneratedText id="m_14c6440eca1edc" />
                         </Button>
-                      </a>
+                      </DownloadLink>
                     ) : null
                   }
                 />

@@ -17,6 +17,7 @@ import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
 import { CollaboraEmbed } from '@/components/collabora-embed'
+import { DownloadLink } from '@/components/download-link'
 import {
   createBlankDeckMaster,
   getPptxAuthorPlaybackSession,
@@ -112,9 +113,9 @@ export function SlideDeckEditor({
                   </span>
                 </span>
                 <Button asChild variant="outline" size="sm">
-                  <a href={downloadHref}>
+                  <DownloadLink href={downloadHref}>
                     <Download size={13} /> <GeneratedText id="m_0fcb9c63d263d1" />
-                  </a>
+                  </DownloadLink>
                 </Button>
                 <Button
                   type="button"

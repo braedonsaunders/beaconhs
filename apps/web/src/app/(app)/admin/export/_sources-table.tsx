@@ -9,6 +9,7 @@ import {
 import { GeneratedText } from '@/i18n/generated'
 
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { useRouter } from 'next/navigation'
 import { ArrowUpRight, Download } from 'lucide-react'
 import {
@@ -184,14 +185,14 @@ export function ExportSourcesTable({
                           <ArrowUpRight size={14} />
                         </Link>
                       </Button>
-                      {/* Plain <a>: <Link> prefetches the /export.csv route handler,
-                        which runs the export query and records a phantom audit
-                        entry (see 7170384). Anchors don't prefetch. */}
                       <Button asChild size="sm">
-                        <a href={entity.csvHref} onClick={(event) => event.stopPropagation()}>
+                        <DownloadLink
+                          href={entity.csvHref}
+                          onClick={(event) => event.stopPropagation()}
+                        >
                           <Download size={14} className="mr-1.5" />
                           <GeneratedText id="m_13bc18467bfb44" />
-                        </a>
+                        </DownloadLink>
                       </Button>
                     </div>
                   </TableCell>

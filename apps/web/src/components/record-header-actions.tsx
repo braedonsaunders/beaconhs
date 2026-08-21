@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { type ReactNode, useState } from 'react'
 import { Button } from '@beaconhs/ui'
+import { DownloadLink } from '@/components/download-link'
 import { Copy, FileText, Lock, Mail, MoreHorizontal, Shield, Trash2, Unlock } from 'lucide-react'
 import { GeneratedText, GeneratedValue, useGeneratedTranslations } from '@/i18n/generated'
 
@@ -65,9 +66,9 @@ export function RecordHeaderActions({
           <Shield size={15} /> {review.label ?? <GeneratedText id="m_039fc01243fb46" />}
         </Link>
       ) : null}
-      <a href={pdfHref} className={menuItem}>
+      <DownloadLink href={pdfHref} className={menuItem}>
         <FileText size={15} /> <GeneratedText id="m_016088be0b1e51" />
-      </a>
+      </DownloadLink>
       {canEmail ? (
         <Link href={emailHref as never} scroll={false} className={menuItem}>
           <Mail size={15} /> <GeneratedText id="m_09dfca28fc95ba" />
@@ -103,11 +104,11 @@ export function RecordHeaderActions({
             </Button>
           </Link>
         ) : null}
-        <a href={pdfHref}>
+        <DownloadLink href={pdfHref}>
           <Button variant="outline">
             <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
           </Button>
-        </a>
+        </DownloadLink>
         {canEmail ? (
           <Link href={emailHref as never} scroll={false}>
             <Button variant="outline">

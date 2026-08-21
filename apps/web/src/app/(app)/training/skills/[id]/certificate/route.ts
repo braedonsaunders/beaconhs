@@ -10,6 +10,7 @@ import { recordAudit } from '@/lib/audit'
 import { pdfResponse, renderSkillCredentialPdf } from '@/lib/training-credential-pdf'
 import { skillCertificateForAssignment } from '@/lib/training-credential-access'
 import { isUuid } from '@/lib/list-params'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -18,6 +19,8 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isRouterPrefetch(req)) return new Response(null, { status: 204 })
+
   const { id: assignmentId } = await params
   if (!isUuid(assignmentId)) {
     return NextResponse.json({ error: 'Skill assignment not found.' }, { status: 404 })

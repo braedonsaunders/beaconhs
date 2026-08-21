@@ -2,6 +2,7 @@ import { getGeneratedValueTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { notFound, redirect } from 'next/navigation'
 import { Download, FileText, Pencil } from 'lucide-react'
 import { Button, PageHeader, cn } from '@beaconhs/ui'
@@ -79,20 +80,18 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
               value={
                 canExport ? (
                   <>
-                    {/* Plain <a>, NOT <Link>: these are audited route handlers,
-                        so prefetching must never trigger an export. */}
-                    <a href={`/insights/cards/${card.id}/export?format=pdf`}>
+                    <DownloadLink href={`/insights/cards/${card.id}/export?format=pdf`}>
                       <Button type="button" variant="outline" className="h-9 text-xs">
                         <FileText size={13} className="mr-1" />{' '}
                         <GeneratedText id="m_1a2b2ed6729166" />
                       </Button>
-                    </a>
-                    <a href={`/insights/cards/${card.id}/export`}>
+                    </DownloadLink>
+                    <DownloadLink href={`/insights/cards/${card.id}/export`}>
                       <Button type="button" variant="outline" className="h-9 text-xs">
                         <Download size={13} className="mr-1" />{' '}
                         <GeneratedText id="m_13bc18467bfb44" />
                       </Button>
-                    </a>
+                    </DownloadLink>
                   </>
                 ) : null
               }

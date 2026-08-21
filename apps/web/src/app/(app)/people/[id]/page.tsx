@@ -3,6 +3,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq, isNull, ne } from 'drizzle-orm'
 import {
@@ -633,9 +634,9 @@ export default async function PersonDetailPage({
             canEdit ? (
               <div className="flex flex-wrap gap-2">
                 <Button asChild variant="outline" size="sm">
-                  <a href={`${basePath}/badge`} target="_blank" rel="noreferrer">
+                  <DownloadLink href={`${basePath}/badge`} target="_blank" rel="noreferrer">
                     <IdCard size={14} /> <GeneratedText id="m_1036403447ff0f" />
-                  </a>
+                  </DownloadLink>
                 </Button>
                 <GeneratedValue
                   value={

@@ -17,6 +17,7 @@ import {
 } from '@beaconhs/ui'
 import { trainingCourses } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
+import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -121,11 +122,11 @@ export default async function TrainingCoursesPage({
                 <GeneratedValue
                   value={
                     canExport ? (
-                      <Link href={buildExportHref('/training/courses/export.csv', sp)}>
+                      <DownloadLink href={buildExportHref('/training/courses/export.csv', sp)}>
                         <Button variant="outline">
                           <GeneratedText id="m_14c6440eca1edc" />
                         </Button>
-                      </Link>
+                      </DownloadLink>
                     ) : null
                   }
                 />

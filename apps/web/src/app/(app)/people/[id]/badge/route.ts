@@ -10,14 +10,17 @@ import { recordAudit } from '@/lib/audit'
 import { renderPersonBadgePdf } from '@/lib/person-badge'
 import { pdfResponse } from '@/lib/training-credential-pdf'
 import { isUuid } from '@/lib/list-params'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function GET(
-  _req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isRouterPrefetch(request)) return new Response(null, { status: 204 })
+
   const { id: personId } = await params
   if (!isUuid(personId)) {
     return NextResponse.json({ error: 'Person not found.' }, { status: 404 })

@@ -15,6 +15,7 @@ import { GeneratedText } from '@/i18n/generated'
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import {
   Award,
   Check,
@@ -286,11 +287,11 @@ export function CoursePlayer({
                   <GeneratedValue
                     value={
                       certificateRecordId ? (
-                        <Link href={`/training/records/${certificateRecordId}/certificate`}>
+                        <DownloadLink href={`/training/records/${certificateRecordId}/certificate`}>
                           <Button>
                             <Award size={14} /> <GeneratedText id="m_1b6598cb02491a" />
                           </Button>
-                        </Link>
+                        </DownloadLink>
                       ) : null
                     }
                   />
@@ -665,11 +666,11 @@ export function OnlineCoursePlayer({
           <GeneratedValue
             value={
               certificateRecordId ? (
-                <Link href={`/training/records/${certificateRecordId}/certificate`}>
+                <DownloadLink href={`/training/records/${certificateRecordId}/certificate`}>
                   <Button>
                     <Award size={14} /> <GeneratedText id="m_1b6598cb02491a" />
                   </Button>
-                </Link>
+                </DownloadLink>
               ) : null
             }
           />

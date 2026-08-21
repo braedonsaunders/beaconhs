@@ -11,10 +11,13 @@ import {
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
 import { listEntries } from '../_data'
 import type { JournalDefinition, JournalFilters, JournalStatus } from '../_types'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
+  if (isRouterPrefetch(req)) return new Response(null, { status: 204 })
+
   const ctx = await requireExportContext()
   assertCan(ctx, 'journals.read.self')
   const sp = new URL(req.url).searchParams

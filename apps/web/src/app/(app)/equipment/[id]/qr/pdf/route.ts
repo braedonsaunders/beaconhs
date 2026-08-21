@@ -9,11 +9,14 @@ import { normalizeEquipmentLabelDesign } from '@/lib/equipment-label-design'
 import { pdfBufferResponse } from '@/lib/pdf-route'
 import { recordAudit } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 
 /** One equipment QR label as a print-ready PDF at the tenant's label size. */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (isRouterPrefetch(request)) return new Response(null, { status: 204 })
+
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const ctx = await requireRequestContext()

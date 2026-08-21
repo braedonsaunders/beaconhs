@@ -12,13 +12,16 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { storedPdfArtifactResponse } from '@/lib/pdf-route'
 import { isUuid } from '@/lib/list-params'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(
-  _req: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; runId: string }> },
 ): Promise<Response> {
+  if (isRouterPrefetch(request)) return new Response(null, { status: 204 })
+
   const { id, runId } = await params
   if (!isUuid(id) || !isUuid(runId)) {
     return NextResponse.json({ error: 'Run not found' }, { status: 404 })

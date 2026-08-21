@@ -10,13 +10,16 @@ import { requireModuleManage } from '@/lib/module-admin/guard'
 import { recordAudit } from '@/lib/audit'
 import { loadDeckMaster, parseDeckTarget } from '../../../_lib'
 import { isUuid } from '@/lib/list-params'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(
-  _req: NextRequest,
+  request: NextRequest,
   routeCtx: { params: Promise<{ target: string; id: string }> },
 ) {
+  if (isRouterPrefetch(request)) return new Response(null, { status: 204 })
+
   const { target: targetRaw, id } = await routeCtx.params
   const target = parseDeckTarget(targetRaw)
   if (!target || !isUuid(id)) return new NextResponse('Not found', { status: 404 })

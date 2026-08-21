@@ -7,6 +7,7 @@ import { useGeneratedTranslations } from '@/i18n/generated'
 // Library hub with subtabs (Cards | Dashboards) instead of stacked sections.
 
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { FileText, LayoutDashboard } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { vizDef } from '@beaconhs/analytics'
@@ -156,14 +157,14 @@ export function LibraryTabs({
                       <GeneratedValue
                         value={
                           canExport ? (
-                            <a
+                            <DownloadLink
                               href={`/insights/cards/${c.id}/export?format=pdf`}
                               className="relative z-10 grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-teal-700 focus:ring-2 focus:ring-teal-500/30 focus:outline-none dark:hover:bg-slate-800 dark:hover:text-teal-300"
                               aria-label={tGenerated('m_13928c678297eb', { value0: c.name })}
                               title={tGenerated('m_1e5ece8eefa44b')}
                             >
                               <FileText size={14} />
-                            </a>
+                            </DownloadLink>
                           ) : null
                         }
                       />

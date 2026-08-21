@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, eq } from 'drizzle-orm'
 import { Download } from 'lucide-react'
@@ -6,6 +5,7 @@ import { attachments, reportDefinitions, reportRuns, reportSchedules } from '@be
 import { ReportRunDetail } from '@beaconhs/reports/react'
 import { assertCan } from '@beaconhs/tenant'
 import { Button, DetailHeader } from '@beaconhs/ui'
+import { DownloadLink } from '@/components/download-link'
 import { PageContainer } from '@/components/page-layout'
 import { GeneratedText } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
@@ -76,10 +76,10 @@ export default async function RunDetailPage({
         actions={
           pdfHref ? (
             <Button asChild>
-              <Link href={pdfHref}>
+              <DownloadLink href={pdfHref}>
                 <Download size={14} />
                 <GeneratedText id="m_1eeaf573dabd83" />
-              </Link>
+              </DownloadLink>
             </Button>
           ) : null
         }

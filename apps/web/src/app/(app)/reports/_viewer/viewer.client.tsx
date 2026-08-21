@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useMemo, useState, useTransition } from 'react'
 import { Download, Filter, Pencil, RotateCcw } from 'lucide-react'
+import { DownloadLink } from '@/components/download-link'
 import {
   reportEntity,
   type ReportEntityCatalog,
@@ -97,22 +98,22 @@ export function BeaconReportViewer({
         actions={
           <>
             <Button asChild variant="outline" size="sm">
-              <Link href={href('csv')}>
+              <DownloadLink href={href('csv')}>
                 <Download size={14} />
                 <GeneratedText id="m_13bc18467bfb44" />
-              </Link>
+              </DownloadLink>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href={href('xlsx')}>
+              <DownloadLink href={href('xlsx')}>
                 <Download size={14} />
                 <GeneratedText id="m_0c81eece17490f" />
-              </Link>
+              </DownloadLink>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href={href('pdf')}>
+              <DownloadLink href={href('pdf')}>
                 <Download size={14} />
                 <GeneratedText id="m_1a2b2ed6729166" />
-              </Link>
+              </DownloadLink>
             </Button>
             {canBuild ? (
               <Button asChild size="sm">

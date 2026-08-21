@@ -7,6 +7,7 @@ import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'dri
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { correctiveActions, orgUnits, tenantUsers, users as user } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
+import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -183,7 +184,7 @@ export default async function CorrectiveActionsPage({
                 <GeneratedValue
                   value={
                     canExport ? (
-                      <a
+                      <DownloadLink
                         href={buildExportHref('/corrective-actions/export.csv', {
                           ...sp,
                           status: statusRaw,
@@ -192,7 +193,7 @@ export default async function CorrectiveActionsPage({
                         <Button variant="outline">
                           <GeneratedText id="m_14c6440eca1edc" />
                         </Button>
-                      </a>
+                      </DownloadLink>
                     ) : null
                   }
                 />

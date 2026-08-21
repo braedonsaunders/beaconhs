@@ -8,6 +8,7 @@ import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { incidentPeople, incidents, orgUnits, people } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { IncidentsSubNav } from './_sub-nav'
+import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -191,11 +192,11 @@ export default async function IncidentsPage({
                 <GeneratedValue
                   value={
                     canExport ? (
-                      <a href={buildExportHref('/incidents/export.csv', sp)}>
+                      <DownloadLink href={buildExportHref('/incidents/export.csv', sp)}>
                         <Button variant="outline">
                           <GeneratedText id="m_14c6440eca1edc" />
                         </Button>
-                      </a>
+                      </DownloadLink>
                     ) : null
                   }
                 />

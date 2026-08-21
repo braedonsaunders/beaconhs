@@ -14,6 +14,7 @@ import { redirect } from 'next/navigation'
 import { BookText } from 'lucide-react'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
+import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { ModuleNav } from '@/components/module-admin/module-nav'
 import { ListPageLayout } from '@/components/page-layout'
@@ -142,11 +143,11 @@ export default async function JournalRecordsPage({
             description={tGenerated('m_052281e1e91a00')}
             actions={
               canExport ? (
-                <a href={buildExportHref('/journals/export.csv', sp)}>
+                <DownloadLink href={buildExportHref('/journals/export.csv', sp)}>
                   <Button variant="outline">
                     <GeneratedText id="m_14c6440eca1edc" />
                   </Button>
-                </a>
+                </DownloadLink>
               ) : null
             }
           />

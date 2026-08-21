@@ -62,6 +62,11 @@ describe('unified AppKit report contract', () => {
     expect(viewer).toContain("params.set('filters', JSON.stringify(activeFilters))")
     expect(viewer).toContain("params.set('groupBy', groupBy)")
     expect(viewer).toContain("tGenerated('m_1df37ea02bdc43')")
+    expect(viewer).toContain("<DownloadLink href={href('csv')}>")
+    expect(viewer).toContain("<DownloadLink href={href('xlsx')}>")
+    expect(viewer).toContain("<DownloadLink href={href('pdf')}>")
+    expect(viewer).not.toContain('<Link href={href(')
+    expect(viewer).not.toContain('<a href={href(')
   })
 
   it('keeps route navigation in the host shell and PDF export in the AppKit studio', () => {

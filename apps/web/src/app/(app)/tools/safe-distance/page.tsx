@@ -19,6 +19,7 @@ import {
 } from '@beaconhs/ui'
 import { orgUnits, safeDistanceRecords } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
+import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { canUseSafeDistance } from '@/lib/safe-distance-access'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -158,11 +159,11 @@ export default async function SafeDistanceListPage({
                 <GeneratedValue
                   value={
                     canExport ? (
-                      <Link href={buildExportHref('/tools/safe-distance/export.csv', sp)}>
+                      <DownloadLink href={buildExportHref('/tools/safe-distance/export.csv', sp)}>
                         <Button variant="outline">
                           <GeneratedText id="m_14c6440eca1edc" />
                         </Button>
-                      </Link>
+                      </DownloadLink>
                     ) : null
                   }
                 />

@@ -41,6 +41,7 @@ import {
   tenantUsers,
   users as user,
 } from '@beaconhs/db/schema'
+import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { moduleScopeWhere } from '@/lib/visibility'
@@ -258,11 +259,11 @@ export default async function InspectionRecordsPage({
                   <GeneratedValue
                     value={
                       canExport ? (
-                        <a href={buildExportHref('/inspections/export.csv', sp)}>
+                        <DownloadLink href={buildExportHref('/inspections/export.csv', sp)}>
                           <Button variant="outline">
                             <GeneratedText id="m_14c6440eca1edc" />
                           </Button>
-                        </a>
+                        </DownloadLink>
                       ) : null
                     }
                   />

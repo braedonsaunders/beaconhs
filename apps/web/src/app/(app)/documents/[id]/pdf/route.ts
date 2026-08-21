@@ -11,14 +11,17 @@ import { requireRequestContext } from '@/lib/auth'
 import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
 import { recordAudit } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
 export async function GET(
-  _req: Request,
+  request: Request,
   routeCtx: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isRouterPrefetch(request)) return new Response(null, { status: 204 })
+
   const { id } = await routeCtx.params
   if (!isUuid(id)) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
 

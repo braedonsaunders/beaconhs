@@ -9,13 +9,16 @@ import { recordAudit } from '@/lib/audit'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
 import { getEntry } from '../../_data'
 import { isUuid } from '@/lib/list-params'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(
-  _req: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isRouterPrefetch(request)) return new Response(null, { status: 204 })
+
   const { id } = await params
   if (!isUuid(id)) return new Response('Not found', { status: 404 })
 

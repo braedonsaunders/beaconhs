@@ -18,6 +18,7 @@ import {
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
@@ -801,7 +802,7 @@ export function VehicleLogWorkspaceClient({
             <GeneratedValue
               value={
                 workspace.selectedDriverId && workspace.selectedEquipmentId ? (
-                  <a
+                  <DownloadLink
                     href={`/equipment/vehicle-log/pdf?${baseParams.toString()}`}
                     target="_blank"
                     rel="noreferrer"
@@ -809,7 +810,7 @@ export function VehicleLogWorkspaceClient({
                   >
                     <FileText size={14} />
                     <GeneratedText id="m_1a2b2ed6729166" />
-                  </a>
+                  </DownloadLink>
                 ) : null
               }
             />

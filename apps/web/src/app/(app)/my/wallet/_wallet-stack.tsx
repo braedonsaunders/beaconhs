@@ -17,6 +17,7 @@ import {
 // pass. One column on phones, a wider multi-column gallery on desktop.
 
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { Award, CreditCard, Download, GraduationCap, ShieldCheck } from 'lucide-react'
 import { cn, EmptyState } from '@beaconhs/ui'
 import { CredentialFlipCard } from '@/components/credential-flip-card'
@@ -145,7 +146,7 @@ function FlipCard({ card, design }: { card: WalletCard; design: WalletDesign }) 
       />
 
       <div className="mt-3 flex items-center gap-2">
-        <Link
+        <DownloadLink
           href={card.pdfHref}
           target="_blank"
           rel="noopener noreferrer"
@@ -153,7 +154,7 @@ function FlipCard({ card, design }: { card: WalletCard; design: WalletDesign }) 
         >
           <Download size={15} />
           <GeneratedText id="m_0fcb9c63d263d1" />
-        </Link>
+        </DownloadLink>
         <GeneratedValue
           value={
             card.verifyHref ? (

@@ -32,6 +32,7 @@ import { toast } from '@/lib/toast'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { MAX_DOCUMENT_VERSION_NOTE_CHARS } from '@/lib/document-authoring-policy'
 import { CollaboraEmbed, type CollaboraHandle } from '@/components/collabora-embed'
+import { DownloadLink } from '@/components/download-link'
 import {
   createBlankDocumentMaster,
   getDocumentWriterSession,
@@ -222,9 +223,9 @@ export function DocumentPane({
                       }
                     />
                     <Button asChild variant="outline" size="sm">
-                      <a href={`/documents/${documentId}/master`}>
+                      <DownloadLink href={`/documents/${documentId}/master`}>
                         <Download size={13} /> <GeneratedText id="m_18c2e68821b0cd" />
-                      </a>
+                      </DownloadLink>
                     </Button>
                     <Button
                       type="button"

@@ -16,6 +16,7 @@ import { isUuid } from '@/lib/list-params'
 import { loadTenantBranding } from '../../../../reports/_run'
 import { runInsightAiCard } from '../../../_ai-actions'
 import { aiCardDocument, cardExportFilename, cardResultDocument } from './_document'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,6 +49,8 @@ function toCsv(result: BhqlResult): string {
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (isRouterPrefetch(req)) return new Response(null, { status: 204 })
+
   const { id } = await params
   if (!isUuid(id)) return new Response('Not found', { status: 404 })
 

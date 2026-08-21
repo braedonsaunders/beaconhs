@@ -13,6 +13,7 @@ import { Button } from '@beaconhs/ui'
 import { attachments, documentVersions, documents } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { DownloadLink } from '@/components/download-link'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { isUuid } from '@/lib/list-params'
 import { DocumentWriter } from './_writer'
@@ -139,7 +140,7 @@ export default async function DocumentEditorPage({
             value={
               data.att ? (
                 <Button asChild variant="outline" size="sm">
-                  <a
+                  <DownloadLink
                     href={
                       data.viewingVersion
                         ? `/documents/${id}/versions/${data.viewingVersion.id}/download?kind=docx`
@@ -147,7 +148,7 @@ export default async function DocumentEditorPage({
                     }
                   >
                     <Download size={13} /> <GeneratedText id="m_18c2e68821b0cd" />
-                  </a>
+                  </DownloadLink>
                 </Button>
               ) : null
             }

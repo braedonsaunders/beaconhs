@@ -10,6 +10,7 @@ import { getObjectStream } from '@beaconhs/storage'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,8 @@ export async function GET(
   req: NextRequest,
   routeCtx: { params: Promise<{ id: string; versionId: string }> },
 ): Promise<Response> {
+  if (isRouterPrefetch(req)) return new Response(null, { status: 204 })
+
   const { id, versionId } = await routeCtx.params
   if (!isUuid(id) || !isUuid(versionId)) return new NextResponse('Not found', { status: 404 })
 

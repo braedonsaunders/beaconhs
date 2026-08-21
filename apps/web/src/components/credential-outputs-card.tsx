@@ -1,6 +1,7 @@
 import { useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 import { GeneratedText } from '@/i18n/generated'
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { CreditCard, FileText, Settings } from 'lucide-react'
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@beaconhs/ui'
 import { directPrintProvider, type DirectPrintProvider } from '@beaconhs/design-studio'
@@ -103,7 +104,7 @@ export function CredentialOutputsCard({
                         </Button>
                       ) : (
                         <Button asChild variant="outline" size="sm">
-                          <Link
+                          <DownloadLink
                             href={href}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -111,7 +112,7 @@ export function CredentialOutputsCard({
                           >
                             <CredentialOutputIcon output={output} />{' '}
                             <GeneratedValue value={label} />
-                          </Link>
+                          </DownloadLink>
                         </Button>
                       )
                     }

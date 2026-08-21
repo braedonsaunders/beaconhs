@@ -9,13 +9,16 @@ import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit } from '@/lib/audit'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
 import { isUuid } from '@/lib/list-params'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(
-  _req: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isRouterPrefetch(request)) return new Response(null, { status: 204 })
+
   const { id } = await params
   if (!isUuid(id)) return Response.json({ error: 'Not found' }, { status: 404 })
 
@@ -49,8 +52,8 @@ export async function GET(
     return Response.json({ error: 'Not found' }, { status: 404 })
   }
 
-  // Exports are audited. The header buttons link here with plain <a> anchors
-  // (never <Link>) so router prefetch can't log phantom exports.
+  // Exports are audited. Header buttons use DownloadLink (Link + no prefetch)
+  // so the boot splash does not replay and prefetch cannot log phantom rows.
   await recordAudit(ctx, {
     entityType: 'hazid_assessment',
     entityId: id,

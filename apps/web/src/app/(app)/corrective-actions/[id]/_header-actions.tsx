@@ -10,6 +10,7 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
+import { DownloadLink } from '@/components/download-link'
 import { Button, Select, cn } from '@beaconhs/ui'
 import { CheckCircle2, FileText, Lock, Mail, MoreHorizontal, Unlock } from 'lucide-react'
 
@@ -65,11 +66,11 @@ export function CaHeaderActions({
   )
 
   const pdfLink = (
-    <Link href={pdfHref as any} target="_blank">
+    <DownloadLink href={pdfHref as any} target="_blank">
       <Button variant="outline" type="button">
         <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
       </Button>
-    </Link>
+    </DownloadLink>
   )
 
   const emailLink = (
@@ -144,14 +145,14 @@ export function CaHeaderActions({
                   onClick={() => setOpen(false)}
                 />
                 <div className="fixed inset-x-3 bottom-3 z-50 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                  <Link
+                  <DownloadLink
                     href={pdfHref as any}
                     target="_blank"
                     className={menuItem}
                     onClick={() => setOpen(false)}
                   >
                     <FileText size={15} /> <GeneratedText id="m_1a2b2ed6729166" />
-                  </Link>
+                  </DownloadLink>
                   <Link
                     href={emailHref as any}
                     scroll={false}

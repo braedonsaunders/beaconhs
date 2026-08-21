@@ -13,6 +13,7 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
+import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
@@ -207,7 +208,7 @@ export default async function EquipmentPage({
                 <GeneratedValue
                   value={
                     canExport ? (
-                      <a
+                      <DownloadLink
                         href={buildExportHref('/equipment/export.csv', {
                           ...sp,
                           status: statusRaw,
@@ -216,7 +217,7 @@ export default async function EquipmentPage({
                         <Button variant="outline">
                           <GeneratedText id="m_14c6440eca1edc" />
                         </Button>
-                      </a>
+                      </DownloadLink>
                     ) : null
                   }
                 />

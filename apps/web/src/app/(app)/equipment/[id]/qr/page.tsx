@@ -11,6 +11,7 @@ import { appBaseUrl } from '@/lib/app-base-url'
 import { requireRequestContext } from '@/lib/auth'
 import { canSeeRecord } from '@/lib/visibility'
 import { isUuid } from '@/lib/list-params'
+import { DownloadLink } from '@/components/download-link'
 import { PageContainer } from '@/components/page-layout'
 
 export const dynamic = 'force-dynamic'
@@ -63,9 +64,13 @@ export default async function EquipmentQrPage({ params }: { params: Promise<{ id
           subtitle={tGeneratedValue(`${row.item.assetTag}${row.type ? ` · ${row.type.name}` : ''}`)}
           actions={
             <Button asChild variant="outline" title={tGenerated('m_055217343f2cbe')}>
-              <a href={`/equipment/${id}/qr/pdf`} target="_blank" rel="noopener noreferrer">
+              <DownloadLink
+                href={`/equipment/${id}/qr/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <GeneratedText id="m_04aed76b78cb4a" />
-              </a>
+              </DownloadLink>
             </Button>
           }
         />

@@ -2,6 +2,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
@@ -345,11 +346,11 @@ export default async function WorkOrderDetailPage({
           }
           actions={
             <>
-              <Link href={`/equipment/work-orders/${id}/pdf` as any} target="_blank">
+              <DownloadLink href={`/equipment/work-orders/${id}/pdf` as any} target="_blank">
                 <Button variant="outline">
                   <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
                 </Button>
-              </Link>
+              </DownloadLink>
               <GeneratedValue
                 value={
                   canSend ? (

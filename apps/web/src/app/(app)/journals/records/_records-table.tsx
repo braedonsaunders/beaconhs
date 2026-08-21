@@ -21,6 +21,7 @@ import { useLocale } from 'next-intl'
 import { FileDown, Image as ImageIcon, Loader2, PenLine } from 'lucide-react'
 import { Badge, Button, Drawer, cn } from '@beaconhs/ui'
 import type { AppLocale } from '@beaconhs/i18n'
+import { DownloadLink } from '@/components/download-link'
 import { SortTh } from '@/components/sortable-th'
 import { ListCard, MobileCardList } from '@/components/list-card'
 import { tagSwatch } from '../_tag-colors'
@@ -249,11 +250,15 @@ export function JournalRecordsTable({
         footer={
           readEntry ? (
             <div className="flex w-full items-center justify-end gap-2">
-              <a href={`/journals/${readEntry.id}/pdf`} target="_blank" rel="noopener noreferrer">
+              <DownloadLink
+                href={`/journals/${readEntry.id}/pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <Button variant="outline">
                   <FileDown size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
                 </Button>
-              </a>
+              </DownloadLink>
               <Button onClick={() => openWorkspace(readEntry.id)}>
                 <PenLine size={14} /> <GeneratedText id="m_0891c66f86aa35" />
               </Button>

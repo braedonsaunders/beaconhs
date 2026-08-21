@@ -2,6 +2,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
+import { DownloadLink } from '@/components/download-link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { aliasedTable, and, asc, count, desc, eq, ilike, isNull, or } from 'drizzle-orm'
@@ -865,11 +866,11 @@ export default async function FormResponsePage({
                   ) : null
                 }
               />
-              <Link href={`/apps/responses/${id}/pdf`}>
+              <DownloadLink href={`/apps/responses/${id}/pdf`}>
                 <Button variant="outline">
                   <FileText size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
                 </Button>
-              </Link>
+              </DownloadLink>
             </>
           }
         />

@@ -8,6 +8,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
 import { loadDefinitionById } from '../../../_definitions'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 import { loadTenantBranding, runReportForViewer } from '../../../_run'
 
 export const dynamic = 'force-dynamic'
@@ -16,6 +17,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  if (isRouterPrefetch(request)) return new Response(null, { status: 204 })
   const { id } = await params
   if (!isUuid(id)) notFound()
   const ctx = await requireRequestContext()

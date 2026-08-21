@@ -13,6 +13,7 @@ import { recordAudit } from '@/lib/audit'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
 import { renderOnDemandPdfResponse } from '@/lib/pdf-route'
 import { loadVehicleLogWorkspace, type VehicleLogWorkspace } from '../_service'
+import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,6 +112,8 @@ function builtinMonthHtml(
 }
 
 export async function GET(req: NextRequest) {
+  if (isRouterPrefetch(req)) return new Response(null, { status: 204 })
+
   const url = new URL(req.url)
   const ctx = await requireExportContext()
   if (

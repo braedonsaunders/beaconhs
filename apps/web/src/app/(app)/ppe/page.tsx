@@ -16,6 +16,7 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { buildExportHref, isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { resolvePpeInspectionDue } from '@/lib/ppe-inspection-due'
+import { DownloadLink } from '@/components/download-link'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
@@ -354,11 +355,11 @@ export default async function PpePage({
                 <GeneratedValue
                   value={
                     canExport ? (
-                      <a href={buildExportHref('/ppe/export.csv', sp)}>
+                      <DownloadLink href={buildExportHref('/ppe/export.csv', sp)}>
                         <Button variant="outline">
                           <GeneratedText id="m_14c6440eca1edc" />
                         </Button>
-                      </a>
+                      </DownloadLink>
                     ) : null
                   }
                 />
