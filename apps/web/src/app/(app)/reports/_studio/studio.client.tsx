@@ -43,7 +43,7 @@ export function BeaconReportStudio({
         return result.ok ? { ok: true, value: { definition: result.definition } } : result
       }}
       onSaved={(saved) => {
-        if (definition.id === 'new' && saved.definition.id !== 'new') {
+        if (saved.definition.id !== definition.id && saved.definition.id !== 'new') {
           router.replace(`/reports/definitions/${saved.definition.id}/edit`)
         }
       }}

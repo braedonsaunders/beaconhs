@@ -1,1 +1,1 @@
-export * from '@appkit/reports/react'
+export * from '@braedonsaunders/appkit-reports/react'

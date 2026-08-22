@@ -5,10 +5,6 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@appkit/analytics': file:./vendor/appkit/appkit-analytics-0.2.0.tgz
-  '@appkit/reports': file:./vendor/appkit/appkit-reports-0.2.0-daa2a5e.tgz
-  '@appkit/tokens': file:./vendor/appkit/appkit-tokens-0.1.1.tgz
-  '@appkit/ui': file:./vendor/appkit/appkit-ui-0.1.1.tgz
   '@excalidraw/excalidraw@0.18.1>sass': '-'
   next@16.2.10>sass: '-'
   pdfjs-dist@4.10.38>@napi-rs/canvas: '-'
@@ -546,12 +542,12 @@ importers:
 
   packages/db:
     dependencies:
-      '@appkit/reports':
-        specifier: file:../../vendor/appkit/appkit-reports-0.2.0-daa2a5e.tgz
-        version: file:vendor/appkit/appkit-reports-0.2.0-daa2a5e.tgz(@appkit/ui@file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
       '@beaconhs/forms-core':
         specifier: workspace:*
         version: link:../forms-core
+      '@braedonsaunders/appkit-reports':
+        specifier: ^1.1.0
+        version: 1.1.0(@braedonsaunders/appkit-ui@0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(kysely@0.28.17)(mysql2@3.22.6(@types/node@24.13.3))(pg@8.22.0)(postgres@3.4.9)
@@ -813,15 +809,15 @@ importers:
 
   packages/reports:
     dependencies:
-      '@appkit/reports':
-        specifier: file:../../vendor/appkit/appkit-reports-0.2.0-daa2a5e.tgz
-        version: file:vendor/appkit/appkit-reports-0.2.0-daa2a5e.tgz(@appkit/ui@file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
-      '@appkit/ui':
-        specifier: file:../../vendor/appkit/appkit-ui-0.1.1.tgz
-        version: file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2)
       '@beaconhs/db':
         specifier: workspace:*
         version: link:../db
+      '@braedonsaunders/appkit-reports':
+        specifier: ^1.1.0
+        version: 1.1.0(@braedonsaunders/appkit-ui@0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)
+      '@braedonsaunders/appkit-ui':
+        specifier: ^0.2.1
+        version: 0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2)
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(kysely@0.28.17)(mysql2@3.22.6(@types/node@24.13.3))(pg@8.22.0)(postgres@3.4.9)
@@ -1047,42 +1043,6 @@ packages:
 
   '@apm-js-collab/tracing-hooks@0.10.1':
     resolution: {integrity: sha512-w2OWXR7FWrKqSziuE9+QclaZrStxO/8+OwbXM635s/zs0Eez1Qo3ivSPdB2WsaPY/iznKTytONPx/PitD7IXcA==}
-
-  '@appkit/analytics@file:vendor/appkit/appkit-analytics-0.2.0.tgz':
-    resolution: {integrity: sha512-fGNm0J22MZ2MLZcILMjIHMjRIBv0N6EMW4CQk03ndni5YSu4h3rHC50p79ZWdTkC7j5wLJ5C46Bb3SCqC5FaOw==, tarball: file:vendor/appkit/appkit-analytics-0.2.0.tgz}
-    version: 0.2.0
-    engines: {node: '>=22'}
-
-  '@appkit/reports@file:vendor/appkit/appkit-reports-0.2.0-daa2a5e.tgz':
-    resolution: {integrity: sha512-uz/pC2EGwwE/qdYd4enWk9oCApcS3+73jMsdG5jP2tt9RbvdiXMI+o3Dm5Am84eZqgqUW+QAZUGlfR15maiBKg==, tarball: file:vendor/appkit/appkit-reports-0.2.0-daa2a5e.tgz}
-    version: 0.2.0
-    engines: {node: '>=22'}
-    peerDependencies:
-      '@appkit/ui': ^0.1.1
-      lucide-react: ^1.24.0
-      react: ^19.0.0
-    peerDependenciesMeta:
-      '@appkit/ui':
-        optional: true
-      lucide-react:
-        optional: true
-      react:
-        optional: true
-
-  '@appkit/tokens@file:vendor/appkit/appkit-tokens-0.1.1.tgz':
-    resolution: {integrity: sha512-xzxx8Ue3Ad+DFxHINkv4TkYS7NfoEg4ULvzeyDyzRT5MzLJGH0znmmSI3sdxEzv0zGWDR6H3caKDV/CYyh2NRw==, tarball: file:vendor/appkit/appkit-tokens-0.1.1.tgz}
-    version: 0.1.1
-    engines: {node: '>=22'}
-    peerDependencies:
-      tailwindcss: ^4.0.0
-
-  '@appkit/ui@file:vendor/appkit/appkit-ui-0.1.1.tgz':
-    resolution: {integrity: sha512-kD3d2SkVhEYUf58HcfU0I34Kxm6kERosA5sZWSguWMMJ3MhxPnt3vJBywQ9oglP7Qorq2QZadqPi3e4kl5b4yw==, tarball: file:vendor/appkit/appkit-ui-0.1.1.tgz}
-    version: 0.1.1
-    engines: {node: '>=22'}
-    peerDependencies:
-      react: ^19.0.0
-      react-dom: ^19.0.0
 
   '@asamuzakjp/css-color@3.2.0':
     resolution: {integrity: sha512-K1A6z8tS3XsmCMM86xoWdn7Fkdn9m6RSVtocUrJYIwZnFVkng/PvkEoWtOWmP+Scc6saYWHWZYbndEEXxl24jw==}
@@ -1395,6 +1355,38 @@ packages:
 
   '@better-fetch/fetch@1.3.1':
     resolution: {integrity: sha512-ABkD1WhyfPZprKRQI3bhATjeiFuNWC9PXhfGWqL+sg/gKrM977oFrYkdb4msM3hgUGonr7KlOsOFT5TU2rht9g==}
+
+  '@braedonsaunders/appkit-analytics@0.2.0':
+    resolution: {integrity: sha512-H0gYz2CMTG1AF37n+uFpchtjBz8GOMOIqfhgBOGSEIcfL0U9LSeoOccvJNSApilTxUezOteLcOuBFJ1g+60wmg==}
+    engines: {node: '>=22'}
+
+  '@braedonsaunders/appkit-reports@1.1.0':
+    resolution: {integrity: sha512-/Bqb5rYMCPQNfhJjffgYxyUqUiFZZznZAEOHwyY+O1LVXiigcU8iahb43dVWsIo7d6WlzVfhLZQf1mIR7EwqGg==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@braedonsaunders/appkit-ui': ^0.2.1
+      lucide-react: ^1.24.0
+      react: ^19.0.0
+    peerDependenciesMeta:
+      '@braedonsaunders/appkit-ui':
+        optional: true
+      lucide-react:
+        optional: true
+      react:
+        optional: true
+
+  '@braedonsaunders/appkit-tokens@0.1.2':
+    resolution: {integrity: sha512-coIavTu9rbfIHYL2kBiyPl4qXbu5R5UMYTsS5KZCKqSdKV9Hpix4NGE1UAHeLVOrQPMx0ow/6qnS3muP/4mlvg==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      tailwindcss: ^4.0.0
+
+  '@braedonsaunders/appkit-ui@0.2.1':
+    resolution: {integrity: sha512-M4MLSkyVRhR7iq+J1xeFtXBZESD0HLrDQlrh7hj6SVRir4K+vteLWHhjoII2v0SdKjR7EFyFEZMGwv8WBuaa7Q==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      react: ^19.0.0
+      react-dom: ^19.0.0
 
   '@braintree/sanitize-url@6.0.2':
     resolution: {integrity: sha512-Tbsj02wXCbqGmzdnXNk0SOF19ChhRU70BsroIi4Pm6Ehp56in6vch94mfbdQ17DozxkL3BAVjbZ4Qc1a0HFRAg==}
@@ -8423,34 +8415,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@appkit/analytics@file:vendor/appkit/appkit-analytics-0.2.0.tgz': {}
-
-  '@appkit/reports@file:vendor/appkit/appkit-reports-0.2.0-daa2a5e.tgz(@appkit/ui@file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@appkit/analytics': file:vendor/appkit/appkit-analytics-0.2.0.tgz
-    optionalDependencies:
-      '@appkit/ui': file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2)
-      lucide-react: 1.24.0(react@19.2.7)
-      react: 19.2.7
-
-  '@appkit/tokens@file:vendor/appkit/appkit-tokens-0.1.1.tgz(tailwindcss@4.3.2)':
-    dependencies:
-      tailwindcss: 4.3.2
-
-  '@appkit/ui@file:vendor/appkit/appkit-ui-0.1.1.tgz(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2)':
-    dependencies:
-      '@appkit/tokens': file:vendor/appkit/appkit-tokens-0.1.1.tgz(tailwindcss@4.3.2)
-      class-variance-authority: 0.7.1
-      clsx: 2.1.1
-      framer-motion: 12.42.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      lucide-react: 1.24.0(react@19.2.7)
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-      tailwind-merge: 3.6.0
-    transitivePeerDependencies:
-      - '@emotion/is-prop-valid'
-      - tailwindcss
-
   '@asamuzakjp/css-color@3.2.0':
     dependencies:
       '@csstools/css-calc': 2.1.4(@csstools/css-parser-algorithms@3.0.5(@csstools/css-tokenizer@3.0.4))(@csstools/css-tokenizer@3.0.4)
@@ -8950,6 +8914,34 @@ snapshots:
       '@noble/hashes': 2.2.0
 
   '@better-fetch/fetch@1.3.1': {}
+
+  '@braedonsaunders/appkit-analytics@0.2.0': {}
+
+  '@braedonsaunders/appkit-reports@1.1.0(@braedonsaunders/appkit-ui@0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2))(lucide-react@1.24.0(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      '@braedonsaunders/appkit-analytics': 0.2.0
+    optionalDependencies:
+      '@braedonsaunders/appkit-ui': 0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2)
+      lucide-react: 1.24.0(react@19.2.7)
+      react: 19.2.7
+
+  '@braedonsaunders/appkit-tokens@0.1.2(tailwindcss@4.3.2)':
+    dependencies:
+      tailwindcss: 4.3.2
+
+  '@braedonsaunders/appkit-ui@0.2.1(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(tailwindcss@4.3.2)':
+    dependencies:
+      '@braedonsaunders/appkit-tokens': 0.1.2(tailwindcss@4.3.2)
+      class-variance-authority: 0.7.1
+      clsx: 2.1.1
+      framer-motion: 12.42.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      lucide-react: 1.24.0(react@19.2.7)
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      tailwind-merge: 3.6.0
+    transitivePeerDependencies:
+      - '@emotion/is-prop-valid'
+      - tailwindcss
 
   '@braintree/sanitize-url@6.0.2': {}
 

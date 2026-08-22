@@ -72,6 +72,8 @@ export const complianceAudienceKind = pgEnum('compliance_audience_kind', [
   'trade',
   'department',
   'org_unit',
+  'person_group',
+  'crew',
 ])
 
 export const complianceObligationStatus = pgEnum('compliance_obligation_status', [

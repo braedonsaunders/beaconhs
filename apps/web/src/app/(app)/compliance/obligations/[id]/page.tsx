@@ -138,8 +138,6 @@ export default async function ObligationDetailPage({
   let edit: ObligationEditData | null = null
   if (editable && pickString(sp.drawer) === 'edit') {
     const initialAudience: AudienceItem[] = audience.map((a) => ({
-      // Compliance obligations only ever use the 6 compliance audience kinds;
-      // the crew/person_group kinds are notification-only, so this narrows safely.
       type: a.kind as AudienceItem['type'],
       entityKey: a.kind === 'everyone' ? EVERYONE_KEY : a.entityKey,
     }))

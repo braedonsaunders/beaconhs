@@ -1,7 +1,16 @@
 import { z } from 'zod'
 import { KIND_META, OBLIGATION_KINDS } from './_meta'
 
-const audienceKind = z.enum(['everyone', 'role', 'trade', 'department', 'person', 'org_unit'])
+const audienceKind = z.enum([
+  'everyone',
+  'role',
+  'trade',
+  'department',
+  'person',
+  'org_unit',
+  'person_group',
+  'crew',
+])
 const uuid = z.string().uuid()
 
 const recurrenceSchema = z

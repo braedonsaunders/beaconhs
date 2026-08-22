@@ -6,7 +6,7 @@ import {
   type ReportEntityCatalog,
   type ReportRuleGroup,
   type ReportRunResult,
-} from '@appkit/reports'
+} from '@braedonsaunders/appkit-reports'
 
 export type BeaconReportRunOptions = {
   maxRows?: number

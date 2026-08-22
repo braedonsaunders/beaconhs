@@ -5,16 +5,6 @@ packages:
   - 'plugins/*'
 
 overrides:
-  # Immutable package artifacts built from AppKit release commit
-  # d955f747f05517bf5116e1a26792dfb0dde957f8, except reports which tracks the
-  # commit-qualified build b7a5ee2 (tenant-resolved dimension multi-selects +
-  # one portrait report renderer for screen and PDF). The release workflow
-  # validated successfully, but the repository npm
-  # publisher is not authenticated yet.
-  '@appkit/analytics': 'file:./vendor/appkit/appkit-analytics-0.2.0.tgz'
-  '@appkit/reports': 'file:./vendor/appkit/appkit-reports-0.2.0-daa2a5e.tgz'
-  '@appkit/tokens': 'file:./vendor/appkit/appkit-tokens-0.1.1.tgz'
-  '@appkit/ui': 'file:./vendor/appkit/appkit-ui-0.1.1.tgz'
   # The published Excalidraw runtime ships precompiled JS/CSS but mistakenly
   # declares its build-time Sass compiler as a production dependency.
   '@excalidraw/excalidraw@0.18.1>sass': '-'

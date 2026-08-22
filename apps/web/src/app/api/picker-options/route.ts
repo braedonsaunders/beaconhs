@@ -18,6 +18,7 @@ import {
 import {
   correctiveActions,
   complianceObligations,
+  crews,
   departments,
   documents,
   equipmentCategories,
@@ -324,6 +325,8 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'compliance-obligation-audience-departments':
     case 'compliance-obligation-audience-people':
     case 'compliance-obligation-audience-org-units':
+    case 'compliance-obligation-audience-groups':
+    case 'compliance-obligation-audience-crews':
       return can(ctx, 'compliance.assign') || can(ctx, 'compliance.manage')
     case 'dashboard-quick-action-forms':
       return can(ctx, 'forms.response.create')
@@ -580,7 +583,7 @@ async function loadOptions(
       )
     }
 
-    if (lookup === 'report-groups') {
+    if (lookup === 'report-groups' || lookup === 'compliance-obligation-audience-groups') {
       const match = input.hasQuery
         ? or(
             ilike(personGroups.name, input.term),
@@ -595,6 +598,26 @@ async function loadOptions(
           ...(input.selected ? [desc(sql`${personGroups.id} = ${input.selected}`)] : []),
           asc(personGroups.name),
           asc(personGroups.id),
+        )
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(rows.map((row) => option(row.id, row.name)))
+    }
+
+    if (lookup === 'compliance-obligation-audience-crews') {
+      const match = input.hasQuery
+        ? or(
+            ilike(crews.name, input.term),
+            input.selected ? eq(crews.id, input.selected) : undefined,
+          )
+        : undefined
+      const rows = await tx
+        .select({ id: crews.id, name: crews.name })
+        .from(crews)
+        .where(match)
+        .orderBy(
+          ...(input.selected ? [desc(sql`${crews.id} = ${input.selected}`)] : []),
+          asc(crews.name),
+          asc(crews.id),
         )
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(rows.map((row) => option(row.id, row.name)))

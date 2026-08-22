@@ -123,7 +123,7 @@ const FILTER_OPS: { value: FilterOp; label: string; needsValue: boolean }[] = [
   { value: 'contains', label: 'contains', needsValue: true },
   { value: 'gte', label: '≥', needsValue: true },
   { value: 'lte', label: '≤', needsValue: true },
-  { value: 'in', label: 'is any of (comma-sep)', needsValue: true },
+  { value: 'in', label: 'is any of', needsValue: true },
   { value: 'is_null', label: 'is empty', needsValue: false },
   { value: 'is_not_null', label: 'is set', needsValue: false },
 ]
@@ -2490,19 +2490,30 @@ function FilterEditor({
   onChange: (next: FilterRow) => void
 }) {
   const tGenerated = useGeneratedTranslations()
+  const field = fields.find((item) => item.value === row.field)
+  const options = field?.col.filterOptions ?? field?.col.enumOptions ?? []
   const op = FILTER_OPS.find((o) => o.value === row.op)
+  const changeField = (nextField: string) => {
+    const next = fields.find((item) => item.value === nextField)
+    const nextOptions = next?.col.filterOptions ?? next?.col.enumOptions ?? []
+    onChange({
+      field: nextField,
+      op: nextOptions.length ? 'in' : row.op,
+      value: '',
+    })
+  }
   return (
     <div className="space-y-1">
       <Select
         value={row.field}
-        onChange={(e) => onChange({ ...row, field: e.target.value })}
+        onChange={(e) => changeField(e.target.value)}
         className={cn(selectCls, 'h-8 text-xs')}
       >
         <FieldOptions fields={fields} />
       </Select>
       <Select
         value={row.op}
-        onChange={(e) => onChange({ ...row, op: e.target.value as FilterOp })}
+        onChange={(e) => onChange({ ...row, op: e.target.value as FilterOp, value: '' })}
         className={cn(selectCls, 'h-8 text-xs')}
       >
         {FILTER_OPS.map((o) => (
@@ -2513,7 +2524,29 @@ function FilterEditor({
       </Select>
       <GeneratedValue
         value={
-          op?.needsValue ? (
+          op?.needsValue && options.length && row.op === 'in' ? (
+            <FilterPickList
+              options={options}
+              selected={row.value
+                .split(',')
+                .map((item) => item.trim())
+                .filter(Boolean)}
+              onChange={(next) => onChange({ ...row, value: next.join(',') })}
+            />
+          ) : op?.needsValue && options.length ? (
+            <Select
+              value={typeof row.value === 'string' ? row.value : ''}
+              onChange={(e) => onChange({ ...row, value: e.target.value })}
+              className={cn(selectCls, 'h-8 text-xs')}
+            >
+              <option value="">{tGenerated('m_1e9cb0f49f978f')}</option>
+              {options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          ) : op?.needsValue ? (
             <input
               value={row.value}
               onChange={(e) => onChange({ ...row, value: e.target.value })}
@@ -2523,6 +2556,53 @@ function FilterEditor({
           ) : null
         }
       />
+    </div>
+  )
+}
+
+function FilterPickList({
+  options,
+  selected,
+  onChange,
+}: {
+  options: readonly { value: string; label: string }[]
+  selected: string[]
+  onChange: (next: string[]) => void
+}) {
+  const remaining = options.filter((option) => !selected.includes(option.value))
+  const labelOf = (value: string) =>
+    options.find((option) => option.value === value)?.label ?? value
+  return (
+    <div className="space-y-1.5">
+      <Select
+        value=""
+        onChange={(event) => {
+          if (event.target.value) onChange([...selected, event.target.value])
+        }}
+        className={cn(selectCls, 'h-8 text-xs')}
+      >
+        <option value="">Add value…</option>
+        {remaining.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </Select>
+      {selected.length ? (
+        <div className="flex flex-wrap gap-1">
+          {selected.map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onChange(selected.filter((item) => item !== value))}
+              className="inline-flex items-center gap-1 rounded-full border border-slate-300 px-2 py-0.5 text-[11px] text-slate-700 hover:border-rose-400 hover:text-rose-600 dark:border-slate-700 dark:text-slate-200"
+            >
+              <span className="max-w-40 truncate">{labelOf(value)}</span>
+              <Trash2 size={10} />
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

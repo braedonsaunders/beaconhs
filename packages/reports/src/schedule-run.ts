@@ -6,7 +6,7 @@ import {
   reportSchedules,
   type ReportRunRequestSnapshot,
 } from '@beaconhs/db/schema'
-import { claimReportRun, type ReportRunStore, type ReportRunTrigger } from '@appkit/reports'
+import { claimReportRun, type ReportRunStore, type ReportRunTrigger } from '@braedonsaunders/appkit-reports'
 
 type BeaconRunDefinition = ReportRunRequestSnapshot['definition']
 type BeaconRunFilters = ReportRunRequestSnapshot['filters']

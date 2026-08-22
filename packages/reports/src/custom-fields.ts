@@ -24,7 +24,7 @@ import {
   type CustomReportFieldDefinition,
   type ReportEntityCatalog,
   type ReportEntityColumn,
-} from '@appkit/reports'
+} from '@braedonsaunders/appkit-reports'
 import {
   isTechnicalIdentifierColumn,
   mergeAuthorizedReportSources,
@@ -379,6 +379,16 @@ export async function loadBeaconReportCatalog(
         label: prettifyEnumLabel(value),
       })),
     ],
+    ['ppe_items.holder_status', enumOptionsByColumn.get('people.status') ?? []],
+  ])
+  const relationIdOptionsByTarget = new Map<string, { value: string; label: string }[]>([
+    ['people', personIdOptions],
+    ['training_courses', courseIdOptions],
+    ['org_units', locationRows],
+    ['departments', departmentRows],
+    ['inspection_types', inspectionTypeRows],
+    ['ppe_types', ppeTypeRows],
+    ['tenant_users', ownerRows.map((row) => ({ value: row.value, label: row.label ?? row.value }))],
   ])
   const relationOptionsByTarget = new Map<string, { value: string; label: string }[]>([
     ['people', personNameOptions],
@@ -401,14 +411,28 @@ export async function loadBeaconReportCatalog(
             const relation = augmented.relations?.find(
               (candidate) => candidate.via === (column.sql ?? column.key),
             )
+            const relatedTail = column.key.includes('.') ? column.key.split('.').at(-1) : null
+            const filterExpression =
+              'filterExpression' in column && typeof column.filterExpression === 'string'
+                ? column.filterExpression
+                : undefined
+            const relationPick = relation
+              ? filterExpression
+                ? relationIdOptionsByTarget.get(relation.target)
+                : column.expression
+                  ? relationOptionsByTarget.get(relation.target)
+                  : undefined
+              : undefined
             const filterOptions =
-              (column.expression && relation
-                ? relationOptionsByTarget.get(relation.target)
-                : undefined) ??
+              relationPick ??
               optionsByColumn.get(`${entity.key}.${column.key}`) ??
               optionsByColumn.get(column.key) ??
               enumOptionsByColumn.get(`${entity.table}.${column.key}`) ??
               derivedOptionsByColumn.get(`${entity.key}.${column.key}`) ??
+              (relatedTail
+                ? (enumOptionsByColumn.get(`people.${relatedTail}`) ??
+                  enumOptionsByColumn.get(`ppe_types.${relatedTail}`))
+                : undefined) ??
               column.filterOptions
             return {
               ...column,
@@ -420,4 +444,26 @@ export async function loadBeaconReportCatalog(
       }),
     ),
   }
+}
+
+/** Copy report-catalog pick lists onto Insights entities so card filters use the same lists. */
+export function attachReportFilterOptions<
+  T extends {
+    key: string
+    columns: Array<{ key: string; filterOptions?: readonly { value: string; label: string }[] }>
+  },
+>(entities: T[], catalog: ReportEntityCatalog): T[] {
+  const byKey = new Map(catalog.entities.map((entity) => [entity.key, entity]))
+  return entities.map((entity) => {
+    const report = byKey.get(entity.key)
+    if (!report) return entity
+    const options = new Map(report.columns.map((column) => [column.key, column.filterOptions]))
+    return {
+      ...entity,
+      columns: entity.columns.map((column) => ({
+        ...column,
+        filterOptions: column.filterOptions ?? options.get(column.key),
+      })),
+    }
+  })
 }

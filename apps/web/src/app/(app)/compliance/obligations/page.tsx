@@ -246,5 +246,7 @@ function emptyAudienceOptions() {
     people: [],
     departments: [],
     orgUnits: [],
+    groups: [],
+    crews: [],
   }
 }

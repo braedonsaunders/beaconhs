@@ -233,8 +233,8 @@ The seeded catalogue replaces the former Beacon reports for training certificate
 
 1. Open the report.
 2. Set the filters and grouping, then click **Apply and run**.
-3. Click **CSV**, **Excel**, or **PDF**.
-4. The export uses the same filters and grouping shown in the preview. The PDF matches the on-screen paper preview exactly. CSV and Excel are best for working with the rows.
+3. Click **CSV**, **Excel**, or **PDF**. Training matrix and training records reports also have **Wallet cards**, which prints the filtered people's latest certificates as wallet-card PDFs.
+4. The export uses the same filters and grouping shown in the preview. The PDF matches the on-screen paper preview exactly. CSV and Excel are best for working with the rows. Use **Training — Wallet cards** when you want a saved report that starts with current valid and expiring certificates.
 
 ## Schedule a report by email
 
@@ -265,7 +265,7 @@ Seeded and team-created reports use the same editable report definition. There i
 4. Set the saved filters, grouping, and sorting.
 5. Under **Page setup**, choose **Letter**, **A4**, or **Legal**, **Portrait** or **Landscape**, the page margin, row density, and whether to show summary cards.
 6. Check the live paper preview.
-7. Click **Save** to keep your changes. A new report receives a unique untitled name and opens at its saved address after the first successful save. Click **PDF** beside **Run** and **Save** to save the current report and download the matching paper preview.
+7. Click **Save** to keep your changes. A blank name is saved as **Untitled report** and still previews. Click **Save as** to copy the report into a new draft. Click **PDF** beside **Run** and **Save** to save the current report and download the matching paper preview. Filter pickers stay on the page instead of running off the edge. Relationship fields can be filtered by the related record (for example, a PPE holder's employment status) as well as the display name.
 8. Use the small **Back to reports** link at the top left to return to the report list without reloading the app. The same link appears when you run a report.
 9. To permanently remove a report, click **Delete** in the editor or on its row in the report list, then confirm. Deleting a report also permanently removes its email schedules and delivery history.
 
@@ -316,7 +316,7 @@ A card is one saved chart or table. The fastest way to build one is to describe 
 2. Enter the **Card name**. Add the optional **Description** when people need more context in the Insights library.
 3. In the **Ask AI** box, type what you want in plain words — for example, incidents by month this year.
 4. Click **Ask AI**. It sets up the data and chart for you.
-5. Adjust anything in the side panel (data, filters, grouping, chart type), then click **Save card**.
+5. Adjust anything in the side panel (data, filters, grouping, chart type), then click **Save card**. List fields — status, course, department, group, person — use a picker, not free-typed IDs. Use **is any of** to pick several values.
 
 You can also build a card by hand using the same side panel, without asking AI. The data-source list only includes Builder apps you can currently open. If an app is a draft, archived, or restricted to another active role, its records cannot be used by your cards.
 
@@ -331,7 +331,7 @@ The live **Training — Certificate Matrix** is the one canonical training matri
 3. Employees are the rows, courses are the columns, and each cell shows the latest certificate status.
 4. To put it on a dashboard, open that dashboard, click **Customise**, then **Add content** and choose the matrix card.
 
-A person who has no record for a course has a blank cell. The matrix does not add an empty **None** course column. Use **Download CSV** or **PDF** on the card when you need a snapshot.
+A person who has no record for a course has a blank cell. The matrix does not add an empty **None** course column. Edit the card to include only certain people, groups, departments, or courses — those filters use pick lists. Use **Download CSV** or **PDF** on the card when you need a snapshot. To print wallet cards for the same slice, open **Reports → Training — Wallet cards**, apply the same people and course filters, and click **Wallet cards**.
 
 ## Save a card as PDF
 
@@ -383,14 +383,14 @@ An obligation is a rule like "everyone in the Field department completes fall pr
 
 Open [Compliance](/compliance) from the sidebar. The tabs are **Overview**, **Obligations**, **By person**, **Aging**, **Due & expiring**, and **Mine**.
 
-The **Overview** tab shows the big picture: total obligations, subjects tracked, overdue and expiring counts, and overall compliance.
+The **Overview** tab shows the big picture: total obligations, subjects tracked, overdue and expiring counts, and overall compliance. Search the obligation list and use the **Kind** chips to show only training, documents, inspections, or another kind. The four score cards stay company-wide.
 
 ## Create an obligation
 
 1. Open the **Obligations** tab and click **New obligation**. The creation flyout opens without leaving the list.
 2. Pick the **Kind**. Common kinds include **Training / assessment**, **Document acknowledgement**, **App (scheduled)** for a form people must fill on a cadence, **Certification requirement**, and **Inspection**.
 3. Fill in the title and what to require for that kind — for example, which course or which document.
-4. Pick the audience: specific people, a role, a department, a site, or everyone.
+4. Pick the audience: specific people, a role, a department, a **Group**, a **Crew**, a site, or everyone.
 5. For a recurring item, choose the **Cadence**. Inspections, journals, and hazard assessments also have **Quantity per period** and **Compliant threshold (%)**. Leave **Cron override (optional)** blank for the standard cadence time. For an inspection or scheduled app, **Due offset (minutes after fire)** moves the deadline later without changing when the next period starts.
 6. Click **Create obligation**.
 

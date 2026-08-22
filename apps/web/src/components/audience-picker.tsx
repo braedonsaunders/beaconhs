@@ -34,7 +34,8 @@ import {
 import { RemoteSearchSelect } from '@/components/remote-search-select'
 import type { PickerLookup, PickerOption } from '@/lib/picker-options'
 
-export type AudienceType = 'everyone' | 'role' | 'trade' | 'department' | 'person' | 'org_unit'
+export type AudienceType =
+  'everyone' | 'role' | 'trade' | 'department' | 'person' | 'org_unit' | 'person_group' | 'crew'
 
 export type AudienceItem = { type: AudienceType; entityKey: string }
 
@@ -44,6 +45,8 @@ export type AudienceOptions = {
   departments: { id: string; label: string }[]
   people: { id: string; label: string; sub?: string }[]
   orgUnits: { id: string; label: string }[]
+  groups: { id: string; label: string }[]
+  crews: { id: string; label: string }[]
 }
 
 const ALL_AUDIENCE_TYPES: AudienceType[] = [
@@ -52,6 +55,8 @@ const ALL_AUDIENCE_TYPES: AudienceType[] = [
   'trade',
   'department',
   'person',
+  'person_group',
+  'crew',
   'org_unit',
 ]
 
@@ -62,6 +67,8 @@ const TYPE_LABEL: Record<AudienceType, string> = {
   department: 'Department',
   person: 'Person',
   org_unit: 'Site / project',
+  person_group: 'Group',
+  crew: 'Crew',
 }
 
 // `everyone` carries a UI sentinel entityKey ('all'); obligation actions
@@ -80,6 +87,10 @@ function lookupFor(type: Exclude<AudienceType, 'everyone'>): PickerLookup {
       return 'compliance-obligation-audience-people'
     case 'org_unit':
       return 'compliance-obligation-audience-org-units'
+    case 'person_group':
+      return 'compliance-obligation-audience-groups'
+    case 'crew':
+      return 'compliance-obligation-audience-crews'
   }
 }
 
@@ -117,6 +128,10 @@ export function AudiencePicker({
       return resolvedOptions.departments.map((d) => ({ value: d.id, label: d.label }))
     if (pendingType === 'org_unit')
       return resolvedOptions.orgUnits.map((o) => ({ value: o.id, label: o.label }))
+    if (pendingType === 'person_group')
+      return resolvedOptions.groups.map((g) => ({ value: g.id, label: g.label }))
+    if (pendingType === 'crew')
+      return resolvedOptions.crews.map((c) => ({ value: c.id, label: c.label }))
     if (pendingType === 'person')
       return resolvedOptions.people.map((p) => ({
         value: p.id,
@@ -139,7 +154,11 @@ export function AudiencePicker({
             ? 'departments'
             : type === 'org_unit'
               ? 'orgUnits'
-              : 'people'
+              : type === 'person_group'
+                ? 'groups'
+                : type === 'crew'
+                  ? 'crews'
+                  : 'people'
       if (current[key].some((row) => row.id === option.value)) return current
       return {
         ...current,
@@ -292,5 +311,9 @@ function audienceLabel(row: AudienceItem, options: AudienceOptions): string {
     return options.departments.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
   if (row.type === 'org_unit')
     return options.orgUnits.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
+  if (row.type === 'person_group')
+    return options.groups.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
+  if (row.type === 'crew')
+    return options.crews.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
   return options.people.find((x) => x.id === row.entityKey)?.label ?? row.entityKey
 }

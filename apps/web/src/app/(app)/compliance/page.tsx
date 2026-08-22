@@ -15,12 +15,14 @@ import {
 } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { parseListParams } from '@/lib/list-params'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
+import { FilterChips } from '@/components/filter-bar'
 import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
 import { Pagination } from '@/components/pagination'
 import { obligationOverview, kindLabel } from './_hub'
+import { OBLIGATION_KINDS, type ObligationKind } from './obligations/_meta'
 import { PercentBar } from './_shared'
 import { ComplianceSubNav } from './_sub-nav'
 
@@ -45,8 +47,13 @@ export default async function ComplianceOverviewPage({
   if (!can(ctx, 'compliance.read')) redirect('/compliance/mine')
   const canAssign = can(ctx, 'compliance.assign')
   const params = parseListParams(sp, { sort: 'overdue', allowedSorts: ['overdue'] as const })
+  const rawKind = pickString(sp.kind)
+  const kindFilter = OBLIGATION_KINDS.includes(rawKind as ObligationKind)
+    ? (rawKind as ObligationKind)
+    : undefined
   const overview = await obligationOverview(ctx, {
     q: params.q,
+    kind: kindFilter,
     page: params.page,
     perPage: params.perPage,
   })
@@ -94,6 +101,13 @@ export default async function ComplianceOverviewPage({
 
         <TableToolbar>
           <SearchInput placeholder={tGenerated('m_16e4ca6d191db6')} />
+          <FilterChips
+            basePath={BASE}
+            currentParams={sp}
+            paramKey="kind"
+            label={tGenerated('m_1e578efe1574cd')}
+            options={OBLIGATION_KINDS.map((k) => ({ value: k, label: kindLabel(k) }))}
+          />
         </TableToolbar>
 
         <GeneratedValue

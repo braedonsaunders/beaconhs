@@ -17,6 +17,7 @@ import {
 //   • new-prev-step       / edit-prev-step
 
 import { useState, useTransition } from 'react'
+import { useResetWhenOpen } from '@/lib/use-reset-when-open'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@beaconhs/ui'
@@ -61,6 +62,11 @@ export function EventDrawer({
   const [description, setDescription] = useState(defaults?.description ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  useResetWhenOpen(open, () => {
+    setOccurredAt(defaults?.occurredAt ?? defaultNow())
+    setDescription(defaults?.description ?? '')
+    setError(null)
+  })
 
   function submit() {
     setError(tGeneratedValue(null))
@@ -197,6 +203,11 @@ export function FactorDrawer({
   const [description, setDescription] = useState(defaults?.description ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  useResetWhenOpen(open, () => {
+    setCategory(defaults?.category ?? 'equipment')
+    setDescription(defaults?.description ?? '')
+    setError(null)
+  })
 
   function submit() {
     setError(tGeneratedValue(null))
@@ -334,6 +345,11 @@ export function WhyDrawer({
   const [whyText, setWhyText] = useState(defaults?.whyText ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  useResetWhenOpen(open, () => {
+    setOrdinal(defaults?.ordinal ?? nextOrdinal)
+    setWhyText(defaults?.whyText ?? '')
+    setError(null)
+  })
 
   function submit() {
     setError(tGeneratedValue(null))
@@ -486,6 +502,13 @@ export function PrevStepDrawer({
   const [status, setStatus] = useState<PrevStepStatus>(defaults?.status ?? 'planned')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  useResetWhenOpen(open, () => {
+    setDescription(defaults?.description ?? '')
+    setOwnerPersonId(defaults?.ownerPersonId ?? '')
+    setTargetDate(defaults?.targetDate ?? '')
+    setStatus(defaults?.status ?? 'planned')
+    setError(null)
+  })
 
   function submit() {
     setError(tGeneratedValue(null))

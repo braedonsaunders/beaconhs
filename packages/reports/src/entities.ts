@@ -12,7 +12,7 @@ import {
   type ReportEntity as AppKitReportEntity,
   type ReportEntityColumn,
   type ReportEntityCatalog,
-} from '@appkit/reports'
+} from '@braedonsaunders/appkit-reports'
 
 export type ReportEntity = AppKitReportEntity & { table: string }
 export type { ReportColumnKind, ReportEntityColumn, ReportEntityCatalog }
@@ -290,8 +290,11 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'serial_number', label: 'Serial', kind: 'text' },
       { key: 'size', label: 'Size', kind: 'text' },
       { key: 'status', label: 'Status', kind: 'enum' },
+      { key: 'is_draft', label: 'Draft', kind: 'boolean' },
       { key: 'current_holder_person_id', label: 'Current holder (id)', kind: 'uuid' },
       { key: 'holder_name', label: 'Current holder', kind: 'text' },
+      { key: 'holder_status', label: 'Holder status', kind: 'enum' },
+      { key: 'holder_employee_no', label: 'Holder employee #', kind: 'text' },
       { key: 'department_id', label: 'Department (id)', kind: 'uuid' },
       { key: 'department_name', label: 'Department', kind: 'text' },
       {
@@ -302,6 +305,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       },
       { key: 'last_inspection_on', label: 'Last pre-use inspection', kind: 'date' },
       { key: 'next_inspection_due', label: 'Next pre-use inspection', kind: 'date' },
+      { key: 'last_annual_inspection_on', label: 'Last annual inspection', kind: 'date' },
       { key: 'next_annual_inspection_due', label: 'Next annual inspection', kind: 'date' },
       { key: 'purchase_date', label: 'Purchase date', kind: 'date' },
       { key: 'expires_on', label: 'Expires on', kind: 'date' },

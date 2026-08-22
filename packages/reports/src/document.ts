@@ -1,1 +1,1 @@
-export * from '@appkit/reports/document'
+export * from '@braedonsaunders/appkit-reports/document'

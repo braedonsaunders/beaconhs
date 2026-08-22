@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo, useState, useTransition } from 'react'
-import { Download, Filter, Pencil, RotateCcw } from 'lucide-react'
+import { CreditCard, Download, Filter, Pencil, RotateCcw } from 'lucide-react'
 import { DownloadLink } from '@/components/download-link'
 import {
   reportEntity,
@@ -14,6 +14,7 @@ import {
 import { ReportFilterTree, ReportResultView } from '@beaconhs/reports/react'
 import { Button, PageHeader, Select } from '@beaconhs/ui'
 import { GeneratedText, useGeneratedTranslations } from '@/i18n/generated'
+import { reportSupportsWalletCards } from '@/lib/report-wallet-cards-lookups'
 import { runReportWithControls } from './actions'
 
 const EMPTY_FILTERS: ReportRuleGroup = { combinator: 'and', rules: [] }
@@ -84,11 +85,12 @@ export function BeaconReportViewer({
     setFilters(structuredClone(savedFilters))
     setGroupBy(savedGroupBy)
   }
-  const href = (format: 'csv' | 'xlsx' | 'pdf') => {
+  const href = (format: 'csv' | 'xlsx' | 'pdf' | 'wallet-pdf') => {
     const params = new URLSearchParams(exportQuery)
     params.set('format', format)
     return `/reports/definitions/${definition.id}/export?${params}`
   }
+  const canPrintWalletCards = reportSupportsWalletCards(definition.query.entity)
 
   return (
     <div className="space-y-4">
@@ -115,6 +117,14 @@ export function BeaconReportViewer({
                 <GeneratedText id="m_1a2b2ed6729166" />
               </DownloadLink>
             </Button>
+            {canPrintWalletCards ? (
+              <Button asChild variant="outline" size="sm">
+                <DownloadLink href={href('wallet-pdf')}>
+                  <CreditCard size={14} />
+                  Wallet cards
+                </DownloadLink>
+              </Button>
+            ) : null}
             {canBuild ? (
               <Button asChild size="sm">
                 <Link href={`/reports/definitions/${definition.id}/edit`}>

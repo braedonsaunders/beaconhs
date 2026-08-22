@@ -47,14 +47,23 @@ type KindMeta = {
   hint: string
 }
 
-const PERSON_AUD: AudienceType[] = ['everyone', 'role', 'trade', 'department', 'person', 'org_unit']
+const PERSON_AUD: AudienceType[] = [
+  'everyone',
+  'role',
+  'trade',
+  'department',
+  'person',
+  'person_group',
+  'crew',
+  'org_unit',
+]
 
 export const KIND_META: Record<ObligationKind, KindMeta> = {
   inspection: {
     label: 'Inspection',
     subjectKind: 'per_person',
     audience: true,
-    audienceTypes: ['everyone', 'role', 'person', 'org_unit'],
+    audienceTypes: PERSON_AUD,
     recurrence: { recurring: true, quantity: true, threshold: true, dueOffset: true },
     target: 'inspectionType',
     hint: 'These people each complete an inspection of this type, on this cadence.',
@@ -63,7 +72,7 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     label: 'Document acknowledgement',
     subjectKind: 'per_person',
     audience: true,
-    audienceTypes: ['everyone', 'role', 'trade', 'department', 'person'],
+    audienceTypes: PERSON_AUD,
     recurrence: { oneTime: true },
     target: 'document',
     hint: 'These people must acknowledge this document.',
@@ -72,7 +81,7 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     label: 'Training / assessment',
     subjectKind: 'per_person',
     audience: true,
-    audienceTypes: ['everyone', 'role', 'trade', 'person'],
+    audienceTypes: PERSON_AUD,
     recurrence: { oneTime: true, recurring: true, remind: true },
     target: 'trainingItem',
     hint: 'These people must complete this course or assessment.',
@@ -90,7 +99,7 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     label: 'App (scheduled)',
     subjectKind: 'per_person',
     audience: true,
-    audienceTypes: ['role', 'person', 'org_unit'],
+    audienceTypes: ['role', 'person', 'person_group', 'crew', 'org_unit'],
     recurrence: { recurring: true, dueOffset: true },
     target: 'formTemplate',
     hint: 'These people must submit this app on this cadence.',
@@ -99,7 +108,7 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     label: 'Journal',
     subjectKind: 'per_person',
     audience: true,
-    audienceTypes: ['everyone', 'person', 'org_unit'],
+    audienceTypes: ['everyone', 'person', 'person_group', 'crew', 'org_unit'],
     recurrence: { recurring: true, quantity: true, threshold: true },
     target: 'journalName',
     hint: 'These people must log journal entries on this cadence.',

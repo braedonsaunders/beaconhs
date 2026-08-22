@@ -98,6 +98,8 @@ export const PICKER_LOOKUPS = [
   'compliance-obligation-audience-departments',
   'compliance-obligation-audience-people',
   'compliance-obligation-audience-org-units',
+  'compliance-obligation-audience-groups',
+  'compliance-obligation-audience-crews',
   'dashboard-quick-action-forms',
   'admin-navigation-form-templates',
 ] as const

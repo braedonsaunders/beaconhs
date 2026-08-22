@@ -3,15 +3,17 @@ import type { Database } from '@beaconhs/db'
 import {
   complianceAudience,
   complianceObligations,
+  crews,
   departments,
   orgUnits,
   people,
+  personGroups,
   roles,
   trades,
 } from '@beaconhs/db/schema'
 
 export type PersistedComplianceAudienceKind =
-  'everyone' | 'person' | 'role' | 'trade' | 'department' | 'org_unit'
+  'everyone' | 'person' | 'role' | 'trade' | 'department' | 'org_unit' | 'person_group' | 'crew'
 
 export type ComplianceAudienceTarget = {
   kind: PersistedComplianceAudienceKind
@@ -35,6 +37,8 @@ const TARGET_KIND_ORDER: readonly PersistedComplianceAudienceKind[] = [
   'trade',
   'department',
   'org_unit',
+  'person_group',
+  'crew',
 ]
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
@@ -145,6 +149,34 @@ export async function lockComplianceAudienceTargets(
         .for('key share')
       return row
     }, 'department')
+  }
+  for (const id of plan.person_group) {
+    await requireLockedTarget(async () => {
+      const [row] = await tx
+        .select({ id: personGroups.id })
+        .from(personGroups)
+        .where(
+          and(
+            eq(personGroups.tenantId, tenantId),
+            eq(personGroups.id, id),
+            isNull(personGroups.deletedAt),
+          ),
+        )
+        .limit(1)
+        .for('key share')
+      return row
+    }, 'people group')
+  }
+  for (const id of plan.crew) {
+    await requireLockedTarget(async () => {
+      const [row] = await tx
+        .select({ id: crews.id })
+        .from(crews)
+        .where(and(eq(crews.tenantId, tenantId), eq(crews.id, id)))
+        .limit(1)
+        .for('key share')
+      return row
+    }, 'crew')
   }
   for (const id of plan.org_unit) {
     await requireLockedTarget(async () => {

@@ -3,7 +3,7 @@ import {
   assertCustomReportDefinition,
   type CustomReportDefinition,
   type ReportCustomQuery,
-} from '@appkit/reports'
+} from '@braedonsaunders/appkit-reports'
 
 type BeaconReportSeed = Omit<CustomReportDefinition, 'id' | 'builtIn'> & {
   seedKey: string
@@ -449,6 +449,33 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
     ),
   ),
   seed(
+    'training_wallet_cards',
+    'Training — Wallet cards',
+    'Latest certificates you can filter, then print as wallet-card PDFs.',
+    'training',
+    rows(
+      'training_matrix',
+      [
+        'employee_no',
+        'person_name',
+        'department_name',
+        'course_code',
+        'course_name',
+        'completed_on',
+        'expires_on',
+        'coverage_status',
+      ],
+      {
+        filters: {
+          combinator: 'and',
+          rules: [{ field: 'coverage_status', op: 'in', value: ['valid', 'expiring'] }],
+        },
+        groupBy: 'person_name',
+        sorts: [{ column: 'person_name', direction: 'asc' }],
+      },
+    ),
+  ),
+  seed(
     'training_missing',
     'Training — Missing',
     'Required courses that are missing, expired, or expiring. Group by employee or course.',
@@ -651,8 +678,10 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
         'size',
         'status',
         'holder_name',
+        'holder_status',
         'department_name',
         'last_inspection_on',
+        'last_annual_inspection_on',
         'next_annual_inspection_due',
       ],
       {
@@ -660,6 +689,8 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
           combinator: 'and',
           rules: [
             { field: 'status', op: 'in', value: ['issued', 'in_stock'] },
+            { field: 'is_draft', op: 'is_false' },
+            { field: 'holder_status', op: 'eq', value: 'active' },
             { field: 'next_annual_inspection_due', op: 'due_within_days', value: 90 },
           ],
         },

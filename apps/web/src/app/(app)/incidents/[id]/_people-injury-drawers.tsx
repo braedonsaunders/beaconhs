@@ -15,6 +15,7 @@ import {
 //   • add-injury   / edit-injury
 
 import { useState, useTransition } from 'react'
+import { useResetWhenOpen } from '@/lib/use-reset-when-open'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Loader2 } from 'lucide-react'
@@ -77,6 +78,12 @@ export function PersonDrawer({
   const [role, setRole] = useState(defaults?.role ?? 'involved')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  useResetWhenOpen(open, () => {
+    setPersonId(defaults?.personId ?? '')
+    setPersonNameText(defaults?.personNameText ?? '')
+    setRole(defaults?.role ?? 'involved')
+    setError(null)
+  })
 
   function submit() {
     setError(tGeneratedValue(null))
@@ -258,6 +265,19 @@ export function InjuryDrawer({
   )
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  useResetWhenOpen(open, () => {
+    setPersonId(defaults?.personId ?? '')
+    setPersonName(defaults?.personName ?? '')
+    setSelectedTypes(
+      (defaults?.assignedTypes ?? []).map((type) => ({ value: type.id, label: type.name })),
+    )
+    setInjuryResult(defaults?.injuryResult ?? '')
+    setBodyParts(toCommaList(defaults?.bodyParts ?? []))
+    setTreatment(defaults?.treatment ?? '')
+    setTreatedAtFacility(defaults?.treatedAtFacility ?? '')
+    setHours(defaults?.workedHoursPriorTo != null ? String(defaults.workedHoursPriorTo) : '')
+    setError(null)
+  })
 
   function submit() {
     setError(tGeneratedValue(null))

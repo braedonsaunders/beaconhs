@@ -43,6 +43,7 @@ export async function saveReportDefinition(
     assertCustomReportDefinition(definition)
     const creating = definition.id === 'new'
     const definitionId = creating ? randomUUID() : definition.id
+    const name = definition.name.trim() || 'Untitled report'
 
     await ctx.db(async (tx) => {
       const catalog = await loadAuthorizedReportCatalogInTransaction(ctx, tx)
@@ -68,7 +69,7 @@ export async function saveReportDefinition(
           tenantId: ctx.tenantId!,
           seedKey: null,
           slug: definition.slug,
-          name: definition.name.trim(),
+          name,
           description: definition.description?.trim() || null,
           category: entity.category,
           query: definition.query,
@@ -81,7 +82,7 @@ export async function saveReportDefinition(
           .update(reportDefinitions)
           .set({
             slug: definition.slug,
-            name: definition.name.trim(),
+            name,
             description: definition.description?.trim() || null,
             category: entity.category,
             query: definition.query,
@@ -104,9 +105,9 @@ export async function saveReportDefinition(
         entityType: 'report_definition',
         entityId: definitionId,
         action: creating ? 'create' : 'update',
-        summary: `${creating ? 'Created' : 'Updated'} report "${definition.name}"`,
+        summary: `${creating ? 'Created' : 'Updated'} report "${name}"`,
         after: {
-          name: definition.name,
+          name,
           slug: definition.slug,
           entity: definition.query.entity,
           state: definition.state,
@@ -121,6 +122,7 @@ export async function saveReportDefinition(
       definition: {
         ...definition,
         id: definitionId,
+        name,
       },
     }
   } catch (cause) {

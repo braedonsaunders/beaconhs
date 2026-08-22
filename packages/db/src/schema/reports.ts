@@ -3,13 +3,13 @@
 // tenant's initial copy came from; it never changes editability or execution.
 
 import { relations, sql } from 'drizzle-orm'
-import type { CustomReportDefinition, ReportCustomQuery, ReportLayout } from '@appkit/reports'
+import type { CustomReportDefinition, ReportCustomQuery, ReportLayout } from '@braedonsaunders/appkit-reports'
 export type {
   ReportCustomQuery,
   ReportFilterOperator,
   ReportRule,
   ReportRuleGroup,
-} from '@appkit/reports'
+} from '@braedonsaunders/appkit-reports'
 import {
   boolean,
   check,

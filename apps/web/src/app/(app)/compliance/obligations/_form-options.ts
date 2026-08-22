@@ -11,7 +11,9 @@ import {
   inspectionTypes,
   orgUnits,
   people,
+  personGroups,
   personTitles,
+  crews,
   ppeTypes,
   roles,
   trades,
@@ -69,6 +71,8 @@ export async function loadObligationFormOptions(
   const departmentIds = audienceKeys(audience, 'department').filter(isUuid)
   const personIds = audienceKeys(audience, 'person').filter(isUuid)
   const orgUnitIds = audienceKeys(audience, 'org_unit').filter(isUuid)
+  const groupIds = audienceKeys(audience, 'person_group').filter(isUuid)
+  const crewIds = audienceKeys(audience, 'crew').filter(isUuid)
 
   const data = await ctx.db(async (tx) => {
     const [
@@ -86,6 +90,8 @@ export async function loadObligationFormOptions(
       equipTypes,
       ppeTypeRows,
       jobTitles,
+      allGroups,
+      allCrews,
     ] = await Promise.all([
       inspectionTypeId
         ? tx
@@ -211,6 +217,18 @@ export async function loadObligationFormOptions(
             .from(personTitles)
             .where(and(eq(personTitles.id, jobTitleId), isNull(personTitles.deletedAt)))
         : Promise.resolve([]),
+      groupIds.length > 0
+        ? tx
+            .select({ id: personGroups.id, name: personGroups.name })
+            .from(personGroups)
+            .where(and(inArray(personGroups.id, groupIds), isNull(personGroups.deletedAt)))
+        : Promise.resolve([]),
+      crewIds.length > 0
+        ? tx
+            .select({ id: crews.id, name: crews.name })
+            .from(crews)
+            .where(inArray(crews.id, crewIds))
+        : Promise.resolve([]),
     ])
     return {
       inspTypes,
@@ -227,6 +245,8 @@ export async function loadObligationFormOptions(
       equipTypes,
       ppeTypeRows,
       jobTitles,
+      allGroups,
+      allCrews,
     }
   })
 
@@ -266,6 +286,8 @@ export async function loadObligationFormOptions(
         id: orgUnit.id,
         label: `${orgUnit.name} (${orgUnit.level})`,
       })),
+      groups: data.allGroups.map((group) => ({ id: group.id, label: group.name })),
+      crews: data.allCrews.map((crew) => ({ id: crew.id, label: crew.name })),
     },
   }
 }

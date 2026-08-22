@@ -9,6 +9,7 @@ import { recordAudit } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
 import { loadDefinitionById } from '../../../_definitions'
 import { isRouterPrefetch } from '@/lib/router-prefetch'
+import { renderWalletCardsForReport, reportSupportsWalletCards } from '@/lib/report-wallet-cards'
 import { loadTenantBranding, runReportForViewer } from '../../../_run'
 
 export const dynamic = 'force-dynamic'
@@ -25,7 +26,8 @@ export async function GET(
   const definition = await loadDefinitionById(ctx.tenantId!, id)
   if (!definition) notFound()
   const format = request.nextUrl.searchParams.get('format')
-  const resolvedFormat = format === 'xlsx' || format === 'pdf' ? format : 'csv'
+  const resolvedFormat =
+    format === 'xlsx' || format === 'pdf' || format === 'wallet-pdf' ? format : 'csv'
   let filters: ReportRuleGroup | null | undefined
   const filtersParam = request.nextUrl.searchParams.get('filters')
   if (filtersParam) {
@@ -51,6 +53,30 @@ export async function GET(
     groupBy,
   })
   if (run.error) return NextResponse.json({ error: run.error }, { status: 422 })
+
+  if (resolvedFormat === 'wallet-pdf') {
+    if (!reportSupportsWalletCards(definition.query.entity)) {
+      return NextResponse.json(
+        { error: 'Wallet cards can only print from a training matrix or training records report.' },
+        { status: 400 },
+      )
+    }
+    const wallet = await renderWalletCardsForReport(ctx, run.result)
+    if (!wallet.ok) return NextResponse.json({ error: wallet.error }, { status: wallet.status })
+    await recordAudit(ctx, {
+      entityType: 'report_definition',
+      entityId: id,
+      action: 'export',
+      summary: `Printed ${wallet.rendered} wallet card${wallet.rendered === 1 ? '' : 's'} from "${definition.name}"`,
+      metadata: { format: 'wallet-pdf', rendered: wallet.rendered, skipped: wallet.skipped },
+    })
+    return new Response(new Uint8Array(wallet.bytes), {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${wallet.filename}"`,
+      },
+    })
+  }
 
   await recordAudit(ctx, {
     entityType: 'report_definition',

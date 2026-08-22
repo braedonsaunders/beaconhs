@@ -232,6 +232,13 @@
       "when": 1785954317002,
       "tag": "0032_ppe_status_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787331600000,
+      "tag": "0034_compliance_group_audience_ppe_report",
+      "breakpoints": true
     }
   ]
 }

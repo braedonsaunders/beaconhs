@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compileCustomReport } from '@appkit/reports'
+import { compileCustomReport } from '@braedonsaunders/appkit-reports'
 import {
   BEACON_REPORT_SEEDS,
   EXPECTED_BEACON_REPORT_SEED_KEYS,
@@ -42,7 +42,7 @@ describe('Beacon AppKit report catalogue', () => {
   it('contains every intended legacy replacement exactly once', () => {
     const keys = new Set(EXPECTED_BEACON_REPORT_SEED_KEYS)
     expect(EXPECTED_BEACON_REPORT_SEED_KEYS).toHaveLength(keys.size)
-    expect(BEACON_REPORT_SEEDS).toHaveLength(31)
+    expect(BEACON_REPORT_SEEDS).toHaveLength(32)
     for (const key of LEGACY_REPORT_REPLACEMENTS) expect(keys.has(key)).toBe(true)
   })
 
