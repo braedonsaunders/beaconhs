@@ -1,6 +1,6 @@
 import type { ReportRunResult } from '@beaconhs/reports'
 
-export const WALLET_CARD_REPORT_ENTITIES = new Set(['training_matrix', 'training_records'])
+const WALLET_CARD_REPORT_ENTITIES = new Set(['training_matrix', 'training_records'])
 export const MAX_REPORT_WALLET_CARDS = 200
 
 export function reportSupportsWalletCards(entity: string): boolean {
@@ -12,7 +12,7 @@ function cell(row: Record<string, unknown>, key: string): string {
   return value == null ? '' : String(value).trim()
 }
 
-export type WalletCardLookup = {
+type WalletCardLookup = {
   employeeNo: string
   courseCode: string
   personName: string

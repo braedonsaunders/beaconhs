@@ -121,7 +121,7 @@ export function BeaconReportViewer({
               <Button asChild variant="outline" size="sm">
                 <DownloadLink href={href('wallet-pdf')}>
                   <CreditCard size={14} />
-                  Wallet cards
+                  <GeneratedText id="m_19b9714cd37d07" />
                 </DownloadLink>
               </Button>
             ) : null}

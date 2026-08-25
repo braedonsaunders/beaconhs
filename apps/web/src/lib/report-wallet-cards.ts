@@ -10,12 +10,7 @@ import {
   walletCardLookupsFromResult,
 } from './report-wallet-cards-lookups'
 
-export {
-  MAX_REPORT_WALLET_CARDS,
-  WALLET_CARD_REPORT_ENTITIES,
-  reportSupportsWalletCards,
-  walletCardLookupsFromResult,
-} from './report-wallet-cards-lookups'
+export { reportSupportsWalletCards } from './report-wallet-cards-lookups'
 
 export async function renderWalletCardsForReport(
   ctx: RequestContext,

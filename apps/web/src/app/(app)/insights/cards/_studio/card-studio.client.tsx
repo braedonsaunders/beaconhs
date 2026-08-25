@@ -2569,6 +2569,7 @@ function FilterPickList({
   selected: string[]
   onChange: (next: string[]) => void
 }) {
+  const tGenerated = useGeneratedTranslations()
   const remaining = options.filter((option) => !selected.includes(option.value))
   const labelOf = (value: string) =>
     options.find((option) => option.value === value)?.label ?? value
@@ -2581,7 +2582,7 @@ function FilterPickList({
         }}
         className={cn(selectCls, 'h-8 text-xs')}
       >
-        <option value="">Add value…</option>
+        <option value="">{tGenerated('m_163af01e380f76')}</option>
         {remaining.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

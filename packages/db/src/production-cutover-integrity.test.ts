@@ -24,6 +24,10 @@ const monitoredSessionCutoverSql = readFileSync(
   new URL('0028_generalize_monitored_sessions.sql', drizzleFolder),
   'utf8',
 )
+const complianceAudienceReportSql = readFileSync(
+  new URL('0034_compliance_group_audience_ppe_report.sql', drizzleFolder),
+  'utf8',
+)
 
 function position(fragment: string): number {
   const value = finalSection.indexOf(fragment)
@@ -70,6 +74,7 @@ describe('production cutover migration integrity', () => {
       '0030_unify_hazid_app_locations.sql',
       '0031_hazid_optional_risk_ratings.sql',
       '0032_ppe_status_lifecycle.sql',
+      '0034_compliance_group_audience_ppe_report.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -109,6 +114,7 @@ describe('production cutover migration integrity', () => {
       { idx: 30, tag: '0030_unify_hazid_app_locations' },
       { idx: 31, tag: '0031_hazid_optional_risk_ratings' },
       { idx: 32, tag: '0032_ppe_status_lifecycle' },
+      { idx: 33, tag: '0034_compliance_group_audience_ppe_report' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)
@@ -197,6 +203,25 @@ describe('production cutover migration integrity', () => {
     expect(monitoredSessionCutoverSql).toContain(`"category" = 'monitored_session'`)
     expect(monitoredSessionCutoverSql).toContain('"op-monitored-sessions-active"')
     expect(monitoredSessionCutoverSql).toContain('"kpi-monitored-sessions-active"')
+  })
+
+  it('installs group/crew compliance audiences and live report seed cutover', () => {
+    expect(complianceAudienceReportSql).toContain(
+      `ALTER TYPE "compliance_audience_kind" ADD VALUE IF NOT EXISTS 'person_group'`,
+    )
+    expect(complianceAudienceReportSql).toContain(
+      `ALTER TYPE "compliance_audience_kind" ADD VALUE IF NOT EXISTS 'crew'`,
+    )
+    expect(complianceAudienceReportSql).toContain('holder.status AS holder_status')
+    expect(complianceAudienceReportSql).toContain(
+      `ALTER TABLE "report_definitions" NO FORCE ROW LEVEL SECURITY`,
+    )
+    expect(complianceAudienceReportSql).toContain(`"seed_key" = 'training_wallet_cards'`)
+    expect(complianceAudienceReportSql).toContain(`"seed_key" = 'ppe_expired_upcoming'`)
+    expect(complianceAudienceReportSql).toContain(`rule->>'field' = 'current_holder_person_id'`)
+    expect(complianceAudienceReportSql).toContain(
+      `ALTER TABLE "report_definitions" FORCE ROW LEVEL SECURITY`,
+    )
   })
 
   it('preflights and backfills training owners before removing legacy columns', () => {
