@@ -363,12 +363,9 @@ export const REPORT_VIEWS_SQL: string[] = [
      item.serial_number,
      item.size,
      item.status,
-     item.is_draft,
      item.current_holder_person_id,
      CASE WHEN holder.id IS NULL THEN NULL
           ELSE holder.last_name || ', ' || holder.first_name END AS holder_name,
-     holder.status AS holder_status,
-     holder.employee_no AS holder_employee_no,
      holder.department_id,
      department.name AS department_name,
      array_to_string(
@@ -383,12 +380,17 @@ export const REPORT_VIEWS_SQL: string[] = [
      ) AS group_id_list,
      item.last_inspection_on,
      item.next_inspection_due,
-     item.last_annual_inspection_on,
      item.next_annual_inspection_due,
      item.purchase_date,
      item.expires_on,
      item.metadata,
-     item.deleted_at
+     item.deleted_at,
+     -- New columns stay appended. CREATE OR REPLACE VIEW cannot rename or
+     -- insert columns into the installed sequence.
+     item.is_draft,
+     holder.status AS holder_status,
+     holder.employee_no AS holder_employee_no,
+     item.last_annual_inspection_on
    FROM ppe_items item
    JOIN ppe_types type
      ON type.id = item.type_id AND type.tenant_id = item.tenant_id

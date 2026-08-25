@@ -213,6 +213,9 @@ describe('production cutover migration integrity', () => {
       `ALTER TYPE "compliance_audience_kind" ADD VALUE IF NOT EXISTS 'crew'`,
     )
     expect(complianceAudienceReportSql).toContain('holder.status AS holder_status')
+    expect(complianceAudienceReportSql.indexOf('item.deleted_at')).toBeLessThan(
+      complianceAudienceReportSql.indexOf('item.is_draft'),
+    )
     expect(complianceAudienceReportSql).toContain(
       `ALTER TABLE "report_definitions" NO FORCE ROW LEVEL SECURITY`,
     )

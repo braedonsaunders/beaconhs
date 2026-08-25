@@ -57,6 +57,7 @@ describe('reporting view cutover', () => {
     expect(ppe).toContain('item.last_annual_inspection_on')
     expect(ppe).toContain('department.name AS department_name')
     expect(ppe).toContain('AS group_id_list')
+    expect(ppe?.indexOf('item.deleted_at')).toBeLessThan(ppe?.indexOf('item.is_draft') ?? -1)
     expect(correctiveActions).toContain('owner.display_name AS owner_name')
     expect(correctiveActions).toContain('department.name AS department_name')
     expect(correctiveActions).toContain('AS group_id_list')
