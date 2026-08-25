@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { compileCustomReport, refineReportEntitiesForDocuments } from '@braedonsaunders/appkit-reports'
+import {
+  compileCustomReport,
+  refineReportEntitiesForDocuments,
+} from '@braedonsaunders/appkit-reports'
 import {
   isTechnicalIdentifierColumn,
   mergeAuthorizedReportSources,
