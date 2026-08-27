@@ -19,7 +19,7 @@ import {
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import type { RequestContext } from '@beaconhs/tenant'
-import { assertCan } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
@@ -157,7 +157,9 @@ async function requirePublishedVersion(
 /** Self-service acknowledgment of the current published version. */
 export async function acknowledgeDocument(input: unknown): Promise<Ok | Err> {
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'documents.acknowledge')
+  if (!can(ctx, 'documents.acknowledge') && !can(ctx, 'documents.manage')) {
+    assertCan(ctx, 'documents.acknowledge')
+  }
 
   try {
     const values = inputRecord(input, 'Acknowledgment')
@@ -238,6 +240,7 @@ export async function acknowledgeDocument(input: unknown): Promise<Ok | Err> {
     }
 
     revalidatePath(`/documents/${documentId}`)
+    revalidatePath(`/documents/${documentId}/read`)
     return { ok: true }
   } catch (error) {
     if (error instanceof AcknowledgmentError && error.message.includes('already acknowledged')) {
@@ -393,6 +396,7 @@ export async function addSignOffSigner(
     )
 
     revalidatePath(`/documents/${documentId}`)
+    revalidatePath(`/documents/${documentId}/read`)
     revalidatePath(`/documents/${documentId}/sign-off`)
     return { ok: true, ...out }
   } catch (error) {
@@ -475,6 +479,7 @@ export async function removeSignOffSigner(input: unknown): Promise<Ok | Err> {
     })
 
     revalidatePath(`/documents/${documentId}`)
+    revalidatePath(`/documents/${documentId}/read`)
     revalidatePath(`/documents/${documentId}/sign-off`)
     return { ok: true }
   } catch (error) {
@@ -571,6 +576,7 @@ export async function completeSignOffSession(input: unknown): Promise<Ok | Err> 
     })
 
     revalidatePath(`/documents/${documentId}`)
+    revalidatePath(`/documents/${documentId}/read`)
     revalidatePath(`/documents/${documentId}/sign-off`)
     return { ok: true }
   } catch (error) {

@@ -4,7 +4,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { DownloadLink } from '@/components/download-link'
 import { SmartBackLink } from '@/components/smart-back-link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, count, desc, eq, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import {
@@ -58,7 +58,6 @@ import {
 } from '@beaconhs/compliance'
 import { isUuid, parsePrefixedListParams, pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
-import { DetailGrid } from '@/components/detail-grid'
 import { DocumentOverview } from './_overview'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
@@ -428,6 +427,20 @@ export default async function DocumentDetailPage({
   const canManage = ctx.isSuperAdmin || can(ctx, 'documents.manage')
   const canRead = canManage || can(ctx, 'documents.read')
   if (!canRead) notFound()
+  // Readers use the dedicated /read surface — this page is the authoring
+  // workspace. Unpublished documents stay hidden from anyone who cannot manage.
+  if (!canManage) {
+    const readable = await ctx.db(async (tx) => {
+      const [doc] = await tx
+        .select({ status: documents.status })
+        .from(documents)
+        .where(and(eq(documents.id, id), isNull(documents.deletedAt)))
+        .limit(1)
+      return doc ?? null
+    })
+    if (!readable || readable.status !== 'published') notFound()
+    redirect(`/documents/${id}/read`)
+  }
 
   const data = await ctx.db(async (tx) => {
     const [doc] = await tx
@@ -562,10 +575,18 @@ export default async function DocumentDetailPage({
                 acknowledgedAt: documentAcknowledgments.acknowledgedAt,
                 sessionId: documentAcknowledgments.sessionId,
                 sessionTitle: documentAcknowledgmentSessions.title,
+                version: documentVersions.version,
                 signatureAttachmentId: attachments.id,
               })
               .from(documentAcknowledgments)
               .innerJoin(people, eq(people.id, documentAcknowledgments.personId))
+              .innerJoin(
+                documentVersions,
+                and(
+                  eq(documentVersions.id, documentAcknowledgments.versionId),
+                  eq(documentVersions.documentId, documentAcknowledgments.documentId),
+                ),
+              )
               .leftJoin(
                 documentAcknowledgmentSessions,
                 eq(documentAcknowledgmentSessions.id, documentAcknowledgments.sessionId),
@@ -705,9 +726,6 @@ export default async function DocumentDetailPage({
   const categoryName = doc.categoryId
     ? (categories.find((category) => category.id === doc.categoryId)?.name ?? null)
     : null
-  // Non-managers may only view PUBLISHED documents — same rule the list page
-  // applies via `eq(documents.status, 'published')`.
-  if (!canManage && doc.status !== 'published') notFound()
   const basePath = `/documents/${id}`
 
   // Right pane: the inline Writer for authored docs, or the PDF for
@@ -730,6 +748,7 @@ export default async function DocumentDetailPage({
     acknowledgedAt: a.acknowledgedAt.toISOString(),
     sessionId: a.sessionId,
     sessionTitle: a.sessionTitle,
+    version: a.version,
     signatureUrl: a.signatureAttachmentId ? attachmentUrl(a.signatureAttachmentId) : null,
   }))
   const selfStatus: 'can' | 'acked' | 'unpublished' | 'no-person' = !currentPerson
@@ -812,6 +831,17 @@ export default async function DocumentDetailPage({
           </div>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          <GeneratedValue
+            value={
+              publishedVersion ? (
+                <Link href={`${basePath}/read`}>
+                  <Button variant="outline">
+                    <FileText size={14} /> <GeneratedText id="m_0431e4b7409595" />
+                  </Button>
+                </Link>
+              ) : null
+            }
+          />
           <GeneratedValue
             value={
               canManage ? (
@@ -943,54 +973,21 @@ export default async function DocumentDetailPage({
             <GeneratedValue
               value={
                 active === 'overview' ? (
-                  canManage ? (
-                    <DocumentOverview
-                      documentId={id}
-                      categories={categories}
-                      types={types}
-                      initialMeta={{
-                        title: doc.title,
-                        key: doc.key,
-                        categoryId: doc.categoryId ?? '',
-                        typeId: doc.typeId ?? '',
-                        description: doc.description ?? '',
-                        reviewFrequencyMonths:
-                          doc.reviewFrequencyMonths != null
-                            ? String(doc.reviewFrequencyMonths)
-                            : '',
-                        nextReviewOn: doc.nextReviewOn ?? '',
-                      }}
-                    />
-                  ) : (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>
-                          <GeneratedText id="m_11c253e21845f3" />
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <DetailGrid
-                          rows={[
-                            { label: 'Title', value: doc.title },
-                            { label: 'Key', value: doc.key },
-                            {
-                              label: 'Category',
-                              value: categoryName ?? '—',
-                            },
-                            {
-                              label: 'Type',
-                              value:
-                                (doc.typeId
-                                  ? types.find((t) => t.id === doc.typeId)?.name
-                                  : null) ?? '—',
-                            },
-                            { label: 'Description', value: doc.description ?? '—' },
-                            { label: 'Next review', value: doc.nextReviewOn ?? '—' },
-                          ]}
-                        />
-                      </CardContent>
-                    </Card>
-                  )
+                  <DocumentOverview
+                    documentId={id}
+                    categories={categories}
+                    types={types}
+                    initialMeta={{
+                      title: doc.title,
+                      key: doc.key,
+                      categoryId: doc.categoryId ?? '',
+                      typeId: doc.typeId ?? '',
+                      description: doc.description ?? '',
+                      reviewFrequencyMonths:
+                        doc.reviewFrequencyMonths != null ? String(doc.reviewFrequencyMonths) : '',
+                      nextReviewOn: doc.nextReviewOn ?? '',
+                    }}
+                  />
                 ) : null
               }
             />
@@ -1205,8 +1202,8 @@ export default async function DocumentDetailPage({
                 active === 'acknowledgments' ? (
                   <AcknowledgmentsPanel
                     documentId={id}
-                    versionId={publishedVersion?.id ?? null}
                     signOffHref={`${basePath}/sign-off`}
+                    readHref={`${basePath}/read`}
                     acks={ackRows}
                     total={ackTotal}
                     filteredTotal={ackFilteredTotal}

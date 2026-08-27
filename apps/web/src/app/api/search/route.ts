@@ -418,7 +418,10 @@ export async function GET(req: Request): Promise<NextResponse> {
         id: r.id,
         label: r.title,
         sublabel: r.category ? `${r.category} · ${r.key}` : r.key,
-        href: `/documents/${r.id}`,
+        href:
+          can(ctx, 'documents.manage') || ctx.isSuperAdmin
+            ? `/documents/${r.id}`
+            : `/documents/${r.id}/read`,
       })),
     })
   }

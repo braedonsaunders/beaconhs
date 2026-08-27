@@ -7,34 +7,29 @@ import {
   useGeneratedValueTranslations,
 } from '@/i18n/generated'
 
-// The Acknowledgments tab body: a URL-driven, server-paged roster of everyone
-// who has signed, the current user's self-acknowledge action (with an optional
-// signature), and an entry point to the group sign-off sheet.
+// Manager-only acknowledgments roster: who signed, when, which version, and
+// whether it was individual or a group session. Signatures open as evidence —
+// they are never shown as a thumbnail strip. Self-ack lives on /read.
 
-import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
-import { BadgeCheck, Check, PenLine, Users } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle, Badge, Button, SignaturePad } from '@beaconhs/ui'
-import { acknowledgeDocument } from './_ack-actions'
-import { RawImage } from '@/components/raw-image'
+import { BadgeCheck, Users } from 'lucide-react'
+import { Badge, Button } from '@beaconhs/ui'
 import { SearchInput } from '@/components/search-input'
 import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
 import { TableToolbar } from '@/components/table-toolbar'
+import { SignatureEvidence } from './_signature-evidence'
 
 export type AckRow = {
   ackId: string
   personId: string
   name: string
-  acknowledgedAt: string // ISO
+  acknowledgedAt: string
+  version: number | null
   sessionId: string | null
   sessionTitle: string | null
   signatureUrl: string | null
 }
-
-type SelfStatus = 'can' | 'acked' | 'unpublished' | 'no-person'
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -45,8 +40,8 @@ function initials(name: string): string {
 
 export function AcknowledgmentsPanel({
   documentId,
-  versionId,
   signOffHref,
+  readHref,
   acks,
   total,
   filteredTotal,
@@ -58,123 +53,62 @@ export function AcknowledgmentsPanel({
   canManageSignOff,
 }: {
   documentId: string
-  versionId: string | null
   signOffHref: string
+  readHref: string
   acks: AckRow[]
   total: number
   filteredTotal: number
   page: number
   perPage: number
   currentParams: Record<string, string | string[] | undefined>
-  selfStatus: SelfStatus
+  selfStatus: 'can' | 'acked' | 'unpublished' | 'no-person'
   selfAckedAt: string | null
-  /** Group sign-off is a documents.manage surface — hide the entry for readers. */
   canManageSignOff: boolean
 }) {
-  const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
-  const router = useRouter()
-  const [sig, setSig] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
+  const tGeneratedValue = useGeneratedValueTranslations()
   const basePath = `/documents/${documentId}`
-
-  function submitSelfAck() {
-    if (!versionId) return
-    startTransition(async () => {
-      try {
-        const res = await acknowledgeDocument({ documentId, signatureDataUrl: sig })
-        if (!res.ok) {
-          toast.error(tGeneratedValue(res.error))
-          return
-        }
-        toast.success(tGenerated('m_16ab93413661d2'))
-        setSig(null)
-        router.refresh()
-      } catch (err) {
-        toast.error(
-          tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_1d1fa19fb2f80d')),
-        )
-      }
-    })
-  }
 
   return (
     <div className="space-y-4">
-      {/* Self-acknowledge */}
       <GeneratedValue
         value={
-          selfStatus === 'acked' ? (
-            <Alert variant="success">
-              <Check size={16} />
-              <AlertTitle>
-                <GeneratedText id="m_0945deabe6292c" />
-              </AlertTitle>
+          selfStatus === 'unpublished' ? null : (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900/60">
               <GeneratedValue
                 value={
-                  selfAckedAt ? (
-                    <AlertDescription>
-                      <GeneratedText id="m_03bc5bb7f90899" />{' '}
-                      <GeneratedValue value={new Date(selfAckedAt).toLocaleString()} />.
-                    </AlertDescription>
-                  ) : null
+                  selfStatus === 'acked' ? (
+                    <p className="text-slate-700 dark:text-slate-200">
+                      <GeneratedText id="m_0945deabe6292c" />
+                      <GeneratedValue
+                        value={
+                          selfAckedAt ? (
+                            <>
+                              {' · '}
+                              <GeneratedText id="m_03bc5bb7f90899" />{' '}
+                              <GeneratedValue value={new Date(selfAckedAt).toLocaleString()} />.
+                            </>
+                          ) : null
+                        }
+                      />
+                    </p>
+                  ) : (
+                    <p className="text-slate-700 dark:text-slate-200">
+                      <GeneratedText id="m_1359a3381f80a2" />
+                    </p>
+                  )
                 }
               />
-            </Alert>
-          ) : selfStatus === 'can' ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/60">
-              <p className="text-sm text-slate-700 dark:text-slate-200">
-                <GeneratedText id="m_1359a3381f80a2" />
-              </p>
-              <div className="mt-2">
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                  <PenLine size={12} /> <GeneratedText id="m_0c0bc02db58371" />{' '}
-                  <span className="font-normal">
-                    <GeneratedText id="m_1f61ed87b795bd" />
-                  </span>
-                </div>
-                <SignaturePad value={sig} onChange={setSig} height={120} />
-              </div>
-              <Button
-                type="button"
-                className="mt-3 w-full"
-                onClick={submitSelfAck}
-                disabled={pending}
-              >
-                <Check size={14} />{' '}
-                <GeneratedValue
-                  value={
-                    pending ? (
-                      <GeneratedText id="m_0d17b2ff9d6215" />
-                    ) : (
-                      <GeneratedText id="m_12ef6648f77371" />
-                    )
-                  }
-                />
-              </Button>
+              <Link href={readHref} className="mt-2 inline-block">
+                <Button type="button" variant="outline" size="sm">
+                  <GeneratedText id="m_0431e4b7409595" />
+                </Button>
+              </Link>
             </div>
-          ) : selfStatus === 'unpublished' ? (
-            <Alert variant="warning">
-              <AlertTitle>
-                <GeneratedText id="m_17f1cc7a464731" />
-              </AlertTitle>
-              <AlertDescription>
-                <GeneratedText id="m_0034e77e69a315" />
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <Alert variant="warning">
-              <AlertTitle>
-                <GeneratedText id="m_03a0cae28cdecf" />
-              </AlertTitle>
-              <AlertDescription>
-                <GeneratedText id="m_17af6e2c8f7d2b" />
-              </AlertDescription>
-            </Alert>
           )
         }
       />
 
-      {/* Group sign-off entry — the sign-off sheet is manage-only */}
       <GeneratedValue
         value={
           canManageSignOff && selfStatus !== 'unpublished' ? (
@@ -187,7 +121,6 @@ export function AcknowledgmentsPanel({
         }
       />
 
-      {/* Roster */}
       <div>
         <div className="mb-2">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -259,7 +192,7 @@ export function AcknowledgmentsPanel({
                         >
                           <GeneratedValue value={row.name} />
                         </Link>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <span
                             className="text-xs text-slate-500 dark:text-slate-400"
                             title={tGeneratedValue(new Date(row.acknowledgedAt).toLocaleString())}
@@ -268,6 +201,16 @@ export function AcknowledgmentsPanel({
                               value={new Date(row.acknowledgedAt).toLocaleDateString()}
                             />
                           </span>
+                          <GeneratedValue
+                            value={
+                              row.version != null ? (
+                                <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                                  <GeneratedText id="m_1c693e59d64fb2" />
+                                  <GeneratedValue value={row.version} />
+                                </Badge>
+                              ) : null
+                            }
+                          />
                           <GeneratedValue
                             value={
                               row.sessionId ? (
@@ -288,18 +231,7 @@ export function AcknowledgmentsPanel({
                           />
                         </div>
                       </div>
-                      <GeneratedValue
-                        value={
-                          row.signatureUrl ? (
-                            <RawImage
-                              src={row.signatureUrl}
-                              alt={tGenerated('m_017383099e620c', { value0: row.name })}
-                              optimizationReason="authenticated"
-                              className="h-8 w-16 shrink-0 rounded border border-slate-200 bg-white object-contain dark:border-slate-700"
-                            />
-                          ) : null
-                        }
-                      />
+                      <SignatureEvidence name={row.name} signatureUrl={row.signatureUrl} />
                     </li>
                   ))}
                 />

@@ -25,11 +25,9 @@ export function resolveComplianceLink(
   const ref = targetRef ?? {}
   switch (kind) {
     case 'document':
-      // Land on the Acknowledgments tab so the acknowledge action + signature
-      // are front-and-centre, with the document shown in the right pane.
-      return ref.documentId
-        ? { href: `/documents/${ref.documentId}?tab=acknowledgments`, prefetch: true }
-        : null
+      // Worker reader: published PDF + sticky self-acknowledge. Managers
+      // still reach the authoring workspace from Documents manage.
+      return ref.documentId ? { href: `/documents/${ref.documentId}/read`, prefetch: true } : null
     case 'journal':
       // The journals workspace is where today's entry is logged.
       return { href: '/journals', prefetch: true }

@@ -66,6 +66,17 @@ describe('compliance completion links', () => {
     })
   })
 
+  it('opens document requirements on the reader page', () => {
+    expect(
+      resolveComplianceLink('document', {
+        documentId: '90000000-0000-4000-8000-000000000009',
+      }),
+    ).toEqual({
+      href: '/documents/90000000-0000-4000-8000-000000000009/read',
+      prefetch: true,
+    })
+  })
+
   it('opens skill requirements in the learner wallet', () => {
     expect(
       resolveComplianceLink('cert_requirement', {

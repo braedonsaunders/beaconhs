@@ -388,24 +388,25 @@ Open **Documents** in the left menu. You will see cards for every published docu
 
 1. Open [Documents](/documents).
 2. Type a word in the search box — it says **Search title or description**. You can also filter by **Category** or **Type**.
-3. Tap **View PDF** on the document you want.
-4. The document opens right there. Tap **Download** to save a copy, or **New tab** to open it full screen for printing.
+3. Tap **Read document** on the document you want.
+4. The published PDF opens full screen. Tap **Download** to save a copy, or **New tab** to open it for printing.
 
 ## Acknowledge a document
 
 Some documents need your sign-off. This is the digital version of signing the sheet at a toolbox talk.
 
-1. Open the document's page and go to the **Acknowledgments** tab.
-2. Read the document first. The screen reminds you: by acknowledging you confirm you have read and understood it.
-3. Add your signature if the **Signature (optional)** box is shown.
-4. Tap **Acknowledge**.
-5. You will see **You've acknowledged this** with the date and time it was recorded. Done — no paper needed.
+1. Open the document from [Documents](/documents) or from [Compliance](/compliance).
+2. Read the PDF first. The bar at the bottom reminds you: by acknowledging you confirm you have read and understood it.
+3. Tap **Signature (optional)** if you want to add a handwritten signature, then tap **Acknowledge**.
+4. You will see **You've acknowledged this** with the date and time it was recorded. Done — no paper needed.
+
+You only see your own sign-off on this page. Other people's signatures stay with the people who manage documents.
 
 If a supervisor is running a group sign-off at a toolbox talk, they will pass you the tablet to sign your name on their screen instead.
 
 For a facilitator-led session, each signature saves immediately. After the last person signs, the facilitator selects the site or project and taps **Complete session**. Completion locks the roster and runs the configured sign-off automations once.
 
-The same tab shows everyone who has signed. Use **Search people or sessions**, **Source**, and **Order** to find an individual acknowledgment or a group sign-off. Use **Next** and **Prev** to move through the complete history.
+Acknowledgment requests can also show up in your notifications. Follow the link, read, and tap **Acknowledge**.
 
 ## Document books
 
@@ -422,7 +423,6 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 ## Tips
 
 - If you cannot find a document, check your spelling, then try a shorter search word.
-- Acknowledgment requests can also show up in your notifications. Follow the link, read, and tap **Acknowledge**.
 - Need training instead of a document? See [Training & certificates](/help/training).`,
   },
   {
@@ -498,6 +498,14 @@ Open the **Versions** tab. Every published version keeps its own PDF and Word fi
 - **View changes** — compare the extracted text with the preceding version. Added and removed lines include their old and new line numbers, and long comparisons are paged. For native Writer redlines, use **Open read-only**; tracked changes and comments remain inside that version's Word file.
 
 Use **Search versions or changes**, **Status**, and **Order** to work through a long version history. The **Reviews**, **Compliance**, and **Activity** tabs have the same search, relevant filters, and **Next** / **Prev** paging, so older records stay available instead of disappearing from the page.
+
+## Acknowledgments (who signed)
+
+The **Acknowledgments** tab is the evidence roster for this document: name, date, version, and whether they signed alone or in a group session. Tap **Signature** to open one person's signature. The list never shows a strip of everyone else's handwriting.
+
+To sign the current published version yourself, tap **Read document** at the top of the page. That opens the same reader field workers use.
+
+For a toolbox talk, tap **Record group sign-off**. Use **Search people or sessions**, **Source**, and **Order** to find a person or a session. Use **Next** and **Prev** to move through the complete history.
 
 ## Uploaded PDFs
 

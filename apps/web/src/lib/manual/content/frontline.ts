@@ -642,7 +642,7 @@ Open **Compliance** in the left menu, or go to [Compliance](/compliance). Most p
 
 1. Open [Compliance](/compliance).
 2. Find a row that is not done. The button on the row tells you what to do — it changes with the kind of item:
-   - **Acknowledge** — open the document, read it, and confirm.
+   - **Acknowledge** — open the document reader, read the PDF, and confirm.
    - **Go to training** — opens the assigned course or assessment. Start an assessment from this link so the result is credited to that exact requirement.
    - **Open app** — opens the form linked to that exact obligation. Submit it from this link so the required item is recorded as complete.
    - **Start inspection** — starts the required inspection.

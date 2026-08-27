@@ -1,15 +1,13 @@
 'use client'
 
-import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 
-// Read-only documents library for users without `documents.manage` (everyone
-// except Administration / Health & Safety). A responsive card grid; clicking a
-// card opens the document's PDF (rendered on demand) in a modal. No edit affordances.
+// Read-only documents library for users without `documents.manage`. A
+// responsive card grid; each card opens the dedicated reader page (published
+// PDF + self-acknowledge). No edit affordances.
 
-import { useState } from 'react'
+import Link from 'next/link'
 import { FileText } from 'lucide-react'
-import { getDocumentPdfUrl } from './[id]/_actions'
-import { ReadOnlyPdfModal } from './_read-only-pdf-modal'
 
 export type ReadOnlyDoc = {
   id: string
@@ -20,80 +18,63 @@ export type ReadOnlyDoc = {
 }
 
 export function ReadOnlyDocumentsGrid({ docs }: { docs: ReadOnlyDoc[] }) {
-  const tGeneratedValue = useGeneratedValueTranslations()
-  const [active, setActive] = useState<ReadOnlyDoc | null>(null)
   return (
-    <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-        <GeneratedValue
-          value={docs.map((d) => (
-            <button
-              key={d.id}
-              type="button"
-              onClick={() => setActive(d)}
-              className="group flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
-            >
-              <div className="mb-3 flex items-start justify-between gap-2">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-600 dark:bg-teal-950/60 dark:text-teal-400">
-                  <FileText size={18} />
-                </span>
-                <GeneratedValue
-                  value={
-                    d.type ? (
-                      <span
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                        style={{
-                          backgroundColor: hexAlpha(d.type.color, 0.13),
-                          color: d.type.color ?? '#475569',
-                        }}
-                      >
-                        <GeneratedValue value={d.type.name} />
-                      </span>
-                    ) : null
-                  }
-                />
-              </div>
-              <h3 className="line-clamp-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                <GeneratedValue value={d.title} />
-              </h3>
-              <GeneratedValue
-                value={
-                  d.category ? (
-                    <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-                      <GeneratedValue value={d.category} />
-                    </p>
-                  ) : null
-                }
-              />
-              <GeneratedValue
-                value={
-                  d.description ? (
-                    <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                      <GeneratedValue value={d.description} />
-                    </p>
-                  ) : null
-                }
-              />
-              <span className="mt-auto inline-flex items-center gap-1.5 pt-4 text-xs font-semibold text-teal-600 group-hover:gap-2 dark:text-teal-400">
-                <FileText size={13} /> <GeneratedText id="m_18289d8eec64f8" />
-              </span>
-            </button>
-          ))}
-        />
-      </div>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
       <GeneratedValue
-        value={
-          active ? (
-            <ReadOnlyPdfModal
-              id={active.id}
-              title={tGeneratedValue(active.title)}
-              resolve={getDocumentPdfUrl}
-              onClose={() => setActive(null)}
+        value={docs.map((d) => (
+          <Link
+            key={d.id}
+            href={`/documents/${d.id}/read`}
+            className="group flex h-full flex-col rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-700"
+          >
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-teal-50 text-teal-600 dark:bg-teal-950/60 dark:text-teal-400">
+                <FileText size={18} />
+              </span>
+              <GeneratedValue
+                value={
+                  d.type ? (
+                    <span
+                      className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                      style={{
+                        backgroundColor: hexAlpha(d.type.color, 0.13),
+                        color: d.type.color ?? '#475569',
+                      }}
+                    >
+                      <GeneratedValue value={d.type.name} />
+                    </span>
+                  ) : null
+                }
+              />
+            </div>
+            <h3 className="line-clamp-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+              <GeneratedValue value={d.title} />
+            </h3>
+            <GeneratedValue
+              value={
+                d.category ? (
+                  <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={d.category} />
+                  </p>
+                ) : null
+              }
             />
-          ) : null
-        }
+            <GeneratedValue
+              value={
+                d.description ? (
+                  <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                    <GeneratedValue value={d.description} />
+                  </p>
+                ) : null
+              }
+            />
+            <span className="mt-auto inline-flex items-center gap-1.5 pt-4 text-xs font-semibold text-teal-600 group-hover:gap-2 dark:text-teal-400">
+              <FileText size={13} /> <GeneratedText id="m_0431e4b7409595" />
+            </span>
+          </Link>
+        ))}
       />
-    </>
+    </div>
   )
 }
 
