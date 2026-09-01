@@ -71,7 +71,43 @@ describe('Beacon AppKit report catalogue', () => {
         'department_id',
         'department_name',
         'group_id_list',
+        'person_status',
       ]),
     )
+    const records = BEACON_REPORT_CATALOG.entities.find(
+      (entity) => entity.key === 'training_records',
+    )
+    expect(records?.table).toBe('report_training_records')
+    expect(records?.columns.map((column) => column.key)).toEqual(
+      expect.arrayContaining([
+        'employee_no',
+        'person_name',
+        'person_status',
+        'department_id',
+        'department_name',
+        'course_code',
+        'course_name',
+        'group_id_list',
+      ]),
+    )
+  })
+
+  it('seeds employment status and wallet-card PDF export on training reports', () => {
+    const trainingSeeds = BEACON_REPORT_SEEDS.filter(
+      (definition) => definition.query.entity === 'training_matrix',
+    )
+    expect(trainingSeeds.length).toBeGreaterThan(0)
+    for (const definition of trainingSeeds) {
+      const rules = definition.query.filters?.rules ?? []
+      expect(rules).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ field: 'person_status', op: 'eq', value: 'active' }),
+        ]),
+      )
+    }
+    const wallet = BEACON_REPORT_SEEDS.find(
+      (definition) => definition.seedKey === 'training_wallet_cards',
+    )
+    expect(wallet?.layout).toEqual(expect.objectContaining({ exportMode: 'credential-fronts' }))
   })
 })

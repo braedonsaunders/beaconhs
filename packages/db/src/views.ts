@@ -80,6 +80,7 @@ export const REPORT_VIEWS_SQL: string[] = [
        ),
        ','
      ) AS group_id_list
+     ,(SELECT d.name FROM departments d WHERE d.id = p.department_id) AS department_name
    FROM training_skill_assignments a
    JOIN training_skill_types t ON t.id = a.skill_type_id
    JOIN training_skill_authorities au ON au.id = t.authority_id
@@ -88,11 +89,13 @@ export const REPORT_VIEWS_SQL: string[] = [
    WHERE a.deleted_at IS NULL
      AND p.deleted_at IS NULL`,
 
-  // Person × course training coverage. The cross product of active people and
+  // Person × course training coverage. The cross product of people and
   // courses (so "never trained" cells exist) LEFT JOINed to each person's
-  // latest record per course, with a derived coverage status. All three base
-  // tables are FORCE-RLS, so every branch is tenant-scoped by app.tenant_id;
-  // the explicit tenant equality keeps the cross join within a tenant too.
+  // latest record per course, with a derived coverage status. Employment
+  // status is a report filter (`person_status`), not a view predicate.
+  // All three base tables are FORCE-RLS, so every branch is tenant-scoped
+  // by app.tenant_id; the explicit tenant equality keeps the cross join
+  // within a tenant too.
   `CREATE OR REPLACE VIEW report_training_matrix AS
    WITH latest AS (
      SELECT DISTINCT ON (r.tenant_id, r.person_id, r.course_id)
@@ -158,13 +161,13 @@ export const REPORT_VIEWS_SQL: string[] = [
          ORDER BY gm.group_id
        ),
        ','
-     )                                 AS group_id_list
+     )                                 AS group_id_list,
+     p.status                          AS person_status
    FROM people p
    CROSS JOIN training_courses c
    LEFT JOIN latest l
      ON l.person_id = p.id AND l.course_id = c.id AND l.tenant_id = p.tenant_id
    WHERE p.tenant_id = c.tenant_id
-     AND p.status = 'active'
      AND p.deleted_at IS NULL
      AND c.deleted_at IS NULL`,
 
@@ -442,4 +445,40 @@ export const REPORT_VIEWS_SQL: string[] = [
      ON department.id = owner_person.department_id AND department.tenant_id = action.tenant_id
    LEFT JOIN org_units location
      ON location.id = action.site_org_unit_id AND location.tenant_id = action.tenant_id`,
+
+  // Training records with the employee dimensions the report studio needs
+  // (department, status, groups). New view — full column order is free.
+  `CREATE OR REPLACE VIEW report_training_records AS
+   SELECT
+     r.id,
+     r.tenant_id,
+     r.person_id,
+     r.course_id,
+     r.completed_on,
+     r.expires_on,
+     r.source,
+     r.score,
+     r.grade,
+     r.deleted_at,
+     p.employee_no,
+     (p.last_name || ', ' || p.first_name) AS person_name,
+     p.status AS person_status,
+     p.department_id,
+     (SELECT d.name FROM departments d WHERE d.id = p.department_id) AS department_name,
+     c.code AS course_code,
+     c.name AS course_name,
+     array_to_string(
+       ARRAY(
+         SELECT gm.group_id::text
+         FROM person_group_memberships gm
+         WHERE gm.tenant_id = p.tenant_id AND gm.person_id = p.id
+         ORDER BY gm.group_id
+       ),
+       ','
+     ) AS group_id_list
+   FROM training_records r
+   JOIN people p ON p.id = r.person_id AND p.tenant_id = r.tenant_id
+   JOIN training_courses c ON c.id = r.course_id AND c.tenant_id = r.tenant_id
+   WHERE p.deleted_at IS NULL
+     AND c.deleted_at IS NULL`,
 ]

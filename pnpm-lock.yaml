@@ -308,6 +308,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@beaconhs/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@beaconhs/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
@@ -317,6 +320,9 @@ importers:
       '@beaconhs/compliance':
         specifier: workspace:*
         version: link:../../packages/compliance
+      '@beaconhs/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
       '@beaconhs/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -374,6 +380,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(kysely@0.28.17)(mysql2@3.22.6(@types/node@24.13.3))(pg@8.22.0)(postgres@3.4.9)
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
     devDependencies:
       '@types/node':
         specifier: ^24.13.2
@@ -695,18 +704,33 @@ importers:
 
   packages/forms-pdf:
     dependencies:
+      '@beaconhs/db':
+        specifier: workspace:*
+        version: link:../db
       '@beaconhs/design-studio':
         specifier: workspace:*
         version: link:../design-studio
       '@beaconhs/reports':
         specifier: workspace:*
         version: link:../reports
+      '@beaconhs/storage':
+        specifier: workspace:*
+        version: link:../storage
       '@beaconhs/sync':
         specifier: workspace:*
         version: link:../sync
+      '@beaconhs/tenant':
+        specifier: workspace:*
+        version: link:../tenant
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(kysely@0.28.17)(mysql2@3.22.6(@types/node@24.13.3))(pg@8.22.0)(postgres@3.4.9)
       puppeteer-core:
         specifier: ^25.3.0
         version: 25.3.0
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       sharp:
         specifier: 0.34.5
         version: 0.34.5
@@ -714,6 +738,9 @@ importers:
       '@types/node':
         specifier: ^24.13.2
         version: 24.13.3
+      '@types/qrcode':
+        specifier: ^1.5.6
+        version: 1.5.6
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

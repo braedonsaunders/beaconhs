@@ -30,6 +30,8 @@ type RawAi = {
   keyNonce?: string
   /** Auto-summarise & categorise journal entries on submit (background). Tenant-only. */
   autoJournalAi?: boolean
+  /** Nightly/hourly Insights journal analysis. Default on when AI is configured. */
+  autoJournalAnalysis?: boolean
 }
 
 /** Platform-wide AI config: the provider PLUS the policy governing tenant overrides. */
@@ -60,7 +62,10 @@ function toCommon(ai: RawAi): CommonAiSettings {
   }
 }
 
-type TenantAiSettings = CommonAiSettings & { autoJournalAi: boolean }
+type TenantAiSettings = CommonAiSettings & {
+  autoJournalAi: boolean
+  autoJournalAnalysis: boolean
+}
 type PlatformAiSettings = CommonAiSettings & { mode: AiPolicyMode }
 
 // The mutable, non-secret fields a save action collects from the form.
@@ -139,13 +144,23 @@ async function readAi(tenantId: string): Promise<{ ai: RawAi; orgName: string | 
 /** UI-facing tenant settings (no secret material). */
 export async function getTenantAiSettings(ctx: RequestContext): Promise<TenantAiSettings> {
   const { ai } = await readAi(ctx.tenantId)
-  return { ...toCommon(ai), autoJournalAi: ai.autoJournalAi === true }
+  return {
+    ...toCommon(ai),
+    autoJournalAi: ai.autoJournalAi === true,
+    autoJournalAnalysis: ai.autoJournalAnalysis !== false,
+  }
 }
 
 /** Whether journals are auto-summarised & tagged on submit (background AI). */
 export async function getTenantAutoJournalAi(ctx: RequestContext): Promise<boolean> {
   const { ai } = await readAi(ctx.tenantId)
   return ai.enabled !== false && ai.autoJournalAi === true
+}
+
+/** Whether Insights journal analysis runs automatically in the worker. */
+export async function getTenantAutoJournalAnalysis(ctx: RequestContext): Promise<boolean> {
+  const { ai } = await readAi(ctx.tenantId)
+  return ai.enabled !== false && ai.autoJournalAnalysis !== false
 }
 
 /**
@@ -180,7 +195,7 @@ export async function getTenantOwnAiConfig(ctx: RequestContext): Promise<AiConfi
 
 export async function saveTenantAiSettings(
   ctx: RequestContext,
-  input: AiSettingsInput & { autoJournalAi: boolean },
+  input: AiSettingsInput & { autoJournalAi: boolean; autoJournalAnalysis: boolean },
 ): Promise<void> {
   const validatedInput = await validateAiSettingsInput(input)
   await withSuperAdmin(db, async (tx) => {
@@ -194,6 +209,7 @@ export async function saveTenantAiSettings(
     const prev = (settings.ai && typeof settings.ai === 'object' ? settings.ai : {}) as RawAi
     const next = mergeRaw(prev, validatedInput, {
       autoJournalAi: validatedInput.autoJournalAi,
+      autoJournalAnalysis: validatedInput.autoJournalAnalysis,
     })
     await tx
       .update(tenants)

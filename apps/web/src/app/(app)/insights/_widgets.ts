@@ -32,7 +32,7 @@ const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
     id: 'ai-analysis',
     label: 'AI journal analysis',
     description:
-      'Sentiment, surfaced issues & recommended corrective actions from recent journals.',
+      'Automatic background analysis of recent journals: sentiment, issues, and recommended actions.',
     category: 'ai',
     defaultSize: { w: 6, h: 6 },
     minSize: { w: 4, h: 5 },

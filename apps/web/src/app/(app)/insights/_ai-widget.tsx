@@ -8,24 +8,26 @@ import {
 
 import { GeneratedText } from '@/i18n/generated'
 
-// The "AI journal analysis" Insights widget. Reads recent field journals on
-// demand and surfaces sentiment, recurring themes, the issues raised, and
-// recommended corrective actions routed to an owner. Degrades gracefully when
-// AI is unconfigured.
+// The "AI journal analysis" Insights widget. Reads the latest worker-written
+// snapshot for 7 / 30 / 90 days. Period chips only switch cached results.
+// Refresh enqueues a background job — it never runs the model on this page.
 
-import { useState, useTransition, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, ClipboardCheck, Loader2, Sparkles } from 'lucide-react'
+import { AlertTriangle, ClipboardCheck, Loader2, RefreshCw, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@beaconhs/ui'
-import type { JournalAnalysis } from '@beaconhs/ai'
-import { runJournalAnalysis } from './_ai-actions'
+import {
+  enqueueJournalAnalysis,
+  loadJournalAnalysisSnapshot,
+  type JournalAnalysisSnapshot,
+} from './_ai-actions'
 
 const PERIODS = [
   { days: 7, label: '7d' },
   { days: 30, label: '30d' },
   { days: 90, label: '90d' },
-]
+] as const
 
 const SENTIMENT_TONE: Record<string, string> = {
   positive: 'bg-teal-100 text-teal-800 ring-teal-600/20 dark:bg-teal-500/15 dark:text-teal-300',
@@ -41,34 +43,58 @@ const SEV_TONE: Record<string, string> = {
   low: 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-700 dark:text-slate-300',
 }
 
-export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
+export function JournalAnalysisWidget({
+  aiEnabled,
+  initialRuns,
+}: {
+  aiEnabled: boolean
+  initialRuns: JournalAnalysisSnapshot[]
+}) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
-  const [days, setDays] = useState(30)
-  const [result, setResult] = useState<{
-    analysis: JournalAnalysis
-    entryCount: number
-    days: number
-  } | null>(null)
-  const [pending, start] = useTransition()
+  const [days, setDays] = useState<7 | 30 | 90>(30)
+  const [runs, setRuns] = useState(initialRuns)
+  const [refreshing, setRefreshing] = useState(false)
+  const current = runs.find((r) => r.days === days) ?? runs[1] ?? runs[0]
+  const working = current?.status === 'pending' || current?.status === 'running'
 
-  function run(d: number) {
-    setDays(d)
+  useEffect(() => {
+    if (!working) return
+    let cancelled = false
+    const timer = window.setInterval(() => {
+      void loadJournalAnalysisSnapshot().then((next) => {
+        if (!cancelled) setRuns(next)
+      })
+    }, 4000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [working])
+
+  async function refresh() {
     if (!aiEnabled) {
       toast.error(tGenerated('m_00e97569b011f9'))
       return
     }
-    start(async () => {
-      const r = await runJournalAnalysis(d)
+    setRefreshing(true)
+    try {
+      const r = await enqueueJournalAnalysis(days)
       if (!r.ok) {
         toast.error(tGeneratedValue(r.error))
         return
       }
-      setResult({ analysis: r.analysis, entryCount: r.entryCount, days: r.days })
-    })
+      toast.success(tGenerated('m_03527b17b1230e'))
+      setRuns(await loadJournalAnalysisSnapshot())
+    } catch {
+      toast.error(tGenerated('m_06887a9476d26a'))
+    } finally {
+      setRefreshing(false)
+    }
   }
 
-  const a = result?.analysis
+  const a = current?.analysis ?? null
+  const pending = working || refreshing
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -85,8 +111,7 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
                 <button
                   key={p.days}
                   type="button"
-                  onClick={() => run(p.days)}
-                  disabled={pending}
+                  onClick={() => setDays(p.days)}
                   className={cn(
                     'px-2 py-1 text-xs font-medium transition-colors disabled:opacity-60',
                     days === p.days
@@ -101,24 +126,16 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
           </div>
           <button
             type="button"
-            onClick={() => run(days)}
-            disabled={pending}
+            onClick={() => void refresh()}
+            disabled={refreshing || working}
             className="inline-flex h-7 items-center gap-1.5 rounded-md bg-teal-600 px-2.5 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-60"
           >
             <GeneratedValue
               value={
-                pending ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />
+                pending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />
               }
             />
-            <GeneratedValue
-              value={
-                a ? (
-                  <GeneratedText id="m_1e21782483902a" />
-                ) : (
-                  <GeneratedText id="m_13184d6f3629b6" />
-                )
-              }
-            />
+            <GeneratedText id="m_16f11d7bc7b7b4" />
           </button>
         </div>
       </div>
@@ -127,10 +144,10 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto p-3">
         <GeneratedValue
           value={
-            pending ? (
+            working && !a ? (
               <div className="flex h-full items-center justify-center gap-2 text-sm text-slate-400">
                 <Loader2 size={15} className="animate-spin" />{' '}
-                <GeneratedText id="m_151bdf2a7987a9" />
+                <GeneratedText id="m_19d570f57a5735" />
               </div>
             ) : !aiEnabled ? (
               <Empty>
@@ -142,22 +159,13 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
                 <GeneratedValue value={' '} />
                 <GeneratedText id="m_1ea7b304608f38" />
               </Empty>
+            ) : current?.status === 'failed' && !a ? (
+              <Empty>
+                <GeneratedValue value={current.error ?? tGenerated('m_06887a9476d26a')} />
+              </Empty>
             ) : !a ? (
               <Empty>
-                <GeneratedText id="m_04ad20f8a203c6" />{' '}
-                <strong>
-                  <GeneratedText id="m_01aeb389580f99" />
-                </strong>
-                ,<GeneratedValue value={' '} />
-                <strong>
-                  <GeneratedText id="m_1e46b62631fc9c" />
-                </strong>{' '}
-                <GeneratedText id="m_0237e52728336d" />{' '}
-                <strong>
-                  <GeneratedText id="m_123d9ac5d211b3" />
-                </strong>
-                <GeneratedValue value={' '} />
-                <GeneratedText id="m_040218a3214039" />
+                <GeneratedText id="m_006ac01927a797" />
               </Empty>
             ) : (
               <div className="space-y-3">
@@ -306,10 +314,19 @@ export function JournalAnalysisWidget({ aiEnabled }: { aiEnabled: boolean }) {
                 />
 
                 <p className="pt-1 text-[10px] text-slate-400">
+                  <GeneratedText id="m_118381f628c355" />
+                  <GeneratedValue value={' '} />
                   <GeneratedText id="m_087e1d02654a6e" />{' '}
-                  <GeneratedValue value={result?.entryCount} />{' '}
-                  <GeneratedText id="m_13fa230451e20c" /> <GeneratedValue value={result?.days} />{' '}
+                  <GeneratedValue value={current?.entryCount} />{' '}
+                  <GeneratedText id="m_13fa230451e20c" /> <GeneratedValue value={current?.days} />{' '}
                   <GeneratedText id="m_07dbd8251e8a8b" />
+                  <GeneratedValue
+                    value={
+                      current?.finishedAt
+                        ? ` · ${tGenerated('m_01da19754e16f7')} ${new Date(current.finishedAt).toLocaleString()}`
+                        : ''
+                    }
+                  />
                 </p>
               </div>
             )

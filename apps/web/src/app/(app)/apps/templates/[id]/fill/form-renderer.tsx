@@ -35,10 +35,10 @@ import {
   useTransition,
 } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { useLocale, useTranslations } from 'next-intl'
 import {
   AlertTriangle,
-  Bold,
   Check,
   ClipboardList,
   ChevronDown,
@@ -48,11 +48,9 @@ import {
   Cloud,
   CloudOff,
   Eye,
-  Italic,
-  Link as LinkIcon,
-  List,
   MapPin,
   Minus,
+  PenTool,
   Plus,
   ScanLine,
   Search,
@@ -69,8 +67,10 @@ import {
   Badge,
   Button,
   DetailHeader,
+  Drawer,
   Input,
   Label,
+  RichTextEditor,
   SearchSelect,
   Select,
   Textarea,
@@ -118,7 +118,11 @@ import {
 } from '@/app/(app)/apps/_lib/data-sources'
 import { SignaturePad } from '@/components/signature-pad'
 import { RawImage } from '@/components/raw-image'
-import { SketchPad, type SketchScene } from '@/components/sketch-pad'
+import type { SketchScene } from '@/components/sketch-pad'
+
+const SketchPad = dynamic(() => import('@/components/sketch-pad').then((mod) => mod.SketchPad), {
+  ssr: false,
+})
 import { RiskMatrixField } from '@/components/risk-matrix'
 import { FileUpload, dataUrlToFile, type AttachedFile } from '@/components/file-upload'
 import { PhotoGallery, type PhotoEdits } from '@/components/photo-gallery'
@@ -152,8 +156,8 @@ const SECTION_TONES = [
 ] as const
 
 // Read-only context — when true, custom (non-form-control) inputs that a
-// disabled <fieldset> can't reach (signature/sketch canvases, the rich-text
-// contentEditable) render static. Provided by FormRenderer in record/view mode.
+// disabled <fieldset> can't reach (signature/sketch canvases, the TipTap
+// rich-text editor) render static. Provided by FormRenderer in record/view mode.
 const FillReadOnlyContext = createContext(false)
 
 // Per-MOUNT cache of org-unit picker options, keyed by level. Deliberately
@@ -4334,114 +4338,45 @@ function RankingInput({
   )
 }
 
-// --- Rich text (lightweight contentEditable) -------------------------------
+// --- Rich text (shared TipTap editor) --------------------------------------
+
+function richTextIsEmpty(html: string): boolean {
+  return (
+    html
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .trim().length === 0
+  )
+}
 
 function RichTextInput({ value, onChange }: { value: unknown; onChange: (v: unknown) => void }) {
   const tGenerated = useGeneratedTranslations()
   const readOnly = useContext(FillReadOnlyContext)
-  const ref = useRef<HTMLDivElement>(null)
-  // Capture the sanitized initial document once. React sees the same HTML prop
-  // on later renders and leaves the user's uncontrolled DOM/caret untouched.
   const [initialHtml] = useState(() => sanitizeDocumentHtml(typeof value === 'string' ? value : ''))
-  const cleanEditorHtml = () => sanitizeDocumentHtml(ref.current?.innerHTML ?? '')
-  const exec = (cmd: string, arg?: string) => {
-    if (readOnly) return
-    document.execCommand(cmd, false, arg)
-    onChange(cleanEditorHtml())
-    ref.current?.focus()
-  }
-  const btn =
-    'flex h-7 w-7 items-center justify-center rounded text-slate-500 enabled:hover:bg-white enabled:hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40'
-  return (
-    <div className="rounded-md border border-slate-200">
-      <div className="flex gap-0.5 border-b border-slate-200 bg-slate-50 p-1">
-        <button
-          type="button"
-          className={btn}
-          title={tGenerated('m_1e62e6d69a0d11')}
-          disabled={readOnly}
-          onClick={() => exec('bold')}
-        >
-          <Bold size={13} />
-        </button>
-        <button
-          type="button"
-          className={btn}
-          title={tGenerated('m_1ee96b6856cb45')}
-          disabled={readOnly}
-          onClick={() => exec('italic')}
-        >
-          <Italic size={13} />
-        </button>
-        <button
-          type="button"
-          className={btn}
-          title={tGenerated('m_1eba1a694e67d0')}
-          disabled={readOnly}
-          onClick={() => exec('insertUnorderedList')}
-        >
-          <List size={13} />
-        </button>
-        <button
-          type="button"
-          className={btn}
-          title={tGenerated('m_197fef09772e0d')}
-          disabled={readOnly}
-          onClick={() => {
-            const url = window.prompt('Link URL')
-            if (!url) return
-            const safeUrl = normalizeRichTextLinkUrl(url)
-            if (!safeUrl) {
-              toast.error(tGenerated('m_19dc719a9038ec'))
-              return
-            }
-            exec('createLink', safeUrl)
-          }}
-        >
-          <LinkIcon size={13} />
-        </button>
+
+  if (readOnly) {
+    return (
+      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
+        {richTextIsEmpty(initialHtml) ? (
+          <span className="text-slate-400">—</span>
+        ) : (
+          <div
+            className="prose prose-sm prose-slate dark:prose-invert max-w-none"
+            dangerouslySetInnerHTML={{ __html: initialHtml }}
+          />
+        )}
       </div>
-      <div
-        ref={ref}
-        contentEditable={!readOnly}
-        suppressContentEditableWarning
-        dangerouslySetInnerHTML={{ __html: initialHtml }}
-        onInput={readOnly ? undefined : () => onChange(cleanEditorHtml())}
-        onPaste={
-          readOnly
-            ? undefined
-            : (event) => {
-                event.preventDefault()
-                const html = event.clipboardData.getData('text/html')
-                if (html) {
-                  document.execCommand('insertHTML', false, sanitizeDocumentHtml(html))
-                } else {
-                  document.execCommand('insertText', false, event.clipboardData.getData('text'))
-                }
-                onChange(cleanEditorHtml())
-              }
-        }
-        onDrop={
-          readOnly
-            ? undefined
-            : (event) => {
-                event.preventDefault()
-                document.execCommand('insertText', false, event.dataTransfer.getData('text/plain'))
-                onChange(cleanEditorHtml())
-              }
-        }
-        onBlur={
-          readOnly
-            ? undefined
-            : () => {
-                const clean = cleanEditorHtml()
-                if (ref.current && ref.current.innerHTML !== clean) ref.current.innerHTML = clean
-                onChange(clean)
-              }
-        }
-        className="app-scroll prose prose-sm max-h-60 min-h-[80px] max-w-none overflow-auto p-2 text-sm focus:outline-none"
-      />
-    </div>
+    )
+  }
+
+  return (
+    <RichTextEditor
+      defaultValue={initialHtml}
+      onChange={(html) => onChange(sanitizeDocumentHtml(html))}
+      minHeight="120px"
+      normalizeLink={normalizeRichTextLinkUrl}
+      onInvalidLink={() => toast.error(tGenerated('m_19dc719a9038ec'))}
+    />
   )
 }
 
@@ -4651,7 +4586,9 @@ function SketchField({
   onChange: (v: SketchValue | null) => void
   persistValue?: (v: SketchValue | null) => Promise<void>
 }) {
+  const tGenerated = useGeneratedTranslations()
   const readOnly = useContext(FillReadOnlyContext)
+  const [open, setOpen] = useState(false)
   const stored = (value as SketchValue | null) ?? null
 
   async function persist(dataUrl: string | null, scene: SketchScene) {
@@ -4683,7 +4620,56 @@ function SketchField({
     else onChange(next)
   }
 
-  return <SketchPad initialScene={stored?.scene ?? null} onSave={persist} readOnly={readOnly} />
+  return (
+    <div className="space-y-2">
+      {stored?.url ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="block w-full overflow-hidden rounded-md border border-slate-200 bg-white text-left dark:border-slate-700 dark:bg-slate-900"
+        >
+          <RawImage
+            src={stored.url}
+            alt={tGenerated('m_0d0d6b202ceb8a')}
+            optimizationReason="authenticated"
+            className="mx-auto max-h-48 w-full object-contain"
+          />
+        </button>
+      ) : (
+        <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+          <GeneratedText id="m_10d9f72c7ad9b3" />
+        </div>
+      )}
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <PenTool size={14} />
+        {stored?.url ? (
+          readOnly ? (
+            <GeneratedText id="m_18fb14ef4f6843" />
+          ) : (
+            <GeneratedText id="m_090f457d0a6f79" />
+          )
+        ) : (
+          <GeneratedText id="m_0dac081b69dd88" />
+        )}
+      </Button>
+      {open ? (
+        <Drawer
+          open
+          onClose={() => setOpen(false)}
+          title={tGenerated(stored?.url ? 'm_090f457d0a6f79' : 'm_0dac081b69dd88')}
+          size="2xl"
+          bodyClassName="overflow-hidden px-4 py-4"
+        >
+          <SketchPad
+            initialScene={stored?.scene ?? null}
+            onSave={persist}
+            readOnly={readOnly}
+            height={520}
+          />
+        </Drawer>
+      ) : null}
+    </div>
+  )
 }
 
 // --- Save status indicator -------------------------------------------------

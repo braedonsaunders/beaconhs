@@ -15,7 +15,9 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@beaconhs/ai": "workspace:*",
     "@beaconhs/audit": "workspace:*",
+    "@beaconhs/crypto": "workspace:*",
     "@beaconhs/analytics": "workspace:*",
     "@beaconhs/compliance": "workspace:*",
     "@beaconhs/db": "workspace:*",
@@ -36,7 +38,8 @@
     "@sentry/node": "10.65.0",
     "bullmq": "^5.80.2",
     "cron-parser": "^4.9.0",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

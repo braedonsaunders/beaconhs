@@ -29,6 +29,8 @@ export type RunAgentTurnArgs = {
   maxSteps?: number
   temperature?: number
   abortSignal?: AbortSignal
+  /** Extra response headers (conversation id, disable proxy buffering). */
+  headers?: Record<string, string>
   /** Settled-turn hook (fires on success AND on abort) with the assembled parts. */
   onComplete?: (result: AgentTurnResult) => void | Promise<void>
 }
@@ -60,6 +62,7 @@ export function runAgentTurn(
   })
 
   return result.toUIMessageStreamResponse({
+    headers: args.headers,
     sendReasoning: false,
     onError: (err) => {
       // Never leak provider/internal error text — it may carry keys/base URLs.

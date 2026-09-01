@@ -25,4 +25,17 @@ describe('lift-plan field persistence contract', () => {
     )
     expect(renderer).toContain('if (persistValue) await persistValue(next)')
   })
+
+  it('uses the shared TipTap editor instead of contentEditable', () => {
+    expect(renderer).toContain('RichTextEditor')
+    expect(renderer).not.toContain('contentEditable')
+    expect(renderer).not.toContain('execCommand')
+  })
+
+  it('opens the sketch canvas in a drawer instead of mounting Excalidraw inline', () => {
+    expect(renderer).toContain('<Drawer')
+    expect(renderer).toContain('m_0dac081b69dd88')
+    expect(renderer).toContain("dynamic(() => import('@/components/sketch-pad')")
+    expect(sketchPad).toContain('handleKeyboardGlobally={false}')
+  })
 })

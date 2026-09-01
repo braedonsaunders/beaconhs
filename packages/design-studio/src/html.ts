@@ -40,23 +40,34 @@ export function renderDesignDocumentHtml(
  */
 export function renderDesignDocumentsHtml(
   pages: { document: DesignDocument; data: DesignDocumentData }[],
-  options: { title?: string } = {},
+  options: {
+    title?: string
+    artboards?: 'all' | 'first'
+    pageSize?: { width: number; height: number }
+  } = {},
 ): string {
+  const firstOnly = options.artboards === 'first'
   return renderPagesHtml(
-    pages.flatMap(({ document, data }) =>
-      document.artboards.map((artboard) => ({ artboard, data })),
-    ),
+    pages.flatMap(({ document, data }) => {
+      const artboards = firstOnly ? document.artboards.slice(0, 1) : document.artboards
+      return artboards.map((artboard) => ({ artboard, data }))
+    }),
     options.title ?? pages[0]?.document.name ?? 'Design document',
+    options.pageSize,
   )
 }
 
 function renderPagesHtml(
   sections: { artboard: DesignArtboard; data: DesignDocumentData }[],
   title: string,
+  pageSizeOverride?: { width: number; height: number },
 ): string {
-  const pages = sections.map(({ artboard, data }) => renderArtboard(artboard, data))
+  const pages = sections.map(({ artboard, data }) =>
+    renderArtboard(artboard, data, pageSizeOverride),
+  )
   const first = sections[0]?.artboard
-  const pageSize = first ? `${first.width}in ${first.height}in` : '11in 8.5in'
+  const size = pageSizeOverride ?? first
+  const pageSize = size ? `${size.width}in ${size.height}in` : '11in 8.5in'
   return `<!doctype html>
 <html>
 <head>
@@ -90,12 +101,18 @@ function renderPagesHtml(
 </html>`
 }
 
-function renderArtboard(artboard: DesignArtboard, data: DesignDocumentData): string {
+function renderArtboard(
+  artboard: DesignArtboard,
+  data: DesignDocumentData,
+  pageSizeOverride?: { width: number; height: number },
+): string {
   const elements = artboard.elements
     .filter((element) => element.visible !== false)
     .map((element) => renderElement(element, data))
     .join('\n')
-  return `<section class="ds-page" data-artboard="${esc(artboard.id)}" style="width:${artboard.width}in;height:${artboard.height}in;background:${esc(artboard.background)};">${elements}</section>`
+  const width = pageSizeOverride?.width ?? artboard.width
+  const height = pageSizeOverride?.height ?? artboard.height
+  return `<section class="ds-page" data-artboard="${esc(artboard.id)}" style="width:${width}in;height:${height}in;background:${esc(artboard.background)};">${elements}</section>`
 }
 
 function renderElement(element: DesignElement, data: DesignDocumentData): string {

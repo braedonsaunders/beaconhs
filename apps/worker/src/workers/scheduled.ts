@@ -18,6 +18,7 @@ import { runSessionOverdueFlows } from '../lib/session-overdue-flows'
 import { runDatabaseMaintenance } from '../lib/db-maintenance'
 import { drainDomainEventOutbox } from '../lib/domain-event-outbox'
 import { reconcileOfficeRenders } from '../lib/office-render-reconciler'
+import { scanJournalAnalysis } from '../lib/journal-analysis'
 import { drainStorageObjectDeletionOutbox } from '../lib/storage-object-deletion-outbox'
 import { reconcileExpiredAttachmentUploads } from '../lib/attachment-upload-reconciler'
 
@@ -113,6 +114,15 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       }
       if (uploads.errors > 0) {
         throw new Error(`Expired upload reconciliation had ${uploads.errors} error(s)`)
+      }
+      return
+    }
+    case 'journal_analysis_scan': {
+      const result = await scanJournalAnalysis()
+      if (result.enqueued > 0) {
+        console.log(
+          `[scheduled] journal_analysis_scan: ${result.enqueued} runs enqueued across ${result.tenants} tenants`,
+        )
       }
       return
     }

@@ -18,6 +18,7 @@ export type ScheduledTick =
   | { kind: 'domain_event_outbox_scan' }
   | { kind: 'storage_object_deletion_scan' }
   | { kind: 'office_render_reconcile' }
+  | { kind: 'journal_analysis_scan' }
 
 let scheduledQueue: Queue<ScheduledTick> | undefined
 
@@ -34,6 +35,7 @@ const SCHEDULED_KINDS = new Set<ScheduledTick['kind']>([
   'domain_event_outbox_scan',
   'storage_object_deletion_scan',
   'office_render_reconcile',
+  'journal_analysis_scan',
 ])
 
 export function assertScheduledTick(data: ScheduledTick): void {
@@ -181,6 +183,13 @@ const SCHEDULES: Array<{
     pattern: '*/5 * * * *',
     jobId: 'tick:office_render_reconcile',
     repeatKey: 'tick-office-render-reconcile',
+  },
+  {
+    name: 'tick:journal_analysis',
+    data: { kind: 'journal_analysis_scan' },
+    pattern: '20 * * * *',
+    jobId: 'tick:journal_analysis',
+    repeatKey: 'tick-journal-analysis',
   },
 ]
 

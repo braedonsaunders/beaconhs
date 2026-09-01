@@ -8,8 +8,8 @@ import { GeneratedText, GeneratedValue, useGeneratedTranslations } from '@/i18n/
 // editable Excalidraw scene so the drawing can be re-opened and amended.
 //
 // Excalidraw touches `window` at module scope, so it is loaded via
-// `next/dynamic` with `ssr: false`. The heavy bundle only downloads when a
-// sketch element actually renders.
+// `next/dynamic` with `ssr: false`. The filler only mounts this component
+// inside the Draw-diagram drawer — the heavy bundle stays off the form page.
 
 import { useCallback, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
@@ -159,6 +159,7 @@ export function SketchPad({
             apiRef.current = api
           }}
           viewModeEnabled={readOnly}
+          handleKeyboardGlobally={false}
           onChange={handleChange}
           UIOptions={{
             canvasActions: {

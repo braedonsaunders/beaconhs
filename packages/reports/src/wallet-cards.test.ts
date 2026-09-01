@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  reportSupportsWalletCards,
-  walletCardLookupsFromResult,
-} from './report-wallet-cards-lookups'
+import { reportSupportsWalletCards, walletCardLookupsFromResult } from './wallet-cards'
 
 describe('report wallet cards', () => {
   it('only offers wallet-card print on training reports', () => {

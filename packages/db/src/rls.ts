@@ -246,6 +246,7 @@ export const TENANT_SCOPED_TABLES = [
   'journal_entry_photos',
   'journal_entry_tags',
   'journal_tags',
+  'journal_analysis_runs',
   // User-buildable Insights dashboards + saved Cards (query+viz) + per-user pins
   'insight_dashboards',
   'insight_cards',

@@ -11,6 +11,7 @@ import { relations, sql } from 'drizzle-orm'
 import {
   customType,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -224,4 +225,68 @@ export const journalEntryTagsRelations = relations(journalEntryTags, ({ one }) =
 
 export const journalTagsRelations = relations(journalTags, ({ one }) => ({
   tenant: one(tenants, { fields: [journalTags.tenantId], references: [tenants.id] }),
+}))
+
+// --- journal_analysis_runs -------------------------------------------------
+// Background Insights "AI journal analysis". The dashboard reads the latest
+// succeeded row per lookback window; the worker writes these. Never computed
+// on a page request.
+
+export const journalAnalysisRunStatus = pgEnum('journal_analysis_run_status', [
+  'pending',
+  'running',
+  'succeeded',
+  'failed',
+])
+
+export type JournalAnalysisResult = {
+  summary: string
+  sentiment: { label: string; score: number; rationale: string }
+  themes: Array<{ label: string; count: number }>
+  issues: Array<{ title: string; severity: string; detail: string; site: string | null }>
+  actions: Array<{ action: string; owner: string; priority: string; rationale: string }>
+}
+
+export const journalAnalysisRuns = pgTable(
+  'journal_analysis_runs',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    days: integer('days').notNull(),
+    status: journalAnalysisRunStatus('status').default('pending').notNull(),
+    entryCount: integer('entry_count').default(0).notNull(),
+    result: jsonb('result').$type<JournalAnalysisResult | null>(),
+    error: text('error'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    createdByTenantUserId: uuid('created_by_tenant_user_id'),
+    ...timestamps,
+  },
+  (t) => ({
+    tenantDaysCreatedIdx: index('journal_analysis_runs_tenant_days_created_idx').on(
+      t.tenantId,
+      t.days,
+      t.createdAt,
+    ),
+    tenantStatusIdx: index('journal_analysis_runs_tenant_status_idx').on(t.tenantId, t.status),
+    createdByIdx: index('journal_analysis_runs_created_by_idx').on(
+      t.tenantId,
+      t.createdByTenantUserId,
+    ),
+    createdByFk: foreignKey({
+      name: 'journal_analysis_runs_tenant_created_by_fk',
+      columns: [t.tenantId, t.createdByTenantUserId],
+      foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
+    }),
+  }),
+)
+
+export const journalAnalysisRunsRelations = relations(journalAnalysisRuns, ({ one }) => ({
+  tenant: one(tenants, { fields: [journalAnalysisRuns.tenantId], references: [tenants.id] }),
+  createdBy: one(tenantUsers, {
+    fields: [journalAnalysisRuns.tenantId, journalAnalysisRuns.createdByTenantUserId],
+    references: [tenantUsers.tenantId, tenantUsers.id],
+  }),
 }))

@@ -3,7 +3,11 @@ import {
   assertCustomReportDefinition,
   type CustomReportDefinition,
   type ReportCustomQuery,
+  type ReportLayout,
+  type ReportRule,
 } from '@braedonsaunders/appkit-reports'
+
+const ACTIVE_PEOPLE: ReportRule = { field: 'person_status', op: 'eq', value: 'active' }
 
 type BeaconReportSeed = Omit<CustomReportDefinition, 'id' | 'builtIn'> & {
   seedKey: string
@@ -51,6 +55,7 @@ const seed = (
   description: string,
   category: string,
   query: ReportCustomQuery,
+  layout: Partial<ReportLayout> & { exportMode?: 'document' | 'credential-fronts' } = {},
 ): BeaconReportSeed => ({
   schemaVersion: 1,
   seedKey: slug,
@@ -59,7 +64,7 @@ const seed = (
   description,
   category,
   query,
-  layout: DEFAULT_REPORT_LAYOUT,
+  layout: { ...DEFAULT_REPORT_LAYOUT, ...layout } as ReportLayout,
   state: 'published',
   tags: [category, 'beacon-default'],
 })
@@ -415,7 +420,7 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
       {
         filters: {
           combinator: 'and',
-          rules: [{ field: 'coverage_status', op: 'neq', value: 'missing' }],
+          rules: [ACTIVE_PEOPLE, { field: 'coverage_status', op: 'neq', value: 'missing' }],
         },
         groupBy: 'person_name',
         sorts: [{ column: 'person_name', direction: 'asc' }],
@@ -441,7 +446,10 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
       {
         filters: {
           combinator: 'and',
-          rules: [{ field: 'coverage_status', op: 'in', value: ['expired', 'expiring'] }],
+          rules: [
+            ACTIVE_PEOPLE,
+            { field: 'coverage_status', op: 'in', value: ['expired', 'expiring'] },
+          ],
         },
         groupBy: 'person_name',
         sorts: [{ column: 'expires_on', direction: 'asc' }],
@@ -451,7 +459,7 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
   seed(
     'training_wallet_cards',
     'Training — Wallet cards',
-    'Latest certificates you can filter, then print as wallet-card PDFs.',
+    'Latest certificates you can filter, then print as CR80 wallet-card fronts.',
     'training',
     rows(
       'training_matrix',
@@ -468,12 +476,16 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
       {
         filters: {
           combinator: 'and',
-          rules: [{ field: 'coverage_status', op: 'in', value: ['valid', 'expiring'] }],
+          rules: [
+            ACTIVE_PEOPLE,
+            { field: 'coverage_status', op: 'in', value: ['valid', 'expiring'] },
+          ],
         },
         groupBy: 'person_name',
         sorts: [{ column: 'person_name', direction: 'asc' }],
       },
     ),
+    { exportMode: 'credential-fronts' },
   ),
   seed(
     'training_missing',
@@ -495,6 +507,7 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
         filters: {
           combinator: 'and',
           rules: [
+            ACTIVE_PEOPLE,
             { field: 'is_required', op: 'is_true' },
             {
               field: 'coverage_status',

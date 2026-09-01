@@ -62,6 +62,7 @@ export default async function AiSettingsPage() {
                         baseUrl: s.baseUrl,
                         hasKey: s.hasKey,
                         autoJournalAi: s.autoJournalAi,
+                        autoJournalAnalysis: s.autoJournalAnalysis,
                       }}
                     />
                     <div className="flex items-end justify-between border-t border-slate-100 pt-4 dark:border-slate-800">

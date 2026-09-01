@@ -152,7 +152,7 @@ export async function listDueSignals(
           nullif(trim(concat_ws(', ', ${people.lastName}, ${people.firstName})), '')::text as person_name,
           ${trainingRecords.personId}::text as person_id, ${trainingRecords.expiresOn}::date as due_on,
           case when ${trainingRecords.expiresOn} < ${today}::date then 'expired' else 'due_soon' end::text as status,
-          '/training'::text as href, ${trainingRecords.id}::text as stable_key
+          '/training/records/' || ${trainingRecords.id}::text as href, ${trainingRecords.id}::text as stable_key
         from ${trainingRecords}
         join ${people} on ${people.id} = ${trainingRecords.personId}
         left join ${trainingCourses} on ${trainingCourses.id} = ${trainingRecords.courseId}
@@ -173,7 +173,7 @@ export async function listDueSignals(
         select 'monitored_session', 'Check-in', 'Monitored session check-in', null, null,
           ${formResponses.nextCheckinDueAt}::date,
           case when ${formResponses.monitorStatus} in ('missed','escalated') or ${formResponses.nextCheckinDueAt}::date < ${today}::date then 'overdue' else 'due_soon' end,
-          '/apps/sessions', ${formResponses.id}::text
+          '/apps/responses/' || ${formResponses.id}::text, ${formResponses.id}::text
         from ${formResponses}
         where ${formResponses.tenantId} = ${tid}
           and ${formResponses.monitorStatus} in ('active','missed','escalated')
@@ -233,7 +233,7 @@ export async function listDueSignals(
           nullif(trim(concat_ws(', ', ${people.lastName}, ${people.firstName})), ''),
           ${ppeItems.currentHolderPersonId}::text, due_on,
           case when expiry and due_on < ${today}::date then 'expired' when due_on < ${today}::date then 'overdue' else 'due_soon' end,
-          '/ppe', ${ppeItems.id}::text || ':' || family
+          '/ppe/' || ${ppeItems.id}::text, ${ppeItems.id}::text || ':' || family
         from ${ppeItems}
         left join ${ppeTypes} on ${ppeTypes.id} = ${ppeItems.typeId}
         left join ${people} on ${people.id} = ${ppeItems.currentHolderPersonId}

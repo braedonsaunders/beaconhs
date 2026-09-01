@@ -10,6 +10,7 @@ const config: KnipConfig = {
       entry: [
         'public/sw.js',
         'scripts/backfill-credential-outputs.ts',
+        'scripts/cleanup-rassaun-credential-designs.ts',
         'scripts/backfill-private-attachment-urls.ts',
         'scripts/backfill-signatures-to-storage.ts',
         'scripts/backfill-tenant-storage-keys.ts',
@@ -23,6 +24,9 @@ const config: KnipConfig = {
     },
     'apps/worker': {
       entry: ['src/health.ts', 'src/storage-init.ts'],
+      // Bundled @beaconhs/forms-pdf keeps `qrcode` external; the worker image
+      // must still resolve it at runtime.
+      ignoreDependencies: ['qrcode'],
     },
     'packages/db': {
       entry: ['src/scripts/reseed-lift-plan.ts'],

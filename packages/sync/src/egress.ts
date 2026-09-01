@@ -46,6 +46,21 @@ function isForbiddenRequestHeader(name: string): boolean {
   )
 }
 
+/**
+ * Drop hop-by-hop / proxy headers a caller (the AI SDK) may set on `fetch`.
+ * This egress path owns Connection and Transfer-Encoding itself; gzip is
+ * rejected later, so Accept-Encoding is forced to identity.
+ */
+export function stripHopByHopOutboundHeaders(input?: Headers | Record<string, string>): Headers {
+  const headers = new Headers()
+  for (const [name, value] of new Headers(input)) {
+    if (isForbiddenRequestHeader(name) || name === 'accept-encoding') continue
+    headers.set(name, value)
+  }
+  headers.set('accept-encoding', 'identity')
+  return headers
+}
+
 const RESERVED_HOST_SUFFIXES = [
   '.example',
   '.home',
@@ -126,6 +141,11 @@ export interface SecureFetchOptions {
   maxRequestBytes?: number
   maxResponseBytes?: number
   maxRedirects?: number
+  /**
+   * Return the response as soon as headers arrive and pipe the body. Required
+   * for SSE / streaming LLM completions — the default buffers until `end`.
+   */
+  stream?: boolean
   signal?: AbortSignal
   /** Optional resolver for controlled runtimes and tests. Every answer is still subject to the public-IP policy. */
   resolver?: OutboundDnsResolver
@@ -387,12 +407,23 @@ function responseHeaders(raw: IncomingHttpHeaders): Headers {
   return headers
 }
 
-interface RawResponse {
+interface BufferedResponse {
+  kind: 'buffer'
   status: number
   statusMessage: string
   headers: Headers
   body: Buffer
 }
+
+interface StreamedResponse {
+  kind: 'stream'
+  status: number
+  statusMessage: string
+  headers: Headers
+  body: ReadableStream<Uint8Array>
+}
+
+type RawResponse = BufferedResponse | StreamedResponse
 
 function requestOnce(
   url: URL,
@@ -402,11 +433,25 @@ function requestOnce(
   body: Buffer | undefined,
   maxResponseBytes: number,
   timeoutMs: number,
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
+  stream: boolean,
 ): Promise<RawResponse> {
   return new Promise<RawResponse>((resolve, reject) => {
     let settled = false
+    let streaming = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const armTimeout = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        request.destroy(new Error(`Outbound request timed out after ${timeoutMs} ms.`))
+      }, timeoutMs)
+      timer.unref?.()
+    }
     const finishError = (error: Error) => {
+      if (streaming) {
+        releaseStream()
+        return
+      }
       if (settled) return
       settled = true
       clearTimeout(timer)
@@ -416,9 +461,21 @@ function requestOnce(
     const finish = (value: RawResponse) => {
       if (settled) return
       settled = true
+      if (value.kind !== 'stream') {
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', onAbort)
+      } else {
+        // Headers arrived. Keep an idle timeout so a live SSE is not killed
+        // by the original wall clock (assistant tool loops exceed 120s).
+        streaming = true
+        armTimeout()
+      }
+      resolve(value)
+    }
+    const releaseStream = () => {
+      streaming = false
       clearTimeout(timer)
       signal?.removeEventListener('abort', onAbort)
-      resolve(value)
     }
     const onAbort = () => {
       const error = abortError(signal!)
@@ -449,8 +506,6 @@ function requestOnce(
         checkServerIdentity: (_hostname, cert) => checkServerIdentity(resolved.hostname, cert),
       },
       (response) => {
-        const chunks: Buffer[] = []
-        let bytes = 0
         const contentEncoding = String(response.headers['content-encoding'] ?? '')
           .trim()
           .toLowerCase()
@@ -469,6 +524,49 @@ function requestOnce(
           return
         }
 
+        const status = response.statusCode ?? 0
+        if (stream && !isRedirect(status)) {
+          let bytes = 0
+          const bodyStream = new ReadableStream<Uint8Array>({
+            start(controller) {
+              response.on('data', (chunk: Buffer | Uint8Array | string) => {
+                const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+                bytes += buffer.length
+                if (bytes > maxResponseBytes) {
+                  const error = new Error(`Outbound response exceeded ${maxResponseBytes} bytes.`)
+                  response.destroy(error)
+                  controller.error(error)
+                  return
+                }
+                armTimeout()
+                controller.enqueue(new Uint8Array(buffer))
+              })
+              response.on('end', () => {
+                releaseStream()
+                controller.close()
+              })
+              response.on('error', (error) => {
+                releaseStream()
+                controller.error(error)
+              })
+            },
+            cancel() {
+              releaseStream()
+              response.destroy()
+            },
+          })
+          finish({
+            kind: 'stream',
+            status,
+            statusMessage: response.statusMessage ?? '',
+            headers: responseHeaders(response.headers),
+            body: bodyStream,
+          })
+          return
+        }
+
+        const chunks: Buffer[] = []
+        let bytes = 0
         response.on('data', (chunk: Buffer | Uint8Array | string) => {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
           bytes += buffer.length
@@ -483,7 +581,8 @@ function requestOnce(
         response.on('error', (error) => finishError(error))
         response.on('end', () => {
           finish({
-            status: response.statusCode ?? 0,
+            kind: 'buffer',
+            status,
             statusMessage: response.statusMessage ?? '',
             headers: responseHeaders(response.headers),
             body: Buffer.concat(chunks, bytes),
@@ -492,10 +591,7 @@ function requestOnce(
       },
     )
 
-    const timer = setTimeout(() => {
-      request.destroy(new Error(`Outbound request timed out after ${timeoutMs} ms.`))
-    }, timeoutMs)
-    timer.unref?.()
+    armTimeout()
     if (signal?.aborted) {
       onAbort()
       return
@@ -516,7 +612,7 @@ function responseFromRaw(raw: RawResponse): Response {
     throw new Error(`Outbound server returned unsupported HTTP status ${raw.status}.`)
   }
   const noBody = raw.status === 204 || raw.status === 205 || raw.status === 304
-  const body = noBody ? null : Uint8Array.from(raw.body).buffer
+  const body = noBody ? null : raw.kind === 'stream' ? raw.body : Uint8Array.from(raw.body).buffer
   return new Response(body, {
     status: raw.status,
     statusText: raw.statusMessage,
@@ -598,6 +694,7 @@ export async function secureFetch(
       maxResponseBytes,
       Math.max(1, deadline - Date.now()),
       options.signal,
+      options.stream === true,
     )
     if (!isRedirect(raw.status)) return responseFromRaw(raw)
 

@@ -4,6 +4,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { canCreateInsights, canPublishInsights, canViewInsights } from './_access'
 import { loadDashboardCardRenders, loadDashboards, type CardRender } from './_data'
+import { loadJournalAnalysisSnapshot } from './_ai-actions'
 import { loadCardsForPalette, loadStudioEntities, type CardRow } from './cards/_data'
 import { resolveParamValues } from './_params'
 import { ensureSystemCards } from './_system-cards'
@@ -31,15 +32,17 @@ export default async function InsightsPage({
   // load everything: dashboards remap their built-in widget keys onto these card
   // ids, and the palette/library pick them up as published cards.
   const systemCards = await ensureSystemCards(ctx)
-  const [dashboards, paletteCards, aiConfig, entities, roleOptions] = await Promise.all([
-    loadDashboards(ctx, systemCards),
-    loadCardsForPalette(ctx),
-    getTenantAiConfig(ctx),
-    // Studio entities (base registry + Builder-app-scoped), so the dashboard
-    // filter drawer can map params onto app-backed cards too.
-    loadStudioEntities(ctx),
-    canPublish ? loadInsightRoleOptions(ctx) : Promise.resolve([]),
-  ])
+  const [dashboards, paletteCards, aiConfig, entities, roleOptions, journalAnalysisRuns] =
+    await Promise.all([
+      loadDashboards(ctx, systemCards),
+      loadCardsForPalette(ctx),
+      getTenantAiConfig(ctx),
+      // Studio entities (base registry + Builder-app-scoped), so the dashboard
+      // filter drawer can map params onto app-backed cards too.
+      loadStudioEntities(ctx),
+      canPublish ? loadInsightRoleOptions(ctx) : Promise.resolve([]),
+      loadJournalAnalysisSnapshot(),
+    ])
 
   // Compile the Cards placed on each dashboard, per dashboard, so a board's own
   // parameter values fan out into its cards (the same card on two boards can be
@@ -90,6 +93,7 @@ export default async function InsightsPage({
     <InsightsWorkspace
       initialDashboards={dashboards}
       aiEnabled={aiConfig !== null}
+      journalAnalysisRuns={journalAnalysisRuns}
       paletteCards={paletteCards}
       cardRenders={cardRenders}
       canCreate={canCreateInsights(ctx)}

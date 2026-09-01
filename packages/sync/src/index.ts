@@ -18,6 +18,7 @@ export {
   resolveOutboundRedirect,
   resolvePublicHost,
   secureFetch,
+  stripHopByHopOutboundHeaders,
   validateOutboundRequestConfiguration,
 } from './egress'
 export type {

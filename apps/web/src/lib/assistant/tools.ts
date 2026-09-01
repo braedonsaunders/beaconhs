@@ -74,7 +74,9 @@ const whoami: AssistantToolDef = {
     'Return the current user: their permissions, role scopes, super-admin / impersonation state, and whether they can draft changes. Call this first when unsure what the user is allowed to see or do.',
   category: 'read',
   gate: { mode: 'public' },
-  inputSchema: z.object({}),
+  inputSchema: z.object({
+    unused: z.string().optional().describe('Unused. Leave empty.'),
+  }),
   execute: async (_args, ctx): Promise<ToolResult> => ({
     ok: true,
     data: {
@@ -757,7 +759,9 @@ const listMyOpenItems: AssistantToolDef = {
     "Summarize what's on the current user's plate right now: their open corrective actions and their own training that's expiring soon. Read-only.",
   category: 'read',
   gate: { mode: 'public' },
-  inputSchema: z.object({}),
+  inputSchema: z.object({
+    unused: z.string().optional().describe('Unused. Leave empty.'),
+  }),
   execute: async (_args, ctx): Promise<ToolResult> => {
     return ctx.db(async (tx) => {
       const membershipId = ctx.membership?.id ?? null

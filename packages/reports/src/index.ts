@@ -13,3 +13,15 @@ export {
   mergeAuthorizedReportSources,
 } from './entities'
 export type { ReportColumnKind, ReportEntityCatalog, ReportEntityColumn } from './entities'
+export {
+  reportExportMode,
+  reportExportsCredentialFronts,
+  type ReportExportMode,
+} from './export-mode'
+export {
+  MAX_REPORT_WALLET_CARDS,
+  parseWalletCardPersonName,
+  reportSupportsWalletCards,
+  walletCardLookupsFromResult,
+  type WalletCardLookup,
+} from './wallet-cards'

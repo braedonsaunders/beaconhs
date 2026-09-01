@@ -14,14 +14,20 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@beaconhs/db": "workspace:*",
     "@beaconhs/design-studio": "workspace:*",
     "@beaconhs/reports": "workspace:*",
+    "@beaconhs/storage": "workspace:*",
     "@beaconhs/sync": "workspace:*",
+    "@beaconhs/tenant": "workspace:*",
+    "drizzle-orm": "^0.45.2",
     "puppeteer-core": "^25.3.0",
+    "qrcode": "^1.5.4",
     "sharp": "0.34.5"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
+    "@types/qrcode": "^1.5.6",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }

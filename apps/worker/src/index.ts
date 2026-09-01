@@ -8,6 +8,7 @@ import { processScheduledTick } from './workers/scheduled'
 import { processReportRun } from './workers/reports'
 import { processOutboundDispatch } from './workers/outbound'
 import { processPush } from './workers/push'
+import { processAiJob } from './workers/ai'
 import { captureWorkerFailure, flushObservability } from './instrument'
 
 console.log('[worker] starting beaconhs worker…')
@@ -21,6 +22,7 @@ const workers = [
   new Worker('reports', processReportRun, { connection, concurrency: 2 }),
   new Worker('outbound', processOutboundDispatch, { connection, concurrency: 5 }),
   new Worker('push', processPush, { connection, concurrency: 10 }),
+  new Worker('ai', processAiJob, { connection, concurrency: 2, lockDuration: 5 * 60 * 1000 }),
 ]
 
 for (const w of workers) {

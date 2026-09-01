@@ -8,6 +8,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import {
   resolvePublicHost,
   secureFetch,
+  stripHopByHopOutboundHeaders,
   validateOutboundRequestConfiguration,
 } from '@beaconhs/sync/egress'
 import { generateText, type LanguageModel } from 'ai'
@@ -293,16 +294,22 @@ export const secureAiFetch: typeof globalThis.fetch = async (input, init) => {
   if (!['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
     throw new Error(`AI request method ${method} is not supported.`)
   }
+  // The AI SDK sets Connection / Accept-Encoding: gzip on streaming turns.
+  // Those are hop-by-hop — this transport owns the socket and forbids them.
+  // Stripping (instead of throwing) is what lets Test connection AND the
+  // assistant share one fetch: generateText never sets them, streamText does.
+  const headers = stripHopByHopOutboundHeaders(request.headers)
   const body = await readBoundedRequestBody(request)
   return secureFetch(request.url, {
     method: method as 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-    headers: request.headers,
+    headers,
     body,
     timeoutMs: AI_REQUEST_TIMEOUT_MS,
     maxRequestBytes: MAX_AI_REQUEST_BYTES,
     maxResponseBytes: MAX_AI_RESPONSE_BYTES,
     maxRedirects: 2,
     signal: request.signal,
+    stream: true,
   })
 }
 

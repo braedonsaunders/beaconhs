@@ -6,6 +6,7 @@ import {
   resolveOutboundRedirect,
   resolvePublicHost,
   secureFetch,
+  stripHopByHopOutboundHeaders,
   validateOutboundRequestConfiguration,
 } from './egress'
 import { connectDb } from './db-drivers'
@@ -129,6 +130,14 @@ test('outbound configuration and redirect policy reject unsafe request metadata'
       }),
     /header "accept-encoding" must be identity/,
   )
+  const stripped = stripHopByHopOutboundHeaders({
+    Connection: 'keep-alive',
+    'Accept-Encoding': 'gzip',
+    Authorization: 'Bearer test',
+  })
+  assert.equal(stripped.get('connection'), null)
+  assert.equal(stripped.get('accept-encoding'), 'identity')
+  assert.equal(stripped.get('authorization'), 'Bearer test')
   const secretHeader = 'do-not-echo-this-secret'
   assert.throws(
     () =>

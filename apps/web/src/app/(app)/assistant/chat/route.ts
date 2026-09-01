@@ -196,6 +196,11 @@ export async function POST(req: Request): Promise<Response> {
       system,
       tools,
       abortSignal: req.signal,
+      headers: {
+        'x-conversation-id': conversationId,
+        'cache-control': 'no-cache, no-transform',
+        'x-accel-buffering': 'no',
+      },
       onComplete: async ({ parts, aborted, finishReason, usage }) => {
         const text = parts
           .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
@@ -230,10 +235,11 @@ export async function POST(req: Request): Promise<Response> {
       },
     })
 
-    // Surface the (possibly new) conversation id to the client.
-    const headers = new Headers(res.headers)
-    headers.set('x-conversation-id', conversationId)
-    return new Response(res.body, { status: res.status, headers })
+    // Return the SDK stream Response as-is. Reconstructing `new Response(res.body)`
+    // can drop the body in Next standalone; mutating immutable Headers throws
+    // (client then instantly shows "could not respond"). Identity headers are
+    // set on the SDK response above.
+    return res
   } catch (err) {
     if (userPersisted) await persistFailedTurn(conversationId)
     if (err instanceof AIDisabledError) {

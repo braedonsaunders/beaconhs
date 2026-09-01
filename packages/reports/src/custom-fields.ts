@@ -314,6 +314,10 @@ export async function loadBeaconReportCatalog(
     ['training_matrix.course_name', courseNameOptions],
     ['training_matrix.course_code', courseCodeOptions],
     ['training_matrix.course_type', courseTypeOptions],
+    ['training_records.person_name', personNameOptions],
+    ['training_records.employee_no', employeeNumberOptions],
+    ['training_records.course_name', courseNameOptions],
+    ['training_records.course_code', courseCodeOptions],
     ['skill_assignments.employee_no', employeeNumberOptions],
     [
       'skill_assignments.last_name',
@@ -380,6 +384,8 @@ export async function loadBeaconReportCatalog(
       })),
     ],
     ['ppe_items.holder_status', enumOptionsByColumn.get('people.status') ?? []],
+    ['training_matrix.person_status', enumOptionsByColumn.get('people.status') ?? []],
+    ['training_records.person_status', enumOptionsByColumn.get('people.status') ?? []],
   ])
   const relationIdOptionsByTarget = new Map<string, { value: string; label: string }[]>([
     ['people', personIdOptions],

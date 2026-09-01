@@ -284,7 +284,7 @@ export function CredentialDesignStudio({
   async function removeActive() {
     if (!activeOutput || outputs.length <= 1) return
     const ok = await confirmDialog({
-      message: `Remove the "${activeOutput.name}" design? Records and courses using it fall back to the remaining designs once you save.`,
+      message: `Remove the "${activeOutput.name}" design? Saving also unpins it from every course. Records stop showing it once you save.`,
       confirmLabel: 'Remove design',
       tone: 'danger',
     })

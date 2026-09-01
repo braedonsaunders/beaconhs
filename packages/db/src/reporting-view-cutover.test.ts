@@ -38,8 +38,30 @@ describe('reporting view cutover', () => {
     expect(training).toContain('FROM compliance_status cs')
     expect(training).toContain('AS is_required')
     expect(training).toContain('c.course_type                     AS course_type')
+    expect(training).toContain('p.status                          AS person_status')
+    expect(training).not.toContain("p.status = 'active'")
     expect(training?.indexOf('AS course_type')).toBeGreaterThan(
       training?.indexOf('AS is_required') ?? -1,
+    )
+    expect(training?.indexOf('AS person_status')).toBeGreaterThan(
+      training?.indexOf('AS group_id_list') ?? -1,
+    )
+  })
+
+  it('joins employee department and status onto training records and skills', () => {
+    const records = REPORT_VIEWS_SQL.find((statement) =>
+      statement.includes('CREATE OR REPLACE VIEW report_training_records'),
+    )
+    const skills = REPORT_VIEWS_SQL.find((statement) =>
+      statement.includes('CREATE OR REPLACE VIEW report_skill_assignments'),
+    )
+    expect(records).toContain('p.status AS person_status')
+    expect(records).toContain('AS department_name')
+    expect(records).toContain('AS group_id_list')
+    expect(records).toContain('c.code AS course_code')
+    expect(skills).toContain('AS department_name')
+    expect(skills?.indexOf('AS department_name')).toBeGreaterThan(
+      skills?.indexOf('AS group_id_list') ?? -1,
     )
   })
 

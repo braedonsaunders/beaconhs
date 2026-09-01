@@ -1,7 +1,11 @@
 import { notFound } from 'next/navigation'
 import { NextResponse, type NextRequest } from 'next/server'
 import ExcelJS from 'exceljs'
-import { assertBoundedReportFilters, type ReportRuleGroup } from '@beaconhs/reports'
+import {
+  assertBoundedReportFilters,
+  reportExportsCredentialFronts,
+  type ReportRuleGroup,
+} from '@beaconhs/reports'
 import { assertCan } from '@beaconhs/tenant'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
 import { requireRequestContext } from '@/lib/auth'
@@ -54,7 +58,10 @@ export async function GET(
   })
   if (run.error) return NextResponse.json({ error: run.error }, { status: 422 })
 
-  if (resolvedFormat === 'wallet-pdf') {
+  const printCredentialFronts =
+    resolvedFormat === 'wallet-pdf' ||
+    (resolvedFormat === 'pdf' && reportExportsCredentialFronts(definition.layout))
+  if (printCredentialFronts) {
     if (!reportSupportsWalletCards(definition.query.entity)) {
       return NextResponse.json(
         { error: 'Wallet cards can only print from a training matrix or training records report.' },
@@ -68,7 +75,12 @@ export async function GET(
       entityId: id,
       action: 'export',
       summary: `Printed ${wallet.rendered} wallet card${wallet.rendered === 1 ? '' : 's'} from "${definition.name}"`,
-      metadata: { format: 'wallet-pdf', rendered: wallet.rendered, skipped: wallet.skipped },
+      metadata: {
+        format: 'pdf',
+        exportMode: 'credential-fronts',
+        rendered: wallet.rendered,
+        skipped: wallet.skipped,
+      },
     })
     return new Response(new Uint8Array(wallet.bytes), {
       headers: {

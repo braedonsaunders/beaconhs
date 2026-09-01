@@ -3,11 +3,11 @@
 // owner. Powers the Insights "AI journal analysis" widget. This is the richer,
 // structured counterpart to the short prose `generateDigest`.
 
-import { generateObject } from 'ai'
 import { z } from 'zod'
 import { getModel, type AiConfig } from './client'
 import { JOURNAL_SYSTEM } from './prompts'
 import type { DigestEntry } from './digest'
+import { coerceJournalAnalysis, generateStructured } from './structured'
 
 export const journalAnalysisSchema = z.object({
   summary: z.string().describe('2–3 sentence plain-language recap for a safety manager.'),
@@ -101,15 +101,14 @@ export async function analyseDataset(
     .map((r) => cols.map((c) => cell(r[c.key])).join(' | '))
     .join('\n')
 
-  const { object } = await generateObject({
+  return generateStructured({
     model,
     schema: datasetAnalysisSchema,
     system:
       'You are a meticulous EHS / operations data analyst. Analyse the dataset and follow the user instruction. Ground every statement STRICTLY in the data provided — never invent numbers, names or events. If the data is thin, say so and return fewer findings.',
-    prompt: `Instruction: ${args.instruction}\n\nDataset (${args.rows.length} rows shown${args.rows.length > 500 ? ', truncated to 500' : ''}):\n${header}\n${sep}\n${body}`,
+    prompt: `Instruction: ${args.instruction}\n\nReturn JSON with keys summary (string) and points (array of {title, detail, tone} where tone is positive|neutral|watch|negative).\n\nDataset (${args.rows.length} rows shown${args.rows.length > 500 ? ', truncated to 500' : ''}):\n${header}\n${sep}\n${body}`,
     temperature: 0.2,
   })
-  return object
 }
 
 /** Analyse a batch of journal entries. Null when AI is unconfigured or empty. */
@@ -128,20 +127,24 @@ export async function analyseJournals(
     )
     .join('\n')
 
-  const { object } = await generateObject({
+  return generateStructured({
     model,
     schema: journalAnalysisSchema,
     system: JOURNAL_SYSTEM,
-    prompt: `You are analysing ${args.entries.length} field-safety journal entries from the ${scope} period. Produce a structured analysis for a safety manager:
-- the overall sentiment / crew morale and what drives it,
-- the recurring themes,
-- the concrete issues, risks or concerns the journals surface,
-- and recommended corrective actions, each assigned to the most appropriate owner (name the specific person or role from the entries wherever possible) so the recommendation reaches the right people.
+    coerce: coerceJournalAnalysis,
+    prompt: `You are analysing ${args.entries.length} field-safety journal entries from the ${scope} period. Produce a structured analysis for a safety manager.
+
+Return JSON with exactly these keys:
+- summary: string (2–3 sentences)
+- sentiment: { label: positive|steady|mixed|concerned|negative, score: number from -1 to 1, rationale: string }
+- themes: array of { label: string, count: number }, most frequent first
+- issues: array of { title, severity: low|medium|high, detail, site: string or null }
+- actions: array of { action, owner, priority: low|medium|high, rationale }
+
 Ground every claim in the entries — do not invent incidents. If little is surfaced, return fewer items rather than padding.
 
 ---
 ${corpus}`,
     temperature: 0.3,
   })
-  return object
 }

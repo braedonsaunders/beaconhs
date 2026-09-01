@@ -65,7 +65,7 @@ Open **Training** in the left menu. You will see tabs for **Certificates**, **Co
 
 A print run from the certificates list can contain up to 50 records. Revoked, inaccessible, or missing wallet-card outputs are skipped, and the action bar tells you how many cards were prepared and skipped.
 
-To filter first, then print, open **Reports → Training — Wallet cards**. Add people, groups, courses, or coverage filters, click **Apply and run**, then **Wallet cards**. That path can print up to 200 cards from the matching latest certificates.
+To filter first, then print, open **Reports → Training — Wallet cards**. Add people, groups, courses, or coverage filters, click **Apply and run**, then **PDF**. That path prints CR80 card fronts (up to 200) from the matching latest certificates.
 
 ## See your classes
 

@@ -28,6 +28,14 @@ const complianceAudienceReportSql = readFileSync(
   new URL('0034_compliance_group_audience_ppe_report.sql', drizzleFolder),
   'utf8',
 )
+const journalAnalysisSql = readFileSync(
+  new URL('0035_journal_analysis_runs.sql', drizzleFolder),
+  'utf8',
+)
+const trainingReportWalletSql = readFileSync(
+  new URL('0036_training_report_wallet_cutover.sql', drizzleFolder),
+  'utf8',
+)
 
 function position(fragment: string): number {
   const value = finalSection.indexOf(fragment)
@@ -75,6 +83,8 @@ describe('production cutover migration integrity', () => {
       '0031_hazid_optional_risk_ratings.sql',
       '0032_ppe_status_lifecycle.sql',
       '0034_compliance_group_audience_ppe_report.sql',
+      '0035_journal_analysis_runs.sql',
+      '0036_training_report_wallet_cutover.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -115,6 +125,8 @@ describe('production cutover migration integrity', () => {
       { idx: 31, tag: '0031_hazid_optional_risk_ratings' },
       { idx: 32, tag: '0032_ppe_status_lifecycle' },
       { idx: 33, tag: '0034_compliance_group_audience_ppe_report' },
+      { idx: 34, tag: '0035_journal_analysis_runs' },
+      { idx: 35, tag: '0036_training_report_wallet_cutover' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)
@@ -225,6 +237,23 @@ describe('production cutover migration integrity', () => {
     expect(complianceAudienceReportSql).toContain(
       `ALTER TABLE "report_definitions" FORCE ROW LEVEL SECURITY`,
     )
+  })
+
+  it('cuts over wallet-card PDF export and employment-status filters', () => {
+    expect(trainingReportWalletSql).toContain(`"seed_key" = 'training_wallet_cards'`)
+    expect(trainingReportWalletSql).toContain("'{exportMode}'")
+    expect(trainingReportWalletSql).toContain('"credential-fronts"')
+    expect(trainingReportWalletSql).toContain(`"query" ->> 'entity' = 'training_matrix'`)
+    expect(trainingReportWalletSql).toContain("'person_status'")
+  })
+
+  it('adds stored journal analysis runs with a bounded lookback check', () => {
+    expect(journalAnalysisSql).toContain('CREATE TABLE "journal_analysis_runs"')
+    expect(journalAnalysisSql).toContain('CREATE TYPE "journal_analysis_run_status"')
+    expect(journalAnalysisSql).toContain(`CHECK ("days" IN (7, 30, 90))`)
+    expect(journalAnalysisSql).toContain('journal_analysis_runs_tenant_days_created_idx')
+    expect(journalAnalysisSql).toContain('journal_analysis_runs_tenant_created_by_fk')
+    expect(journalAnalysisSql).toContain('journal_analysis_runs_created_by_idx')
   })
 
   it('preflights and backfills training owners before removing legacy columns', () => {

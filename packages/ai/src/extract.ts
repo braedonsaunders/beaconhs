@@ -1,10 +1,10 @@
 // Structured metadata extraction from an entry's text — drives the AI summary
 // and auto-tags (the "smart tree"). No hazard detection — that lives in HazID.
 
-import { generateObject } from 'ai'
 import { z } from 'zod'
 import { getModel, type AiConfig } from './client'
 import { JOURNAL_SYSTEM } from './prompts'
+import { generateStructured } from './structured'
 
 export const entryMetaSchema = z.object({
   summary: z.string().describe('One short paragraph, plain language, recapping the entry'),
@@ -27,13 +27,14 @@ export async function extractEntryMeta(
   const text = bodyText.trim()
   if (text.length < 12) return null
 
-  const { object } = await generateObject({
+  const object = await generateStructured({
     model,
     schema: entryMetaSchema,
     system: JOURNAL_SYSTEM,
-    prompt: `Read this daily field-safety journal entry and extract a one-paragraph summary and topic tags. Use only information present in the text.\n\n---\n${text}`,
+    prompt: `Read this daily field-safety journal entry and extract a one-paragraph summary and topic tags. Use only information present in the text. Return JSON { "summary": string, "tags": string[] }.\n\n---\n${text}`,
     temperature: 0.2,
   })
+  if (!object) return null
   const tags = Array.from(
     new Set(object.tags.map((t) => t.trim().toLowerCase()).filter(Boolean)),
   ).slice(0, 8)

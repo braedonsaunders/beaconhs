@@ -266,8 +266,8 @@ describe('lazy jobs runtime', () => {
     const repeatOptions = mocks.queueAdd.mock.calls.map(
       ([, , options]) => (options as { repeat: { key: string; pattern: string } }).repeat,
     )
-    expect(repeatOptions).toHaveLength(11)
-    expect(new Set(repeatOptions.map(({ key }) => key))).toHaveLength(11)
+    expect(repeatOptions).toHaveLength(12)
+    expect(new Set(repeatOptions.map(({ key }) => key))).toHaveLength(12)
     expect(repeatOptions).toContainEqual({
       key: 'tick-reports',
       pattern: '*/5 * * * *',
@@ -275,6 +275,10 @@ describe('lazy jobs runtime', () => {
     expect(repeatOptions).toContainEqual({
       key: 'tick-storage-object-deletion',
       pattern: '* * * * *',
+    })
+    expect(repeatOptions).toContainEqual({
+      key: 'tick-journal-analysis',
+      pattern: '20 * * * *',
     })
   })
 

@@ -4,6 +4,7 @@ import { assertOutboundDispatchJob } from './queues/outbound'
 import { assertPdfJobData } from './queues/pdf'
 import { assertPushJobData } from './queues/push'
 import { assertReportRunJobData } from './queues/reports'
+import { assertAiJobData } from './queues/ai'
 import { assertScheduledTick } from './queues/scheduled'
 
 const TENANT_ID = '10000000-0000-4000-8000-000000000001'
@@ -73,6 +74,16 @@ describe('queue payload validation', () => {
         trigger: 'manual',
       }),
     ).toThrow(/connectionId/)
+    expect(() =>
+      assertAiJobData({
+        kind: 'journal_analysis_run',
+        tenantId: TENANT_ID,
+        days: 14,
+      } as unknown as Parameters<typeof assertAiJobData>[0]),
+    ).toThrow(/7, 30, or 90/)
+    expect(() =>
+      assertAiJobData({ kind: 'journal_analysis_run', tenantId: TENANT_ID, days: 30 }),
+    ).not.toThrow()
   })
 
   it('binds durable PDF targets and bounds render payloads', () => {

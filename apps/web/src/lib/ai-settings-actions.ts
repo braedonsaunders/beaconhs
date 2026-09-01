@@ -49,7 +49,8 @@ export async function saveTenantAi(formData: FormData) {
   gateTenant(ctx)
   const input = parseInput(formData)
   const autoJournalAi = formData.get('autoJournalAi') === 'on'
-  await saveTenantAiSettings(ctx, { ...input, autoJournalAi })
+  const autoJournalAnalysis = formData.get('autoJournalAnalysis') === 'on'
+  await saveTenantAiSettings(ctx, { ...input, autoJournalAi, autoJournalAnalysis })
   await recordAudit(ctx, {
     entityType: 'tenant',
     entityId: ctx.tenantId,

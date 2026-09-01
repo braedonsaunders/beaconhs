@@ -225,7 +225,7 @@ Open [Reports](/reports) from the sidebar. It has two tabs: **Reports** and **Sc
 6. Click **Apply and run**. The paper preview and summary now use those exact controls.
 7. Click **Reset to saved report** to return to the report's saved filters and grouping.
 
-Training reports expose employee, course, course type, delivery type, department, and person-group fields. This lets the certificate, expired, and missing reports be filtered and grouped without a separate training-only reporting screen. **Training — Missing** only includes courses assigned through active compliance requirements.
+Training reports expose employee, course, course type, delivery type, department, employment status, and person-group fields — including those joined from the employee record. This lets the certificate, expired, and missing reports be filtered and grouped without a separate training-only reporting screen. **Training — Missing** defaults to active employees and only includes courses assigned through active compliance requirements. You can change the employment-status filter in the report definition or when you run it.
 
 The seeded catalogue replaces the former Beacon reports for training certificates, missing and expired training, skill matrices, missing and expired skills, CWB qualifications, corrective actions, PPE, compliance by entity, compliance by person, Hazard ID signatures, equipment fleet, equipment inspections, and equipment oil changes. The old training matrix is the live **Training — Certificate Matrix** card in Insights, so it is not duplicated in Reports. Equipment charges and ROI are intentionally excluded.
 
@@ -233,8 +233,8 @@ The seeded catalogue replaces the former Beacon reports for training certificate
 
 1. Open the report.
 2. Set the filters and grouping, then click **Apply and run**.
-3. Click **CSV**, **Excel**, or **PDF**. Training matrix and training records reports also have **Wallet cards**, which prints the filtered people's latest certificates as wallet-card PDFs.
-4. The export uses the same filters and grouping shown in the preview. The PDF matches the on-screen paper preview exactly. CSV and Excel are best for working with the rows. Use **Training — Wallet cards** when you want a saved report that starts with current valid and expiring certificates.
+3. Click **CSV**, **Excel**, or **PDF**. On **Training — Wallet cards**, **PDF** prints the designed CR80 card fronts (one card per page, printer size). The on-screen preview stays the filter table so you can pick who prints.
+4. The export uses the same filters and grouping shown in the preview. CSV and Excel are the table rows. Other reports' **PDF** still matches the paper preview.
 
 ## Schedule a report by email
 
@@ -331,7 +331,7 @@ The live **Training — Certificate Matrix** is the one canonical training matri
 3. Employees are the rows, courses are the columns, and each cell shows the latest certificate status.
 4. To put it on a dashboard, open that dashboard, click **Customise**, then **Add content** and choose the matrix card.
 
-A person who has no record for a course has a blank cell. The matrix does not add an empty **None** course column. Edit the card to include only certain people, groups, departments, or courses — those filters use pick lists. Use **Download CSV** or **PDF** on the card when you need a snapshot. To print wallet cards for the same slice, open **Reports → Training — Wallet cards**, apply the same people and course filters, and click **Wallet cards**.
+A person who has no record for a course has a blank cell. The matrix does not add an empty **None** course column. Edit the card to include only certain people, groups, departments, or courses — those filters use pick lists. Use **Download CSV** or **PDF** on the card when you need a snapshot. To print wallet cards for the same slice, open **Reports → Training — Wallet cards**, apply the same people and course filters, and click **PDF**.
 
 ## Save a card as PDF
 
@@ -349,6 +349,15 @@ Use **Download CSV** on the open card when you need the same live data in a spre
 2. Click **Add content** to open the card library, then place cards on the grid.
 3. Drag and resize cards until the layout works.
 4. Click **Save**, then **Done**.
+
+## Read the AI journal analysis
+
+The **AI journal analysis** card shows sentiment, themes, issues, and recommended actions from recent journals. BeaconHS writes this in the background. Changing **7d**, **30d**, or **90d** only switches the saved result — it does not call the model.
+
+1. Open [Insights](/insights) and find **AI journal analysis**.
+2. Tap a period to see that window's last result.
+3. Tap **Refresh** only when you want a new background run. The card updates when that run finishes.
+4. An admin can turn automatic runs on or off under [Admin → AI](/admin/ai) with **Automatic journal analysis**.
 
 ## Share dashboards
 
@@ -400,7 +409,7 @@ Recurring periods use the compliance scan timezone under **Admin** → **Notific
 
 ## See who is overdue
 
-1. Open the **Due & expiring** tab. The cards at the top show **Overdue**, **Expired**, **Due soon (30d)**, and **Open tasks**. Search by item or person, filter by **Status** or **Module**, and click a heading to sort the list. Certifications only count for active people — someone marked inactive or terminated in People drops off this list. Only the newest certificate per person and course counts: once someone is retrained, their older certificate for that course stops showing as expired.
+1. Open the **Due & expiring** tab. The cards at the top show **Overdue**, **Expired**, **Due soon (30d)**, and **Open tasks**. Search by item or person, filter by **Status** or **Module**, and click a heading to sort the list. Click the item name to open that record — a certification opens the training record, a document opens the document, and so on. Certifications only count for active people — someone marked inactive or terminated in People drops off this list. Only the newest certificate per person and course counts: once someone is retrained, their older certificate for that course stops showing as expired.
 2. Open the **Aging** tab to see how long items have been overdue, grouped into 0–7 days, 7–30 days, and 30+ days. Start with the oldest.
 3. Open the **By person** tab and pick a person to see every requirement on their plate. Search the selected person's obligations or filter them by **Status** and **Kind**. Open an obligation to search and filter its resolved subjects.
 

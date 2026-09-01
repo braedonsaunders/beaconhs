@@ -35,6 +35,7 @@ import {
   unpublishDashboard,
 } from './_actions'
 import type { CardRender, InsightDashboardRow } from './_data'
+import type { JournalAnalysisSnapshot } from './_ai-actions'
 import type { CardRow } from './cards/_data'
 import { confirmDialog } from '@/lib/confirm'
 import { INSIGHT_DASHBOARD_NAME_MAX_LENGTH } from '@/lib/persisted-text-policy'
@@ -53,6 +54,7 @@ type Board = {
 export function InsightsWorkspace({
   initialDashboards,
   aiEnabled,
+  journalAnalysisRuns,
   paletteCards,
   cardRenders,
   canCreate,
@@ -62,6 +64,7 @@ export function InsightsWorkspace({
 }: {
   initialDashboards: InsightDashboardRow[]
   aiEnabled: boolean
+  journalAnalysisRuns: JournalAnalysisSnapshot[]
   paletteCards: CardRow[]
   cardRenders: Record<string, CardRender>
   canCreate: boolean
@@ -105,7 +108,9 @@ export function InsightsWorkspace({
   // AI journal analysis is the one remaining bespoke (non-card) widget.
   const nodes = useMemo(() => {
     const r: Record<string, ReactNode> = {
-      'ai-analysis': <JournalAnalysisWidget aiEnabled={aiEnabled} />,
+      'ai-analysis': (
+        <JournalAnalysisWidget aiEnabled={aiEnabled} initialRuns={journalAnalysisRuns} />
+      ),
     }
     if (active) {
       for (const w of active.widgets) {
@@ -114,7 +119,7 @@ export function InsightsWorkspace({
       }
     }
     return r
-  }, [aiEnabled, cardRenders, active])
+  }, [aiEnabled, journalAnalysisRuns, cardRenders, active])
 
   // The cards currently placed on the active board + their entity columns — the
   // targets the filter-settings drawer maps params onto.

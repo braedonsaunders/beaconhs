@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import type { RequestContext } from '@beaconhs/tenant'
 import { listDueSignals } from './_signals'
@@ -77,5 +79,15 @@ describe('listDueSignals', () => {
       total: 0,
       counts: { overdue: 0, expired: 0, due_soon: 0, open: 0 },
     })
+  })
+
+  it('opens each due item on its own record, not a module landing page', () => {
+    const source = readFileSync(fileURLToPath(new URL('./_signals.ts', import.meta.url)), 'utf8')
+    expect(source).toContain("'/training/records/' || ${trainingRecords.id}::text as href")
+    expect(source).not.toContain("'/training'::text as href")
+    expect(source).toContain("'/ppe/' || ${ppeItems.id}::text")
+    expect(source).not.toContain("'/ppe', ${ppeItems.id}")
+    expect(source).toContain("'/apps/responses/' || ${formResponses.id}::text")
+    expect(source).not.toContain("'/apps/sessions'")
   })
 })

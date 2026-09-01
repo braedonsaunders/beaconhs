@@ -1,8 +1,14 @@
 'use server'
 
+import { eq } from 'drizzle-orm'
+import { tenants, trainingCourses } from '@beaconhs/db/schema'
 import { revalidatePath } from 'next/cache'
 import { requireRequestContext } from '@/lib/auth'
-import { CREDENTIAL_OUTPUTS_SETTINGS_KEY, type CredentialOutput } from '@/lib/credential-designs'
+import {
+  CREDENTIAL_OUTPUTS_SETTINGS_KEY,
+  courseCredentialOutputIds,
+  type CredentialOutput,
+} from '@/lib/credential-designs'
 import {
   CredentialDesignValidationError,
   parseCredentialOutputsForSave,
@@ -34,18 +40,61 @@ export async function saveCredentialOutputs(input: unknown): Promise<SaveCredent
 
   try {
     await ctx.db(async (tx) => {
+      const [tenant] = await tx
+        .select({ settings: tenants.settings })
+        .from(tenants)
+        .where(eq(tenants.id, ctx.tenantId))
+        .limit(1)
+      const previous = tenant?.settings
+      const previousIds = Array.isArray(
+        previous &&
+          typeof previous === 'object' &&
+          (previous as Record<string, unknown>)[CREDENTIAL_OUTPUTS_SETTINGS_KEY],
+      )
+        ? (
+            (previous as Record<string, unknown>)[CREDENTIAL_OUTPUTS_SETTINGS_KEY] as unknown[]
+          ).flatMap((entry) =>
+            entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string'
+              ? [(entry as { id: string }).id]
+              : [],
+          )
+        : []
+      const nextIds = new Set(outputs.map((output) => output.id))
+      const removedIds = previousIds.filter((id) => !nextIds.has(id))
+
       await setTenantSettingInTransaction(
         tx,
         ctx.tenantId,
         CREDENTIAL_OUTPUTS_SETTINGS_KEY,
         outputs,
       )
+      if (removedIds.length > 0) {
+        const courses = await tx
+          .select({ id: trainingCourses.id, metadata: trainingCourses.metadata })
+          .from(trainingCourses)
+        for (const course of courses) {
+          const pinned = courseCredentialOutputIds(course.metadata)
+          if (!pinned.some((id) => removedIds.includes(id))) continue
+          const metadata =
+            course.metadata &&
+            typeof course.metadata === 'object' &&
+            !Array.isArray(course.metadata)
+              ? { ...(course.metadata as Record<string, unknown>) }
+              : {}
+          metadata.credentialOutputIds = pinned.filter((id) => !removedIds.includes(id))
+          await tx
+            .update(trainingCourses)
+            .set({ metadata })
+            .where(eq(trainingCourses.id, course.id))
+        }
+      }
       await recordAuditInTransaction(tx, ctx, {
         entityType: 'training_credential_design',
         action: 'update',
         summary: 'Saved training credential designs',
         metadata: {
           outputCount: outputs.length,
+          removedIds,
           outputs: outputs.map((output) => ({
             id: output.id,
             format: output.format,

@@ -31,6 +31,8 @@ import {
   normalizeReportRecipientEmails,
   normalizeReportRecipientUserIds,
   REPORT_SCHEDULE_LIMITS,
+  reportExportsCredentialFronts,
+  reportSupportsWalletCards,
   resolveReportLayout,
 } from '@beaconhs/reports'
 import {
@@ -44,7 +46,7 @@ import {
   makeTenantContext,
   resolveMembershipAccess,
 } from '@beaconhs/tenant'
-import { renderReportPdf } from '@beaconhs/forms-pdf'
+import { renderReportPdf, renderWalletCardsForReport } from '@beaconhs/forms-pdf'
 import {
   deleteObject,
   getObject,
@@ -126,38 +128,52 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
     let artifact = await loadArtifact(tenantId, ctx.run.pdfAttachmentId, ctx.run.rowCount)
 
     if (!artifact) {
-      const { groups, summary, rowCount, locale } = await withTenant(db, tenantId, async (tx) => {
-        const { catalog, locale } = await resolveScheduledReportContext(tx, tenantId, snapshot)
+      const { result, locale, requestCtx } = await withTenant(db, tenantId, async (tx) => {
+        const { catalog, locale, requestCtx } = await resolveScheduledReportContext(
+          tx,
+          tenantId,
+          snapshot,
+        )
         const result = await runBeaconReport(tx, tenantId, snapshot.definition.query, catalog, {
           maxRows: 10_000,
           runtimeFilters: normalizeReportRuntimeFilters(snapshot.filters),
         })
-        return {
-          groups: result.groups,
-          summary: result.summary,
-          rowCount: result.rowCount,
-          locale,
-        }
+        return { result, locale, requestCtx }
       })
-      const pdf = await renderReportPdf({
-        tenantName: ctx.tenant.name,
-        tenantLogoUrl: await resolveTenantLogoUrl({
-          tenantId,
-          logoUrl: ctx.tenant.branding.logoUrl,
-        }),
-        primaryColor: ctx.tenant.branding.primaryColor ?? null,
-        reportName: snapshot.scheduleName || snapshot.definition.name,
-        dateRangeLabel: rangeLabel,
-        generatedAt: new Date(),
-        summary,
-        groups,
-        translate: createSystemTranslator(locale),
-        layout: resolveReportLayout(snapshot.definition.layout),
-      })
+      const rowCount = result.rowCount
+      const printCredentialFronts = reportExportsCredentialFronts(snapshot.definition.layout)
+      if (printCredentialFronts && !reportSupportsWalletCards(snapshot.definition.query.entity)) {
+        throw new Error(
+          'Wallet cards can only print from a training matrix or training records report.',
+        )
+      }
+      const wallet = printCredentialFronts
+        ? await renderWalletCardsForReport(requestCtx, result)
+        : null
+      if (wallet && !wallet.ok) throw new Error(wallet.error)
+      const pdf = wallet
+        ? wallet.bytes
+        : await renderReportPdf({
+            tenantName: ctx.tenant.name,
+            tenantLogoUrl: await resolveTenantLogoUrl({
+              tenantId,
+              logoUrl: ctx.tenant.branding.logoUrl,
+            }),
+            primaryColor: ctx.tenant.branding.primaryColor ?? null,
+            reportName: snapshot.scheduleName || snapshot.definition.name,
+            dateRangeLabel: rangeLabel,
+            generatedAt: new Date(),
+            summary: result.summary,
+            groups: result.groups,
+            translate: createSystemTranslator(locale),
+            layout: resolveReportLayout(snapshot.definition.layout),
+          })
       if (pdf.length === 0 || pdf.length > MAX_REPORT_PDF_BYTES) {
         throw new Error('Scheduled report PDF must be between 1 byte and 200 MiB')
       }
-      const filename = `${snapshot.definition.slug}-${dateStamp(new Date())}.pdf`
+      const filename = wallet
+        ? wallet.filename
+        : `${snapshot.definition.slug}-${dateStamp(new Date())}.pdf`
       const r2Key = newAttachmentKey({ tenantId, kind: 'document', filename })
       await putObject({
         key: r2Key,
@@ -534,6 +550,7 @@ async function resolveScheduledReportContext(
   return {
     catalog: await loadBeaconReportCatalog(tx, sources),
     locale: localePolicy.locale,
+    requestCtx,
   }
 }
 
