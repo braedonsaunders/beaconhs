@@ -307,7 +307,7 @@ async function firstPhotoThumbs(
     })
     .from(journalEntryPhotos)
     .innerJoin(attachments, eq(attachments.id, journalEntryPhotos.attachmentId))
-    .where(inArray(journalEntryPhotos.entryId, entryIds))
+    .where(and(inArray(journalEntryPhotos.entryId, entryIds), eq(attachments.kind, 'image')))
     .orderBy(asc(journalEntryPhotos.sortOrder))
   const out: Record<string, string> = {}
   for (const r of rows) if (!out[r.entryId]) out[r.entryId] = attachmentUrl(r.attachmentId)
@@ -322,7 +322,8 @@ async function photoCountsByEntry(
   const rows = await tx
     .select({ entryId: journalEntryPhotos.entryId, c: sql<number>`count(*)::int` })
     .from(journalEntryPhotos)
-    .where(inArray(journalEntryPhotos.entryId, entryIds))
+    .innerJoin(attachments, eq(attachments.id, journalEntryPhotos.attachmentId))
+    .where(and(inArray(journalEntryPhotos.entryId, entryIds), eq(attachments.kind, 'image')))
     .groupBy(journalEntryPhotos.entryId)
   return Object.fromEntries(rows.map((r) => [r.entryId, Number(r.c)]))
 }
@@ -365,6 +366,8 @@ export async function getEntry(
         width: attachments.width,
         height: attachments.height,
         filename: attachments.filename,
+        kind: attachments.kind,
+        contentType: attachments.contentType,
       })
       .from(journalEntryPhotos)
       .innerJoin(attachments, eq(attachments.id, journalEntryPhotos.attachmentId))
@@ -395,6 +398,8 @@ export async function getEntry(
         width: p.width,
         height: p.height,
         filename: p.filename,
+        kind: p.kind,
+        contentType: p.contentType,
       })),
       authorName: row.firstName ? `${row.firstName} ${row.lastName ?? ''}`.trim() : null,
       siteName: row.siteName ?? null,

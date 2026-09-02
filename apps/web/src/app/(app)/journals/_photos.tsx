@@ -2,7 +2,7 @@
 
 import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 import { useTransition } from 'react'
-import { Loader2, Sparkles } from 'lucide-react'
+import { FileText, Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import { FileUpload, type AttachedFile } from '@/components/file-upload'
 import { PhotoGallery } from '@/components/photo-gallery'
@@ -60,8 +60,9 @@ export function Photos({
   }
 
   const visiblePhotos = photos
-    .filter((photo) => Boolean(photo.url))
+    .filter((photo) => photo.kind === 'image' && Boolean(photo.url))
     .map((photo) => ({ ...photo, url: photo.url! }))
+  const visibleFiles = photos.filter((photo) => photo.kind !== 'image' && Boolean(photo.url))
 
   return (
     <div className="space-y-2.5">
@@ -103,10 +104,50 @@ export function Photos({
         />
       ) : null}
 
-      {editable && aiEnabled && photos.some((photo) => !photo.caption) ? (
+      {visibleFiles.length > 0 ? (
+        <div className="space-y-1.5">
+          <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            <GeneratedValue value="Attached files" />
+          </div>
+          {visibleFiles.map((file) => (
+            <div
+              key={file.id}
+              className="flex min-h-11 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950"
+            >
+              <FileText size={16} className="shrink-0 text-slate-500" />
+              <a
+                href={file.url!}
+                target="_blank"
+                rel="noreferrer"
+                className="min-w-0 flex-1 truncate text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
+              >
+                {file.filename}
+              </a>
+              {editable ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    start(async () => {
+                      const result = await removeJournalPhoto(file.id)
+                      if (!result.ok) toast.error(tGeneratedValue(result.error))
+                      onChange()
+                    })
+                  }}
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
+                  aria-label={tGeneratedValue(`Remove ${file.filename}`)}
+                >
+                  <Trash2 size={15} />
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {editable && aiEnabled && photos.some((photo) => photo.kind === 'image' && !photo.caption) ? (
         <div className="flex flex-wrap gap-2">
           {photos
-            .filter((photo) => !photo.caption)
+            .filter((photo) => photo.kind === 'image' && !photo.caption)
             .map((photo) => (
               <button
                 key={photo.id}

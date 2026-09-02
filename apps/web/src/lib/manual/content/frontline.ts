@@ -64,6 +64,8 @@ BeaconHS leaves your original words in place until the AI response finishes. If 
 4. To remove a photo, tap the trash button on it.
 5. Use the left and right arrow buttons to put several photos in the order you want.
 
+Older imported entries can also show an **Attached files** list below the photos. Tap a file name to open or download the original PDF or email file.
+
 ## Tags
 
 Tags help people find entries later (for example a tag for concrete pours). Tap the **Tags** chip in the bar above the text to add or change up to 20 tags. If your company has AI assist turned on, tags are often added for you.

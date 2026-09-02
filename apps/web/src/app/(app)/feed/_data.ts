@@ -529,7 +529,7 @@ async function journalPhotos(
     })
     .from(journalEntryPhotos)
     .innerJoin(attachments, eq(attachments.id, journalEntryPhotos.attachmentId))
-    .where(inArray(journalEntryPhotos.entryId, ids))
+    .where(and(inArray(journalEntryPhotos.entryId, ids), eq(attachments.kind, 'image')))
     .orderBy(asc(journalEntryPhotos.sortOrder))
   for (const r of rows) {
     const cur = map.get(r.entryId) ?? { urls: [], count: 0 }

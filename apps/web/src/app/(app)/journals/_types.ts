@@ -68,6 +68,8 @@ export type JournalPhoto = {
   width: number | null
   height: number | null
   filename: string
+  kind: 'image' | 'document' | 'video' | 'audio' | 'signature' | 'other'
+  contentType: string
 }
 
 export type JournalEntryDetail = {
