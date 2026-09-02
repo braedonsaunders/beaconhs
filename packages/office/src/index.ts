@@ -45,36 +45,56 @@ export async function resolveSoffice(): Promise<string> {
  * Convert one office file with LibreOffice headless. `convertTo` is soffice's
  * --convert-to argument (e.g. 'pdf', 'txt:Text'); returns the converted bytes.
  */
+const SOFFICE_ATTEMPTS = 3
+
+function sofficeErrorDetail(error: unknown): string {
+  const err = error as { message?: string; stderr?: string; stdout?: string }
+  return [err.message, err.stderr, err.stdout].filter(Boolean).join('\n').trim()
+}
+
 export async function sofficeConvert(
   input: Buffer,
   inputName: string,
   convertTo: string,
 ): Promise<Buffer> {
   const soffice = await resolveSoffice()
-  const workDir = await mkdtemp(join(tmpdir(), 'bhs-office-'))
-  try {
-    const srcPath = join(workDir, inputName)
-    await writeFile(srcPath, input)
-    await exec(soffice, ['--headless', '--convert-to', convertTo, '--outdir', workDir, srcPath], {
-      timeout: 180_000,
-      env: { ...process.env, HOME: workDir }, // soffice needs a writable profile dir
-    })
-    const outExt = convertTo.split(':')[0]!
-    const outPath = srcPath.replace(/\.[^.]+$/, `.${outExt}`)
+  let lastError: unknown
+  for (let attempt = 1; attempt <= SOFFICE_ATTEMPTS; attempt++) {
+    const workDir = await mkdtemp(join(tmpdir(), 'bhs-office-'))
     try {
-      // Read directly: checking access and then reopening creates a needless
-      // time-of-check/time-of-use window. The private random work directory is
-      // cleaned in finally regardless of whether LibreOffice produced output.
-      return await readFile(outPath)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new Error(`LibreOffice did not produce a .${outExt} from ${inputName}`)
+      const srcPath = join(workDir, inputName)
+      await writeFile(srcPath, input)
+      await exec(soffice, ['--headless', '--convert-to', convertTo, '--outdir', workDir, srcPath], {
+        timeout: 180_000,
+        env: { ...process.env, HOME: workDir },
+      })
+      const outExt = convertTo.split(':')[0]!
+      const outPath = srcPath.replace(/\.[^.]+$/, `.${outExt}`)
+      try {
+        // Read directly: checking access and then reopening creates a needless
+        // time-of-check/time-of-use window. The private random work directory is
+        // cleaned in finally regardless of whether LibreOffice produced output.
+        return await readFile(outPath)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          throw new Error(`LibreOffice did not produce a .${outExt} from ${inputName}`)
+        }
+        throw error
       }
-      throw error
+    } catch (error) {
+      lastError = error
+      if (attempt === SOFFICE_ATTEMPTS) {
+        throw new Error(
+          `LibreOffice convert failed after ${SOFFICE_ATTEMPTS} attempts: ${sofficeErrorDetail(error)}`,
+        )
+      }
+    } finally {
+      await rm(workDir, { recursive: true, force: true }).catch(() => {})
     }
-  } finally {
-    await rm(workDir, { recursive: true, force: true }).catch(() => {})
   }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`LibreOffice convert failed: ${sofficeErrorDetail(lastError)}`)
 }
 
 /** Concatenate PDFs in order with poppler's pdfunite. */
