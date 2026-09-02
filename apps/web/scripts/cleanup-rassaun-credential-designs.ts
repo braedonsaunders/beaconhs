@@ -109,7 +109,7 @@ await sql.begin(async (tx) => {
   const settings = { ...(tenant.settings ?? {}), [CREDENTIAL_OUTPUTS_SETTINGS_KEY]: kept }
   await tx`
     update tenants
-       set settings = ${settings as never}::jsonb
+       set settings = ${JSON.stringify(settings)}::jsonb
      where id = ${tenant.id}::uuid
   `
   for (const course of pinUpdates) {
@@ -120,7 +120,7 @@ await sql.begin(async (tx) => {
     }
     await tx`
       update training_courses
-         set metadata = ${metadata as never}::jsonb
+         set metadata = ${JSON.stringify(metadata)}::jsonb
        where id = ${course.id}::uuid
          and tenant_id = ${tenant.id}::uuid
     `
