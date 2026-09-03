@@ -20,10 +20,12 @@ import {
   normalizeFormResponseData,
   normalizeFormResponseDraftData,
   validateResponse,
+  type SketchDraftElement,
 } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { analyzePhotoAttachments } from '@/app/(app)/apps/_lib/analyze-photos'
+import { generateSketchDraft } from '@/app/(app)/apps/_lib/sketch-draft'
 import { recordAudit } from '@/lib/audit'
 import { computeFormScore } from '@/app/(app)/apps/_lib/score-router'
 import { fetchSingleEntityAttrs } from '@/app/(app)/apps/_lib/entity-loader'
@@ -679,6 +681,45 @@ export async function updateResponseField(input: {
 // + a configured AI provider; returns a friendly error rather than throwing so
 // the filler can surface it inline. Never persists — the client stores the
 // returned findings on the field value.
+const MAX_SKETCH_DRAFT_DESCRIPTION_LENGTH = 2_000
+
+// Draft a diagram from a description for a `sketch` element. The AI returns
+// content-agnostic primitives; the filler inserts them as an editable draft
+// the user reviews and adjusts — nothing is drawn permanently and nothing
+// persists until the user explicitly saves. Gated on `forms.ai.generate`
+// (same as photo analysis) plus tenant AI config; offline users keep the
+// symbol library as the fallback.
+export async function draftSketchDiagram(args: {
+  templateId: string
+  description: string
+  symbolNames: string[]
+}): Promise<{ ok: true; elements: SketchDraftElement[] } | { ok: false; error: string }> {
+  const ctx = await requireRequestContext()
+  if (!can(ctx, 'forms.ai.generate')) {
+    return { ok: false, error: 'You do not have permission to use AI drafting.' }
+  }
+  if (!args || typeof args !== 'object' || !(await canFillTemplate(ctx, args.templateId))) {
+    return { ok: false, error: 'App not found.' }
+  }
+  const description = typeof args.description === 'string' ? args.description.trim() : ''
+  if (!description || description.length > MAX_SKETCH_DRAFT_DESCRIPTION_LENGTH) {
+    return { ok: false, error: 'Describe the diagram in a few sentences first.' }
+  }
+  const symbolNames = Array.isArray(args.symbolNames)
+    ? args.symbolNames.filter((name): name is string => typeof name === 'string').slice(0, 50)
+    : []
+  const aiConfig = await getTenantAiConfig(ctx)
+  if (!aiConfig) {
+    return { ok: false, error: 'AI is not configured for this workspace (Admin → AI).' }
+  }
+  try {
+    return await generateSketchDraft(aiConfig, { description, symbolNames })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Diagram drafting failed'
+    return { ok: false, error: message }
+  }
+}
+
 export async function analyzePhotos(args: {
   attachmentIds: string[]
 }): Promise<{ ok: true; analysis: SafetyVisionAnalysis } | { ok: false; error: string }> {

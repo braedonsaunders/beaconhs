@@ -11,6 +11,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { getTenantAiConfig } from '@/lib/ai-config'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
 import { canAccessTemplate, canEditResponsePayload } from '@/app/(app)/apps/_lib/access'
 import { parseBuilderReturnTo } from '@/app/(app)/apps/_lib/return-to'
@@ -267,6 +268,11 @@ export default async function FillTemplatePage({
   // selected yet, so this returns picker → null entries.
   const entitiesByField = await loadEntitiesForPickers(ctx, data.version.schema, initialValues)
 
+  // AI sketch drafting needs tenant AI configured AND the draft permission;
+  // the server action re-checks both, so this only controls the affordance.
+  const aiDraftEnabled =
+    !readOnly && can(ctx, 'forms.ai.generate') && (await getTenantAiConfig(ctx)) !== null
+
   return (
     <FormRenderer
       templateId={data.tmpl.id}
@@ -293,6 +299,7 @@ export default async function FillTemplatePage({
       responseStatus={response?.status ?? null}
       reviewHref={reviewHref}
       complianceObligationId={data.complianceObligationId}
+      aiDraftEnabled={aiDraftEnabled}
     />
   )
 }

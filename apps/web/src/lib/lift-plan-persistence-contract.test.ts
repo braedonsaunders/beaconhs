@@ -38,4 +38,33 @@ describe('lift-plan field persistence contract', () => {
     expect(renderer).toContain("dynamic(() => import('@/components/sketch-pad')")
     expect(sketchPad).toContain('handleKeyboardGlobally={false}')
   })
+
+  it('inserts tenant-authored symbols as editable canvas drafts, never auto-saved', () => {
+    // Library comes from the sketch element config — no hard-coded shapes.
+    expect(renderer).toContain('sketchConfigSchema.safeParse(field.config')
+    expect(sketchPad).toContain('symbols?: SketchSymbol[]')
+    expect(sketchPad).toContain('function insertSymbol(')
+    expect(sketchPad).toContain('api.updateScene')
+    // Fresh identity per insert so copies never collide with each other.
+    expect(sketchPad).toContain('crypto.randomUUID()')
+    // Insert path only marks dirty; the explicit save still persists.
+    expect(sketchPad).toContain('async function saveDrawing()')
+    expect(sketchPad).toContain('setDirty(true)')
+  })
+
+  it('gates AI diagram drafting behind config, permission, and human review', () => {
+    // Server: permission + AI-config gates, validated primitives, no auto-draw.
+    expect(renderer).toContain('draftSketchDiagram')
+    const actions = readFileSync(
+      new URL('../app/(app)/apps/templates/[id]/fill/actions.ts', import.meta.url),
+      'utf8',
+    )
+    expect(actions).toContain("can(ctx, 'forms.ai.generate')")
+    expect(actions).toContain('getTenantAiConfig(ctx)')
+    expect(actions).toContain('generateSketchDraft(aiConfig,')
+    // Client: draft inserts as editable elements; save stays explicit.
+    expect(sketchPad).toContain('aiDraft?: {')
+    expect(sketchPad).toContain('export function buildDraftElements(')
+    expect(sketchPad).toContain('insertElements(buildDraftElements(result.elements))')
+  })
 })
