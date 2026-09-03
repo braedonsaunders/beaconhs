@@ -190,6 +190,10 @@ export const PERMISSION_CATALOGUE = [
   'hazid.read.all',
   'hazid.read.site',
   'hazid.read.self',
+  // Opt-in tenant-wide read of other people's assessments (list + open +
+  // copy-from). View only: edit still needs hazid.update, copy still needs
+  // hazid.create. Off by default — grant it explicitly, never via BUILTIN_ROLES.
+  'hazid.read.others',
   'hazid.create',
   'hazid.update',
   'hazid.review',

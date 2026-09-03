@@ -159,7 +159,10 @@ export async function moduleScopeWhere(
   cols: ModuleScopeCols,
 ): Promise<SQL | undefined> {
   const tier = resolveVisibilityTier(ctx, cols.prefix)
-  if (tier === 'all') return undefined
+  // Opt-in hazid read of others' assessments: a self-tier holder of
+  // `hazid.read.others` sees tenant-wide (same as `all`). Scoped to the hazid
+  // prefix — other modules keep their generic tier behavior.
+  if (tier === 'all' || (cols.prefix === 'hazid' && can(ctx, 'hazid.read.others'))) return undefined
 
   const ownConds = await ownPredicates(ctx, cols)
 
@@ -193,7 +196,9 @@ export async function canSeeRecord(
   rec: RecordOwnership,
 ): Promise<boolean> {
   const tier = resolveVisibilityTier(ctx, rec.prefix)
-  if (tier === 'all') return true
+  // Same opt-in as moduleScopeWhere: `hazid.read.others` grants tenant-wide
+  // view for a self-tier holder. Scoped to hazid only.
+  if (tier === 'all' || (rec.prefix === 'hazid' && can(ctx, 'hazid.read.others'))) return true
   if (tier === 'site' && rec.siteId && mySiteIds(ctx).includes(rec.siteId)) return true
 
   const tuId = myTenantUserId(ctx)

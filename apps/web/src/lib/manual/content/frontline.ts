@@ -154,6 +154,12 @@ Open **Hazard Assessments** in the left menu, or go to [Hazard assessments](/haz
 
 Use **All locations** to search the complete set of locations used by assessments you are allowed to open. On **My hazard assessments**, it searches only locations used by assessments you started. If the picker says more results exist, add more of the location name or code.
 
+## Who can see which assessments
+
+Most people see only the assessments they started. Foremen see their site's assessments.
+
+If your company wants you to read other people's assessments — for example to copy a good one for repeat work — an administrator can add the **View others' hazard assessments** permission to your role, or just to you under **Permissions** on your member page. It lets you open, list, email, and copy from anyone's assessment. It does not let you change other people's assessments. Editing still needs the edit permission, and copying still needs the create permission.
+
 ## Starting a new assessment
 
 1. Tap **New assessment**.

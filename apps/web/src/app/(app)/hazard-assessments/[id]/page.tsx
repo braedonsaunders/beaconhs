@@ -155,7 +155,12 @@ export const dynamic = 'force-dynamic'
 async function sendEmailAction(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
-  if (!can(ctx, 'hazid.read.all') && !can(ctx, 'hazid.read.site') && !can(ctx, 'hazid.read.self')) {
+  if (
+    !can(ctx, 'hazid.read.all') &&
+    !can(ctx, 'hazid.read.site') &&
+    !can(ctx, 'hazid.read.self') &&
+    !can(ctx, 'hazid.read.others')
+  ) {
     throw new Error('Not authorized')
   }
   const id = String(formData.get('id') ?? '')
