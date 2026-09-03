@@ -40,7 +40,7 @@ import { SortableTh } from '@/components/sortable-th'
 export const dynamic = 'force-dynamic'
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
-  return { title: tGenerated('m_0620c94ba8d26d') }
+  return { title: tGenerated('m_039d6635ac0051') }
 }
 
 const BASE = '/equipment/inspections'
@@ -242,7 +242,7 @@ export default async function EquipmentInspectionsPage({
       header={
         <>
           <PageHeader
-            title={tGenerated('m_189bb91aaf5565')}
+            title={tGenerated('m_039d6635ac0051')}
             description={tGenerated('m_18faf7c048e1b2', {
               value0: total.toLocaleString(),
               value1: total === 1 ? '' : 's',
@@ -318,6 +318,16 @@ export default async function EquipmentInspectionsPage({
                   <TableRow>
                     <TableCell colSpan={7} className="py-10 text-center text-sm text-slate-500">
                       <GeneratedText id="m_1ef212a3b97a74" />
+                      {can(ctx, 'inspections.read.self') ? (
+                        <span className="mt-1 block text-xs">
+                          <Link
+                            href="/inspections/records"
+                            className="underline-offset-2 hover:underline"
+                          >
+                            <GeneratedText id="m_05902fad863efe" />
+                          </Link>
+                        </span>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ) : (

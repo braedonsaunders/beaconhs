@@ -361,7 +361,7 @@ export default async function MyLandingPage() {
     },
     {
       href: '/my/inspections',
-      label: 'Inspections',
+      label: 'Site Inspections',
       description: 'Inspection records you carried out.',
       icon: ClipboardList,
       tone: 'sky',

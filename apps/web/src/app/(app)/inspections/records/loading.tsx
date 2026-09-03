@@ -16,7 +16,7 @@ export default function Loading() {
       header={
         <>
           <PageHeader
-            title={tGenerated('m_189bb91aaf5565')}
+            title={tGenerated('m_06959b10572d20')}
             description={tGenerated('m_074b0b12b5f20c')}
             actions={<Skeleton className="h-9 w-44" />}
           />

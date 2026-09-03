@@ -153,7 +153,7 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]
 
-// Sub-tabs inside the Inspections tab. Pre-use leads because it is the check a
+// Sub-tabs inside the Equipment Checks tab. Pre-use leads because it is the check a
 // crew runs every shift; the rest were three tables stacked on one screen.
 // Pre-use is not a tab: it is a schedule like any other, so it lives as the
 // first row of the schedules table rather than a parallel place to look.
@@ -1600,7 +1600,7 @@ export default async function EquipmentDetailPage({
                 { key: 'location', label: 'Location & custody', count: checkoutsTotal },
                 {
                   key: 'inspections',
-                  label: 'Inspections',
+                  label: 'Equipment Checks',
                   count: scheduleStats.active + openReminderCount,
                 },
                 { key: 'work_orders', label: 'Work orders', count: openWoCount },

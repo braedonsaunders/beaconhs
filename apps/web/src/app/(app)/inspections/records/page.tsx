@@ -61,7 +61,7 @@ import { startInspection } from './_actions'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
-  return { title: tGenerated('m_189bb91aaf5565') }
+  return { title: tGenerated('m_06959b10572d20') }
 }
 export const dynamic = 'force-dynamic'
 
@@ -252,7 +252,7 @@ export default async function InspectionRecordsPage({
         header={
           <>
             <PageHeader
-              title={tGenerated('m_189bb91aaf5565')}
+              title={tGenerated('m_06959b10572d20')}
               description={tGenerated('m_074b0b12b5f20c')}
               actions={
                 <div className="flex items-center gap-2">
@@ -385,11 +385,21 @@ export default async function InspectionRecordsPage({
                 )}
                 description={tGenerated('m_1682c6a90ba66b')}
                 action={
-                  <Link href="/inspections/records?drawer=new">
-                    <Button>
-                      <GeneratedText id="m_0f060bce7a52ef" />
-                    </Button>
-                  </Link>
+                  <div className="flex flex-col items-center gap-2">
+                    <Link href="/inspections/records?drawer=new">
+                      <Button>
+                        <GeneratedText id="m_0f060bce7a52ef" />
+                      </Button>
+                    </Link>
+                    {can(ctx, 'equipment.read.self') ? (
+                      <Link
+                        href="/equipment/inspections"
+                        className="text-xs text-slate-500 underline-offset-2 hover:underline dark:text-slate-400"
+                      >
+                        <GeneratedText id="m_0adbc965fc7eab" />
+                      </Link>
+                    ) : null}
+                  </div>
                 }
               />
             ) : (

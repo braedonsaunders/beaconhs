@@ -653,7 +653,7 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 ## Tips
 
 - A red **missing** badge means someone reported the unit missing. If you find it, tell your supervisor.
-- Need to inspect a unit before use? See [Equipment inspections](/help/equipment-inspections).`,
+- Need to inspect a unit before use? See [Equipment checks](/help/equipment-inspections).`,
   },
   {
     slug: 'equipment-station',
@@ -743,7 +743,7 @@ The kiosk locks automatically when the workspace is suspended or archived. Ask a
   },
   {
     slug: 'equipment-inspections',
-    title: 'Equipment inspections',
+    title: 'Equipment checks',
     group: 'Equipment & PPE',
     iconKey: 'clipboard-check',
     requiredPermission: 'equipment.read.self',
@@ -768,11 +768,13 @@ Before you run a unit — or on its service schedule — you walk through a chec
 
 ## Where to find it
 
-Open **Equipment** in the left menu, then go to [Inspections](/equipment/inspections). You can also start a check straight from a unit's page: open the unit and tap the **Inspections** tab. That tab is split into **Schedules**, **Reminders**, and **History**. **Schedules** lists every check the unit is set up for, with the pre-use check first, and each row has a **Start** link that opens that inspection right there.
+Open **Equipment** in the left menu, then go to [Equipment Checks](/equipment/inspections). You can also start a check straight from a unit's page: open the unit and tap the **Equipment Checks** tab. That tab is split into **Schedules**, **Reminders**, and **History**. **Schedules** lists every check the unit is set up for, with the pre-use check first, and each row has a **Start** link that opens that check right there.
 
-## Perform an inspection
+Walking a site instead of checking a unit? Those live separately — see [Site inspections](/help/inspections).
 
-1. Open [Inspections](/equipment/inspections) and tap **New inspection**. A panel opens — there is no separate page to fill in first.
+## Perform a check
+
+1. Open [Equipment Checks](/equipment/inspections) and tap **New inspection**. A panel opens — there is no separate page to fill in first.
 2. Choose **Registered unit** to search the fleet, or **Rental / unregistered** for a unit that is not in the equipment register.
 3. For a registered unit, pick the **Equipment item**. The **Inspection** list then shows only what is set up on that unit — its pre-use checklist and its schedules. If what you expect is missing, the unit needs it set up on the **Schedules** sub-tab first.
 4. For a rental, enter the equipment name, serial or asset identifier, and provider, then choose the **Location** — the customer, project, site, or area the unit is working at. Rentals can only take pre-use inspections; their periodic certification belongs to the rental company.

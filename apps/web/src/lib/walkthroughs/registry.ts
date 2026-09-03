@@ -153,8 +153,8 @@ export const WALKTHROUGHS: Walkthrough[] = [
     steps: [
       {
         path: '/inspections/records',
-        title: 'Inspections',
-        body: 'Inspections are checklists your company set up: site walk-throughs, housekeeping checks and more.',
+        title: 'Site Inspections',
+        body: 'Site inspections are checklists your company set up: site walk-throughs, housekeeping checks and more.',
       },
       {
         path: '/inspections/records',

@@ -3,7 +3,7 @@ import { ModuleFlowsPage } from '@/components/flows/module-flows-page'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
-  return { title: tGenerated('m_0e49c60ec45d0c') }
+  return { title: tGenerated('m_18be1399639341') }
 }
 export const dynamic = 'force-dynamic'
 

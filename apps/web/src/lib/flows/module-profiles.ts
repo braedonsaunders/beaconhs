@@ -400,7 +400,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
   inspections: {
     subjectType: 'module',
     subjectKey: 'inspections',
-    label: 'Inspections',
+    label: 'Site Inspections',
     triggers: ['on_create', 'on_submit', 'status_change', 'manual'],
     actions: [
       'send_email',
@@ -638,7 +638,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
   'equipment-inspections': {
     subjectType: 'module',
     subjectKey: 'equipment-inspections',
-    label: 'Equipment inspections',
+    label: 'Equipment Checks',
     triggers: ['on_submit', 'manual'],
     actions: ['send_email', 'notify_role', 'create_capa', 'webhook', 'export_pdf'],
     fields: [

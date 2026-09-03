@@ -12,7 +12,7 @@ import { ModuleManageHub } from '@/components/module-admin/module-manage-hub'
 export const dynamic = 'force-dynamic'
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
-  return { title: tGenerated('m_176bf5e6cb9674') }
+  return { title: tGenerated('m_0d93896fc0ff95') }
 }
 
 export default async function InspectionsManagePage() {

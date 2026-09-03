@@ -254,9 +254,11 @@ Regular inspections catch unsafe conditions before they hurt someone. The record
 
 ## Where to find it
 
-Open **Inspections** in the left menu. Records live at [Inspection records](/inspections/records).
+Open **Site Inspections** in the left menu. Records live at [Inspection records](/inspections/records).
 
 On **Inspection records**, use **All inspection types**, **All locations**, and **All inspectors** to search across the records you are allowed to open. The **Location** column shows the selected company location. If a picker says more results exist, add more of the type, location, inspector name, or email to the search.
+
+Inspecting a unit or tool instead of a site? Those live separately — see [Equipment checks](/help/equipment-inspections).
 
 ## Starting an inspection
 
@@ -277,7 +279,7 @@ On **Inspection records**, use **All inspection types**, **All locations**, and 
 
 ## Setting up checklist questions
 
-Managers build inspection types under **Inspections** → **Manage** → **Types**. Open a type, add or edit a question, then choose its **Response type**. Use **Text** for a short answer, **Long text** for a narrative, or **Number** when the answer must be numeric. For **Select one**, enter at least two unique **Options (one per line)**. New inspections copy the response type and options into the record, so changing the type later does not rewrite an inspector's saved answer contract. Reusable banks use the same question editor under **Banks**.
+Managers build inspection types under **Site Inspections** → **Manage** → **Types**. Open a type, add or edit a question, then choose its **Response type**. Use **Text** for a short answer, **Long text** for a narrative, or **Number** when the answer must be numeric. For **Select one**, enter at least two unique **Options (one per line)**. New inspections copy the response type and options into the record, so changing the type later does not rewrite an inspector's saved answer contract. Reusable banks use the same question editor under **Banks**.
 
 ## Draft vs submitted
 

@@ -141,12 +141,12 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
   },
   {
     moduleKey: 'inspections',
-    label: 'Inspections',
+    label: 'Site Inspections',
     href: '/inspections',
     managePath: '/inspections/manage',
     iconKey: 'clipboard',
     permission: 'inspections.manage',
-    tabs: [{ key: 'records', label: 'Inspections', href: '/inspections/records' }],
+    tabs: [{ key: 'records', label: 'Site Inspections', href: '/inspections/records' }],
     sections: [
       {
         key: 'types',
@@ -246,7 +246,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
       { key: 'vehicle-log', label: 'Vehicle log', href: '/equipment/vehicle-log' },
       {
         key: 'inspections',
-        label: 'Inspections',
+        label: 'Equipment Checks',
         href: '/equipment/inspections',
         permission: 'equipment.read.self',
       },
@@ -368,12 +368,12 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
   },
   {
     moduleKey: 'equipment-inspections',
-    label: 'Equipment inspections',
+    label: 'Equipment checks',
     href: '/equipment/inspections',
     managePath: '/equipment/manage',
     iconKey: 'clipboard',
     permission: 'equipment.manage',
-    tabs: [{ key: 'inspections', label: 'Inspections', href: '/equipment/inspections' }],
+    tabs: [{ key: 'inspections', label: 'Equipment Checks', href: '/equipment/inspections' }],
     sections: [],
   },
   {

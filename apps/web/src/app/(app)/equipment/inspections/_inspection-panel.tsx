@@ -79,7 +79,7 @@ export async function EquipmentInspectionDrawer({
   const id = open && inspectionId && isUuid(inspectionId) ? inspectionId : null
   if (!id) {
     return (
-      <UrlDrawer open={false} closeHref={closeHref} title={tGenerated('m_189bb91aaf5565')}>
+      <UrlDrawer open={false} closeHref={closeHref} title={tGenerated('m_039d6635ac0051')}>
         {null}
       </UrlDrawer>
     )
@@ -217,7 +217,7 @@ export async function EquipmentInspectionDrawer({
 
   if (!data) {
     return (
-      <UrlDrawer open closeHref={closeHref} title={tGenerated('m_189bb91aaf5565')}>
+      <UrlDrawer open closeHref={closeHref} title={tGenerated('m_039d6635ac0051')}>
         <p className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
           <GeneratedText id="m_0279fd6c5a9fba" />
         </p>

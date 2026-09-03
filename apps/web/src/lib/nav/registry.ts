@@ -125,7 +125,7 @@ export const NAV_MODULES: NavModule[] = [
   {
     key: 'inspections',
     href: '/inspections',
-    label: 'Inspections',
+    label: 'Site Inspections',
     iconKey: 'clipboard',
     group: 'Frontline',
     requiredPermission: 'inspections.read.self',
