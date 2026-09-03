@@ -1234,6 +1234,58 @@ async function passAll(formData: FormData) {
   revalidatePath(`/inspections/records/${recordId}`)
 }
 
+async function markSectionNa(formData: FormData) {
+  'use server'
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'inspections.update')
+  const recordId = String(formData.get('recordId') ?? '')
+  const groupLabel = String(formData.get('groupLabel') ?? '')
+  if (!isUuid(recordId) || !groupLabel) return
+  const flipped = await ctx.db(async (tx) => {
+    const record = await lockVisibleInspectionRecordForMutation(tx, ctx, recordId)
+    const updated = await tx
+      .update(inspectionRecordCriteria)
+      .set({
+        answer: 'n_a',
+        severity: null,
+        nonComplianceDescription: null,
+        actionTaken: null,
+        compliantNote: null,
+        assignedToPersonId: null,
+        assignedToTenantUserId: null,
+        assignedDueDate: null,
+        correctedOn: null,
+        answeredAt: new Date(),
+        answeredByTenantUserId: ctx.membership?.id ?? null,
+      })
+      .where(
+        and(
+          eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+          eq(inspectionRecordCriteria.recordId, recordId),
+          eq(inspectionRecordCriteria.groupLabelSnapshot, groupLabel),
+          isNull(inspectionRecordCriteria.answer),
+          inArray(inspectionRecordCriteria.responseType, ['pass_fail_na', 'yes_no', 'rating']),
+        ),
+      )
+      .returning({ id: inspectionRecordCriteria.id })
+    if (updated.length === 0) return 0
+    await markInspectionInProgressIfDraft(tx, ctx, record)
+    for (const row of updated) {
+      await syncCorrectiveActionForCriterionInTx(tx, ctx, recordId, row.id)
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'inspection_record',
+      entityId: recordId,
+      action: 'update',
+      summary: `Marked section "${groupLabel.slice(0, 50)}" as N/A (${updated.length} item${updated.length === 1 ? '' : 's'})`,
+      metadata: { groupLabel, flipped: updated.length },
+    })
+    return updated.length
+  })
+  if (flipped === 0) return
+  revalidatePath(`/inspections/records/${recordId}`)
+}
+
 async function saveCustomerSignature(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
@@ -2205,76 +2257,106 @@ export default async function InspectionRecordDetailPage({
                 ) : (
                   <div className="space-y-4">
                     <GeneratedValue
-                      value={criteriaGroups.map((group, gi) => (
-                        <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-2">
-                          <GeneratedValue
-                            value={
-                              group.label || multiSection ? (
-                                <div className="sticky top-0 z-[1] -mx-1 flex items-center gap-2 bg-white/90 px-1 py-1 backdrop-blur dark:bg-slate-900/90">
-                                  <h3 className="text-xs font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
-                                    <GeneratedValue
-                                      value={group.label ?? <GeneratedText id="m_124ee6c18e0195" />}
-                                    />
-                                  </h3>
-                                  <span className="text-xs text-slate-400">
-                                    <GeneratedValue value={group.rows.length} />{' '}
-                                    <GeneratedText id="m_089f2b1abdb347" />
+                      value={criteriaGroups.map((group, gi) => {
+                        const sectionNaCount = group.label
+                          ? group.rows.filter(
+                              (row) =>
+                                isInspectionOutcomeResponseType(row.c.responseType) &&
+                                !row.c.answer,
+                            ).length
+                          : 0
+                        return (
+                          <div key={group.label ?? `__ungrouped_${gi}`} className="space-y-2">
+                            <GeneratedValue
+                              value={
+                                group.label || multiSection ? (
+                                  <div className="sticky top-0 z-[1] -mx-1 flex items-center gap-2 bg-white/90 px-1 py-1 backdrop-blur dark:bg-slate-900/90">
+                                    <h3 className="text-xs font-semibold tracking-wide text-slate-700 uppercase dark:text-slate-300">
+                                      <GeneratedValue
+                                        value={
+                                          group.label ?? <GeneratedText id="m_124ee6c18e0195" />
+                                        }
+                                      />
+                                    </h3>
+                                    <span className="text-xs text-slate-400">
+                                      <GeneratedValue value={group.rows.length} />{' '}
+                                      <GeneratedText id="m_089f2b1abdb347" />
+                                      <GeneratedValue
+                                        value={
+                                          group.rows.length === 1 ? (
+                                            ''
+                                          ) : (
+                                            <GeneratedText id="m_00ded356f0f424" />
+                                          )
+                                        }
+                                      />
+                                    </span>
                                     <GeneratedValue
                                       value={
-                                        group.rows.length === 1 ? (
-                                          ''
-                                        ) : (
-                                          <GeneratedText id="m_00ded356f0f424" />
-                                        )
+                                        sectionNaCount > 0 && !recordImmutable ? (
+                                          <form action={markSectionNa} className="ml-auto">
+                                            <input type="hidden" name="recordId" value={id} />
+                                            <input
+                                              type="hidden"
+                                              name="groupLabel"
+                                              value={group.label ?? ''}
+                                            />
+                                            <Button type="submit" variant="outline" size="sm">
+                                              <GeneratedText id="m_14001de0aa07db" />{' '}
+                                              <GeneratedText id="m_02f67a0e8ba5ce" />{' '}
+                                              <GeneratedText id="m_06702e4064e393" />
+                                            </Button>
+                                          </form>
+                                        ) : null
                                       }
                                     />
-                                  </span>
-                                </div>
-                              ) : null
-                            }
-                          />
-                          <GeneratedValue
-                            value={group.rows.map((row) => (
-                              <CriterionCard
-                                key={row.c.id}
-                                recordId={id}
-                                rowId={row.c.id}
-                                index={indexById.get(row.c.id) ?? 0}
-                                question={row.c.questionTextSnapshot}
-                                responseType={row.c.responseType as CriterionResponseType}
-                                choiceOptions={row.c.choiceOptionsSnapshot}
-                                choiceAnswer={row.c.choiceAnswer}
-                                textAnswer={row.c.textAnswer}
-                                numberAnswer={row.c.numberAnswer}
-                                requiresPhoto={row.c.requiresPhoto ?? false}
-                                requiresComment={row.c.requiresComment ?? false}
-                                answer={row.c.answer}
-                                severity={row.c.severity as CriterionSeverity | null}
-                                nonComplianceDescription={row.c.nonComplianceDescription}
-                                actionTaken={row.c.actionTaken}
-                                compliantNote={row.c.compliantNote}
-                                assignedToPersonId={row.c.assignedToPersonId}
-                                assignedDueDate={row.c.assignedDueDate}
-                                correctedOn={row.c.correctedOn}
-                                overdue={isOverdue({
-                                  answer: row.c.answer,
-                                  assignedDueDate: row.c.assignedDueDate,
-                                  correctedOn: row.c.correctedOn,
-                                  recordOccurredAt: record.occurredAt,
-                                })}
-                                photoPreviews={(row.c.photoAttachmentIds ?? [])
-                                  .map((aid) => data.criterionPhotoMap.get(aid))
-                                  .filter((p): p is NonNullable<typeof p> => Boolean(p))}
-                                correctiveActionRef={row.ca?.reference ?? null}
-                                correctiveActionId={row.c.correctiveActionId}
-                                locked={recordImmutable}
-                                allowCompliantNotes={type.allowCompliantNotes}
-                                actions={criterionActions}
-                              />
-                            ))}
-                          />
-                        </div>
-                      ))}
+                                  </div>
+                                ) : null
+                              }
+                            />
+                            <GeneratedValue
+                              value={group.rows.map((row) => (
+                                <CriterionCard
+                                  key={row.c.id}
+                                  recordId={id}
+                                  rowId={row.c.id}
+                                  index={indexById.get(row.c.id) ?? 0}
+                                  question={row.c.questionTextSnapshot}
+                                  responseType={row.c.responseType as CriterionResponseType}
+                                  choiceOptions={row.c.choiceOptionsSnapshot}
+                                  choiceAnswer={row.c.choiceAnswer}
+                                  textAnswer={row.c.textAnswer}
+                                  numberAnswer={row.c.numberAnswer}
+                                  requiresPhoto={row.c.requiresPhoto ?? false}
+                                  requiresComment={row.c.requiresComment ?? false}
+                                  answer={row.c.answer}
+                                  severity={row.c.severity as CriterionSeverity | null}
+                                  nonComplianceDescription={row.c.nonComplianceDescription}
+                                  actionTaken={row.c.actionTaken}
+                                  compliantNote={row.c.compliantNote}
+                                  assignedToPersonId={row.c.assignedToPersonId}
+                                  assignedDueDate={row.c.assignedDueDate}
+                                  correctedOn={row.c.correctedOn}
+                                  overdue={isOverdue({
+                                    answer: row.c.answer,
+                                    assignedDueDate: row.c.assignedDueDate,
+                                    correctedOn: row.c.correctedOn,
+                                    recordOccurredAt: record.occurredAt,
+                                  })}
+                                  photoPreviews={(row.c.photoAttachmentIds ?? [])
+                                    .map((aid) => data.criterionPhotoMap.get(aid))
+                                    .filter((p): p is NonNullable<typeof p> => Boolean(p))}
+                                  correctiveActionRef={row.ca?.reference ?? null}
+                                  correctiveActionId={row.c.correctiveActionId}
+                                  locked={recordImmutable}
+                                  allowCompliantNotes={type.allowCompliantNotes}
+                                  actions={criterionActions}
+                                />
+                              ))}
+                            />
+                          </div>
+                        )
+                      })}
                     />
                   </div>
                 )

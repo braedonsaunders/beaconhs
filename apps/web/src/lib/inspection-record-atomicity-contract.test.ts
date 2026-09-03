@@ -53,7 +53,8 @@ describe('inspection record atomicity contract', () => {
       ['updateStatus', 'async function toggleLock'],
       ['toggleLock', 'async function updateRecordField'],
       ['updateRecordField', 'async function setCriterionAnswer'],
-      ['passAll', 'async function saveCustomerSignature'],
+      ['passAll', 'async function markSectionNa'],
+      ['markSectionNa', 'async function saveCustomerSignature'],
       ['saveCustomerSignature', '// Plain helper'],
       [
         'attachRecordPhotos',

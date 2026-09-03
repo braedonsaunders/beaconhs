@@ -276,6 +276,7 @@ Inspecting a unit or tool instead of a site? Those live separately — see [Equi
 3. Add photos on any failed item. Tap **Take photo or upload** to use the camera or choose pictures from your phone's photo library. Some items require a photo before you can submit — they show a **Photo** tag.
 4. Tap the pencil button on a photo to add a caption or draw attention to a problem. The editor keeps the photo's original shape. Large camera photos are optimized automatically when they upload. Tap the trash button to remove the wrong photo. Use the arrow buttons to put several photos in order.
 5. If most outcome items pass, tap **Mark unanswered as pass** in the **Status & workflow** section to fill those items in one tap. **Select one**, **Text**, **Long text**, and **Number** items are never filled by this shortcut; answer each one yourself. Only use the shortcut when you actually checked the items.
+6. If a whole section does not apply to the job — for example hoisting checks on a day with no lifts — tap **Mark section N/A** in that section's header. It marks only the section's unanswered outcome items as **N/A**; items you already answered stay as they are. Like the record-wide shortcut, it never touches **Select one**, **Text**, **Long text**, or **Number** items, and items that require a photo or comment before submit can still block submission — N/A only excuses the photo requirement, so add the required comment to submit.
 
 ## Setting up checklist questions
 
