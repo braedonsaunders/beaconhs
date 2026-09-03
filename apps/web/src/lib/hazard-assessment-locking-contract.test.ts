@@ -80,13 +80,53 @@ describe('hazard-assessment transactional locking contract', () => {
   it('locks and audits signature storage in its attachment transaction', () => {
     const addSignature = between(
       'export async function addSignature',
-      'export async function deleteSignature',
+      'export async function signSignature',
     )
 
     expect(addSignature).toContain('await withStoredSignatureAttachment(')
     expect(addSignature).toContain('await lockEditableAssessment(ctx, tx, assessmentId)')
     expect(addSignature).toContain('await recordAuditInTransaction(tx, ctx')
     expect(addSignature).not.toContain('await recordAudit(ctx')
+  })
+
+  it('captures ink onto unsigned signer rows without replacing existing signatures', () => {
+    const detailPage = readFileSync(
+      new URL('../app/(app)/hazard-assessments/[id]/page.tsx', import.meta.url),
+      'utf8',
+    )
+    const signatureForm = readFileSync(
+      new URL('../app/(app)/hazard-assessments/_signature-form.tsx', import.meta.url),
+      'utf8',
+    )
+    const addSignature = between(
+      'export async function addSignature',
+      'export async function signSignature',
+    )
+    const signSignature = between(
+      'export async function signSignature',
+      'export async function deleteSignature',
+    )
+
+    // Server: same storage saga + transactional parent lock as addSignature,
+    // guarded UPDATE so a concurrent sign fails closed instead of orphaning ink.
+    expect(signSignature).toContain("assertCan(ctx, 'hazid.update')")
+    expect(signSignature).toContain('await assertAssessmentEditable(ctx, assessmentId)')
+    expect(signSignature).toContain('await withStoredSignatureAttachment(')
+    expect(signSignature).toContain('await lockEditableAssessment(ctx, tx, assessmentId)')
+    expect(signSignature).toContain('isNull(hazidAssessmentSignatures.signatureAttachmentId)')
+    expect(signSignature).toContain("event: 'on_sign'")
+    expect(signSignature).toContain('await recordAuditInTransaction(tx, ctx')
+    expect(signSignature).not.toContain('await recordAudit(ctx')
+
+    // Add drawer: ink optional (signer-first add), save label follows the mode.
+    expect(signatureForm).toContain('export function SignSignatureDrawerBody')
+    expect(addSignature).not.toContain('if (!signature) {')
+
+    // Detail page: per-row Sign entry points only for unsigned rows on
+    // unlocked assessments; the sign drawer never opens for signed rows.
+    expect(detailPage).toContain("drawerHref('sign-signature'")
+    expect(detailPage).toContain('signSignatureRow')
+    expect(detailPage).toContain('!signSignatureRow.row.signatureAttachmentId')
   })
 
   it('locks the parent in the same transaction for every reorder', () => {

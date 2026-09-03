@@ -106,6 +106,7 @@ import {
   unlockAssessment,
   openAssessmentApp,
   reviewAssessment,
+  signSignature,
   removePhoto,
   reorderPhotos,
   updateHazard,
@@ -142,7 +143,7 @@ import {
   LiveSelect,
 } from '@/components/live-field'
 import { datetimeLocalValue, formatDateTime } from '@/lib/datetime'
-import { AddSignatureDrawerBody } from '../_signature-form'
+import { AddSignatureDrawerBody, SignSignatureDrawerBody } from '../_signature-form'
 import { HazidPhotoUploader } from '../_photo-uploader'
 import { RiskScoreBadge } from '../_risk'
 
@@ -234,6 +235,7 @@ export default async function HazidAssessmentDetailPage({
   const editHazardId = pickString(sp.hazardId) ?? ''
   const editPPEId = pickString(sp.ppeId) ?? ''
   const editQuestionId = pickString(sp.questionId) ?? ''
+  const signSignatureId = pickString(sp.signatureId) ?? ''
 
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -759,6 +761,11 @@ export default async function HazidAssessmentDetailPage({
   const editPPERow = editPPEId ? ppe.find((p) => p.id === editPPEId) : undefined
   const editQuestionRow = editQuestionId
     ? questions.find((q) => q.id === editQuestionId)
+    : undefined
+  // Row targeted by the per-signer "Sign" drawer — resolved up front like the
+  // edit drawers; the drawer's `open=` predicate stays false when it misses.
+  const signSignatureRow = signSignatureId
+    ? signatures.find((s) => s.row.id === signSignatureId)
     : undefined
   return (
     <DetailPageLayout
@@ -1585,13 +1592,32 @@ export default async function HazidAssessmentDetailPage({
                               <GeneratedValue
                                 value={
                                   !locked ? (
-                                    <form action={deleteSignature}>
-                                      <input type="hidden" name="id" value={s.row.id} />
-                                      <input type="hidden" name="assessmentId" value={id} />
-                                      <Button type="submit" size="sm" variant="ghost">
-                                        <GeneratedText id="m_11773f3c3f7558" />
-                                      </Button>
-                                    </form>
+                                    <div className="flex shrink-0 items-center gap-1">
+                                      <GeneratedValue
+                                        value={
+                                          s.row.signatureAttachmentId ? null : (
+                                            <Link
+                                              href={
+                                                drawerHref('sign-signature', {
+                                                  signatureId: s.row.id,
+                                                }) as any
+                                              }
+                                            >
+                                              <Button type="button" size="sm">
+                                                <GeneratedText id="m_18b6a957bf05e0" />
+                                              </Button>
+                                            </Link>
+                                          )
+                                        }
+                                      />
+                                      <form action={deleteSignature}>
+                                        <input type="hidden" name="id" value={s.row.id} />
+                                        <input type="hidden" name="assessmentId" value={id} />
+                                        <Button type="submit" size="sm" variant="ghost">
+                                          <GeneratedText id="m_11773f3c3f7558" />
+                                        </Button>
+                                      </form>
+                                    </div>
                                   ) : null
                                 }
                               />
@@ -1608,10 +1634,21 @@ export default async function HazidAssessmentDetailPage({
                                       unoptimized
                                       className="h-16 w-auto max-w-full object-contain"
                                     />
-                                  ) : (
+                                  ) : locked ? (
                                     <span className="text-xs text-red-600">
                                       <GeneratedText id="m_17f941df9401b5" />
                                     </span>
+                                  ) : (
+                                    <Link
+                                      href={
+                                        drawerHref('sign-signature', {
+                                          signatureId: s.row.id,
+                                        }) as any
+                                      }
+                                      className="text-xs font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300"
+                                    >
+                                      <GeneratedText id="m_0fac35edf41e7d" />
+                                    </Link>
                                   )
                                 }
                               />
@@ -1860,6 +1897,36 @@ export default async function HazidAssessmentDetailPage({
           showCSRoles={false}
           closeHref={tabHref}
           addAction={addSignature}
+        />
+      </UrlDrawer>
+
+      {/* Per-signer ink capture — unsigned rows only, editable assessments only. */}
+      <UrlDrawer
+        open={
+          drawerKey === 'sign-signature' &&
+          !locked &&
+          !!signSignatureRow &&
+          !signSignatureRow.row.signatureAttachmentId
+        }
+        closeHref={tabHref}
+        title={tGenerated('m_0c0bc02db58371')}
+        size="md"
+      >
+        <GeneratedValue
+          value={
+            signSignatureRow && !signSignatureRow.row.signatureAttachmentId ? (
+              <SignSignatureDrawerBody
+                signatureId={signSignatureRow.row.id}
+                signerLabel={
+                  signSignatureRow.person
+                    ? `${signSignatureRow.person.firstName} ${signSignatureRow.person.lastName}`
+                    : (signSignatureRow.row.externalName ?? tGenerated('m_03029599bbfa85'))
+                }
+                closeHref={tabHref}
+                signAction={signSignature}
+              />
+            ) : null
+          }
         />
       </UrlDrawer>
 

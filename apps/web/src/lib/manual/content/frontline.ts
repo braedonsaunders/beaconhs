@@ -189,8 +189,9 @@ Some assessment types skip risk ratings and work as a simple checklist instead. 
 
 1. In the signatures section, tap **Add signature**.
 2. Pick **Internal (employee)** and choose the person, or **External (visitor / contractor)** and type their name.
-3. Have them sign in the **Signature** box.
+3. Either have them sign in the **Signature** box right away, or leave the box empty and tap **Save signers** to add them to the list — useful when you build the JSA on a computer first and collect signatures later.
 4. Repeat for everyone on the crew. The header shows how many signatures are collected.
+5. To collect a missing signature, tap **Sign** beside the name (or tap **Sign later** on their card), have them sign in the box, then tap **Save signature**. Pass the phone around the crew until everyone is signed.
 
 ## Attached assessment apps
 

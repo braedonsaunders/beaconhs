@@ -1928,6 +1928,77 @@ export async function addSignature(formData: FormData) {
   revalidateAssessment(assessmentId)
 }
 
+// Capture ink onto an existing unsigned signer row (crew added up front, then
+// signed one by one — e.g. passing a phone around). The signer identity is
+// fixed at add time; this only attaches the signature image and stamps
+// signedAt. Re-signing an already-signed row is rejected — delete and re-add
+// instead — so an existing signature attachment is never orphaned.
+export async function signSignature(formData: FormData) {
+  const ctx = await ctxWithTenant()
+  assertCan(ctx, 'hazid.update')
+  const id = String(formData.get('id') ?? '')
+  const signatureDataUrl = String(formData.get('signatureDataUrl') ?? '').trim() || null
+  if (!id) throw new Error('Missing id')
+  if (!signatureDataUrl) throw new Error('Capture a signature')
+  // Resolve the parent for the visibility + lock guards. The already-signed
+  // check lives on the guarded UPDATE below so two concurrent sign attempts
+  // cannot both attach ink to the same row.
+  const assessmentId = await ctx.db(async (tx) => {
+    const [found] = await tx
+      .select({ assessmentId: hazidAssessmentSignatures.assessmentId })
+      .from(hazidAssessmentSignatures)
+      .where(
+        and(
+          eq(hazidAssessmentSignatures.tenantId, ctx.tenantId),
+          eq(hazidAssessmentSignatures.id, id),
+        ),
+      )
+      .limit(1)
+    if (!found) throw new Error('Signature not found')
+    return found.assessmentId
+  })
+  await assertAssessmentEditable(ctx, assessmentId)
+
+  const row = await withStoredSignatureAttachment(
+    ctx,
+    signatureDataUrl,
+    async (tx, attachmentId) => {
+      if (!attachmentId) throw new Error('Capture a signature')
+      await lockEditableAssessment(ctx, tx, assessmentId)
+      // Guard on signatureAttachmentId IS NULL so a concurrent sign on the
+      // same row fails closed instead of replacing (and orphaning) ink.
+      const [updated] = await tx
+        .update(hazidAssessmentSignatures)
+        .set({ signatureAttachmentId: attachmentId, signedAt: new Date() })
+        .where(
+          and(
+            eq(hazidAssessmentSignatures.tenantId, ctx.tenantId),
+            eq(hazidAssessmentSignatures.id, id),
+            eq(hazidAssessmentSignatures.assessmentId, assessmentId),
+            isNull(hazidAssessmentSignatures.signatureAttachmentId),
+          ),
+        )
+        .returning()
+      if (!updated) throw new Error('This signer has already signed')
+      await recordModuleFlowEvent(tx, ctx, {
+        subjectId: assessmentId,
+        moduleKey: 'hazid',
+        event: 'on_sign',
+        occurrenceKey: updated.id,
+      })
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'hazid_assessment_signature',
+        entityId: updated.id,
+        action: 'sign',
+        summary: 'Captured signature',
+      })
+      return updated
+    },
+  )
+  void row
+  revalidateAssessment(assessmentId)
+}
+
 export async function deleteSignature(formData: FormData) {
   const ctx = await ctxWithTenant()
   assertCan(ctx, 'hazid.update')

@@ -36,6 +36,10 @@ export function AddSignatureDrawerBody({
   const [personId, setPersonId] = useState<string>('')
   const [externalName, setExternalName] = useState<string>('')
   const [signature, setSignature] = useState<string | null>(null)
+  // Ink is optional here: leaving the pad empty saves the person as an
+  // unsigned signer row they (or a phone passed around the crew) sign later.
+  // Switch to a capture-required mode for the single-shot add-and-sign flow.
+  const [captureNow, setCaptureNow] = useState(false)
   const [csEntrant, setCsEntrant] = useState(false)
   const [csAttendant, setCsAttendant] = useState(false)
   const [csRescue, setCsRescue] = useState(false)
@@ -52,7 +56,7 @@ export function AddSignatureDrawerBody({
       setErr('External signer needs a name')
       return
     }
-    if (!signature) {
+    if (captureNow && !signature) {
       setErr('Capture a signature')
       return
     }
@@ -63,7 +67,7 @@ export function AddSignatureDrawerBody({
     // over from the other mode must not ride along.
     if (type === 'internal') fd.set('personId', personId)
     if (type === 'external') fd.set('externalName', externalName)
-    fd.set('signatureDataUrl', signature)
+    if (signature) fd.set('signatureDataUrl', signature)
     if (showCSRoles) {
       if (csEntrant) fd.set('csEntrant', 'on')
       if (csAttendant) fd.set('csAttendant', 'on')
@@ -163,6 +167,98 @@ export function AddSignatureDrawerBody({
             <GeneratedText id="m_0c0bc02db58371" />
           </Label>
           <SignaturePad value={signature} onChange={setSignature} />
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            <GeneratedText id="m_17038c88ec9ff5" />
+          </p>
+          <label className="flex items-center gap-1.5 text-sm">
+            <input
+              type="checkbox"
+              checked={captureNow}
+              onChange={(e) => setCaptureNow(e.target.checked)}
+            />
+            <GeneratedText id="m_05755c995456ea" />
+          </label>
+        </div>
+        <GeneratedValue
+          value={
+            err ? (
+              <div className="text-sm text-red-600">
+                <GeneratedValue value={err} />
+              </div>
+            ) : null
+          }
+        />
+      </div>
+      <div className="sticky bottom-0 -mx-6 mt-6 -mb-5 flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3 dark:border-slate-800 dark:bg-slate-800/50">
+        <Link href={closeHref as any}>
+          <Button type="button" variant="outline">
+            <GeneratedText id="m_112e2e8ecda428" />
+          </Button>
+        </Link>
+        <Button type="button" onClick={submit} disabled={pending}>
+          <GeneratedValue
+            value={
+              pending ? (
+                <GeneratedText id="m_106811f2aac664" />
+              ) : signature ? (
+                <GeneratedText id="m_173c1ae83a1c73" />
+              ) : (
+                <GeneratedText id="m_199a683f86eb40" />
+              )
+            }
+          />
+        </Button>
+      </div>
+    </>
+  )
+}
+
+/**
+ * Drawer body for capturing ink onto an existing unsigned signer row. Renders
+ * into the body slot of an <UrlDrawer> on the HazID detail page.
+ */
+export function SignSignatureDrawerBody({
+  signatureId,
+  signerLabel,
+  closeHref,
+  signAction,
+}: {
+  signatureId: string
+  signerLabel: string
+  closeHref: string
+  signAction: (formData: FormData) => Promise<void>
+}) {
+  const router = useRouter()
+  const [signature, setSignature] = useState<string | null>(null)
+  const [pending, start] = useTransition()
+  const [err, setErr] = useState<string | null>(null)
+
+  function submit() {
+    setErr(null)
+    if (!signature) {
+      setErr('Capture a signature')
+      return
+    }
+    const fd = new FormData()
+    fd.set('id', signatureId)
+    fd.set('signatureDataUrl', signature)
+    start(async () => {
+      await signAction(fd)
+      router.replace(closeHref as any)
+    })
+  }
+
+  return (
+    <>
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          <GeneratedValue value={signerLabel} />
+        </p>
+        <div className="space-y-1.5">
+          <Label>
+            <GeneratedText id="m_0c0bc02db58371" />
+          </Label>
+          <SignaturePad value={signature} onChange={setSignature} />
         </div>
         <GeneratedValue
           value={
@@ -186,7 +282,7 @@ export function AddSignatureDrawerBody({
               pending ? (
                 <GeneratedText id="m_106811f2aac664" />
               ) : (
-                <GeneratedText id="m_173c1ae83a1c73" />
+                <GeneratedText id="m_0e9ffb4d864c14" />
               )
             }
           />
