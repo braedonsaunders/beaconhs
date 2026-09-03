@@ -95,6 +95,8 @@ import {
   type DefaultValueExpression,
   type PhotoFieldConfig,
   type PhotoFieldValue,
+  sketchConfigSchema,
+  type SketchSymbol,
   type TableColumn,
   type TableConfig,
 } from '@beaconhs/forms-core'
@@ -102,6 +104,7 @@ import { localizeText } from '@beaconhs/i18n'
 import {
   analyzePhotos,
   createDraftResponse,
+  draftSketchDiagram,
   fetchEntityAttrs,
   listOrgUnitOptions,
   saveFormResponseDraft,
@@ -159,6 +162,15 @@ const SECTION_TONES = [
 // disabled <fieldset> can't reach (signature/sketch canvases, the TipTap
 // rich-text editor) render static. Provided by FormRenderer in record/view mode.
 const FillReadOnlyContext = createContext(false)
+
+// AI sketch-draft availability — enabled when the tenant has AI configured
+// AND the filler holds `forms.ai.generate`. SketchField reads it to decide
+// whether to offer the Draft-with-AI panel; the server action re-checks both
+// gates, so the template id here is routing context, not a trust decision.
+const SketchAiDraftContext = createContext<{ enabled: boolean; templateId: string }>({
+  enabled: false,
+  templateId: '',
+})
 
 // Per-MOUNT cache of org-unit picker options, keyed by level. Deliberately
 // React state (provided by FormRenderer), never module scope: a tenant switch
@@ -220,6 +232,7 @@ export function FormRenderer({
   reviewHref = null,
   complianceObligationId = null,
   inlineAutosave = false,
+  aiDraftEnabled = false,
 }: {
   templateId: string
   templateName: string
@@ -265,6 +278,9 @@ export function FormRenderer({
   // writing one key to the canonical `data` via `updateResponseField`. The
   // parent page owns all chrome. `initialResponseId` is always present here.
   inlineAutosave?: boolean
+  // True when the tenant has AI configured and the filler may use AI
+  // drafting. Threaded through SketchAiDraftContext to sketch fields.
+  aiDraftEnabled?: boolean
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
@@ -988,118 +1004,122 @@ export function FormRenderer({
 
     return (
       <FillReadOnlyContext.Provider value={readOnly}>
-        <OrgUnitOptionsCacheContext.Provider value={orgUnitOptionsCache}>
-          <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
-            <GeneratedValue
-              value={
-                inlineTabbed ? (
-                  <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
-                    <GeneratedValue
-                      value={appTabs.map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => setActiveTabId(t.id)}
-                          className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                            t.id === activeTabId
-                              ? 'border-teal-600 bg-teal-600 text-white'
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-                          }`}
-                        >
-                          <GeneratedValue value={localizeText(t.title, locale, t.id)} />
-                        </button>
-                      ))}
-                    />
-                  </div>
-                ) : null
-              }
-            />
-            <GeneratedValue
-              value={inlineSections.map((sec) => {
-                if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
-                return (
-                  <Section
-                    key={sec.id}
-                    title={tGeneratedValue(localizeText(sec.title, locale, sec.id))}
-                    subtitle={tGeneratedValue(
-                      localizeText(
-                        sec.description,
-                        locale,
-                        sec.repeating ? 'Repeatable section' : '',
-                      ) || undefined,
-                    )}
-                  >
-                    <div className="space-y-4">
+        <SketchAiDraftContext.Provider value={{ enabled: aiDraftEnabled, templateId }}>
+          <OrgUnitOptionsCacheContext.Provider value={orgUnitOptionsCache}>
+            <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
+              <GeneratedValue
+                value={
+                  inlineTabbed ? (
+                    <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
                       <GeneratedValue
-                        value={
-                          sec.repeating ? (
-                            <RepeatingSection
-                              section={sec}
-                              rows={rowsByStep[sec.id] ?? []}
-                              onAdd={() => {
-                                addRow(sec)
-                                // addRow mutates state async; persist the resulting array.
-                                const existing = rowsByStep[sec.id] ?? []
-                                if (sec.maxRows !== undefined && existing.length >= sec.maxRows)
-                                  return
-                                const next: Record<string, unknown> = {}
-                                for (const f of sec.fields) {
-                                  if (!f.defaultValue) continue
-                                  const dv = resolveDefaultValue(
-                                    f.defaultValue as DefaultValueExpression,
-                                    evalCtx,
-                                  )
-                                  if (dv !== undefined && dv !== null) next[f.id] = dv
-                                }
-                                void saveArray(sec.id, [...existing, next])
-                              }}
-                              onRemove={(i) => {
-                                removeRow(sec, i)
-                                const arr = (rowsByStep[sec.id] ?? []).filter((_, idx) => idx !== i)
-                                void saveArray(sec.id, arr)
-                              }}
-                              onUpdate={(i, patch) => {
-                                updateRow(sec, i, patch)
-                                const arr = (rowsByStep[sec.id] ?? []).map((r, idx) =>
-                                  idx === i ? { ...r, ...patch } : r,
-                                )
-                                void saveArray(sec.id, arr)
-                              }}
-                              people={people}
-                              evalCtx={evalCtx}
-                              errors={errors}
-                              sectionError={errors.get(`__section_${sec.id}`) ?? null}
-                            />
-                          ) : (
-                            sec.fields.map((f) => {
-                              if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
-                              return (
-                                <InlineFieldRow
-                                  key={f.id}
-                                  field={f}
-                                  value={values[f.id]}
-                                  onChange={(v) => setValue(f.id, v)}
-                                  onSetFieldValue={setValue}
-                                  error={errors.get(f.id)}
-                                  people={people}
-                                  evalCtx={evalCtx}
-                                  loading={pickerLoading.has(f.id)}
-                                  readOnly={readOnly}
-                                  saveField={saveField}
-                                  saveArray={saveArray}
-                                />
-                              )
-                            })
-                          )
-                        }
+                        value={appTabs.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setActiveTabId(t.id)}
+                            className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                              t.id === activeTabId
+                                ? 'border-teal-600 bg-teal-600 text-white'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                            }`}
+                          >
+                            <GeneratedValue value={localizeText(t.title, locale, t.id)} />
+                          </button>
+                        ))}
                       />
                     </div>
-                  </Section>
-                )
-              })}
-            />
-          </fieldset>
-        </OrgUnitOptionsCacheContext.Provider>
+                  ) : null
+                }
+              />
+              <GeneratedValue
+                value={inlineSections.map((sec) => {
+                  if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+                  return (
+                    <Section
+                      key={sec.id}
+                      title={tGeneratedValue(localizeText(sec.title, locale, sec.id))}
+                      subtitle={tGeneratedValue(
+                        localizeText(
+                          sec.description,
+                          locale,
+                          sec.repeating ? 'Repeatable section' : '',
+                        ) || undefined,
+                      )}
+                    >
+                      <div className="space-y-4">
+                        <GeneratedValue
+                          value={
+                            sec.repeating ? (
+                              <RepeatingSection
+                                section={sec}
+                                rows={rowsByStep[sec.id] ?? []}
+                                onAdd={() => {
+                                  addRow(sec)
+                                  // addRow mutates state async; persist the resulting array.
+                                  const existing = rowsByStep[sec.id] ?? []
+                                  if (sec.maxRows !== undefined && existing.length >= sec.maxRows)
+                                    return
+                                  const next: Record<string, unknown> = {}
+                                  for (const f of sec.fields) {
+                                    if (!f.defaultValue) continue
+                                    const dv = resolveDefaultValue(
+                                      f.defaultValue as DefaultValueExpression,
+                                      evalCtx,
+                                    )
+                                    if (dv !== undefined && dv !== null) next[f.id] = dv
+                                  }
+                                  void saveArray(sec.id, [...existing, next])
+                                }}
+                                onRemove={(i) => {
+                                  removeRow(sec, i)
+                                  const arr = (rowsByStep[sec.id] ?? []).filter(
+                                    (_, idx) => idx !== i,
+                                  )
+                                  void saveArray(sec.id, arr)
+                                }}
+                                onUpdate={(i, patch) => {
+                                  updateRow(sec, i, patch)
+                                  const arr = (rowsByStep[sec.id] ?? []).map((r, idx) =>
+                                    idx === i ? { ...r, ...patch } : r,
+                                  )
+                                  void saveArray(sec.id, arr)
+                                }}
+                                people={people}
+                                evalCtx={evalCtx}
+                                errors={errors}
+                                sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                              />
+                            ) : (
+                              sec.fields.map((f) => {
+                                if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
+                                return (
+                                  <InlineFieldRow
+                                    key={f.id}
+                                    field={f}
+                                    value={values[f.id]}
+                                    onChange={(v) => setValue(f.id, v)}
+                                    onSetFieldValue={setValue}
+                                    error={errors.get(f.id)}
+                                    people={people}
+                                    evalCtx={evalCtx}
+                                    loading={pickerLoading.has(f.id)}
+                                    readOnly={readOnly}
+                                    saveField={saveField}
+                                    saveArray={saveArray}
+                                  />
+                                )
+                              })
+                            )
+                          }
+                        />
+                      </div>
+                    </Section>
+                  )
+                })}
+              />
+            </fieldset>
+          </OrgUnitOptionsCacheContext.Provider>
+        </SketchAiDraftContext.Provider>
       </FillReadOnlyContext.Provider>
     )
   }
@@ -1118,405 +1138,441 @@ export function FormRenderer({
 
   return (
     <FillReadOnlyContext.Provider value={readOnly}>
-      <OrgUnitOptionsCacheContext.Provider value={orgUnitOptionsCache}>
-        <WizardLayout
-          className={`ff-surface ${fieldMode ? 'field-mode' : ''}`}
-          wide={readOnly}
-          header={
-            recordLayout ? (
-              <DetailHeader
-                back={{
-                  href: returnTo ?? `/apps/templates/${templateId}/records`,
-                  label: returnTo ? 'Back to assessment' : 'Back',
-                }}
-                title={tGeneratedValue(templateName)}
-                subtitle={tGeneratedValue(
-                  initialResponseId
-                    ? tGenerated('m_14c3dfbc8a08e9', {
-                        value0: initialResponseId.slice(0, 8),
-                        value1: version,
-                      })
-                    : tGenerated('m_1480a378beafd1', { value0: version }),
-                )}
-                badge={
-                  readOnly ? (
-                    responseStatus ? (
-                      <Badge variant="secondary">
-                        <GeneratedValue value={responseStatus.replace(/_/g, ' ')} />
-                      </Badge>
-                    ) : null
-                  ) : (
-                    <SaveStatus
-                      status={saveStatus}
-                      lastSavedAt={lastSavedAt}
-                      error={saveError}
-                      onRetry={() => {
-                        void persistDraft({ values, rows: rowsByStep, stepIndex })
-                      }}
-                    />
-                  )
-                }
-                actions={
-                  <>
-                    <GeneratedValue
-                      value={
-                        !readOnly ? (
-                          <button
-                            type="button"
-                            onClick={toggleFieldMode}
-                            aria-pressed={fieldMode}
-                            title={tGenerated('m_0c388e73463aaf')}
-                            className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
-                              fieldMode
-                                ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
-                                : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
-                            }`}
-                          >
-                            <Sun size={15} />
-                          </button>
-                        ) : null
-                      }
-                    />
-                    <GeneratedValue value={reviewLink} />
-                  </>
-                }
-              />
-            ) : (
-              <div className="space-y-3">
-                <Link
-                  href={returnTo ?? `/apps/templates/${templateId}/records`}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
-                >
-                  <ChevronLeft size={13} />{' '}
-                  <GeneratedValue
-                    value={
-                      returnTo ? (
-                        <GeneratedText id="m_0addbe9f7bc1a1" />
-                      ) : (
-                        <GeneratedText id="m_1a7cefe5a9894e" />
-                      )
-                    }
-                  />
-                </Link>
-                <div className="flex items-center justify-between gap-2">
-                  <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100">
-                    <GeneratedValue value={templateName} />
-                  </h1>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={toggleFieldMode}
-                      aria-pressed={fieldMode}
-                      title={tGenerated('m_0c388e73463aaf')}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
-                        fieldMode
-                          ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
-                          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
-                      }`}
-                    >
-                      <Sun size={15} />
-                    </button>
-                    <SaveStatus
-                      status={saveStatus}
-                      lastSavedAt={lastSavedAt}
-                      error={saveError}
-                      onRetry={() => {
-                        void persistDraft({ values, rows: rowsByStep, stepIndex })
-                      }}
-                    />
-                    <Badge variant="outline">
-                      <GeneratedText id="m_1c693e59d64fb2" />
-                      <GeneratedValue value={version} />
-                    </Badge>
-                    <GeneratedValue value={reviewLink} />
-                  </div>
-                </div>
-                {/* Progress strip — every workflow step as a clickable pill. Hidden
-              on single-step apps (e.g. the Lift Plan), where a one-pill strip
-              + progress bar is just noise and makes the header needlessly tall. */}
-                <GeneratedValue
-                  value={
-                    totalSteps > 1 ? (
-                      <>
-                        <ol className="flex flex-wrap items-center gap-1 text-xs">
-                          <GeneratedValue
-                            value={steps.map((s, i) => {
-                              const isCurrent = i === stepIndex
-                              const isCompleted = completedSteps.has(s.key)
-                              const isClickable = i <= stepIndex || isCompleted
-                              return (
-                                <li key={s.key}>
-                                  <button
-                                    type="button"
-                                    disabled={!isClickable}
-                                    onClick={() => jumpTo(i)}
-                                    className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors ${
-                                      isCurrent
-                                        ? 'border-teal-600 bg-teal-600 text-white'
-                                        : isCompleted
-                                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                          : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-                                    } ${!isClickable ? 'cursor-not-allowed opacity-60' : ''}`}
-                                  >
-                                    <span
-                                      className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
-                                        isCurrent
-                                          ? 'bg-white text-teal-700'
-                                          : isCompleted
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                                      }`}
-                                    >
-                                      <GeneratedValue
-                                        value={
-                                          isCompleted && !isCurrent ? <Check size={10} /> : i + 1
-                                        }
-                                      />
-                                    </span>
-                                    <span className="truncate">
-                                      <GeneratedValue
-                                        value={localizeText(s.title, locale, s.key)}
-                                      />
-                                    </span>
-                                  </button>
-                                </li>
-                              )
-                            })}
-                          />
-                        </ol>
-                        <div className="h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
-                          <div
-                            className="h-full rounded-full bg-teal-600 transition-all"
-                            style={{ width: `${Math.max(8, completion)}%` }}
-                          />
-                        </div>
-                      </>
-                    ) : null
+      <SketchAiDraftContext.Provider value={{ enabled: aiDraftEnabled, templateId }}>
+        <OrgUnitOptionsCacheContext.Provider value={orgUnitOptionsCache}>
+          <WizardLayout
+            className={`ff-surface ${fieldMode ? 'field-mode' : ''}`}
+            wide={readOnly}
+            header={
+              recordLayout ? (
+                <DetailHeader
+                  back={{
+                    href: returnTo ?? `/apps/templates/${templateId}/records`,
+                    label: returnTo ? 'Back to assessment' : 'Back',
+                  }}
+                  title={tGeneratedValue(templateName)}
+                  subtitle={tGeneratedValue(
+                    initialResponseId
+                      ? tGenerated('m_14c3dfbc8a08e9', {
+                          value0: initialResponseId.slice(0, 8),
+                          value1: version,
+                        })
+                      : tGenerated('m_1480a378beafd1', { value0: version }),
+                  )}
+                  badge={
+                    readOnly ? (
+                      responseStatus ? (
+                        <Badge variant="secondary">
+                          <GeneratedValue value={responseStatus.replace(/_/g, ' ')} />
+                        </Badge>
+                      ) : null
+                    ) : (
+                      <SaveStatus
+                        status={saveStatus}
+                        lastSavedAt={lastSavedAt}
+                        error={saveError}
+                        onRetry={() => {
+                          void persistDraft({ values, rows: rowsByStep, stepIndex })
+                        }}
+                      />
+                    )
+                  }
+                  actions={
+                    <>
+                      <GeneratedValue
+                        value={
+                          !readOnly ? (
+                            <button
+                              type="button"
+                              onClick={toggleFieldMode}
+                              aria-pressed={fieldMode}
+                              title={tGenerated('m_0c388e73463aaf')}
+                              className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
+                                fieldMode
+                                  ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
+                                  : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
+                              }`}
+                            >
+                              <Sun size={15} />
+                            </button>
+                          ) : null
+                        }
+                      />
+                      <GeneratedValue value={reviewLink} />
+                    </>
                   }
                 />
-              </div>
-            )
-          }
-          footer={
-            readOnly ? undefined : (
-              <div className="space-y-2">
-                <GeneratedValue
-                  value={
-                    serverError ? (
-                      <Alert variant="destructive">
-                        <AlertTitle>
-                          <GeneratedText id="m_051fb158550e48" />
-                        </AlertTitle>
-                        <AlertDescription>
-                          <GeneratedValue value={serverError} />
-                        </AlertDescription>
-                      </Alert>
-                    ) : null
-                  }
-                />
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    onClick={back}
-                    disabled={stepIndex === 0}
-                    className="h-12 px-4"
+              ) : (
+                <div className="space-y-3">
+                  <Link
+                    href={returnTo ?? `/apps/templates/${templateId}/records`}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
                   >
-                    <ChevronLeft size={16} />
-                    <GeneratedText id="m_1a7cefe5a9894e" />
-                  </Button>
-                  <GeneratedValue
-                    value={
-                      stepIndex < totalSteps - 1 ? (
-                        <Button onClick={next} size="lg" className="h-12 flex-1 text-base">
-                          <GeneratedText id="m_08b5fa148b2af7" /> <ChevronRight size={16} />
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={submit}
-                          disabled={pending}
-                          size="lg"
-                          className="h-12 flex-1 text-base"
-                        >
-                          <Check size={16} />
-                          <GeneratedValue
-                            value={
-                              pending ? (
-                                <GeneratedText id="m_00cfcb628bc131" />
-                              ) : (
-                                <GeneratedText id="m_09ee2ce911f04f" />
-                              )
-                            }
-                          />
-                        </Button>
-                      )
-                    }
-                  />
-                </div>
-              </div>
-            )
-          }
-        >
-          <GeneratedValue
-            value={
-              readOnly ? (
-                <Alert variant="warning">
-                  <AlertTitle>
-                    <GeneratedText id="m_0cd6abb2df6fc8" />
-                  </AlertTitle>
-                  <AlertDescription>
+                    <ChevronLeft size={13} />{' '}
                     <GeneratedValue
                       value={
-                        responseStatus ? (
-                          <GeneratedText
-                            id="m_05829ac350a185"
-                            values={{ value0: responseStatus.replace(/_/g, ' ') }}
-                          />
+                        returnTo ? (
+                          <GeneratedText id="m_0addbe9f7bc1a1" />
                         ) : (
-                          <GeneratedText id="m_171450f953a653" />
+                          <GeneratedText id="m_1a7cefe5a9894e" />
                         )
                       }
                     />
-                  </AlertDescription>
-                </Alert>
-              ) : null
-            }
-          />
-          <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
-            <GeneratedValue
-              value={
-                stepIndex === 0 ? (
-                  <PremiumSection
-                    title={tGenerated('m_055f11420b2da4')}
-                    subtitle={tGenerated('m_16bca608598e31')}
-                    icon={<MapPin size={20} />}
-                    tone="teal"
-                  >
-                    <div className="space-y-1">
-                      <Label>
-                        <GeneratedText id="m_055f11420b2da4" />
-                      </Label>
-                      <RemoteSearchSelect
-                        lookup="form-response-locations"
-                        value={siteId}
-                        onChange={setSiteId}
-                        initialOption={initialLocation}
-                        placeholder={tGenerated('m_1ad901c0a1f003')}
-                        searchPlaceholder={tGenerated('m_016e087c3c8544')}
-                        sheetTitle={tGenerated('m_055f11420b2da4')}
-                        ariaLabel={tGenerated('m_055f11420b2da4')}
-                        emptyLabel={tGenerated('m_1ad901c0a1f003')}
-                        disabled={readOnly || locationReadOnly}
+                  </Link>
+                  <div className="flex items-center justify-between gap-2">
+                    <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-slate-100">
+                      <GeneratedValue value={templateName} />
+                    </h1>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={toggleFieldMode}
+                        aria-pressed={fieldMode}
+                        title={tGenerated('m_0c388e73463aaf')}
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${
+                          fieldMode
+                            ? 'border-amber-400 bg-amber-100 text-amber-700 dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-200'
+                            : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
+                        }`}
+                      >
+                        <Sun size={15} />
+                      </button>
+                      <SaveStatus
+                        status={saveStatus}
+                        lastSavedAt={lastSavedAt}
+                        error={saveError}
+                        onRetry={() => {
+                          void persistDraft({ values, rows: rowsByStep, stepIndex })
+                        }}
                       />
+                      <Badge variant="outline">
+                        <GeneratedText id="m_1c693e59d64fb2" />
+                        <GeneratedValue value={version} />
+                      </Badge>
+                      <GeneratedValue value={reviewLink} />
                     </div>
-                  </PremiumSection>
-                ) : null
-              }
-            />
-
-            <GeneratedValue
-              value={
-                tabbed ? (
-                  <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
+                  </div>
+                  {/* Progress strip — every workflow step as a clickable pill. Hidden
+              on single-step apps (e.g. the Lift Plan), where a one-pill strip
+              + progress bar is just noise and makes the header needlessly tall. */}
+                  <GeneratedValue
+                    value={
+                      totalSteps > 1 ? (
+                        <>
+                          <ol className="flex flex-wrap items-center gap-1 text-xs">
+                            <GeneratedValue
+                              value={steps.map((s, i) => {
+                                const isCurrent = i === stepIndex
+                                const isCompleted = completedSteps.has(s.key)
+                                const isClickable = i <= stepIndex || isCompleted
+                                return (
+                                  <li key={s.key}>
+                                    <button
+                                      type="button"
+                                      disabled={!isClickable}
+                                      onClick={() => jumpTo(i)}
+                                      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 transition-colors ${
+                                        isCurrent
+                                          ? 'border-teal-600 bg-teal-600 text-white'
+                                          : isCompleted
+                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                            : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                                      } ${!isClickable ? 'cursor-not-allowed opacity-60' : ''}`}
+                                    >
+                                      <span
+                                        className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
+                                          isCurrent
+                                            ? 'bg-white text-teal-700'
+                                            : isCompleted
+                                              ? 'bg-emerald-500 text-white'
+                                              : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                        }`}
+                                      >
+                                        <GeneratedValue
+                                          value={
+                                            isCompleted && !isCurrent ? <Check size={10} /> : i + 1
+                                          }
+                                        />
+                                      </span>
+                                      <span className="truncate">
+                                        <GeneratedValue
+                                          value={localizeText(s.title, locale, s.key)}
+                                        />
+                                      </span>
+                                    </button>
+                                  </li>
+                                )
+                              })}
+                            />
+                          </ol>
+                          <div className="h-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                            <div
+                              className="h-full rounded-full bg-teal-600 transition-all"
+                              style={{ width: `${Math.max(8, completion)}%` }}
+                            />
+                          </div>
+                        </>
+                      ) : null
+                    }
+                  />
+                </div>
+              )
+            }
+            footer={
+              readOnly ? undefined : (
+                <div className="space-y-2">
+                  <GeneratedValue
+                    value={
+                      serverError ? (
+                        <Alert variant="destructive">
+                          <AlertTitle>
+                            <GeneratedText id="m_051fb158550e48" />
+                          </AlertTitle>
+                          <AlertDescription>
+                            <GeneratedValue value={serverError} />
+                          </AlertDescription>
+                        </Alert>
+                      ) : null
+                    }
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={back}
+                      disabled={stepIndex === 0}
+                      className="h-12 px-4"
+                    >
+                      <ChevronLeft size={16} />
+                      <GeneratedText id="m_1a7cefe5a9894e" />
+                    </Button>
                     <GeneratedValue
-                      value={appTabs.map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => setActiveTabId(t.id)}
-                          className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
-                            t.id === activeTabId
-                              ? 'border-teal-600 bg-teal-600 text-white'
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-                          }`}
-                        >
-                          <GeneratedValue value={localizeText(t.title, locale, t.id)} />
-                        </button>
-                      ))}
+                      value={
+                        stepIndex < totalSteps - 1 ? (
+                          <Button onClick={next} size="lg" className="h-12 flex-1 text-base">
+                            <GeneratedText id="m_08b5fa148b2af7" /> <ChevronRight size={16} />
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={submit}
+                            disabled={pending}
+                            size="lg"
+                            className="h-12 flex-1 text-base"
+                          >
+                            <Check size={16} />
+                            <GeneratedValue
+                              value={
+                                pending ? (
+                                  <GeneratedText id="m_00cfcb628bc131" />
+                                ) : (
+                                  <GeneratedText id="m_09ee2ce911f04f" />
+                                )
+                              }
+                            />
+                          </Button>
+                        )
+                      }
                     />
                   </div>
-                ) : null
-              }
-            />
-
+                </div>
+              )
+            }
+          >
             <GeneratedValue
               value={
-                renderedSections.length === 0 ? (
-                  <PremiumSection
-                    title={tGeneratedValue(localizeText(step.title, locale, step.key))}
-                    icon={<ClipboardList size={20} />}
-                    tone="slate"
-                  >
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                readOnly ? (
+                  <Alert variant="warning">
+                    <AlertTitle>
+                      <GeneratedText id="m_0cd6abb2df6fc8" />
+                    </AlertTitle>
+                    <AlertDescription>
                       <GeneratedValue
                         value={
-                          tabbed ? (
-                            <GeneratedText id="m_04c0e447e102e8" />
+                          responseStatus ? (
+                            <GeneratedText
+                              id="m_05829ac350a185"
+                              values={{ value0: responseStatus.replace(/_/g, ' ') }}
+                            />
                           ) : (
-                            <GeneratedText id="m_1fa0b63118d05f" />
+                            <GeneratedText id="m_171450f953a653" />
                           )
                         }
                       />
-                    </p>
-                  </PremiumSection>
-                ) : (
-                  renderedSections.map((sec, i) => {
-                    // Section-level visibility — completely hide the section if showIf
-                    // is false against the current values.
-                    if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
-                    return (
-                      <PremiumSection
-                        key={sec.id}
-                        title={tGeneratedValue(localizeText(sec.title, locale, sec.id))}
-                        subtitle={tGeneratedValue(
-                          localizeText(
-                            sec.description,
-                            locale,
-                            sec.repeating ? 'Repeatable section' : '',
-                          ) || undefined,
-                        )}
-                        icon={<ClipboardList size={20} />}
-                        tone={SECTION_TONES[i % SECTION_TONES.length]}
-                        count={sec.repeating ? (rowsByStep[sec.id]?.length ?? 0) : undefined}
-                      >
-                        <div className="space-y-4">
-                          <GeneratedValue
-                            value={
-                              sec.repeating ? (
-                                <RepeatingSection
-                                  section={sec}
-                                  rows={rowsByStep[sec.id] ?? []}
-                                  onAdd={() => addRow(sec)}
-                                  onRemove={(i) => removeRow(sec, i)}
-                                  onUpdate={(i, patch) => updateRow(sec, i, patch)}
-                                  people={people}
-                                  evalCtx={evalCtx}
-                                  errors={errors}
-                                  sectionError={errors.get(`__section_${sec.id}`) ?? null}
-                                />
-                              ) : sec.canvas ? (
-                                (() => {
-                                  const cls = gridClass(sec.id)
-                                  const canvas = sec.canvas
-                                  const visible = sec.fields.filter(
-                                    (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
-                                  )
-                                  const { order, byId } = resolveCanvas(
-                                    visible.map((f) => f.id),
-                                    canvas.items,
-                                    canvas.cols,
-                                  )
-                                  const byField = new Map(visible.map((f) => [f.id, f]))
-                                  return (
-                                    <div className={cls}>
-                                      <style>
-                                        {canvasCss(cls, canvas.cols, canvas.rowHeight, byId)}
-                                      </style>
-                                      <GeneratedValue
-                                        value={order.map((id) => {
-                                          const f = byField.get(id)!
-                                          return (
-                                            <div key={id} data-ci={id}>
+                    </AlertDescription>
+                  </Alert>
+                ) : null
+              }
+            />
+            <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
+              <GeneratedValue
+                value={
+                  stepIndex === 0 ? (
+                    <PremiumSection
+                      title={tGenerated('m_055f11420b2da4')}
+                      subtitle={tGenerated('m_16bca608598e31')}
+                      icon={<MapPin size={20} />}
+                      tone="teal"
+                    >
+                      <div className="space-y-1">
+                        <Label>
+                          <GeneratedText id="m_055f11420b2da4" />
+                        </Label>
+                        <RemoteSearchSelect
+                          lookup="form-response-locations"
+                          value={siteId}
+                          onChange={setSiteId}
+                          initialOption={initialLocation}
+                          placeholder={tGenerated('m_1ad901c0a1f003')}
+                          searchPlaceholder={tGenerated('m_016e087c3c8544')}
+                          sheetTitle={tGenerated('m_055f11420b2da4')}
+                          ariaLabel={tGenerated('m_055f11420b2da4')}
+                          emptyLabel={tGenerated('m_1ad901c0a1f003')}
+                          disabled={readOnly || locationReadOnly}
+                        />
+                      </div>
+                    </PremiumSection>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  tabbed ? (
+                    <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 dark:border-slate-800">
+                      <GeneratedValue
+                        value={appTabs.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setActiveTabId(t.id)}
+                            className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                              t.id === activeTabId
+                                ? 'border-teal-600 bg-teal-600 text-white'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-teal-300 hover:text-teal-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                            }`}
+                          >
+                            <GeneratedValue value={localizeText(t.title, locale, t.id)} />
+                          </button>
+                        ))}
+                      />
+                    </div>
+                  ) : null
+                }
+              />
+
+              <GeneratedValue
+                value={
+                  renderedSections.length === 0 ? (
+                    <PremiumSection
+                      title={tGeneratedValue(localizeText(step.title, locale, step.key))}
+                      icon={<ClipboardList size={20} />}
+                      tone="slate"
+                    >
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        <GeneratedValue
+                          value={
+                            tabbed ? (
+                              <GeneratedText id="m_04c0e447e102e8" />
+                            ) : (
+                              <GeneratedText id="m_1fa0b63118d05f" />
+                            )
+                          }
+                        />
+                      </p>
+                    </PremiumSection>
+                  ) : (
+                    renderedSections.map((sec, i) => {
+                      // Section-level visibility — completely hide the section if showIf
+                      // is false against the current values.
+                      if (sec.showIf && !evaluateLogicRule(sec.showIf, evalCtx)) return null
+                      return (
+                        <PremiumSection
+                          key={sec.id}
+                          title={tGeneratedValue(localizeText(sec.title, locale, sec.id))}
+                          subtitle={tGeneratedValue(
+                            localizeText(
+                              sec.description,
+                              locale,
+                              sec.repeating ? 'Repeatable section' : '',
+                            ) || undefined,
+                          )}
+                          icon={<ClipboardList size={20} />}
+                          tone={SECTION_TONES[i % SECTION_TONES.length]}
+                          count={sec.repeating ? (rowsByStep[sec.id]?.length ?? 0) : undefined}
+                        >
+                          <div className="space-y-4">
+                            <GeneratedValue
+                              value={
+                                sec.repeating ? (
+                                  <RepeatingSection
+                                    section={sec}
+                                    rows={rowsByStep[sec.id] ?? []}
+                                    onAdd={() => addRow(sec)}
+                                    onRemove={(i) => removeRow(sec, i)}
+                                    onUpdate={(i, patch) => updateRow(sec, i, patch)}
+                                    people={people}
+                                    evalCtx={evalCtx}
+                                    errors={errors}
+                                    sectionError={errors.get(`__section_${sec.id}`) ?? null}
+                                  />
+                                ) : sec.canvas ? (
+                                  (() => {
+                                    const cls = gridClass(sec.id)
+                                    const canvas = sec.canvas
+                                    const visible = sec.fields.filter(
+                                      (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
+                                    )
+                                    const { order, byId } = resolveCanvas(
+                                      visible.map((f) => f.id),
+                                      canvas.items,
+                                      canvas.cols,
+                                    )
+                                    const byField = new Map(visible.map((f) => [f.id, f]))
+                                    return (
+                                      <div className={cls}>
+                                        <style>
+                                          {canvasCss(cls, canvas.cols, canvas.rowHeight, byId)}
+                                        </style>
+                                        <GeneratedValue
+                                          value={order.map((id) => {
+                                            const f = byField.get(id)!
+                                            return (
+                                              <div key={id} data-ci={id}>
+                                                <FieldRow
+                                                  field={f}
+                                                  value={values[f.id]}
+                                                  onChange={(v) => setValue(f.id, v)}
+                                                  onSetFieldValue={setValue}
+                                                  error={errors.get(f.id)}
+                                                  people={people}
+                                                  evalCtx={evalCtx}
+                                                  loading={pickerLoading.has(f.id)}
+                                                />
+                                              </div>
+                                            )
+                                          })}
+                                        />
+                                      </div>
+                                    )
+                                  })()
+                                ) : sec.layout && sec.layout.columns > 1 ? (
+                                  (() => {
+                                    const cls = gridClass(sec.id)
+                                    const cols = sec.layout.columns
+                                    const visible = sec.fields.filter(
+                                      (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
+                                    )
+                                    const css = columnsCss(
+                                      cls,
+                                      cols,
+                                      visible.map((f) => ({ id: f.id, span: f.colSpan ?? cols })),
+                                    )
+                                    return (
+                                      <div className={cls}>
+                                        <style>{css}</style>
+                                        <GeneratedValue
+                                          value={visible.map((f) => (
+                                            <div key={f.id} data-cs={f.id}>
                                               <FieldRow
                                                 field={f}
                                                 value={values[f.id]}
@@ -1528,76 +1584,43 @@ export function FormRenderer({
                                                 loading={pickerLoading.has(f.id)}
                                               />
                                             </div>
-                                          )
-                                        })}
+                                          ))}
+                                        />
+                                      </div>
+                                    )
+                                  })()
+                                ) : (
+                                  sec.fields.map((f) => {
+                                    if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx))
+                                      return null
+                                    return (
+                                      <FieldRow
+                                        key={f.id}
+                                        field={f}
+                                        value={values[f.id]}
+                                        onChange={(v) => setValue(f.id, v)}
+                                        onSetFieldValue={setValue}
+                                        error={errors.get(f.id)}
+                                        people={people}
+                                        evalCtx={evalCtx}
+                                        loading={pickerLoading.has(f.id)}
                                       />
-                                    </div>
-                                  )
-                                })()
-                              ) : sec.layout && sec.layout.columns > 1 ? (
-                                (() => {
-                                  const cls = gridClass(sec.id)
-                                  const cols = sec.layout.columns
-                                  const visible = sec.fields.filter(
-                                    (f) => !f.showIf || evaluateLogicRule(f.showIf, evalCtx),
-                                  )
-                                  const css = columnsCss(
-                                    cls,
-                                    cols,
-                                    visible.map((f) => ({ id: f.id, span: f.colSpan ?? cols })),
-                                  )
-                                  return (
-                                    <div className={cls}>
-                                      <style>{css}</style>
-                                      <GeneratedValue
-                                        value={visible.map((f) => (
-                                          <div key={f.id} data-cs={f.id}>
-                                            <FieldRow
-                                              field={f}
-                                              value={values[f.id]}
-                                              onChange={(v) => setValue(f.id, v)}
-                                              onSetFieldValue={setValue}
-                                              error={errors.get(f.id)}
-                                              people={people}
-                                              evalCtx={evalCtx}
-                                              loading={pickerLoading.has(f.id)}
-                                            />
-                                          </div>
-                                        ))}
-                                      />
-                                    </div>
-                                  )
-                                })()
-                              ) : (
-                                sec.fields.map((f) => {
-                                  if (f.showIf && !evaluateLogicRule(f.showIf, evalCtx)) return null
-                                  return (
-                                    <FieldRow
-                                      key={f.id}
-                                      field={f}
-                                      value={values[f.id]}
-                                      onChange={(v) => setValue(f.id, v)}
-                                      onSetFieldValue={setValue}
-                                      error={errors.get(f.id)}
-                                      people={people}
-                                      evalCtx={evalCtx}
-                                      loading={pickerLoading.has(f.id)}
-                                    />
-                                  )
-                                })
-                              )
-                            }
-                          />
-                        </div>
-                      </PremiumSection>
-                    )
-                  })
-                )
-              }
-            />
-          </fieldset>
-        </WizardLayout>
-      </OrgUnitOptionsCacheContext.Provider>
+                                    )
+                                  })
+                                )
+                              }
+                            />
+                          </div>
+                        </PremiumSection>
+                      )
+                    })
+                  )
+                }
+              />
+            </fieldset>
+          </WizardLayout>
+        </OrgUnitOptionsCacheContext.Provider>
+      </SketchAiDraftContext.Provider>
     </FillReadOnlyContext.Provider>
   )
 }
@@ -2639,8 +2662,17 @@ function FieldInput({
       return <OrgUnitPickerInput level="area" value={value} onChange={onChange} />
     case 'signature':
       return <SignatureField value={(value as string | null) ?? null} onChange={onChange} />
-    case 'sketch':
-      return <SketchField value={value} onChange={onChange} persistValue={persistValue} />
+    case 'sketch': {
+      const symbols = sketchConfigSchema.safeParse(field.config ?? {}).data?.symbols ?? []
+      return (
+        <SketchField
+          value={value}
+          onChange={onChange}
+          persistValue={persistValue}
+          symbols={symbols}
+        />
+      )
+    }
     case 'photo':
       return <PhotoInput field={field} value={value} onChange={onChange} />
     case 'file':
@@ -4581,15 +4613,28 @@ function SketchField({
   value,
   onChange,
   persistValue,
+  symbols = [],
 }: {
   value: unknown
   onChange: (v: SketchValue | null) => void
   persistValue?: (v: SketchValue | null) => Promise<void>
+  symbols?: SketchSymbol[]
 }) {
   const tGenerated = useGeneratedTranslations()
   const readOnly = useContext(FillReadOnlyContext)
+  const aiDraftCtx = useContext(SketchAiDraftContext)
   const [open, setOpen] = useState(false)
   const stored = (value as SketchValue | null) ?? null
+  const aiDraft = aiDraftCtx.enabled
+    ? {
+        request: (description: string) =>
+          draftSketchDiagram({
+            templateId: aiDraftCtx.templateId,
+            description,
+            symbolNames: symbols.map((symbol) => symbol.name),
+          }),
+      }
+    : null
 
   async function persist(dataUrl: string | null, scene: SketchScene) {
     if (!dataUrl) {
@@ -4665,6 +4710,8 @@ function SketchField({
             onSave={persist}
             readOnly={readOnly}
             height={520}
+            symbols={symbols}
+            aiDraft={aiDraft}
           />
         </Drawer>
       ) : null}

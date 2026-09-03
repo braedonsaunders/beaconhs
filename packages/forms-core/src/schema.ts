@@ -391,6 +391,82 @@ export const tableConfigSchema = z.object({
 })
 export type TableConfig = z.infer<typeof tableConfigSchema>
 
+// --- Sketch symbol library ----------------------------------------------------
+//
+// A `sketch` field stores a reusable symbol library in FormField.config.symbols
+// (the freeform bag). Each symbol is a tenant-authored name plus an Excalidraw
+// elements array captured from a drawing — deliberately content-agnostic so one
+// mechanism serves lift plans, site maps, incident sketches, or any future
+// diagram use. Elements stay opaque records (no version-coupled Excalidraw
+// schema); bounds below keep a library within a sane size. The filler inserts
+// a symbol's elements into the live canvas via `updateScene`; the drawing
+// itself is never auto-modified.
+export const MAX_SKETCH_SYMBOLS = 50
+export const MAX_SKETCH_SYMBOL_ELEMENTS = 200
+
+export const sketchSymbolSchema = z.object({
+  name: z.string().trim().min(1).max(128),
+  elements: z.array(z.record(z.string(), z.unknown())).min(1).max(MAX_SKETCH_SYMBOL_ELEMENTS),
+})
+export type SketchSymbol = z.infer<typeof sketchSymbolSchema>
+
+export const sketchConfigSchema = z.object({
+  symbols: z.array(sketchSymbolSchema).max(MAX_SKETCH_SYMBOLS).optional(),
+})
+export type SketchConfig = z.infer<typeof sketchConfigSchema>
+
+// --- Sketch AI draft ----------------------------------------------------------
+//
+// Content-agnostic diagram primitives the AI draft endpoint may return. The
+// model describes layout in a fixed 1200×800 coordinate space; the filler
+// converts these primitives into real Excalidraw elements client-side and
+// inserts them as an editable draft the user reviews before saving. Bounds
+// keep a draft within a sane size and on-canvas.
+export const MAX_SKETCH_DRAFT_ELEMENTS = 30
+export const SKETCH_DRAFT_WIDTH = 1200
+export const SKETCH_DRAFT_HEIGHT = 800
+
+const sketchDraftCoord = z.number().finite().min(0).max(2000)
+const sketchDraftLabel = z.string().trim().min(1).max(128)
+
+export const sketchDraftElementSchema = z.union([
+  z
+    .object({
+      kind: z.literal('box'),
+      x: sketchDraftCoord,
+      y: sketchDraftCoord,
+      w: z.number().finite().min(20).max(1200),
+      h: z.number().finite().min(20).max(800),
+      label: sketchDraftLabel.optional(),
+      shape: z.enum(['rect', 'ellipse', 'diamond']).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('arrow'),
+      x1: sketchDraftCoord,
+      y1: sketchDraftCoord,
+      x2: sketchDraftCoord,
+      y2: sketchDraftCoord,
+      label: sketchDraftLabel.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('text'),
+      x: sketchDraftCoord,
+      y: sketchDraftCoord,
+      text: sketchDraftLabel,
+    })
+    .strict(),
+])
+export type SketchDraftElement = z.infer<typeof sketchDraftElementSchema>
+
+export const sketchDraftSchema = z.object({
+  elements: z.array(sketchDraftElementSchema).min(1).max(MAX_SKETCH_DRAFT_ELEMENTS),
+})
+export type SketchDraft = z.infer<typeof sketchDraftSchema>
+
 export const matrixConfigSchema = z.object({
   rows: z
     .array(
@@ -1109,6 +1185,31 @@ function schemaInvariantIssues(schema: z.infer<typeof formSchemaV1Base>): Schema
               })
             } else {
               scaleValues.set(point.value, pointIndex)
+            }
+          })
+        }
+      }
+
+      if (field.type === 'sketch') {
+        const parsed = sketchConfigSchema.safeParse(field.config ?? {})
+        if (!parsed.success) {
+          appendConfigParseIssues(
+            issues,
+            parsed.error,
+            [...fieldBasePath, 'config'],
+            'sketch config',
+          )
+        } else {
+          const names = new Map<string, number>()
+          ;(parsed.data.symbols ?? []).forEach((symbol, symbolIndex) => {
+            const first = names.get(symbol.name.toLowerCase())
+            if (first !== undefined) {
+              issues.push({
+                path: [...fieldBasePath, 'config', 'symbols', symbolIndex, 'name'],
+                message: `Duplicate sketch symbol name "${symbol.name}"; first declared at config.symbols[${first}].name`,
+              })
+            } else {
+              names.set(symbol.name.toLowerCase(), symbolIndex)
             }
           })
         }

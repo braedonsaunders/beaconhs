@@ -19,6 +19,8 @@ import {
 // version via the `publishNewVersion` server action.
 
 import { useCallback, useEffect, useRef, useState, useTransition, useMemo } from 'react'
+import dynamic from 'next/dynamic'
+import type { SketchScene } from '@/components/sketch-pad'
 import { SmartBackLink } from '@/components/smart-back-link'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -88,8 +90,11 @@ import {
   type DataBinding,
   type DefaultValueExpression,
   type FieldType,
+  MAX_SKETCH_SYMBOLS,
+  sketchConfigSchema,
   type FormField,
   type FormSchemaV1,
+  type SketchSymbol,
   type FormSection,
   type FormulaExpression,
   type FormWorkflowStep,
@@ -2071,6 +2076,11 @@ function FieldBasicTab({
       />
       <GeneratedValue
         value={
+          field.type === 'sketch' ? <SketchConfigEditor field={field} onChange={onChange} /> : null
+        }
+      />
+      <GeneratedValue
+        value={
           field.type === 'lookup' || field.type === 'data_table' || field.type === 'metric' ? (
             <DataBindingEditor
               field={field}
@@ -2149,6 +2159,153 @@ function PhotoConfigEditor({
       <p className="text-[10px] text-slate-500 dark:text-slate-400">
         <GeneratedText id="m_1fc2a2e38d88c7" />
       </p>
+    </div>
+  )
+}
+
+// --- Sketch symbol library --------------------------------------------------
+//
+// Tenant-authored sticker set for a `sketch` element. Each symbol is drawn on
+// a capture canvas and stored as a named Excalidraw element fragment in
+// `config.symbols` — content-agnostic by design (lift-plan parts, site-map
+// icons, or anything else the company draws). The filler offers the names as
+// one-tap inserts.
+const SketchCapturePad = dynamic(
+  () => import('@/components/sketch-pad').then((mod) => ({ default: mod.SketchPad })),
+  { ssr: false },
+)
+
+function SketchConfigEditor({
+  field,
+  onChange,
+}: {
+  field: FormField
+  onChange: (patch: Partial<FormField>) => void
+}) {
+  const tGenerated = useGeneratedTranslations()
+  const symbols: SketchSymbol[] =
+    sketchConfigSchema.safeParse(field.config ?? {}).data?.symbols ?? []
+  const [capturing, setCapturing] = useState(false)
+  const [pendingElements, setPendingElements] = useState<Record<string, unknown>[] | null>(null)
+  const [name, setName] = useState('')
+  const trimmed = name.trim()
+  const duplicate =
+    trimmed.length > 0 && symbols.some((s) => s.name.toLowerCase() === trimmed.toLowerCase())
+
+  function setSymbols(next: SketchSymbol[]) {
+    onChange({ config: { ...field.config, symbols: next } })
+  }
+
+  async function handleCapture(_dataUrl: string | null, scene: SketchScene) {
+    const elements = ((scene.elements ?? []) as Record<string, unknown>[]).filter(
+      (element) => !element.isDeleted,
+    )
+    if (elements.length === 0) return
+    setPendingElements(elements)
+    setCapturing(false)
+  }
+
+  function saveSymbol() {
+    if (!pendingElements || !trimmed || duplicate) return
+    setSymbols([...symbols, { name: trimmed, elements: pendingElements }])
+    setPendingElements(null)
+    setName('')
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-slate-200 p-2 dark:border-slate-800">
+      <div className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+        <GeneratedText id="m_0e697f25f50ced" />
+      </div>
+      {symbols.length === 0 && !pendingElements ? (
+        <p className="text-[10px] text-slate-500 dark:text-slate-400">
+          <GeneratedText id="m_1b95713e849302" />
+        </p>
+      ) : null}
+      {symbols.map((symbol) => (
+        <div
+          key={symbol.name}
+          className="flex items-center gap-2 rounded border border-slate-100 px-2 py-1 text-xs dark:border-slate-800"
+        >
+          <span className="min-w-0 flex-1 truncate font-medium">
+            <GeneratedValue value={symbol.name} />
+          </span>
+          <span className="shrink-0 text-[10px] text-slate-400">
+            <GeneratedValue value={symbol.elements.length} />{' '}
+            <GeneratedText id="m_15e2f2c2984c95" />
+          </span>
+          <button
+            type="button"
+            onClick={() => setSymbols(symbols.filter((s) => s.name !== symbol.name))}
+            title={tGenerated('m_11773f3c3f7558')}
+            aria-label={tGenerated('m_11773f3c3f7558')}
+            className="shrink-0 text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      ))}
+      {pendingElements ? (
+        <div className="space-y-1 rounded border border-teal-200 bg-teal-50/50 p-2 dark:border-teal-900 dark:bg-teal-950/20">
+          <Label className="text-xs">
+            <GeneratedText id="m_1c6b085b24716b" />
+          </Label>
+          <Input
+            value={name}
+            maxLength={128}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={tGenerated('m_1c6b085b24716b')}
+          />
+          {duplicate ? (
+            <p className="text-[10px] text-red-600 dark:text-red-400">
+              <GeneratedText id="m_02b24c3a800472" />
+            </p>
+          ) : null}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={saveSymbol}
+              disabled={!trimmed || duplicate || symbols.length >= MAX_SKETCH_SYMBOLS}
+            >
+              <GeneratedText id="m_05881b9b655db3" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setPendingElements(null)
+                setName('')
+              }}
+            >
+              <GeneratedText id="m_112e2e8ecda428" />
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setCapturing(true)}
+          disabled={symbols.length >= MAX_SKETCH_SYMBOLS}
+        >
+          <Plus size={13} /> <GeneratedText id="m_021bbf527e46e5" />
+        </Button>
+      )}
+      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+        <GeneratedText id="m_1f3c0bbf5a2597" />
+      </p>
+      <Drawer
+        open={capturing}
+        onClose={() => setCapturing(false)}
+        title={tGenerated('m_021bbf527e46e5')}
+        size="2xl"
+        bodyClassName="overflow-hidden px-4 py-4"
+      >
+        <SketchCapturePad initialScene={null} onSave={handleCapture} height={420} />
+      </Drawer>
     </div>
   )
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { fieldTypeSchema, formSchemaV1, lintFormSchema, type FormSchemaV1 } from './schema'
+import {
+  fieldTypeSchema,
+  formSchemaV1,
+  lintFormSchema,
+  sketchConfigSchema,
+  sketchDraftSchema,
+  type FormSchemaV1,
+} from './schema'
 
 describe('photo field type cutover', () => {
   it('keeps one canonical photo type and rejects retired variants', () => {
@@ -1009,5 +1016,77 @@ describe('formSchemaV1 executable reference invariants', () => {
     expect(formSchemaV1.safeParse(invalidFormula).success).toBe(false)
     expect(formSchemaV1.safeParse(invalidMetric).success).toBe(false)
     expect(formSchemaV1.safeParse(unboundedDataPage).success).toBe(false)
+  })
+})
+
+describe('sketch symbol library', () => {
+  const symbol = { name: 'Crane', elements: [{ id: 'a', type: 'rectangle', x: 0, y: 0 }] }
+
+  it('accepts a sketch field with a named symbol library', () => {
+    const input = schemaWithField({
+      id: 'diagram',
+      type: 'sketch',
+      label: { en: 'Diagram' },
+      config: { symbols: [symbol] },
+    })
+
+    expect(formSchemaV1.safeParse(input).success).toBe(true)
+    expect(lintFormSchema(input as FormSchemaV1)).toEqual([])
+    expect(sketchConfigSchema.safeParse({ symbols: [symbol] }).success).toBe(true)
+  })
+
+  it('rejects duplicate symbol names and oversized libraries', () => {
+    const dupe = schemaWithField({
+      id: 'diagram',
+      type: 'sketch',
+      label: { en: 'Diagram' },
+      config: { symbols: [symbol, { ...symbol, name: 'crane' }] },
+    })
+    expect(lintFormSchema(dupe as FormSchemaV1)).toEqual(
+      expect.arrayContaining([expect.stringContaining('Duplicate sketch symbol name')]),
+    )
+    expect(
+      sketchConfigSchema.safeParse({
+        symbols: Array.from({ length: 51 }, (_, i) => ({ ...symbol, name: `s${i}` })),
+      }).success,
+    ).toBe(false)
+    expect(
+      sketchConfigSchema.safeParse({ symbols: [{ name: 'Empty', elements: [] }] }).success,
+    ).toBe(false)
+  })
+})
+
+describe('sketch AI draft primitives', () => {
+  it('accepts boxes, arrows, and text within bounds', () => {
+    const parsed = sketchDraftSchema.safeParse({
+      elements: [
+        { kind: 'box', x: 10, y: 10, w: 200, h: 100, label: 'Crane', shape: 'rect' },
+        { kind: 'arrow', x1: 210, y1: 60, x2: 400, y2: 60 },
+        { kind: 'text', x: 10, y: 130, text: ' exclusion zone ' },
+      ],
+    })
+
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) throw new Error('Expected draft parsing to succeed')
+    expect(parsed.data.elements).toHaveLength(3)
+  })
+
+  it('rejects empty drafts, oversized drafts, and out-of-canvas geometry', () => {
+    expect(sketchDraftSchema.safeParse({ elements: [] }).success).toBe(false)
+    expect(
+      sketchDraftSchema.safeParse({
+        elements: Array.from({ length: 31 }, () => ({ kind: 'text', x: 0, y: 0, text: 't' })),
+      }).success,
+    ).toBe(false)
+    expect(
+      sketchDraftSchema.safeParse({
+        elements: [{ kind: 'box', x: -5, y: 0, w: 10, h: 10 }],
+      }).success,
+    ).toBe(false)
+    expect(
+      sketchDraftSchema.safeParse({
+        elements: [{ kind: 'mystery', x: 0, y: 0 }],
+      }).success,
+    ).toBe(false)
   })
 })
