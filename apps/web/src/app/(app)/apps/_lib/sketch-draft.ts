@@ -8,8 +8,7 @@ import 'server-only'
 import { runBuilderPrompt, type AiConfig } from '@beaconhs/ai'
 import { sketchDraftSchema, type SketchDraftElement } from '@beaconhs/forms-core'
 
-export type SketchDraftResult =
-  { ok: true; elements: SketchDraftElement[] } | { ok: false; error: string }
+type SketchDraftResult = { ok: true; elements: SketchDraftElement[] } | { ok: false; error: string }
 
 function extractJson(text: string): unknown {
   const trimmed = text.trim()
