@@ -217,7 +217,7 @@ People with permission to review hazard assessments can record an advisory decis
 
 ## Finishing up
 
-1. When everything is rated and signed, tap **Submit & lock**. This makes the assessment read-only and runs its submit flows.
+1. When everything is rated and signed, tap **Submit & lock**, then tap **Submit & lock** again in the confirmation. This makes the assessment read-only and runs its submit flows. **Unlock** asks to confirm as well, so a mis-tap on a phone cannot submit or reopen an assessment.
 2. Use **Print / PDF** for a paper copy, or **Send email** to share it.
 
 In **Photos**, tap **Take photo or upload** to take a new photo or choose pictures from your phone's photo library. Use the pencil button for a caption or markup, the trash button to remove a photo, and the arrow buttons to change the order. The editor keeps the photo's original shape while you add captions or markup. Large camera photos are optimized automatically when they upload. Unlock the assessment before making photo changes. Locking it again runs the submit flows for the revised assessment.
@@ -226,7 +226,7 @@ In **Photos**, tap **Take photo or upload** to take a new photo or choose pictur
 
 - Unlocking does not remove signatures. Adding another signature also keeps every signature already collected. If the assessment content changes, BeaconHS clears the existing signatures so the crew signs the revised assessment.
 - Conditions change. If the job changes, unlock and update the assessment, or start a new one.
-- **Copy assessment** starts a new one pre-filled from an old one — handy for repeat work.`,
+- **Copy assessment** starts a new one pre-filled from an old one — handy for repeat work. On a phone it lives under **More actions**. The button reads **Copying…** while the new assessment is built, then opens it — tap it once and wait.`,
   },
   {
     slug: 'inspections',
@@ -287,20 +287,20 @@ Managers build inspection types under **Site Inspections** → **Manage** → **
 
 A record stays a draft while you work — you can leave and come back. When every item is answered:
 
-1. Tap **Submit & lock** in the header to submit the inspection, run its submit flows, and make it read-only in one step.
+1. Tap **Submit & lock** in the header and confirm. This submits the inspection, runs its submit flows, and makes it read-only in one step.
 2. If the inspection should stay editable after submission, open **Status & workflow**, choose **Submitted**, and tap **Update status** instead.
 3. Choosing **Closed** also submits and locks the inspection. Every submission path requires all required answers, comments, photos, and signatures.
 
 If an edit removes required information from a submitted record, it returns to **In progress**. Complete the missing item and submit it again.
 
-To correct a locked or closed record, tap **Unlock**. A closed record reopens as **Submitted** so you can make the correction. Tap **Resubmit & lock** when you are done; this locks the revised record and runs its submit flows again.
+To correct a locked or closed record, tap **Unlock** and confirm. A closed record reopens as **Submitted** so you can make the correction. Tap **Resubmit & lock** when you are done; this locks the revised record and runs its submit flows again.
 
 ## Record actions
 
-Use the buttons in the header to **PDF**, **Email**, **Copy**, lock, unlock, or delete an inspection. On a phone, keep the lock button visible and tap **More actions** for the rest.
+Use the buttons in the header to **Print / PDF**, **Send email**, **Copy inspection**, lock, unlock, or delete an inspection. On a phone, keep the lock button visible and tap **More actions** for the rest.
 
-- **Copy** starts a new draft with the same setup and checklist. Answers, photos, signatures, approvals, and corrective-action history are not copied.
-- **Email** sends the inspection summary and saved checklist only to the addresses you enter.
+- **Copy inspection** starts a new draft with the same setup and checklist. Answers, photos, signatures, approvals, and corrective-action history are not copied. The button reads **Copying…** while the new draft is built, then opens it — tap it once and wait.
+- **Send email** sends the inspection summary and saved checklist only to the addresses you enter.
 - **Delete** is available to inspection managers. Confirm it carefully; the record leaves operational lists, while its audit history is retained.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}

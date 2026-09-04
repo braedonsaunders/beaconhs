@@ -1897,6 +1897,7 @@ export default async function InspectionRecordDetailPage({
               emailHref={`/inspections/records/${id}?send=1`}
               deleteHref={`/inspections/records/${id}?drawer=confirm-delete`}
               copyAction={copyInspection}
+              copyLabel="Copy inspection"
               lockAction={lockInspection}
               unlockAction={unlockInspection}
               lockLabel={record.status === 'submitted' ? 'Resubmit & lock' : 'Submit & lock'}
