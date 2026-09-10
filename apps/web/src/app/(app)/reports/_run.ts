@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { tenants } from '@beaconhs/db/schema'
 import { resolveTenantLogoUrl } from '@beaconhs/storage'
-import { type ReportRuleGroup, type ReportRunResult } from '@beaconhs/reports'
+import { withDomainCellTones, type ReportRuleGroup, type ReportRunResult } from '@beaconhs/reports'
 import { runBeaconReport } from '@beaconhs/reports/server'
 import type { RequestContext } from '@beaconhs/tenant'
 import { loadAuthorizedReportCatalogInTransaction } from '@/lib/report-catalog'
@@ -34,7 +34,9 @@ export async function runReportForViewer(
         { maxRows: options.maxRows ?? DOCUMENT_PREVIEW_MAX_ROWS },
       )
     })
-    return { result, error: null }
+    // Colour statuses on the way out, so the viewer, the PDF and a scheduled
+    // email attachment all read the same without each remembering to ask.
+    return { result: withDomainCellTones(result), error: null }
   } catch (cause) {
     return {
       result: { groups: [], summary: [], rowCount: 0, truncated: false, durationMs: 0 },

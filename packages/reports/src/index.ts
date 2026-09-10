@@ -13,6 +13,7 @@ export {
   mergeAuthorizedReportSources,
 } from './entities'
 export type { ReportColumnKind, ReportEntityCatalog, ReportEntityColumn } from './entities'
+export { withDomainCellTones } from './cell-tones'
 export {
   reportExportMode,
   reportExportsCredentialFronts,
