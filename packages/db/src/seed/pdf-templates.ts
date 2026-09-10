@@ -249,6 +249,62 @@ const HAZID = wrap(
     photos(),
 )
 
+// Blank sheet for on-site handwriting. Same data shape as the record template,
+// but every captured column is an empty ruled box: the crew writes hazards'
+// specific controls and applicability in pen, then keys it in later.
+//
+// The write-in columns are the wide ones — "Specific controls" gets the space,
+// "Standard controls" is narrowed to what its pre-printed text needs. There is
+// ONE blank template for the whole module, not one per assessment type; the
+// type's hazards, PPE and questions come from the values it is merged with.
+const BLANK_BOX = 'height:34px;'
+
+const HAZID_BLANK = wrap(
+  letterhead('Hazard Assessment', '{{type_name}}', 'Reference ______________') +
+    heading('General information') +
+    grid([
+      p('Occurred', '&nbsp;'),
+      p('Location', '&nbsp;'),
+      p('Specific location', '&nbsp;'),
+      p('Project', '&nbsp;'),
+      p('Supervisor', '&nbsp;'),
+      p('Completed by', '&nbsp;'),
+    ]) +
+    narrative('Job scope', '&nbsp;', 'type_name') +
+    collection('Hazards & controls', 'hazards', [
+      ['#', '{{@number}}', 'width:4%;'],
+      ['Hazard', '{{name}}', 'width:18%;'],
+      // Pre-printed guidance: narrow, it only has to stay readable.
+      ['Standard controls', '{{standard_controls}}', 'width:26%;'],
+      // Hand-written on site: the widest column on the page.
+      ['Specific controls', '&nbsp;', `width:44%;${BLANK_BOX}`],
+      ['Applies', '&nbsp;', `width:8%;${BLANK_BOX}`],
+    ]) +
+    collection('PPE manifest', 'ppe', [
+      ['PPE', '{{name}}', 'width:26%;'],
+      ['Description', '{{description}}'],
+      ['Required', '{{required}}', 'width:10%;'],
+      ['Answer', '&nbsp;', `width:14%;${BLANK_BOX}`],
+    ]) +
+    collection('Questions & answers', 'questions', [
+      ['#', '{{@number}}', 'width:4%;'],
+      ['Question', '{{question}}'],
+      ['Answer', '&nbsp;', `width:18%;${BLANK_BOX}`],
+    ]) +
+    // Ruled sign-on rows: a blank sheet has no signature records to loop over.
+    `<table style="${TABLE}">` +
+    `<tr><td colspan="3" style="${HEAD_CELL}"><div style="${H2}">Sign-on</div></td></tr>` +
+    `<tr><th style="${TH}">Name</th><th style="${TH}width:26%;">Signature</th><th style="${TH}width:18%;">Date</th></tr>` +
+    Array.from({ length: 12 })
+      .map(
+        () =>
+          `<tr style="${ROW}"><td style="${TD}${BLANK_BOX}">&nbsp;</td>` +
+          `<td style="${TD}${BLANK_BOX}">&nbsp;</td><td style="${TD}${BLANK_BOX}">&nbsp;</td></tr>`,
+      )
+      .join('') +
+    `</table>`,
+)
+
 const INCIDENT = wrap(
   letterhead('Incident Report', '{{title}}', 'Reference <strong>{{reference}}</strong>') +
     chips('{{severity_label}}', '{{status_label}}', '{{type_label}}') +
@@ -732,6 +788,12 @@ export type ModulePdfTemplateSeed = {
   html: string
   orientation: 'portrait' | 'landscape'
   header: string
+  /**
+   * Whether this is the template a module's record PDFs resolve to. Defaults to
+   * true — a subject's ONE default. Purpose-built sheets (the blank
+   * handwriting copy) set it false and are addressed by key instead.
+   */
+  isModuleDefault?: boolean
 }
 
 // Exported so the web app's token-contract test can verify every {{token}} /
@@ -744,6 +806,17 @@ export const MODULE_PDF_TEMPLATE_SEEDS: ModulePdfTemplateSeed[] = [
     html: HAZID,
     orientation: 'landscape',
     header: '{{reference}} — {{type_name}}',
+  },
+  {
+    key: 'hazid-blank-pdf',
+    name: 'Hazard Assessment — Blank (handwritten)',
+    subjectKey: 'hazid',
+    html: HAZID_BLANK,
+    orientation: 'landscape',
+    header: 'Hazard Assessment — {{type_name}}',
+    // Never the module default: this prints from /hazard-assessments/blank/pdf,
+    // while a real record keeps the record template.
+    isModuleDefault: false,
   },
   {
     key: 'incident-report-pdf',
@@ -894,7 +967,11 @@ export async function seedPdfTemplates(tx: DrizzleTx, tenantId: string): Promise
           orientation=${tpl.orientation}, header_html=${tpl.header}, footer_html=${footer},
           compiled_html=${compiled}, source_html=${tpl.html},
           is_active=true,
-          is_module_default=(is_module_default or ${noDefaultExists(tenantId, tpl.subjectKey)}),
+          is_module_default=${
+            tpl.isModuleDefault === false
+              ? sql`false`
+              : sql`(is_module_default or ${noDefaultExists(tenantId, tpl.subjectKey)})`
+          },
           updated_at=now()
         where id=${found[0].id}`)
       updated++
@@ -907,7 +984,9 @@ export async function seedPdfTemplates(tx: DrizzleTx, tenantId: string): Promise
         values
           (${tenantId}, ${tpl.key}, ${tpl.name}, 'module', ${tpl.subjectKey}, 'letter',
            ${tpl.orientation}, 14, ${tpl.header}, ${footer}, ${compiled}, ${tpl.html},
-           true, ${noDefaultExists(tenantId, tpl.subjectKey)})`)
+           true, ${
+             tpl.isModuleDefault === false ? sql`false` : noDefaultExists(tenantId, tpl.subjectKey)
+           })`)
       created++
     }
   }

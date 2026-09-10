@@ -59,6 +59,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
+import { PrintBlankAssessment } from './_print-blank.client'
 import { HazidSubNav } from './_subnav'
 import { formatDate, parseDatetimeLocal } from '@/lib/datetime'
 import { RiskScoreChip } from './_risk'
@@ -327,11 +328,17 @@ export async function AssessmentsListPage({
                 mineOnly ? tGenerated('m_180efb0cc3e9dc') : tGenerated('m_063d5ef44c90a6'),
               )}
               actions={
-                <Link href={`${basePath}?drawer=new`} scroll={false}>
-                  <Button>
-                    <GeneratedText id="m_0b765ce4236ed0" />
-                  </Button>
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Paper fallback for jobs where a phone is not practical. */}
+                  <PrintBlankAssessment
+                    types={types.map((type) => ({ id: type.id, name: type.name }))}
+                  />
+                  <Link href={`${basePath}?drawer=new`} scroll={false}>
+                    <Button>
+                      <GeneratedText id="m_0b765ce4236ed0" />
+                    </Button>
+                  </Link>
+                </div>
               }
             />
             <HazidSubNav pathname={basePath} />

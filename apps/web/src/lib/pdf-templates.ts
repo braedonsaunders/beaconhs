@@ -72,6 +72,34 @@ export async function getModuleDefaultTemplate(
 }
 
 /**
+ * A tenant template addressed by its stable `key` within a module subject —
+ * used for the purpose-built sheets that are not a module's default, such as
+ * the blank hazard assessment printed for handwriting on site.
+ */
+export async function getModuleTemplateByKey(
+  ctx: RequestContext,
+  moduleKey: string,
+  key: string,
+): Promise<PdfTemplateRenderConfig | null> {
+  const [t] = await ctx.db((tx) =>
+    tx
+      .select(PDF_RENDER_COLS)
+      .from(pdfTemplates)
+      .where(
+        and(
+          isNull(pdfTemplates.deletedAt),
+          eq(pdfTemplates.isActive, true),
+          eq(pdfTemplates.recordSubjectType, 'module'),
+          eq(pdfTemplates.recordSubjectKey, moduleKey),
+          eq(pdfTemplates.key, key),
+        ),
+      )
+      .limit(1),
+  )
+  return t ?? null
+}
+
+/**
  * A form template's OWN PDF template (recordSubjectType='form_template',
  * recordSubjectKey=<formTemplateId>). Any active template for the form counts;
  * one flagged as default wins, ties broken deterministically by name.

@@ -228,6 +228,7 @@ In **Photos**, tap **Take photo or upload** to take a new photo or choose pictur
 - Unlocking does not remove signatures. Adding another signature also keeps every signature already collected. If the assessment content changes, BeaconHS clears the existing signatures so the crew signs the revised assessment.
 - Conditions change. If the job changes, unlock and update the assessment, or start a new one.
 - **Completed by** on the record and on the assessment list is the person who filled the assessment in. BeaconHS records it when the assessment is started — there is nothing to type, and it cannot be edited. It is the **Completed by** line on the printed PDF too.
+- **Print blank** on the assessment list prints a paper copy to fill in by hand — for a job where a phone is not practical. Pick the assessment type first: the sheet carries that type's real hazards, PPE and questions, with the **Specific controls**, **Applies**, and answer columns left empty and a ruled sign-on block at the end. Key it into BeaconHS afterwards so the record is the system of record.
 - **Copy assessment** starts a new one pre-filled from an old one — handy for repeat work. On a phone it lives under **More actions**. The button reads **Copying…** while the new assessment is built, then opens it — tap it once and wait.`,
   },
   {
