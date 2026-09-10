@@ -24,4 +24,13 @@ describe('assistant stream cutover', () => {
     expect(client).toContain('stripHopByHopOutboundHeaders')
     expect(client).toContain('stream: true')
   })
+
+  it('never posts an explicit null conversationId for a new chat', () => {
+    // JSON.stringify keeps null but drops undefined, so sending the key with a
+    // null value is a real request the server has to interpret. The client omits
+    // it instead; turn-request.test.ts pins the server half.
+    const app = read('../app/(app)/assistant/_components/assistant-app.tsx')
+    expect(app).toContain('conversationId ? { conversationId, prompt: text } : { prompt: text }')
+    expect(app).not.toContain('JSON.stringify({ conversationId, prompt: text })')
+  })
 })

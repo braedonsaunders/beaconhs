@@ -22,7 +22,8 @@ import {
 } from '@/lib/ai-conversations'
 import { buildToolRegistry } from '@/lib/assistant/registry'
 import { assistantSystemPrompt } from '@/lib/assistant/system-prompt'
-import { MAX_ASSISTANT_PROMPT_CHARS, MAX_ASSISTANT_REQUEST_BYTES } from '@/lib/assistant/limits'
+import { MAX_ASSISTANT_REQUEST_BYTES } from '@/lib/assistant/limits'
+import { parseAssistantTurnRequest } from '@/lib/assistant/turn-request'
 import {
   readBoundedJsonBody,
   RequestBodyLengthError,
@@ -30,7 +31,6 @@ import {
   RequestBodyTimeoutError,
   RequestBodyTooLargeError,
 } from '@/lib/request-body'
-import { isUuid } from '@/lib/list-params'
 
 export const dynamic = 'force-dynamic'
 // Agent turns run a multi-step tool loop — far longer than a single completion.
@@ -112,27 +112,14 @@ export async function POST(req: Request): Promise<Response> {
     }
     return new Response('Bad request', { status: 400 })
   }
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    return new Response('Bad request', { status: 400 })
-  }
-  const input = body as { conversationId?: unknown; prompt?: unknown }
-  if (input.conversationId !== undefined && typeof input.conversationId !== 'string') {
-    return new Response('Bad request', { status: 400 })
-  }
-  if (typeof input.prompt !== 'string') return new Response('Invalid prompt', { status: 400 })
-  if (input.prompt.length > MAX_ASSISTANT_PROMPT_CHARS) {
-    return new Response('Prompt too large', { status: 413 })
-  }
-  const prompt = input.prompt.trim()
-  if (!prompt) return new Response('Empty prompt', { status: 400 })
+  const parsed = parseAssistantTurnRequest(body)
+  if (!parsed.ok) return new Response(parsed.reason, { status: parsed.status })
+  const { prompt } = parsed.request
 
   // Resolve / create the conversation. Only the OWNER may send a turn.
-  let conversationId = input.conversationId ?? null
-  if (conversationId) {
-    if (!isUuid(conversationId)) return new Response('Bad request', { status: 400 })
-    if ((await resolveConversationAccess(conversationId, SCOPE)) !== 'owner') {
-      return new Response('Forbidden', { status: 403 })
-    }
+  let conversationId = parsed.request.conversationId
+  if (conversationId && (await resolveConversationAccess(conversationId, SCOPE)) !== 'owner') {
+    return new Response('Forbidden', { status: 403 })
   }
 
   const aiConfig = await getTenantAiConfig(ctx)

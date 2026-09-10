@@ -242,7 +242,12 @@ export function AssistantApp({
         const res = await fetch('/assistant/chat', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ conversationId, prompt: text }),
+          // Omit the key entirely for a new chat. JSON.stringify keeps an
+          // explicit null, and the route reads a present-but-null id as a
+          // malformed request.
+          body: JSON.stringify(
+            conversationId ? { conversationId, prompt: text } : { prompt: text },
+          ),
           signal: ac.signal,
         })
         const responseConversationId = res.headers.get('x-conversation-id')
