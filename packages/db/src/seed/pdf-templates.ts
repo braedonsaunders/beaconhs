@@ -193,7 +193,9 @@ const HAZID = wrap(
       p('Specific location', '{{location_on_site}}'),
       p('Project', '{{project_name}}'),
       p('Supervisor', '{{supervisor_name}}'),
-      p('Reported by', '{{reported_by_name}}'),
+      // The person who filled the assessment in. "Reported by" reads like an
+      // incident; on a JSA the crew asked for "Completed by".
+      p('Completed by', '{{reported_by_name}}'),
       pIf('locked_at', 'Locked at', '{{locked_at}}'),
     ]) +
     narrative('Job scope', '{{job_scope}}') +

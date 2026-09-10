@@ -46,6 +46,8 @@ import {
   orgUnits,
   people,
   personGroupMemberships,
+  tenantUsers,
+  users,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
@@ -67,7 +69,7 @@ import {
   loadMyHazardAssessmentSiteOptions,
 } from './_site-picker-actions'
 
-const SORTS = ['reference', 'occurred_at', 'site', 'supervisor', 'type'] as const
+const SORTS = ['reference', 'occurred_at', 'site', 'supervisor', 'completed_by', 'type'] as const
 
 export async function AssessmentsListPage({
   searchParams,
@@ -154,17 +156,19 @@ export async function AssessmentsListPage({
           ? [params.dir === 'asc' ? asc(orgUnits.name) : desc(orgUnits.name)]
           : params.sort === 'supervisor'
             ? [params.dir === 'asc' ? asc(people.lastName) : desc(people.lastName)]
-            : params.sort === 'type'
-              ? [
-                  params.dir === 'asc'
-                    ? asc(hazidAssessmentTypes.name)
-                    : desc(hazidAssessmentTypes.name),
-                ]
-              : [
-                  params.dir === 'asc'
-                    ? asc(hazidAssessments.occurredAt)
-                    : desc(hazidAssessments.occurredAt),
-                ]
+            : params.sort === 'completed_by'
+              ? [params.dir === 'asc' ? asc(users.name) : desc(users.name)]
+              : params.sort === 'type'
+                ? [
+                    params.dir === 'asc'
+                      ? asc(hazidAssessmentTypes.name)
+                      : desc(hazidAssessmentTypes.name),
+                  ]
+                : [
+                    params.dir === 'asc'
+                      ? asc(hazidAssessments.occurredAt)
+                      : desc(hazidAssessments.occurredAt),
+                  ]
 
     const [tot] = await tx.select({ c: count() }).from(hazidAssessments).where(whereClause)
     const rows = await tx
@@ -173,6 +177,9 @@ export async function AssessmentsListPage({
         site: orgUnits,
         supervisor: people,
         type: hazidAssessmentTypes,
+        // Who actually filled it in — distinct from the supervisor named on the
+        // assessment, and the first thing anyone asks when reviewing the list.
+        completedByName: users.name,
       })
       .from(hazidAssessments)
       .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
@@ -181,6 +188,8 @@ export async function AssessmentsListPage({
         hazidAssessmentTypes,
         eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId),
       )
+      .leftJoin(tenantUsers, eq(tenantUsers.id, hazidAssessments.reportedByTenantUserId))
+      .leftJoin(users, eq(users.id, tenantUsers.userId))
       .where(whereClause)
       .orderBy(...orderBy)
       .limit(params.perPage)
@@ -535,6 +544,13 @@ export async function AssessmentsListPage({
                           >
                             <GeneratedText id="m_0ccb8e5b917b17" />
                           </SortableTh>
+                          <SortableTh
+                            {...sortProps}
+                            column="completed_by"
+                            active={params.sort === 'completed_by'}
+                          >
+                            <GeneratedText id="m_1550d0ce582f98" />
+                          </SortableTh>
                           <TableHead>
                             <GeneratedText id="m_1f10a46fc1db73" />
                           </TableHead>
@@ -551,7 +567,7 @@ export async function AssessmentsListPage({
                       </TableHeader>
                       <TableBody>
                         <GeneratedValue
-                          value={rows.map(({ a, site, supervisor, type }) => {
+                          value={rows.map(({ a, site, supervisor, type, completedByName }) => {
                             const worst = worstRisk.get(a.id)
                             const scope = htmlToSnippet(a.jobScope, 70)
                             return (
@@ -583,6 +599,9 @@ export async function AssessmentsListPage({
                                         : '—'
                                     }
                                   />
+                                </TableCell>
+                                <TableCell className="text-slate-600 dark:text-slate-400">
+                                  <GeneratedValue value={completedByName ?? '—'} />
                                 </TableCell>
                                 <TableCell>
                                   <Link

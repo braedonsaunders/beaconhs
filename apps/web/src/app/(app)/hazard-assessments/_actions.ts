@@ -7,7 +7,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { randomUUID } from 'node:crypto'
-import { and, asc, desc, eq, inArray, isNull, max, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, max, sql } from 'drizzle-orm'
 import { assertCan, can, type RequestContext } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
@@ -940,6 +940,25 @@ export async function lockAssessment(formData: FormData) {
   await ctx.db(async (tx) => {
     const assessment = await lockVisibleAssessment(ctx, tx, id)
     if (assessment.locked) throw new Error('This assessment is already locked')
+    // A hazard assessment is the crew's record that they read and understood
+    // the hazards. Submitting one nobody signed produces a signed-off safety
+    // document with no signature on it, and the submit flows email it out as
+    // if it were complete. Unsigned rows (a signer added but not yet inked)
+    // do not count — readiness has always meant captured ink.
+    const [signed] = await tx
+      .select({ c: count() })
+      .from(hazidAssessmentSignatures)
+      .where(
+        and(
+          eq(hazidAssessmentSignatures.assessmentId, id),
+          isNotNull(hazidAssessmentSignatures.signatureAttachmentId),
+        ),
+      )
+    if ((signed?.c ?? 0) === 0) {
+      throw new Error(
+        'This assessment has no signatures yet. Collect at least one before you submit and lock it.',
+      )
+    }
     const lockedAt = new Date()
     const lockedByTenantUserId = ctx.membership?.id ?? null
     await tx

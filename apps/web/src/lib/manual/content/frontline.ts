@@ -218,6 +218,7 @@ People with permission to review hazard assessments can record an advisory decis
 ## Finishing up
 
 1. When everything is rated and signed, tap **Submit & lock**, then tap **Submit & lock** again in the confirmation. This makes the assessment read-only and runs its submit flows. **Unlock** asks to confirm as well, so a mis-tap on a phone cannot submit or reopen an assessment.
+   - **Submit & lock** stays greyed out until at least one person has signed. An assessment is the crew's record that they read and understood the hazards, so it cannot be submitted with no signature on it.
 2. Use **Print / PDF** for a paper copy, or **Send email** to share it.
 
 In **Photos**, tap **Take photo or upload** to take a new photo or choose pictures from your phone's photo library. Use the pencil button for a caption or markup, the trash button to remove a photo, and the arrow buttons to change the order. The editor keeps the photo's original shape while you add captions or markup. Large camera photos are optimized automatically when they upload. Unlock the assessment before making photo changes. Locking it again runs the submit flows for the revised assessment.
@@ -226,6 +227,7 @@ In **Photos**, tap **Take photo or upload** to take a new photo or choose pictur
 
 - Unlocking does not remove signatures. Adding another signature also keeps every signature already collected. If the assessment content changes, BeaconHS clears the existing signatures so the crew signs the revised assessment.
 - Conditions change. If the job changes, unlock and update the assessment, or start a new one.
+- **Completed by** on the record and on the assessment list is the person who filled the assessment in. BeaconHS records it when the assessment is started — there is nothing to type, and it cannot be edited. It is the **Completed by** line on the printed PDF too.
 - **Copy assessment** starts a new one pre-filled from an old one — handy for repeat work. On a phone it lives under **More actions**. The button reads **Copying…** while the new assessment is built, then opens it — tap it once and wait.`,
   },
   {

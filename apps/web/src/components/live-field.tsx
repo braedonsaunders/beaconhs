@@ -201,6 +201,26 @@ function FieldLabel({
   )
 }
 
+/**
+ * A value the system owns, shown in the same grid as the live fields.
+ *
+ * Some record facts are recorded automatically and must never look editable —
+ * who created the record, when it was locked. Rendering them as a disabled
+ * input invites people to try; this reads as what it is.
+ */
+export function ReadOnlyField({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        <GeneratedValue value={label} />
+      </div>
+      <p className="text-sm text-slate-900 dark:text-slate-100">
+        <GeneratedValue value={value || '—'} />
+      </p>
+    </div>
+  )
+}
+
 export function LiveField({
   id,
   field,

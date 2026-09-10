@@ -168,6 +168,32 @@ function equipmentInspectionTypeHint(
   return `Every ${intervalValue} ${intervalUnit}${intervalValue === 1 ? '' : 's'}`
 }
 
+/**
+ * ONE ordering for every equipment-inspection-type picker: the check you do
+ * most often comes first.
+ *
+ * Sorting on `is_pre_use` alone is not enough. Plenty of daily checks are not
+ * flagged pre-use (a welder's "Daily Engine Driver Welder Inspection", a
+ * "Scaffolding Daily Inspection"), so an alphabetical tie-break put "Annual …"
+ * above the daily check on those units — people reaching for the pre-use
+ * inspection by habit hit Annual instead. Falling back to the interval length
+ * keeps a daily check above an annual one whether or not the flag was ever set.
+ */
+const EQUIPMENT_INSPECTION_TYPE_ORDER = [
+  desc(equipmentInspectionTypes.isPreUse),
+  asc(sql`
+    CASE ${equipmentInspectionTypes.intervalUnit}
+      WHEN 'day' THEN ${equipmentInspectionTypes.intervalValue}
+      WHEN 'week' THEN ${equipmentInspectionTypes.intervalValue} * 7
+      WHEN 'month' THEN ${equipmentInspectionTypes.intervalValue} * 30
+      WHEN 'year' THEN ${equipmentInspectionTypes.intervalValue} * 365
+      ELSE NULL
+    END
+  `),
+  asc(equipmentInspectionTypes.name),
+  asc(equipmentInspectionTypes.id),
+]
+
 function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
   const canAny = (...permissions: string[]) =>
     ctx.isSuperAdmin || permissions.some((permission) => can(ctx, permission))
@@ -1845,7 +1871,7 @@ async function loadOptions(
             input.hasQuery ? ilike(equipmentInspectionTypes.name, input.term) : undefined,
           ),
         )
-        .orderBy(desc(equipmentInspectionTypes.isPreUse), asc(equipmentInspectionTypes.name))
+        .orderBy(...EQUIPMENT_INSPECTION_TYPE_ORDER)
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(
         rows.map((row) => option(row.id, row.name, row.isPreUse ? 'Pre-use' : 'Scheduled')),
@@ -1900,8 +1926,7 @@ async function loadOptions(
           ...(input.selected
             ? [desc(sql`${equipmentInspectionTypes.id} = ${input.selected}`)]
             : []),
-          asc(equipmentInspectionTypes.name),
-          asc(equipmentInspectionTypes.id),
+          ...EQUIPMENT_INSPECTION_TYPE_ORDER,
         )
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(

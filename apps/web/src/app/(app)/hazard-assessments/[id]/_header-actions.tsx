@@ -14,6 +14,7 @@ export function AssessmentHeaderActions({
   copyAction,
   lockAction,
   unlockAction,
+  lockDisabledReason,
 }: {
   id: string
   locked: boolean
@@ -26,6 +27,7 @@ export function AssessmentHeaderActions({
   copyAction: (formData: FormData) => Promise<void>
   lockAction: (formData: FormData) => Promise<void>
   unlockAction: (formData: FormData) => Promise<void>
+  lockDisabledReason?: string | null
 }) {
   return (
     <RecordHeaderActions
@@ -39,6 +41,7 @@ export function AssessmentHeaderActions({
       copyAction={copyAction}
       lockAction={lockAction}
       unlockAction={unlockAction}
+      lockDisabledReason={lockDisabledReason}
     />
   )
 }

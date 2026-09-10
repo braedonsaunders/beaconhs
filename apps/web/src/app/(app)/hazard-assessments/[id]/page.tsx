@@ -53,6 +53,8 @@ import {
   hazidTasks,
   orgUnits,
   people,
+  tenantUsers,
+  users,
 } from '@beaconhs/db/schema'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { revalidatePath } from 'next/cache'
@@ -141,6 +143,7 @@ import {
   LiveRemoteSelect,
   LiveRichText,
   LiveSelect,
+  ReadOnlyField,
 } from '@/components/live-field'
 import { datetimeLocalValue, formatDateTime } from '@/lib/datetime'
 import { AddSignatureDrawerBody, SignSignatureDrawerBody } from '../_signature-form'
@@ -243,6 +246,9 @@ export default async function HazidAssessmentDetailPage({
         a: hazidAssessments,
         site: orgUnits,
         type: hazidAssessmentTypes,
+        // Who filled the assessment in. Recorded automatically on create and
+        // shown read-only — the crew asked for it on the record and the PDF.
+        completedByName: users.name,
       })
       .from(hazidAssessments)
       .leftJoin(orgUnits, eq(orgUnits.id, hazidAssessments.siteOrgUnitId))
@@ -250,6 +256,8 @@ export default async function HazidAssessmentDetailPage({
         hazidAssessmentTypes,
         eq(hazidAssessmentTypes.id, hazidAssessments.assessmentTypeId),
       )
+      .leftJoin(tenantUsers, eq(tenantUsers.id, hazidAssessments.reportedByTenantUserId))
+      .leftJoin(users, eq(users.id, tenantUsers.userId))
       .where(and(eq(hazidAssessments.id, id), isNull(hazidAssessments.deletedAt)))
       .limit(1)
     if (!row) return null
@@ -432,6 +440,7 @@ export default async function HazidAssessmentDetailPage({
     a,
     site,
     type,
+    completedByName,
     tasks,
     hazards,
     ppe,
@@ -816,6 +825,9 @@ export default async function HazidAssessmentDetailPage({
                 reviewHref={drawerHref('safety-review')}
                 deleteHref={drawerHref('confirm-delete')}
                 copyAction={copyAssessment}
+                // Mirrors the server-side gate in lockAssessment: a hazard
+                // assessment nobody signed must not become a submitted record.
+                lockDisabledReason={signedCount === 0 ? tGenerated('m_0e21f7c54c71b2') : null}
                 lockAction={lockAssessment}
                 unlockAction={unlockAssessment}
               />
@@ -1034,6 +1046,7 @@ export default async function HazidAssessmentDetailPage({
                   disabled={locked}
                   updateAction={updateTextField}
                 />
+                <ReadOnlyField label={tGenerated('m_1550d0ce582f98')} value={completedByName} />
                 <LiveRemoteSelect
                   id={a.id}
                   field="siteOrgUnitId"

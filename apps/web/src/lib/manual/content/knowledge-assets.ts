@@ -824,6 +824,7 @@ If you manage equipment, submitted inspections can send emails on their own — 
 ## Tips
 
 - Use the **Status** chips on the list — **All**, **Draft**, **In progress**, **Submitted**, or **Closed** — to find an inspection you started earlier.
+- The inspection picker lists the check you do most often first: pre-use at the top, then daily, weekly, monthly and annual. The annual check is never the first thing you land on.
 - Tap **Print / PDF** in the inspection panel for a paper copy with every criterion listed line by line.
 - Never pencil-whip it. A failed item with a photo gets fixed a lot faster than a fake pass.
 - Inspecting your harness or hard hat instead? That lives in [PPE](/help/ppe).`,

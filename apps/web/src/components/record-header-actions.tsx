@@ -29,11 +29,14 @@ function ConfirmedSubmitButton({
   title,
   message,
   confirmLabel,
+  disabledReason = null,
   children,
 }: {
   title: string
   message: string
   confirmLabel: string
+  /** Set to block the action outright, with the reason as the tooltip. */
+  disabledReason?: string | null
   children: ReactNode
 }) {
   const { pending } = useFormStatus()
@@ -41,7 +44,8 @@ function ConfirmedSubmitButton({
     <Button
       variant="outline"
       type="submit"
-      disabled={pending}
+      title={disabledReason ?? undefined}
+      disabled={pending || Boolean(disabledReason)}
       onClick={(event) => {
         event.preventDefault()
         const button = event.currentTarget
@@ -106,6 +110,7 @@ export function RecordHeaderActions({
   lockAction,
   unlockAction,
   lockLabel = 'Submit & lock',
+  lockDisabledReason = null,
 }: {
   id: string
   locked: boolean
@@ -123,6 +128,12 @@ export function RecordHeaderActions({
   lockAction: FormAction
   unlockAction: FormAction
   lockLabel?: string
+  /**
+   * Why this record cannot be submitted yet. The server is authoritative and
+   * rejects the submit regardless; showing the reason here stops the button
+   * offering an action that is going to fail after the person confirms it.
+   */
+  lockDisabledReason?: string | null
 }) {
   const tGenerated = useGeneratedTranslations()
   const tGeneratedValue = useGeneratedValueTranslations()
@@ -134,6 +145,7 @@ export function RecordHeaderActions({
         title={locked ? tGenerated('m_0ada1228bbdfc0') : tGenerated('m_1b0351e1b7075e')}
         message={locked ? tGenerated('m_1b9e23f3e26938') : tGenerated('m_06944c5267be24')}
         confirmLabel={locked ? tGenerated('m_0ca830c9381fd6') : tGeneratedValue(lockLabel)}
+        disabledReason={locked ? null : lockDisabledReason}
       >
         {locked ? <Unlock size={14} /> : <Lock size={14} />}
         {locked ? <GeneratedText id="m_0ca830c9381fd6" /> : <GeneratedValue value={lockLabel} />}
