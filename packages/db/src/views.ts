@@ -162,7 +162,22 @@ export const REPORT_VIEWS_SQL: string[] = [
        ),
        ','
      )                                 AS group_id_list,
-     p.status                          AS person_status
+     p.status                          AS person_status,
+     -- The next class this person is booked onto for this course. Someone who
+     -- is expired-but-booked still reports as expired — they are not covered
+     -- until they sit it — but the missing-training report has to show a seat
+     -- is already reserved, or coordinators chase people who are handled.
+     (SELECT MIN(cl.starts_at)
+        FROM training_class_attendees ta
+        JOIN training_classes cl
+          ON cl.id = ta.class_id AND cl.tenant_id = ta.tenant_id
+       WHERE ta.tenant_id = p.tenant_id
+         AND ta.person_id = p.id
+         AND cl.course_id = c.id
+         AND cl.cancelled_at IS NULL
+         AND cl.completed_at IS NULL
+         AND cl.starts_at >= now()
+     )                                 AS booked_starts_at
    FROM people p
    CROSS JOIN training_courses c
    LEFT JOIN latest l

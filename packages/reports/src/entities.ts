@@ -348,6 +348,16 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'completed_on', label: 'Completed on', kind: 'date' },
       { key: 'expires_on', label: 'Expires on', kind: 'date' },
       { key: 'coverage_status', label: 'Coverage', kind: 'enum' },
+      // Coverage stays honest — expired is expired until the class is sat —
+      // while these say a seat is already booked, so the missing-training
+      // report does not send coordinators chasing people who are handled.
+      { key: 'booked_starts_at', label: 'Booked for', kind: 'timestamp' },
+      {
+        key: 'booked',
+        label: 'Booked',
+        kind: 'boolean',
+        expression: '(booked_starts_at IS NOT NULL)',
+      },
       { key: 'department_id', label: 'Department', kind: 'uuid' },
       { key: 'department_name', label: 'Department name', kind: 'text' },
       { key: 'delivery_type', label: 'Course delivery type', kind: 'enum' },

@@ -502,6 +502,9 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
         'course_name',
         'coverage_status',
         'expires_on',
+        // Someone expired but already booked onto a class is handled; without
+        // this the report reads as if nobody has done anything about them.
+        'booked_starts_at',
       ],
       {
         filters: {
