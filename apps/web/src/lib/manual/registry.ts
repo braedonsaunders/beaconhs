@@ -64,39 +64,187 @@ export function groupedManualArticles(
 
 type ManualSearchHit = {
   article: ManualArticle
-  /** A short plain-text excerpt around the first body match (empty when the
+  /** A short plain-text excerpt around the best body match (empty when the
    *  match was title/keywords only). */
   excerpt: string
+  /** The `## heading` the excerpt came from, so a hit can say where to look. */
+  section?: string
 }
 
-/** Case-insensitive search over title, summary, keywords and body. */
+// People search the guide by asking a question, not by naming a feature:
+// "how do I move My PPE to my dashboard?". Scoring every whitespace token
+// equally over whole article bodies made that unrankable — "how", "do", "my"
+// and "to" appear in nearly every article, so noise buried the one real term,
+// and "dashboard?" matched nothing because the question mark was never
+// stripped. Normalise, drop the question scaffolding, and rank on the terms
+// that carry meaning.
+
+const SEARCH_STOPWORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'are',
+  'as',
+  'at',
+  'be',
+  'can',
+  'do',
+  'does',
+  'for',
+  'from',
+  'get',
+  'give',
+  'how',
+  'i',
+  'if',
+  'in',
+  'is',
+  'it',
+  'me',
+  'my',
+  'of',
+  'on',
+  'or',
+  'our',
+  'set',
+  'should',
+  'that',
+  'the',
+  'their',
+  'them',
+  'there',
+  'they',
+  'this',
+  'to',
+  'up',
+  'use',
+  'want',
+  'what',
+  'when',
+  'where',
+  'which',
+  'why',
+  'will',
+  'with',
+  'you',
+  'your',
+])
+
+/** Lowercase, strip punctuation, split. Keeps intra-word hyphens and apostrophes. */
+function searchTerms(query: string): { all: string[]; meaningful: string[] } {
+  const all = query
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s'-]+/gu, ' ')
+    .split(/\s+/)
+    .map((term) => term.replace(/^[-']+|[-']+$/g, ''))
+    .filter(Boolean)
+  const meaningful = all.filter((term) => term.length > 1 && !SEARCH_STOPWORDS.has(term))
+  // An all-stopword query ("how do I") still has to search something.
+  return { all, meaningful: meaningful.length > 0 ? meaningful : all }
+}
+
+type ArticleSection = { heading: string; body: string; offset: number }
+
+/** Split an article body on its `## headings` so a hit can name its section. */
+function articleSections(body: string): ArticleSection[] {
+  const sections: ArticleSection[] = []
+  const re = /^##\s+(.+)$/gm
+  let match = re.exec(body)
+  if (!match) return [{ heading: '', body, offset: 0 }]
+  if (match.index > 0) sections.push({ heading: '', body: body.slice(0, match.index), offset: 0 })
+  while (match) {
+    const heading = match[1]!.trim()
+    const contentStart = match.index + match[0].length
+    const next = re.exec(body)
+    sections.push({
+      heading,
+      body: body.slice(contentStart, next ? next.index : body.length),
+      offset: contentStart,
+    })
+    match = next
+  }
+  return sections
+}
+
+/**
+ * Search the guide. Articles matching EVERY meaningful term rank first; if
+ * nothing matches them all we fall back to partial matches rather than telling
+ * someone their question has no answer.
+ */
 export function searchManualArticles(ctx: RequestContext, query: string): ManualSearchHit[] {
-  const q = query.trim().toLowerCase()
-  if (!q) return visibleManualArticles(ctx).map((article) => ({ article, excerpt: '' }))
-  const terms = q.split(/\s+/).filter(Boolean)
-  const hits: { hit: ManualSearchHit; score: number }[] = []
-  for (const article of visibleManualArticles(ctx)) {
+  const articles = visibleManualArticles(ctx)
+  const { meaningful } = searchTerms(query)
+  if (meaningful.length === 0) return articles.map((article) => ({ article, excerpt: '' }))
+
+  const scored: { hit: ManualSearchHit; score: number; matched: number }[] = []
+  for (const article of articles) {
     const title = article.title.toLowerCase()
     const summary = article.summary.toLowerCase()
     const keywords = article.keywords.join(' ').toLowerCase()
-    const body = article.body.toLowerCase()
+    const sections = articleSections(article.body)
+
     let score = 0
-    let firstBodyIdx = -1
-    for (const t of terms) {
-      if (title.includes(t)) score += 10
-      if (keywords.includes(t)) score += 6
-      if (summary.includes(t)) score += 4
-      const idx = body.indexOf(t)
-      if (idx >= 0) {
-        score += 2
-        if (firstBodyIdx < 0 || idx < firstBodyIdx) firstBodyIdx = idx
+    let matched = 0
+    let best: { section: ArticleSection; index: number; hits: number } | null = null
+    // Distinct query terms found in each section. A section mentioning several
+    // of them is the answer; the same words scattered across an article are
+    // usually just an article that happens to talk about the subject.
+    const sectionTerms = new Map<ArticleSection, Set<string>>()
+
+    for (const term of meaningful) {
+      let hitThisTerm = false
+      if (title.includes(term)) {
+        score += 12
+        hitThisTerm = true
       }
+      if (keywords.includes(term)) {
+        score += 8
+        hitThisTerm = true
+      }
+      if (summary.includes(term)) {
+        score += 5
+        hitThisTerm = true
+      }
+      for (const section of sections) {
+        // A heading naming the term is what someone is actually looking for.
+        if (section.heading.toLowerCase().includes(term)) {
+          score += 11
+          hitThisTerm = true
+        }
+        const index = section.body.toLowerCase().indexOf(term)
+        if (index < 0) continue
+        score += 2
+        hitThisTerm = true
+        const terms = sectionTerms.get(section) ?? new Set<string>()
+        terms.add(term)
+        sectionTerms.set(section, terms)
+        if (!best || terms.size > best.hits) best = { section, index, hits: terms.size }
+      }
+      if (hitThisTerm) matched += 1
     }
-    if (score === 0) continue
-    hits.push({ hit: { article, excerpt: bodyExcerpt(article.body, firstBodyIdx) }, score })
+
+    if (matched === 0) continue
+    // Reward covering the whole question over mentioning one word a lot.
+    score += matched * 15
+    // …and reward one section covering several terms over an article that
+    // mentions them in unrelated places. "How do I move My PPE to my
+    // dashboard?" should land on the dashboard section that says how, not on
+    // the PPE article that merely owns the word "PPE" in its title.
+    const bestSectionTerms = best?.hits ?? 0
+    if (bestSectionTerms > 1) score += (bestSectionTerms - 1) * 14
+    const section = best?.section
+    const excerpt = section ? bodyExcerpt(article.body, section.offset + (best?.index ?? 0)) : ''
+    scored.push({
+      hit: { article, excerpt, section: section?.heading || undefined },
+      score,
+      matched,
+    })
   }
-  hits.sort((a, b) => b.score - a.score)
-  return hits.map((h) => h.hit)
+
+  const complete = scored.filter((entry) => entry.matched === meaningful.length)
+  const ranked = complete.length > 0 ? complete : scored
+  ranked.sort((a, b) => b.score - a.score)
+  return ranked.map((entry) => entry.hit)
 }
 
 function bodyExcerpt(body: string, idx: number): string {

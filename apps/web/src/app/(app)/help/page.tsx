@@ -121,7 +121,7 @@ export default async function HelpPage({
                   </h2>
                   <div className="space-y-2">
                     <GeneratedValue
-                      value={hits.map(({ article, excerpt }) => (
+                      value={hits.map(({ article, excerpt, section }) => (
                         <Link
                           key={article.slug}
                           href={`/help/${article.slug}` as never}
@@ -134,6 +134,17 @@ export default async function HelpPage({
                             <h3 className="text-sm font-semibold text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300">
                               <GeneratedValue value={article.title} />
                             </h3>
+                            {/* Which part of the article answered the question —
+                                long articles otherwise leave you scrolling. */}
+                            <GeneratedValue
+                              value={
+                                section ? (
+                                  <p className="mt-0.5 text-[11px] font-medium text-teal-700 dark:text-teal-300">
+                                    <GeneratedValue value={section} />
+                                  </p>
+                                ) : null
+                              }
+                            />
                             <p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">
                               <GeneratedValue value={excerpt || article.summary} />
                             </p>

@@ -851,11 +851,14 @@ const searchUserGuide: AssistantToolDef = {
       ok: true,
       data: {
         total: hits.length,
-        items: hits.map(({ article, excerpt }) => ({
+        items: hits.map(({ article, excerpt, section }) => ({
           slug: article.slug,
           title: article.title,
           group: article.group,
           summary: article.summary,
+          // Naming the matching section lets the assistant quote the right part
+          // of a long article instead of the first thing it finds.
+          section: section || undefined,
           excerpt: excerpt || undefined,
           url: `/help/${article.slug}`,
         })),

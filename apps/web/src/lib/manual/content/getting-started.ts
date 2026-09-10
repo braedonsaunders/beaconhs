@@ -20,6 +20,18 @@ export const GETTING_STARTED_ARTICLES: ManualArticle[] = [
       'sidebar',
       'menu',
       'dashboard',
+      'customize dashboard',
+      'customise dashboard',
+      'widget',
+      'widgets',
+      'tiles',
+      'add widget',
+      'move widget',
+      'rearrange',
+      'layout',
+      'home screen',
+      'my ppe',
+      'my training',
       'dark mode',
       'phone',
       'tablet',
@@ -67,6 +79,19 @@ The left menu lists everything you can use. Items are grouped:
 You only see the items your role allows. If a page is missing, ask your supervisor or admin.
 
 The **Dashboard** shows your open work at a glance. Tap any card to jump to it.
+
+## Changing what is on your dashboard
+
+Your dashboard is made of tiles (widgets), and you choose which ones you see and where they sit. Changes are yours alone — they do not affect anyone else.
+
+1. Open the [Dashboard](/dashboard) and select **Customize** in the header.
+2. Select **Add widget** to open the **Widget library**, then select a widget to put it on the dashboard. **My PPE**, **My training**, and your other personal tiles are all in this list.
+3. Drag a tile to move it. Drag its bottom-right corner to resize it. Select the **✕** on a tile to take it off.
+4. Select **Save layout** when it looks right. A widget you added only appears after you save.
+
+Use **Hide widgets** to put a tile away without losing your arrangement, and **Reset to default** to go back to the standard layout for your role.
+
+This is a different thing from an Insights dashboard. This one is your personal home screen; Insights dashboards are shared charts and are covered in [Insights](/help/insights).
 
 ## Turning on dark mode
 
