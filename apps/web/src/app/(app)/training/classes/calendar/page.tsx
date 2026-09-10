@@ -12,10 +12,17 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // stacks a chip per class scheduled that day; click → /training/classes/[id].
 
 import Link from 'next/link'
-import { and, asc, gte, lt } from 'drizzle-orm'
+import { and, asc, gte, lt, sql } from 'drizzle-orm'
 import { CalendarDays, ChevronLeft, ChevronRight, List, Plus } from 'lucide-react'
 import { Badge, Button, PageHeader } from '@beaconhs/ui'
-import { trainingClasses, trainingCourses } from '@beaconhs/db/schema'
+import {
+  orgUnits,
+  tenantUsers,
+  trainingClassAttendees,
+  trainingClasses,
+  trainingCourses,
+  users,
+} from '@beaconhs/db/schema'
 import { eq } from 'drizzle-orm'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -23,6 +30,7 @@ import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { TrainingSubNav } from '../../_components/training-sub-nav'
 import { startClass } from '../_actions'
+import { classDayCount } from './class-days'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -109,6 +117,12 @@ type ClassChip = {
   start: Date
   cancelled: boolean
   completed: boolean
+  siteName: string | null
+  instructorName: string | null
+  attendees: number
+  /** 1-based position within a multi-day class; dayCount === 1 for a single day. */
+  day: number
+  dayCount: number
 }
 
 export default async function TrainingClassesCalendarPage({
@@ -137,36 +151,65 @@ export default async function TrainingClassesCalendarPage({
 
   const rows = await ctx.db((tx) =>
     tx
-      .select({ cls: trainingClasses, course: trainingCourses })
+      .select({
+        cls: trainingClasses,
+        course: trainingCourses,
+        siteName: orgUnits.name,
+        instructorName: users.name,
+        attendees: sql<number>`(
+          select count(*)::int from ${trainingClassAttendees} a
+          where a.class_id = ${trainingClasses.id}
+        )`,
+      })
       .from(trainingClasses)
       .innerJoin(trainingCourses, eq(trainingCourses.id, trainingClasses.courseId))
+      .leftJoin(orgUnits, eq(orgUnits.id, trainingClasses.siteOrgUnitId))
+      .leftJoin(tenantUsers, eq(tenantUsers.id, trainingClasses.instructorTenantUserId))
+      .leftJoin(users, eq(users.id, tenantUsers.userId))
+      // Any class OVERLAPPING the visible grid, not just one starting in it —
+      // a course that began last month still runs into this one.
       .where(
         and(
-          gte(trainingClasses.startsAt, windowStart),
           lt(trainingClasses.startsAt, windowEndExclusive),
+          gte(trainingClasses.endsAt, windowStart),
         ),
       )
       .orderBy(asc(trainingClasses.startsAt)),
   )
 
-  // Bucket classes by local-date iso string.
-  const byDay = new Map<string, ClassChip[]>()
-  for (const r of rows) {
-    const d = new Date(r.cls.startsAt)
-    const iso = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d
+  const isoDay = (d: Date) =>
+    `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d
       .getDate()
       .toString()
       .padStart(2, '0')}`
-    const list = byDay.get(iso) ?? []
-    list.push({
-      id: r.cls.id,
-      title: r.cls.title,
-      courseName: r.course.name,
-      start: d,
-      cancelled: !!r.cls.cancelledAt,
-      completed: !!r.cls.completedAt,
-    })
-    byDay.set(iso, list)
+
+  // Bucket classes by local-date iso string, repeating a multi-day class on
+  // every day it runs.
+  const byDay = new Map<string, ClassChip[]>()
+  for (const r of rows) {
+    const start = new Date(r.cls.startsAt)
+    const dayCount = classDayCount(start, new Date(r.cls.endsAt), r.cls.lengthDays)
+    for (let offset = 0; offset < dayCount; offset += 1) {
+      const day = new Date(start)
+      day.setDate(day.getDate() + offset)
+      if (day < windowStart || day >= windowEndExclusive) continue
+      const iso = isoDay(day)
+      const list = byDay.get(iso) ?? []
+      list.push({
+        id: r.cls.id,
+        title: r.cls.title,
+        courseName: r.course.name,
+        start,
+        cancelled: !!r.cls.cancelledAt,
+        completed: !!r.cls.completedAt,
+        siteName: r.siteName,
+        instructorName: r.instructorName,
+        attendees: r.attendees,
+        day: offset + 1,
+        dayCount,
+      })
+      byDay.set(iso, list)
+    }
   }
 
   const prev = shiftMonth(year, month, -1)
@@ -306,11 +349,21 @@ export default async function TrainingClassesCalendarPage({
                   </div>
                   <ul className="space-y-0.5">
                     <GeneratedValue
-                      value={chips.slice(0, 4).map((c) => (
+                      value={chips.slice(0, 3).map((c) => (
                         <li key={c.id}>
                           <Link
                             href={`/training/classes/${c.id}`}
-                            title={tGeneratedValue(`${c.title} — ${c.courseName}`)}
+                            title={tGeneratedValue(
+                              [
+                                `${c.title} — ${c.courseName}`,
+                                c.dayCount > 1 ? `Day ${c.day} of ${c.dayCount}` : null,
+                                c.siteName,
+                                c.instructorName,
+                                `${c.attendees} booked`,
+                              ]
+                                .filter(Boolean)
+                                .join(' · '),
+                            )}
                             className={[
                               'block truncate rounded px-1.5 py-0.5 text-[11px] leading-tight transition-colors',
                               c.cancelled
@@ -333,15 +386,36 @@ export default async function TrainingClassesCalendarPage({
                             <span className="font-medium">
                               <GeneratedValue value={c.title} />
                             </span>
+                            <GeneratedValue
+                              value={
+                                c.dayCount > 1 ? (
+                                  <span className="text-[10px] text-slate-500 tabular-nums dark:text-slate-400">
+                                    {' '}
+                                    <GeneratedValue value={`(${c.day}/${c.dayCount})`} />
+                                  </span>
+                                ) : null
+                              }
+                            />
+                            {/* Location, trainer and head count — the three
+                                things a coordinator opened every class to find. */}
+                            <span className="block truncate text-[10px] text-slate-500 dark:text-slate-400">
+                              <GeneratedValue
+                                value={[c.siteName, c.instructorName].filter(Boolean).join(' · ')}
+                              />
+                            </span>
+                            <span className="block text-[10px] text-slate-500 tabular-nums dark:text-slate-400">
+                              <GeneratedValue value={c.attendees} />{' '}
+                              <GeneratedText id="m_00934a99f77df1" />
+                            </span>
                           </Link>
                         </li>
                       ))}
                     />
                     <GeneratedValue
                       value={
-                        chips.length > 4 ? (
+                        chips.length > 3 ? (
                           <li className="px-1.5 text-[10px] text-slate-400">
-                            +<GeneratedValue value={chips.length - 4} />{' '}
+                            +<GeneratedValue value={chips.length - 3} />{' '}
                             <GeneratedText id="m_02ae245776e9fe" />
                           </li>
                         ) : null

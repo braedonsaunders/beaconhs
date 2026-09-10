@@ -276,6 +276,10 @@ A person marked as a no-show cannot pass. A cancelled class is read-only; choose
 
 Use **Print / PDF** in the class header for a paper session sheet with the roster on it — handy for a sign-in sheet or a training file.
 
+## The class calendar
+
+Open **Classes**, then **Calendar**, for the month view. A class that runs over several days appears on **every** day it runs, marked with the day number — a three-day course shows as **(1/3)**, **(2/3)**, **(3/3)** — so the week does not look free when it is not. Each entry shows its start time, location, trainer, and how many people are booked; hover for the full details or select it to open the class. A class that started last month still appears on the days it runs into this one.
+
 ## Enroll learners for sign-off
 
 Classroom and on-the-job courses are not self-started — workers see them in [My training](/my/training) only once you enroll them.
@@ -657,6 +661,7 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 ## Tips
 
 - A red **missing** badge means someone reported the unit missing. If you find it, tell your supervisor.
+- Each unit names the **Pre-use inspection** form its crew gets. If that form belongs to a different equipment type, the unit shows a warning — a boom lift handed the scissor-lift checklist is the classic case. Managers set which equipment type a form belongs to under **Manage** → **Inspection types**; a form left unassigned can be used on anything.
 - **Print / PDF** on a unit gives you its asset record sheet. The **QR label** button beside it prints the tag that goes on the unit — they are two different documents.
 - Need to inspect a unit before use? See [Equipment checks](/help/equipment-inspections).`,
   },

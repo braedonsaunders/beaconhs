@@ -1165,7 +1165,14 @@ export default async function EquipmentDetailPage({
       // bounded, permission-scoped picker endpoint when the field is opened.
       row.item.preUseInspectionTypeId
         ? tx
-            .select({ id: equipmentInspectionTypes.id, name: equipmentInspectionTypes.name })
+            .select({
+              id: equipmentInspectionTypes.id,
+              name: equipmentInspectionTypes.name,
+              // A form bound to a DIFFERENT equipment type is how a boom lift
+              // ended up on the scissor-lift checklist for years: the pin is
+              // per unit, so nothing re-checks it after an import.
+              appliesToTypeId: equipmentInspectionTypes.appliesToTypeId,
+            })
             .from(equipmentInspectionTypes)
             .where(eq(equipmentInspectionTypes.id, row.item.preUseInspectionTypeId))
             .limit(1)
@@ -1233,6 +1240,14 @@ export default async function EquipmentDetailPage({
 
   // Read-only unless the viewer can manage equipment. The autosave action
   // re-asserts the permission server-side; this only gates the inputs.
+  // A pre-use form bound to another equipment type means this unit hands its
+  // crew the wrong checklist. Unbound forms (appliesToTypeId null) apply to
+  // anything and are not a mismatch.
+  const preUseFormMismatch =
+    selectedPreUseType?.appliesToTypeId != null &&
+    item.typeId != null &&
+    selectedPreUseType.appliesToTypeId !== item.typeId
+
   const canManageEquipment = can(ctx, 'equipment.manage')
   const canCreateWorkOrder = can(ctx, 'equipment.workorder.create')
   const locked = !canManageEquipment
@@ -3658,6 +3673,20 @@ export default async function EquipmentDetailPage({
             emptyLabel={tGenerated('m_045c03d42f2f53')}
             disabled={locked}
             updateAction={updateEquipmentField}
+          />
+          <GeneratedValue
+            value={
+              preUseFormMismatch ? (
+                <Alert variant="warning">
+                  <AlertTitle>
+                    <GeneratedText id="m_0cf35d8d5e4746" />
+                  </AlertTitle>
+                  <AlertDescription>
+                    <GeneratedText id="m_02949f4908dcd0" />
+                  </AlertDescription>
+                </Alert>
+              ) : null
+            }
           />
           <ReadOnlyStat
             label={tGenerated('m_066ea9befbd59e')}
