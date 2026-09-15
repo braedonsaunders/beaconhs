@@ -11,6 +11,7 @@ import { GeneratedText, GeneratedValue, useGeneratedTranslations } from '@/i18n/
 
 import { useEffect, useRef, useState } from 'react'
 import type { Component, Editor } from 'grapesjs'
+import { MIN_COLUMN_PCT, nextColumnPercents } from './_column-resize'
 
 const CELL_TAGS = new Set(['td', 'th'])
 
@@ -170,41 +171,51 @@ function readColumnPercents(ctx: CellCtx): number[] {
   return declared.map((w) => w ?? share)
 }
 
-/** Write percentage widths back, preferring the colgroup the renderer reads. */
-function writeColumnPercents(ctx: CellCtx, percents: number[]): void {
-  const cols = tableCols(ctx.table)
+/**
+ * Write percentage widths to components resolved UP FRONT.
+ *
+ * A drag must not re-resolve the selection between moves: setting a width
+ * re-creates components and GrapesJS drops the selection, so the second lookup
+ * returns nothing and the drag dies after one jump.
+ */
+function applyColumnPercents(
+  targets: { cols: Component[]; rows: Component[] },
+  percents: number[],
+): void {
   const set = (cmp: Component | undefined, pct: number) => {
     if (!cmp || typeof cmp.setStyle !== 'function') return
     cmp.setStyle({ ...cmp.getStyle(), width: `${Math.round(pct * 10) / 10}%` })
   }
-  if (cols.length > 0) {
-    percents.forEach((pct, i) => set(cols[i], pct))
+  if (targets.cols.length > 0) {
+    percents.forEach((pct, i) => set(targets.cols[i], pct))
     return
   }
   // No colgroup: fall back to per-cell widths on every row, which is how the
   // hand-built tables in the block palette are sized.
-  ctx.rows.forEach((row) => {
+  targets.rows.forEach((row) => {
     percents.forEach((pct, i) => set(row.components().at(i), pct))
   })
+}
+
+/** Write percentage widths back, preferring the colgroup the renderer reads. */
+function writeColumnPercents(ctx: CellCtx, percents: number[]): void {
+  applyColumnPercents({ cols: tableCols(ctx.table), rows: ctx.rows }, percents)
 }
 
 /** Set ONE column's width, taking the difference from its right-hand neighbour. */
 function setColumnWidth(editor: Editor, pct: number | null): void {
   const ctx = cellCtx(editor)
   if (!ctx) return
+  if (pct === null) return
   const percents = readColumnPercents(ctx)
-  const index = ctx.colIndex
-  const neighbour = index + 1 < percents.length ? index + 1 : index - 1
-  if (pct === null || neighbour < 0) return
-  const pair = (percents[index] ?? 0) + (percents[neighbour] ?? 0)
-  const next = Math.min(Math.max(pct, MIN_COLUMN_PCT), pair - MIN_COLUMN_PCT)
-  percents[index] = next
-  percents[neighbour] = pair - next
-  writeColumnPercents(ctx, percents)
+  // Typing a width is the same move as dragging that column's right edge.
+  const index = ctx.colIndex < percents.length - 1 ? ctx.colIndex : ctx.colIndex - 1
+  if (index < 0) return
+  const current = percents[ctx.colIndex] ?? 0
+  const delta = ctx.colIndex === index ? pct - current : current - pct
+  writeColumnPercents(ctx, nextColumnPercents(percents, index, delta))
   editor.trigger('change:canvasOffset')
 }
-
-const MIN_COLUMN_PCT = 3
 
 function currentColWidthPct(editor: Editor): string {
   const ctx = cellCtx(editor)
@@ -324,11 +335,18 @@ export function TableColumnResizer({ editor }: { editor: Editor | null }) {
     startX: number
     percents: number[]
     width: number
+    // Captured up front. Re-resolving the selection on every move was the bug:
+    // writing a width re-creates components, GrapesJS drops the selection, and
+    // cellCtx() then returns null — so the drag applied ONE jump and went dead.
+    targets: { cols: Component[]; rows: Component[] }
   } | null>(null)
 
   useEffect(() => {
     if (!editor) return
     const sync = () => {
+      // Never move the handles mid-drag: each width write fires component:update,
+      // which would recompute and re-render the control under the cursor.
+      if (dragRef.current) return
       const ctx = cellCtx(editor)
       const headerRow = ctx?.rows[0]
       const tableEl = ctx?.table.getEl()
@@ -399,26 +417,23 @@ export function TableColumnResizer({ editor }: { editor: Editor | null }) {
                 index: bound.index,
                 startX: event.clientX,
                 percents: readColumnPercents(ctx),
-                width: tableEl.getBoundingClientRect().width,
+                // Measure in the SAME space the handles are positioned in.
+                // getBoundingClientRect() reports iframe pixels, which do not
+                // match the pointer's coordinates once the canvas is zoomed —
+                // the delta came out scaled and saturated the clamp on the
+                // first move.
+                width: editor.Canvas.getElementPos(tableEl).width,
+                targets: { cols: tableCols(ctx.table), rows: ctx.rows },
               }
             }}
             onPointerMove={(event) => {
               const drag = dragRef.current
               if (!drag || drag.width <= 0) return
-              const ctx = cellCtx(editor)
-              if (!ctx) return
               const deltaPct = ((event.clientX - drag.startX) / drag.width) * 100
-              const percents = [...drag.percents]
-              const left = drag.index
-              const right = drag.index + 1
-              const pair = (percents[left] ?? 0) + (percents[right] ?? 0)
-              const nextLeft = Math.min(
-                Math.max((percents[left] ?? 0) + deltaPct, MIN_COLUMN_PCT),
-                pair - MIN_COLUMN_PCT,
+              applyColumnPercents(
+                drag.targets,
+                nextColumnPercents(drag.percents, drag.index, deltaPct),
               )
-              percents[left] = nextLeft
-              percents[right] = pair - nextLeft
-              writeColumnPercents(ctx, percents)
             }}
             onPointerUp={(event) => {
               if (!dragRef.current) return
