@@ -63,8 +63,17 @@ export function collectionTableBlockHtml(collection: TemplateCollection): string
   const body = fields
     .map((field) => `<td style="${TABLE_CELL_STYLE}">{{${field.key!}}}</td>`)
     .join('')
+  // Matches the seeded document tables: an even <colgroup> the column resizer
+  // writes to, `table-layout:fixed` so a table that breaks across a page keeps
+  // the same shape on both halves, and the headings in <thead> so they repeat.
+  const width = Math.round((100 / fields.length) * 10) / 10
+  const colgroup = `<colgroup>${fields
+    .map(() => `<col style="width:${width}%" />`)
+    .join('')}</colgroup>`
   return (
-    '<table style="width:100%;border-collapse:collapse;margin:0 0 8px;">' +
-    `<tr>${head}</tr><tr data-each="${collectionKey}">${body}</tr></table>`
+    '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 8px;">' +
+    colgroup +
+    `<thead><tr>${head}</tr></thead>` +
+    `<tr data-each="${collectionKey}">${body}</tr></table>`
   )
 }

@@ -27,7 +27,7 @@ import {
   type TemplateCollection,
   type TemplateMergeField,
 } from '@/lib/template-builder-html'
-import { TableToolbar } from '../_table-tools'
+import { TableColumnResizer, TableToolbar } from '../_table-tools'
 
 const STARTER_HTML =
   '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;padding:24px;max-width:680px;margin:0 auto;">' +
@@ -180,6 +180,7 @@ export default function EmailBuilder({
           {/* RIGHT 2/3 — the canvas */}
           <div className="relative col-span-2 min-h-0 overflow-hidden">
             <TableToolbar editor={editor} />
+            <TableColumnResizer editor={editor} />
             <Canvas className="h-full" />
           </div>
         </div>

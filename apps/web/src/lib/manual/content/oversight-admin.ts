@@ -689,6 +689,10 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 
 Every module that ships a template appears on that tab, and each one has a matching **Print / PDF** button on its record: incidents, hazard assessments, corrective actions, equipment work orders, equipment asset records, equipment checks, PPE inspections, PPE issue reports, journals, site inspections, training assessments, training classes, document sign-off sessions, management reviews, and the vehicle log month sheet.
 
+Tables in a PDF template keep the same column widths on every page, so a long list that runs over a page break does not change shape halfway down, and the column headings repeat at the top of each page.
+
+To change a column's width, select any cell in it and drag the handle on its edge — the column next to it gives up or takes back the space, so the table always fills the page. The **Table** toolbar also takes a width as a percentage if you would rather type it.
+
 Open a PDF template to get three tabs. **Design** is the drag-and-drop page builder. **HTML** shows the same document as raw markup for people who would rather type it — edit there and switch back to **Design** to reload the canvas from your markup. **Preview** paginates the result on real paper with the header, footer, and page numbers. All three edit one document, so **Save** stores whichever tab you were last working in. Repeating rows (hazards, signatures, checklist items) are marked on the row itself, so the builder cannot break them.
 
 ## Configure direct card printing

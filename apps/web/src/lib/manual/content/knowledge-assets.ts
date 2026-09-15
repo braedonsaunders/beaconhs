@@ -274,7 +274,7 @@ Presenting never changes anyone's records. When the class is done, issue records
 
 A person marked as a no-show cannot pass. A cancelled class is read-only; choose **Reopen class** before changing details, the roster, or completion decisions. A completed class stays locked so its issued records cannot drift.
 
-Use **Print / PDF** in the class header for a paper session sheet with the roster on it — handy for a sign-in sheet or a training file.
+Use **Print / PDF** in the class header for a paper session sheet. It lists everyone on the roster with a blank **Signature** box beside each name, so the printout doubles as the attendance sheet you pass around on the day. An administrator can widen or remove that column under **Admin** → **PDF templates**.
 
 ## The class calendar
 

@@ -35,7 +35,11 @@ const LBL =
   'width:18%;border:1px solid #e2e8f0;background:#f1f5f9;padding:5px 8px;font-size:10.5px;font-weight:600;color:#475569;vertical-align:top;'
 const VAL =
   'width:32%;border:1px solid #e2e8f0;padding:5px 8px;font-size:11.5px;color:#0f172a;vertical-align:top;'
-const TABLE = 'width:100%;border-collapse:collapse;margin:0 0 10px;'
+// `table-layout:fixed` is load-bearing for PRINT, not cosmetics. Under the
+// default `auto`, a table that breaks across a page re-computes its column
+// widths from only the rows that landed on THAT page, so the continuation of a
+// long table comes out a different shape from its first half.
+const TABLE = 'width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 10px;'
 const ROW = 'page-break-inside:avoid;'
 const HEAD_CELL = 'border:none;padding:14px 0 6px;'
 const NARR =
@@ -121,13 +125,37 @@ type Col = [header: string, cell: string, extraStyle?: string]
  * (empty ⇒ the whole block collapses), one data-each body row, optional
  * static footer row (totals).
  */
+/**
+ * Percentage width per column, filling in any the caller left unset.
+ *
+ * `table-layout:fixed` needs every column sized or the browser splits what is
+ * left evenly and the careful widths drift. Columns that declare a width keep
+ * it; the rest share the remainder.
+ */
+function columnWidths(cols: Col[]): string[] {
+  const declared = cols.map(([, , style]) => /width:\s*([\d.]+)%/.exec(style ?? '')?.[1])
+  const used = declared.reduce((sum, w) => sum + (w ? Number(w) : 0), 0)
+  const unsized = declared.filter((w) => !w).length
+  const share = unsized > 0 ? Math.max(0, 100 - used) / unsized : 0
+  return declared.map((w) => `${w ? Number(w) : share}%`)
+}
+
 function collection(title: string, eachKey: string, cols: Col[], footerRow = ''): string {
   const ths = cols.map(([h, , s]) => `<th style="${TH}${s ?? ''}">${h}</th>`).join('')
   const tds = cols.map(([, c, s]) => `<td style="${TD}${s ?? ''}">${c}</td>`).join('')
+  // <colgroup> is what fixed layout reads FIRST, so the widths hold even though
+  // the section heading below is a colspan row that says nothing about columns.
+  // It is also the single place the designer's column resizer writes to.
+  const colgroup = `<colgroup>${columnWidths(cols)
+    .map((w) => `<col style="width:${w}" />`)
+    .join('')}</colgroup>`
   return (
     `<table style="${TABLE}">` +
+    colgroup +
     `<tr data-if="${eachKey}"><td colspan="${cols.length}" style="${HEAD_CELL}"><div style="${H2}">${title}</div></td></tr>` +
-    `<tr data-if="${eachKey}">${ths}</tr>` +
+    // The header row lives in <thead> so it REPEATS on every page the table
+    // runs onto; a split table used to continue with no column headings at all.
+    `<thead><tr data-if="${eachKey}">${ths}</tr></thead>` +
     `<tr data-each="${eachKey}" style="${ROW}">${tds}</tr>` +
     footerRow +
     `</table>`
@@ -149,7 +177,7 @@ function narrative(title: string, token: string, gate = ''): string {
 /** Photo list: gated heading + one bordered image per row with its caption. */
 function photos(eachKey = 'photos', title = 'Photos'): string {
   return (
-    `<table style="width:100%;border-collapse:collapse;margin:0 0 10px;">` +
+    `<table style="${TABLE}">` +
     `<tr data-if="${eachKey}"><td style="${HEAD_CELL}"><div style="${H2}">${title}</div></td></tr>` +
     `<tr data-each="${eachKey}" style="${ROW}"><td style="border:none;padding:4px 0 8px;">` +
     `<img src="{{url}}" width="320" style="border:1px solid #e2e8f0;border-radius:4px;display:block;" alt="" />` +
@@ -707,11 +735,15 @@ const TRAINING_CLASS = wrap(
     ]) +
     narrative('About this course', '{{course_description}}') +
     narrative('Notes', '{{notes}}') +
+    // The printed class sheet doubles as the attendance register, so every
+    // enrolled person gets a ruled box to sign on the day. The column is part of
+    // the template, so a tenant can widen it or take it out in the designer.
     collection('Attendees', 'attendees', [
       ['#', '{{@number}}', 'width:5%;'],
-      ['Name', '{{name}}'],
-      ['Email', '{{email}}'],
-      ['Status', '{{status}}', 'width:14%;'],
+      ['Name', '{{name}}', 'width:26%;'],
+      ['Email', '{{email}}', 'width:27%;'],
+      ['Status', '{{status}}', 'width:12%;'],
+      ['Signature', '&nbsp;', `width:30%;${BLANK_BOX}`],
     ]),
 )
 

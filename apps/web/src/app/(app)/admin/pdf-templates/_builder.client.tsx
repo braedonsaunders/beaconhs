@@ -22,7 +22,7 @@ import {
   type TemplateCollection,
   type TemplateMergeField,
 } from '@/lib/template-builder-html'
-import { TableToolbar } from '../_table-tools'
+import { TableColumnResizer, TableToolbar } from '../_table-tools'
 
 const STARTER_HTML =
   '<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;">' +
@@ -226,6 +226,7 @@ export default function PdfBuilder({
               }
             />
             <TableToolbar editor={editor} />
+            <TableColumnResizer editor={editor} />
             <Canvas className="h-full" />
           </div>
         </div>
