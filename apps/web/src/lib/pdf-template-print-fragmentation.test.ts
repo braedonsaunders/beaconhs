@@ -66,6 +66,25 @@ describe('PDF templates survive a page break', () => {
           expect(table.querySelectorAll('tbody th').length).toBe(0)
         }
       })
+
+      it('keeps the section title with its headings, above the rows', () => {
+        // <thead> renders at the TOP of the table box whatever the source order.
+        // Leaving the section title outside it threw the column headings above
+        // the title, and split the body into two <tbody> elements. The parsed
+        // shape is the only honest way to assert this.
+        for (const table of collectionTables(seed.html)) {
+          if (table.querySelectorAll('th').length === 0) continue
+          const sections = [...table.children].map((child) => child.tagName.toLowerCase())
+          expect(sections.filter((tag) => tag === 'tbody')).toHaveLength(1)
+          expect(sections.indexOf('thead')).toBeLessThan(sections.indexOf('tbody'))
+
+          // Inside the head, the colspan title comes before the column labels.
+          const headRows = [...table.querySelectorAll('thead tr')]
+          const titleRow = headRows.findIndex((row) => row.querySelector('td[colspan]'))
+          const labelRow = headRows.findIndex((row) => row.querySelector('th'))
+          if (titleRow >= 0) expect(titleRow).toBeLessThan(labelRow)
+        }
+      })
     })
   }
 })

@@ -146,13 +146,17 @@ function collectionTable(
   const colgroup = `<colgroup>${columns
     .map(() => `<col style="width:${width}%" />`)
     .join('')}</colgroup>`
+  // Section title and column headings share ONE <thead>, in that order.
+  // <thead> renders at the top of the table box regardless of source order, so
+  // a title left outside it ends up BELOW the column headings it introduces.
+  // Together they also repeat as a unit on each page the table runs onto.
   return (
     `<table style="${TABLE}">` +
     colgroup +
+    `<thead>` +
     headingRow(title, columns.length, eachKey) +
-    // <thead> so the column labels repeat on every page the table runs onto;
-    // a split table used to continue with no headings at all.
-    `<thead><tr data-if="${eachKey}">${ths}</tr></thead>` +
+    `<tr data-if="${eachKey}">${ths}</tr>` +
+    `</thead>` +
     `<tr data-each="${eachKey}" style="${ROW}">${tds}</tr>` +
     `</table>`
   )

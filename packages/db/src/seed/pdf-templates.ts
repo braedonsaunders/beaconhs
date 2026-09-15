@@ -149,13 +149,19 @@ function collection(title: string, eachKey: string, cols: Col[], footerRow = '')
   const colgroup = `<colgroup>${columnWidths(cols)
     .map((w) => `<col style="width:${w}" />`)
     .join('')}</colgroup>`
+  // BOTH the section title and the column headings go in ONE <thead>, in that
+  // order. <thead> renders at the top of the table box whatever the source
+  // order, so leaving the title outside it threw the column headings ABOVE the
+  // section title — and the parser split the rest into a second <tbody>.
+  // Together in <thead> they also repeat as a unit on every page the table
+  // runs onto, which is what a reader needs on page two.
   return (
     `<table style="${TABLE}">` +
     colgroup +
+    `<thead>` +
     `<tr data-if="${eachKey}"><td colspan="${cols.length}" style="${HEAD_CELL}"><div style="${H2}">${title}</div></td></tr>` +
-    // The header row lives in <thead> so it REPEATS on every page the table
-    // runs onto; a split table used to continue with no column headings at all.
-    `<thead><tr data-if="${eachKey}">${ths}</tr></thead>` +
+    `<tr data-if="${eachKey}">${ths}</tr>` +
+    `</thead>` +
     `<tr data-each="${eachKey}" style="${ROW}">${tds}</tr>` +
     footerRow +
     `</table>`

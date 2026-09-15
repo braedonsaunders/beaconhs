@@ -373,39 +373,6 @@ export function TableColumnResizer({ editor }: { editor: Editor | null }) {
     return () => events.forEach((event) => editor.off(event, sync))
   }, [editor])
 
-  useEffect(() => {
-    if (!editor) return
-    const onMove = (event: PointerEvent) => {
-      const drag = dragRef.current
-      if (!drag || drag.width <= 0) return
-      const ctx = cellCtx(editor)
-      if (!ctx) return
-      const deltaPct = ((event.clientX - drag.startX) / drag.width) * 100
-      const percents = [...drag.percents]
-      const left = drag.index
-      const right = drag.index + 1
-      const pair = (percents[left] ?? 0) + (percents[right] ?? 0)
-      const nextLeft = Math.min(
-        Math.max((percents[left] ?? 0) + deltaPct, MIN_COLUMN_PCT),
-        pair - MIN_COLUMN_PCT,
-      )
-      percents[left] = nextLeft
-      percents[right] = pair - nextLeft
-      writeColumnPercents(ctx, percents)
-    }
-    const onUp = () => {
-      if (!dragRef.current) return
-      dragRef.current = null
-      editor.trigger('change:canvasOffset')
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-    return () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-    }
-  }, [editor])
-
   if (!editor || bounds.length === 0) return null
 
   return (
@@ -423,12 +390,41 @@ export function TableColumnResizer({ editor }: { editor: Editor | null }) {
               const tableEl = ctx?.table.getEl()
               if (!ctx || !tableEl) return
               event.preventDefault()
+              // Capture on the handle itself. The canvas is an IFRAME, so once
+              // the cursor crosses into it the parent document stops seeing
+              // pointer events — the handle rendered and highlighted but never
+              // moved. Capture keeps them coming to this element.
+              event.currentTarget.setPointerCapture(event.pointerId)
               dragRef.current = {
                 index: bound.index,
                 startX: event.clientX,
                 percents: readColumnPercents(ctx),
                 width: tableEl.getBoundingClientRect().width,
               }
+            }}
+            onPointerMove={(event) => {
+              const drag = dragRef.current
+              if (!drag || drag.width <= 0) return
+              const ctx = cellCtx(editor)
+              if (!ctx) return
+              const deltaPct = ((event.clientX - drag.startX) / drag.width) * 100
+              const percents = [...drag.percents]
+              const left = drag.index
+              const right = drag.index + 1
+              const pair = (percents[left] ?? 0) + (percents[right] ?? 0)
+              const nextLeft = Math.min(
+                Math.max((percents[left] ?? 0) + deltaPct, MIN_COLUMN_PCT),
+                pair - MIN_COLUMN_PCT,
+              )
+              percents[left] = nextLeft
+              percents[right] = pair - nextLeft
+              writeColumnPercents(ctx, percents)
+            }}
+            onPointerUp={(event) => {
+              if (!dragRef.current) return
+              dragRef.current = null
+              event.currentTarget.releasePointerCapture(event.pointerId)
+              editor.trigger('change:canvasOffset')
             }}
           />
         ))}
