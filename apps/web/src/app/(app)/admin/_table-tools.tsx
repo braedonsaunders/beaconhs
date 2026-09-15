@@ -11,7 +11,13 @@ import { GeneratedText, GeneratedValue, useGeneratedTranslations } from '@/i18n/
 
 import { useEffect, useRef, useState } from 'react'
 import type { Component, Editor } from 'grapesjs'
-import { MIN_COLUMN_PCT, nextColumnPercents } from './_column-resize'
+import {
+  applyColumnPercents,
+  MIN_COLUMN_PCT,
+  nextColumnPercents,
+  readColumnPercents,
+  tableCols,
+} from './_column-resize'
 
 const CELL_TAGS = new Set(['td', 'th'])
 
@@ -134,69 +140,6 @@ function removeRow(editor: Editor): void {
   editor.trigger('change:canvasOffset')
 }
 
-/** The <col> elements of a table, in column order (empty when there is no colgroup). */
-function tableCols(table: Component): Component[] {
-  const group = table
-    .components()
-    .toArray()
-    .find((c: Component) => String(c.get('tagName')) === 'colgroup')
-  if (!group) return []
-  return group
-    .components()
-    .toArray()
-    .filter((c: Component) => String(c.get('tagName')) === 'col')
-}
-
-/**
- * Column widths as percentages, in column order.
- *
- * Document tables are laid out `table-layout: fixed` against a known paper
- * width, so a <colgroup> of percentages is what the renderer reads and what a
- * resize has to write. Falls back to the header cells for hand-built tables
- * that have no colgroup yet.
- */
-function readColumnPercents(ctx: CellCtx): number[] {
-  const cols = tableCols(ctx.table)
-  const count = ctx.rows[0]?.components().length ?? 0
-  const read = (cmp: Component | undefined): number | null => {
-    const raw = String(cmp?.getStyle?.().width ?? '')
-    const pct = /^([\d.]+)%$/.exec(raw)?.[1]
-    return pct ? Number(pct) : null
-  }
-  const source = cols.length > 0 ? cols : (ctx.rows[0]?.components().toArray() ?? [])
-  const declared = Array.from({ length: count }, (_, i) => read(source[i]))
-  const used = declared.reduce((sum: number, w) => sum + (w ?? 0), 0)
-  const unsized = declared.filter((w) => w === null).length
-  const share = unsized > 0 ? Math.max(0, 100 - used) / unsized : 0
-  return declared.map((w) => w ?? share)
-}
-
-/**
- * Write percentage widths to components resolved UP FRONT.
- *
- * A drag must not re-resolve the selection between moves: setting a width
- * re-creates components and GrapesJS drops the selection, so the second lookup
- * returns nothing and the drag dies after one jump.
- */
-function applyColumnPercents(
-  targets: { cols: Component[]; rows: Component[] },
-  percents: number[],
-): void {
-  const set = (cmp: Component | undefined, pct: number) => {
-    if (!cmp || typeof cmp.setStyle !== 'function') return
-    cmp.setStyle({ ...cmp.getStyle(), width: `${Math.round(pct * 10) / 10}%` })
-  }
-  if (targets.cols.length > 0) {
-    percents.forEach((pct, i) => set(targets.cols[i], pct))
-    return
-  }
-  // No colgroup: fall back to per-cell widths on every row, which is how the
-  // hand-built tables in the block palette are sized.
-  targets.rows.forEach((row) => {
-    percents.forEach((pct, i) => set(row.components().at(i), pct))
-  })
-}
-
 /** Write percentage widths back, preferring the colgroup the renderer reads. */
 function writeColumnPercents(ctx: CellCtx, percents: number[]): void {
   applyColumnPercents({ cols: tableCols(ctx.table), rows: ctx.rows }, percents)
@@ -207,7 +150,7 @@ function setColumnWidth(editor: Editor, pct: number | null): void {
   const ctx = cellCtx(editor)
   if (!ctx) return
   if (pct === null) return
-  const percents = readColumnPercents(ctx)
+  const percents = readColumnPercents(tableCols(ctx.table), ctx.rows)
   // Typing a width is the same move as dragging that column's right edge.
   const index = ctx.colIndex < percents.length - 1 ? ctx.colIndex : ctx.colIndex - 1
   if (index < 0) return
@@ -220,7 +163,7 @@ function setColumnWidth(editor: Editor, pct: number | null): void {
 function currentColWidthPct(editor: Editor): string {
   const ctx = cellCtx(editor)
   if (!ctx) return ''
-  const pct = readColumnPercents(ctx)[ctx.colIndex]
+  const pct = readColumnPercents(tableCols(ctx.table), ctx.rows)[ctx.colIndex]
   return pct === undefined ? '' : String(Math.round(pct * 10) / 10)
 }
 
@@ -416,7 +359,7 @@ export function TableColumnResizer({ editor }: { editor: Editor | null }) {
               dragRef.current = {
                 index: bound.index,
                 startX: event.clientX,
-                percents: readColumnPercents(ctx),
+                percents: readColumnPercents(tableCols(ctx.table), ctx.rows),
                 // Measure in the SAME space the handles are positioned in.
                 // getBoundingClientRect() reports iframe pixels, which do not
                 // match the pointer's coordinates once the canvas is zoomed —
