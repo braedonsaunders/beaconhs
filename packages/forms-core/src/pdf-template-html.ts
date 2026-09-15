@@ -39,7 +39,11 @@ const LBL =
   'width:18%;border:1px solid #e2e8f0;background:#f1f5f9;padding:5px 8px;font-size:10.5px;font-weight:600;color:#475569;vertical-align:top;'
 const VAL =
   'width:32%;border:1px solid #e2e8f0;padding:5px 8px;font-size:11.5px;color:#0f172a;vertical-align:top;'
-const TABLE = 'width:100%;border-collapse:collapse;margin:0 0 10px;'
+// `table-layout:fixed` is load-bearing for PRINT: under the default `auto`, a
+// table that breaks across a page re-derives its column widths from only the
+// rows that landed on THAT page, so the continuation comes out a different
+// shape from the first half.
+const TABLE = 'width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 10px;'
 const ROW = 'page-break-inside:avoid;'
 const HEAD_CELL = 'border:none;padding:14px 0 6px;'
 
@@ -135,10 +139,20 @@ function collectionTable(
 ): string {
   const ths = columns.map((c) => `<th style="${TH}">${esc(c.header)}</th>`).join('')
   const tds = columns.map((c) => `<td style="${TD}">${c.cell}</td>`).join('')
+  // An even <colgroup> is what fixed layout reads first — the heading row below
+  // spans every column and says nothing about their widths — and it is the one
+  // place the designer's column resizer writes to.
+  const width = Math.round((100 / columns.length) * 10) / 10
+  const colgroup = `<colgroup>${columns
+    .map(() => `<col style="width:${width}%" />`)
+    .join('')}</colgroup>`
   return (
     `<table style="${TABLE}">` +
+    colgroup +
     headingRow(title, columns.length, eachKey) +
-    `<tr data-if="${eachKey}">${ths}</tr>` +
+    // <thead> so the column labels repeat on every page the table runs onto;
+    // a split table used to continue with no headings at all.
+    `<thead><tr data-if="${eachKey}">${ths}</tr></thead>` +
     `<tr data-each="${eachKey}" style="${ROW}">${tds}</tr>` +
     `</table>`
   )

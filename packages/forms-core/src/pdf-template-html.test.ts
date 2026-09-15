@@ -148,3 +148,42 @@ describe('generateFormPdfTemplate', () => {
     expect(html).not.toContain('{{/each')
   })
 })
+
+describe('generated app PDFs survive a page break', () => {
+  // Same contract the seeded module templates hold, and the same bug: a
+  // repeating section that runs onto a second page used to re-derive its column
+  // widths from only the rows on that page, and lost its column headings
+  // entirely because a bare <tr> of <th> is parsed into <tbody>.
+  const { sourceHtml } = generateFormPdfTemplate(schema, 'Crane Lift Plan')
+
+  it('lays repeating tables out fixed so both halves match', () => {
+    // Every table that repeats rows has to be fixed-layout.
+    const repeatingTables = sourceHtml
+      .split('<table')
+      .filter((chunk) => chunk.includes('data-each='))
+    expect(repeatingTables.length).toBeGreaterThan(0)
+    for (const table of repeatingTables) {
+      expect(table).toContain('table-layout:fixed')
+    }
+  })
+
+  it('sizes the columns up front and repeats the headings', () => {
+    expect(sourceHtml).toContain('<colgroup>')
+    expect(sourceHtml).toContain('<thead>')
+    // Headings belong in <thead>; a <th> outside one will not repeat on page
+    // two. Strip the thead blocks and nothing header-ish may be left over.
+    const withoutThead = sourceHtml.replace(/<thead>.*?<\/thead>/g, '')
+    expect(withoutThead).not.toContain('<th ')
+    expect((sourceHtml.match(/<thead>/g) ?? []).length).toBeGreaterThan(0)
+  })
+
+  it('gives every column an equal share that totals 100%', () => {
+    const groups = sourceHtml.match(/<colgroup>.*?<\/colgroup>/g) ?? []
+    expect(groups.length).toBeGreaterThan(0)
+    for (const group of groups) {
+      const widths = [...group.matchAll(/width:([\d.]+)%/g)].map((m) => Number(m[1]))
+      expect(widths.length).toBeGreaterThan(0)
+      expect(Math.abs(widths.reduce((a, b) => a + b, 0) - 100)).toBeLessThan(0.5)
+    }
+  })
+})
