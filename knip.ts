@@ -29,7 +29,11 @@ const config: KnipConfig = {
       ignoreDependencies: ['qrcode'],
     },
     'packages/db': {
-      entry: ['src/scripts/reseed-lift-plan.ts', 'src/scripts/import-legacy-passwords.ts'],
+      entry: [
+        'src/scripts/reseed-lift-plan.ts',
+        'src/scripts/import-legacy-passwords.ts',
+        'src/scripts/backfill-document-book-pins.ts',
+      ],
     },
     'packages/sync': {
       ignoreDependencies: ['mssql'],
