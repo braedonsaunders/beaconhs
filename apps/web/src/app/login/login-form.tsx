@@ -54,18 +54,18 @@ export function LoginForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div className="flex gap-2 rounded-md border border-slate-200 bg-white p-1 text-sm">
+      <div className="flex gap-2 rounded-md border border-slate-200 bg-white p-1 text-sm dark:border-slate-800 dark:bg-slate-900">
         <button
           type="button"
           onClick={() => setMode('password')}
-          className={`flex-1 rounded px-3 py-1 ${mode === 'password' ? 'bg-slate-100 font-medium' : 'text-slate-600'}`}
+          className={`flex-1 rounded px-3 py-1 ${mode === 'password' ? 'bg-slate-100 font-medium dark:bg-slate-800' : 'text-slate-600 dark:text-slate-400'}`}
         >
           <GeneratedText id="m_155d0bdc9a243f" />
         </button>
         <button
           type="button"
           onClick={() => setMode('magic')}
-          className={`flex-1 rounded px-3 py-1 ${mode === 'magic' ? 'bg-slate-100 font-medium' : 'text-slate-600'}`}
+          className={`flex-1 rounded px-3 py-1 ${mode === 'magic' ? 'bg-slate-100 font-medium dark:bg-slate-800' : 'text-slate-600 dark:text-slate-400'}`}
         >
           <GeneratedText id="m_086c6ef3266fa4" />
         </button>
@@ -93,7 +93,10 @@ export function LoginForm() {
                 <Label htmlFor="password">
                   <GeneratedText id="m_155d0bdc9a243f" />
                 </Label>
-                <Link href="/forgot-password" className="text-xs text-teal-700 hover:underline">
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-teal-700 hover:underline dark:text-teal-300"
+                >
                   <GeneratedText id="m_0f435be138c0e6" />
                 </Link>
               </div>

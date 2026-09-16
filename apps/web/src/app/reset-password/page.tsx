@@ -44,7 +44,10 @@ export default async function ResetPasswordPage({
                   </AlertDescription>
                 </Alert>
                 <p className="text-center text-sm">
-                  <Link href="/forgot-password" className="text-teal-700 hover:underline">
+                  <Link
+                    href="/forgot-password"
+                    className="text-teal-700 hover:underline dark:text-teal-300"
+                  >
                     <GeneratedText id="m_0eb29cb6d1851e" />
                   </Link>
                 </p>
@@ -53,7 +56,7 @@ export default async function ResetPasswordPage({
               <>
                 <ResetPasswordForm token={token} />
                 <p className="text-center text-xs text-slate-500">
-                  <Link href="/login" className="text-teal-700 hover:underline">
+                  <Link href="/login" className="text-teal-700 hover:underline dark:text-teal-300">
                     <GeneratedText id="m_1ca872ae411203" />
                   </Link>
                 </p>
