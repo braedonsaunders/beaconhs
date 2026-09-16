@@ -20,6 +20,6 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "pdf-lib": "^1.17.1"
+    "@braedonsaunders/appkit-pdf": "^0.2.1"
   }
 }
