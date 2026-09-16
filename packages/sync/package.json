@@ -19,7 +19,7 @@
     "@beaconhs/db": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "mssql": "^11.0.1",
-    "mysql2": "^3.22.6",
+    "mysql2": "^3.23.1",
     "postgres": "^3.4.9"
   },
   "devDependencies": {

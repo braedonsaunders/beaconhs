@@ -16,10 +16,10 @@
   },
   "dependencies": {
     "@beaconhs/office": "workspace:*",
-    "@tiptap/extension-link": "^3.27.4",
-    "@tiptap/extension-placeholder": "^3.27.4",
-    "@tiptap/react": "^3.27.4",
-    "@tiptap/starter-kit": "^3.27.4",
+    "@tiptap/extension-link": "^3.30.4",
+    "@tiptap/extension-placeholder": "^3.30.4",
+    "@tiptap/react": "^3.30.4",
+    "@tiptap/starter-kit": "^3.30.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.42.2",
@@ -36,6 +36,6 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.11"
   }
 }

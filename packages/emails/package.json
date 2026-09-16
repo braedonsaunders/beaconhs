@@ -17,13 +17,13 @@
     "@beaconhs/crypto": "workspace:*",
     "@beaconhs/email-render": "workspace:*",
     "@beaconhs/sync": "workspace:*",
-    "nodemailer": "^9.0.3"
+    "nodemailer": "^9.1.1"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
     "@types/nodemailer": "^8.0.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.0",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.11"
   }
 }
