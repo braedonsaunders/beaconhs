@@ -333,11 +333,26 @@ export const documentBookStatus = pgEnum('document_book_status', ['draft', 'publ
 export type DocumentBookPrintSettings = {
   paperSize?: 'letter' | 'a4' | 'legal'
   orientation?: 'portrait' | 'landscape'
+  /**
+   * Inset applied to imported document content, in millimetres.
+   *
+   * Members arrive already rendered with their own margins, so this adds to
+   * whatever the source had rather than replacing it. Raising it also shrinks
+   * the content — which is the only lever a book has over type that is too
+   * large in the source documents themselves.
+   */
+  contentMarginMm?: number
   /** Title page with the tenant logo. */
   coverPage?: boolean
   tableOfContents?: boolean
   /** The controlled-document block (category, revision, approver, version). */
   documentHeaders?: boolean
+  /**
+   * Put that block on a sheet of its own instead of at the top of the
+   * document's first page. Off by default: a separate sheet doubles the page
+   * count of a book made of one-page documents.
+   */
+  documentHeadersOnOwnPage?: boolean
   /** "UNCONTROLLED WHEN PRINTED" + page numbers. */
   footer?: boolean
   /** Start each document on a fresh sheet. */

@@ -43,6 +43,7 @@ import {
   unpublishDocumentBook,
 } from '@/lib/document-book-lifecycle'
 import { ReorderableList } from './_components/reorderable-list'
+import { PendingSubmitButton } from '@/components/pending-submit-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -308,11 +309,17 @@ export default async function DocumentBookPage({
           }
           actions={
             <>
+              {/* Rendering a book is seconds of work with no visual change
+                  until it navigates, so the button has to say it is busy —
+                  otherwise people click it again. */}
               <form action={renderBookPdf} className="inline">
                 <input type="hidden" name="bookId" value={id} />
-                <Button type="submit" variant="outline">
-                  <FileDown size={14} /> <GeneratedText id="m_0aff97b409282d" />
-                </Button>
+                <PendingSubmitButton
+                  icon={<FileDown size={14} />}
+                  pendingLabel={<GeneratedText id="m_11beb293de9d2d" />}
+                >
+                  <GeneratedText id="m_0aff97b409282d" />
+                </PendingSubmitButton>
               </form>
               <GeneratedValue
                 value={

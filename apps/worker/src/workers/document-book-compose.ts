@@ -46,12 +46,20 @@ export type ComposeBookInput = {
 const DEFAULTS = {
   paperSize: 'letter',
   orientation: 'portrait',
+  contentMarginMm: 0,
   coverPage: true,
   tableOfContents: true,
   documentHeaders: true,
+  // The control block rides on the document's first page. Giving it a sheet of
+  // its own doubled the page count of a book whose members are mostly one page.
+  documentHeadersOnOwnPage: false,
   footer: true,
   documentPageBreaks: true,
 } as const satisfies Required<DocumentBookPrintSettings>
+
+const PT_PER_MM = 72 / 25.4
+/** Band reserved for the control block when it rides on the document. */
+const CONTROL_BAND_PT = 132
 
 export function resolveBookPrintSettings(
   settings: DocumentBookPrintSettings | null | undefined,
@@ -90,12 +98,18 @@ function formatStamp(value: Date, timeZone: string): string {
  * It is a sheet of its own rather than an overlay because the document below it
  * is an already-rendered PDF whose content cannot be pushed down to make room.
  */
-function controlSheetHtml(entry: BookEntry, accent: string, timeZone: string): string {
-  const cell = 'border:1px solid #0f172a;padding:6px 10px;font-size:11px;vertical-align:middle;'
+function controlSheetHtml(
+  entry: BookEntry,
+  accent: string,
+  timeZone: string,
+  ownPage: boolean,
+): string {
+  const pad = ownPage ? '6px 10px' : '3px 8px'
+  const cell = `border:1px solid #0f172a;padding:${pad};font-size:${ownPage ? 11 : 9}px;vertical-align:middle;`
   const label = `${cell}width:22%;letter-spacing:.06em;text-transform:uppercase;color:#334155;`
   const value = `${cell}width:36%;`
   return `
-    <div style="padding-top:48px">
+    <div style="padding-top:${ownPage ? 48 : 0}px">
       <table style="width:100%;border-collapse:collapse;table-layout:fixed">
         <colgroup><col style="width:42%"><col style="width:22%"><col style="width:36%"></colgroup>
         <tbody>
@@ -105,7 +119,7 @@ function controlSheetHtml(entry: BookEntry, accent: string, timeZone: string): s
             <td style="${value}">${escapeHtml(formatMonthYear(entry.issuedAt, timeZone))}</td>
           </tr>
           <tr>
-            <td rowspan="4" style="${cell}background:${accent};color:#fff;font-size:21px;font-weight:700;line-height:1.25;">${escapeHtml(entry.title)}</td>
+            <td rowspan="4" style="${cell}background:${accent};color:#fff;font-size:${ownPage ? 21 : 15}px;font-weight:700;line-height:1.2;">${escapeHtml(entry.title)}</td>
             <td style="${label}">Revision date</td>
             <td style="${value}">${escapeHtml(formatMonthYear(entry.revisedAt, timeZone))}</td>
           </tr>
@@ -122,7 +136,7 @@ function controlSheetHtml(entry: BookEntry, accent: string, timeZone: string): s
           </tr>
         </tbody>
       </table>
-      <p style="margin-top:14px;font-size:10px;color:#64748b;letter-spacing:.04em;">${escapeHtml(entry.key)}</p>
+      <p style="margin-top:${ownPage ? 14 : 5}px;font-size:${ownPage ? 10 : 8}px;color:#64748b;letter-spacing:.04em;">${escapeHtml(entry.key)}</p>
     </div>`
 }
 
@@ -204,20 +218,20 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
     settings.documentHeaders && input.entries.length > 0
       ? await renderHtmlDocumentPdf({
           ...paper,
-          marginMm: 18,
+          marginMm: settings.documentHeadersOnOwnPage ? 18 : 6,
           bodyHtml: input.entries
             .map(
               (entry, i) =>
-                `<div style="${i > 0 ? 'page-break-before:always;' : ''}">${controlSheetHtml(entry, accent, input.timeZone)}</div>`,
+                `<div style="${i > 0 ? 'page-break-before:always;' : ''}">${controlSheetHtml(entry, accent, input.timeZone, settings.documentHeadersOnOwnPage)}</div>`,
             )
             .join(''),
         })
       : null
 
-  const hasSheet = controlSheetsPdf !== null
-  const bodyLengths = input.entries.map(
-    (entry) => (hasSheet ? 1 : 0) + Math.max(1, entry.pageCount),
-  )
+  // A block that rides on the document adds no page of its own, so it does not
+  // move where anything starts.
+  const ownPage = Boolean(controlSheetsPdf) && settings.documentHeadersOnOwnPage
+  const bodyLengths = input.entries.map((entry) => (ownPage ? 1 : 0) + Math.max(1, entry.pageCount))
 
   // Printed numbers start at the first BODY page: the cover and the contents
   // are unnumbered, exactly as a reader would count. That also means the
@@ -255,15 +269,27 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
   if (toc) parts.push({ bytes: toc, unnumbered: true })
 
   input.entries.forEach((entry, i) => {
-    // Each document's sheet is page i of the single rendered sheets document.
-    if (controlSheetsPdf) parts.push({ bytes: controlSheetsPdf, pages: [i] })
-    parts.push({ bytes: entry.pdf })
+    // Each document's block is page i of the single rendered sheets document —
+    // either as a sheet in its own right, or as a band on the document's first
+    // page.
+    if (controlSheetsPdf && ownPage) {
+      parts.push({ bytes: controlSheetsPdf, pages: [i] })
+      parts.push({ bytes: entry.pdf })
+      return
+    }
+    parts.push({
+      bytes: entry.pdf,
+      ...(controlSheetsPdf
+        ? { letterhead: { bytes: controlSheetsPdf, page: i, heightPt: CONTROL_BAND_PT } }
+        : {}),
+    })
   })
 
   const stamp = formatStamp(now, input.timeZone)
   return composePdf({
     geometry,
     parts,
+    marginPt: Math.max(0, settings.contentMarginMm) * PT_PER_MM,
     title: input.title,
     author: input.tenantName,
     footer: settings.footer

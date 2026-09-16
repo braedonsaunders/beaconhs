@@ -831,8 +831,8 @@ importers:
   packages/office:
     dependencies:
       '@braedonsaunders/appkit-pdf':
-        specifier: ^0.2.1
-        version: 0.2.1(isomorphic-dompurify@3.18.0(@noble/hashes@2.2.0)(canvas@3.2.3))(puppeteer-core@25.3.0)(tailwindcss@4.3.2)
+        specifier: ^0.3.0
+        version: 0.3.0(isomorphic-dompurify@3.18.0(@noble/hashes@2.2.0)(canvas@3.2.3))(puppeteer-core@25.3.0)(tailwindcss@4.3.2)
     devDependencies:
       '@types/node':
         specifier: ^24.13.2
@@ -1415,8 +1415,8 @@ packages:
     resolution: {integrity: sha512-H0gYz2CMTG1AF37n+uFpchtjBz8GOMOIqfhgBOGSEIcfL0U9LSeoOccvJNSApilTxUezOteLcOuBFJ1g+60wmg==}
     engines: {node: '>=22'}
 
-  '@braedonsaunders/appkit-pdf@0.2.1':
-    resolution: {integrity: sha512-uA6DI+p1ZwU24jv0n+NQ27MkDhSdMAeVRG0fO8Z6/sQ6UZWg3yOKovmZSD5hWrTLSZC/Rb0Khq/wmkOLaXsfPA==}
+  '@braedonsaunders/appkit-pdf@0.3.0':
+    resolution: {integrity: sha512-Ee5REO5M5NVh0+nu7/rNTLNUvZr5jvzwn+4kvFJoHIHLC6thcx7p3QkDvgGfqrFWBS9VntF0rVatG0//segRow==}
     engines: {node: '>=22'}
     peerDependencies:
       isomorphic-dompurify: ^3.18.0
@@ -9301,7 +9301,7 @@ snapshots:
 
   '@braedonsaunders/appkit-analytics@0.2.0': {}
 
-  '@braedonsaunders/appkit-pdf@0.2.1(isomorphic-dompurify@3.18.0(@noble/hashes@2.2.0)(canvas@3.2.3))(puppeteer-core@25.3.0)(tailwindcss@4.3.2)':
+  '@braedonsaunders/appkit-pdf@0.3.0(isomorphic-dompurify@3.18.0(@noble/hashes@2.2.0)(canvas@3.2.3))(puppeteer-core@25.3.0)(tailwindcss@4.3.2)':
     dependencies:
       '@braedonsaunders/appkit-tokens': 0.1.2(tailwindcss@4.3.2)
       pdf-lib: 1.17.1

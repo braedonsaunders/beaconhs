@@ -13,9 +13,13 @@ describe('resolveBookPrintSettings', () => {
     expect(resolveBookPrintSettings(null)).toEqual({
       paperSize: 'letter',
       orientation: 'portrait',
+      contentMarginMm: 0,
       coverPage: true,
       tableOfContents: true,
       documentHeaders: true,
+      // The control block rides on the document by default: a sheet of its own
+      // doubles the page count of a book of one-page documents.
+      documentHeadersOnOwnPage: false,
       footer: true,
       documentPageBreaks: true,
     })
