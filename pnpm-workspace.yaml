@@ -16,36 +16,23 @@ overrides:
   # Node canvas backend is unused and otherwise installs a second native ABI.
   'pdfjs-dist@4.10.38>@napi-rs/canvas': '-'
   'vite@8.1.4>sass': '-'
-  # NB: several entries below exist purely to lift a transitive dependency onto
-  # a patched release. Advisories keep landing on these, so when bumping one,
-  # check it is still at or above the current first-patched version rather than
-  # assuming the pin is safe because it is newer than what the parent asked for.
-  dompurify: 3.4.13
   esbuild@0.18.20: 0.25.12
   esbuild@0.28.0: 0.28.1
   form-data: 4.0.6
   ioredis: 5.11.1
   kysely: 0.28.17
   lodash-es: 4.18.1
-  nanoid@3.3.3: 3.3.19
-  nanoid@4.0.2: 5.1.16
-  postcss@8.4.31: 8.5.23
-  undici@7.27.2: 7.29.0
   uuid@8.3.2: 11.1.1
-  # Transitive advisory fixes: each parent pins a vulnerable range it has not
-  # released against yet.
-  'js-yaml@4.2.0': 4.3.2
-  'fast-uri@3.1.3': 3.1.6
-  'browserslist@4.28.6': 4.28.7
-  'smol-toml@1.7.0': 1.7.1
-  'baseline-browser-mapping@2.10.43': 2.11.0
-  mermaid: 11.16.1
-  # brace-expansion has advisories open against all three major lines still in
-  # the tree, so each needs lifting separately — a single override would force
-  # incompatible majors onto parents that ask for 1.x or 2.x.
-  'brace-expansion@1.1.15': 1.1.21
-  'brace-expansion@2.1.1': 2.1.7
-  'brace-expansion@5.0.6': 5.0.12
+  # Excalidraw pins these two nanoid versions EXACTLY, and both sit in advisory
+  # ranges (< 3.3.18, and >= 4.0.0 < 5.1.16). Nothing else in the tree needs an
+  # advisory override: every other flagged package reaches a patched version on
+  # its own once the lockfile is refreshed. Before adding an override for a
+  # security alert, delete it and reinstall first — a stale lockfile looks
+  # exactly like a package that needs pinning, and an override that is not
+  # load-bearing silently becomes the thing holding a vulnerable version in
+  # place.
+  nanoid@3.3.3: 3.3.19 # via @excalidraw/excalidraw@0.18.1
+  nanoid@4.0.2: 5.1.16 # via @excalidraw/mermaid-to-excalidraw@2.2.2
 
 peerDependencyRules:
   ignoreMissing:

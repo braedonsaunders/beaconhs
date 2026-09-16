@@ -9,27 +9,15 @@ overrides:
   next@16.3.5>sass: '-'
   pdfjs-dist@4.10.38>@napi-rs/canvas: '-'
   vite@8.1.4>sass: '-'
-  dompurify: 3.4.13
   esbuild@0.18.20: 0.25.12
   esbuild@0.28.0: 0.28.1
   form-data: 4.0.6
   ioredis: 5.11.1
   kysely: 0.28.17
   lodash-es: 4.18.1
+  uuid@8.3.2: 11.1.1
   nanoid@3.3.3: 3.3.19
   nanoid@4.0.2: 5.1.16
-  postcss@8.4.31: 8.5.23
-  undici@7.27.2: 7.29.0
-  uuid@8.3.2: 11.1.1
-  js-yaml@4.2.0: 4.3.2
-  fast-uri@3.1.3: 3.1.6
-  browserslist@4.28.6: 4.28.7
-  smol-toml@1.7.0: 1.7.1
-  baseline-browser-mapping@2.10.43: 2.11.0
-  mermaid: 11.16.1
-  brace-expansion@1.1.15: 1.1.21
-  brace-expansion@2.1.1: 2.1.7
-  brace-expansion@5.0.6: 5.0.12
 
 patchedDependencies:
   pagedjs@0.4.3:
@@ -7325,13 +7313,13 @@ packages:
     resolution: {integrity: sha512-YGFOfVrjxYfeGTS5XctP1WCI5hu8Lr9SmntjfRC+iX5hCihEO+QZl9Ra+pkjqkgoVdDKvb2JccpElcowhZtzpw==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
-      postcss: 8.5.23
+      postcss: ^8.4
 
   postcss-safe-parser@7.0.1:
     resolution: {integrity: sha512-0AioNCJZ2DPYz5ABT6bddIqlhgwhpHZ/l65YAYo0BCIn0xiDpsnTHz0gnoTGk0OXZW0JRs+cDwL8u/teRdz+8A==}
     engines: {node: '>=18.0'}
     peerDependencies:
-      postcss: 8.5.23
+      postcss: ^8.4.31
 
   postcss-selector-parser@6.0.10:
     resolution: {integrity: sha512-IQ7TZdoaqbT+LCpShg46jnZVlhWD2w6iQYAcYXfHARZ7X1t/UGhhceQDs5X0cGqKvYlHNOuv7Oa1xmb0oQuA3w==}
@@ -8228,7 +8216,7 @@ packages:
     resolution: {integrity: sha512-Js0m9cx+qOgDxo0eMiFGEueWztz+d4+M3rGlmKPT+T4IS/jP4ylw3Nwpu6cpTTP8R1MAC1kF4VbdLt3ARf209w==}
     hasBin: true
     peerDependencies:
-      browserslist: 4.28.7
+      browserslist: '>= 4.21.0'
 
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
