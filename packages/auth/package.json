@@ -21,6 +21,7 @@
     "@beaconhs/db": "workspace:*",
     "@beaconhs/emails": "workspace:*",
     "@beaconhs/jobs": "workspace:*",
+    "bcryptjs": "^3.0.3",
     "better-auth": "^1.6.23",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.22.0"

@@ -7,6 +7,7 @@ import {
   inviteGrantFromCallbackURL,
   INVITE_LINK_TTL_SECONDS,
 } from './invites'
+import { verifyLegacyOrCurrentPassword } from './legacy-password'
 
 function createAuth() {
   const databaseUrl = process.env.DATABASE_URL
@@ -42,6 +43,13 @@ function createAuth() {
       requireEmailVerification: false,
       minPasswordLength: 8,
       autoSignIn: true,
+      password: {
+        // Accept the bcrypt hashes carried over from the legacy BeaconHS as well
+        // as Better-Auth's own scrypt hashes, so migrated users sign in with the
+        // password they already have. `hash` is intentionally left at the
+        // default: nothing new is ever written as bcrypt.
+        verify: verifyLegacyOrCurrentPassword,
+      },
       // Self-service password reset. `url` already points at the API callback
       // (`/api/auth/reset-password/<token>?callbackURL=/reset-password`), which
       // validates the token and forwards the user to our /reset-password page.
