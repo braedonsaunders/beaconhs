@@ -208,6 +208,15 @@ export async function renderHtmlDocumentPdf(input: {
   marginMm: number
   headerHtml?: string | null
   footerHtml?: string | null
+  /**
+   * Exact page size in points, overriding `paperSize`/`orientation`.
+   *
+   * For strips that are LAID ONTO another page — a control block banded across
+   * the top of a document — the source has to be the size of the band. Rendered
+   * on a full sheet instead, fitting it into the band scales the whole page
+   * down and the content shrinks to a fraction of its intended size.
+   */
+  pageSizePt?: { width: number; height: number }
 }): Promise<Buffer> {
   const formatMap = { letter: 'Letter', a4: 'A4', legal: 'Legal' } as const
   const m = `${Math.max(0, input.marginMm)}mm`
@@ -232,8 +241,17 @@ export async function renderHtmlDocumentPdf(input: {
   try {
     await setPdfContent(page, html)
     const pdf = await page.pdf({
-      format: formatMap[input.paperSize] ?? 'Letter',
-      landscape: input.orientation === 'landscape',
+      // Expressed in inches: Chromium accepts px/in/cm/mm but not pt, and
+      // points divide cleanly by 72.
+      ...(input.pageSizePt
+        ? {
+            width: `${input.pageSizePt.width / 72}in`,
+            height: `${input.pageSizePt.height / 72}in`,
+          }
+        : {
+            format: formatMap[input.paperSize] ?? 'Letter',
+            landscape: input.orientation === 'landscape',
+          }),
       printBackground: true,
       margin: { top: m, bottom: m, left: m, right: m },
       displayHeaderFooter: Boolean(input.headerHtml || input.footerHtml),

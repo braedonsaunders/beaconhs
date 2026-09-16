@@ -281,7 +281,10 @@ export async function bulkAddDocumentsToBook(args: {
       throw new Error(`Document books may contain at most ${MAX_DOCUMENT_BOOK_ITEMS} documents.`)
     }
 
-    const addedIds = added.map((row) => row.documentId)
+    // `documentId` is nullable now that a book entry may be a section divider;
+    // these rows are documents we just inserted, so drop the null case rather
+    // than asserting it away.
+    const addedIds = added.flatMap((row) => (row.documentId === null ? [] : [row.documentId]))
     const bookLabel = book.title || 'Untitled book'
     for (const id of addedIds) {
       await recordAuditInTransaction(tx, ctx, {

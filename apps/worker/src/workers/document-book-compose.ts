@@ -16,6 +16,7 @@ import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
 // Not exported: callers build these structurally as part of ComposeBookInput,
 // so exporting the name only creates an unused public symbol.
 type BookEntry = {
+  kind: 'document'
   title: string
   key: string
   version: number
@@ -29,6 +30,21 @@ type BookEntry = {
   approvedBy?: string | null
 }
 
+/** A divider that names the run of documents after it. */
+type BookSection = { kind: 'section'; title: string }
+
+export type ComposeBookNode = BookEntry | BookSection
+
+/**
+ * A cover designed in the PDF template designer, already merged with the
+ * book's values. When a tenant has one, it replaces the generated cover
+ * wholesale — the point of the designer is that the tenant owns the layout.
+ */
+type DesignedCover = {
+  html: string
+  marginMm: number
+}
+
 export type ComposeBookInput = {
   title: string
   description?: string | null
@@ -37,10 +53,11 @@ export type ComposeBookInput = {
   accentColor?: string | null
   publishedAt?: Date | null
   settings?: DocumentBookPrintSettings | null
-  entries: BookEntry[]
+  entries: ComposeBookNode[]
   /** IANA zone for the printed-at stamp and document dates. */
   timeZone: string
   now?: Date
+  designedCover?: DesignedCover | null
 }
 
 const DEFAULTS = {
@@ -164,15 +181,40 @@ function coverHtml(input: ComposeBookInput, accent: string): string {
     </div>`
 }
 
-function tableOfContentsHtml(
-  rows: { title: string; key: string; version: number; page: number }[],
-  accent: string,
-): string {
+type TocRow =
+  | { kind: 'section'; title: string; page: number }
+  | { kind: 'document'; title: string; key: string; version: number; page: number }
+
+/**
+ * A divider page: the section name, centred, with the accent rule.
+ *
+ * A 196-document manual with nothing between its documents is unreadable —
+ * this is the page a reader flips to when looking for a part of the book.
+ */
+function sectionDividerHtml(title: string, accent: string): string {
+  return `
+    <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 14%">
+      <div style="width:64px;height:3px;background:${accent};margin-bottom:26px"></div>
+      <h2 style="margin:0;font-size:30px;line-height:1.2;font-weight:700;color:#0f172a">${escapeHtml(title)}</h2>
+    </div>`
+}
+
+function tableOfContentsHtml(rows: TocRow[], accent: string): string {
+  // Sections become headings within the listing, so the contents mirrors the
+  // shape of the book rather than presenting 196 undifferentiated lines.
   const items = rows
-    .map(
-      (row) => `
+    .map((row) =>
+      row.kind === 'section'
+        ? `
       <tr>
-        <td style="padding:7px 0;font-size:12px;color:#0f172a;">
+        <td colspan="3" style="padding:16px 0 5px">
+          <div style="font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#334155">${escapeHtml(row.title)}</div>
+          <div style="height:2px;background:${accent};width:46px;margin-top:5px"></div>
+        </td>
+      </tr>`
+        : `
+      <tr>
+        <td style="padding:7px 0 7px 14px;font-size:12px;color:#0f172a;">
           ${escapeHtml(row.title)}
           <span style="color:#94a3b8"> · v${row.version}</span>
         </td>
@@ -206,6 +248,11 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
   const geometry = pageGeometry(settings.paperSize, settings.orientation)
   const paper = { paperSize: settings.paperSize, orientation: settings.orientation } as const
 
+  // Split once: control sheets and page maths only concern documents, while
+  // dividers need their own generated page.
+  const documents = input.entries.flatMap((node) => (node.kind === 'document' ? [node] : []))
+  const sections = input.entries.flatMap((node) => (node.kind === 'section' ? [node] : []))
+
   // Control sheets are part of the body, so they must exist before the contents
   // can know where anything starts.
   //
@@ -215,11 +262,17 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
   // ~12s render, dwarfing every other phase combined. One render, then each
   // sheet is sliced out by page index at composition time.
   const controlSheetsPdf =
-    settings.documentHeaders && input.entries.length > 0
+    settings.documentHeaders && documents.length > 0
       ? await renderHtmlDocumentPdf({
           ...paper,
-          marginMm: settings.documentHeadersOnOwnPage ? 18 : 6,
-          bodyHtml: input.entries
+          marginMm: settings.documentHeadersOnOwnPage ? 18 : 4,
+          // When the block rides on a document it is a BAND, so it must be
+          // rendered at band size. On a full sheet, fitting it into the band
+          // scales the whole page and the table shrinks to a sixth of its size.
+          ...(settings.documentHeadersOnOwnPage
+            ? {}
+            : { pageSizePt: { width: geometry.width, height: CONTROL_BAND_PT } }),
+          bodyHtml: documents
             .map(
               (entry, i) =>
                 `<div style="${i > 0 ? 'page-break-before:always;' : ''}">${controlSheetHtml(entry, accent, input.timeZone, settings.documentHeadersOnOwnPage)}</div>`,
@@ -228,25 +281,49 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
         })
       : null
 
+  // Divider pages, likewise batched into one render.
+  const sectionPagesPdf =
+    sections.length > 0
+      ? await renderHtmlDocumentPdf({
+          ...paper,
+          marginMm: 0,
+          bodyHtml: sections
+            .map(
+              (section, i) =>
+                `<div style="${i > 0 ? 'page-break-before:always;' : ''}">${sectionDividerHtml(section.title, accent)}</div>`,
+            )
+            .join(''),
+        })
+      : null
+
   // A block that rides on the document adds no page of its own, so it does not
   // move where anything starts.
   const ownPage = Boolean(controlSheetsPdf) && settings.documentHeadersOnOwnPage
-  const bodyLengths = input.entries.map((entry) => (ownPage ? 1 : 0) + Math.max(1, entry.pageCount))
 
+  // Walk the book in order, assigning each node its first printed page.
+  //
   // Printed numbers start at the first BODY page: the cover and the contents
   // are unnumbered, exactly as a reader would count. That also means the
-  // numbers do not depend on how many pages the contents itself runs to, so
-  // there is no chicken-and-egg to resolve — offsetting by the front matter
-  // simply made every entry wrong by the length of the contents.
-  //
-  // An entry points at the document's control sheet, which is that document's
-  // first page in the book.
+  // numbers do not depend on how long the contents itself runs to, so there is
+  // no chicken-and-egg to resolve — offsetting by the front matter simply made
+  // every entry wrong by the length of the contents.
   let cursor = 1
-  const tocRows = input.entries.map((entry, i) => {
+  const tocRows: TocRow[] = input.entries.map((node) => {
     const page = cursor
-    cursor += bodyLengths[i]!
-    return { title: entry.title, key: entry.key, version: entry.version, page }
+    if (node.kind === 'section') {
+      cursor += 1
+      return { kind: 'section', title: node.title, page }
+    }
+    cursor += (ownPage ? 1 : 0) + Math.max(1, node.pageCount)
+    return {
+      kind: 'document',
+      title: node.title,
+      key: node.key,
+      version: node.version,
+      page,
+    }
   })
+
   const toc = settings.tableOfContents
     ? await renderHtmlDocumentPdf({
         ...paper,
@@ -257,33 +334,46 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
 
   const parts: ComposePart[] = []
   if (settings.coverPage) {
+    // A designed cover wins outright: the tenant owns that layout, and second
+    // guessing it with generated markup would defeat the designer.
+    const cover = input.designedCover
     parts.push({
       bytes: await renderHtmlDocumentPdf({
         ...paper,
-        marginMm: 0,
-        bodyHtml: coverHtml(input, accent),
+        marginMm: cover ? cover.marginMm : 0,
+        bodyHtml: cover ? cover.html : coverHtml(input, accent),
       }),
       unnumbered: true,
     })
   }
   if (toc) parts.push({ bytes: toc, unnumbered: true })
 
-  input.entries.forEach((entry, i) => {
+  let documentIndex = 0
+  let sectionIndex = 0
+  for (const node of input.entries) {
+    if (node.kind === 'section') {
+      // Numbered, not `unnumbered`: a divider is a page of the manual a reader
+      // pages past, and skipping it would make every following number wrong.
+      if (sectionPagesPdf) parts.push({ bytes: sectionPagesPdf, pages: [sectionIndex] })
+      sectionIndex += 1
+      continue
+    }
+    const i = documentIndex++
     // Each document's block is page i of the single rendered sheets document —
     // either as a sheet in its own right, or as a band on the document's first
     // page.
     if (controlSheetsPdf && ownPage) {
       parts.push({ bytes: controlSheetsPdf, pages: [i] })
-      parts.push({ bytes: entry.pdf })
-      return
+      parts.push({ bytes: node.pdf })
+      continue
     }
     parts.push({
-      bytes: entry.pdf,
+      bytes: node.pdf,
       ...(controlSheetsPdf
         ? { letterhead: { bytes: controlSheetsPdf, page: i, heightPt: CONTROL_BAND_PT } }
         : {}),
     })
-  })
+  }
 
   const stamp = formatStamp(now, input.timeZone)
   return composePdf({

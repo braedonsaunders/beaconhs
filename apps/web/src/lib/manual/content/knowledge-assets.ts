@@ -426,6 +426,27 @@ A book bundles related documents into one big PDF — for example, a full safety
 
 Published books are fixed to the exact document versions approved when the book was published. A newer document version does not change an already published book.
 
+### Building a book
+
+While a book is a **draft**, open it to change what is inside:
+
+1. Pick a document in **Add document** and tap **Add**.
+2. To break a long book into parts, type a heading in **Section heading** and tap **Add section**.
+3. Drag any row to reorder it, or use the up and down arrows.
+4. Tap the pencil on a section to rename it, or the bin to remove a row.
+5. Tap **Publish** when the contents are right. Published books are locked — tap **Unpublish** to edit again.
+
+Sections print as their own divider page and group the contents list, so a long manual is easy to navigate.
+
+### What a book PDF contains
+
+- A **title page** with your company logo.
+- A **contents** list with real page numbers.
+- A control block at the top of each document showing its category, issue and revision dates, approver and version.
+- **UNCONTROLLED WHEN PRINTED** and a page number on every page.
+
+Tap **Render PDF** to build it. Large books take a few seconds — the button shows a spinner while it works.
+
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
 ## Tips

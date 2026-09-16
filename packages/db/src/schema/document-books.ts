@@ -3,14 +3,25 @@
 // Ordered membership is normalized here so drag-reorder and add/remove operations
 // are relational, tenant-scoped, and concurrency-safe.
 
-import { relations } from 'drizzle-orm'
-import { foreignKey, index, integer, pgTable, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { relations, sql } from 'drizzle-orm'
+import {
+  foreignKey,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { tenants } from './core'
 import { documentBooks, documents, documentVersions } from './documents'
 
 // Note: the `documentBookStatus` enum and `documentBooks` table live in documents.ts
 // (they predate this file). Import from there directly.
+
+export const documentBookItemKind = pgEnum('document_book_item_kind', ['document', 'section'])
 
 export const documentBookItems = pgTable(
   'document_book_items',
@@ -20,7 +31,15 @@ export const documentBookItems = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     bookId: uuid('book_id').notNull(),
-    documentId: uuid('document_id').notNull(),
+    // What this row IS. A book is an ordered list of entries, most of which
+    // point at a document; a `section` is a divider that carries only a
+    // heading, so it has a title and no document.
+    kind: documentBookItemKind('kind').notNull().default('document'),
+    // Null for a section — the composite FK below is MATCH SIMPLE, so a null
+    // document simply is not checked against documents.
+    documentId: uuid('document_id'),
+    /** Section heading. Null for document entries, which take their title from the document. */
+    title: text('title'),
     // Null while the book is a draft. Publishing pins every item to the exact
     // immutable version rendered for readers.
     documentVersionId: uuid('document_version_id'),
@@ -36,7 +55,11 @@ export const documentBookItems = pgTable(
       t.documentId,
       t.documentVersionId,
     ),
-    bookDocUx: uniqueIndex('document_book_items_book_doc_ux').on(t.bookId, t.documentId),
+    // A document appears at most once per book; sections have no document and
+    // a book may hold any number of them, so the rule is partial.
+    bookDocUx: uniqueIndex('document_book_items_book_doc_ux')
+      .on(t.bookId, t.documentId)
+      .where(sql`${t.documentId} is not null`),
     bookFk: foreignKey({
       name: 'document_book_items_tenant_book_fk',
       columns: [t.tenantId, t.bookId],

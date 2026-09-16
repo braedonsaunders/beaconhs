@@ -56,7 +56,8 @@ export async function publishedBookReferencesForDocuments(
   const ids = [...new Set(documentIds)]
   if (ids.length === 0) return []
 
-  return tx
+  // Section dividers carry no document, so they can never reference one.
+  const rows = await tx
     .select({
       documentId: documentBookItems.documentId,
       bookId: documentBooks.id,
@@ -78,6 +79,10 @@ export async function publishedBookReferencesForDocuments(
       ),
     )
     .orderBy(asc(documentBooks.title), asc(documentBooks.id))
+
+  return rows.flatMap((row) =>
+    row.documentId === null ? [] : [{ ...row, documentId: row.documentId }],
+  )
 }
 
 export function publishedBookDocumentIds(
@@ -136,7 +141,10 @@ export async function publishDocumentBook(
   if (!book) throw new Error('Document book not found.')
   if (book.status === 'published') return false
 
-  const items: PublishableBookItem[] = await tx
+  // Only document entries are publishable. Sections are dividers with no
+  // version to pin, and the inner join drops them anyway — the explicit filter
+  // states the intent rather than relying on that.
+  const itemRows = await tx
     .select({
       itemId: documentBookItems.id,
       documentId: documentBookItems.documentId,
@@ -154,10 +162,20 @@ export async function publishDocumentBook(
         eq(documents.id, documentBookItems.documentId),
       ),
     )
-    .where(and(eq(documentBookItems.tenantId, ctx.tenantId), eq(documentBookItems.bookId, bookId)))
+    .where(
+      and(
+        eq(documentBookItems.tenantId, ctx.tenantId),
+        eq(documentBookItems.bookId, bookId),
+        eq(documentBookItems.kind, 'document'),
+      ),
+    )
     .orderBy(asc(documentBookItems.position), asc(documentBookItems.id))
     .limit(MAX_DOCUMENT_BOOK_ITEMS + 1)
     .for('update', { of: documents })
+
+  const items: PublishableBookItem[] = itemRows.flatMap((row) =>
+    row.documentId === null ? [] : [{ ...row, documentId: row.documentId }],
+  )
 
   if (items.length === 0) {
     resolveDocumentBookItems({ mode: 'publish', items, versions: [], attachments: [] })

@@ -54,8 +54,23 @@ const MODULE_PDF_TARGETS: { moduleKey: string; label: string }[] = [
   { moduleKey: 'vehicle-log', label: 'Vehicle log (monthly sheet)' },
 ]
 
+/**
+ * Subjects that are designed like a module template but are NOT printed from a
+ * record route: they are rendered as part of a larger document.
+ *
+ * The document-book cover is one sheet of a composed manual — there is no
+ * "print this cover" route to back it, which is exactly what separates it from
+ * MODULE_PDF_TARGETS above.
+ */
+const COMPONENT_PDF_TARGETS: { moduleKey: string; label: string }[] = [
+  { moduleKey: 'document-books', label: 'Document book (cover)' },
+]
+
 export function isModulePdfTarget(moduleKey: string): boolean {
-  return MODULE_PDF_TARGETS.some((t) => t.moduleKey === moduleKey)
+  return (
+    MODULE_PDF_TARGETS.some((t) => t.moduleKey === moduleKey) ||
+    COMPONENT_PDF_TARGETS.some((t) => t.moduleKey === moduleKey)
+  )
 }
 
 // Merge a template with a record's values and print it via template_pdf.
@@ -218,7 +233,7 @@ export async function listModulePdfDefaults(ctx: RequestContext): Promise<Module
       )
       .orderBy(asc(pdfTemplates.name)),
   )
-  return MODULE_PDF_TARGETS.map((t) => {
+  return [...MODULE_PDF_TARGETS, ...COMPONENT_PDF_TARGETS].map((t) => {
     const forModule = rows.filter((r) => r.moduleKey === t.moduleKey)
     return {
       moduleKey: t.moduleKey,

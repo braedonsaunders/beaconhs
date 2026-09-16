@@ -27,6 +27,7 @@ import {
   documentVersions,
   documents,
   emailLog,
+  pdfTemplates,
   formResponses,
   tenantUsers,
   tenants,
@@ -49,7 +50,8 @@ import {
 } from '@beaconhs/storage'
 import { renderDocumentMasterPdf, renderDocumentVersion } from './document-render'
 import { countPages, pdfUnite } from '@beaconhs/office'
-import { composeDocumentBook } from './document-book-compose'
+import { composeDocumentBook, type ComposeBookNode } from './document-book-compose'
+import { renderTemplate } from '@beaconhs/email-render'
 import { audit } from '@beaconhs/audit'
 import { assertEmailAttachmentSize } from '../lib/email-attachment-policy'
 import { commitExternalArtifact } from '../lib/external-artifact-commit'
@@ -109,6 +111,62 @@ async function loadBrandingLogoDataUrl(logoUrl: string | null | undefined): Prom
     return null
   }
 }
+/**
+ * One entry in a book's render order: a document, or a section divider that
+ * carries only a heading.
+ */
+type BookRenderEntry =
+  | { kind: 'section'; title: string }
+  | {
+      kind: 'document'
+      title: string
+      key: string
+      version: number
+      pdfKey: string
+      sizeBytes: number
+      category: string | null
+      type: string | null
+      issuedAt: Date | null
+      approvedBy: string | null
+    }
+
+/**
+ * The tenant's designed cover for document books, merged with this book's
+ * values.
+ *
+ * Null when none is configured, which is the normal case — the generated cover
+ * stays the default so a book looks finished without anyone opening the
+ * designer.
+ */
+async function loadDesignedBookCover(
+  tx: Parameters<Parameters<typeof withTenant>[2]>[0],
+  tenantId: string,
+  values: Record<string, unknown>,
+): Promise<{ html: string; marginMm: number } | null> {
+  const [tpl] = await tx
+    .select({
+      compiledHtml: pdfTemplates.compiledHtml,
+      marginMm: pdfTemplates.marginMm,
+    })
+    .from(pdfTemplates)
+    .where(
+      and(
+        eq(pdfTemplates.tenantId, tenantId),
+        eq(pdfTemplates.recordSubjectType, 'module'),
+        eq(pdfTemplates.recordSubjectKey, 'document-books'),
+        eq(pdfTemplates.isActive, true),
+        eq(pdfTemplates.isModuleDefault, true),
+        isNull(pdfTemplates.deletedAt),
+      ),
+    )
+    .limit(1)
+  if (!tpl?.compiledHtml?.trim()) return null
+  return {
+    html: renderTemplate(tpl.compiledHtml, values, { escapeHtml: true }),
+    marginMm: tpl.marginMm,
+  }
+}
+
 const MAX_DOCUMENT_BOOK_SOURCE_BYTES = 50 * 1024 * 1024
 const MAX_DOCUMENT_BOOK_TOTAL_SOURCE_BYTES = 250 * 1024 * 1024
 
@@ -588,25 +646,26 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
       throw new Error('Published document book is missing its publication timestamp.')
     }
 
-    const items = await tx
+    // LEFT, not inner: a section divider has no document but still occupies a
+    // place in the order, and the renderer needs it there to emit a divider.
+    const bookRows = await tx
       .select({ item: documentBookItems, doc: documents })
       .from(documentBookItems)
-      .innerJoin(
+      .leftJoin(
         documents,
         and(
           eq(documents.tenantId, documentBookItems.tenantId),
           eq(documents.id, documentBookItems.documentId),
         ),
       )
-      .where(
-        and(
-          eq(documentBookItems.bookId, bookId),
-          eq(documentBookItems.tenantId, tenantId),
-          eq(documents.tenantId, tenantId),
-        ),
-      )
+      .where(and(eq(documentBookItems.bookId, bookId), eq(documentBookItems.tenantId, tenantId)))
       .orderBy(asc(documentBookItems.position))
-      .limit(MAX_DOCUMENT_BOOK_ITEMS + 1)
+      .limit(MAX_DOCUMENT_BOOK_ITEMS * 2 + 1)
+
+    // The cap counts documents; dividers are free.
+    const items = bookRows.flatMap((row) =>
+      row.doc && row.item.kind === 'document' ? [{ item: row.item, doc: row.doc }] : [],
+    )
     if (items.length > MAX_DOCUMENT_BOOK_ITEMS) {
       throw new Error(`Document books may contain at most ${MAX_DOCUMENT_BOOK_ITEMS} documents.`)
     }
@@ -797,19 +856,46 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
       }
     }
 
-    const entries = resolvedItems.map((item) => ({
-      title: item.documentTitle,
-      key: item.documentKey,
-      version: item.version,
-      pdfKey: item.attachmentKey,
-      sizeBytes: item.sizeBytes,
-      category: categoryByDoc.get(item.documentId) ?? null,
-      type: typeByDoc.get(item.documentId) ?? null,
-      issuedAt: issuedByVersion.get(item.versionId) ?? null,
-      approvedBy: approverByDoc.get(item.documentId) ?? null,
-    }))
+    // Rebuild the book's real order: resolveDocumentBookItems only sees
+    // documents, so its results are keyed back onto the full entry list to put
+    // section dividers where the editor placed them.
+    const resolvedByItemId = new Map(resolvedItems.map((item) => [item.itemId, item]))
+    const entries: BookRenderEntry[] = bookRows.flatMap((bookRow): BookRenderEntry[] => {
+      if (bookRow.item.kind === 'section') {
+        const title = bookRow.item.title?.trim()
+        return title ? [{ kind: 'section' as const, title }] : []
+      }
+      const item = resolvedByItemId.get(bookRow.item.id)
+      if (!item) return []
+      return [
+        {
+          kind: 'document' as const,
+          title: item.documentTitle,
+          key: item.documentKey,
+          version: item.version,
+          pdfKey: item.attachmentKey,
+          sizeBytes: item.sizeBytes,
+          category: categoryByDoc.get(item.documentId) ?? null,
+          type: typeByDoc.get(item.documentId) ?? null,
+          issuedAt: issuedByVersion.get(item.versionId) ?? null,
+          approvedBy: approverByDoc.get(item.documentId) ?? null,
+        },
+      ]
+    })
 
-    return { ...row, entries }
+    // Tokens a designed cover can reference. Kept flat and few on purpose:
+    // these are the facts about the book itself, and anything richer belongs
+    // in the body rather than the cover sheet.
+    const designedCover = await loadDesignedBookCover(tx, tenantId, {
+      book_title: row.b.title,
+      book_description: row.b.description ?? '',
+      tenant_name: row.tenant.name,
+      published_at: row.b.publishedAt ? row.b.publishedAt.toISOString().slice(0, 10) : '',
+      document_count: entries.filter((entry) => entry.kind === 'document').length,
+      section_count: entries.filter((entry) => entry.kind === 'section').length,
+    })
+
+    return { ...row, entries, designedCover }
   })
 
   if (!data) {
@@ -822,8 +908,10 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
   // Fetch every member in parallel. A 196-document book used to make 392
   // sequential round trips to object storage before a single page was drawn,
   // which dominated the render time.
+  // Section dividers are generated, not fetched — only documents have bytes.
+  const documentEntries = data.entries.flatMap((e) => (e.kind === 'document' ? [e] : []))
   const fetched = await Promise.all(
-    data.entries.map(async (e) => {
+    documentEntries.map(async (e) => {
       const metadata = await headObject({ key: e.pdfKey })
       if (!metadata) throw new Error(`Published PDF object is missing for document ${e.key}.`)
       if (
@@ -853,6 +941,12 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
 
   const pageCounts = await Promise.all(fetched.map((f) => countPages(f.bytes)))
 
+  // Stitch the fetched bytes back onto the full ordered list so dividers keep
+  // their place between the documents they introduce.
+  const byKey = new Map(
+    fetched.map((f, i) => [f.entry.key, { bytes: f.bytes, pages: pageCounts[i]! }]),
+  )
+
   const pdf = await composeDocumentBook({
     title,
     description: b.description,
@@ -864,18 +958,27 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
     // Tenants carry no timezone of their own (it lives on users), and a
     // printed manual needs one stable local stamp rather than the reader's.
     timeZone: BOOK_PRINT_TIMEZONE,
-    entries: fetched.map((f, i) => ({
-      title: f.entry.title,
-      key: f.entry.key,
-      version: f.entry.version,
-      pdf: f.bytes,
-      pageCount: pageCounts[i]!,
-      category: f.entry.category,
-      type: f.entry.type,
-      issuedAt: f.entry.issuedAt,
-      revisedAt: f.entry.issuedAt,
-      approvedBy: f.entry.approvedBy,
-    })),
+    designedCover: data.designedCover,
+    entries: data.entries.flatMap((e): ComposeBookNode[] => {
+      if (e.kind === 'section') return [{ kind: 'section' as const, title: e.title }]
+      const loaded = byKey.get(e.key)
+      if (!loaded) return []
+      return [
+        {
+          kind: 'document' as const,
+          title: e.title,
+          key: e.key,
+          version: e.version,
+          pdf: loaded.bytes,
+          pageCount: loaded.pages,
+          category: e.category,
+          type: e.type,
+          issuedAt: e.issuedAt,
+          revisedAt: e.issuedAt,
+          approvedBy: e.approvedBy,
+        },
+      ]
+    }),
   })
   assertGeneratedPdf(pdf)
 

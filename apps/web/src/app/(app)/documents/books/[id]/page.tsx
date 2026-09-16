@@ -43,6 +43,7 @@ import {
   unpublishDocumentBook,
 } from '@/lib/document-book-lifecycle'
 import { ReorderableList } from './_components/reorderable-list'
+import { addBookSectionAction } from './actions'
 import { PendingSubmitButton } from '@/components/pending-submit-button'
 
 export const dynamic = 'force-dynamic'
@@ -256,7 +257,9 @@ export default async function DocumentBookPage({
         pinnedVersion: documentVersions.version,
       })
       .from(documentBookItems)
-      .innerJoin(
+      // LEFT, not inner: a section divider has no document and must still
+      // appear in the editor, in its place in the order.
+      .leftJoin(
         documents,
         and(
           eq(documents.tenantId, documentBookItems.tenantId),
@@ -288,7 +291,9 @@ export default async function DocumentBookPage({
 
   if (!data) notFound()
   const { book, items, categories, types } = data
-  const memberIds = items.map((row) => row.doc.id)
+  // Only document entries are members; sections have no document to exclude
+  // from the add-document picker.
+  const memberIds = items.flatMap((row) => (row.doc ? [row.doc.id] : []))
   const basePath = `/documents/books/${id}`
   const display = book.title || '(untitled)'
   const categoryName = categories.find((category) => category.id === book.categoryId)?.name ?? null
@@ -384,16 +389,21 @@ export default async function DocumentBookPage({
                           <ReorderableList
                             key={items
                               .map(
-                                (row) => `${row.doc.id}:${row.item.documentVersionId ?? 'draft'}`,
+                                (row) =>
+                                  `${row.item.id}:${row.item.title ?? ''}:${row.item.documentVersionId ?? 'draft'}`,
                               )
                               .sort()
                               .join('|')}
                             bookId={id}
                             locked={book.status === 'published'}
                             initial={items.map((row) => ({
-                              documentId: row.doc.id,
-                              title: row.doc.title,
-                              status: row.doc.status,
+                              itemId: row.item.id,
+                              kind: row.item.kind,
+                              documentId: row.doc?.id ?? null,
+                              // A section carries its own heading; a document
+                              // entry takes the document's title.
+                              title: row.item.title ?? row.doc?.title ?? '',
+                              status: row.doc?.status ?? null,
                               pinnedVersion: row.pinnedVersion,
                             }))}
                           />
@@ -426,6 +436,32 @@ export default async function DocumentBookPage({
                           </div>
                           <Button type="submit">
                             <GeneratedText id="m_16c8592e5020a4" />
+                          </Button>
+                        </form>
+
+                        {/* Sections are what make a long manual navigable — an
+                            imported book can run to 196 documents with nothing
+                            between them. A section is appended and then dragged
+                            into place, same as a document. */}
+                        <form
+                          action={addBookSectionAction}
+                          className="mt-3 flex items-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800"
+                        >
+                          <input type="hidden" name="bookId" value={id} />
+                          <div className="min-w-0 flex-1 space-y-1.5">
+                            <Label htmlFor="sectionTitle">
+                              <GeneratedText id="m_0217bcd80ad7d2" />
+                            </Label>
+                            <Input
+                              id="sectionTitle"
+                              name="title"
+                              maxLength={120}
+                              required
+                              placeholder={tGenerated('m_0217bcd80ad7d2')}
+                            />
+                          </div>
+                          <Button type="submit" variant="outline">
+                            <GeneratedText id="m_0cfd5e4e441158" />
                           </Button>
                         </form>
                       </Section>
