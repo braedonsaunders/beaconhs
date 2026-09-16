@@ -8,7 +8,7 @@ import {
 
 export const TRAINING_EXTRA_FIELD_KEY_MAX = 120
 export const TRAINING_EXTRA_FIELD_VALUE_MAX = 500
-export const TRAINING_EXTRA_FIELD_OWNER_TYPES = ['skill', 'skill_type', 'authority'] as const
+const TRAINING_EXTRA_FIELD_OWNER_TYPES = ['skill', 'skill_type', 'authority'] as const
 
 export type TrainingExtraFieldOwnerType = (typeof TRAINING_EXTRA_FIELD_OWNER_TYPES)[number]
 

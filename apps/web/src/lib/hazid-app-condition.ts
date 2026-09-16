@@ -1,4 +1,4 @@
-export type HazidAppCondition = {
+type HazidAppCondition = {
   questionId: string
   operator: 'equals'
   value: string

@@ -11,7 +11,7 @@ import {
 const TRAINING_RECORD_FILE_KINDS = ['certificate', 'evidence', 'photo', 'other'] as const
 const MAX_FILE_LABEL_LENGTH = 300
 
-export const TRAINING_RECORD_SOURCES = [
+const TRAINING_RECORD_SOURCES = [
   'class',
   'self_paced',
   'evaluator',

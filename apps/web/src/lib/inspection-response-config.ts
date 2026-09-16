@@ -7,7 +7,7 @@ export const INSPECTION_RESPONSE_TYPES = [
   'number',
 ] as const
 
-export type AuthorableInspectionResponseType = (typeof INSPECTION_RESPONSE_TYPES)[number]
+type AuthorableInspectionResponseType = (typeof INSPECTION_RESPONSE_TYPES)[number]
 export type InspectionResponseType = AuthorableInspectionResponseType | 'rating'
 
 export const INSPECTION_RESPONSE_LABELS: Record<InspectionResponseType, string> = {

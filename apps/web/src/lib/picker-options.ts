@@ -5,7 +5,7 @@ import type { SelectOption } from '@beaconhs/ui'
  * names: each API branch has its own permission and visibility policy, so a
  * picker cannot become a generic tenant-directory escape hatch.
  */
-export const PICKER_LOOKUPS = [
+const PICKER_LOOKUPS = [
   'training-evaluation-people',
   'training-assessment-people',
   'training-assessment-types',
@@ -106,7 +106,7 @@ export const PICKER_LOOKUPS = [
 
 export type PickerLookup = (typeof PICKER_LOOKUPS)[number]
 
-export type PickerOptionMeta =
+type PickerOptionMeta =
   | {
       kind: 'dashboard-quick-action'
       href: string

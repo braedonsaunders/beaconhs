@@ -8,7 +8,7 @@ import {
   requireUuidInput,
 } from '../../../../lib/mutation-input'
 
-export const VEHICLE_LOG_MODES = ['destination', 'odometer'] as const
+const VEHICLE_LOG_MODES = ['destination', 'odometer'] as const
 export type VehicleLogMode = (typeof VEHICLE_LOG_MODES)[number]
 
 export type SaveVehicleLogEntryInput = {

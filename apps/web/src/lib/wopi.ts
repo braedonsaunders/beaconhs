@@ -41,7 +41,7 @@ function key(): Buffer {
 type WopiTarget = 'lesson' | 'content_item' | 'document'
 /** Training-deck subset (slides lessons + library items). */
 export type WopiDeckTarget = 'lesson' | 'content_item'
-export type WopiAudience = 'document' | 'author' | 'instructor' | 'learner'
+type WopiAudience = 'document' | 'author' | 'instructor' | 'learner'
 
 export type WopiGrant = {
   attachmentId: string
