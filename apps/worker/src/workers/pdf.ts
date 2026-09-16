@@ -20,11 +20,17 @@ import {
   attachments,
   documentBookItems,
   documentBooks,
+  documentCategories,
+  documentManagementReviewDocuments,
+  documentManagementReviews,
+  documentTypes,
   documentVersions,
   documents,
   emailLog,
   formResponses,
+  tenantUsers,
   tenants,
+  users,
 } from '@beaconhs/db/schema'
 import { renderHtmlDocumentPdf, renderRecordSummaryPdf } from '@beaconhs/forms-pdf'
 import {
@@ -42,7 +48,8 @@ import {
   putObject,
 } from '@beaconhs/storage'
 import { renderDocumentMasterPdf, renderDocumentVersion } from './document-render'
-import { pdfUnite } from '@beaconhs/office'
+import { countPages, pdfUnite } from '@beaconhs/office'
+import { composeDocumentBook } from './document-book-compose'
 import { audit } from '@beaconhs/audit'
 import { assertEmailAttachmentSize } from '../lib/email-attachment-policy'
 import { commitExternalArtifact } from '../lib/external-artifact-commit'
@@ -52,6 +59,56 @@ import {
 } from '../lib/pdf-artifact-policy'
 
 const MAX_GENERATED_PDF_BYTES = 200 * 1024 * 1024
+const BOOK_PRINT_TIMEZONE = 'America/Toronto'
+const MAX_BRANDING_LOGO_BYTES = 4 * 1024 * 1024
+const LOGO_CONTENT_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+}
+
+/**
+ * Turn a tenant's branding logo into a `data:` URL for the cover.
+ *
+ * It cannot simply be linked. Storage is private — `R2_PUBLIC_URL` is refused
+ * outright — so the plain URL sitting in `branding.logoUrl` is not fetchable,
+ * and the renderer's egress guard blocks it anyway because the storage host
+ * resolves to a private address both locally and inside the cluster. Reading
+ * the object directly avoids the network entirely.
+ *
+ * Best-effort on purpose: a missing or unreadable logo must not fail a
+ * 240-page manual, so the cover simply renders without it.
+ */
+async function loadBrandingLogoDataUrl(logoUrl: string | null | undefined): Promise<string | null> {
+  const raw = logoUrl?.trim()
+  if (!raw) return null
+  if (raw.startsWith('data:')) return raw
+  try {
+    const url = new URL(raw)
+    const endpoint = process.env.R2_ENDPOINT
+    const bucket = process.env.R2_BUCKET
+    if (!endpoint || !bucket) return null
+    if (url.origin !== new URL(endpoint).origin) return null
+    const prefix = `/${bucket}/`
+    if (!url.pathname.startsWith(prefix)) return null
+    const key = decodeURIComponent(url.pathname.slice(prefix.length))
+    if (!key) return null
+
+    const metadata = await headObject({ key })
+    if (!metadata || metadata.contentLength <= 0) return null
+    if (metadata.contentLength > MAX_BRANDING_LOGO_BYTES) return null
+    const bytes = await getObject({ key })
+    const extension = key.split('.').pop()?.toLowerCase() ?? ''
+    const contentType = LOGO_CONTENT_TYPES[extension] ?? 'image/png'
+    return `data:${contentType};base64,${bytes.toString('base64')}`
+  } catch (error) {
+    console.warn('[pdf] branding logo could not be inlined:', (error as Error).message)
+    return null
+  }
+}
 const MAX_DOCUMENT_BOOK_SOURCE_BYTES = 50 * 1024 * 1024
 const MAX_DOCUMENT_BOOK_TOTAL_SOURCE_BYTES = 250 * 1024 * 1024
 
@@ -634,12 +691,122 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
       versions,
       attachments: attachmentRows,
     })
+    // Control-sheet facts: the same fields the legacy manual printed above
+    // every policy (category, type, issue/revision dates, approver).
+    const categoryByDoc = new Map<string, string | null>()
+    const typeByDoc = new Map<string, string | null>()
+    const approverByDoc = new Map<string, string | null>()
+    const issuedByVersion = new Map<string, Date | null>()
+    if (documentIds.length > 0) {
+      const meta = await tx
+        .select({
+          documentId: documents.id,
+          category: documentCategories.name,
+          type: documentTypes.name,
+        })
+        .from(documents)
+        .leftJoin(
+          documentCategories,
+          and(
+            eq(documentCategories.tenantId, documents.tenantId),
+            eq(documentCategories.id, documents.categoryId),
+          ),
+        )
+        .leftJoin(
+          documentTypes,
+          and(
+            eq(documentTypes.tenantId, documents.tenantId),
+            eq(documentTypes.id, documents.typeId),
+          ),
+        )
+        .where(and(eq(documents.tenantId, tenantId), inArray(documents.id, documentIds)))
+      for (const m of meta) {
+        categoryByDoc.set(m.documentId, m.category)
+        typeByDoc.set(m.documentId, m.type)
+      }
+      for (const v of versions) issuedByVersion.set(v.id, null)
+      const published = await tx
+        .select({ id: documentVersions.id, publishedAt: documentVersions.publishedAt })
+        .from(documentVersions)
+        .where(
+          and(
+            eq(documentVersions.tenantId, tenantId),
+            inArray(
+              documentVersions.id,
+              versions.map((v) => v.id),
+            ),
+          ),
+        )
+      for (const p of published) issuedByVersion.set(p.id, p.publishedAt)
+
+      const approvals = await tx
+        .select({
+          documentId: documentManagementReviewDocuments.documentId,
+          periodEnd: documentManagementReviews.periodEnd,
+          // The legacy control block printed the review PARTICIPANTS as
+          // "approved by", not the review's title.
+          participants: documentManagementReviews.participants,
+        })
+        .from(documentManagementReviewDocuments)
+        .innerJoin(
+          documentManagementReviews,
+          and(
+            eq(documentManagementReviews.tenantId, documentManagementReviewDocuments.tenantId),
+            eq(documentManagementReviews.id, documentManagementReviewDocuments.managementReviewId),
+          ),
+        )
+        .where(
+          and(
+            eq(documentManagementReviewDocuments.tenantId, tenantId),
+            inArray(documentManagementReviewDocuments.documentId, documentIds),
+          ),
+        )
+        .orderBy(desc(documentManagementReviews.periodEnd))
+      // Most recent review wins; the query is ordered so the first hit per
+      // document is the latest.
+      // `participants` holds tenant_user ids, not names — printing them raw put
+      // a row of UUIDs in the "approved by" box of every control sheet.
+      const participantIds = [
+        ...new Set(approvals.flatMap((a) => a.participants ?? []).filter(Boolean)),
+      ]
+      const nameById = new Map<string, string>()
+      if (participantIds.length > 0) {
+        const members = await tx
+          .select({
+            id: tenantUsers.id,
+            displayName: tenantUsers.displayName,
+            userName: users.name,
+            email: users.email,
+          })
+          .from(tenantUsers)
+          .leftJoin(users, eq(users.id, tenantUsers.userId))
+          .where(and(eq(tenantUsers.tenantId, tenantId), inArray(tenantUsers.id, participantIds)))
+        for (const m of members) {
+          const label = m.displayName?.trim() || m.userName?.trim() || m.email?.trim()
+          if (label) nameById.set(m.id, label)
+        }
+      }
+      for (const a of approvals) {
+        if (approverByDoc.has(a.documentId)) continue
+        const names = (a.participants ?? [])
+          .map((id) => nameById.get(id))
+          .filter((n): n is string => Boolean(n))
+        // Semicolons, not commas: these are "Last, First" names, so a comma
+        // join reads as one long ambiguous list.
+        approverByDoc.set(a.documentId, names.length > 0 ? names.join('; ') : null)
+      }
+    }
+
     const entries = resolvedItems.map((item) => ({
       title: item.documentTitle,
       key: item.documentKey,
       version: item.version,
       pdfKey: item.attachmentKey,
       sizeBytes: item.sizeBytes,
+      category: categoryByDoc.get(item.documentId) ?? null,
+      type: typeByDoc.get(item.documentId) ?? null,
+      issuedAt: issuedByVersion.get(item.versionId) ?? null,
+      approvedBy: approverByDoc.get(item.documentId) ?? null,
     }))
 
     return { ...row, entries }
@@ -651,54 +818,66 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
 
   const b = data.b
   const title = b.title
-  const toc = data.entries
-    .map((e, i) => {
-      const label = `${i + 1}. ${escapeBookHtml(e.title)} — v${e.version}`
-      return `<li style="margin:4px 0">${label} <span style="color:#64748b">${escapeBookHtml(e.key)}</span></li>`
-    })
-    .join('')
-  const coverHtml = `
-    <div style="font-family: Arial, Helvetica, sans-serif; padding-top: 96px;">
-      <div style="color:#64748b; font-size:12px;">${escapeBookHtml(data.tenant.name)}</div>
-      <h1 style="font-size:30px; margin:8px 0 4px 0;">${escapeBookHtml(title)}</h1>
-      ${b.description ? `<p style="color:#334155">${escapeBookHtml(b.description)}</p>` : ''}
-      <h2 style="font-size:14px; margin-top:48px; text-transform:uppercase; letter-spacing:0.05em; color:#334155;">Contents</h2>
-      <ol style="list-style:none; padding:0; font-size:13px;">${toc}</ol>
-    </div>`
-  const coverPdf = await renderHtmlDocumentPdf({
-    bodyHtml: coverHtml,
-    paperSize: 'letter',
-    orientation: 'portrait',
-    marginMm: 18,
-    headerHtml: null,
-    footerHtml: null,
-  })
-  assertGeneratedPdf(coverPdf)
 
-  const parts: Buffer[] = [coverPdf]
-  let totalSourceBytes = coverPdf.length
-  for (const e of data.entries) {
-    const metadata = await headObject({ key: e.pdfKey })
-    if (!metadata) throw new Error(`Published PDF object is missing for document ${e.key}.`)
-    if (
-      metadata.contentLength <= 0 ||
-      metadata.contentLength !== e.sizeBytes ||
-      metadata.contentLength > MAX_DOCUMENT_BOOK_SOURCE_BYTES ||
-      totalSourceBytes + metadata.contentLength > MAX_DOCUMENT_BOOK_TOTAL_SOURCE_BYTES
-    ) {
-      throw new Error(`Published PDF for document ${e.key} exceeds the document-book size limit.`)
-    }
-    const bytes = await getObject({ key: e.pdfKey })
-    if (
-      bytes.length !== metadata.contentLength ||
-      !bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))
-    ) {
-      throw new Error(`Published PDF for document ${e.key} is missing, truncated, or invalid.`)
-    }
-    totalSourceBytes += bytes.length
-    parts.push(bytes)
+  // Fetch every member in parallel. A 196-document book used to make 392
+  // sequential round trips to object storage before a single page was drawn,
+  // which dominated the render time.
+  const fetched = await Promise.all(
+    data.entries.map(async (e) => {
+      const metadata = await headObject({ key: e.pdfKey })
+      if (!metadata) throw new Error(`Published PDF object is missing for document ${e.key}.`)
+      if (
+        metadata.contentLength <= 0 ||
+        metadata.contentLength !== e.sizeBytes ||
+        metadata.contentLength > MAX_DOCUMENT_BOOK_SOURCE_BYTES
+      ) {
+        throw new Error(`Published PDF for document ${e.key} exceeds the document-book size limit.`)
+      }
+      const bytes = await getObject({ key: e.pdfKey })
+      if (
+        bytes.length !== metadata.contentLength ||
+        !bytes.subarray(0, 5).equals(Buffer.from('%PDF-'))
+      ) {
+        throw new Error(`Published PDF for document ${e.key} is missing, truncated, or invalid.`)
+      }
+      return { entry: e, bytes }
+    }),
+  )
+
+  // The per-document cap is enforced above; this is the whole-book ceiling, so
+  // it has to be checked once the sizes are known rather than as they arrive.
+  const totalSourceBytes = fetched.reduce((sum, f) => sum + f.bytes.length, 0)
+  if (totalSourceBytes > MAX_DOCUMENT_BOOK_TOTAL_SOURCE_BYTES) {
+    throw new Error('Document book exceeds the total source size limit.')
   }
-  const pdf = await pdfUnite(parts)
+
+  const pageCounts = await Promise.all(fetched.map((f) => countPages(f.bytes)))
+
+  const pdf = await composeDocumentBook({
+    title,
+    description: b.description,
+    tenantName: data.tenant.name,
+    logoUrl: await loadBrandingLogoDataUrl(data.tenant.branding?.logoUrl),
+    accentColor: data.tenant.branding?.primaryColor ?? null,
+    publishedAt: b.publishedAt,
+    settings: b.printSettings,
+    // Tenants carry no timezone of their own (it lives on users), and a
+    // printed manual needs one stable local stamp rather than the reader's.
+    timeZone: BOOK_PRINT_TIMEZONE,
+    entries: fetched.map((f, i) => ({
+      title: f.entry.title,
+      key: f.entry.key,
+      version: f.entry.version,
+      pdf: f.bytes,
+      pageCount: pageCounts[i]!,
+      category: f.entry.category,
+      type: f.entry.type,
+      issuedAt: f.entry.issuedAt,
+      revisedAt: f.entry.issuedAt,
+      approvedBy: f.entry.approvedBy,
+    })),
+  })
+  assertGeneratedPdf(pdf)
 
   const stamp = Date.now()
   const stored = await storeTransientPdfArtifact({

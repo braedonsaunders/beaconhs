@@ -7,6 +7,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -322,6 +323,27 @@ export const documentReviews = pgTable(
 // Ordered membership lives in document_book_items (see document-books.ts).
 export const documentBookStatus = pgEnum('document_book_status', ['draft', 'published'])
 
+/**
+ * How a document book prints.
+ *
+ * Every field is optional: a book that has never been configured still gets the
+ * house defaults, so turning the richer output on did not require editing 8
+ * existing books by hand.
+ */
+export type DocumentBookPrintSettings = {
+  paperSize?: 'letter' | 'a4' | 'legal'
+  orientation?: 'portrait' | 'landscape'
+  /** Title page with the tenant logo. */
+  coverPage?: boolean
+  tableOfContents?: boolean
+  /** The controlled-document block (category, revision, approver, version). */
+  documentHeaders?: boolean
+  /** "UNCONTROLLED WHEN PRINTED" + page numbers. */
+  footer?: boolean
+  /** Start each document on a fresh sheet. */
+  documentPageBreaks?: boolean
+}
+
 export const documentBooks = pgTable(
   'document_books',
   {
@@ -336,6 +358,9 @@ export const documentBooks = pgTable(
     reviewFrequencyMonths: integer('review_frequency_months'),
     nextReviewOn: date('next_review_on'),
     status: documentBookStatus('status').default('draft').notNull(),
+    // How the book prints. Null means "tenant/system default" rather than
+    // "off", so existing books gain the new output without being edited.
+    printSettings: jsonb('print_settings').$type<DocumentBookPrintSettings | null>(),
     publishedAt: timestamp('published_at', { withTimezone: true }),
     publishedByUserId: text('published_by_user_id').references(() => users.id),
     ...timestamps,

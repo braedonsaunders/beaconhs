@@ -5,13 +5,15 @@
 import { existsSync } from 'node:fs'
 import puppeteer, { type Browser, type HTTPRequest, type Page } from 'puppeteer-core'
 import sharp from 'sharp'
-import { secureFetch } from '@beaconhs/sync/egress'
+import { MAX_SECURE_FETCH_RESPONSE_BYTES, secureFetch } from '@beaconhs/sync/egress'
 
 let browserPromise: Promise<Browser> | null = null
 // Image uploads accepted by the platform can be as large as 50 MiB. PDF
 // rendering must accept that same input contract; a lower hidden ceiling makes
 // an otherwise valid inspection photo strand every attach-PDF email.
 export const PDF_RESOURCE_LIMITS = {
+  // Matches the upload contract. Resources served from our own storage or app
+  // origin are fetched directly and may use all of it.
   singleBytes: 50 * 1024 * 1024,
   totalBytes: 64 * 1024 * 1024,
   renderedImageBytes: 8 * 1024 * 1024,
@@ -247,7 +249,17 @@ async function fetchPdfResource(
         ? await secureFetch(url, {
             method: 'GET',
             timeoutMs: RESOURCE_TIMEOUT_MS,
-            maxResponseBytes: PDF_RESOURCE_LIMITS.singleBytes,
+            // The egress proxy validates the REQUESTED ceiling, not the
+            // response, and rejects anything above its own limit — so asking
+            // for the full upload allowance failed every proxied fetch before
+            // a byte was read. That is why remote images (a tenant logo on a
+            // cover or letterhead) never loaded. Arbitrary external resources
+            // are therefore capped lower than our own storage, which is the
+            // right trade for an outbound fetch anyway.
+            maxResponseBytes: Math.min(
+              PDF_RESOURCE_LIMITS.singleBytes,
+              MAX_SECURE_FETCH_RESPONSE_BYTES,
+            ),
             maxRedirects: MAX_RESOURCE_REDIRECTS - redirect,
           })
         : await fetch(url, {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import sharp from 'sharp'
+import { MAX_SECURE_FETCH_RESPONSE_BYTES } from '@beaconhs/sync/egress'
 import {
   injectPdfBase,
   optimizePdfImageResource,
@@ -155,4 +156,13 @@ describe('PDF resource policy', () => {
     expect(metadata.height).toBeLessThanOrEqual(PDF_RESOURCE_LIMITS.imageDimension)
     expect(optimized.body.length).toBeLessThanOrEqual(PDF_RESOURCE_LIMITS.renderedImageBytes)
   })
+})
+
+it('never asks the egress proxy for more than it will allow', () => {
+  // secureFetch validates the requested ceiling and throws if it exceeds its
+  // own, so requesting the full upload allowance broke every proxied fetch.
+  expect(Math.min(PDF_RESOURCE_LIMITS.singleBytes, MAX_SECURE_FETCH_RESPONSE_BYTES)).toBe(
+    MAX_SECURE_FETCH_RESPONSE_BYTES,
+  )
+  expect(MAX_SECURE_FETCH_RESPONSE_BYTES).toBeLessThan(PDF_RESOURCE_LIMITS.singleBytes)
 })

@@ -10,7 +10,13 @@ const DEFAULT_TIMEOUT_MS = 15_000
 const DEFAULT_MAX_RESPONSE_BYTES = 1024 * 1024
 const DEFAULT_MAX_REQUEST_BYTES = 2 * 1024 * 1024
 const MAX_TIMEOUT_MS = 120_000
-const MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+/**
+ * Hard ceiling on a proxied response body. Exported because callers size their
+ * own limits against it — asking for more than this is rejected outright before
+ * any request is made, which is a confusing way to discover the cap.
+ */
+export const MAX_SECURE_FETCH_RESPONSE_BYTES = 16 * 1024 * 1024
+const MAX_RESPONSE_BYTES = MAX_SECURE_FETCH_RESPONSE_BYTES
 const MAX_REQUEST_BYTES = 16 * 1024 * 1024
 const MAX_REDIRECTS = 5
 const MAX_URL_LENGTH = 4_096

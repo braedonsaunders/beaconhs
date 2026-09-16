@@ -253,6 +253,13 @@
       "when": 1788220800000,
       "tag": "0036_training_report_wallet_cutover",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788220800001,
+      "tag": "0037_document_book_print_settings",
+      "breakpoints": true
     }
   ]
 }

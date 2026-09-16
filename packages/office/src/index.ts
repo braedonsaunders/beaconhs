@@ -118,3 +118,4 @@ export async function pdfUnite(pdfs: Buffer[]): Promise<Buffer> {
 }
 export * from './fodt'
 export * from './limits'
+export * from './pdf-compose'
