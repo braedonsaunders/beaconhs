@@ -21,6 +21,7 @@ import {
 } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
 import { sofficeConvert } from '@beaconhs/office'
+import { setDocxPageSize } from '@beaconhs/office/docx-page-size'
 
 const MAX_TEXT_CHARS = 1_500_000
 const MAX_OFFICE_INPUT_BYTES = 100 * 1024 * 1024
@@ -48,6 +49,26 @@ function assertOfficeInput(
   if (bytes && bytes.length !== attachment.sizeBytes) {
     throw new Error('Document render source size does not match its attachment record')
   }
+}
+
+/**
+ * The paper every document is authored and printed on.
+ *
+ * Not configurable: a book composed from mixed paper has to scale the odd sizes
+ * to fit, which shrinks their type and widens their margins against everything
+ * else. The blank master new documents start from is already Letter; this is
+ * what stops an imported or uploaded master reintroducing the mismatch.
+ */
+const DOCUMENT_PAGE_SIZE = 'letter'
+
+/**
+ * Convert a master to PDF, forcing the house paper size first.
+ *
+ * `setDocxPageSize` hands back the original bytes when the master is already
+ * Letter, so this costs nothing for documents authored in the app.
+ */
+async function renderDocxToPdf(docx: Buffer): Promise<Buffer> {
+  return sofficeConvert(await setDocxPageSize(docx, DOCUMENT_PAGE_SIZE), 'document.docx', 'pdf')
 }
 
 export async function renderDocumentVersion(args: {
@@ -111,7 +132,7 @@ export async function renderDocumentVersion(args: {
 
     const docx = await getObject({ key: data.source.key })
     assertOfficeInput(data.source, docx)
-    const pdf = await sofficeConvert(docx, 'document.docx', 'pdf')
+    const pdf = await renderDocxToPdf(docx)
     const text = (await sofficeConvert(docx, 'document.docx', 'txt:Text'))
       .toString('utf8')
       .slice(0, MAX_TEXT_CHARS)
@@ -214,7 +235,7 @@ export async function renderDocumentMasterPdf(args: {
   assertOfficeInput(data.source)
   const docx = await getObject({ key: data.source.key })
   assertOfficeInput(data.source, docx)
-  const pdf = await sofficeConvert(docx, 'document.docx', 'pdf')
+  const pdf = await renderDocxToPdf(docx)
 
   const stamp = Date.now()
   const base =

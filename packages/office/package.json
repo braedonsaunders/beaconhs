@@ -7,7 +7,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./limits": "./src/limits.ts"
+    "./limits": "./src/limits.ts",
+    "./docx-page-size": "./src/docx-page-size.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -20,6 +21,7 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "@braedonsaunders/appkit-pdf": "^0.6.0"
+    "@braedonsaunders/appkit-pdf": "^0.6.0",
+    "jszip": "^3.10.1"
   }
 }

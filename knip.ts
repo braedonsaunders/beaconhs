@@ -23,7 +23,7 @@ const config: KnipConfig = {
       ],
     },
     'apps/worker': {
-      entry: ['src/health.ts', 'src/storage-init.ts'],
+      entry: ['src/health.ts', 'src/storage-init.ts', 'src/scripts/convert-documents-to-letter.ts'],
       // Bundled @beaconhs/forms-pdf keeps `qrcode` external; the worker image
       // must still resolve it at runtime.
       ignoreDependencies: ['qrcode'],
