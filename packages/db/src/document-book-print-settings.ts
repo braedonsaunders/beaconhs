@@ -13,7 +13,10 @@ import type { DocumentBookPrintSettings } from './schema/documents'
 export const DOCUMENT_BOOK_PRINT_DEFAULTS = {
   paperSize: 'letter',
   orientation: 'portrait',
-  contentMarginMm: 0,
+  // Cropping removes the source document's own margins, so this IS the book's
+  // page margin — not an addition to the source's. Zero would print text on the
+  // sheet edge, inside the non-printable border of most office printers.
+  contentMarginMm: 10,
   coverPage: true,
   tableOfContents: true,
   documentHeaders: true,

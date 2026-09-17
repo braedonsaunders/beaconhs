@@ -4,13 +4,17 @@ import { resolveBookPrintSettings } from './document-book-print-settings'
 // NULL print settings must mean "house defaults", not "everything off" — the
 // books that existed before the setting did were never edited, and they still
 // have to print with a cover, contents and footer.
+//
+// The margin default is NOT zero: normalisation crops the source document's own
+// white space away, so this value is the book's page margin, and zero would put
+// text on the sheet edge inside most printers' non-printable border.
 
 describe('resolveBookPrintSettings', () => {
   it('gives an unconfigured book the full treatment', () => {
     expect(resolveBookPrintSettings(null)).toEqual({
       paperSize: 'letter',
       orientation: 'portrait',
-      contentMarginMm: 0,
+      contentMarginMm: 10,
       coverPage: true,
       tableOfContents: true,
       documentHeaders: true,

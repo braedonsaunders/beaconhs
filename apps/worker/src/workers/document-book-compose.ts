@@ -72,6 +72,19 @@ const PT_PER_MM = 72 / 25.4
 /** Band reserved for the control block when it rides on the document. */
 const CONTROL_BAND_PT = 132
 
+/** Footer geometry — `stampFooter`'s own defaults, which the book keeps. */
+const FOOTER_MARGIN_PT = 28
+const FOOTER_FONT_PT = 7.5
+/**
+ * Strip kept clear at the foot of every numbered page.
+ *
+ * The footer is stamped AFTER imposition, so without reserving its band the
+ * imposed document simply runs underneath the page number. Covers the main row
+ * (baseline at the footer margin) plus the company subline below it, with a
+ * few points of air.
+ */
+const FOOTER_RESERVE_PT = FOOTER_MARGIN_PT + FOOTER_FONT_PT + 10
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -406,6 +419,13 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
     geometry,
     parts,
     marginPt: Math.max(0, settings.contentMarginMm) * PT_PER_MM,
+    footerReservePt: settings.footer ? FOOTER_RESERVE_PT : 0,
+    // One scale for the whole book, pinned to the content box corner. Fitting
+    // each document on its own made the scale a property of that document: on
+    // the 61-document manual this was built against it ranged 0.965–1.495 and
+    // the side margin 0–126pt, which reads as the type size and the margins
+    // changing from document to document.
+    normalizeContentScale: settings.normalizeContent,
     title: input.title,
     author: input.tenantName,
     footer: settings.footer

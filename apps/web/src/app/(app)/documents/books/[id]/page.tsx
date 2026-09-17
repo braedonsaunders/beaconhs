@@ -233,7 +233,7 @@ export default async function DocumentBookPage({ params }: { params: Promise<{ i
                   <option value="landscape">{tGenerated('m_0e9e90da7290dd')}</option>
                 </Select>
               </Field>
-              <Field label={tGenerated('m_1001cf35f2b222')} hint={tGenerated('m_03abccfd5c6385')}>
+              <Field label={tGenerated('m_0512aeb80e6f21')} hint={tGenerated('m_1bf4a336b8ff31')}>
                 <Input
                   name="contentMarginMm"
                   type="number"
@@ -252,7 +252,7 @@ export default async function DocumentBookPage({ params }: { params: Promise<{ i
                 checked={print.normalizeContent}
                 disabled={locked}
                 label={tGenerated('m_101d6f9449fd93')}
-                hint={tGenerated('m_1231805e434811')}
+                hint={tGenerated('m_0df0a48c84c006')}
               />
               <PrintToggle
                 name="coverPage"

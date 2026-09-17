@@ -335,12 +335,12 @@ export type DocumentBookPrintSettings = {
   paperSize?: 'letter' | 'a4' | 'legal'
   orientation?: 'portrait' | 'landscape'
   /**
-   * Inset applied to imported document content, in millimetres.
+   * The book's page margin, in millimetres.
    *
-   * Members arrive already rendered with their own margins, so this adds to
-   * whatever the source had rather than replacing it. Raising it also shrinks
-   * the content — which is the only lever a book has over type that is too
-   * large in the source documents themselves.
+   * With `normalizeContent` on, each document is cropped to its own text, so
+   * this REPLACES whatever margin the source had rather than adding to it — it
+   * is the margin a reader measures on the printed page. Raising it also
+   * shrinks the content, since every page shares one scale.
    */
   contentMarginMm?: number
   /** Title page with the tenant logo. */
