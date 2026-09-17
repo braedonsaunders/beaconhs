@@ -9,9 +9,16 @@
 // Converting the MASTER, not just the render, is the durable fix: the author
 // sees Letter in the editor, and the next save cannot reintroduce A4.
 //
-//   pnpm --filter @beaconhs/worker exec tsx src/scripts/convert-documents-to-letter.ts [--apply]
+//   pnpm --filter @beaconhs/worker exec tsx src/scripts/convert-documents-to-letter.ts [--apply] [--limit N]
 //
-// Without --apply it reports what it would do and changes nothing.
+// Without --apply it reports what it would do and changes nothing. It is
+// idempotent — anything already on the target size is skipped — so it is meant
+// to be run repeatedly in batches until it reports nothing left.
+//
+// BOUNDED ON PURPOSE. Each document costs two LibreOffice invocations, and a
+// few hundred back to back will exhaust a workstation's memory. --limit caps
+// how many are converted per run (default 40); raise it only on a machine with
+// room to spare.
 //
 // NOTE: this rewrites published version snapshots in place. That is deliberate
 // for a pre-launch library of imported content — the documents are being
@@ -46,8 +53,22 @@ async function pageSizeOf(docx: Buffer): Promise<string | null> {
   return readDocxPageSize(await entry.async('string'))
 }
 
+/** Conversions per run, unless --limit says otherwise. */
+const DEFAULT_LIMIT = 40
+
+function parseLimit(argv: readonly string[]): number {
+  const flag = argv.indexOf('--limit')
+  if (flag === -1) return DEFAULT_LIMIT
+  const value = Number(argv[flag + 1])
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error('--limit needs a positive whole number')
+  }
+  return value
+}
+
 async function main() {
   const apply = process.argv.includes('--apply')
+  const limit = parseLimit(process.argv)
 
   const candidates = await withSuperAdmin(db, (tx) =>
     tx
@@ -66,13 +87,18 @@ async function main() {
       .where(isNotNull(documentVersions.docxAttachmentId)),
   )
 
-  console.log(`${candidates.length} version(s) with a Word master`)
+  console.log(`${candidates.length} version(s) with a Word master; converting at most ${limit}`)
 
   let converted = 0
   let alreadyCorrect = 0
   let failed = 0
+  let remaining = 0
 
   for (const row of candidates as Candidate[]) {
+    if (converted >= limit) {
+      remaining++
+      continue
+    }
     const label = `${row.docKey || row.docTitle} v${row.version}`
     try {
       const docx = await getObject({ key: row.docxKey })
@@ -179,6 +205,9 @@ async function main() {
   console.log(
     `\n${apply ? 'converted' : 'would convert'} ${converted}; already ${TARGET}: ${alreadyCorrect}; failed: ${failed}`,
   )
+  if (remaining > 0) {
+    console.log(`${remaining} still to do — run again to continue.`)
+  }
   if (!apply) console.log('Re-run with --apply to write the changes.')
   process.exit(failed > 0 ? 1 : 0)
 }
