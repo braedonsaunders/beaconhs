@@ -106,7 +106,18 @@ export default async function PlatformUsersPage({
   const { accounts, memberships, total, identityCount, multiCount } = await withSuperAdmin(
     db,
     async (tx) => {
-      const membershipCount = sql<number>`(select count(*) from ${tenantUsers} where ${tenantUsers.userId} = ${users.id})`
+      // Memberships per account, as a joined aggregate rather than a correlated
+      // `sql` fragment. Drizzle renders bare column chunks UNQUALIFIED, so
+      // `... where ${tenantUsers.userId} = ${users.id}` became
+      // `where user_id = id` — and inside `from tenant_users` that `id` binds to
+      // tenant_users.id (uuid), not the outer users.id (text). The page died on
+      // `operator does not exist: text = uuid` for every visitor.
+      const membershipTotals = tx
+        .select({ userId: tenantUsers.userId, total: count().as('membership_total') })
+        .from(tenantUsers)
+        .groupBy(tenantUsers.userId)
+        .as('membership_totals')
+      const membershipCount = sql<number>`coalesce(${membershipTotals.total}, 0)`
       const search: SQL<unknown> | undefined = listParams.q
         ? or(
             ilike(users.name, `%${listParams.q}%`),
@@ -151,8 +162,13 @@ export default async function PlatformUsersPage({
         tx
           .select({ c: count() })
           .from(users)
+          .leftJoin(membershipTotals, eq(membershipTotals.userId, users.id))
           .where(sql`${membershipCount} >= 2`),
-        tx.select({ c: count() }).from(users).where(where),
+        tx
+          .select({ c: count() })
+          .from(users)
+          .leftJoin(membershipTotals, eq(membershipTotals.userId, users.id))
+          .where(where),
         tx
           .select({
             id: users.id,
@@ -163,6 +179,7 @@ export default async function PlatformUsersPage({
             membershipCount,
           })
           .from(users)
+          .leftJoin(membershipTotals, eq(membershipTotals.userId, users.id))
           .where(where)
           .orderBy(...orderBy)
           .limit(listParams.perPage)

@@ -113,12 +113,18 @@ export default async function DocumentCategoriesPage({
           ? not(hasDocuments)
           : undefined
     const where = and(active, search, hierarchy, usage)
-    const usageCount = sql<number>`(
-      select count(*)
-      from ${documents}
-      where ${documents.categoryId} = ${documentCategories.id}
-        and ${documents.deletedAt} is null
-    )`
+    // Joined aggregate, NOT a correlated `sql` fragment. Drizzle renders bare
+    // column chunks unqualified, so `= ${documentCategories.id}` became `= id`,
+    // and inside `from documents` that binds to documents.id. Both are uuid, so
+    // it never errored — every category reported 0 documents while the largest
+    // actually held 131.
+    const usageTotals = tx
+      .select({ categoryId: documents.categoryId, total: count().as('usage_total') })
+      .from(documents)
+      .where(isNull(documents.deletedAt))
+      .groupBy(documents.categoryId)
+      .as('usage_totals')
+    const usageCount = sql<number>`coalesce(${usageTotals.total}, 0)`
 
     const [totalRow, tallyRow, parentOptions] = await Promise.all([
       tx
@@ -166,6 +172,7 @@ export default async function DocumentCategoriesPage({
       })
       .from(documentCategories)
       .leftJoin(parent, eq(parent.id, documentCategories.parentId))
+      .leftJoin(usageTotals, eq(usageTotals.categoryId, documentCategories.id))
       .where(where)
       .orderBy(...orderBy)
       .limit(params.perPage)

@@ -75,9 +75,34 @@ export default async function AdminTenantsPage({
         )
       : undefined
     const where = and(search, statusFilter ? eq(tenants.status, statusFilter) : undefined)
-    const memberCount = sql<number>`(select count(*) from ${tenantUsers} where ${tenantUsers.tenantId} = ${tenants.id})`
-    const peopleCount = sql<number>`(select count(*) from ${people} where ${people.tenantId} = ${tenants.id})`
-    const incidentCount = sql<number>`(select count(*) from ${incidents} where ${incidents.tenantId} = ${tenants.id})`
+    // Per-tenant totals as joined aggregates, NOT correlated `sql` fragments.
+    // Each aggregate column needs a DISTINCT alias: drizzle renders subquery
+    // column chunks unqualified too, so three subqueries all naming their count
+    // `total` make `coalesce(total, 0)` ambiguous (42702).
+    // Drizzle renders bare column chunks unqualified, so
+    // `... where ${tenantUsers.tenantId} = ${tenants.id}` became
+    // `where tenant_id = id`, and inside `from tenant_users` that `id` binds to
+    // tenant_users.id rather than the outer tenants.id. Both are uuid, so it
+    // never errored — every tenant just reported 0 members, 0 people and
+    // 0 incidents while the real numbers were in the hundreds.
+    const memberTotals = tx
+      .select({ tenantId: tenantUsers.tenantId, total: count().as('member_total') })
+      .from(tenantUsers)
+      .groupBy(tenantUsers.tenantId)
+      .as('member_totals')
+    const peopleTotals = tx
+      .select({ tenantId: people.tenantId, total: count().as('people_total') })
+      .from(people)
+      .groupBy(people.tenantId)
+      .as('people_totals')
+    const incidentTotals = tx
+      .select({ tenantId: incidents.tenantId, total: count().as('incident_total') })
+      .from(incidents)
+      .groupBy(incidents.tenantId)
+      .as('incident_totals')
+    const memberCount = sql<number>`coalesce(${memberTotals.total}, 0)`
+    const peopleCount = sql<number>`coalesce(${peopleTotals.total}, 0)`
+    const incidentCount = sql<number>`coalesce(${incidentTotals.total}, 0)`
     const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
       params.sort === 'slug'
@@ -103,6 +128,9 @@ export default async function AdminTenantsPage({
       tx
         .select({ tenant: tenants, memberCount, peopleCount, incidentCount })
         .from(tenants)
+        .leftJoin(memberTotals, eq(memberTotals.tenantId, tenants.id))
+        .leftJoin(peopleTotals, eq(peopleTotals.tenantId, tenants.id))
+        .leftJoin(incidentTotals, eq(incidentTotals.tenantId, tenants.id))
         .where(where)
         .orderBy(...orderBy)
         .limit(params.perPage)

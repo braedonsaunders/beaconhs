@@ -180,7 +180,17 @@ export default async function DataSourcesPage({
       : undefined
     const active = isNull(dataSources.deletedAt)
     const where = and(active, search, kindFilter ? eq(dataSources.kind, kindFilter) : undefined)
-    const rowCount = sql<number>`(select count(*) from ${dataSourceRows} where ${dataSourceRows.dataSourceId} = ${dataSources.id} and ${dataSourceRows.deletedAt} is null)`
+    // Joined aggregate, NOT a correlated `sql` fragment. Drizzle renders bare
+    // column chunks unqualified, so `... = ${dataSources.id}` became `= id`,
+    // and inside `from data_source_rows` that binds to data_source_rows.id —
+    // every source silently reported 0 rows.
+    const rowTotals = tx
+      .select({ dataSourceId: dataSourceRows.dataSourceId, total: count().as('row_total') })
+      .from(dataSourceRows)
+      .where(isNull(dataSourceRows.deletedAt))
+      .groupBy(dataSourceRows.dataSourceId)
+      .as('row_totals')
+    const rowCount = sql<number>`coalesce(${rowTotals.total}, 0)`
     const dirFn = params.dir === 'asc' ? asc : desc
     const orderBy =
       params.sort === 'key'
@@ -202,6 +212,7 @@ export default async function DataSourcesPage({
         rowCount,
       })
       .from(dataSources)
+      .leftJoin(rowTotals, eq(rowTotals.dataSourceId, dataSources.id))
       .where(where)
       .orderBy(...orderBy)
       .limit(params.perPage)
