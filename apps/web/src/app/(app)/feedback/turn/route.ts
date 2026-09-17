@@ -20,6 +20,7 @@ import {
   resolveConversationAccess,
 } from '@/lib/ai-conversations'
 import { recordAudit } from '@/lib/audit'
+import { feedbackFiledAuditEvent } from '@/lib/feedback-audit'
 import { feedbackDenyList, getPlatformFeedbackRuntime } from '@/lib/feedback-config'
 import { feedbackGithubRequest } from '@/lib/feedback-github'
 import { createFeedbackKnowledge } from '@/lib/feedback-knowledge'
@@ -142,23 +143,18 @@ export async function POST(req: Request): Promise<Response> {
       temperature: 0.2,
     })
     const result = interpretFeedbackTurn(feedbackToolPartsFromResult(generated))
-    await appendMessage({
-      conversationId: sessionId,
-      role: 'assistant',
-      content: result.kind === 'guidance' ? result.explanation : result.kind,
-      data: { v: 1, kind: 'feedback-turn', result },
-    })
-    if (result.kind === 'filed') {
-      await recordAudit(ctx, {
-        entityType: 'feedback_issue',
-        entityId: result.issue.id,
-        action: 'create',
-        summary: 'Filed a product issue from the in-app reporter',
-        metadata: {
-          number: result.issue.number,
-          stripped: result.stripped,
-        },
+    try {
+      await appendMessage({
+        conversationId: sessionId,
+        role: 'assistant',
+        content: result.kind === 'guidance' ? result.explanation : result.kind,
+        data: { v: 1, kind: 'feedback-turn', result },
       })
+      if (result.kind === 'filed') {
+        await recordAudit(ctx, feedbackFiledAuditEvent(result, sessionId))
+      }
+    } catch (error) {
+      console.error('[feedback/turn] failed to persist turn', error)
     }
     return jsonResult({ ...result, sessionId })
   } catch (error) {
