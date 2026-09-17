@@ -507,7 +507,7 @@ Read the steps. If they solve it, tap **That helped**. If it is still a product 
 
 ## What happens after you send it
 
-If it is a defect, BeaconHS files a generalized product issue. Names, emails, record ids, and company details are removed first. You will see a confirmation with an issue number.
+If it is a defect, BeaconHS files a generalized product issue. Names, emails, record ids, and company details are removed first. You will see a confirmation with an issue number. This still works when workspace AI is not set up — the report goes straight to the product tracker.
 
 You do not need to confirm again after it is recognized as a defect.
 

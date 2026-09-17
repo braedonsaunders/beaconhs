@@ -42,6 +42,24 @@ test('scripted client answers from help before filing', async () => {
   assert.equal(result.help[0]?.id, 'nav')
 })
 
+test('scripted client surfaces a publisher failure', async () => {
+  const client = createScriptedFeedbackClient({
+    publisher: {
+      create: async () => {
+        throw new Error('GitHub 401: Bad credentials')
+      },
+    },
+  })
+  const result = await client.send({
+    text: 'The save button on the user page does nothing after I click it twice.',
+    context,
+    forceFile: true,
+  })
+  assert.equal(result.kind, 'unavailable')
+  if (result.kind !== 'unavailable') return
+  assert.equal(result.message, 'GitHub 401: Bad credentials')
+})
+
 test('scripted client files a redacted issue when it is a defect', async () => {
   const publisher = createMemoryIssuePublisher()
   const client = createScriptedFeedbackClient({ publisher, defaultLabels: ['feedback'] })

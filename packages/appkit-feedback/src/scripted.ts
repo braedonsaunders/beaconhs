@@ -20,13 +20,13 @@ export function createScriptedFeedbackClient(options: ScriptedFeedbackOptions): 
     async send(input) {
       try {
         return await runScriptedTurn(options, input)
-      } catch {
-        return {
-          kind: 'unavailable',
-          message:
-            options.unavailableMessage ??
-            'The report could not be completed. Try again in a moment.',
-        }
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message
+            : (options.unavailableMessage ??
+              'The report could not be completed. Try again in a moment.')
+        return { kind: 'unavailable', message }
       }
     },
   }

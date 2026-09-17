@@ -4,6 +4,7 @@ import {
   composeFeedbackUserMessage,
   createFeedbackTools,
   createGithubIssuePublisher,
+  createScriptedFeedbackClient,
   feedbackSystemPrompt,
   interpretFeedbackTurn,
   type FeedbackContext,
@@ -48,6 +49,7 @@ export async function POST(req: Request): Promise<Response> {
   const ctx = await getRequestContext()
   if (!ctx) return new Response('Unauthorized', { status: 401 })
   if (!can(ctx, 'feedback.use')) return new Response('Forbidden', { status: 403 })
+  const requestCtx = ctx
 
   const t = await getTranslations('Feedback')
   const unavailable = (): FeedbackTurnResult => ({
@@ -84,7 +86,11 @@ export async function POST(req: Request): Promise<Response> {
     getSessionUser(),
   ])
   const model = getModel(aiConfig, 'fast')
-  if (!runtime || !model) return jsonResult(unavailable(), 503)
+  if (!runtime) {
+    console.error('[feedback/turn] destination is not ready')
+    return jsonResult(unavailable(), 503)
+  }
+  const destination = runtime
 
   let sessionId = request.sessionId
   if (sessionId && (await resolveConversationAccess(sessionId, SCOPE)) !== 'owner') {
@@ -96,6 +102,7 @@ export async function POST(req: Request): Promise<Response> {
       title: request.text.slice(0, 80),
     })
   }
+  const conversationId = sessionId
 
   const context: FeedbackContext = {
     pathname: request.includePage ? request.pathname : '/',
@@ -104,19 +111,61 @@ export async function POST(req: Request): Promise<Response> {
     locale: ctx.locale,
   }
   const denyList = await feedbackDenyList(ctx, sessionUser?.email)
+  const knowledge = createFeedbackKnowledge(ctx)
   const github = createGithubIssuePublisher({
-    owner: runtime.owner,
-    repo: runtime.repo,
-    token: runtime.token,
-    labels: runtime.labels,
+    owner: destination.owner,
+    repo: destination.repo,
+    token: destination.token,
+    labels: destination.labels,
     request: feedbackGithubRequest,
   })
-  const publisher: IssuePublisher = runtime.searchDuplicates
+  const publisher: IssuePublisher = destination.searchDuplicates
     ? github
     : { create: (draft) => github.create(draft) }
 
+  async function persist(result: FeedbackTurnResult): Promise<void> {
+    try {
+      await appendMessage({
+        conversationId,
+        role: 'assistant',
+        content: result.kind === 'guidance' ? result.explanation : result.kind,
+        data: { v: 1, kind: 'feedback-turn', result },
+      })
+      if (result.kind === 'filed') {
+        await recordAudit(requestCtx, feedbackFiledAuditEvent(result, conversationId))
+      }
+    } catch (error) {
+      console.error('[feedback/turn] failed to persist turn', error)
+    }
+  }
+
+  async function runScripted(forceFile: boolean): Promise<FeedbackTurnResult> {
+    return createScriptedFeedbackClient({
+      knowledge,
+      publisher,
+      defaultLabels: destination.labels,
+    }).send({
+      text: request.text,
+      context,
+      answers: request.answers,
+      forceFile,
+    })
+  }
+
+  if (!model) {
+    console.warn('[feedback/turn] AI not configured; filing without the model')
+    try {
+      await appendMessage({ conversationId, role: 'user', content: request.text })
+    } catch (error) {
+      console.error('[feedback/turn] failed to persist user turn', error)
+    }
+    const result = await runScripted(request.forceFile)
+    await persist(result)
+    return jsonResult({ ...result, sessionId: conversationId })
+  }
+
   try {
-    await appendMessage({ conversationId: sessionId, role: 'user', content: request.text })
+    await appendMessage({ conversationId, role: 'user', content: request.text })
     const generated = await generateText({
       model,
       system: feedbackSystemPrompt({
@@ -132,34 +181,29 @@ export async function POST(req: Request): Promise<Response> {
         includePage: request.includePage,
       }),
       tools: createFeedbackTools({
-        knowledge: createFeedbackKnowledge(ctx),
+        knowledge,
         publisher,
         context,
-        defaultLabels: runtime.labels,
+        defaultLabels: destination.labels,
         redact: { denyList },
       }),
       stopWhen: stepCountIs(8),
       abortSignal: req.signal,
       temperature: 0.2,
     })
-    const result = interpretFeedbackTurn(feedbackToolPartsFromResult(generated))
-    try {
-      await appendMessage({
-        conversationId: sessionId,
-        role: 'assistant',
-        content: result.kind === 'guidance' ? result.explanation : result.kind,
-        data: { v: 1, kind: 'feedback-turn', result },
-      })
-      if (result.kind === 'filed') {
-        await recordAudit(ctx, feedbackFiledAuditEvent(result, sessionId))
-      }
-    } catch (error) {
-      console.error('[feedback/turn] failed to persist turn', error)
+    let result = interpretFeedbackTurn(feedbackToolPartsFromResult(generated))
+    if (result.kind === 'unavailable') {
+      console.warn('[feedback/turn] model turn incomplete; filing without the model')
+      result = await runScripted(true)
     }
-    return jsonResult({ ...result, sessionId })
+    await persist(result)
+    return jsonResult({ ...result, sessionId: conversationId })
   } catch (error) {
-    if (error instanceof AIDisabledError) return jsonResult(unavailable(), 503)
-    console.error('[feedback/turn] failed', error)
-    return jsonResult({ ...unavailable(), sessionId }, 500)
+    if (!(error instanceof AIDisabledError)) {
+      console.error('[feedback/turn] failed', error)
+    }
+    const result = await runScripted(true)
+    await persist(result)
+    return jsonResult({ ...result, sessionId: conversationId })
   }
 }
