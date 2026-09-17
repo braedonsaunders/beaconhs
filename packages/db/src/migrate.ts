@@ -44,8 +44,13 @@ function allRows<T = Record<string, unknown>>(result: unknown): T[] {
  * to change it, which can be months later.
  *
  * Checked up front so the failure names the objects and the fix instead.
+ * Owners are resolved through `pg_roles`, not `pg_authid` — the migrator is
+ * not a superuser and cannot read the latter.
  * Extension-owned functions are excluded: pgcrypto and friends belong to the
  * role that installed them and must stay that way.
+ *
+ * Reads pg_roles rather than pg_authid — the latter is superuser-only, and the
+ * migration login deliberately is not one.
  */
 async function assertSchemaOwnership(db: MigrationDatabase, ownerRole: string) {
   const strays = allRows<{ kind: string; name: string; owner: string }>(
@@ -56,19 +61,19 @@ async function assertSchemaOwnership(db: MigrationDatabase, ownerRole: string) {
           c.relname::text as name,
           r.rolname::text as owner
         from pg_class c
-        join pg_authid r on r.oid = c.relowner
+        join pg_roles r on r.oid = c.relowner
         join pg_namespace n on n.oid = c.relnamespace
         where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'S')
         union all
         select 'type', t.typname::text, r.rolname::text
         from pg_type t
-        join pg_authid r on r.oid = t.typowner
+        join pg_roles r on r.oid = t.typowner
         join pg_namespace n on n.oid = t.typnamespace
         where n.nspname = 'public' and t.typtype = 'e'
         union all
         select 'function', p.proname::text, r.rolname::text
         from pg_proc p
-        join pg_authid r on r.oid = p.proowner
+        join pg_roles r on r.oid = p.proowner
         join pg_namespace n on n.oid = p.pronamespace
         where n.nspname = 'public'
           and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
