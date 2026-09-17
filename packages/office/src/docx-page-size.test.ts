@@ -3,6 +3,7 @@ import JSZip from 'jszip'
 import {
   clampMarginsInDocumentXml,
   defaultRunSize,
+  isNormalizedDocx,
   modalRunSize,
   normalizeDocxTypography,
   readDocxPageSize,
@@ -224,5 +225,38 @@ describe('normalizeDocxTypography sizeFactor', () => {
     const out = await normalizeDocxTypography(await makeDocx(body), 'letter', { sizeFactor: 0.5 })
     const xml = await (await JSZip.loadAsync(out)).file('word/document.xml')!.async('string')
     expect(xml).toContain('w:sz w:val="12"')
+  })
+})
+
+describe('isNormalizedDocx', () => {
+  const HOUSE_MARGINS =
+    '<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>'
+
+  it('recognises a master it has already normalised', async () => {
+    // Deterministic, unlike "does it render at the target size?" — that never
+    // settles, because rendered glyph heights quantise around the target.
+    const docx = await makeDocx(LETTER + HOUSE_MARGINS)
+    expect(await isNormalizedDocx(docx, 'letter')).toBe(true)
+    expect(await normalizeDocxTypography(docx, 'letter')).toBe(docx)
+  })
+
+  it('rejects the wrong paper', async () => {
+    expect(await isNormalizedDocx(await makeDocx(A4 + HOUSE_MARGINS), 'letter')).toBe(false)
+  })
+
+  it('rejects the wrong margins', async () => {
+    const tight = '<w:pgMar w:top="567" w:right="567" w:bottom="567" w:left="1134"/>'
+    expect(await isNormalizedDocx(await makeDocx(LETTER + tight), 'letter')).toBe(false)
+  })
+
+  it('rejects a document whose sections disagree', async () => {
+    // One section left behind would print on different paper mid-document.
+    const tight = '<w:pgMar w:top="567" w:right="567" w:bottom="567" w:left="567"/>'
+    const mixed = await makeDocx(LETTER + HOUSE_MARGINS + LETTER + tight)
+    expect(await isNormalizedDocx(mixed, 'letter')).toBe(false)
+  })
+
+  it('rejects a file with no sections at all', async () => {
+    expect(await isNormalizedDocx(await makeDocx(LETTER), 'letter')).toBe(false)
   })
 })

@@ -249,3 +249,27 @@ export async function normalizeDocxTypography(
   if (nextStyles !== null) zip.file('word/styles.xml', nextStyles)
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
 }
+
+/**
+ * Whether a master already carries the house paper and margins.
+ *
+ * Deterministic on purpose. The obvious idempotency check — "does it already
+ * render at the target body size?" — never settles: rendered glyph heights
+ * quantise, so a 12.5pt target is reached as 12 or 13 and the next pass tries
+ * again. One real campaign rewrote the same 83 masters 291 times, oscillating
+ * 13 → 12 → 13 → 12. Structure converges in a single pass.
+ */
+export async function isNormalizedDocx(docx: Buffer, size: DocxPageSize): Promise<boolean> {
+  const entry = (await JSZip.loadAsync(docx)).file('word/document.xml')
+  if (!entry) return false
+  const documentXml = await entry.async('string')
+  if (readDocxPageSize(documentXml) !== size) return false
+
+  const margins = documentXml.match(/<w:pgMar\b[^>]*\/>/g) ?? []
+  if (margins.length === 0) return false
+  return margins.every((tag) =>
+    (['top', 'right', 'bottom', 'left'] as const).every(
+      (edge) => Number(new RegExp(`w:${edge}="(\\d+)"`).exec(tag)?.[1]) === STANDARD_MARGIN_TWIPS,
+    ),
+  )
+}
