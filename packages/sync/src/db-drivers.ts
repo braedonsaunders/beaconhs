@@ -3,9 +3,9 @@
 // (and never eagerly bundled). Each adapter exposes the same three operations:
 // browse tables, browse columns, run a read query.
 
-import { connect as connectTcp } from 'node:net'
+import { connect as connectTcp, isIP } from 'node:net'
 import type { IntrospectColumn, IntrospectTable } from './types'
-import { resolvePublicHost, type ResolvedPublicHost } from './egress'
+import { normalizeOutboundHostname, resolvePublicHost, type ResolvedPublicHost } from './egress'
 
 export type DbKind = 'postgres' | 'mysql' | 'mariadb' | 'mssql'
 
@@ -24,6 +24,52 @@ export interface DbConnectConfig {
   username: string
   password: string
   ssl?: boolean
+  /** Certificate identity when it differs from `host` (required for IP literals). */
+  tlsServerName?: string
+  /** Optional pinned CA PEM for a private/self-signed database certificate. */
+  tlsCa?: string
+}
+
+const DATABASE_HOST_ALLOWLIST_ENV = 'SYNC_DATABASE_HOST_ALLOWLIST'
+
+function parseDatabaseHostAllowlist(raw = process.env[DATABASE_HOST_ALLOWLIST_ENV]): string[] {
+  if (!raw?.trim()) return []
+  const hosts: string[] = []
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+    hosts.push(normalizeOutboundHostname(trimmed))
+  }
+  return hosts
+}
+
+export function isDatabaseHostAllowlisted(
+  host: string,
+  raw = process.env[DATABASE_HOST_ALLOWLIST_ENV],
+): boolean {
+  try {
+    return parseDatabaseHostAllowlist(raw).includes(normalizeOutboundHostname(host))
+  } catch {
+    return false
+  }
+}
+
+function normalizeTlsServerName(raw: string): string {
+  const value = raw.trim()
+  if (!value || value.length > 253 || /[\u0000-\u001f\u007f/%\\?#@\s]/.test(value)) {
+    throw new Error('TLS certificate host name is not valid.')
+  }
+  return value
+}
+
+function parsePinnedCa(raw: string | undefined): string | undefined {
+  if (raw == null) return undefined
+  const pem = raw.trim()
+  if (!pem) return undefined
+  if (!/^-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----\s*$/.test(pem)) {
+    throw new Error('Pinned CA must be a PEM certificate.')
+  }
+  return pem
 }
 
 const DEFAULT_PORT: Record<DbKind, number> = {
@@ -82,13 +128,32 @@ export async function connectDb(cfg: DbConnectConfig): Promise<DbConn> {
   if (cfg.ssl !== true) {
     throw new Error('External database connections require SSL/TLS.')
   }
-  const resolved = await resolvePublicHost(cfg.host, { timeoutMs: CONNECT_TIMEOUT_MS })
-  if (resolved.ipLiteral) {
+  const allowPrivate = isDatabaseHostAllowlisted(cfg.host)
+  const tlsServerName = cfg.tlsServerName?.trim()
+    ? normalizeTlsServerName(cfg.tlsServerName)
+    : undefined
+  const tlsCa = parsePinnedCa(cfg.tlsCa)
+  const hostLooksLikeIp = isIP(normalizeOutboundHostname(cfg.host)) !== 0
+  if (allowPrivate && hostLooksLikeIp && !tlsServerName) {
+    throw new Error('IP-literal database hosts require a TLS certificate host name.')
+  }
+  const resolved = await resolvePublicHost(cfg.host, {
+    timeoutMs: CONNECT_TIMEOUT_MS,
+    allowNonPublic: allowPrivate,
+  })
+  if (resolved.ipLiteral && !allowPrivate) {
     throw new Error(
       'External database host must be a DNS name so its TLS identity can be verified.',
     )
   }
-  const normalized = { ...cfg, host: resolved.hostname, port, ssl: true }
+  const normalized = {
+    ...cfg,
+    host: resolved.hostname,
+    port,
+    ssl: true,
+    tlsServerName,
+    tlsCa,
+  }
   switch (cfg.dbKind) {
     case 'postgres':
       return connectPostgres(normalized, resolved)
@@ -120,7 +185,11 @@ async function connectPostgres(
     database: cfg.database,
     username: cfg.username,
     password: cfg.password,
-    ssl: { rejectUnauthorized: true, servername: resolved.hostname },
+    ssl: {
+      rejectUnauthorized: true,
+      servername: cfg.tlsServerName ?? resolved.hostname,
+      ...(cfg.tlsCa ? { ca: cfg.tlsCa } : {}),
+    },
     max: 2,
     idle_timeout: 10,
     connect_timeout: CONNECT_TIMEOUT_MS / 1000,
@@ -174,13 +243,17 @@ async function connectMysql(cfg: DbConnectConfig, resolved: ResolvedPublicHost):
   const conn = (await mysql.createConnection({
     // mysql2 uses config.host for SNI/certificate identity. A supplied stream
     // prevents its own DNS lookup and connects to the already-approved address.
-    host: resolved.hostname,
+    host: cfg.tlsServerName ?? resolved.hostname,
     port,
     stream: () => connectTcp({ host: resolved.address, port, family: resolved.family }),
     database: cfg.database,
     user: cfg.username,
     password: cfg.password,
-    ssl: { rejectUnauthorized: true, verifyIdentity: true },
+    ssl: {
+      rejectUnauthorized: true,
+      verifyIdentity: true,
+      ...(cfg.tlsCa ? { ca: cfg.tlsCa } : {}),
+    },
     connectTimeout: CONNECT_TIMEOUT_MS,
     dateStrings: true,
   })) as unknown as MyConn
@@ -248,7 +321,8 @@ async function connectMssql(cfg: DbConnectConfig, resolved: ResolvedPublicHost):
     options: {
       encrypt: true,
       trustServerCertificate: false,
-      serverName: resolved.hostname,
+      serverName: cfg.tlsServerName ?? resolved.hostname,
+      ...(cfg.tlsCa ? { cryptoCredentialsDetails: { ca: cfg.tlsCa } } : {}),
       // Tedious otherwise follows a server-supplied routing target with a fresh
       // unrestricted DNS lookup. Reusing the pinned connector makes such a
       // redirect fail closed instead of turning the SQL protocol into SSRF.

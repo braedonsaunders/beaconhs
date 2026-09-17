@@ -28,6 +28,8 @@ interface Conn {
   database: string
   username: string
   ssl: boolean
+  tlsServerName?: string
+  tlsCa?: string
 }
 
 interface Mapping {
@@ -54,6 +56,8 @@ function parseConn(config: Record<string, unknown>): Conn {
     database: String(config.database ?? '').trim(),
     username: String(config.username ?? '').trim(),
     ssl: config.ssl === true || config.ssl === 'true',
+    tlsServerName: String(config.tlsServerName ?? '').trim() || undefined,
+    tlsCa: String(config.tlsCa ?? '').trim() || undefined,
   }
 }
 
@@ -232,6 +236,8 @@ function connect(c: Conn, password: string): Promise<DbConn> {
     username: c.username,
     password,
     ssl: c.ssl,
+    tlsServerName: c.tlsServerName,
+    tlsCa: c.tlsCa,
   })
 }
 
@@ -345,7 +351,7 @@ export const sqlDestination: DestinationDef = {
       type: 'text',
       required: true,
       placeholder: 'db.example.com',
-      help: 'Must be a public DNS name. Local, private, and IP-literal hosts are blocked.',
+      help: 'Usually a public DNS name. On-prem private hosts must be allowlisted by the platform operator. IP addresses also need a TLS certificate host name.',
     },
     { key: 'port', label: 'Port', type: 'number', placeholder: 'default for the database type' },
     { key: 'database', label: 'Database', type: 'text', required: true, placeholder: 'payroll' },
@@ -361,7 +367,20 @@ export const sqlDestination: DestinationDef = {
       label: 'Encrypt the connection (SSL/TLS)',
       type: 'boolean',
       required: true,
-      help: 'Required. The database certificate must be valid for the host name above.',
+      help: 'Required. The database certificate must be valid for the host name, or for the TLS certificate host name below.',
+    },
+    {
+      key: 'tlsServerName',
+      label: 'TLS certificate host name',
+      type: 'text',
+      placeholder: 'sql.example.com',
+      help: 'Required when Host is an IP address. Use the name on the database certificate when it differs from Host.',
+    },
+    {
+      key: 'tlsCa',
+      label: 'Pinned CA certificate (PEM)',
+      type: 'textarea',
+      help: 'Optional. Paste the issuing CA when the database uses a private or self-signed certificate.',
     },
   ],
   secretFields: [{ key: 'password', label: 'Password', required: true }],

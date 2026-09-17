@@ -38,6 +38,9 @@ services:
       # editor URL and the WOPI callback base are both just APP_URL.
       COLLABORA_URL: ${COLLABORA_URL}
       COLLABORA_WOPI_URL: ${COLLABORA_WOPI_URL}
+      # On-prem AdminApp2 MSSQL (10.0.0.44). Override via env when another host
+      # must be allowlisted; an empty value would block the private-IP sync.
+      SYNC_DATABASE_HOST_ALLOWLIST: ${SYNC_DATABASE_HOST_ALLOWLIST:-10.0.0.44}
     networks: [infra-net, dokploy-network]
     healthcheck:
       test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:3000/api/health/ready']
@@ -85,6 +88,7 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       VAPID_SUBJECT: ${VAPID_SUBJECT}
+      SYNC_DATABASE_HOST_ALLOWLIST: ${SYNC_DATABASE_HOST_ALLOWLIST:-10.0.0.44}
     networks: [infra-net]
     healthcheck:
       test: ['CMD', 'node', 'apps/worker/dist/health.js']

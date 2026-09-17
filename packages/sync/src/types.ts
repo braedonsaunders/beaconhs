@@ -29,6 +29,7 @@ export interface CanonicalOrgUnit {
   code?: string | null
   level?: 'customer' | 'project' | 'site' | 'area'
   parentCode?: string | null // resolved to parentId via the code lookup
+  parentExternalId?: string | null // resolved to parentId via the org_unit crosswalk
   lat?: number | null
   lng?: number | null
   geofenceMeters?: number | null

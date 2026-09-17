@@ -44,6 +44,7 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { deriveColumnsFromSchema, slugify } from '../_shared'
 import { collectDataSourceUsage } from '../_usage'
+import { deleteDataSource } from '../_actions'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -493,6 +494,13 @@ export default async function DataSourceDetailPage({
               />
             </p>
           </div>
+          <form action={deleteDataSource}>
+            <input type="hidden" name="id" value={src.id} />
+            <input type="hidden" name="redirect" value="list" />
+            <Button type="submit" variant="outline">
+              <Trash2 size={14} /> <GeneratedText id="m_0371f0ff181098" />
+            </Button>
+          </form>
         </header>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">

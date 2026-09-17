@@ -686,7 +686,7 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 - **Tenant settings** — branding, languages, regulatory terminology, and hierarchy. Risk matrices are configured in each module's own **Manage** area.
 - **Notifications** — who gets automatic alerts and how often reminders repeat.
 - **Navigation** — reorder the sidebar and pin forms as modules.
-- **Data sources** — reference lists and live data your apps bind to. Search by name, key, or description and filter by **Reference** or **Live responses**. Inside a reference source, search its row values and its Builder references separately.
+- **Data sources** — reference lists and live data your apps bind to. Search by name, key, or description and filter by **Reference** or **Live responses**. Click **New data source** to create a reference list or a live source from an app; the form opens in a side panel. Inside a reference source, search its row values and its Builder references separately.
 - **Data export** — audited CSV exports across modules and Builder apps. Search and filter the source catalogue, then sort it by name, group, or sensitivity. Builder app sources follow the role you are currently using; template builders can also export records from draft and archived apps for review.
 - **Email templates** and **PDF templates** — branded emails and paper documents. PDF templates drive record downloads: every module ships with an editable default document, and each Builder app gets its own generated one the first time it is published. On the **Module print defaults** tab you pick which template each module's **PDF** button renders, and press **Generate default template** for any app that lacks one. Records without a template get a clean field-summary PDF.
 
@@ -743,6 +743,10 @@ BeaconHS blocks deletion while a People group is used by a notification rule, Fl
 - **API keys** — credentials for the public REST API. Search by key name or prefix and filter by active, expired, or revoked status. Choose the smallest permissions and explicitly select every Builder app the integration may access; forms permissions alone expose no apps. After you click **Generate**, copy each highlighted secret before you dismiss it; a secret is shown only once. Write requests require an **Idempotency-Key**, and keys are rate-limited. API keys stop authenticating while the workspace is suspended or archived.
 
 For an inbound data-sync connection, the schedule controls automatic runs only. A connection set to manual still owns the records it imported, so source-managed fields stay read-only. Use **Delete connection** only when you want those records handed back to manual management. Deleting the connection keeps the imported records; it removes the source ownership link.
+
+A SQL inbound connection can map more than one table into **Locations & Projects**. Customers become locations. Jobs become projects under their customer.
+
+A **Database (SQL)** connection and an **External SQL database** automation both require **Use SSL/TLS**. If the host is an IP address, enter the **TLS certificate host name** from the database certificate. For a private or self-signed certificate, paste the **Pinned CA certificate**. On-prem private hosts also have to be allowlisted by the platform operator.
 
 ## Configure AI
 
@@ -822,7 +826,7 @@ This option is available only while the platform policy is **Tenants choose thei
 
 When the override is off, the tenant uses the platform default provider. Clicking **Remove key** removes the tenant credential and turns off the override; it does not stop SMS supplied by the platform default. Add a credential and enable the override again before sending another tenant-provider test.
 
-Integration connections can reach public **HTTPS** services only. External database connections also need a public DNS name, valid **SSL/TLS**, and a certificate that matches that name. BeaconHS blocks local, private, and reserved network addresses. When sending to an external SQL table, enter its **Identity column** so a partial retry can remove completed inserts before trying again.
+Integration connections can reach public **HTTPS** services only. External database connections need **SSL/TLS** and a certificate that matches the **TLS certificate host name** when the host is an IP address. BeaconHS blocks local, private, and reserved network addresses unless the platform operator has allowlisted that host. When sending to an external SQL table, enter its **Identity column** so a partial retry can remove completed inserts before trying again.
 
 If a sync uses **Archive after safe full pulls**, BeaconHS applies it only after a complete full snapshot. An empty entity or failed record blocks archiving and marks the run partial. A page-limit warning means BeaconHS processed only part of the source, so it also skips archiving. Check the run details before trying again.
 

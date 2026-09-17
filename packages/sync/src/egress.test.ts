@@ -10,7 +10,7 @@ import {
   stripHopByHopOutboundHeaders,
   validateOutboundRequestConfiguration,
 } from './egress'
-import { connectDb } from './db-drivers'
+import { connectDb, isDatabaseHostAllowlisted } from './db-drivers'
 import { planSnapshotArchives } from './snapshot-policy'
 
 test('public IP policy rejects local, private, special, mapped, and documentation ranges', () => {
@@ -240,6 +240,38 @@ test('database connections reject private hosts and unencrypted credentials befo
     connectDb({ ...base, host: 'db.example.com', ssl: false }),
     /require SSL\/TLS/,
   )
+})
+
+test('database host allowlist is exact and still requires TLS identity for IP literals', async () => {
+  assert.equal(isDatabaseHostAllowlisted('10.0.0.44', ' 10.0.0.44, SQL.internal.example '), true)
+  assert.equal(
+    isDatabaseHostAllowlisted('sql.internal.example', '10.0.0.44, SQL.internal.example'),
+    true,
+  )
+  assert.equal(isDatabaseHostAllowlisted('10.0.0.45', '10.0.0.44'), false)
+
+  const previous = process.env.SYNC_DATABASE_HOST_ALLOWLIST
+  process.env.SYNC_DATABASE_HOST_ALLOWLIST = '10.0.0.44,127.0.0.1'
+  const base = {
+    dbKind: 'postgres' as const,
+    database: 'app',
+    username: 'service',
+    password: 'secret',
+  }
+  try {
+    await assert.rejects(connectDb({ ...base, host: '10.0.0.44', ssl: false }), /require SSL\/TLS/)
+    await assert.rejects(
+      connectDb({ ...base, host: '10.0.0.44', ssl: true }),
+      /TLS certificate host name/,
+    )
+    await assert.rejects(
+      connectDb({ ...base, host: '192.168.1.9', ssl: true, tlsServerName: 'sql.example.com' }),
+      /blocked non-public/,
+    )
+  } finally {
+    if (previous == null) delete process.env.SYNC_DATABASE_HOST_ALLOWLIST
+    else process.env.SYNC_DATABASE_HOST_ALLOWLIST = previous
+  }
 })
 
 test('snapshot archive policy fails closed for processing failures and empty entities', () => {

@@ -1188,6 +1188,54 @@ async function findOrgUnitByCode(tx: Database, ctx: UpsertCtx, code: string) {
   return row ?? null
 }
 
+async function findOrgUnitByCodeAnyState(tx: Database, ctx: UpsertCtx, code: string) {
+  const [row] = await tx
+    .select(ORG_UNIT_ROW_SELECTION)
+    .from(orgUnits)
+    .where(and(eq(orgUnits.tenantId, ctx.tenantId), eq(orgUnits.code, code)))
+    .limit(1)
+  return row ?? null
+}
+
+async function orgUnitCodeTakenByOther(
+  tx: Database,
+  ctx: UpsertCtx,
+  code: string,
+  selfId?: string,
+) {
+  const [row] = await tx
+    .select({ id: orgUnits.id })
+    .from(orgUnits)
+    .where(
+      and(
+        eq(orgUnits.tenantId, ctx.tenantId),
+        eq(orgUnits.code, code),
+        selfId ? ne(orgUnits.id, selfId) : undefined,
+      ),
+    )
+    .limit(1)
+  return Boolean(row)
+}
+
+async function resolveOrgUnitParentId(
+  tx: Database,
+  ctx: UpsertCtx,
+  data: CanonicalOrgUnit,
+): Promise<string | undefined> {
+  if (data.parentExternalId) {
+    const parentLink = await findCrosswalk(tx, ctx, 'org_unit', data.parentExternalId)
+    if (parentLink) {
+      const live = await selectOrgUnit(tx, parentLink.canonicalId)
+      if (live) return live.id
+    }
+  }
+  if (data.parentCode) {
+    const byCode = ctx.lookups.orgUnitIdByCode.get(data.parentCode.toLowerCase())
+    if (byCode) return byCode
+  }
+  return undefined
+}
+
 function orgUnitAfter(
   fields: OrgUnitFields,
   before: JsonRecord | null,
@@ -1316,29 +1364,42 @@ async function upsertOrgUnit(
   const rowHash = hashData(data)
   const metadata = data.metadata as JsonRecord | undefined
   const code = data.code ?? null
-  const fields: OrgUnitFields = {
-    level: data.level ?? 'site',
-    name: data.name,
-    code,
-    parentId: data.parentCode
-      ? (ctx.lookups.orgUnitIdByCode.get(data.parentCode.toLowerCase()) ?? null)
-      : null,
-    lat: data.lat ?? null,
-    lng: data.lng ?? null,
-    geofenceMeters: data.geofenceMeters ?? null,
-    address: data.address ?? null,
+  const resolvedParent = await resolveOrgUnitParentId(tx, ctx, data)
+  const fieldsFor = async (existing?: {
+    id?: string
+    parentId: string | null
+    code: string | null
+  }): Promise<OrgUnitFields> => {
+    const incoming = data.code ?? null
+    const keep = existing?.code ?? null
+    const incomingTaken =
+      incoming != null && incoming !== keep
+        ? await orgUnitCodeTakenByOther(tx, ctx, incoming, existing?.id)
+        : false
+    return {
+      level: data.level ?? 'site',
+      name: data.name,
+      code: incomingTaken ? keep : (incoming ?? keep),
+      parentId: resolvedParent ?? existing?.parentId ?? null,
+      lat: data.lat ?? null,
+      lng: data.lng ?? null,
+      geofenceMeters: data.geofenceMeters ?? null,
+      address: data.address ?? null,
+    }
   }
+  const fields = await fieldsFor()
 
   const link = await findCrosswalk(tx, ctx, 'org_unit', externalId)
   if (link) {
     const beforeRow = await selectOrgUnit(tx, link.canonicalId)
     if (!beforeRow) {
+      const archived = await selectOrgUnitAnyState(tx, link.canonicalId)
       const restored = await restoreOrgUnitOrConflict(
         tx,
         ctx,
         externalId,
         link,
-        fields,
+        await fieldsFor(archived ?? undefined),
         rowHash,
         metadata,
       )
@@ -1350,14 +1411,17 @@ async function upsertOrgUnit(
       }
       return createOrgUnit(tx, ctx, externalId, fields, rowHash, metadata)
     }
+    const linkedFields = await fieldsFor(beforeRow)
     if (link.rowHash === rowHash) {
       await touchCrosswalk(tx, ctx, link.id)
-      if (code) ctx.lookups.orgUnitIdByCode.set(code.toLowerCase(), link.canonicalId)
+      if (linkedFields.code) {
+        ctx.lookups.orgUnitIdByCode.set(linkedFields.code.toLowerCase(), link.canonicalId)
+      }
       return { action: 'unchanged', canonicalId: link.canonicalId, rowHash }
     }
     if (isManualConflict(ctx, beforeRow, link)) {
       const before = snap(beforeRow)
-      const after = { ...orgUnitAfter(fields, before, metadata), id: link.canonicalId }
+      const after = { ...orgUnitAfter(linkedFields, before, metadata), id: link.canonicalId }
       return {
         action: 'conflict',
         canonicalId: link.canonicalId,
@@ -1368,14 +1432,35 @@ async function upsertOrgUnit(
         message: conflictMessage(),
       }
     }
-    const res = await updateOrgUnit(tx, ctx, externalId, beforeRow, fields, rowHash, metadata)
+    const res = await updateOrgUnit(tx, ctx, externalId, beforeRow, linkedFields, rowHash, metadata)
     if (!ctx.dryRun) await touchCrosswalk(tx, ctx, link.id, rowHash)
     return res
   }
 
   if (code) {
-    const match = await findOrgUnitByCode(tx, ctx, code)
-    if (match) return updateOrgUnit(tx, ctx, externalId, match, fields, rowHash, metadata)
+    const match =
+      (await findOrgUnitByCode(tx, ctx, code)) ?? (await findOrgUnitByCodeAnyState(tx, ctx, code))
+    if (match) {
+      const matchedFields = await fieldsFor(match)
+      if (match.deletedAt) {
+        const synthetic = {
+          id: '',
+          canonicalId: match.id,
+          lastSyncedAt: match.updatedAt,
+        }
+        const restored = await restoreOrgUnitOrConflict(
+          tx,
+          ctx,
+          externalId,
+          synthetic,
+          matchedFields,
+          rowHash,
+          metadata,
+        )
+        if (restored) return restored
+      }
+      return updateOrgUnit(tx, ctx, externalId, match, matchedFields, rowHash, metadata)
+    }
   }
 
   return createOrgUnit(tx, ctx, externalId, fields, rowHash, metadata)

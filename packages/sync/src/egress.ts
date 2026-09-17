@@ -137,6 +137,12 @@ export interface ResolvePublicHostOptions {
   timeoutMs?: number
   resolver?: OutboundDnsResolver
   signal?: AbortSignal
+  /**
+   * Allow reserved hostnames and private/special resolved addresses. Used only
+   * by the database connector after the host has been operator-allowlisted —
+   * HTTP egress must keep the public-IP policy.
+   */
+  allowNonPublic?: boolean
 }
 
 export interface SecureFetchOptions {
@@ -276,13 +282,14 @@ export async function resolvePublicHost(
   options: ResolvePublicHostOptions = {},
 ): Promise<ResolvedPublicHost> {
   const hostname = normalizeOutboundHostname(rawHostname)
+  const allowNonPublic = options.allowNonPublic === true
   const literalFamily = isIP(hostname)
   if (literalFamily === 4 || literalFamily === 6) {
-    assertPublicAddress(hostname)
+    if (!allowNonPublic) assertPublicAddress(hostname)
     return { hostname, address: hostname, family: literalFamily, ipLiteral: true }
   }
 
-  assertPublicHostname(hostname)
+  if (!allowNonPublic) assertPublicHostname(hostname)
   const timeoutMs = boundedInteger(
     options.timeoutMs,
     DEFAULT_TIMEOUT_MS,
@@ -300,11 +307,19 @@ export async function resolvePublicHost(
 
   // Reject the entire hostname if any answer is private/special. Choosing only
   // a public answer would still permit rebinding or round-robin fallback to a
-  // private address in a later implementation.
+  // private address in a later implementation. Allowlisted on-prem database
+  // hosts are the only caller that opts out.
   const checked = addresses.map((entry) => {
-    const family = assertPublicAddress(entry.address)
-    if (entry.family !== family) throw new Error('Outbound DNS returned an invalid address family.')
-    return { address: entry.address, family }
+    const family = isIP(entry.address)
+    if (family !== 4 && family !== 6) {
+      throw new Error('Outbound DNS returned an invalid address family.')
+    }
+    const resolvedFamily: 4 | 6 = family
+    if (!allowNonPublic) assertPublicAddress(entry.address)
+    if (entry.family !== resolvedFamily) {
+      throw new Error('Outbound DNS returned an invalid address family.')
+    }
+    return { address: entry.address, family: resolvedFamily }
   })
   const selected = checked[0]
   if (!selected) throw new Error('Outbound host did not resolve to an address.')

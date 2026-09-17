@@ -319,6 +319,7 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SYNC_DATABASE_HOST_ALLOWLIST: ${{ secrets.SYNC_DATABASE_HOST_ALLOWLIST }}
         run: |
           set -euo pipefail
           umask 077
@@ -355,6 +356,7 @@ jobs:
             printf 'VAPID_PRIVATE_KEY=%s\n' "$VAPID_PRIVATE_KEY"
             printf 'VAPID_SUBJECT=%s\n' "$VAPID_SUBJECT"
             printf 'SENTRY_DSN=%s\n' "$SENTRY_DSN"
+            printf 'SYNC_DATABASE_HOST_ALLOWLIST=%s\n' "${SYNC_DATABASE_HOST_ALLOWLIST:-10.0.0.44}"
           } > "$env_block_file"
           jq -n --arg id "$COMPOSE_ID" --arg cf "$COMPOSE_FILE" \
             --argjson registry "$DOKPLOY_EXISTING_REGISTRY_ID_JSON" \

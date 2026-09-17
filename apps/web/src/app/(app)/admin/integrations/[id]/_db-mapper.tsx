@@ -65,6 +65,11 @@ const ENTITY_FIELDS: Record<string, { key: string; label: string; help?: string 
     { key: 'code', label: 'Code' },
     { key: 'level', label: 'Level', help: 'customer, project, site, or area' },
     { key: 'parentCode', label: 'Parent code' },
+    {
+      key: 'parentExternalId',
+      label: 'Parent external ID',
+      help: 'External id of the parent location (e.g. customer:{{CustomerID}})',
+    },
     { key: 'lat', label: 'Latitude' },
     { key: 'lng', label: 'Longitude' },
     { key: 'geofenceMeters', label: 'Geofence metres' },
