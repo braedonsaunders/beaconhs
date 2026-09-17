@@ -15,6 +15,7 @@ import {
   resolveDocumentBookItems,
   withSuperAdmin,
   withTenant,
+  type DocumentBookCoverToken,
 } from '@beaconhs/db'
 import {
   attachments,
@@ -51,6 +52,7 @@ import {
 import { renderDocumentMasterPdf, renderDocumentVersion } from './document-render'
 import { countPages, pdfUnite } from '@beaconhs/office'
 import { composeDocumentBook, type ComposeBookNode } from './document-book-compose'
+import { measureTextContentBoxes } from '../lib/pdf-content-box'
 import { renderTemplate } from '@beaconhs/email-render'
 import { audit } from '@beaconhs/audit'
 import { assertEmailAttachmentSize } from '../lib/email-attachment-policy'
@@ -112,11 +114,11 @@ async function loadBrandingLogoDataUrl(logoUrl: string | null | undefined): Prom
   }
 }
 /**
- * One entry in a book's render order: a document, or a section divider that
- * carries only a heading.
+ * One entry in a book's render order: a document, or a chapter/section divider
+ * that carries only a heading.
  */
 type BookRenderEntry =
-  | { kind: 'section'; title: string }
+  | { kind: 'chapter' | 'section'; title: string }
   | {
       kind: 'document'
       title: string
@@ -858,12 +860,12 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
 
     // Rebuild the book's real order: resolveDocumentBookItems only sees
     // documents, so its results are keyed back onto the full entry list to put
-    // section dividers where the editor placed them.
+    // chapter and section dividers where the builder placed them.
     const resolvedByItemId = new Map(resolvedItems.map((item) => [item.itemId, item]))
     const entries: BookRenderEntry[] = bookRows.flatMap((bookRow): BookRenderEntry[] => {
-      if (bookRow.item.kind === 'section') {
+      if (bookRow.item.kind !== 'document') {
         const title = bookRow.item.title?.trim()
-        return title ? [{ kind: 'section' as const, title }] : []
+        return title ? [{ kind: bookRow.item.kind, title }] : []
       }
       const item = resolvedByItemId.get(bookRow.item.id)
       if (!item) return []
@@ -883,17 +885,19 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
       ]
     })
 
-    // Tokens a designed cover can reference. Kept flat and few on purpose:
-    // these are the facts about the book itself, and anything richer belongs
-    // in the body rather than the cover sheet.
-    const designedCover = await loadDesignedBookCover(tx, tenantId, {
+    // Every token the designer palette offers must be supplied here, or a
+    // dragged field prints blank. The record type pins that: the catalogue in
+    // @beaconhs/db is the one list both sides read.
+    const coverTokens: Record<DocumentBookCoverToken, string | number> = {
       book_title: row.b.title,
       book_description: row.b.description ?? '',
       tenant_name: row.tenant.name,
       published_at: row.b.publishedAt ? row.b.publishedAt.toISOString().slice(0, 10) : '',
       document_count: entries.filter((entry) => entry.kind === 'document').length,
+      chapter_count: entries.filter((entry) => entry.kind === 'chapter').length,
       section_count: entries.filter((entry) => entry.kind === 'section').length,
-    })
+    }
+    const designedCover = await loadDesignedBookCover(tx, tenantId, coverTokens)
 
     return { ...row, entries, designedCover }
   })
@@ -941,10 +945,19 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
 
   const pageCounts = await Promise.all(fetched.map((f) => countPages(f.bytes)))
 
+  // Where each document's text actually sits. Sources keep whatever margins
+  // their author chose, so without this a 52%-wide column in small type sits
+  // beside an 80%-wide one in larger type and the book reads as a pile of
+  // documents. Measuring is sub-second for a few hundred pages.
+  const contentBoxes = await Promise.all(fetched.map((f) => measureTextContentBoxes(f.bytes)))
+
   // Stitch the fetched bytes back onto the full ordered list so dividers keep
   // their place between the documents they introduce.
   const byKey = new Map(
-    fetched.map((f, i) => [f.entry.key, { bytes: f.bytes, pages: pageCounts[i]! }]),
+    fetched.map((f, i) => [
+      f.entry.key,
+      { bytes: f.bytes, pages: pageCounts[i]!, boxes: contentBoxes[i] ?? [] },
+    ]),
   )
 
   const pdf = await composeDocumentBook({
@@ -960,7 +973,7 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
     timeZone: BOOK_PRINT_TIMEZONE,
     designedCover: data.designedCover,
     entries: data.entries.flatMap((e): ComposeBookNode[] => {
-      if (e.kind === 'section') return [{ kind: 'section' as const, title: e.title }]
+      if (e.kind !== 'document') return [{ kind: e.kind, title: e.title }]
       const loaded = byKey.get(e.key)
       if (!loaded) return []
       return [
@@ -971,6 +984,7 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
           version: e.version,
           pdf: loaded.bytes,
           pageCount: loaded.pages,
+          contentBoxes: loaded.boxes.length > 0 ? loaded.boxes : undefined,
           category: e.category,
           type: e.type,
           issuedAt: e.issuedAt,

@@ -267,6 +267,13 @@
       "when": 1788220800002,
       "tag": "0038_document_book_sections",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788220800003,
+      "tag": "0039_document_book_chapters",
+      "breakpoints": true
     }
   ]
 }

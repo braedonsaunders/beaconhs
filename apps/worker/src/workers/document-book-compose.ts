@@ -1,5 +1,6 @@
-import { composePdf, pageGeometry, type ComposePart } from '@beaconhs/office'
+import { composePdf, pageGeometry, type ComposePart, type ContentBox } from '@beaconhs/office'
 import type { DocumentBookPrintSettings } from '@beaconhs/db/schema'
+import { resolveBookPrintSettings } from '@beaconhs/db'
 import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
 
 // Assembling a document book.
@@ -18,6 +19,8 @@ import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
 type BookEntry = {
   kind: 'document'
   title: string
+  /** Per-page text extents, null where a page has nothing measurable. */
+  contentBoxes?: readonly (ContentBox | null)[]
   key: string
   version: number
   /** The published PDF for this document version. */
@@ -31,9 +34,14 @@ type BookEntry = {
 }
 
 /** A divider that names the run of documents after it. */
-type BookSection = { kind: 'section'; title: string }
+/**
+ * A chapter opens a major part of the manual; a section groups documents inside
+ * it. Both print as a divider page and both structure the contents listing —
+ * they differ only in weight.
+ */
+type BookHeading = { kind: 'chapter' | 'section'; title: string }
 
-export type ComposeBookNode = BookEntry | BookSection
+export type ComposeBookNode = BookEntry | BookHeading
 
 /**
  * A cover designed in the PDF template designer, already merged with the
@@ -60,29 +68,9 @@ export type ComposeBookInput = {
   designedCover?: DesignedCover | null
 }
 
-const DEFAULTS = {
-  paperSize: 'letter',
-  orientation: 'portrait',
-  contentMarginMm: 0,
-  coverPage: true,
-  tableOfContents: true,
-  documentHeaders: true,
-  // The control block rides on the document's first page. Giving it a sheet of
-  // its own doubled the page count of a book whose members are mostly one page.
-  documentHeadersOnOwnPage: false,
-  footer: true,
-  documentPageBreaks: true,
-} as const satisfies Required<DocumentBookPrintSettings>
-
 const PT_PER_MM = 72 / 25.4
 /** Band reserved for the control block when it rides on the document. */
 const CONTROL_BAND_PT = 132
-
-export function resolveBookPrintSettings(
-  settings: DocumentBookPrintSettings | null | undefined,
-): Required<DocumentBookPrintSettings> {
-  return { ...DEFAULTS, ...(settings ?? {}) }
-}
 
 function escapeHtml(value: string): string {
   return value
@@ -182,20 +170,30 @@ function coverHtml(input: ComposeBookInput, accent: string): string {
 }
 
 type TocRow =
+  | { kind: 'chapter'; title: string; number: number; page: number }
   | { kind: 'section'; title: string; page: number }
   | { kind: 'document'; title: string; key: string; version: number; page: number }
 
 /**
- * A divider page: the section name, centred, with the accent rule.
+ * A divider page: the heading, centred, with the accent rule.
  *
  * A 196-document manual with nothing between its documents is unreadable —
- * this is the page a reader flips to when looking for a part of the book.
+ * this is the page a reader flips to when looking for a part of the book. A
+ * chapter divider carries more weight than a section's so the two are
+ * distinguishable while thumbing through the printed copy.
  */
-function sectionDividerHtml(title: string, accent: string): string {
+function dividerHtml(heading: BookHeading, accent: string, chapterNumber: number | null): string {
+  const isChapter = heading.kind === 'chapter'
+  const eyebrow =
+    isChapter && chapterNumber !== null
+      ? `<div style="font-size:11px;font-weight:700;letter-spacing:.32em;text-transform:uppercase;color:#64748b;margin-bottom:18px">Chapter ${chapterNumber}</div>`
+      : ''
   return `
     <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 14%">
-      <div style="width:64px;height:3px;background:${accent};margin-bottom:26px"></div>
-      <h2 style="margin:0;font-size:30px;line-height:1.2;font-weight:700;color:#0f172a">${escapeHtml(title)}</h2>
+      ${eyebrow}
+      <div style="width:${isChapter ? 96 : 64}px;height:${isChapter ? 4 : 3}px;background:${accent};margin-bottom:26px"></div>
+      <h2 style="margin:0;font-size:${isChapter ? 44 : 30}px;line-height:1.15;font-weight:700;color:#0f172a">${escapeHtml(heading.title)}</h2>
+      ${isChapter ? `<div style="width:96px;height:4px;background:${accent};margin-top:26px"></div>` : ''}
     </div>`
 }
 
@@ -204,17 +202,26 @@ function tableOfContentsHtml(rows: TocRow[], accent: string): string {
   // shape of the book rather than presenting 196 undifferentiated lines.
   const items = rows
     .map((row) =>
-      row.kind === 'section'
+      row.kind === 'chapter'
         ? `
       <tr>
-        <td colspan="3" style="padding:16px 0 5px">
+        <td colspan="3" style="padding:22px 0 6px">
+          <div style="font-size:9px;font-weight:700;letter-spacing:.3em;text-transform:uppercase;color:#94a3b8">Chapter ${row.number}</div>
+          <div style="font-size:14px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#0f172a;margin-top:3px">${escapeHtml(row.title)}</div>
+          <div style="height:3px;background:${accent};width:100%;margin-top:6px"></div>
+        </td>
+      </tr>`
+        : row.kind === 'section'
+          ? `
+      <tr>
+        <td colspan="3" style="padding:14px 0 5px 10px">
           <div style="font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#334155">${escapeHtml(row.title)}</div>
           <div style="height:2px;background:${accent};width:46px;margin-top:5px"></div>
         </td>
       </tr>`
-        : `
+          : `
       <tr>
-        <td style="padding:7px 0 7px 14px;font-size:12px;color:#0f172a;">
+        <td style="padding:7px 0 7px 22px;font-size:12px;color:#0f172a;">
           ${escapeHtml(row.title)}
           <span style="color:#94a3b8"> · v${row.version}</span>
         </td>
@@ -251,7 +258,7 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
   // Split once: control sheets and page maths only concern documents, while
   // dividers need their own generated page.
   const documents = input.entries.flatMap((node) => (node.kind === 'document' ? [node] : []))
-  const sections = input.entries.flatMap((node) => (node.kind === 'section' ? [node] : []))
+  const headings = input.entries.flatMap((node) => (node.kind === 'document' ? [] : [node]))
 
   // Control sheets are part of the body, so they must exist before the contents
   // can know where anything starts.
@@ -281,17 +288,20 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
         })
       : null
 
-  // Divider pages, likewise batched into one render.
-  const sectionPagesPdf =
-    sections.length > 0
+  // Divider pages, likewise batched into one render. Chapters are numbered in
+  // book order, so the count has to run across the whole heading list rather
+  // than per render.
+  let dividerChapterNumber = 0
+  const dividerPagesPdf =
+    headings.length > 0
       ? await renderHtmlDocumentPdf({
           ...paper,
           marginMm: 0,
-          bodyHtml: sections
-            .map(
-              (section, i) =>
-                `<div style="${i > 0 ? 'page-break-before:always;' : ''}">${sectionDividerHtml(section.title, accent)}</div>`,
-            )
+          bodyHtml: headings
+            .map((heading, i) => {
+              const number = heading.kind === 'chapter' ? ++dividerChapterNumber : null
+              return `<div style="${i > 0 ? 'page-break-before:always;' : ''}">${dividerHtml(heading, accent, number)}</div>`
+            })
             .join(''),
         })
       : null
@@ -308,10 +318,18 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
   // no chicken-and-egg to resolve — offsetting by the front matter simply made
   // every entry wrong by the length of the contents.
   let cursor = 1
+  let chapterNumber = 0
   const tocRows: TocRow[] = input.entries.map((node) => {
     const page = cursor
-    if (node.kind === 'section') {
+    // Both heading kinds occupy one divider page. Tested together because
+    // `kind` is a union on BookHeading, which a single-value check cannot
+    // narrow away from the document arm.
+    if (node.kind !== 'document') {
       cursor += 1
+      if (node.kind === 'chapter') {
+        chapterNumber += 1
+        return { kind: 'chapter', title: node.title, number: chapterNumber, page }
+      }
       return { kind: 'section', title: node.title, page }
     }
     cursor += (ownPage ? 1 : 0) + Math.max(1, node.pageCount)
@@ -349,13 +367,13 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
   if (toc) parts.push({ bytes: toc, unnumbered: true })
 
   let documentIndex = 0
-  let sectionIndex = 0
+  let headingIndex = 0
   for (const node of input.entries) {
-    if (node.kind === 'section') {
+    if (node.kind !== 'document') {
       // Numbered, not `unnumbered`: a divider is a page of the manual a reader
       // pages past, and skipping it would make every following number wrong.
-      if (sectionPagesPdf) parts.push({ bytes: sectionPagesPdf, pages: [sectionIndex] })
-      sectionIndex += 1
+      if (dividerPagesPdf) parts.push({ bytes: dividerPagesPdf, pages: [headingIndex] })
+      headingIndex += 1
       continue
     }
     const i = documentIndex++
@@ -364,11 +382,19 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
     // page.
     if (controlSheetsPdf && ownPage) {
       parts.push({ bytes: controlSheetsPdf, pages: [i] })
-      parts.push({ bytes: node.pdf })
+      parts.push({
+        bytes: node.pdf,
+        ...(settings.normalizeContent && node.contentBoxes
+          ? { contentBoxes: node.contentBoxes }
+          : {}),
+      })
       continue
     }
     parts.push({
       bytes: node.pdf,
+      ...(settings.normalizeContent && node.contentBoxes
+        ? { contentBoxes: node.contentBoxes }
+        : {}),
       ...(controlSheetsPdf
         ? { letterhead: { bytes: controlSheetsPdf, page: i, heightPt: CONTROL_BAND_PT } }
         : {}),

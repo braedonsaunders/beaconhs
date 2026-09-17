@@ -13,6 +13,7 @@ export {
 } from '@braedonsaunders/appkit-pdf'
 export type {
   ComposePart,
+  ContentBox,
   ComposePdfInput,
   FooterCell,
   PageGeometry,

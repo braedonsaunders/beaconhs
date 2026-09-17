@@ -7,18 +7,27 @@ function source(relativePath: string): string {
 
 describe('document book publication snapshot contract', () => {
   it('publishes and unpublishes only through the atomic snapshot lifecycle', () => {
-    const page = source('../app/(app)/documents/books/[id]/page.tsx')
-    expect(page).toContain('publishDocumentBook(tx, ctx, bookId)')
-    expect(page).toContain('unpublishDocumentBook(tx, ctx, bookId)')
-    expect(page).not.toContain(".set({ status: 'published', publishedAt:")
+    const actions = source('../app/(app)/documents/books/[id]/actions.ts')
+    expect(actions).toContain('publishDocumentBook(tx, ctx, bookId)')
+    expect(actions).toContain('unpublishDocumentBook(tx, ctx, bookId)')
+    expect(actions).not.toContain(".set({ status: 'published', publishedAt:")
   })
 
   it.each([
-    ['single add and settings', '../app/(app)/documents/books/[id]/page.tsx'],
-    ['reorder and remove', '../app/(app)/documents/books/[id]/actions.ts'],
+    ['book builder mutations', '../app/(app)/documents/books/[id]/actions.ts'],
     ['bulk add', '../app/(app)/documents/_actions.ts'],
   ])('%s locks the draft book before mutation', (_label, relativePath) => {
     expect(source(relativePath)).toContain('lockDraftDocumentBook(')
+  })
+
+  it('keeps every book mutation in the one server-action module', () => {
+    // The builder is a client component, so its actions cannot live inline in
+    // the page any more. Nothing may quietly grow a second mutation path that
+    // skips the draft lock.
+    const page = source('../app/(app)/documents/books/[id]/page.tsx')
+    expect(page).not.toContain("'use server'")
+    // Reads are fine — the page loads the book. Writes are not.
+    expect(page).not.toMatch(/\.(insert|update|delete)\(documentBook/)
   })
 
   it('offers only live published documents and draft books to add flows', () => {

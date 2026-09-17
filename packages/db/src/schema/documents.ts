@@ -357,6 +357,16 @@ export type DocumentBookPrintSettings = {
   footer?: boolean
   /** Start each document on a fresh sheet. */
   documentPageBreaks?: boolean
+  /**
+   * Fit each page's TEXT to a common area instead of fitting the whole sheet.
+   *
+   * Members arrive already rendered with whatever margins their author chose,
+   * so fitting whole pages preserves that variance — one policy lands a
+   * 52%-wide column in small type beside another at 80% in larger type. This
+   * is what makes an assembled book read as one document rather than a pile of
+   * them. Turn it off for books whose sources carry artwork outside the text.
+   */
+  normalizeContent?: boolean
 }
 
 export const documentBooks = pgTable(

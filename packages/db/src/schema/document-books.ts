@@ -21,7 +21,14 @@ import { documentBooks, documents, documentVersions } from './documents'
 // Note: the `documentBookStatus` enum and `documentBooks` table live in documents.ts
 // (they predate this file). Import from there directly.
 
-export const documentBookItemKind = pgEnum('document_book_item_kind', ['document', 'section'])
+// A book's entries form two levels of structure above the documents: a chapter
+// opens a major part, a section groups documents within it. Legacy books used
+// Chapter entries for exactly this.
+export const documentBookItemKind = pgEnum('document_book_item_kind', [
+  'document',
+  'section',
+  'chapter',
+])
 
 export const documentBookItems = pgTable(
   'document_book_items',

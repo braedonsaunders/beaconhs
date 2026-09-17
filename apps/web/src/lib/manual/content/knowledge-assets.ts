@@ -428,24 +428,33 @@ Published books are fixed to the exact document versions approved when the book 
 
 ### Building a book
 
-While a book is a **draft**, open it to change what is inside:
+While a book is a **draft**, open it to build what is inside. The **Build** panel on the left holds the three things you can add; the book itself fills the rest of the screen.
 
-1. Pick a document in **Add document** and tap **Add**.
-2. To break a long book into parts, type a heading in **Section heading** and tap **Add section**.
-3. Drag any row to reorder it, or use the up and down arrows.
-4. Tap the pencil on a section to rename it, or the bin to remove a row.
-5. Tap **Publish** when the contents are right. Published books are locked — tap **Unpublish** to edit again.
+1. Tap **Add documents**. Search for a published document and pick it. Keep picking to stage several, then tap **Add** once.
+2. Tap **Add chapter** to open a major part of the manual, or **Add section** to group documents inside a chapter. Each one drops in at the bottom with a placeholder name — type over it to rename, then press Enter.
+3. Drag the grip handle on any row to move it. Drag a chapter and everything inside it moves too.
+4. Use the up and down arrows to move a row one step — this is how you move a document from one chapter into another.
+5. Tap the bin to remove a row. Removing a chapter or section removes only the heading; the documents under it stay in the book.
+6. Tap **Publish book** when the contents are right. Published books are locked — tap **Unpublish** to edit again.
 
-Sections print as their own divider page and group the contents list, so a long manual is easy to navigate.
+Chapters and sections print as their own divider page and group the contents list, so a long manual is easy to navigate.
+
+### Choosing how a book prints
+
+Open the **Print** panel on the left:
+
+- **Paper size**, **Orientation**, and **Content margin** control the sheet. Raising the margin also shrinks the imported content.
+- **Normalize page content** fits every document to the same text area, so type size stops changing between documents. Leave this on for a manual.
+- The remaining switches turn the cover, contents, control block, page breaks and footer on or off. Each one says what it does to the PDF.
 
 ### What a book PDF contains
 
-- A **title page** with your company logo.
-- A **contents** list with real page numbers.
+- A **title page** with your company logo, or your own design — see **Cover design** in the **Print** panel.
+- A **contents** list with real page numbers, grouped by chapter and section.
 - A control block at the top of each document showing its category, issue and revision dates, approver and version.
-- **UNCONTROLLED WHEN PRINTED** and a page number on every page.
+- **UNCONTROLLED WHEN PRINTED**, a page number, and your company name on every page.
 
-Tap **Render PDF** to build it. Large books take a few seconds — the button shows a spinner while it works.
+Tap **Render PDF** to build it. Large books take a few seconds.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
@@ -566,8 +575,8 @@ Management review automations are separate. Open **Management review automations
 A document book combines approved documents into one controlled PDF.
 
 1. Open [Document books](/documents/books) and click **New book**.
-2. Add published documents under **Contents**. Draft, archived, and deleted documents are not available in the picker.
-3. Drag the documents into the required order. Complete the **Settings** tab, then click **Publish book**.
+2. Add published documents from the **Build** panel on the left. Draft, archived, and deleted documents are not available in the picker.
+3. Add chapters and sections to structure a long manual, and drag everything into the required order. Set how it prints in the **Print** panel and fill in the **Settings** panel, then click **Publish book**.
 4. BeaconHS checks that every document has a valid published PDF and pins the book to those exact version numbers.
 5. A published book's contents, order, and settings are locked. Click **Unpublish** before making changes, then click **Publish book** again when the revised book is ready.
 

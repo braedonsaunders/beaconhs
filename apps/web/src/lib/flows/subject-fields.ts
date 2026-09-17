@@ -16,6 +16,7 @@ import {
 } from '@beaconhs/forms-core'
 import type { RequestContext } from '@beaconhs/tenant'
 import { MODULE_FLOW_PROFILES } from './module-profiles'
+import { COMPONENT_SUBJECT_FIELDS, COMPONENT_SUBJECT_LABELS } from './component-subjects'
 
 type SubjectFieldOption = { key: string; label: string }
 type SubjectOption = { type: 'module' | 'form_template'; key: string; label: string }
@@ -28,7 +29,12 @@ export async function subjectExists(
   subjectType: string,
   subjectKey: string,
 ): Promise<boolean> {
-  if (subjectType === 'module') return Object.hasOwn(MODULE_FLOW_PROFILES, subjectKey)
+  if (subjectType === 'module') {
+    return (
+      Object.hasOwn(MODULE_FLOW_PROFILES, subjectKey) ||
+      Object.hasOwn(COMPONENT_SUBJECT_FIELDS, subjectKey)
+    )
+  }
   if (subjectType !== 'form_template') return false
   const [row] = await ctx.db((tx) =>
     tx
@@ -64,9 +70,9 @@ export async function loadSubjectFields(
 ): Promise<SubjectFieldOption[]> {
   if (!subjectType || !subjectKey) return []
   if (subjectType === 'module') {
-    return (
-      MODULE_FLOW_PROFILES[subjectKey]?.fields.map((f) => ({ key: f.key, label: f.label })) ?? []
-    )
+    const profile = MODULE_FLOW_PROFILES[subjectKey]
+    if (profile) return profile.fields.map((f) => ({ key: f.key, label: f.label }))
+    return COMPONENT_SUBJECT_FIELDS[subjectKey]?.map((f) => ({ ...f })) ?? []
   }
   if (subjectType === 'form_template') {
     const schema = await loadLatestFormSchema(ctx, subjectKey)
@@ -183,7 +189,11 @@ export async function loadSubjectLabel(
   subjectKey: string | null,
 ): Promise<string | null> {
   if (!subjectType || !subjectKey) return null
-  if (subjectType === 'module') return MODULE_FLOW_PROFILES[subjectKey]?.label ?? subjectKey
+  if (subjectType === 'module') {
+    return (
+      MODULE_FLOW_PROFILES[subjectKey]?.label ?? COMPONENT_SUBJECT_LABELS[subjectKey] ?? subjectKey
+    )
+  }
   if (subjectType === 'form_template') {
     const [t] = await ctx.db((tx) =>
       tx
@@ -201,11 +211,20 @@ export async function loadSubjectLabel(
 export async function listSubjectOptions(
   ctx: RequestContext,
 ): Promise<{ modules: SubjectOption[]; apps: SubjectOption[] }> {
-  const modules: SubjectOption[] = Object.values(MODULE_FLOW_PROFILES).map((p) => ({
-    type: 'module',
-    key: p.subjectKey,
-    label: p.label,
-  }))
+  const modules: SubjectOption[] = [
+    ...Object.values(MODULE_FLOW_PROFILES).map((p) => ({
+      type: 'module' as const,
+      key: p.subjectKey,
+      label: p.label,
+    })),
+    // Component subjects are designed here too — a book cover is a template
+    // like any other, it is just printed inside a manual rather than alone.
+    ...Object.entries(COMPONENT_SUBJECT_LABELS).map(([key, label]) => ({
+      type: 'module' as const,
+      key,
+      label,
+    })),
+  ]
   const apps = await ctx.db((tx) =>
     tx
       .select({ key: formTemplates.id, label: formTemplates.name })
