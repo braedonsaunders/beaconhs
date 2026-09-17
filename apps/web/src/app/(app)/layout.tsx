@@ -24,6 +24,7 @@ import { ConfirmRoot } from '@/lib/confirm'
 import { WalkthroughProvider } from '@/components/walkthrough/provider.client'
 import { resolveNavGroups } from '@/lib/nav/resolve'
 import { resolveWalkthroughs } from '@/lib/walkthroughs/service'
+import { getPlatformFeedbackSettings } from '@/lib/feedback-config'
 import { RegulatoryTerminologyProvider } from '@/components/regulatory-terminology'
 
 // Every page in the authenticated app shell requires the per-request context
@@ -42,7 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const defaultCollapsed = (await cookies()).get('sidebar_collapsed')?.value === '1'
 
-  const [tenant, available, roles, unread, navGroups, sessionUser, walkthroughs] =
+  const [tenant, available, roles, unread, navGroups, sessionUser, walkthroughs, feedback] =
     await Promise.all([
       withSuperAdmin(db, async (tx) => {
         const [t] = await tx
@@ -67,6 +68,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       getSessionUser(),
       // Guided tours this user may launch + the first-run auto-start pick.
       ctx.db((tx) => resolveWalkthroughs(ctx, tx)),
+      getPlatformFeedbackSettings(),
     ])
   if (!tenant) redirect('/login')
 
@@ -117,6 +119,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           defaultCollapsed={defaultCollapsed}
           impersonation={impersonation}
           canUseAssistant={can(ctx, 'assistant.use')}
+          canUseFeedback={can(ctx, 'feedback.use') && feedback.ready}
+          feedbackAppVersion={process.env.DEPLOYMENT_VERSION || 'dev'}
+          locale={ctx.locale}
         >
           {/* Remount the page subtree when the active tenant — or effective
               user, while impersonating — changes. router.refresh() (fired by the

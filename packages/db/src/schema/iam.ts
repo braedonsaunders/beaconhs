@@ -272,6 +272,9 @@ export const PERMISSION_CATALOGUE = [
   //          (e.g. ca.create) — this is a feature flag, not an authorization.
   'assistant.use',
   'assistant.write',
+  // In-app product issue reporter. `use` opens the header control and files a
+  // report; destination settings stay on the platform (super-admin) surface.
+  'feedback.use',
   // Admin
   'admin.users.manage',
   // Sign in AS another user to see the app exactly as they do (scoped to the
@@ -324,6 +327,7 @@ export const BUILTIN_ROLES: Record<
       'journals.submit',
       'tools.safe-distance.use',
       'assistant.use',
+      'feedback.use',
     ],
   },
   foreman: {
@@ -364,6 +368,7 @@ export const BUILTIN_ROLES: Record<
       'tools.safe-distance.use',
       'assistant.use',
       'assistant.write',
+      'feedback.use',
     ],
   },
   safety_manager: {
@@ -432,6 +437,7 @@ export const BUILTIN_ROLES: Record<
       'tools.safe-distance.use',
       'assistant.use',
       'assistant.write',
+      'feedback.use',
     ],
   },
   tenant_admin: {

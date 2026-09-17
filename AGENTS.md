@@ -74,6 +74,8 @@ Prettier violations that fail CI.
 - `packages/jobs`: BullMQ queue definitions and Redis connection.
 - `packages/events`: module event fan-out into notifications/jobs.
 - `packages/storage`: S3-compatible storage client for MinIO/R2.
+- `packages/appkit-feedback`: in-app product issue reporter engine
+  (PII-safe GitHub filing). Host UI lives in the web app.
 - `packages/ai`, `packages/audit`, `packages/emails`, `packages/sync`,
   `packages/integrations`: supporting platform packages.
 - `packages/etl`: optional company-specific package in authorized local

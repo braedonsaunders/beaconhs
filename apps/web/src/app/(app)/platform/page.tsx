@@ -10,6 +10,7 @@ import {
   Plus,
   ScrollText,
   Sparkles,
+  CircleDot,
   Users,
 } from 'lucide-react'
 import { PageContainer } from '@/components/page-layout'
@@ -58,6 +59,12 @@ const TILES: Tile[] = [
     title: 'Platform AI',
     desc: 'Global default provider + tenant policy',
     icon: <Sparkles size={18} />,
+  },
+  {
+    href: '/platform/feedback',
+    title: 'Issue reporting',
+    desc: 'In-app product reports to the GitHub tracker',
+    icon: <CircleDot size={18} />,
   },
   {
     href: '/platform/email-log',

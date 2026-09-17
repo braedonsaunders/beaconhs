@@ -42,6 +42,9 @@ export const GETTING_STARTED_ARTICLES: ManualArticle[] = [
       'help',
       'basics',
       'start',
+      'report',
+      'bug',
+      'issue',
     ],
     body: `BeaconHS is where your crew reports hazards, fills out forms, and keeps safety records in one place. This article covers signing in and finding your way around.
 
@@ -113,6 +116,7 @@ Installing it also lets you get push notifications on iPhone. See [Notifications
 
 - Open this user guide any time at [Help](/help). Use the search box to find an answer fast.
 - If your company has it turned on, the [AI Assistant](/help/assistant) can answer questions in plain English.
+- See something broken in the app itself? Tap **Report an issue** in the top bar. See [Report an issue](/help/report-issue).
 - Your supervisor or safety admin can help with access and permissions.`,
   },
   {
@@ -454,5 +458,62 @@ If you manage BeaconHS for your company, you decide which tours are shown to whi
 
 - Stuck on a page? Search [Help](/help) for the page name first — most screens have a matching article.
 - If you prefer to ask instead of read, the [AI Assistant](/help/assistant) can read this guide and answer questions about it.`,
+  },
+  {
+    slug: 'report-issue',
+    title: 'Report an issue',
+    group: 'Getting started',
+    iconKey: 'circle-dot',
+    requiredPermission: 'feedback.use',
+    summary:
+      'Tell BeaconHS when something in the app is broken. We check the user guide first, then file a product report if it is a defect.',
+    keywords: [
+      'report',
+      'bug',
+      'issue',
+      'broken',
+      'feedback',
+      'github',
+      'still a bug',
+      'report an issue',
+      'product',
+    ],
+    body: `The **Report an issue** button lives in the top bar, next to notifications. Use it when a screen is wrong, a button does nothing, or something you expect to work does not.
+
+This is for problems in BeaconHS itself — not for a workplace incident or a hazard on site. Those have their own pages.
+
+## When to use it
+
+- A page will not load or looks empty when it should have data.
+- A button or save action fails.
+- Something you did is missing or saved in the wrong place.
+
+## When not to use it
+
+- You are not sure how to do a task. Search [Help](/help) or ask the [AI Assistant](/help/assistant) first.
+- You need to report a workplace incident, hazard, or inspection. Use those modules instead.
+
+## How to send a report
+
+1. Tap the **Report an issue** button in the top bar. It looks like a small target.
+2. Type what happened in your own words. You do not need technical language.
+3. A chip shows the page you were on. Leave it on unless the problem is not about that page. Tap **Remove page context** to drop it.
+4. Tap **Send**.
+5. BeaconHS may show a help answer, ask one or two questions, or file a product report.
+
+## If you get a help answer
+
+Read the steps. If they solve it, tap **That helped**. If it is still a product defect, tap **Still a bug**. That files a report without asking again.
+
+## What happens after you send it
+
+If it is a defect, BeaconHS files a generalized product issue. Names, emails, record ids, and company details are removed first. You will see a confirmation with an issue number.
+
+You do not need to confirm again after it is recognized as a defect.
+
+## Tips
+
+- Say what you tapped and what you expected to happen.
+- Do not paste emails, phone numbers, or record ids. They are stripped before filing.`,
   },
 ]

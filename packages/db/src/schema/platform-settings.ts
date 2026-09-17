@@ -21,6 +21,9 @@ export const platformSettings = pgTable('platform_settings', {
   email: jsonb('email').$type<Record<string, unknown>>().default({}).notNull(),
   sms: jsonb('sms').$type<Record<string, unknown>>().default({}).notNull(),
   ai: jsonb('ai').$type<Record<string, unknown>>().default({}).notNull(),
+  // In-app product issue reporter destination (GitHub). Shape is owned by
+  // apps/web feedback-config — sealed token, never env.
+  feedback: jsonb('feedback').$type<Record<string, unknown>>().default({}).notNull(),
   // Database maintenance: per-table retention windows + last-run status for the
   // unbounded high-volume tables (audit_log, kiosk_scans, *_log, notifications,
   // compliance_dispatches). Shape = DbMaintenanceSettings in db/maintenance.ts.

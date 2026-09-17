@@ -24,6 +24,7 @@ const GROUP_LABELS: Record<string, string> = {
   insights: 'Insights',
   tools: 'Field tools',
   assistant: 'AI Assistant',
+  feedback: 'Issue reporting',
   admin: 'Administration',
 }
 
@@ -124,6 +125,7 @@ const PERMISSION_LABELS: Record<string, string> = {
 
   'assistant.use': 'Use the assistant',
   'assistant.write': 'Draft changes with the assistant',
+  'feedback.use': 'Report a product issue',
 
   'admin.users.manage': 'Manage users',
   'admin.users.impersonate': 'Impersonate users',

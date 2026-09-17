@@ -54,6 +54,12 @@ const PLATFORM_NAV_GROUPS: SidebarNavGroup[] = [
         iconKey: 'sparkles',
       },
       {
+        href: '/platform/feedback',
+        label: 'Issue reporting',
+        labelKey: 'PlatformNav.issueReporting',
+        iconKey: 'circle-dot',
+      },
+      {
         href: '/platform/email-log',
         label: 'Email log',
         labelKey: 'PlatformNav.emailLog',

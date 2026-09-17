@@ -32,6 +32,7 @@ const nextConfig: NextConfig = {
     '@beaconhs/storage',
     '@beaconhs/sync',
     '@beaconhs/email-render',
+    '@braedonsaunders/appkit-feedback',
   ],
   serverExternalPackages: [
     'postgres',

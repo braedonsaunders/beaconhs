@@ -72,6 +72,11 @@ export const WALKTHROUGHS: Walkthrough[] = [
         body: 'Plain-language how-tos for every part of the app, plus more tours like this one. If you are ever stuck, start here.',
       },
       {
+        target: '[data-walkthrough="report-issue"]',
+        title: 'Report an issue',
+        body: 'See something broken in the app? Tap the target icon in the top bar. Describe what happened. BeaconHS checks the user guide first, then files a product report if it is a defect.',
+      },
+      {
         title: 'That is the basics',
         body: 'Open the User Guide any time for step-by-step help, or ask the Assistant a question in plain English.',
       },

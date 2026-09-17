@@ -26,8 +26,70 @@ function roleIdentifier(role: string): string {
 }
 
 function firstRow<T = Record<string, unknown>>(result: unknown): T | undefined {
-  const rows = (result as { rows?: T[] }).rows ?? (result as T[])
-  return rows[0]
+  return allRows<T>(result)[0]
+}
+
+function allRows<T = Record<string, unknown>>(result: unknown): T[] {
+  return (result as { rows?: T[] }).rows ?? (result as T[])
+}
+
+/**
+ * Every schema object must belong to the owner role the migrations run as.
+ *
+ * A migration that ALTERs an object it does not own dies on a bare
+ * `must be owner of type ...` in the middle of the deploy — after earlier
+ * statements in the same run have already applied. The usual cause is DDL
+ * applied by hand as a superuser: `CREATE TYPE` makes the creator the owner,
+ * so the object silently leaves the owner role's reach until something tries
+ * to change it, which can be months later.
+ *
+ * Checked up front so the failure names the objects and the fix instead.
+ * Extension-owned functions are excluded: pgcrypto and friends belong to the
+ * role that installed them and must stay that way.
+ */
+async function assertSchemaOwnership(db: MigrationDatabase, ownerRole: string) {
+  const strays = allRows<{ kind: string; name: string; owner: string }>(
+    await db.execute(sql`
+      select kind, name, owner from (
+        select
+          case c.relkind when 'S' then 'sequence' when 'v' then 'view' when 'm' then 'view' else 'table' end as kind,
+          c.relname::text as name,
+          r.rolname::text as owner
+        from pg_class c
+        join pg_authid r on r.oid = c.relowner
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm', 'S')
+        union all
+        select 'type', t.typname::text, r.rolname::text
+        from pg_type t
+        join pg_authid r on r.oid = t.typowner
+        join pg_namespace n on n.oid = t.typnamespace
+        where n.nspname = 'public' and t.typtype = 'e'
+        union all
+        select 'function', p.proname::text, r.rolname::text
+        from pg_proc p
+        join pg_authid r on r.oid = p.proowner
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+      ) owned
+      where owner <> ${ownerRole}
+      order by kind, name
+    `),
+  )
+  if (strays.length === 0) return
+
+  const listed = strays.slice(0, 10).map((o) => `  ${o.kind} ${o.name} (owned by ${o.owner})`)
+  const more = strays.length > listed.length ? `\n  …and ${strays.length - listed.length} more` : ''
+  const repair = strays
+    .slice(0, 10)
+    .map((o) => `  ALTER ${o.kind.toUpperCase()} public.${o.name} OWNER TO ${ownerRole};`)
+    .join('\n')
+  throw new Error(
+    `${strays.length} schema object(s) are not owned by ${ownerRole}, so migrations cannot ` +
+      `alter them:\n${listed.join('\n')}${more}\n\n` +
+      `Reassign them as a superuser, then redeploy:\n${repair}`,
+  )
 }
 
 async function verifyMigrationTracker(db: MigrationDatabase, requireComplete: boolean) {
@@ -442,6 +504,9 @@ async function main() {
     )
     await migrationDb.execute(sql`select pg_advisory_lock(hashtext('beaconhs:schema-migration'))`)
     lockAcquired = true
+
+    console.log('▶ Verifying schema ownership…')
+    await assertSchemaOwnership(migrationDb, ownerRole)
 
     console.log('▶ Validating migration ledger…')
     await verifyMigrationTracker(migrationDb, false)

@@ -647,6 +647,9 @@ Platform super-admins manage global identity from **Platform → Users**. Search
       'data export',
       'email templates',
       'direct printing',
+      'issue reporting',
+      'report an issue',
+      'github',
       'cardpresso',
       'zebra',
       'evolis',
@@ -751,6 +754,18 @@ For an inbound data-sync connection, the schedule controls automatic runs only. 
 6. Click **Test saved connection** and confirm the model replies.
 
 The platform policy can let tenants choose their own provider, force every tenant to use the platform provider, or disable AI everywhere. API keys are encrypted at rest. Removing a key disables that saved provider; it does not bypass a platform default that still applies.
+
+## Configure in-app issue reporting
+
+Platform super-admins choose the product GitHub repository that receives in-app defect reports. This is not a per-tenant tracker.
+
+1. Open **Platform**, then click **Issue reporting**.
+2. Enter the **Repository owner** and **Repository name**.
+3. Enter an **Access token** that can create issues. Leave it blank to keep a saved token.
+4. Optionally add **Default labels** and turn on **Search open issues first**.
+5. Turn on **Enable reporting** and click **Save**.
+
+The **Report an issue** button appears in the top bar for people who can use it, only after a repository and token are saved. AI must also be configured, because triage uses the workspace AI provider. Filed issues are generalized and personal data is removed first. See [Report an issue](/help/report-issue).
 
 ## Configure the platform email provider
 

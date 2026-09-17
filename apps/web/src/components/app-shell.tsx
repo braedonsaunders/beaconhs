@@ -8,6 +8,7 @@ import { PlatformMenu } from './platform-menu'
 import { NotificationsBell } from './notifications-bell'
 import { GlobalSearch } from './global-search'
 import { AssistantLauncher } from './assistant-launcher'
+import { FeedbackLauncher } from './feedback-reporter'
 import { type SidebarNavGroup } from './sidebar-nav'
 import { AppSidebar } from './app-sidebar'
 import { MobileNavProvider } from './mobile-nav'
@@ -35,6 +36,9 @@ export function AppShell({
   defaultCollapsed = false,
   impersonation = null,
   canUseAssistant = false,
+  canUseFeedback = false,
+  feedbackAppVersion = 'dev',
+  locale = 'en',
   children,
 }: {
   ctx: Ctx
@@ -56,6 +60,10 @@ export function AppShell({
   impersonation?: { actorName: string; targetName: string; expiresAtMs: number } | null
   /** Whether to show the ⌘K assistant launcher (user holds assistant.use). */
   canUseAssistant?: boolean
+  /** Whether to show Report an issue (user holds feedback.use and destination is ready). */
+  canUseFeedback?: boolean
+  feedbackAppVersion?: string
+  locale?: string
   children: React.ReactNode
 }) {
   const t = useTranslations('Shell')
@@ -107,6 +115,13 @@ export function AppShell({
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1.5 text-sm sm:gap-3 md:ml-0">
               <GeneratedValue value={canUseAssistant ? <AssistantLauncher /> : null} />
+              <GeneratedValue
+                value={
+                  canUseFeedback ? (
+                    <FeedbackLauncher appVersion={feedbackAppVersion} locale={locale} />
+                  ) : null
+                }
+              />
               <NotificationsBell unread={unreadCount} />
               <AccountMenu
                 name={account.name}
