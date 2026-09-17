@@ -111,6 +111,14 @@ export async function getPlatformFeedbackSettings(): Promise<FeedbackSettings> {
   return toSettings(await readPlatformFeedback())
 }
 
+/** Decrypted token for settings verification. Null when none is stored. */
+export async function getPlatformFeedbackToken(): Promise<string | null> {
+  const raw = await readPlatformFeedback()
+  if (!raw.keyCiphertext || !raw.keyNonce) return null
+  const token = unsealSecret({ ciphertext: raw.keyCiphertext, nonce: raw.keyNonce })
+  return token || null
+}
+
 /** Decrypted destination used by the turn route. Null when reporting is off. */
 export async function getPlatformFeedbackRuntime(): Promise<FeedbackRuntime | null> {
   const raw = await readPlatformFeedback()

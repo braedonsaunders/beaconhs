@@ -382,6 +382,9 @@ function normalizedHeaders(
     out[name] = value
   }
   if (!headers.has('accept-encoding')) out['accept-encoding'] = 'identity'
+  // GitHub and other APIs reject raw sockets with no User-Agent. Callers can
+  // still override; never send an empty product identifier.
+  if (!headers.has('user-agent')) out['user-agent'] = 'BeaconHS'
   const headerBytes = Object.entries(out).reduce(
     (total, [name, value]) => total + Buffer.byteLength(name) + Buffer.byteLength(value) + 4,
     0,
@@ -613,6 +616,16 @@ function isRedirect(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308
 }
 
+/**
+ * 303 is "see the resource with GET". 301/302 historically became GET in
+ * browsers after POST; that turns an API create into a list read. Same-origin
+ * egress follows 301/302/307/308 with the original method so GitHub issue
+ * creates survive a canonical-owner redirect.
+ */
+export function outboundRedirectKeepsRequest(status: number): boolean {
+  return status === 301 || status === 302 || status === 307 || status === 308
+}
+
 function responseFromRaw(raw: RawResponse): Response {
   if (raw.status < 200 || raw.status > 599) {
     throw new Error(`Outbound server returned unsupported HTTP status ${raw.status}.`)
@@ -711,7 +724,7 @@ export async function secureFetch(
     }
     const next = resolveOutboundRedirect(url, location)
 
-    if (raw.status === 303 || ((raw.status === 301 || raw.status === 302) && method === 'POST')) {
+    if (!outboundRedirectKeepsRequest(raw.status)) {
       method = 'GET'
       body = undefined
       delete headers['content-type']

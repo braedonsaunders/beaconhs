@@ -85,11 +85,19 @@ export function createFeedbackTools(deps: FeedbackToolDeps): ToolSet {
           },
           deps.redact,
         )
-        const issue = await deps.publisher.create(prepared.draft)
-        return {
-          kind: 'filed' as const,
-          issue: { ...issue, title: issue.title || prepared.draft.title },
-          stripped: prepared.stripped,
+        try {
+          const issue = await deps.publisher.create(prepared.draft)
+          return {
+            kind: 'filed' as const,
+            issue: { ...issue, title: issue.title || prepared.draft.title },
+            stripped: prepared.stripped,
+          }
+        } catch (error) {
+          const message =
+            error instanceof Error && error.message.trim()
+              ? error.message
+              : 'GitHub could not create the issue.'
+          return { kind: 'unavailable' as const, message }
         }
       },
     }),

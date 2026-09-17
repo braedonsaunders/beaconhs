@@ -19,9 +19,11 @@ describe('in-app issue reporter contract', () => {
       resolve(import.meta.dirname, '../app/(app)/feedback/turn/route.ts'),
       'utf8',
     )
+    const github = readFileSync(resolve(import.meta.dirname, './feedback-github.ts'), 'utf8')
     expect(route).toContain("can(ctx, 'feedback.use')")
     expect(route).toContain('createGithubIssuePublisher')
-    expect(route).toContain('secureFetch')
+    expect(route).toContain('feedbackGithubRequest')
+    expect(github).toContain('secureFetch')
     expect(route).toContain('scope: SCOPE')
     expect(route).toContain("const SCOPE = 'feedback'")
   })

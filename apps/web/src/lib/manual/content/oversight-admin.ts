@@ -761,9 +761,9 @@ Platform super-admins choose the product GitHub repository that receives in-app 
 
 1. Open **Platform**, then click **Issue reporting**.
 2. Enter the **Repository owner** and **Repository name**.
-3. Enter an **Access token** that can create issues. Leave it blank to keep a saved token.
-4. Optionally add **Default labels** and turn on **Search open issues first**.
-5. Turn on **Enable reporting** and click **Save**.
+3. Enter an **Access token**. A fine-grained token needs **Issues: Read and write** on that repository. A classic token needs **repo**, or **public_repo** for a public repository. Leave the field blank to keep a saved token.
+4. Optionally add **Default labels**. Each label must already exist on the repository. Turn on **Search open issues first** if you want matching open issues shown instead of a duplicate.
+5. Turn on **Enable reporting** and click **Save**. Save checks that the token can read the repository and list issues, and that every label exists.
 
 The **Report an issue** button appears in the top bar for people who can use it, only after a repository and token are saved. AI must also be configured, because triage uses the workspace AI provider. Filed issues are generalized and personal data is removed first. See [Report an issue](/help/report-issue).
 

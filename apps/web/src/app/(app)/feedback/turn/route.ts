@@ -12,7 +12,6 @@ import {
 } from '@braedonsaunders/appkit-feedback'
 import { AIDisabledError, getModel } from '@beaconhs/ai'
 import { can } from '@beaconhs/tenant'
-import { secureFetch } from '@beaconhs/sync/egress'
 import { getRequestContext, getSessionUser } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import {
@@ -22,6 +21,7 @@ import {
 } from '@/lib/ai-conversations'
 import { recordAudit } from '@/lib/audit'
 import { feedbackDenyList, getPlatformFeedbackRuntime } from '@/lib/feedback-config'
+import { feedbackGithubRequest } from '@/lib/feedback-github'
 import { createFeedbackKnowledge } from '@/lib/feedback-knowledge'
 import { feedbackToolPartsFromResult } from '@/lib/feedback-tools'
 import { MAX_FEEDBACK_REQUEST_BYTES, parseFeedbackTurnRequest } from '@/lib/feedback-turn-request'
@@ -38,22 +38,6 @@ export const maxDuration = 60
 
 const SCOPE = 'feedback'
 const REQUEST_TIMEOUT_MS = 15_000
-
-async function githubRequest(input: {
-  url: string
-  method: 'GET' | 'POST'
-  headers: Record<string, string>
-  body?: string
-}): Promise<{ status: number; body: string }> {
-  const response = await secureFetch(input.url, {
-    method: input.method,
-    headers: input.headers,
-    body: input.body,
-    timeoutMs: 20_000,
-    maxResponseBytes: 512 * 1024,
-  })
-  return { status: response.status, body: await response.text() }
-}
 
 function jsonResult(result: FeedbackTurnResult & { sessionId?: string }, status = 200): Response {
   return Response.json(result, { status })
@@ -124,7 +108,7 @@ export async function POST(req: Request): Promise<Response> {
     repo: runtime.repo,
     token: runtime.token,
     labels: runtime.labels,
-    request: githubRequest,
+    request: feedbackGithubRequest,
   })
   const publisher: IssuePublisher = runtime.searchDuplicates
     ? github

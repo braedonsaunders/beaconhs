@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   isPublicIpAddress,
   normalizeOutboundHostname,
+  outboundRedirectKeepsRequest,
   resolveOutboundRedirect,
   resolvePublicHost,
   secureFetch,
@@ -150,6 +151,13 @@ test('outbound configuration and redirect policy reject unsafe request metadata'
       !error.message.includes(secretHeader),
   )
 
+  const defaultHeaders = validateOutboundRequestConfiguration('https://hooks.example.net')
+  assert.equal(defaultHeaders.headers['user-agent'], 'BeaconHS')
+  const customAgent = validateOutboundRequestConfiguration('https://hooks.example.net', {
+    'User-Agent': 'appkit-feedback',
+  })
+  assert.equal(customAgent.headers['user-agent'], 'appkit-feedback')
+
   const current = new URL('https://hooks.example.net/start')
   assert.equal(resolveOutboundRedirect(current, '/next').href, 'https://hooks.example.net/next')
   assert.throws(
@@ -160,6 +168,11 @@ test('outbound configuration and redirect policy reject unsafe request metadata'
     () => resolveOutboundRedirect(current, 'http://hooks.example.net/next'),
     /must use HTTPS/,
   )
+  assert.equal(outboundRedirectKeepsRequest(301), true)
+  assert.equal(outboundRedirectKeepsRequest(302), true)
+  assert.equal(outboundRedirectKeepsRequest(307), true)
+  assert.equal(outboundRedirectKeepsRequest(308), true)
+  assert.equal(outboundRedirectKeepsRequest(303), false)
 })
 
 test('secure fetch rejects unsafe schemes, credentials, normalized private literals, and hop headers', async () => {

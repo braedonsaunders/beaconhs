@@ -68,10 +68,11 @@ export const DEFAULT_FEEDBACK_LABELS: FeedbackLabels = {
   owner: 'Repository owner',
   repo: 'Repository name',
   token: 'Access token',
-  tokenHelp: 'A token that can create issues. Leave blank to keep the saved token.',
+  tokenHelp:
+    'Needs Issues: Read and write (fine-grained) or repo (classic). Leave blank to keep the saved token.',
   tokenSet: 'A token is already saved.',
   labels: 'Default labels',
-  labelsHelp: 'Comma-separated labels applied to every filed issue.',
+  labelsHelp: 'Comma-separated labels that already exist on the repository.',
   searchDuplicates: 'Search open issues first',
   searchDuplicatesHelp:
     'When a matching open issue already exists, point the person to it instead of filing a duplicate.',

@@ -55,6 +55,20 @@ test('interpretFeedbackTurn prefers a later submit_issue over earlier guidance',
   assert.deepEqual(result.stripped, ['email address'])
 })
 
+test('interpretFeedbackTurn surfaces a failed submit_issue', () => {
+  const result = interpretFeedbackTurn([
+    {
+      type: 'dynamic-tool',
+      toolName: 'submit_issue',
+      state: 'output-available',
+      output: { kind: 'unavailable', message: 'GitHub 401: Bad credentials' },
+    },
+  ])
+  assert.equal(result.kind, 'unavailable')
+  if (result.kind !== 'unavailable') return
+  assert.equal(result.message, 'GitHub 401: Bad credentials')
+})
+
 test('interpretFeedbackTurn returns unavailable when no terminal tool completed', () => {
   const result = interpretFeedbackTurn([
     { type: 'text' },

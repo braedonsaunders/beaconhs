@@ -7,9 +7,10 @@ import {
   type PublishedIssue,
 } from './types'
 
+const UNAVAILABLE_MESSAGE = 'The report could not be completed. Try again in a moment.'
 const UNAVAILABLE: FeedbackTurnResult = {
   kind: 'unavailable',
-  message: 'The report could not be completed. Try again in a moment.',
+  message: UNAVAILABLE_MESSAGE,
 }
 
 export function interpretFeedbackTurn(parts: readonly FeedbackToolPart[]): FeedbackTurnResult {
@@ -69,6 +70,10 @@ function readTerminalOutput(
     const questions = asQuestions(record.questions)
     if (questions.length === 0) return null
     return { kind: 'questions', questions: questions.slice(0, 2) }
+  }
+  if (name === 'submit_issue' && record.kind === 'unavailable') {
+    const message = asString(record.message)
+    return { kind: 'unavailable', message: message ?? UNAVAILABLE_MESSAGE }
   }
   const issue = asPublishedIssue(record.issue ?? record)
   if (!issue) return null

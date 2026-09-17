@@ -48,7 +48,8 @@ export function PlatformFeedbackForm({ settings }: { settings: FeedbackSettings 
           <Label htmlFor="feedback-token">{t('token')}</Label>
           <Input id="feedback-token" name="token" type="password" autoComplete="new-password" />
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {settings.hasToken ? t('tokenSet') : t('tokenHelp')}
+            {settings.hasToken ? `${t('tokenSet')} ` : ''}
+            {t('tokenHelp')}
           </p>
         </div>
 

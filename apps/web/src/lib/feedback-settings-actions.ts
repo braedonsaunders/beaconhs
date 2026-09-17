@@ -1,10 +1,17 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { verifyGithubIssueAccess } from '@braedonsaunders/appkit-feedback'
 import { PLATFORM_SETTINGS_ID } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
-import { clearPlatformFeedbackToken, savePlatformFeedbackSettings } from '@/lib/feedback-config'
+import {
+  clearPlatformFeedbackToken,
+  getPlatformFeedbackToken,
+  parseFeedbackLabels,
+  savePlatformFeedbackSettings,
+} from '@/lib/feedback-config'
+import { feedbackGithubRequest } from '@/lib/feedback-github'
 
 async function gatePlatform() {
   const ctx = await requireRequestContext()
@@ -23,6 +30,16 @@ export async function savePlatformFeedback(formData: FormData) {
     labels: String(formData.get('labels') ?? ''),
     searchDuplicates: formData.get('searchDuplicates') === 'on',
     token: String(formData.get('token') ?? '').trim() || undefined,
+  }
+  if (input.enabled) {
+    const token = input.token || (await getPlatformFeedbackToken())
+    await verifyGithubIssueAccess({
+      owner: input.owner,
+      repo: input.repo,
+      token: token ?? '',
+      labels: parseFeedbackLabels(input.labels),
+      request: feedbackGithubRequest,
+    })
   }
   await savePlatformFeedbackSettings(input)
   await recordAudit(ctx, {

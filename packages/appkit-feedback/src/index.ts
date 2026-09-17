@@ -32,6 +32,7 @@ export { interpretFeedbackTurn, latestFeedbackToolName } from './interpret'
 export {
   createGithubIssuePublisher,
   githubIssueBody,
+  verifyGithubIssueAccess,
   type GithubIssuePublisherOptions,
 } from './github'
 export { createScriptedFeedbackClient, type ScriptedFeedbackOptions } from './scripted'
