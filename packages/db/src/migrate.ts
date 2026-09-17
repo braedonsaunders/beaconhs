@@ -44,13 +44,11 @@ function allRows<T = Record<string, unknown>>(result: unknown): T[] {
  * to change it, which can be months later.
  *
  * Checked up front so the failure names the objects and the fix instead.
- * Owners are resolved through `pg_roles`, not `pg_authid` — the migrator is
- * not a superuser and cannot read the latter.
+ *
+ * Owners resolve through `pg_roles`, not `pg_authid` — the latter is
+ * superuser-only and the migration login deliberately is not one.
  * Extension-owned functions are excluded: pgcrypto and friends belong to the
  * role that installed them and must stay that way.
- *
- * Reads pg_roles rather than pg_authid — the latter is superuser-only, and the
- * migration login deliberately is not one.
  */
 async function assertSchemaOwnership(db: MigrationDatabase, ownerRole: string) {
   const strays = allRows<{ kind: string; name: string; owner: string }>(
