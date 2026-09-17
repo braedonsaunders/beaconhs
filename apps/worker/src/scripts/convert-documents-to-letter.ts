@@ -30,10 +30,18 @@ import { attachments, documents, documentVersions } from '@beaconhs/db/schema'
 import { getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
 import { sofficeConvert } from '@beaconhs/office'
-import { readDocxPageSize, setDocxPageSize } from '@beaconhs/office/docx-page-size'
-import JSZip from 'jszip'
+import { normalizeDocxTypography } from '@beaconhs/office/docx-page-size'
+import { measureRenderedType } from '../lib/pdf-body-type'
 
 const TARGET = 'letter'
+/**
+ * The body size every document should LOOK like, as a measured glyph height in
+ * points — not a declared point size, which settles nothing when one master is
+ * Liberation Serif and the next is a sans face.
+ */
+const TARGET_BODY_PT = 12.5
+/** Do not rewrite a master already this close; re-saving churns storage. */
+const BODY_TOLERANCE_PT = 0.3
 const MAX_TEXT_CHARS = 1_500_000
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
@@ -47,10 +55,14 @@ type Candidate = {
   docxKey: string
 }
 
-async function pageSizeOf(docx: Buffer): Promise<string | null> {
-  const entry = (await JSZip.loadAsync(docx)).file('word/document.xml')
-  if (!entry) return null
-  return readDocxPageSize(await entry.async('string'))
+/** Render a master and report the paper and body size it actually produces. */
+async function measureRender(docx: Buffer): Promise<{ letter: boolean; bodyPt: number | null }> {
+  const pdf = await sofficeConvert(docx, 'document.docx', 'pdf')
+  const { pageWidthPt, bodyTypePt } = await measureRenderedType(pdf)
+  return {
+    letter: pageWidthPt !== null && Math.abs(pageWidthPt - 612) < 2,
+    bodyPt: bodyTypePt,
+  }
 }
 
 /** Conversions per run, unless --limit says otherwise. */
@@ -102,19 +114,26 @@ async function main() {
     const label = `${row.docKey || row.docTitle} v${row.version}`
     try {
       const docx = await getObject({ key: row.docxKey })
-      const size = await pageSizeOf(docx)
-      if (size === TARGET) {
+      const before = await measureRender(docx)
+      const bodyOk =
+        before.bodyPt !== null && Math.abs(before.bodyPt - TARGET_BODY_PT) <= BODY_TOLERANCE_PT
+      if (before.letter && bodyOk) {
         alreadyCorrect++
         continue
       }
 
       if (!apply) {
-        console.log(`  would convert ${label} (${size ?? 'unknown'} -> ${TARGET})`)
+        console.log(
+          `  would convert ${label} (${before.letter ? TARGET : 'not ' + TARGET}, body ${before.bodyPt ?? '?'}pt -> ${TARGET_BODY_PT}pt)`,
+        )
         converted++
         continue
       }
 
-      const letter = await setDocxPageSize(docx, TARGET)
+      // Scale by what the render MEASURED, so documents in different typefaces
+      // end up looking the same size rather than merely declaring the same one.
+      const sizeFactor = before.bodyPt ? TARGET_BODY_PT / before.bodyPt : undefined
+      const letter = await normalizeDocxTypography(docx, TARGET, { sizeFactor })
       const pdf = await sofficeConvert(letter, 'document.docx', 'pdf')
       const text = (await sofficeConvert(letter, 'document.docx', 'txt:Text'))
         .toString('utf8')
@@ -189,8 +208,12 @@ async function main() {
           entityType: 'document',
           entityId: row.documentId,
           action: 'update',
-          summary: `Converted version ${row.version} to ${TARGET} paper`,
-          metadata: { versionId: row.versionId, from: size, to: TARGET },
+          summary: `Normalised version ${row.version} to ${TARGET} paper`,
+          metadata: {
+            versionId: row.versionId,
+            bodyPtBefore: before.bodyPt,
+            bodyPtTarget: TARGET_BODY_PT,
+          },
         })
       })
 

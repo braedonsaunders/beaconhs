@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import JSZip from 'jszip'
 import {
   clampMarginsInDocumentXml,
+  defaultRunSize,
+  modalRunSize,
+  normalizeDocxTypography,
   readDocxPageSize,
+  scaleRunSizes,
   setDocxPageSize,
   setPageSizeInDocumentXml,
 } from './docx-page-size'
@@ -122,5 +126,103 @@ describe('setDocxPageSize', () => {
     const back = await JSZip.loadAsync(out)
     expect(await back.file('word/styles.xml')!.async('string')).toBe('<styles/>')
     expect([...(await back.file('word/media/image1.png')!.async('nodebuffer'))]).toEqual([1, 2, 3])
+  })
+})
+
+describe('modalRunSize', () => {
+  const rPr = (size: number) => `<w:rPr><w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr>`
+
+  it('reports the size most runs use', () => {
+    const runs = (size: number, n: number) => `<w:r>${rPr(size)}<w:t>x</w:t></w:r>`.repeat(n)
+    expect(modalRunSize(runs(23, 10) + runs(48, 2), 20)).toBe(23)
+  })
+
+  it('ignores a border width, which is eighths of a point', () => {
+    // <w:tblBorders><w:top w:sz="4"/> is a hairline rule, not 2pt text. Counting
+    // it would drag the mode to nothing and scale the whole document up.
+    const xml =
+      `<w:tblBorders><w:top w:val="single" w:sz="4"/></w:tblBorders>` +
+      `<w:r>${rPr(24)}<w:t>x</w:t></w:r>`.repeat(3)
+    expect(modalRunSize(xml, 20)).toBe(24)
+  })
+
+  it('counts runs that inherit their size from the defaults', () => {
+    // One real master had 84 runs and a single explicit size; matching the body
+    // to that lone heading shrank the whole document.
+    const inherited = '<w:r><w:t>x</w:t></w:r>'.repeat(84)
+    expect(modalRunSize(inherited + `<w:r>${rPr(27)}<w:t>x</w:t></w:r>`, 24)).toBe(24)
+  })
+
+  it('returns null when there are no runs at all', () => {
+    expect(modalRunSize('<w:body/>', 20)).toBeNull()
+  })
+})
+
+describe('defaultRunSize', () => {
+  it('reads the document defaults', () => {
+    expect(
+      defaultRunSize(
+        '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="24"/></w:rPr></w:rPrDefault></w:docDefaults>',
+      ),
+    ).toBe(24)
+  })
+
+  it("falls back to Word's own default", () => {
+    expect(defaultRunSize(null)).toBe(20)
+    expect(defaultRunSize('<w:styles/>')).toBe(20)
+  })
+})
+
+describe('scaleRunSizes', () => {
+  it('keeps the document hierarchy while moving the body', () => {
+    // A heading two steps above the body must stay two steps above it.
+    const xml = `<w:rPr><w:sz w:val="24"/></w:rPr><w:rPr><w:sz w:val="48"/></w:rPr>`
+    const out = scaleRunSizes(xml, 22 / 24)
+    expect(out).toContain('w:sz w:val="22"')
+    expect(out).toContain('w:sz w:val="44"')
+  })
+
+  it('moves complex-script sizes with their run', () => {
+    expect(scaleRunSizes('<w:rPr><w:szCs w:val="24"/></w:rPr>', 0.5)).toContain('w:szCs w:val="12"')
+  })
+
+  it('leaves border widths alone', () => {
+    const xml = '<w:tblBorders><w:top w:val="single" w:sz="4"/></w:tblBorders>'
+    expect(scaleRunSizes(xml, 2)).toBe(xml)
+  })
+
+  it('is a no-op at factor 1', () => {
+    const xml = '<w:rPr><w:sz w:val="24"/></w:rPr>'
+    expect(scaleRunSizes(xml, 1)).toBe(xml)
+  })
+})
+
+describe('normalizeDocxTypography', () => {
+  it('puts a master on the house paper, margins and body size', async () => {
+    const body = `${A4}<w:pgMar w:top="567" w:right="567" w:bottom="567" w:left="1134"/>${'<w:r><w:rPr><w:sz w:val="27"/></w:rPr><w:t>x</w:t></w:r>'.repeat(5)}`
+    const out = await normalizeDocxTypography(await makeDocx(body), 'letter')
+    const xml = await (await JSZip.loadAsync(out)).file('word/document.xml')!.async('string')
+    expect(readDocxPageSize(xml)).toBe('letter')
+    expect(xml).toContain('w:left="1440"')
+    expect(xml).toContain('w:right="1440"')
+    // 27 half-points (13.5pt) scaled to the 22 half-point (11pt) house body.
+    expect(modalRunSize(xml, 20)).toBe(22)
+  })
+
+  it('leaves an already-normal master byte-identical', async () => {
+    const body = `${LETTER}<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/><w:r><w:rPr><w:sz w:val="22"/></w:rPr><w:t>x</w:t></w:r>`
+    const docx = await makeDocx(body)
+    expect(await normalizeDocxTypography(docx, 'letter')).toBe(docx)
+  })
+})
+
+describe('normalizeDocxTypography sizeFactor', () => {
+  it('uses a measured ratio in place of the declared point size', async () => {
+    // Two masters both set at 11pt render different glyph heights in different
+    // typefaces, so a caller that measured the render overrides the guess.
+    const body = `${A4}<w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t>x</w:t></w:r>`
+    const out = await normalizeDocxTypography(await makeDocx(body), 'letter', { sizeFactor: 0.5 })
+    const xml = await (await JSZip.loadAsync(out)).file('word/document.xml')!.async('string')
+    expect(xml).toContain('w:sz w:val="12"')
   })
 })

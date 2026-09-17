@@ -335,12 +335,11 @@ export type DocumentBookPrintSettings = {
   paperSize?: 'letter' | 'a4' | 'legal'
   orientation?: 'portrait' | 'landscape'
   /**
-   * The book's page margin, in millimetres.
+   * Inset applied around each imported page, in millimetres.
    *
-   * With `normalizeContent` on, each document is cropped to its own text, so
-   * this REPLACES whatever margin the source had rather than adding to it — it
-   * is the margin a reader measures on the printed page. Raising it also
-   * shrinks the content, since every page shares one scale.
+   * Pages are imposed whole, so this ADDS to whatever margin the document was
+   * authored with; the document's own margin is what a reader mostly measures.
+   * Raising this also shrinks the content, since the page must still fit.
    */
   contentMarginMm?: number
   /** Title page with the tenant logo. */
@@ -358,16 +357,6 @@ export type DocumentBookPrintSettings = {
   footer?: boolean
   /** Start each document on a fresh sheet. */
   documentPageBreaks?: boolean
-  /**
-   * Fit each page's TEXT to a common area instead of fitting the whole sheet.
-   *
-   * Members arrive already rendered with whatever margins their author chose,
-   * so fitting whole pages preserves that variance — one policy lands a
-   * 52%-wide column in small type beside another at 80% in larger type. This
-   * is what makes an assembled book read as one document rather than a pile of
-   * them. Turn it off for books whose sources carry artwork outside the text.
-   */
-  normalizeContent?: boolean
 }
 
 export const documentBooks = pgTable(

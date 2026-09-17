@@ -497,7 +497,6 @@ export async function updateBookPrintSettingsAction(formData: FormData): Promise
     documentHeadersOnOwnPage: on('documentHeadersOnOwnPage'),
     footer: on('footer'),
     documentPageBreaks: on('documentPageBreaks'),
-    normalizeContent: on('normalizeContent'),
   }
 
   await ctx.db(async (tx) => {

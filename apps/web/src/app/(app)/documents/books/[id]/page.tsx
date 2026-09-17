@@ -248,13 +248,6 @@ export default async function DocumentBookPage({ params }: { params: Promise<{ i
 
             <RailSection title={tGenerated('m_196fa3ffbb4b43')}>
               <PrintToggle
-                name="normalizeContent"
-                checked={print.normalizeContent}
-                disabled={locked}
-                label={tGenerated('m_101d6f9449fd93')}
-                hint={tGenerated('m_157b50f0694e07')}
-              />
-              <PrintToggle
                 name="coverPage"
                 checked={print.coverPage}
                 disabled={locked}

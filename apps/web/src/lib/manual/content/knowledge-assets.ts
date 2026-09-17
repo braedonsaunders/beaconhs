@@ -450,8 +450,7 @@ Open the **Cover** panel on the left. Every book picks its own cover, so a safet
 
 Open the **Print** panel on the left:
 
-- **Paper size**, **Orientation**, and **Page margin** control the sheet. The margin is what you measure on the printed page; raising it also shrinks the content.
-- **Normalize page content** matches the body text size across documents, so type stops changing between them, and centres each document so the margins match too. Leave this on for a manual.
+- **Paper size**, **Orientation**, and **Page margin** control the sheet. Pages go in whole, so the margin is added on top of the one each document was written with; raising it also shrinks the content.
 - The remaining switches turn the cover, contents, control block, page breaks and footer on or off. Each one says what it does to the PDF.
 
 ### What a book PDF contains

@@ -386,9 +386,6 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(kysely@0.28.17)(mysql2@3.24.4(@types/node@24.13.3))(pg@8.22.0)(postgres@3.4.9)
-      jszip:
-        specifier: ^3.10.1
-        version: 3.10.1
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4

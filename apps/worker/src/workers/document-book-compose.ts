@@ -1,7 +1,6 @@
-import { composePdf, pageGeometry, type ComposePart, type ContentBox } from '@beaconhs/office'
+import { composePdf, pageGeometry, type ComposePart } from '@beaconhs/office'
 import type { DocumentBookPrintSettings } from '@beaconhs/db/schema'
 import { resolveBookPrintSettings } from '@beaconhs/db'
-import { bookTypeScales } from '../lib/book-type-scale'
 import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
 
 // Assembling a document book.
@@ -21,9 +20,6 @@ type BookEntry = {
   kind: 'document'
   title: string
   /** Per-page text extents, null where a page has nothing measurable. */
-  contentBoxes?: readonly (ContentBox | null)[]
-  /** The document's own body type size, in its source points. */
-  bodyTypePt?: number | null
   key: string
   version: number
   /** The published PDF for this document version. */
@@ -366,29 +362,21 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
       })
     : null
 
-  // Even out the TYPE, not the page fit. Fitting each document to the sheet
-  // decides its scale from geometry, and these sources are authored at
-  // different body sizes — on the manual this was built against, 39 documents
-  // were set at 14.5pt and 14 at 17.5pt, a 21% difference that page-fitting
-  // preserves exactly.
+  // Pages are imposed WHOLE.
+  //
+  // They used to be cropped to their measured text and scaled to fill the
+  // sheet, which evened out documents authored at different sizes — but the
+  // measurement is of TEXT, and a page's rules, borders, images and form boxes
+  // are not text. A Communication Log came through the book as a blank sheet
+  // with its heading on it: the table around the empty cells fell outside the
+  // text box and was cropped away.
+  //
+  // Evening out now happens where it belongs, on the master: every document is
+  // normalised to the same paper, margins and body size before it is ever
+  // rendered (see @beaconhs/office/docx-page-size), so imposing whole pages
+  // gives a uniform book and cannot lose content.
   const marginPt = Math.max(0, settings.contentMarginMm) * PT_PER_MM
   const footerReservePt = settings.footer ? FOOTER_RESERVE_PT : 0
-  const typeScales = settings.normalizeContent
-    ? bookTypeScales(
-        documents.map((node) => {
-          const box = node.contentBoxes?.find((entry) => entry !== null) ?? null
-          return {
-            bodyTypePt: node.bodyTypePt ?? null,
-            contentWidthPt: box ? box.right - box.left : 0,
-            contentHeightPt: box ? box.top - box.bottom : 0,
-          }
-        }),
-        {
-          widthPt: Math.max(1, geometry.width - marginPt * 2),
-          heightPt: Math.max(1, geometry.height - marginPt * 2 - footerReservePt),
-        },
-      )
-    : documents.map(() => null)
 
   const parts: ComposePart[] = []
   if (settings.coverPage) {
@@ -422,25 +410,11 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
     // page.
     if (controlSheetsPdf && ownPage) {
       parts.push({ bytes: controlSheetsPdf, pages: [i] })
-      parts.push({
-        bytes: node.pdf,
-        ...(settings.normalizeContent && node.contentBoxes
-          ? {
-              contentBoxes: node.contentBoxes,
-              ...(typeScales[i] !== null ? { contentScale: typeScales[i]! } : {}),
-            }
-          : {}),
-      })
+      parts.push({ bytes: node.pdf })
       continue
     }
     parts.push({
       bytes: node.pdf,
-      ...(settings.normalizeContent && node.contentBoxes
-        ? {
-            contentBoxes: node.contentBoxes,
-            ...(typeScales[i] !== null ? { contentScale: typeScales[i]! } : {}),
-          }
-        : {}),
       ...(controlSheetsPdf
         ? { letterhead: { bytes: controlSheetsPdf, page: i, heightPt: CONTROL_BAND_PT } }
         : {}),

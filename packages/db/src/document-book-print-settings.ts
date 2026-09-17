@@ -13,10 +13,9 @@ import type { DocumentBookPrintSettings } from './schema/documents'
 export const DOCUMENT_BOOK_PRINT_DEFAULTS = {
   paperSize: 'letter',
   orientation: 'portrait',
-  // Cropping removes the source document's own margins, so this IS the book's
-  // page margin — not an addition to the source's. Zero would print text on the
-  // sheet edge, inside the non-printable border of most office printers.
-  contentMarginMm: 10,
+  // Pages are imposed whole, so the document's own margin already keeps text
+  // off the sheet edge; this is an extra inset on top of it.
+  contentMarginMm: 0,
   coverPage: true,
   tableOfContents: true,
   documentHeaders: true,
@@ -25,7 +24,6 @@ export const DOCUMENT_BOOK_PRINT_DEFAULTS = {
   documentHeadersOnOwnPage: false,
   footer: true,
   documentPageBreaks: true,
-  normalizeContent: true,
 } as const satisfies Required<DocumentBookPrintSettings>
 
 export function resolveBookPrintSettings(

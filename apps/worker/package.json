@@ -39,8 +39,7 @@
     "bullmq": "^5.80.2",
     "cron-parser": "^4.9.0",
     "drizzle-orm": "^0.45.2",
-    "qrcode": "^1.5.4",
-    "jszip": "^3.10.1"
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

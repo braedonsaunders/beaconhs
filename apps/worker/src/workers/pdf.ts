@@ -52,7 +52,6 @@ import {
 import { renderDocumentMasterPdf, renderDocumentVersion } from './document-render'
 import { countPages, pdfUnite } from '@beaconhs/office'
 import { composeDocumentBook, type ComposeBookNode } from './document-book-compose'
-import { measureTextContentBoxes } from '../lib/pdf-content-box'
 import { renderTemplate } from '@beaconhs/email-render'
 import { audit } from '@beaconhs/audit'
 import { assertEmailAttachmentSize } from '../lib/email-attachment-policy'
@@ -958,24 +957,10 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
 
   const pageCounts = await Promise.all(fetched.map((f) => countPages(f.bytes)))
 
-  // Where each document's text actually sits. Sources keep whatever margins
-  // their author chose, so without this a 52%-wide column in small type sits
-  // beside an 80%-wide one in larger type and the book reads as a pile of
-  // documents. Measuring is sub-second for a few hundred pages.
-  const measured = await Promise.all(fetched.map((f) => measureTextContentBoxes(f.bytes)))
-
   // Stitch the fetched bytes back onto the full ordered list so dividers keep
   // their place between the documents they introduce.
   const byKey = new Map(
-    fetched.map((f, i) => [
-      f.entry.key,
-      {
-        bytes: f.bytes,
-        pages: pageCounts[i]!,
-        boxes: measured[i]?.boxes ?? [],
-        bodyTypePt: measured[i]?.bodyTypePt ?? null,
-      },
-    ]),
+    fetched.map((f, i) => [f.entry.key, { bytes: f.bytes, pages: pageCounts[i]! }]),
   )
 
   const pdf = await composeDocumentBook({
@@ -1002,8 +987,6 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
           version: e.version,
           pdf: loaded.bytes,
           pageCount: loaded.pages,
-          contentBoxes: loaded.boxes.length > 0 ? loaded.boxes : undefined,
-          bodyTypePt: loaded.bodyTypePt,
           category: e.category,
           type: e.type,
           issuedAt: e.issuedAt,
