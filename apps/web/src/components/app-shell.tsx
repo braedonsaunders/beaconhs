@@ -37,7 +37,7 @@ export function AppShell({
   impersonation = null,
   canUseAssistant = false,
   canUseFeedback = false,
-  feedbackAppVersion = 'dev',
+  appVersion = 'dev',
   locale = 'en',
   children,
 }: {
@@ -62,7 +62,7 @@ export function AppShell({
   canUseAssistant?: boolean
   /** Whether to show Report an issue (user holds feedback.use and destination is ready). */
   canUseFeedback?: boolean
-  feedbackAppVersion?: string
+  appVersion?: string
   locale?: string
   children: React.ReactNode
 }) {
@@ -118,12 +118,13 @@ export function AppShell({
               <GeneratedValue
                 value={
                   canUseFeedback ? (
-                    <FeedbackLauncher appVersion={feedbackAppVersion} locale={locale} />
+                    <FeedbackLauncher appVersion={appVersion} locale={locale} />
                   ) : null
                 }
               />
               <NotificationsBell unread={unreadCount} />
               <AccountMenu
+                appVersion={appVersion}
                 name={account.name}
                 email={account.email}
                 isSuperAdmin={ctx.isSuperAdmin}

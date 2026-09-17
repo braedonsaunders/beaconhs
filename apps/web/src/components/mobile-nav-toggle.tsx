@@ -1,6 +1,6 @@
 'use client'
 
-import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { GeneratedValue } from '@/i18n/generated'
 
 import { useGeneratedTranslations } from '@/i18n/generated'
 
@@ -12,12 +12,10 @@ import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
-import { Badge } from '@beaconhs/ui'
 import { Logo } from './brand-logo'
 import { useMobileNav } from './mobile-nav'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
 import { useNavGroups } from './use-platform-nav'
-import { ThemeToggle } from './theme-toggle'
 import { useHydrated } from '@/lib/use-hydrated'
 
 export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
@@ -97,20 +95,6 @@ export function MobileNavToggle({ groups }: { groups: SidebarNavGroup[] }) {
                           </button>
                         </div>
                         <SidebarNav groups={navGroups} />
-
-                        {/* Footer: theme switcher + build tag — mirrors the desktop
-                        rail. Safe-area padding clears the iOS home indicator. */}
-                        <div className="space-y-2 border-t border-slate-200 px-3 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] dark:border-slate-800">
-                          <ThemeToggle />
-                          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                            <span>
-                              <GeneratedText id="m_0c85098694b405" />
-                            </span>
-                            <Badge variant="secondary" className="font-mono text-[10px]">
-                              <GeneratedText id="m_155b48f51ba2b4" />
-                            </Badge>
-                          </div>
-                        </div>
                       </motion.aside>
                     </div>
                   ) : null}

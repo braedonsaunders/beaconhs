@@ -14,6 +14,7 @@ import { Bell, ChevronDown, LogOut, Settings, ShieldCheck, UserRound } from 'luc
 import { Popover } from '@beaconhs/ui'
 import { signOut } from '@beaconhs/auth/client'
 import { ThemeToggle } from './theme-toggle'
+import { formatAppVersion } from '@/lib/format-app-version'
 
 // Two-letter monogram from a display name, falling back to the email. Handles the
 // "Last, First" directory convention so the initials read First+Last either way.
@@ -34,10 +35,13 @@ export function AccountMenu({
   name,
   email,
   isSuperAdmin,
+  appVersion = 'dev',
 }: {
   name: string
   email: string
   isSuperAdmin: boolean
+  /** The running build, as the deploy stamped it. */
+  appVersion?: string
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const router = useRouter()
@@ -150,6 +154,16 @@ export function AccountMenu({
           <LogOut size={15} className="text-slate-500 dark:text-slate-400" />
           <GeneratedValue value={pending ? t('signingOut') : t('signOut')} />
         </button>
+      </div>
+
+      {/* The build, for support: "it's broken" is answerable only if you know
+          which commit the person is looking at. `title` carries the full SHA so
+          it can be copied. */}
+      <div
+        className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400 dark:border-slate-800 dark:text-slate-500"
+        title={appVersion}
+      >
+        <GeneratedValue value={`${t('version')} ${formatAppVersion(appVersion)}`} />
       </div>
     </Popover>
   )

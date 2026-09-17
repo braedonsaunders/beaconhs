@@ -21,6 +21,7 @@ import { RiskMatrixProvider } from '@/components/risk-matrix'
 import { BackNavProviders } from '@/components/smart-back-link'
 import { ThemeProvider } from '@/components/theme-provider'
 import { ConfirmRoot } from '@/lib/confirm'
+import { appVersion } from '@/lib/app-version'
 import { WalkthroughProvider } from '@/components/walkthrough/provider.client'
 import { resolveNavGroups } from '@/lib/nav/resolve'
 import { resolveWalkthroughs } from '@/lib/walkthroughs/service'
@@ -120,7 +121,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           impersonation={impersonation}
           canUseAssistant={can(ctx, 'assistant.use')}
           canUseFeedback={can(ctx, 'feedback.use') && feedback.ready}
-          feedbackAppVersion={process.env.DEPLOYMENT_VERSION || 'dev'}
+          appVersion={appVersion()}
           locale={ctx.locale}
         >
           {/* Remount the page subtree when the active tenant — or effective

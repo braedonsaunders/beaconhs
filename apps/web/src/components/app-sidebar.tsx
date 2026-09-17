@@ -1,19 +1,20 @@
 'use client'
 
-import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 
 // The desktop nav rail. Collapses to an icon-only strip; the choice is persisted
 // in a cookie so the server can render the correct width on the next load (no
-// width flash). Hosts the brand, the nav, the theme switcher, and the version tag.
+// width flash). Hosts the brand and the nav — the theme switch and the build
+// version live in the account menu, which is where the app's other per-user
+// settings already are.
 
 import { useCallback, useState } from 'react'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Badge, cn } from '@beaconhs/ui'
+import { cn } from '@beaconhs/ui'
 import { Logo } from './brand-logo'
 import { SidebarNav, type SidebarNavGroup } from './sidebar-nav'
 import { useNavGroups } from './use-platform-nav'
-import { ThemeToggle } from './theme-toggle'
 
 const COOKIE = 'sidebar_collapsed'
 
@@ -73,30 +74,6 @@ export function AppSidebar({
       </div>
 
       <SidebarNav groups={navGroups} collapsed={collapsed} />
-
-      <div className="border-t border-slate-200 p-3 dark:border-slate-800">
-        <GeneratedValue
-          value={
-            collapsed ? (
-              <div className="flex justify-center">
-                <ThemeToggle collapsed />
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <ThemeToggle />
-                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                  <span>
-                    <GeneratedText id="m_0c85098694b405" />
-                  </span>
-                  <Badge variant="secondary" className="font-mono text-[10px]">
-                    <GeneratedText id="m_155b48f51ba2b4" />
-                  </Badge>
-                </div>
-              </div>
-            )
-          }
-        />
-      </div>
     </aside>
   )
 }
