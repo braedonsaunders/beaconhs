@@ -962,14 +962,19 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
   // their author chose, so without this a 52%-wide column in small type sits
   // beside an 80%-wide one in larger type and the book reads as a pile of
   // documents. Measuring is sub-second for a few hundred pages.
-  const contentBoxes = await Promise.all(fetched.map((f) => measureTextContentBoxes(f.bytes)))
+  const measured = await Promise.all(fetched.map((f) => measureTextContentBoxes(f.bytes)))
 
   // Stitch the fetched bytes back onto the full ordered list so dividers keep
   // their place between the documents they introduce.
   const byKey = new Map(
     fetched.map((f, i) => [
       f.entry.key,
-      { bytes: f.bytes, pages: pageCounts[i]!, boxes: contentBoxes[i] ?? [] },
+      {
+        bytes: f.bytes,
+        pages: pageCounts[i]!,
+        boxes: measured[i]?.boxes ?? [],
+        bodyTypePt: measured[i]?.bodyTypePt ?? null,
+      },
     ]),
   )
 
@@ -998,6 +1003,7 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
           pdf: loaded.bytes,
           pageCount: loaded.pages,
           contentBoxes: loaded.boxes.length > 0 ? loaded.boxes : undefined,
+          bodyTypePt: loaded.bodyTypePt,
           category: e.category,
           type: e.type,
           issuedAt: e.issuedAt,

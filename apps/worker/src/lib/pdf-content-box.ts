@@ -9,6 +9,17 @@ const exec = promisify(execFile)
 
 export type ContentBox = { left: number; bottom: number; right: number; top: number }
 
+/**
+ * What a document's pages measure: where its text sits, and how big that text
+ * is in the source's own points.
+ *
+ * The type size is the point of the second field. Composing a book from
+ * documents authored at different body sizes and fitting each to the page
+ * leaves the type uneven — fit is decided by geometry, not by type. Measuring
+ * the type is what lets the composer even it out.
+ */
+export type MeasuredDocument = { boxes: (ContentBox | null)[]; bodyTypePt: number | null }
+
 /** Padding around measured text, so descenders and rules are not shaved. */
 const PAD_PT = 6
 /**
@@ -29,9 +40,14 @@ const MIN_FRACTION = 0.15
  * rasterising: 261 pages measure in well under a second, so this can run on
  * every render instead of needing a cache.
  */
-export async function measureTextContentBoxes(pdf: Buffer): Promise<(ContentBox | null)[]> {
+export async function measureTextContentBoxes(pdf: Buffer): Promise<MeasuredDocument> {
   const pages = await measurePages(pdf)
-  return unifyContentBoxes(pages.map((page) => (page.box ? floorContentBox(page.box, page) : null)))
+  return {
+    boxes: unifyContentBoxes(
+      pages.map((page) => (page.box ? floorContentBox(page.box, page) : null)),
+    ),
+    bodyTypePt: modalGlyphHeight(pages.flatMap((page) => page.glyphHeights)),
+  }
 }
 
 async function measurePages(pdf: Buffer): Promise<MeasuredPage[]> {
@@ -51,7 +67,12 @@ async function measurePages(pdf: Buffer): Promise<MeasuredPage[]> {
   }
 }
 
-type MeasuredPage = { width: number; height: number; box: ContentBox | null }
+type MeasuredPage = {
+  width: number
+  height: number
+  box: ContentBox | null
+  glyphHeights: number[]
+}
 
 /** Just the boxes, for callers that do not need the sheet they were measured on. */
 export function parseBboxXhtml(xhtml: string): (ContentBox | null)[] {
@@ -77,6 +98,7 @@ function parseBboxPages(xhtml: string): MeasuredPage[] {
     let minY = Infinity
     let maxX = -Infinity
     let maxY = -Infinity
+    const glyphHeights: number[] = []
 
     wordPattern.lastIndex = 0
     for (let word = wordPattern.exec(page[3]!); word; word = wordPattern.exec(page[3]!)) {
@@ -84,10 +106,11 @@ function parseBboxPages(xhtml: string): MeasuredPage[] {
       minY = Math.min(minY, Number(word[2]))
       maxX = Math.max(maxX, Number(word[3]))
       maxY = Math.max(maxY, Number(word[4]))
+      glyphHeights.push(Number(word[4]) - Number(word[2]))
     }
 
     if (!Number.isFinite(minX) || maxX <= minX || maxY <= minY) {
-      pages.push({ width, height, box: null })
+      pages.push({ width, height, box: null, glyphHeights })
       continue
     }
 
@@ -103,6 +126,7 @@ function parseBboxPages(xhtml: string): MeasuredPage[] {
       width,
       height,
       box: wideEnough && tallEnough ? { left, bottom, right, top } : null,
+      glyphHeights,
     })
   }
 
@@ -186,4 +210,36 @@ export function floorContentBox(
     bottom: vertical.low,
     top: vertical.high,
   }
+}
+
+/** Rounding for the type histogram, in points. */
+const TYPE_BUCKET_PT = 0.5
+
+/**
+ * A document's body type size: the most common word height in it.
+ *
+ * The MODE, not the mean or the median of a page — a page mixes headings,
+ * captions and body, and a document that opens with a title page would drag an
+ * average around. Whatever size most of the words are set in is the size a
+ * reader perceives as "the text".
+ */
+function modalGlyphHeight(heights: readonly number[]): number | null {
+  if (heights.length === 0) return null
+  const buckets = new Map<number, number>()
+  for (const height of heights) {
+    if (!Number.isFinite(height) || height <= 0) continue
+    const bucket = Math.round(height / TYPE_BUCKET_PT) * TYPE_BUCKET_PT
+    buckets.set(bucket, (buckets.get(bucket) ?? 0) + 1)
+  }
+  let best: number | null = null
+  let bestCount = 0
+  for (const [bucket, count] of buckets) {
+    // Ties go to the smaller size: body text outnumbers headings, so a tie is
+    // more likely a sparse document than a genuinely large body.
+    if (count > bestCount || (count === bestCount && best !== null && bucket < best)) {
+      best = bucket
+      bestCount = count
+    }
+  }
+  return best
 }

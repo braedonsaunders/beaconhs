@@ -1,6 +1,7 @@
 import { composePdf, pageGeometry, type ComposePart, type ContentBox } from '@beaconhs/office'
 import type { DocumentBookPrintSettings } from '@beaconhs/db/schema'
 import { resolveBookPrintSettings } from '@beaconhs/db'
+import { bookTypeScales } from '../lib/book-type-scale'
 import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
 
 // Assembling a document book.
@@ -21,6 +22,8 @@ type BookEntry = {
   title: string
   /** Per-page text extents, null where a page has nothing measurable. */
   contentBoxes?: readonly (ContentBox | null)[]
+  /** The document's own body type size, in its source points. */
+  bodyTypePt?: number | null
   key: string
   version: number
   /** The published PDF for this document version. */
@@ -363,6 +366,30 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
       })
     : null
 
+  // Even out the TYPE, not the page fit. Fitting each document to the sheet
+  // decides its scale from geometry, and these sources are authored at
+  // different body sizes — on the manual this was built against, 39 documents
+  // were set at 14.5pt and 14 at 17.5pt, a 21% difference that page-fitting
+  // preserves exactly.
+  const marginPt = Math.max(0, settings.contentMarginMm) * PT_PER_MM
+  const footerReservePt = settings.footer ? FOOTER_RESERVE_PT : 0
+  const typeScales = settings.normalizeContent
+    ? bookTypeScales(
+        documents.map((node) => {
+          const box = node.contentBoxes?.find((entry) => entry !== null) ?? null
+          return {
+            bodyTypePt: node.bodyTypePt ?? null,
+            contentWidthPt: box ? box.right - box.left : 0,
+            contentHeightPt: box ? box.top - box.bottom : 0,
+          }
+        }),
+        {
+          widthPt: Math.max(1, geometry.width - marginPt * 2),
+          heightPt: Math.max(1, geometry.height - marginPt * 2 - footerReservePt),
+        },
+      )
+    : documents.map(() => null)
+
   const parts: ComposePart[] = []
   if (settings.coverPage) {
     // A designed cover wins outright: the tenant owns that layout, and second
@@ -398,7 +425,10 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
       parts.push({
         bytes: node.pdf,
         ...(settings.normalizeContent && node.contentBoxes
-          ? { contentBoxes: node.contentBoxes }
+          ? {
+              contentBoxes: node.contentBoxes,
+              ...(typeScales[i] !== null ? { contentScale: typeScales[i]! } : {}),
+            }
           : {}),
       })
       continue
@@ -406,7 +436,10 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
     parts.push({
       bytes: node.pdf,
       ...(settings.normalizeContent && node.contentBoxes
-        ? { contentBoxes: node.contentBoxes }
+        ? {
+            contentBoxes: node.contentBoxes,
+            ...(typeScales[i] !== null ? { contentScale: typeScales[i]! } : {}),
+          }
         : {}),
       ...(controlSheetsPdf
         ? { letterhead: { bytes: controlSheetsPdf, page: i, heightPt: CONTROL_BAND_PT } }
@@ -418,14 +451,8 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
   return composePdf({
     geometry,
     parts,
-    marginPt: Math.max(0, settings.contentMarginMm) * PT_PER_MM,
-    footerReservePt: settings.footer ? FOOTER_RESERVE_PT : 0,
-    // One scale for the whole book, pinned to the content box corner. Fitting
-    // each document on its own made the scale a property of that document: on
-    // the 61-document manual this was built against it ranged 0.965–1.495 and
-    // the side margin 0–126pt, which reads as the type size and the margins
-    // changing from document to document.
-    normalizeContentScale: settings.normalizeContent,
+    marginPt,
+    footerReservePt,
     title: input.title,
     author: input.tenantName,
     footer: settings.footer

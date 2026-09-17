@@ -252,7 +252,7 @@ export default async function DocumentBookPage({ params }: { params: Promise<{ i
                 checked={print.normalizeContent}
                 disabled={locked}
                 label={tGenerated('m_101d6f9449fd93')}
-                hint={tGenerated('m_0df0a48c84c006')}
+                hint={tGenerated('m_157b50f0694e07')}
               />
               <PrintToggle
                 name="coverPage"
