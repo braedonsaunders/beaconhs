@@ -51,7 +51,7 @@ async function measurePages(pdf: Buffer): Promise<MeasuredPage[]> {
   }
 }
 
-export type MeasuredPage = { width: number; height: number; box: ContentBox | null }
+type MeasuredPage = { width: number; height: number; box: ContentBox | null }
 
 /** Just the boxes, for callers that do not need the sheet they were measured on. */
 export function parseBboxXhtml(xhtml: string): (ContentBox | null)[] {
@@ -65,7 +65,7 @@ export function parseBboxXhtml(xhtml: string): (ContentBox | null)[] {
  * space has it at the bottom left — the flip is the whole reason this is a
  * function rather than an inline regex.
  */
-export function parseBboxPages(xhtml: string): MeasuredPage[] {
+function parseBboxPages(xhtml: string): MeasuredPage[] {
   const pages: MeasuredPage[] = []
   const pagePattern = /<page width="([\d.]+)" height="([\d.]+)">([\s\S]*?)<\/page>/g
   const wordPattern = /<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)"/g

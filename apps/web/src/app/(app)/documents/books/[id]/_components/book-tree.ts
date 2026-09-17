@@ -8,16 +8,13 @@
 // drifts. The builder derives a tree for display, edits the tree, and flattens
 // straight back.
 
-export type BookEntryKind = 'document' | 'section' | 'chapter'
-export type BookEntryStatus = 'draft' | 'published' | 'archived' | 'under_review'
-
 export type BookEntry = {
   itemId: string
-  kind: BookEntryKind
+  kind: 'document' | 'section' | 'chapter'
   /** Null for a chapter or section heading. */
   documentId: string | null
   title: string
-  status: BookEntryStatus | null
+  status: 'draft' | 'published' | 'archived' | 'under_review' | null
   pinnedVersion: number | null
 }
 
@@ -129,7 +126,7 @@ function blockLength(entries: readonly BookEntry[], index: number): number {
 function previousSiblingStart(
   rest: readonly BookEntry[],
   index: number,
-  kind: BookEntryKind,
+  kind: BookEntry['kind'],
 ): number | null {
   if (index === 0) return null
   if (kind === 'document') return index - 1
@@ -145,7 +142,7 @@ function previousSiblingStart(
 function nextSiblingEnd(
   rest: readonly BookEntry[],
   index: number,
-  kind: BookEntryKind,
+  kind: BookEntry['kind'],
 ): number | null {
   if (index >= rest.length) return null
   if (kind === 'document') return index + 1
