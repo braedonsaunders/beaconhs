@@ -117,8 +117,15 @@ export async function setDocxPageSize(docx: Buffer, size: DocxPageSize): Promise
 // was fixed. Everything downstream then needs no per-document compensation.
 // ---------------------------------------------------------------------------
 
-/** A comfortable, printable margin for a manual page, in twips (1 inch). */
-const STANDARD_MARGIN_TWIPS = 1440
+/**
+ * The house page margin, in twips.
+ *
+ * 0.5 inch, not the conventional 1 inch: these documents indent their own
+ * paragraphs and lists, so a 1-inch page margin on top of that left the text
+ * column at 59% of the sheet. Half an inch still clears the non-printable
+ * border of an office printer.
+ */
+const STANDARD_MARGIN_TWIPS = 720
 /** Header/footer band inset, in twips. */
 const STANDARD_HEADER_TWIPS = 720
 /** Target body size, in half-points. 22 = 11pt. */

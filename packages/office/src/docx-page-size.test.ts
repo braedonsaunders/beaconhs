@@ -204,14 +204,14 @@ describe('normalizeDocxTypography', () => {
     const out = await normalizeDocxTypography(await makeDocx(body), 'letter')
     const xml = await (await JSZip.loadAsync(out)).file('word/document.xml')!.async('string')
     expect(readDocxPageSize(xml)).toBe('letter')
-    expect(xml).toContain('w:left="1440"')
-    expect(xml).toContain('w:right="1440"')
+    expect(xml).toContain('w:left="720"')
+    expect(xml).toContain('w:right="720"')
     // 27 half-points (13.5pt) scaled to the 22 half-point (11pt) house body.
     expect(modalRunSize(xml, 20)).toBe(22)
   })
 
   it('leaves an already-normal master byte-identical', async () => {
-    const body = `${LETTER}<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/><w:r><w:rPr><w:sz w:val="22"/></w:rPr><w:t>x</w:t></w:r>`
+    const body = `${LETTER}<w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="720" w:footer="720" w:gutter="0"/><w:r><w:rPr><w:sz w:val="22"/></w:rPr><w:t>x</w:t></w:r>`
     const docx = await makeDocx(body)
     expect(await normalizeDocxTypography(docx, 'letter')).toBe(docx)
   })
@@ -230,7 +230,7 @@ describe('normalizeDocxTypography sizeFactor', () => {
 
 describe('isNormalizedDocx', () => {
   const HOUSE_MARGINS =
-    '<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>'
+    '<w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="720" w:footer="720" w:gutter="0"/>'
 
   it('recognises a master it has already normalised', async () => {
     // Deterministic, unlike "does it render at the target size?" — that never
