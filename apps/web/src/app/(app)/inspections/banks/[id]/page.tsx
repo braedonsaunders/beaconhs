@@ -80,7 +80,7 @@ export default async function InspectionBankDetailPage({
           }
         />
       }
-      className="h-full max-w-none p-0"
+      fullBleed
     >
       <InspectionBankBuilder
         bank={{

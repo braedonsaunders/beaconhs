@@ -8,6 +8,7 @@ import {
   documentBooks,
   documentCategories,
   documentTypes,
+  pdfTemplates,
   type DocumentBookPrintSettings,
 } from '@beaconhs/db/schema'
 import { MAX_DOCUMENT_BOOK_ITEMS } from '@beaconhs/db'
@@ -399,6 +400,53 @@ export async function updateBookSettingsAction(formData: FormData): Promise<void
   })
   revalidatePath(`/documents/books/${bookId}`)
   revalidatePath('/documents/books')
+}
+
+/**
+ * Choose the cover design this book prints, or clear it back to the generated
+ * cover. Per book, not per tenant — a safety manual and a safety-talk
+ * compendium want different covers.
+ */
+export async function updateBookCoverTemplateAction(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'documents.manage')
+  const bookId = String(formData.get('bookId') ?? '')
+  const raw = String(formData.get('coverTemplateId') ?? '').trim()
+  const coverTemplateId = raw || null
+  if (!isUuid(bookId)) throw new Error('Document book not found.')
+  if (coverTemplateId && !isUuid(coverTemplateId)) throw new Error('Select a valid cover design.')
+
+  await ctx.db(async (tx) => {
+    await lockDraftDocumentBook(tx, ctx.tenantId, bookId)
+    if (coverTemplateId) {
+      const [template] = await tx
+        .select({ id: pdfTemplates.id })
+        .from(pdfTemplates)
+        .where(
+          and(
+            eq(pdfTemplates.tenantId, ctx.tenantId),
+            eq(pdfTemplates.id, coverTemplateId),
+            eq(pdfTemplates.recordSubjectKey, 'document-books'),
+            eq(pdfTemplates.isActive, true),
+            isNull(pdfTemplates.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (!template) throw new Error('That cover design is unavailable.')
+    }
+    await tx
+      .update(documentBooks)
+      .set({ coverTemplateId })
+      .where(and(eq(documentBooks.tenantId, ctx.tenantId), eq(documentBooks.id, bookId)))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'document_book',
+      entityId: bookId,
+      action: 'update',
+      summary: coverTemplateId ? 'Changed book cover design' : 'Cleared book cover design',
+      after: { coverTemplateId },
+    })
+  })
+  revalidatePath(`/documents/books/${bookId}`)
 }
 
 const PAPER_SIZES = ['letter', 'a4', 'legal'] as const

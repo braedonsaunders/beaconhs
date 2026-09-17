@@ -6,8 +6,8 @@ import { useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 // (settings / palette) beside a flexible 2/3 build surface. Mirrors the
 // app/form designer split so every builder feels the same.
 //
-// Drop <BuilderShell> inside a DetailPageLayout rendered with
-// `className="h-full max-w-none p-0"` so it fills the viewport.
+// Drop <BuilderShell> inside a DetailPageLayout rendered with `fullBleed` so it
+// fills the viewport edge to edge.
 
 import * as React from 'react'
 import { LayoutList, Settings2 } from 'lucide-react'

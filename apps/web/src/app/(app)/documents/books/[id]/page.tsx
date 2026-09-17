@@ -13,6 +13,7 @@ import {
   documentTypes,
   documentVersions,
   documents,
+  pdfTemplates,
 } from '@beaconhs/db/schema'
 import { resolveBookPrintSettings } from '@beaconhs/db'
 import { can } from '@beaconhs/tenant'
@@ -23,7 +24,11 @@ import { DetailPageLayout } from '@/components/page-layout'
 import { isUuid } from '@/lib/list-params'
 import { BookBuilder } from './_components/book-builder'
 import type { BookEntry } from './_components/book-tree'
-import { updateBookPrintSettingsAction, updateBookSettingsAction } from './actions'
+import {
+  updateBookCoverTemplateAction,
+  updateBookPrintSettingsAction,
+  updateBookSettingsAction,
+} from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,11 +93,25 @@ export default async function DocumentBookPage({ params }: { params: Promise<{ i
       .from(documentTypes)
       .where(isNull(documentTypes.deletedAt))
       .orderBy(asc(documentTypes.name))
-    return { book, items, categories, types }
+    // Cover designs available to this book. Scoped to the document-book subject
+    // so the picker cannot offer an incident report as a book cover.
+    const covers = await tx
+      .select({ id: pdfTemplates.id, name: pdfTemplates.name })
+      .from(pdfTemplates)
+      .where(
+        and(
+          eq(pdfTemplates.recordSubjectType, 'module'),
+          eq(pdfTemplates.recordSubjectKey, 'document-books'),
+          eq(pdfTemplates.isActive, true),
+          isNull(pdfTemplates.deletedAt),
+        ),
+      )
+      .orderBy(asc(pdfTemplates.name))
+    return { book, items, categories, types, covers }
   })
 
   if (!data) notFound()
-  const { book, items, categories, types } = data
+  const { book, items, categories, types, covers } = data
   const activity = await recentActivityForEntity(ctx, 'document_book', id, 50)
 
   const entries: BookEntry[] = items.map((row) => ({
@@ -125,7 +144,7 @@ export default async function DocumentBookPage({ params }: { params: Promise<{ i
           }
         />
       }
-      className="h-full max-w-none p-0"
+      fullBleed
     >
       <BookBuilder
         bookId={id}
@@ -137,6 +156,66 @@ export default async function DocumentBookPage({ params }: { params: Promise<{ i
         })}
         published={locked}
         entries={entries}
+        coverSlot={
+          <form action={updateBookCoverTemplateAction} className="space-y-4 text-sm">
+            <input type="hidden" name="bookId" value={id} />
+            <RailSection title={tGenerated('m_147533ff9fba67')}>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <GeneratedText id="m_0f0fc7237f19f6" />
+              </p>
+              <GeneratedValue
+                value={
+                  covers.length === 0 ? (
+                    <p className="rounded-md border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                      <GeneratedText id="m_179750dda904ed" />
+                    </p>
+                  ) : (
+                    <Field label={tGenerated('m_147533ff9fba67')}>
+                      <Select
+                        name="coverTemplateId"
+                        defaultValue={book.coverTemplateId ?? ''}
+                        disabled={locked}
+                      >
+                        <option value="">{tGenerated('m_1f5fff4b7b151c')}</option>
+                        {covers.map((cover) => (
+                          <option key={cover.id} value={cover.id}>
+                            {cover.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  )
+                }
+              />
+              <GeneratedValue
+                value={
+                  locked ? (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <GeneratedText id="m_1c2f5f21df4d47" />
+                    </p>
+                  ) : covers.length > 0 ? (
+                    <Button type="submit" className="w-full">
+                      <GeneratedText id="m_00ca531f511647" />
+                    </Button>
+                  ) : null
+                }
+              />
+            </RailSection>
+
+            <RailSection title={tGenerated('m_0e247f6fed1a24')}>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <GeneratedText id="m_1b50c4a30cadaf" />
+              </p>
+              <Link
+                href="/admin/pdf-templates"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+              >
+                <Paintbrush size={13} aria-hidden />
+                <GeneratedText id="m_1fc6b8d86d1ead" />
+              </Link>
+            </RailSection>
+          </form>
+        }
         printSlot={
           <form action={updateBookPrintSettingsAction} className="space-y-4 text-sm">
             <input type="hidden" name="bookId" value={id} />
@@ -217,22 +296,6 @@ export default async function DocumentBookPage({ params }: { params: Promise<{ i
                 label={tGenerated('m_1ae476691a476f')}
                 hint={tGenerated('m_01a169ed07c3ce')}
               />
-            </RailSection>
-
-            {/* The cover is designed in the PDF template designer, which is a
-                different page entirely — without a pointer from here nobody
-                finds it. */}
-            <RailSection title={tGenerated('m_147533ff9fba67')}>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                <GeneratedText id="m_1b50c4a30cadaf" />
-              </p>
-              <Link
-                href="/admin/pdf-templates"
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
-              >
-                <Paintbrush size={13} aria-hidden />
-                <GeneratedText id="m_1fc6b8d86d1ead" />
-              </Link>
             </RailSection>
 
             <GeneratedValue

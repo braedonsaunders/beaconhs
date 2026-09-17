@@ -75,7 +75,7 @@ export default async function PpeBankDetailPage({ params }: { params: Promise<{ 
           }
         />
       }
-      className="h-full max-w-none p-0"
+      fullBleed
     >
       <PpeBankBuilder
         bank={{

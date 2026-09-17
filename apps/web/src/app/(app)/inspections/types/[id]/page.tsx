@@ -117,7 +117,7 @@ export default async function InspectionTypeDetailPage({
           }
         />
       }
-      className="h-full max-w-none p-0"
+      fullBleed
     >
       <InspectionTypeBuilder
         type={{

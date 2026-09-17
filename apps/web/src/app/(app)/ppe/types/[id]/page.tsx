@@ -152,7 +152,7 @@ export default async function PpeTypeDetailPage({ params }: { params: Promise<{ 
           }
         />
       }
-      className="h-full max-w-none p-0"
+      fullBleed
     >
       <PpeTypeBuilder
         type={{

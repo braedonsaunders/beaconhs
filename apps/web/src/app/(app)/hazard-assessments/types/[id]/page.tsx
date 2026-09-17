@@ -142,7 +142,7 @@ export default async function AssessmentTypeDetailPage({
           }
         />
       }
-      className="h-full max-w-none p-0"
+      fullBleed
     >
       <HazardTypeBuilder
         type={{

@@ -439,6 +439,13 @@ While a book is a **draft**, open it to build what is inside. The **Build** pane
 
 Chapters and sections print as their own divider page and group the contents list, so a long manual is easy to navigate.
 
+### Choosing the cover
+
+Open the **Cover** panel on the left. Every book picks its own cover, so a safety manual and a talks compendium can look different.
+
+1. Pick a design in **Cover design** and tap **Save cover**. **Built-in cover** is the plain title page with your company logo.
+2. To create or change a design, tap **Open the PDF template designer**, add a template for **Document book (cover)**, and drag in fields like **Book title** and **Company name**.
+
 ### Choosing how a book prints
 
 Open the **Print** panel on the left:
@@ -449,7 +456,7 @@ Open the **Print** panel on the left:
 
 ### What a book PDF contains
 
-- A **title page** with your company logo, or your own design — see **Cover design** in the **Print** panel.
+- A **title page** with your company logo, or your own design — see the **Cover** panel.
 - A **contents** list with real page numbers, grouped by chapter and section.
 - A control block at the top of each document showing its category, issue and revision dates, approver and version.
 - **UNCONTROLLED WHEN PRINTED**, a page number, and your company name on every page.

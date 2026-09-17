@@ -25,7 +25,6 @@ import {
   Loader2,
   Lock,
   Plus,
-  Printer,
   Trash2,
 } from 'lucide-react'
 import { Badge, Button, Drawer, EmptyState } from '@beaconhs/ui'
@@ -62,7 +61,7 @@ import {
   type BookSectionNode,
 } from './book-tree'
 
-type RailView = 'build' | 'print' | 'settings' | 'activity'
+type RailView = 'build' | 'cover' | 'print' | 'settings' | 'activity'
 
 /**
  * The document book builder: a 1/3 palette rail beside a 2/3 build surface,
@@ -81,6 +80,7 @@ export function BookBuilder({
   published,
   entries,
   settingsSlot,
+  coverSlot,
   printSlot,
   activitySlot,
 }: {
@@ -90,6 +90,7 @@ export function BookBuilder({
   published: boolean
   entries: BookEntry[]
   settingsSlot: React.ReactNode
+  coverSlot: React.ReactNode
   printSlot: React.ReactNode
   activitySlot: React.ReactNode
 }) {
@@ -240,17 +241,22 @@ export function BookBuilder({
         left={
           <>
             <BuilderRailHeader icon={<Library size={15} />} title={title} subtitle={subtitle} />
+            {/* Five tabs; labels only, because icon+label does not fit the
+                rail's 320px minimum. */}
             <BuilderRailTabs>
               <BuilderRailTab
                 active={rail === 'build'}
                 onClick={() => setRail('build')}
-                icon={<BookOpen size={14} />}
                 label={tGenerated('m_0adae4a94c7be3')}
+              />
+              <BuilderRailTab
+                active={rail === 'cover'}
+                onClick={() => setRail('cover')}
+                label={tGenerated('m_1f974eb83e974b')}
               />
               <BuilderRailTab
                 active={rail === 'print'}
                 onClick={() => setRail('print')}
-                icon={<Printer size={14} />}
                 label={tGenerated('m_124553ef26fbe5')}
               />
               <BuilderRailTab
@@ -274,6 +280,8 @@ export function BookBuilder({
                       onAddChapter={() => addHeading('chapter')}
                       onAddSection={() => addHeading('section')}
                     />
+                  ) : rail === 'cover' ? (
+                    coverSlot
                   ) : rail === 'print' ? (
                     printSlot
                   ) : rail === 'settings' ? (

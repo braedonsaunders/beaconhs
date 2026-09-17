@@ -20,6 +20,7 @@ import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers, users } from './core'
 import { orgUnits, people } from './org'
 import { documentTypes, documentCategories } from './document-types'
+import { pdfTemplates } from './pdf-templates'
 
 export const documentStatus = pgEnum('document_status', [
   'draft',
@@ -383,6 +384,13 @@ export const documentBooks = pgTable(
     reviewFrequencyMonths: integer('review_frequency_months'),
     nextReviewOn: date('next_review_on'),
     status: documentBookStatus('status').default('draft').notNull(),
+    // The cover this book prints, chosen per book. A manual and a safety-talk
+    // compendium want different covers, so one tenant-wide default could never
+    // be right for both. Null falls back to the generated cover.
+    //
+    // Constrained tenant-composite below, not as a bare id reference, so a book
+    // cannot point at another tenant's template.
+    coverTemplateId: uuid('cover_template_id'),
     // How the book prints. Null means "tenant/system default" rather than
     // "off", so existing books gain the new output without being edited.
     printSettings: jsonb('print_settings').$type<DocumentBookPrintSettings | null>(),
@@ -400,6 +408,11 @@ export const documentBooks = pgTable(
       name: 'document_books_tenant_type_fk',
       columns: [t.tenantId, t.typeId],
       foreignColumns: [documentTypes.tenantId, documentTypes.id],
+    }),
+    coverTemplateFk: foreignKey({
+      name: 'document_books_tenant_cover_template_fk',
+      columns: [t.tenantId, t.coverTemplateId],
+      foreignColumns: [pdfTemplates.tenantId, pdfTemplates.id],
     }),
     categoryFk: foreignKey({
       name: 'document_books_tenant_category_fk',

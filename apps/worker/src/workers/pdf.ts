@@ -140,11 +140,21 @@ type BookRenderEntry =
  * stays the default so a book looks finished without anyone opening the
  * designer.
  */
+/**
+ * The cover design this book prints.
+ *
+ * Chosen PER BOOK (`document_books.cover_template_id`): a safety manual and a
+ * safety-talk compendium want different covers, so a single tenant-wide default
+ * could never be right for both. A book that names no template falls back to
+ * the generated cover rather than borrowing another book's.
+ */
 async function loadDesignedBookCover(
   tx: Parameters<Parameters<typeof withTenant>[2]>[0],
   tenantId: string,
+  coverTemplateId: string | null,
   values: Record<string, unknown>,
 ): Promise<{ html: string; marginMm: number } | null> {
+  if (!coverTemplateId) return null
   const [tpl] = await tx
     .select({
       compiledHtml: pdfTemplates.compiledHtml,
@@ -154,10 +164,8 @@ async function loadDesignedBookCover(
     .where(
       and(
         eq(pdfTemplates.tenantId, tenantId),
-        eq(pdfTemplates.recordSubjectType, 'module'),
-        eq(pdfTemplates.recordSubjectKey, 'document-books'),
+        eq(pdfTemplates.id, coverTemplateId),
         eq(pdfTemplates.isActive, true),
-        eq(pdfTemplates.isModuleDefault, true),
         isNull(pdfTemplates.deletedAt),
       ),
     )
@@ -897,7 +905,12 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
       chapter_count: entries.filter((entry) => entry.kind === 'chapter').length,
       section_count: entries.filter((entry) => entry.kind === 'section').length,
     }
-    const designedCover = await loadDesignedBookCover(tx, tenantId, coverTokens)
+    const designedCover = await loadDesignedBookCover(
+      tx,
+      tenantId,
+      row.b.coverTemplateId,
+      coverTokens,
+    )
 
     return { ...row, entries, designedCover }
   })

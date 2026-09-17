@@ -68,6 +68,9 @@ export const pdfTemplates = pgTable(
   (t) => ({
     tenantIdx: index('pdf_templates_tenant_idx').on(t.tenantId),
     tenantKeyUx: uniqueIndex('pdf_templates_tenant_key_ux').on(t.tenantId, t.key),
+    // Target for tenant-composite foreign keys, so a referencing row cannot
+    // point at another tenant's template.
+    tenantIdIdUx: uniqueIndex('pdf_templates_tenant_id_id_ux').on(t.tenantId, t.id),
     subjectIdx: index('pdf_templates_subject_idx').on(
       t.tenantId,
       t.recordSubjectType,

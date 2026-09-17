@@ -281,6 +281,13 @@
       "when": 1789608000000,
       "tag": "0040_platform_feedback",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1789608000001,
+      "tag": "0041_document_book_cover_template",
+      "breakpoints": true
     }
   ]
 }

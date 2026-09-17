@@ -81,12 +81,23 @@ export function DetailPageLayout({
   subtabs,
   children,
   className,
+  fullBleed = false,
 }: {
   header: React.ReactNode
   alerts?: React.ReactNode
   subtabs?: React.ReactNode
   children: React.ReactNode
   className?: string
+  /**
+   * Hand the body the whole area below the header, with no centring, no width
+   * cap, no padding and no scroll container of its own — for builders, which
+   * are a fixed rail beside their own scrolling surface.
+   *
+   * A prop rather than `className="h-full max-w-none p-0"`: tailwind-merge
+   * cannot strip `sm:p-6` with `p-0`, so that spelling silently left 24px of
+   * dead space around every builder at desktop widths.
+   */
+  fullBleed?: boolean
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -113,8 +124,13 @@ export function DetailPageLayout({
           />
         </FadeInHeader>
       </div>
-      <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
-        <FadeInBody className={cn('mx-auto max-w-screen-2xl p-3 sm:p-6', className)}>
+      <div className={cn('min-h-0 flex-1', !fullBleed && 'app-scroll overflow-y-auto')}>
+        <FadeInBody
+          className={cn(
+            fullBleed ? 'h-full min-h-0' : 'mx-auto max-w-screen-2xl p-3 sm:p-6',
+            className,
+          )}
+        >
           <GeneratedValue value={children} />
         </FadeInBody>
       </div>
