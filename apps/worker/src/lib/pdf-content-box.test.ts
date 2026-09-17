@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBboxXhtml } from './pdf-content-box'
+import { floorContentBox, parseBboxXhtml, unifyContentBoxes } from './pdf-content-box'
 
 function page(width: number, height: number, words: [number, number, number, number][]): string {
   const body = words
@@ -69,5 +69,66 @@ describe('parseBboxXhtml', () => {
     const [box] = parseBboxXhtml(page(595.28, 841.89, [[80, 80, 515, 760]]))
     expect(box!.bottom).toBeCloseTo(841.89 - 760 - 6, 2)
     expect(box!.top).toBeCloseTo(841.89 - 80 + 6, 2)
+  })
+})
+
+describe('unifyContentBoxes', () => {
+  const box = (left: number, bottom: number, right: number, top: number) => ({
+    left,
+    bottom,
+    right,
+    top,
+  })
+
+  it('gives every page of a document the same box', () => {
+    // A document is typeset once, so it must be scaled once. Cropping each page
+    // to its own text makes a page that ends after three lines get magnified
+    // relative to the page before it — type size changing mid-document.
+    const unified = unifyContentBoxes([box(80, 80, 520, 720), box(90, 500, 500, 700)])
+    expect(unified[0]).toEqual({ left: 80, bottom: 80, right: 520, top: 720 })
+    expect(unified[1]).toEqual(unified[0])
+  })
+
+  it('leaves unmeasured pages alone', () => {
+    // An image-only scan has no text to bound; cropping it to the text column
+    // of its neighbours would cut the image.
+    const unified = unifyContentBoxes([box(80, 80, 520, 720), null])
+    expect(unified[1]).toBeNull()
+  })
+
+  it('passes through a document that measured nothing', () => {
+    expect(unifyContentBoxes([null, null])).toEqual([null, null])
+  })
+})
+
+describe('floorContentBox', () => {
+  const page = { width: 612, height: 792 }
+
+  it('leaves a full-sized text block untouched', () => {
+    const measured = { left: 80, bottom: 80, right: 530, top: 710 }
+    expect(floorContentBox(measured, page)).toEqual(measured)
+  })
+
+  it('grows a box too small to enlarge safely', () => {
+    // One short paragraph fitted to the sheet would be blown up until it filled
+    // it. The floor bounds that at roughly 1.7x.
+    const floored = floorContentBox({ left: 250, bottom: 600, right: 360, top: 680 }, page)
+    expect(floored.right - floored.left).toBeCloseTo(612 * 0.58, 5)
+    expect(floored.top - floored.bottom).toBeCloseTo(792 * 0.58, 5)
+  })
+
+  it('keeps a grown box inside the page', () => {
+    // A column hard against one margin must slide inward, not off the sheet.
+    const floored = floorContentBox({ left: 0, bottom: 0, right: 120, top: 100 }, page)
+    expect(floored.left).toBe(0)
+    expect(floored.bottom).toBe(0)
+    expect(floored.right).toBeCloseTo(612 * 0.58, 5)
+    expect(floored.top).toBeCloseTo(792 * 0.58, 5)
+  })
+
+  it('grows about the box centre', () => {
+    const floored = floorContentBox({ left: 250, bottom: 300, right: 360, top: 420 }, page)
+    expect((floored.left + floored.right) / 2).toBeCloseTo(305, 5)
+    expect((floored.bottom + floored.top) / 2).toBeCloseTo(360, 5)
   })
 })
