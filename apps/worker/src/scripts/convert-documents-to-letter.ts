@@ -72,6 +72,32 @@ async function measureRender(docx: Buffer): Promise<{ letter: boolean; bodyPt: n
 /** Conversions per run, unless --limit says otherwise. */
 const DEFAULT_LIMIT = 40
 
+/**
+ * Split the work so several copies of this script can run at once.
+ *
+ * Each conversion is two LibreOffice renders, and LibreOffice is single
+ * threaded — one process leaves most of a workstation idle. `--shard 2/6`
+ * takes every sixth version starting at the second, so six shards cover the
+ * library without coordinating.
+ */
+function parseShard(argv: readonly string[]): { index: number; total: number } {
+  const flag = argv.indexOf('--shard')
+  if (flag === -1) return { index: 0, total: 1 }
+  const parts = (argv[flag + 1] ?? '').split('/').map(Number)
+  const index = parts[0] ?? NaN
+  const total = parts[1] ?? NaN
+  if (
+    !Number.isInteger(index) ||
+    !Number.isInteger(total) ||
+    total < 1 ||
+    index < 1 ||
+    index > total
+  ) {
+    throw new Error('--shard needs the form i/n, 1-based, for example 2/6')
+  }
+  return { index: index - 1, total }
+}
+
 function parseLimit(argv: readonly string[]): number {
   const flag = argv.indexOf('--limit')
   if (flag === -1) return DEFAULT_LIMIT
@@ -85,6 +111,7 @@ function parseLimit(argv: readonly string[]): number {
 async function main() {
   const apply = process.argv.includes('--apply')
   const limit = parseLimit(process.argv)
+  const shard = parseShard(process.argv)
 
   const candidates = await withSuperAdmin(db, (tx) =>
     tx
@@ -103,14 +130,20 @@ async function main() {
       .where(isNotNull(documentVersions.docxAttachmentId)),
   )
 
-  console.log(`${candidates.length} version(s) with a Word master; converting at most ${limit}`)
+  const mine = (candidates as Candidate[]).filter(
+    (_, position) => position % shard.total === shard.index,
+  )
+  const label = shard.total > 1 ? ` [shard ${shard.index + 1}/${shard.total}]` : ''
+  console.log(
+    `${mine.length} of ${candidates.length} version(s) in scope${label}; at most ${limit}`,
+  )
 
   let converted = 0
   let alreadyCorrect = 0
   let failed = 0
   let remaining = 0
 
-  for (const row of candidates as Candidate[]) {
+  for (const row of mine) {
     if (converted >= limit) {
       remaining++
       continue
