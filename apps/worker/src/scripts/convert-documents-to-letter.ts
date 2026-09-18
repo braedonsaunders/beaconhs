@@ -97,6 +97,25 @@ function reservesBand(topPt: number | null): boolean {
   return topPt !== null && topPt >= CONTROLLED_HEADER_BAND_PT - BAND_TOLERANCE_PT
 }
 
+/** Where a document's body text should start, in points from the sheet edge. */
+const TARGET_BODY_LEFT_PT = 36
+/**
+ * How far past that a document may start before it is treated as indented.
+ *
+ * A first-level indent of a fifth of an inch is typography; the masters this
+ * catches indent their whole body about 1.2 inches, which leaves their text
+ * column at 66% of the sheet against 83% for the rest of the library. The
+ * threshold keeps the correction off documents that only carry the former.
+ */
+const MIN_INDENT_EXCESS_PT = 24
+
+/** How far a rendered document's indents need pulling in, in twips. */
+function indentReduceTwips(bodyLeftPt: number | null): number {
+  if (bodyLeftPt === null) return 0
+  const excess = bodyLeftPt - TARGET_BODY_LEFT_PT
+  return excess > MIN_INDENT_EXCESS_PT ? Math.round(excess * 20) : 0
+}
+
 /** Conversions per run, unless --limit says otherwise. */
 const DEFAULT_LIMIT = 40
 
@@ -181,32 +200,37 @@ async function main() {
     const label = `${row.docKey || row.docTitle} v${row.version}`
     try {
       const docx = await getObject({ key: row.docxKey })
-      const typographyDone = await isNormalizedDocx(docx, TARGET)
-      const renderDone = row.pdfKey
-        ? reservesBand(
-            (await measureRenderedType(await getObject({ key: row.pdfKey }))).firstPageTopPt,
-          )
-        : false
-      if (typographyDone && renderDone) {
+      const structureDone = await isNormalizedDocx(docx, TARGET)
+      const rendered = row.pdfKey
+        ? await measureRenderedType(await getObject({ key: row.pdfKey }))
+        : null
+      const bandDone = reservesBand(rendered?.firstPageTopPt ?? null)
+      const indentReduce = indentReduceTwips(rendered?.bodyLeftPt ?? null)
+      if (structureDone && bandDone && indentReduce === 0) {
         alreadyCorrect++
         continue
       }
 
       if (!apply) {
-        console.log(`  would ${typographyDone ? 're-render' : 'normalise'} ${label}`)
+        console.log(`  would ${structureDone ? 're-render' : 'normalise'} ${label}`)
         converted++
         continue
       }
 
       // Scale by what the render MEASURED, so documents in different typefaces
       // end up looking the same size rather than merely declaring the same one.
-      let master = docx
+      // A master that is already on the house typography keeps it: re-deriving
+      // the factor from a scaled document would scale it a second time.
       let bodyPtBefore: number | null = null
-      if (!typographyDone) {
+      let sizeFactor = 1
+      if (!structureDone) {
         bodyPtBefore = (await measureRender(docx)).bodyPt
-        const sizeFactor = bodyPtBefore ? TARGET_BODY_PT / bodyPtBefore : undefined
-        master = await normalizeDocxTypography(docx, TARGET, { sizeFactor })
+        if (bodyPtBefore) sizeFactor = TARGET_BODY_PT / bodyPtBefore
       }
+      const master = await normalizeDocxTypography(docx, TARGET, {
+        sizeFactor,
+        indentReduceTwips: indentReduce,
+      })
       // The same path the render worker uses, so a re-rendered snapshot and a
       // freshly saved one cannot drift apart.
       const pdf = await renderDocxToPdf(master)
@@ -297,12 +321,13 @@ async function main() {
           entityId: row.documentId,
           action: 'update',
           summary: changedMaster
-            ? `Normalised version ${row.version} to ${TARGET} paper`
+            ? `Normalised version ${row.version} to the house page and typography`
             : `Re-rendered version ${row.version} with the controlled-header reserve`,
           metadata: {
             versionId: row.versionId,
             bodyPtBefore,
             bodyPtTarget: TARGET_BODY_PT,
+            indentReduceTwips: indentReduce,
           },
         })
       })

@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest'
 import JSZip from 'jszip'
 import {
   CONTROLLED_HEADER_BAND_PT,
+  addTableBordersInDocumentXml,
   clampMarginsInDocumentXml,
+  fitTablesToMeasure,
   defaultRunSize,
   isNormalizedDocx,
   modalRunSize,
   normalizeDocxTypography,
   hasFirstPageBand,
   readDocxPageSize,
+  reduceIndentsInXml,
   reserveFirstPageBand,
   scaleRunSizes,
   setDocxPageSize,
@@ -314,5 +317,131 @@ describe('reserveFirstPageBand', () => {
     const docx = await makeDocx(LETTER + deep)
     expect(await reserveFirstPageBand(docx, CONTROLLED_HEADER_BAND_PT)).toBe(docx)
     expect(await hasFirstPageBand(docx, CONTROLLED_HEADER_BAND_PT)).toBe(true)
+  })
+})
+
+describe('reduceIndentsInXml', () => {
+  it('pulls both spellings of an indent in by the same amount', () => {
+    // LibreOffice writes w:start/w:end; Word writes w:left/w:right. A library
+    // built from both has to move together.
+    const xml =
+      '<w:ind w:start="1789" w:end="200" w:hanging="283"/>' + '<w:ind w:left="1789" w:right="200"/>'
+    const out = reduceIndentsInXml(xml, 1080)
+    expect(out).toContain('w:start="709"')
+    expect(out).toContain('w:left="709"')
+    expect(out).toContain('w:end="0"')
+    expect(out).toContain('w:right="0"')
+    // The hanging indent is relative to the start, so it must not move.
+    expect(out).toContain('w:hanging="283"')
+  })
+
+  it('keeps the document hierarchy by subtracting, not flattening', () => {
+    const xml = '<w:ind w:start="1789"/><w:ind w:start="2498"/>'
+    const out = reduceIndentsInXml(xml, 1080)
+    expect(out).toContain('w:start="709"')
+    expect(out).toContain('w:start="1418"')
+  })
+
+  it('never indents past the margin', () => {
+    expect(reduceIndentsInXml('<w:ind w:start="200"/>', 1080)).toContain('w:start="0"')
+  })
+
+  it('moves a table that is indented with the text', () => {
+    expect(reduceIndentsInXml('<w:tblInd w:w="1789" w:type="dxa"/>', 1080)).toContain('w:w="709"')
+  })
+
+  it('does nothing for a document that needs nothing', () => {
+    const xml = '<w:ind w:start="709"/>'
+    expect(reduceIndentsInXml(xml, 0)).toBe(xml)
+  })
+})
+
+describe('addTableBordersInDocumentXml', () => {
+  const CELLS = (n: number) =>
+    '<w:tr>' +
+    Array.from(
+      { length: n },
+      () => '<w:tc><w:tcPr><w:tcBorders></w:tcBorders></w:tcPr></w:tc>',
+    ).join('') +
+    '</w:tr>'
+
+  it('grids a table whose borders the import dropped', () => {
+    // `<w:tcBorders></w:tcBorders>` — the element with nothing inside it — is
+    // what the legacy import wrote on every cell of every table. No authoring
+    // tool writes that, which is what makes repairing it wholesale safe.
+    const out = addTableBordersInDocumentXml(`<w:tbl><w:tblPr/>${CELLS(3)}</w:tbl>`)
+    expect(out).toContain('<w:tblBorders>')
+    expect(out).toContain('<w:insideV w:val="single"')
+    expect(out).not.toContain('<w:tcBorders></w:tcBorders>')
+  })
+
+  it('leaves a table that draws its own borders alone', () => {
+    const xml =
+      '<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single"/></w:tblBorders></w:tblPr>' +
+      `${CELLS(3)}</w:tbl>`
+    expect(addTableBordersInDocumentXml(xml)).toBe(xml)
+  })
+
+  it('leaves a table that gets its borders from a style alone', () => {
+    const xml = `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/></w:tblPr>${CELLS(3)}</w:tbl>`
+    expect(addTableBordersInDocumentXml(xml)).toBe(xml)
+  })
+
+  it('leaves a one-cell table alone, because that is layout and not data', () => {
+    const xml = `<w:tbl><w:tblPr/>${CELLS(1)}</w:tbl>`
+    expect(addTableBordersInDocumentXml(xml)).toBe(xml)
+  })
+
+  it('puts the borders where the schema expects them', () => {
+    // Word refuses a document whose tblPr children are out of order, and
+    // tblBorders comes before tblLayout.
+    const out = addTableBordersInDocumentXml(
+      `<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>${CELLS(2)}</w:tbl>`,
+    )
+    expect(out.indexOf('<w:tblBorders>')).toBeLessThan(out.indexOf('<w:tblLayout'))
+    expect(out.indexOf('<w:tblW')).toBeLessThan(out.indexOf('<w:tblBorders>'))
+  })
+})
+
+describe('fitTablesToMeasure', () => {
+  const table = (widths: number[], extra = '') =>
+    `<w:tbl><w:tblPr><w:tblW w:w="${widths.reduce((a, b) => a + b, 0)}" w:type="dxa"/>${extra}</w:tblPr>` +
+    `<w:tblGrid>${widths.map((w) => `<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid></w:tbl>`
+
+  function columnsOf(xml: string): number[] {
+    return [...xml.matchAll(/<w:gridCol w:w="(\d+)"\/>/g)].map((m) => Number(m[1]))
+  }
+
+  it('shrinks an A4-width table onto the Letter measure', () => {
+    // 11339 twips is 20cm — A4 with 1cm margins, which is what the import
+    // produced for most of the library. Letter with half-inch margins is 10800.
+    const out = fitTablesToMeasure(table([5000, 6339]), 'letter')
+    expect(columnsOf(out).reduce((a, b) => a + b, 0)).toBe(10800)
+  })
+
+  it('keeps the proportions between columns', () => {
+    const out = columnsOf(fitTablesToMeasure(table([3000, 6000, 12000]), 'letter'))
+    expect(out[1]! / out[0]!).toBeCloseTo(2, 1)
+    expect(out[2]! / out[0]!).toBeCloseTo(4, 1)
+  })
+
+  it('hands the rounding remainder to the widest column so the parts sum', () => {
+    const out = columnsOf(fitTablesToMeasure(table([3001, 3001, 3001, 3001]), 'letter'))
+    expect(out.reduce((a, b) => a + b, 0)).toBe(10800)
+  })
+
+  it('leaves the table width and cell widths consistent with the grid', () => {
+    const out = fitTablesToMeasure(table([5000, 6339]), 'letter')
+    expect(out).toContain('<w:tblW w:w="10800" w:type="dxa"/>')
+  })
+
+  it('accounts for a table that is indented from the margin', () => {
+    const out = fitTablesToMeasure(table([11339], '<w:tblInd w:w="800" w:type="dxa"/>'), 'letter')
+    expect(columnsOf(out)).toEqual([10000])
+  })
+
+  it('leaves a table that already fits alone', () => {
+    const xml = table([4000, 4000])
+    expect(fitTablesToMeasure(xml, 'letter')).toBe(xml)
   })
 })

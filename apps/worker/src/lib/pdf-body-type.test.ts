@@ -8,6 +8,16 @@ function page(width: number, height: number, words: [number, number][]): string 
   return `<page width="${width}" height="${height}">${body}</page>`
 }
 
+function indented(width: number, height: number, lines: [number, number][]): string {
+  const body = lines
+    .map(
+      ([left, size], i) =>
+        `<word xMin="${left}" yMin="${100 + i * 14}" xMax="${left + 200}" yMax="${100 + i * 14 + size}">w</word>`,
+    )
+    .join('')
+  return `<page width="${width}" height="${height}">${body}</page>`
+}
+
 describe('parseRenderedType', () => {
   it('reports the sheet width so the caller can tell Letter from A4', () => {
     expect(parseRenderedType(page(612, 792, [[10, 22]])).pageWidthPt).toBe(612)
@@ -58,6 +68,7 @@ describe('parseRenderedType', () => {
       pageWidthPt: null,
       bodyTypePt: null,
       firstPageTopPt: null,
+      bodyLeftPt: null,
     })
   })
 
@@ -70,5 +81,34 @@ describe('parseRenderedType', () => {
 
   it('reports no start for a first page with no text', () => {
     expect(parseRenderedType(page(612, 792, [])).firstPageTopPt).toBeNull()
+  })
+
+  it('reports where the body text block starts, not the leftmost word', () => {
+    // A centred title says nothing about where the body sits; the modal line
+    // start does. This is how an indented master is told from a normal one.
+    const xhtml = indented(612, 792, [
+      [300, 10],
+      ...Array.from({ length: 12 }, () => [90, 11] as [number, number]),
+    ])
+    expect(parseRenderedType(xhtml).bodyLeftPt).toBe(90)
+  })
+
+  it('joins a bullet to the line it introduces', () => {
+    // A bullet is set in a different face and lands a fraction of a point off
+    // its text. Counted as its own line, the plain lines below would outvote
+    // it and the measure would report 90 rather than the 72 a reader sees as
+    // the edge of the list.
+    const bulleted = Array.from({ length: 7 }, (_, i) => [
+      `<word xMin="72" yMin="${100 + i * 14}.4" xMax="80" yMax="${111 + i * 14}">.</word>`,
+      `<word xMin="90" yMin="${100 + i * 14}" xMax="300" yMax="${111 + i * 14}">w</word>`,
+    ]).flat()
+    const plain = Array.from(
+      { length: 6 },
+      (_, i) => `<word xMin="90" yMin="${300 + i * 14}" xMax="300" yMax="${311 + i * 14}">w</word>`,
+    )
+    const words = [...bulleted, ...plain]
+    expect(
+      parseRenderedType(`<page width="612" height="792">${words.join('')}</page>`).bodyLeftPt,
+    ).toBe(72)
   })
 })

@@ -222,6 +222,15 @@ export async function normalizeDocxTypography(
      * measured it passes the ratio it actually needs.
      */
     sizeFactor?: number
+    /**
+     * Pull every paragraph indent in by this many twips.
+     *
+     * Same reasoning as `sizeFactor`: the XML cannot say how far in the text
+     * actually lands — a paragraph indent, a list level and a table inset all
+     * stack — so the caller renders the document, measures where the body
+     * block starts, and passes the excess over the house margin.
+     */
+    indentReduceTwips?: number
   } = {},
 ): Promise<Buffer> {
   const zip = await JSZip.loadAsync(docx)
@@ -238,18 +247,22 @@ export async function normalizeDocxTypography(
       : mode
         ? STANDARD_BODY_HALF_POINTS / mode
         : 1
-  const next = scaleRunSizes(
-    setMarginsInDocumentXml(
-      clampMarginsInDocumentXml(setPageSizeInDocumentXml(documentXml, size), size),
-    ),
-    factor,
-  )
+  // Order matters: paper and margins settle the measure, and the measure is
+  // what a table is fitted to.
+  const paper = clampMarginsInDocumentXml(setPageSizeInDocumentXml(documentXml, size), size)
+  const laid = setMarginsInDocumentXml(paper)
+  const sized = scaleRunSizes(laid, factor)
+  const tabled = fitTablesToMeasure(addTableBordersInDocumentXml(sized), size)
+  const next = reduceIndentsInXml(tabled, options.indentReduceTwips ?? 0)
 
   // styles.xml carries the defaults a run inherits when it declares no size of
   // its own, so it has to move by the same factor or those runs drift apart
   // from the ones that do.
   const styles = stylesForSize
-  const nextStyles = styles === null ? null : scaleRunSizes(styles, factor)
+  const nextStyles =
+    styles === null
+      ? null
+      : reduceIndentsInXml(scaleRunSizes(styles, factor), options.indentReduceTwips ?? 0)
 
   if (next === documentXml && (nextStyles === null || nextStyles === styles)) return docx
   zip.file('word/document.xml', next)
@@ -271,6 +284,9 @@ export async function isNormalizedDocx(docx: Buffer, size: DocxPageSize): Promis
   if (!entry) return false
   const documentXml = await entry.async('string')
   if (readDocxPageSize(documentXml) !== size) return false
+
+  if (addTableBordersInDocumentXml(documentXml) !== documentXml) return false
+  if (fitTablesToMeasure(documentXml, size) !== documentXml) return false
 
   const margins = documentXml.match(/<w:pgMar\b[^>]*\/>/g) ?? []
   if (margins.length === 0) return false
@@ -372,4 +388,137 @@ export async function hasFirstPageBand(docx: Buffer, bandPt: number): Promise<bo
   if (!entry) return false
   const documentXml = await entry.async('string')
   return withSpacer(documentXml, bandPt) === documentXml
+}
+
+// ---------------------------------------------------------------------------
+// Import repairs
+//
+// Two defects the legacy import left in every master it produced. Both are
+// invisible in the XML until you render it, and both read as "the formatting is
+// wrong" rather than as anything a reader could describe.
+// ---------------------------------------------------------------------------
+
+/** Indent attributes, in both the transitional and strict spellings. */
+const INDENT_START = /\bw:(left|start)="(-?\d+)"/g
+const INDENT_END = /\bw:(right|end)="(-?\d+)"/g
+
+/**
+ * Pull every paragraph indent in by `twips`, never past the margin.
+ *
+ * Some imported masters indent their whole body about 1.2 inches, so the text
+ * column fills 66% of the sheet against 83% for the rest of the library — the
+ * page margin is right and the paragraphs are wrong. Subtracting a constant
+ * keeps the document's own hierarchy: a list nested two levels deep stays two
+ * levels deep.
+ *
+ * `word/numbering.xml` is deliberately untouched. Its ladder defines the list
+ * LEVELS, and clamping the shallow ones at zero would flatten nesting; the
+ * indents that show up in these documents are all paragraph-level, which
+ * override numbering anyway.
+ */
+export function reduceIndentsInXml(xml: string, twips: number): string {
+  if (!Number.isFinite(twips) || twips <= 0) return xml
+  const pull = (value: string) => String(Math.max(0, Number(value) - twips))
+  return xml
+    .replace(/<w:ind\b[^>]*\/>/g, (tag) =>
+      tag
+        .replace(INDENT_START, (_, name, value) => `w:${name}="${pull(value)}"`)
+        .replace(INDENT_END, (_, name, value) => `w:${name}="${pull(value)}"`),
+    )
+    .replace(/<w:tblInd\b[^>]*\/>/g, (tag) =>
+      tag.replace(/\bw:w="(-?\d+)"/, (_, value) => `w:w="${pull(value)}"`),
+    )
+}
+
+/** A plain single-line grid: half a point, the weight Word's Table Grid uses. */
+const GRID_EDGE = 'w:val="single" w:sz="4" w:space="0" w:color="000000"'
+const GRID =
+  '<w:tblBorders>' +
+  `<w:top ${GRID_EDGE}/><w:left ${GRID_EDGE}/><w:bottom ${GRID_EDGE}/>` +
+  `<w:right ${GRID_EDGE}/><w:insideH ${GRID_EDGE}/><w:insideV ${GRID_EDGE}/>` +
+  '</w:tblBorders>'
+/** Schema order puts tblBorders after tblInd and before these. */
+const AFTER_BORDERS = /<w:(shd|tblLayout|tblCellMar|tblLook)\b/
+
+function tableIsBare(tbl: string): boolean {
+  if (/<w:tblStyle\b/.test(tbl) || /<w:tblBorders>/.test(tbl)) return false
+  // `<w:tcBorders></w:tcBorders>` — the element with nothing in it — declares
+  // no border at all. Every table in the imported library carries exactly that.
+  return !/<w:tcBorders>\s*<w:/.test(tbl)
+}
+
+/**
+ * Give a grid to any table that declares no borders anywhere.
+ *
+ * The import emitted an empty `<w:tcBorders></w:tcBorders>` on every cell of
+ * every table and dropped the edges inside it, so sign-in logs, schedules and
+ * threshold tables all print as floating columns with no rules. No authoring
+ * tool writes that, which is what makes this safe to repair wholesale.
+ *
+ * A one-cell table is layout, not data, and is left alone.
+ */
+export function addTableBordersInDocumentXml(documentXml: string): string {
+  return documentXml.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g, (tbl) => {
+    if (!tableIsBare(tbl)) return tbl
+    const cells = (tbl.match(/<w:tc>/g) ?? []).length
+    if (cells < 2) return tbl
+    const stripped = tbl.replace(/<w:tcBorders>\s*<\/w:tcBorders>/g, '')
+    const properties = /<w:tblPr>[\s\S]*?<\/w:tblPr>/.exec(stripped)?.[0]
+    if (!properties) return stripped.replace('<w:tbl>', `<w:tbl><w:tblPr>${GRID}</w:tblPr>`)
+    const anchor = AFTER_BORDERS.exec(properties)
+    const next = anchor
+      ? properties.replace(anchor[0], `${GRID}${anchor[0]}`)
+      : properties.replace('</w:tblPr>', `${GRID}</w:tblPr>`)
+    return stripped.replace(properties, next)
+  })
+}
+
+/** How wide a table may be, in twips, on a page with the house margins. */
+function measureTwips(size: DocxPageSize): number {
+  return PAGE_TWIPS[size].width - STANDARD_MARGIN_TWIPS * 2
+}
+
+const GRID_COL = /<w:gridCol\b[^>]*\bw:w="(\d+)"[^>]*\/>/g
+/** Only `dxa` — a width in percent or set to auto is already relative. */
+const CELL_WIDTH = /<w:(tblW|tcW)\b[^>]*\bw:w="(\d+)"[^>]*\bw:type="dxa"[^>]*\/>/g
+
+/**
+ * Shrink any table that is wider than the page to fit it.
+ *
+ * The imported masters were authored on A4 with 1cm margins, so most of their
+ * tables declare exactly 11339 twips — 20cm — against the 10800 a Letter page
+ * with half-inch margins allows. Two run to 1.9x and 2.3x that. They all use a
+ * FIXED layout, so the declared widths are honoured and the overhang simply
+ * falls off the right edge of the sheet: measured on the real manual, the last
+ * column of a threshold-limit table was cut mid-word.
+ *
+ * Scaling every width by one factor keeps the table's proportions, and the
+ * rounding remainder goes to the widest column so the parts still sum to the
+ * whole.
+ */
+export function fitTablesToMeasure(documentXml: string, size: DocxPageSize): string {
+  const measure = measureTwips(size)
+  return documentXml.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g, (tbl) => {
+    const indent = Number(/<w:tblInd\b[^>]*\bw:w="(\d+)"/.exec(tbl)?.[1] ?? 0)
+    const available = Math.max(1, measure - (Number.isFinite(indent) ? indent : 0))
+    const columns = [...tbl.matchAll(/<w:gridCol\b[^>]*\bw:w="(\d+)"/g)].map((m) => Number(m[1]))
+    const total = columns.reduce((sum, width) => sum + width, 0)
+    if (total <= available || total === 0) return tbl
+
+    const factor = available / total
+    const scaled = columns.map((width) => Math.max(1, Math.round(width * factor)))
+    // Hand the rounding error to the widest column, where it is least visible.
+    const drift = available - scaled.reduce((sum, width) => sum + width, 0)
+    const widest = scaled.indexOf(Math.max(...scaled))
+    scaled[widest] = Math.max(1, (scaled[widest] ?? 1) + drift)
+
+    let column = 0
+    return tbl
+      .replace(GRID_COL, (tag, width) =>
+        tag.replace(`w:w="${width}"`, `w:w="${scaled[column++] ?? width}"`),
+      )
+      .replace(CELL_WIDTH, (tag, _name, width) =>
+        tag.replace(`w:w="${width}"`, `w:w="${Math.max(1, Math.round(Number(width) * factor))}"`),
+      )
+  })
 }

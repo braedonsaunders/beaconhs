@@ -29,6 +29,14 @@ export type RenderedTypeMetrics = {
    * `null` when page one carries no text at all.
    */
   firstPageTopPt: number | null
+  /**
+   * Where the body's text block starts, in points from the left edge.
+   *
+   * The MODAL line start, not the leftmost: a centred title or a table that
+   * overhangs the measure says nothing about where the body sits. Says whether
+   * a master indents its whole body away from its own page margin.
+   */
+  bodyLeftPt: number | null
 }
 
 export async function measureRenderedType(pdf: Buffer): Promise<RenderedTypeMetrics> {
@@ -41,7 +49,12 @@ export async function measureRenderedType(pdf: Buffer): Promise<RenderedTypeMetr
     return parseRenderedType(await readFile(output, 'utf8'))
   } catch {
     // Measurement guides a conversion; it is never a reason to fail one.
-    return { pageWidthPt: null, bodyTypePt: null, firstPageTopPt: null }
+    return {
+      pageWidthPt: null,
+      bodyTypePt: null,
+      firstPageTopPt: null,
+      bodyLeftPt: null,
+    }
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {})
   }
@@ -80,9 +93,58 @@ export function parseRenderedType(xhtml: string): RenderedTypeMetrics {
   const tops = [...firstPageXhtml.matchAll(/<word xMin="[\d.]+" yMin="([\d.]+)"/g)].map((word) =>
     Number(word[1]),
   )
+
   return {
     pageWidthPt,
     bodyTypePt,
     firstPageTopPt: tops.length > 0 ? Math.min(...tops) : null,
+    bodyLeftPt: measureBodyLeft(xhtml),
   }
+}
+
+/** Rounding for the line-start histogram, in points. */
+const EDGE_PT = 2
+/**
+ * Rounding for grouping words into lines, in points.
+ *
+ * Not zero: a bullet is set in a different face from the text it introduces and
+ * lands a fraction of a point off it, so rounding to the whole point split
+ * every list item into a bullet "line" and a text "line".
+ */
+const LINE_PT = 2
+
+/**
+ * The modal left edge of the rendered lines.
+ *
+ * Words are grouped into lines first, because the start of a LINE is what a
+ * reader sees as the margin; the start of a word is wherever a space fell.
+ */
+function measureBodyLeft(xhtml: string): number | null {
+  const lefts = new Map<number, number>()
+  for (const page of xhtml.split('<page ').slice(1)) {
+    const lines = new Map<number, number>()
+    for (const word of page.matchAll(/<word xMin="([\d.]+)" yMin="([\d.]+)"/g)) {
+      const line = Math.round(Number(word[2]) / LINE_PT)
+      const left = Number(word[1])
+      lines.set(line, Math.min(lines.get(line) ?? Infinity, left))
+    }
+    for (const left of lines.values()) {
+      const bucket = Math.round(left / EDGE_PT) * EDGE_PT
+      lefts.set(bucket, (lefts.get(bucket) ?? 0) + 1)
+    }
+  }
+  return mode(lefts)
+}
+
+/** Ties go to the value nearer the sheet edge, which is the likelier margin. */
+function mode(counts: Map<number, number>): number | null {
+  let best: number | null = null
+  let bestCount = 0
+  for (const [value, count] of counts) {
+    if (count > bestCount || (count === bestCount && best !== null && value < best)) {
+      best = value
+      bestCount = count
+    }
+  }
+  return best
 }
