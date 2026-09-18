@@ -22,7 +22,6 @@ import {
   GripVertical,
   Hash,
   Library,
-  Loader2,
   Lock,
   Plus,
   Trash2,
@@ -98,10 +97,6 @@ export function BookBuilder({
   const tGeneratedValue = useGeneratedValueTranslations()
   const router = useRouter()
   const [, startTransition] = React.useTransition()
-  // Rendering a book is seconds of work with no visual change until it
-  // navigates, so the control has to say it is busy — otherwise people click
-  // it again and queue a second render.
-  const [rendering, startRender] = React.useTransition()
   const [rail, setRail] = React.useState<RailView>('build')
   const [adding, setAdding] = React.useState(false)
   // A heading arrives named "Untitled chapter". Focusing its title the moment
@@ -310,26 +305,17 @@ export function BookBuilder({
                       })}
                     />
                   </Badge>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={rendering}
-                    onClick={() => startRender(() => router.push(`/documents/books/${bookId}/pdf`))}
-                  >
-                    <GeneratedValue
-                      value={
-                        rendering ? (
-                          <>
-                            <Loader2 size={14} className="animate-spin" aria-hidden />
-                            <GeneratedText id="m_11beb293de9d2d" />
-                          </>
-                        ) : (
-                          <>
-                            <FileDown size={14} /> <GeneratedText id="m_0aff97b409282d" />
-                          </>
-                        )
-                      }
-                    />
+                  {/* A new tab, because the render takes seconds and replacing
+                      the builder with a spinning blank page loses the editor
+                      you were working in. */}
+                  <Button variant="outline" size="sm" asChild>
+                    <a
+                      href={`/documents/books/${bookId}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <FileDown size={14} /> <GeneratedText id="m_0aff97b409282d" />
+                    </a>
                   </Button>
                   <Button
                     size="sm"

@@ -21,7 +21,11 @@ import {
 } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
 import { sofficeConvert } from '@beaconhs/office'
-import { setDocxPageSize } from '@beaconhs/office/docx-page-size'
+import {
+  CONTROLLED_HEADER_BAND_PT,
+  reserveFirstPageBand,
+  setDocxPageSize,
+} from '@beaconhs/office/docx-page-size'
 
 const MAX_TEXT_CHARS = 1_500_000
 const MAX_OFFICE_INPUT_BYTES = 100 * 1024 * 1024
@@ -62,13 +66,20 @@ function assertOfficeInput(
 const DOCUMENT_PAGE_SIZE = 'letter'
 
 /**
- * Convert a master to PDF, forcing the house paper size first.
+ * Convert a master to PDF on the house paper, with the controlled-header strip
+ * left clear at the top of page one.
  *
- * `setDocxPageSize` hands back the original bytes when the master is already
- * Letter, so this costs nothing for documents authored in the app.
+ * Both steps hand back the original bytes when nothing needs changing, so this
+ * costs nothing beyond the conversion itself.
+ *
+ * The strip is reserved on every document, not only the ones currently in a
+ * book: a book pins exact versions, so a render that did not reserve it can
+ * never be given the space later without re-rendering an approved snapshot.
  */
-async function renderDocxToPdf(docx: Buffer): Promise<Buffer> {
-  return sofficeConvert(await setDocxPageSize(docx, DOCUMENT_PAGE_SIZE), 'document.docx', 'pdf')
+export async function renderDocxToPdf(docx: Buffer): Promise<Buffer> {
+  const letter = await setDocxPageSize(docx, DOCUMENT_PAGE_SIZE)
+  const reserved = await reserveFirstPageBand(letter, CONTROLLED_HEADER_BAND_PT)
+  return sofficeConvert(reserved, 'document.docx', 'pdf')
 }
 
 export async function renderDocumentVersion(args: {

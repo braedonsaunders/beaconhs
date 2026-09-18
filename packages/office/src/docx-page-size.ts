@@ -280,3 +280,96 @@ export async function isNormalizedDocx(docx: Buffer, size: DocxPageSize): Promis
     ),
   )
 }
+
+// ---------------------------------------------------------------------------
+// First-page band
+//
+// A book stamps a controlled-document block across the top of each document's
+// first page. The composer can only do that by shrinking the page to make room
+// — which leaves every document's first page smaller than its own later pages:
+// measured on a 244-page manual, the pages carrying a block rendered at 9.5pt
+// against 11.5pt elsewhere, with double the left margin.
+//
+// Giving the block its own sheet fixes the type and costs a page per document
+// — on a 196-document manual, 60 extra sheets. Reserving the strip when the
+// document is RENDERED costs nothing: the render leaves the band blank and the
+// composer draws into space that is already empty, at full page size.
+//
+// It is done at render, not in the stored master, so the author is not editing
+// around a block of white space that only means something inside a book.
+// ---------------------------------------------------------------------------
+
+/**
+ * Height of the strip a rendered document keeps clear at the top of its first
+ * page, in points, for the controlled-document block a book stamps there.
+ *
+ * Every consumer must agree on it: the render reserves exactly this, and the
+ * composer draws exactly this.
+ */
+export const CONTROLLED_HEADER_BAND_PT = 132
+
+/**
+ * The reserve is a spacer paragraph at the top of the body, not a first-page
+ * header.
+ *
+ * The header spelling reads better and does not work: LibreOffice sizes a
+ * section's header area once for the whole section, so a 96pt first-page
+ * spacer pushed page TWO's text down 125pt as well. Measured on two real
+ * masters, pages 2+ started at 161pt instead of the 36pt margin.
+ */
+function spacerParagraph(spacerTwips: number): string {
+  return (
+    '<w:p><w:pPr>' +
+    '<w:ind w:left="0" w:right="0" w:firstLine="0"/>' +
+    `<w:spacing w:before="0" w:after="0" w:line="${spacerTwips}" w:lineRule="exact"/>` +
+    '<w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr>' +
+    '</w:pPr></w:p>'
+  )
+}
+
+/** The blank strip the spacer must add, in twips, for a band of `bandPt`. */
+function spacerTwipsFor(documentXml: string, bandPt: number): number {
+  const top = Number(/<w:pgMar\b[^>]*\bw:top="(-?\d+)"/.exec(documentXml)?.[1] ?? NaN)
+  const margin = Number.isFinite(top) ? top : STANDARD_MARGIN_TWIPS
+  return Math.max(0, Math.round(bandPt * 20) - margin)
+}
+
+/** Every spacer this module has ever written, so a re-run replaces its own. */
+const SPACER =
+  /<w:p><w:pPr><w:ind w:left="0" w:right="0" w:firstLine="0"\/><w:spacing w:before="0" w:after="0" w:line="\d+" w:lineRule="exact"\/><w:rPr><w:sz w:val="2"\/><w:szCs w:val="2"\/><\/w:rPr><\/w:pPr><\/w:p>/g
+
+function withSpacer(documentXml: string, bandPt: number): string {
+  const stripped = documentXml.replace(SPACER, '')
+  const body = /<w:body(?:\s[^>]*)?>/.exec(stripped)?.[0]
+  if (!body) throw new Error('Not a Word document: no w:body')
+  const twips = spacerTwipsFor(stripped, bandPt)
+  // A zero-height spacer is not nothing — an empty paragraph still claims a
+  // line — so a page whose margin already clears the band gets no paragraph.
+  if (twips === 0) return stripped
+  return stripped.replace(body, `${body}${spacerParagraph(twips)}`)
+}
+
+/**
+ * Leave the top `bandPt` points of the document's first page blank.
+ *
+ * Idempotent: re-running over a master that already reserves the same height
+ * returns the original bytes.
+ */
+export async function reserveFirstPageBand(docx: Buffer, bandPt: number): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(docx)
+  const entry = zip.file('word/document.xml')
+  if (!entry) throw new Error('Not a Word document: word/document.xml is missing')
+  const documentXml = await entry.async('string')
+  const next = withSpacer(documentXml, bandPt)
+  if (next === documentXml) return docx
+  zip.file('word/document.xml', next)
+  return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
+}
+
+/** Whether a master already reserves a band of exactly this height. */
+export async function hasFirstPageBand(docx: Buffer, bandPt: number): Promise<boolean> {
+  const entry = (await JSZip.loadAsync(docx)).file('word/document.xml')
+  if (!entry) return false
+  const documentXml = await entry.async('string')
+  return withSpacer(documentXml, bandPt) === documentXml
+}

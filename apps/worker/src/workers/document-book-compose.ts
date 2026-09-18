@@ -2,6 +2,7 @@ import { composePdf, pageGeometry, type ComposePart } from '@beaconhs/office'
 import type { DocumentBookPrintSettings } from '@beaconhs/db/schema'
 import { resolveBookPrintSettings } from '@beaconhs/db'
 import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
+import { CONTROLLED_HEADER_BAND_PT } from '@beaconhs/office/docx-page-size'
 
 // Assembling a document book.
 //
@@ -68,8 +69,6 @@ export type ComposeBookInput = {
 }
 
 const PT_PER_MM = 72 / 25.4
-/** Band reserved for the control block when it rides on the document. */
-const CONTROL_BAND_PT = 132
 
 /** Footer geometry — `stampFooter`'s own defaults, which the book keeps. */
 const FOOTER_MARGIN_PT = 28
@@ -290,7 +289,7 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
           // scales the whole page and the table shrinks to a sixth of its size.
           ...(settings.documentHeadersOnOwnPage
             ? {}
-            : { pageSizePt: { width: geometry.width, height: CONTROL_BAND_PT } }),
+            : { pageSizePt: { width: geometry.width, height: CONTROLLED_HEADER_BAND_PT } }),
           bodyHtml: documents
             .map(
               (entry, i) =>
@@ -416,7 +415,19 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
     parts.push({
       bytes: node.pdf,
       ...(controlSheetsPdf
-        ? { letterhead: { bytes: controlSheetsPdf, page: i, heightPt: CONTROL_BAND_PT } }
+        ? {
+            letterhead: {
+              bytes: controlSheetsPdf,
+              page: i,
+              heightPt: CONTROLLED_HEADER_BAND_PT,
+              // The document's own render already left this strip clear, so
+              // the band lands in blank space. Reserving it a second time
+              // would shrink only the pages that carry a block — measured on
+              // a 244-page manual, those came out at 9.5pt against 11.5pt
+              // everywhere else, with double the left margin.
+              reserveSpace: false,
+            },
+          }
         : {}),
     })
   }

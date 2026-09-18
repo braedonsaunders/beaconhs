@@ -22,6 +22,13 @@ export type RenderedTypeMetrics = {
   pageWidthPt: number | null
   /** Modal word height in points — what a reader perceives as "the text". */
   bodyTypePt: number | null
+  /**
+   * Top of the highest word on page one, in points from the sheet edge.
+   *
+   * Says whether a render already leaves the controlled-header strip clear.
+   * `null` when page one carries no text at all.
+   */
+  firstPageTopPt: number | null
 }
 
 export async function measureRenderedType(pdf: Buffer): Promise<RenderedTypeMetrics> {
@@ -34,7 +41,7 @@ export async function measureRenderedType(pdf: Buffer): Promise<RenderedTypeMetr
     return parseRenderedType(await readFile(output, 'utf8'))
   } catch {
     // Measurement guides a conversion; it is never a reason to fail one.
-    return { pageWidthPt: null, bodyTypePt: null }
+    return { pageWidthPt: null, bodyTypePt: null, firstPageTopPt: null }
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {})
   }
@@ -49,6 +56,7 @@ export async function measureRenderedType(pdf: Buffer): Promise<RenderedTypeMetr
 export function parseRenderedType(xhtml: string): RenderedTypeMetrics {
   const firstPage = /<page width="([\d.]+)" height="([\d.]+)">/.exec(xhtml)
   const pageWidthPt = firstPage ? Number(firstPage[1]) : null
+  const firstPageXhtml = xhtml.split('<page ')[1] ?? ''
 
   const wordPattern = /<word xMin="[\d.]+" yMin="([\d.]+)" xMax="[\d.]+" yMax="([\d.]+)"/g
   const buckets = new Map<number, number>()
@@ -69,5 +77,12 @@ export function parseRenderedType(xhtml: string): RenderedTypeMetrics {
       best = count
     }
   }
-  return { pageWidthPt, bodyTypePt: Number.isFinite(pageWidthPt) ? bodyTypePt : bodyTypePt }
+  const tops = [...firstPageXhtml.matchAll(/<word xMin="[\d.]+" yMin="([\d.]+)"/g)].map((word) =>
+    Number(word[1]),
+  )
+  return {
+    pageWidthPt,
+    bodyTypePt,
+    firstPageTopPt: tops.length > 0 ? Math.min(...tops) : null,
+  }
 }

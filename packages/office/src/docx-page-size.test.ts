@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import JSZip from 'jszip'
 import {
+  CONTROLLED_HEADER_BAND_PT,
   clampMarginsInDocumentXml,
   defaultRunSize,
   isNormalizedDocx,
   modalRunSize,
   normalizeDocxTypography,
+  hasFirstPageBand,
   readDocxPageSize,
+  reserveFirstPageBand,
   scaleRunSizes,
   setDocxPageSize,
   setPageSizeInDocumentXml,
@@ -258,5 +261,58 @@ describe('isNormalizedDocx', () => {
 
   it('rejects a file with no sections at all', async () => {
     expect(await isNormalizedDocx(await makeDocx(LETTER), 'letter')).toBe(false)
+  })
+})
+
+describe('reserveFirstPageBand', () => {
+  const HOUSE_MARGINS =
+    '<w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="720" w:footer="720" w:gutter="0"/>'
+
+  async function bodyOf(docx: Buffer): Promise<string> {
+    return (await JSZip.loadAsync(docx)).file('word/document.xml')!.async('string')
+  }
+
+  it('leaves the strip blank measured from the page edge, not the margin', async () => {
+    // The composer draws the band at the top of the SHEET, so the spacer only
+    // has to cover what the page margin does not.
+    const xml = await bodyOf(
+      await reserveFirstPageBand(await makeDocx(LETTER + HOUSE_MARGINS), CONTROLLED_HEADER_BAND_PT),
+    )
+    expect(xml).toContain('w:line="1920" w:lineRule="exact"')
+  })
+
+  it('puts the spacer first, so it is the first page it clears', async () => {
+    const xml = await bodyOf(
+      await reserveFirstPageBand(await makeDocx(LETTER + HOUSE_MARGINS), CONTROLLED_HEADER_BAND_PT),
+    )
+    expect(xml.indexOf('<w:p>')).toBe(xml.indexOf('<w:body>') + '<w:body>'.length)
+  })
+
+  it('is idempotent, so re-rendering a library does not stack strips', async () => {
+    const once = await reserveFirstPageBand(
+      await makeDocx(LETTER + HOUSE_MARGINS),
+      CONTROLLED_HEADER_BAND_PT,
+    )
+    expect(await hasFirstPageBand(once, CONTROLLED_HEADER_BAND_PT)).toBe(true)
+    expect(await reserveFirstPageBand(once, CONTROLLED_HEADER_BAND_PT)).toBe(once)
+    const twice = await bodyOf(await reserveFirstPageBand(once, CONTROLLED_HEADER_BAND_PT))
+    expect(twice.match(/w:lineRule="exact"/g)).toHaveLength(1)
+  })
+
+  it('replaces a strip reserved at a different height', async () => {
+    const short = await reserveFirstPageBand(await makeDocx(LETTER + HOUSE_MARGINS), 72)
+    expect(await hasFirstPageBand(short, CONTROLLED_HEADER_BAND_PT)).toBe(false)
+    const xml = await bodyOf(await reserveFirstPageBand(short, CONTROLLED_HEADER_BAND_PT))
+    expect(xml.match(/w:lineRule="exact"/g)).toHaveLength(1)
+    expect(xml).toContain('w:line="1920"')
+  })
+
+  it('reserves nothing when the margin already clears the band', async () => {
+    // An empty paragraph is not free — it still claims a line — so a page with
+    // room to spare must come back untouched.
+    const deep = '<w:pgMar w:top="3000" w:right="720" w:bottom="720" w:left="720"/>'
+    const docx = await makeDocx(LETTER + deep)
+    expect(await reserveFirstPageBand(docx, CONTROLLED_HEADER_BAND_PT)).toBe(docx)
+    expect(await hasFirstPageBand(docx, CONTROLLED_HEADER_BAND_PT)).toBe(true)
   })
 })

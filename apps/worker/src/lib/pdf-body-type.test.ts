@@ -54,6 +54,21 @@ describe('parseRenderedType', () => {
   })
 
   it('survives output that is not poppler XHTML at all', () => {
-    expect(parseRenderedType('<html/>')).toEqual({ pageWidthPt: null, bodyTypePt: null })
+    expect(parseRenderedType('<html/>')).toEqual({
+      pageWidthPt: null,
+      bodyTypePt: null,
+      firstPageTopPt: null,
+    })
+  })
+
+  it('reports where page one starts, ignoring later pages', () => {
+    // How the caller tells a render that reserved the controlled-header strip
+    // from one that did not. A later page starting higher says nothing.
+    const xhtml = page(612, 792, [[132, 143]]) + page(612, 792, [[36, 47]])
+    expect(parseRenderedType(xhtml).firstPageTopPt).toBe(132)
+  })
+
+  it('reports no start for a first page with no text', () => {
+    expect(parseRenderedType(page(612, 792, [])).firstPageTopPt).toBeNull()
   })
 })
