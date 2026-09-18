@@ -14,10 +14,10 @@ describe('resolveBookPrintSettings', () => {
       coverPage: true,
       tableOfContents: true,
       documentHeaders: true,
-      // The control block gets its own sheet: riding on the document reserves a
-      // band and shrinks the page beneath it, so a third of the book rendered
-      // smaller than the rest.
-      documentHeadersOnOwnPage: true,
+      // The control block rides on the document's first page, which the render
+      // leaves clear for it — so it costs neither a sheet per document nor the
+      // scaled-down pages that giving it a band used to.
+      documentHeadersOnOwnPage: false,
       footer: true,
       documentPageBreaks: true,
     })

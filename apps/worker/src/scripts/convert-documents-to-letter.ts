@@ -86,9 +86,15 @@ async function measureRender(docx: Buffer): Promise<{ bodyPt: number | null }> {
  * A first page with no text at all cannot answer the question, so it is
  * re-rendered — a handful of blank or image-only masters is cheaper than
  * leaving the block printed over their content.
+ *
+ * The tolerance is the ascent a word box carries above the line it sits on:
+ * a reserved render measures 129.3–130 against a 132pt strip, and a 2pt
+ * tolerance read 262 finished documents as unfinished.
  */
+const BAND_TOLERANCE_PT = 4
+
 function reservesBand(topPt: number | null): boolean {
-  return topPt !== null && topPt >= CONTROLLED_HEADER_BAND_PT - 2
+  return topPt !== null && topPt >= CONTROLLED_HEADER_BAND_PT - BAND_TOLERANCE_PT
 }
 
 /** Conversions per run, unless --limit says otherwise. */
