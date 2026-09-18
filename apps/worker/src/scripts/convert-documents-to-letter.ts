@@ -83,9 +83,11 @@ async function measureRender(docx: Buffer): Promise<{ bodyPt: number | null }> {
 /**
  * Whether a stored render already keeps the controlled-header strip clear.
  *
- * A first page with no text at all cannot answer the question, so it is
- * re-rendered — a handful of blank or image-only masters is cheaper than
- * leaving the block printed over their content.
+ * A first page with no text is counted as clear. In this library those eight
+ * versions are genuinely empty — one page, no text and no images — and asking
+ * again every run only re-rendered them forever. A first page that carried
+ * nothing but an image would be missed, which is the honest limit of measuring
+ * a render with a text extractor.
  *
  * The tolerance is the ascent a word box carries above the line it sits on:
  * a reserved render measures 129.3–130 against a 132pt strip, and a 2pt
@@ -94,7 +96,7 @@ async function measureRender(docx: Buffer): Promise<{ bodyPt: number | null }> {
 const BAND_TOLERANCE_PT = 4
 
 function reservesBand(topPt: number | null): boolean {
-  return topPt !== null && topPt >= CONTROLLED_HEADER_BAND_PT - BAND_TOLERANCE_PT
+  return topPt === null || topPt >= CONTROLLED_HEADER_BAND_PT - BAND_TOLERANCE_PT
 }
 
 /** Where a document's body text should start, in points from the sheet edge. */
@@ -206,7 +208,19 @@ async function main() {
         : null
       const bandDone = reservesBand(rendered?.firstPageTopPt ?? null)
       const indentReduce = indentReduceTwips(rendered?.bodyLeftPt ?? null)
-      if (structureDone && bandDone && indentReduce === 0) {
+      // Asking "does it still measure wide?" never settles on its own: two
+      // masters render their body 114pt and 62pt in while every indent they
+      // declare is already zero, so the reduction has nothing left to take and
+      // the next run asks again. What settles it is whether normalising would
+      // change the bytes.
+      const repaired =
+        structureDone && bandDone
+          ? await normalizeDocxTypography(docx, TARGET, {
+              sizeFactor: 1,
+              indentReduceTwips: indentReduce,
+            })
+          : null
+      if (repaired === docx) {
         alreadyCorrect++
         continue
       }
@@ -227,10 +241,12 @@ async function main() {
         bodyPtBefore = (await measureRender(docx)).bodyPt
         if (bodyPtBefore) sizeFactor = TARGET_BODY_PT / bodyPtBefore
       }
-      const master = await normalizeDocxTypography(docx, TARGET, {
-        sizeFactor,
-        indentReduceTwips: indentReduce,
-      })
+      const master =
+        repaired ??
+        (await normalizeDocxTypography(docx, TARGET, {
+          sizeFactor,
+          indentReduceTwips: indentReduce,
+        }))
       // The same path the render worker uses, so a re-rendered snapshot and a
       // freshly saved one cannot drift apart.
       const pdf = await renderDocxToPdf(master)
