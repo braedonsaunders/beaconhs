@@ -451,7 +451,8 @@ Open the **Cover** panel on the left. Every book picks its own cover, so a safet
 Open the **Print** panel on the left:
 
 - **Paper size**, **Orientation**, and **Page margin** control the sheet. Pages go in whole, so the margin is added on top of the one each document was written with; raising it also shrinks the content.
-- The remaining switches turn the cover, contents, control block, page breaks and footer on or off. Each one says what it does to the PDF.
+- **Control block on its own page** is on by default. Riding it on top of the document instead saves a sheet per document, but the page underneath is shrunk to make room for it, so those pages print smaller than the rest of the book.
+- The remaining switches turn the cover, contents, page breaks and footer on or off. Each one says what it does to the PDF.
 
 ### What a book PDF contains
 

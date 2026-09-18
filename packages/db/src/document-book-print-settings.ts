@@ -19,9 +19,15 @@ export const DOCUMENT_BOOK_PRINT_DEFAULTS = {
   coverPage: true,
   tableOfContents: true,
   documentHeaders: true,
-  // The control block rides on the document's first page. Giving it a sheet of
-  // its own doubled the page count of a book whose members are mostly one page.
-  documentHeadersOnOwnPage: false,
+  // The control block gets a sheet of its own.
+  //
+  // Riding on the document's first page costs one sheet per document less, but
+  // the band reserves 132pt and the page beneath is scaled to fit what is left.
+  // Measured on the real manual, that made a THIRD of the pages render at 9.5pt
+  // against 11.5pt elsewhere, with double the left margin — which is exactly
+  // what "the text size keeps changing" and "the margins are way too wide"
+  // were. Every page of every document now imposes identically.
+  documentHeadersOnOwnPage: true,
   footer: true,
   documentPageBreaks: true,
 } as const satisfies Required<DocumentBookPrintSettings>

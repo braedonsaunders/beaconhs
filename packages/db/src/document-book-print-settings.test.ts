@@ -14,9 +14,10 @@ describe('resolveBookPrintSettings', () => {
       coverPage: true,
       tableOfContents: true,
       documentHeaders: true,
-      // The control block rides on the document by default: a sheet of its own
-      // doubles the page count of a book of one-page documents.
-      documentHeadersOnOwnPage: false,
+      // The control block gets its own sheet: riding on the document reserves a
+      // band and shrinks the page beneath it, so a third of the book rendered
+      // smaller than the rest.
+      documentHeadersOnOwnPage: true,
       footer: true,
       documentPageBreaks: true,
     })
