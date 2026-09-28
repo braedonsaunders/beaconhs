@@ -74,6 +74,12 @@ describe('normalizeEmailDeliveryInput', () => {
     ).toHaveLength(1)
   })
 
+  it('omits an empty attachment list from the normalized provider payload', () => {
+    expect(normalizeEmailDeliveryInput({ ...BASE, attachments: [] })).not.toHaveProperty(
+      'attachments',
+    )
+  })
+
   it.each([
     { filename: '../report.pdf', content: 'cGRm', contentType: 'application/pdf' },
     { filename: 'report.pdf', content: 'not base64!', contentType: 'application/pdf' },

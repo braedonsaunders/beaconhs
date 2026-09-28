@@ -196,6 +196,10 @@ export function normalizeEmailDeliveryInput(
     subject,
     html: input.html,
     text: input.text,
-    ...(attachments ? { attachments } : {}),
+    // Provider APIs distinguish an omitted attachments field from an empty
+    // array. In particular, SendGrid rejects `attachments: []` with HTTP 400.
+    // Canonicalise both "not supplied" and "supplied but empty" to omission
+    // before the payload enters Redis and again before provider delivery.
+    ...(attachments?.length ? { attachments } : {}),
   }
 }

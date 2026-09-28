@@ -13,7 +13,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { and, asc, eq, isNull, or } from 'drizzle-orm'
-import { getAuth } from '@beaconhs/auth'
+import { getAuth, withAuthEmailContext } from '@beaconhs/auth'
 import { nextInviteGenerationDate } from '@beaconhs/auth/invites'
 import {
   auditLog,
@@ -322,10 +322,13 @@ export async function sendMemberPasswordReset(formData: FormData): Promise<void>
   }
 
   try {
-    await getAuth().api.requestPasswordReset({
-      body: { email: member.account.email, redirectTo: '/reset-password' },
-      headers: (await headers()) as unknown as Headers,
-    })
+    const requestHeaders = (await headers()) as unknown as Headers
+    await withAuthEmailContext({ tenantId: ctx.tenantId, userId: member.account.id }, () =>
+      getAuth().api.requestPasswordReset({
+        body: { email: member.account.email, redirectTo: '/reset-password' },
+        headers: requestHeaders,
+      }),
+    )
   } catch {
     backToDetail(
       membershipId,

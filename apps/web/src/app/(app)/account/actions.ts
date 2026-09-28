@@ -9,7 +9,7 @@ import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { getTranslations } from 'next-intl/server'
 import { and, eq } from 'drizzle-orm'
-import { getAuth } from '@beaconhs/auth'
+import { getAuth, withAuthEmailContext } from '@beaconhs/auth'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import { attachments, people, tenantUsers, users } from '@beaconhs/db/schema'
 import { parseAppLocale } from '@beaconhs/i18n'
@@ -226,10 +226,13 @@ export async function sendPasswordResetEmail(): Promise<Result> {
   const sessionUser = await getSessionUser()
   if (!sessionUser?.email) return { error: 'No email is on file for your account.' }
   try {
-    await getAuth().api.requestPasswordReset({
-      body: { email: sessionUser.email, redirectTo: '/reset-password' },
-      headers: await reqHeaders(),
-    })
+    const requestHeaders = await reqHeaders()
+    await withAuthEmailContext({ tenantId: ctx.tenantId, userId: ctx.userId }, () =>
+      getAuth().api.requestPasswordReset({
+        body: { email: sessionUser.email, redirectTo: '/reset-password' },
+        headers: requestHeaders,
+      }),
+    )
   } catch {
     // Swallow — never surface mail/lookup failures.
   }

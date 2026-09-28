@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { headers } from 'next/headers'
-import { getAuth } from '@beaconhs/auth'
+import { getAuth, withAuthEmailContext } from '@beaconhs/auth'
 import { createInviteGrant, inviteCallbackPath } from '@beaconhs/auth/invites'
 
 type MembershipInviteEmail = {
@@ -27,14 +27,17 @@ export async function sendMembershipInviteEmail(invite: MembershipInviteEmail): 
     invitedAt: invite.invitedAt,
   })
   const callbackURL = inviteCallbackPath(grant)
-  await getAuth().api.signInMagicLink({
-    body: {
-      email: invite.email,
-      name: invite.name?.trim() || undefined,
-      callbackURL,
-      errorCallbackURL: callbackURL,
-      metadata: { flow: 'invite', tenantName: invite.tenantName },
-    },
-    headers: (await headers()) as unknown as Headers,
-  })
+  const inviteHeaders = (await headers()) as unknown as Headers
+  await withAuthEmailContext({ tenantId: invite.tenantId, userId: invite.userId }, () =>
+    getAuth().api.signInMagicLink({
+      body: {
+        email: invite.email,
+        name: invite.name?.trim() || undefined,
+        callbackURL,
+        errorCallbackURL: callbackURL,
+        metadata: { flow: 'invite', tenantName: invite.tenantName },
+      },
+      headers: inviteHeaders,
+    }),
+  )
 }

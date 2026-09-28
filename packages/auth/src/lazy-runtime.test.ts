@@ -5,7 +5,10 @@ const mocks = vi.hoisted(() => {
   const state: {
     options?: {
       emailAndPassword?: {
-        sendResetPassword?: (args: { user: { email: string }; url: string }) => Promise<void>
+        sendResetPassword?: (args: {
+          user: { id: string; email: string }
+          url: string
+        }) => Promise<void>
       }
       hooks?: { after?: (ctx: unknown) => Promise<unknown> }
     }
@@ -121,7 +124,7 @@ describe('lazy auth runtime', () => {
     const sendResetPassword = mocks.state.options?.emailAndPassword?.sendResetPassword
     expect(sendResetPassword).toBeTypeOf('function')
     await sendResetPassword?.({
-      user: { email: 'operator@example.com' },
+      user: { id: 'user-1', email: 'operator@example.com' },
       url: 'https://app.example.test/reset?token=secret-token',
     })
 
@@ -129,10 +132,32 @@ describe('lazy auth runtime', () => {
       expect.objectContaining({
         to: 'operator@example.com',
         subject: 'Reset your BeaconHS password',
-        meta: { category: 'auth' },
+        meta: { category: 'auth', userId: 'user-1' },
       }),
     )
     expect(mocks.sendVia).not.toHaveBeenCalled()
+  })
+
+  it('attributes an auth email to the tenant-scoped operation that requested it', async () => {
+    process.env.DATABASE_URL = 'postgresql://app:secret@db.example.test/beaconhs'
+    process.env.BETTER_AUTH_SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    process.env.NODE_ENV = 'production'
+    const { getAuth, withAuthEmailContext } = await import('./server')
+    getAuth()
+
+    const sendResetPassword = mocks.state.options?.emailAndPassword?.sendResetPassword
+    await withAuthEmailContext({ tenantId: 'tenant-1', userId: 'user-1' }, () =>
+      sendResetPassword!({
+        user: { id: 'user-1', email: 'operator@example.com' },
+        url: 'https://app.example.test/reset?token=secret-token',
+      }),
+    )
+
+    expect(mocks.enqueueEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: { category: 'auth', tenantId: 'tenant-1', userId: 'user-1' },
+      }),
+    )
   })
 
   it('uses the explicit loopback-only SMTP transport for local magic links', async () => {

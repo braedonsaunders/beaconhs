@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { betterAuth } from 'better-auth'
 import { magicLink } from 'better-auth/plugins'
 import { nextCookies } from 'better-auth/next-js'
@@ -8,6 +9,28 @@ import {
   INVITE_LINK_TTL_SECONDS,
 } from './invites'
 import { verifyLegacyOrCurrentPassword } from './legacy-password'
+
+export type AuthEmailContext = {
+  tenantId: string
+  userId?: string
+}
+
+const authEmailContext = new AsyncLocalStorage<AuthEmailContext>()
+
+/**
+ * Attribute an auth email to the tenant action that requested it.
+ *
+ * Better Auth invokes its mail callback inside the API call but does not pass
+ * application tenant context to that callback. Async-local state keeps the
+ * attribution request-scoped without trusting spoofable browser headers or
+ * mutating the process-wide auth singleton.
+ */
+export function withAuthEmailContext<T>(
+  context: AuthEmailContext,
+  operation: () => Promise<T>,
+): Promise<T> {
+  return authEmailContext.run(context, operation)
+}
 
 function createAuth() {
   const databaseUrl = process.env.DATABASE_URL
@@ -57,7 +80,14 @@ function createAuth() {
         const subject = 'Reset your BeaconHS password'
         const text = `A password reset was requested for your BeaconHS account.\n\nSet a new password:\n\n${url}\n\nThis link expires in 1 hour. If you didn't request it, ignore this email — your password won't change.`
         const html = `<p>A password reset was requested for your BeaconHS account.</p><p><a href="${escapeHtml(url)}">Set a new password</a></p><p>This link expires in 1 hour. If you didn't request it, ignore this email — your password won't change.</p>`
-        await sendAuthEmail({ to: user.email, subject, html, text, label: 'password-reset' })
+        await sendAuthEmail({
+          to: user.email,
+          subject,
+          html,
+          text,
+          label: 'password-reset',
+          userId: user.id,
+        })
       },
     },
     session: {
@@ -168,11 +198,24 @@ async function sendAuthEmail(args: {
   html: string
   text: string
   label: string
+  userId?: string
 }) {
-  const { to, subject, html, text, label } = args
+  const { to, subject, html, text, label, userId } = args
   if (process.env.NODE_ENV === 'production') {
     const { enqueueEmail } = await import('@beaconhs/jobs')
-    await enqueueEmail({ to, subject, html, text, meta: { category: 'auth' } })
+    const context = authEmailContext.getStore()
+    const effectiveUserId = context?.userId ?? userId
+    await enqueueEmail({
+      to,
+      subject,
+      html,
+      text,
+      meta: {
+        category: 'auth',
+        ...(context?.tenantId ? { tenantId: context.tenantId } : {}),
+        ...(effectiveUserId ? { userId: effectiveUserId } : {}),
+      },
+    })
     return
   }
   if (process.env.NODE_ENV !== 'development') {
