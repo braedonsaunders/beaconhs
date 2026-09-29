@@ -51,11 +51,7 @@ export function wopiTimestampsMatch(clientStamp: string | null, serverTime: Date
 }
 
 /** The lock Collabora still holds, or null when missing or expired. */
-function activeWopiLock(
-  lock: string | null,
-  expiresAt: Date | null,
-  now: number,
-): string | null {
+function activeWopiLock(lock: string | null, expiresAt: Date | null, now: number): string | null {
   if (!lock || !expiresAt) return null
   if (expiresAt.getTime() <= now) return null
   return lock
