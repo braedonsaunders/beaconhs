@@ -24,6 +24,7 @@ type OverviewMeta = {
   description: string
   reviewFrequencyMonths: string
   nextReviewOn: string
+  showDocumentHeader: boolean
 }
 
 type SaveState = 'saving' | 'saved' | 'error'
@@ -33,11 +34,13 @@ export function DocumentOverview({
   initialMeta,
   categories,
   types,
+  hasMaster,
 }: {
   documentId: string
   initialMeta: OverviewMeta
   categories: { id: string; name: string }[]
   types: { id: string; name: string }[]
+  hasMaster: boolean
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
@@ -68,6 +71,7 @@ export function DocumentOverview({
             ? Number(next.reviewFrequencyMonths)
             : null,
           nextReviewOn: next.nextReviewOn || null,
+          showDocumentHeader: next.showDocumentHeader,
         })
         lastSaveSucceeded = res.ok
         if (!res.ok) {
@@ -117,6 +121,27 @@ export function DocumentOverview({
         <SaveBadge state={saveState} />
       </div>
       <div className="space-y-4 p-4">
+        {hasMaster && (
+          <div className="space-y-1.5 rounded-md border border-slate-200 p-3 dark:border-slate-700">
+            <label
+              className="flex items-center gap-2 text-sm font-medium"
+              htmlFor="o-document-header"
+            >
+              <input
+                id="o-document-header"
+                type="checkbox"
+                className="h-4 w-4 accent-teal-600"
+                checked={m.showDocumentHeader}
+                onChange={(e) => field('showDocumentHeader', e.currentTarget.checked)}
+                onBlur={() => void flush()}
+              />
+              <GeneratedText id="m_09e4b0c8b299d1" />
+            </label>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_1a3548cd328498" />
+            </p>
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="o-title">
             <GeneratedText id="m_0decefd558c355" />

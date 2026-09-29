@@ -16,6 +16,7 @@ export type DocumentEditorModel = {
   master: { attachmentId: string; filename: string } | null
   latestPublished: { version: number; renderStatus: string | null } | null
   aiEnabled: boolean
+  pdfRevision: string
 }
 
 /** Props for the write/PDF pane. Null for readers; they use the read page. */
@@ -29,7 +30,11 @@ export async function loadDocumentEditorModel(
 
   const data = await ctx.db(async (tx) => {
     const [doc] = await tx
-      .select({ sourceAttachmentId: documents.sourceAttachmentId, status: documents.status })
+      .select({
+        sourceAttachmentId: documents.sourceAttachmentId,
+        status: documents.status,
+        updatedAt: documents.updatedAt,
+      })
       .from(documents)
       .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
       .limit(1)
@@ -64,6 +69,7 @@ export async function loadDocumentEditorModel(
 
     return {
       canPublish: canPublishDocument(doc.status),
+      pdfRevision: doc.updatedAt.toISOString(),
       sourceAttachmentId: doc.sourceAttachmentId,
       published: published ?? null,
       contentAttachmentId: current?.contentAttachmentId ?? null,
@@ -77,6 +83,7 @@ export async function loadDocumentEditorModel(
   return {
     documentId,
     canPublish: data.canPublish,
+    pdfRevision: data.pdfRevision,
     defaultMode: isFileDoc ? 'pdf' : 'write',
     master: data.master ? { attachmentId: data.master.id, filename: data.master.filename } : null,
     latestPublished: data.published

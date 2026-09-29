@@ -963,6 +963,7 @@ export default async function DocumentDetailPage({
                     documentId={id}
                     categories={categories}
                     types={types}
+                    hasMaster={Boolean(doc.sourceAttachmentId)}
                     initialMeta={{
                       title: doc.title,
                       key: doc.key,
@@ -972,6 +973,7 @@ export default async function DocumentDetailPage({
                       reviewFrequencyMonths:
                         doc.reviewFrequencyMonths != null ? String(doc.reviewFrequencyMonths) : '',
                       nextReviewOn: doc.nextReviewOn ?? '',
+                      showDocumentHeader: doc.showDocumentHeader,
                     }}
                   />
                 ) : null

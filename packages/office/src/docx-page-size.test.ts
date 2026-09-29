@@ -310,6 +310,13 @@ describe('reserveFirstPageBand', () => {
     expect(xml).toContain('w:line="1920"')
   })
 
+  it('removes only the generated spacer when the header is disabled', async () => {
+    const original = await makeDocx(LETTER + HOUSE_MARGINS)
+    const reserved = await reserveFirstPageBand(original, CONTROLLED_HEADER_BAND_PT)
+    expect(await bodyOf(await reserveFirstPageBand(reserved, 0))).toBe(await bodyOf(original))
+    expect(await reserveFirstPageBand(original, 0)).toBe(original)
+  })
+
   it('reserves nothing when the margin already clears the band', async () => {
     // An empty paragraph is not free — it still claims a line — so a page with
     // room to spare must come back untouched.

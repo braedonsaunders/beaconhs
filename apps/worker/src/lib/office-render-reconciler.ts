@@ -31,7 +31,11 @@ export async function reconcileOfficeRenders(): Promise<OfficeRenderReconcileRes
       .where(
         and(
           isNotNull(documentVersions.docxAttachmentId),
-          isNull(documentVersions.pdfAttachmentId),
+          or(
+            isNull(documentVersions.pdfAttachmentId),
+            isNull(documentVersions.bodyPdfAttachmentId),
+            isNull(documentVersions.bookPdfAttachmentId),
+          ),
           or(
             and(
               eq(documentVersions.renderStatus, 'pending'),
@@ -40,6 +44,10 @@ export async function reconcileOfficeRenders(): Promise<OfficeRenderReconcileRes
             and(
               eq(documentVersions.renderStatus, 'processing'),
               sql`${documentVersions.updatedAt} <= now() - interval '15 minutes'`,
+            ),
+            and(
+              eq(documentVersions.renderStatus, 'complete'),
+              sql`${documentVersions.updatedAt} <= now() - interval '2 minutes'`,
             ),
           ),
         ),

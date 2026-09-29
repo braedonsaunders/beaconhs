@@ -8,6 +8,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { and, desc, eq, isNull } from 'drizzle-orm'
+import { loadDocumentControlHeaders } from '@beaconhs/db'
 import { attachments, documents, documentVersions } from '@beaconhs/db/schema'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { assertCan, can } from '@beaconhs/tenant'
@@ -260,6 +261,7 @@ export async function publishDocumentVersion(documentId: string, changelog?: str
           title: documents.title,
           key: documents.key,
           sourceAttachmentId: documents.sourceAttachmentId,
+          showDocumentHeader: documents.showDocumentHeader,
         })
         .from(documents)
         .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
@@ -321,6 +323,12 @@ export async function publishDocumentVersion(documentId: string, changelog?: str
         .returning({ id: attachments.id })
       if (!snapshot) throw new Error('Failed to snapshot the document file')
 
+      const publishedAt = new Date()
+      const header = doc.showDocumentHeader
+        ? (await loadDocumentControlHeaders(tx, tenantId, [documentId])).get(documentId)
+        : null
+      if (doc.showDocumentHeader && !header)
+        throw new Error('Document header details are unavailable')
       const [version] = await tx
         .insert(documentVersions)
         .values({
@@ -329,7 +337,15 @@ export async function publishDocumentVersion(documentId: string, changelog?: str
           version: nextVersion,
           docxAttachmentId: snapshot.id,
           renderStatus: 'pending',
-          publishedAt: new Date(),
+          controlHeader: header
+            ? {
+                ...header,
+                version: nextVersion,
+                issuedAt: header.issuedAt ?? publishedAt.toISOString(),
+                revisedAt: publishedAt.toISOString(),
+              }
+            : null,
+          publishedAt,
           publishedBy: ctx.userId,
           changelog: normalizedChangelog || null,
         })

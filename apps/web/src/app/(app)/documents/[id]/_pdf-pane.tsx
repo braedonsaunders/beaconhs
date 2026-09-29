@@ -32,6 +32,7 @@ export function DocumentPdfPane({
   onModeChange,
   readOnly = false,
   draft = false,
+  revision = '',
 }: {
   documentId: string
   mode?: DocumentMode
@@ -39,11 +40,12 @@ export function DocumentPdfPane({
   readOnly?: boolean
   /** Authored document, manage surface: render the CURRENT working draft. */
   draft?: boolean
+  revision?: string
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const router = useRouter()
-  const requestKey = `${documentId}:${draft ? 'draft' : 'published'}`
+  const requestKey = `${documentId}:${draft ? `draft:${revision}` : 'published'}`
   const [resource, setResource] = useState<{
     key: string
     status: 'loading' | 'ready' | 'error'

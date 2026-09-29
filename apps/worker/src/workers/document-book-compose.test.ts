@@ -1,62 +1,96 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { composePdf, countPages } from '@beaconhs/office'
+import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
+import { composeDocumentBook } from './document-book-compose'
 
-// The full composer needs Chromium (it renders the cover and contents through
-// the HTML pipeline), so it is exercised end-to-end against a real book rather
-// than here. Settings resolution is pinned next to its implementation in
-// @beaconhs/db, which the worker and the book builder both read.
+vi.mock('@beaconhs/office', () => ({
+  pageGeometry: () => ({ width: 612, height: 792 }),
+  composePdf: vi.fn(async () => Buffer.from('composed')),
+  countPages: vi.fn(async () => 1),
+}))
+vi.mock('@beaconhs/forms-pdf', () => ({
+  renderHtmlDocumentPdf: vi.fn(async () => Buffer.from('generated page')),
+}))
 
-describe('book paging with sections', () => {
-  // The contents must point at real pages. Sections occupy a divider page of
-  // their own, so they shift everything after them — getting this wrong makes
-  // every entry in a 196-document manual wrong by the number of dividers.
-  function pages(
-    nodes: ({ kind: 'section' } | { kind: 'document'; pageCount: number })[],
-    ownPage: boolean,
-  ): number[] {
-    let cursor = 1
-    return nodes.map((node) => {
-      const page = cursor
-      cursor += node.kind === 'section' ? 1 : (ownPage ? 1 : 0) + Math.max(1, node.pageCount)
-      return page
+const entry = {
+  kind: 'document' as const,
+  title: 'Hydro Testing Procedure',
+  key: 'doc-430',
+  version: 3,
+  pdf: Buffer.from('published body'),
+  pageCount: 3,
+  headerReserved: true,
+}
+const input = {
+  title: 'Safety manual',
+  tenantName: 'Rassaun',
+  timeZone: 'America/Toronto',
+  entries: [entry],
+}
+const settings = { coverPage: false, tableOfContents: false, footer: false, documentHeaders: true }
+
+describe('document book control tables', () => {
+  beforeEach(() => vi.clearAllMocks())
+  it('uses the reserved Word body at full size', async () => {
+    await composeDocumentBook({ ...input, settings })
+    expect(composePdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [
+          {
+            bytes: entry.pdf,
+            letterhead: {
+              bytes: Buffer.from('generated page'),
+              page: 0,
+              heightPt: 132,
+              reserveSpace: false,
+            },
+          },
+        ],
+      }),
+    )
+  })
+  it('makes room for a table on uploaded PDFs that cannot reflow', async () => {
+    await composeDocumentBook({
+      ...input,
+      settings,
+      entries: [{ ...entry, headerReserved: false }],
     })
-  }
-
-  it('counts a divider as one page', () => {
-    expect(
-      pages(
-        [
-          { kind: 'section' },
-          { kind: 'document', pageCount: 2 },
-          { kind: 'section' },
-          { kind: 'document', pageCount: 3 },
+    expect(composePdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [
+          expect.objectContaining({
+            letterhead: expect.objectContaining({ reserveSpace: true }),
+          }),
         ],
-        false,
-      ),
-    ).toEqual([1, 2, 4, 5])
+      }),
+    )
   })
-
-  it('adds the control sheet only when it takes its own page', () => {
-    const nodes = [
-      { kind: 'document' as const, pageCount: 1 },
-      { kind: 'document' as const, pageCount: 1 },
-    ]
-    // Riding on the document: one page each.
-    expect(pages(nodes, false)).toEqual([1, 2])
-    // Its own sheet: two pages each.
-    expect(pages(nodes, true)).toEqual([1, 3])
+  it('adds a separate sheet without overlaying another table on the body', async () => {
+    await composeDocumentBook({
+      ...input,
+      settings: { ...settings, documentHeadersOnOwnPage: true },
+    })
+    expect(composePdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parts: [{ bytes: Buffer.from('generated page'), pages: [0] }, { bytes: entry.pdf }],
+      }),
+    )
   })
-
-  it('treats a zero-page document as occupying one page', () => {
-    // A member that reports no pages must not collapse the numbering of
-    // everything after it.
-    expect(
-      pages(
-        [
-          { kind: 'document', pageCount: 0 },
-          { kind: 'document', pageCount: 1 },
-        ],
-        false,
-      ),
-    ).toEqual([1, 2])
+  it('uses actual document and divider page counts in the contents', async () => {
+    vi.mocked(countPages).mockResolvedValueOnce(2)
+    await composeDocumentBook({
+      ...input,
+      settings: { ...settings, tableOfContents: true },
+      entries: [
+        { kind: 'section', title: 'Mechanical' },
+        entry,
+        { ...entry, title: 'Second procedure', key: 'doc-431' },
+      ],
+    })
+    const contents = vi
+      .mocked(renderHtmlDocumentPdf)
+      .mock.calls.find(([args]) => args.bodyHtml.includes('Contents'))?.[0].bodyHtml
+    expect(contents).toMatch(/doc-430[\s\S]*?>2<\/td>/)
+    expect(contents).toMatch(/doc-431[\s\S]*?>5<\/td>/)
   })
 })

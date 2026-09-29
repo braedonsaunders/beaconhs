@@ -91,6 +91,7 @@ export function DocumentEditorPortal({ model }: { model: DocumentEditorModel }) 
         master={model.master}
         latestPublished={model.latestPublished}
         aiEnabled={model.aiEnabled}
+        pdfRevision={model.pdfRevision}
       />
     </div>
   )

@@ -3,6 +3,7 @@
 
 import { relations, sql } from 'drizzle-orm'
 import {
+  boolean,
   date,
   foreignKey,
   index,
@@ -21,6 +22,18 @@ import { tenants, tenantUsers, users } from './core'
 import { orgUnits, people } from './org'
 import { documentTypes, documentCategories } from './document-types'
 import { pdfTemplates } from './pdf-templates'
+
+/** Facts printed on a version's control table, frozen when it is published. */
+export type DocumentControlHeader = {
+  title: string
+  key: string
+  category: string | null
+  type: string | null
+  issuedAt: string | null
+  revisedAt: string | null
+  approvedBy: string | null
+  version: number | 'Draft'
+}
 
 export const documentStatus = pgEnum('document_status', [
   'draft',
@@ -45,6 +58,7 @@ export const documents = pgTable(
     ownerTenantUserId: uuid('owner_tenant_user_id'),
     reviewFrequencyMonths: integer('review_frequency_months'),
     nextReviewOn: date('next_review_on'),
+    showDocumentHeader: boolean('show_document_header').default(false).notNull(),
     // DOCX master copy: the working draft, edited inline in Collabora Writer
     // (page setup, headers/footers, comments and track changes all live in the
     // file). Publishing snapshots it into an immutable document_versions row.
@@ -103,6 +117,11 @@ export const documentVersions = pgTable(
     // pagination on every device) and extracted plain text (search / AI).
     docxAttachmentId: uuid('docx_attachment_id'),
     pdfAttachmentId: uuid('pdf_attachment_id'),
+    // Derived body layouts let books choose their own control table without
+    // duplicating the individual header or converting the whole library again.
+    bodyPdfAttachmentId: uuid('body_pdf_attachment_id'),
+    bookPdfAttachmentId: uuid('book_pdf_attachment_id'),
+    controlHeader: jsonb('control_header').$type<DocumentControlHeader>(),
     textContent: text('text_content'),
     // PDF render lifecycle (worker writes these): 'pending' | 'processing' |
     // 'complete' | 'failed'.

@@ -51,6 +51,7 @@ export function DocumentPane({
   master,
   latestPublished,
   aiEnabled = false,
+  pdfRevision,
 }: {
   documentId: string
   canManage: boolean
@@ -60,6 +61,7 @@ export function DocumentPane({
   master: { attachmentId: string; filename: string } | null
   latestPublished: { version: number; renderStatus: string | null } | null
   aiEnabled?: boolean
+  pdfRevision: string
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
@@ -159,6 +161,7 @@ export function DocumentPane({
         mode={mode}
         onModeChange={setMode}
         draft={!!master}
+        revision={pdfRevision}
       />
     )
   } else {

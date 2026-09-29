@@ -1,7 +1,8 @@
-import { composePdf, pageGeometry, type ComposePart } from '@beaconhs/office'
+import { composePdf, countPages, pageGeometry, type ComposePart } from '@beaconhs/office'
 import type { DocumentBookPrintSettings } from '@beaconhs/db/schema'
 import { resolveBookPrintSettings } from '@beaconhs/db'
 import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
+import { documentControlHeaderHtml } from '../lib/document-control-header'
 import { CONTROLLED_HEADER_BAND_PT } from '@beaconhs/office/docx-page-size'
 
 // Assembling a document book.
@@ -26,6 +27,7 @@ type BookEntry = {
   /** The published PDF for this document version. */
   pdf: Buffer
   pageCount: number
+  headerReserved: boolean
   category?: string | null
   type?: string | null
   issuedAt?: Date | null
@@ -104,56 +106,6 @@ function formatStamp(value: Date, timeZone: string): string {
     timeStyle: 'short',
     timeZone,
   }).format(value)
-}
-
-/**
- * The controlled-document block: category, issue and revision dates, approver
- * and version. Reproduces the control sheet the legacy manual printed above
- * every policy — auditors look for exactly these fields.
- *
- * It is a sheet of its own rather than an overlay because the document below it
- * is an already-rendered PDF whose content cannot be pushed down to make room.
- */
-function controlSheetHtml(
-  entry: BookEntry,
-  accent: string,
-  timeZone: string,
-  ownPage: boolean,
-): string {
-  const pad = ownPage ? '6px 10px' : '3px 8px'
-  const cell = `border:1px solid #0f172a;padding:${pad};font-size:${ownPage ? 11 : 9}px;vertical-align:middle;`
-  const label = `${cell}width:22%;letter-spacing:.06em;text-transform:uppercase;color:#334155;`
-  const value = `${cell}width:36%;`
-  return `
-    <div style="padding-top:${ownPage ? 48 : 0}px">
-      <table style="width:100%;border-collapse:collapse;table-layout:fixed">
-        <colgroup><col style="width:42%"><col style="width:22%"><col style="width:36%"></colgroup>
-        <tbody>
-          <tr>
-            <td style="${cell}text-transform:uppercase;letter-spacing:.06em;color:#334155;font-size:11px;">${escapeHtml(entry.category ?? '')}</td>
-            <td style="${label}">Issue date</td>
-            <td style="${value}">${escapeHtml(formatMonthYear(entry.issuedAt, timeZone))}</td>
-          </tr>
-          <tr>
-            <td rowspan="4" style="${cell}background:${accent};color:#fff;font-size:${ownPage ? 21 : 15}px;font-weight:700;line-height:1.2;">${escapeHtml(entry.title)}</td>
-            <td style="${label}">Revision date</td>
-            <td style="${value}">${escapeHtml(formatMonthYear(entry.revisedAt, timeZone))}</td>
-          </tr>
-          <tr>
-            <td style="${label}">Approved by</td>
-            <td style="${value}">${escapeHtml(entry.approvedBy ?? '—')}</td>
-          </tr>
-          <tr>
-            <td style="${label}">Version</td>
-            <td style="${value}">${entry.version}</td>
-          </tr>
-          <tr>
-            <td colspan="2" style="${cell}text-align:center;text-transform:uppercase;letter-spacing:.06em;color:#334155;">${escapeHtml(entry.type ?? '')}</td>
-          </tr>
-        </tbody>
-      </table>
-      <p style="margin-top:${ownPage ? 14 : 5}px;font-size:${ownPage ? 10 : 8}px;color:#64748b;letter-spacing:.04em;">${escapeHtml(entry.key)}</p>
-    </div>`
 }
 
 function coverHtml(input: ComposeBookInput, accent: string): string {
@@ -293,11 +245,17 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
           bodyHtml: documents
             .map(
               (entry, i) =>
-                `<div style="${i > 0 ? 'page-break-before:always;' : ''}">${controlSheetHtml(entry, accent, input.timeZone, settings.documentHeadersOnOwnPage)}</div>`,
+                `<div style="${i > 0 ? 'page-break-before:always;' : ''}">${documentControlHeaderHtml(entry, accent, input.timeZone, settings.documentHeadersOnOwnPage)}</div>`,
             )
             .join(''),
         })
       : null
+
+  if (controlSheetsPdf && (await countPages(controlSheetsPdf)) !== documents.length) {
+    throw new Error(
+      'A document control block is too long to fit. Enable Control block on its own page or shorten the header details.',
+    )
+  }
 
   // Divider pages, likewise batched into one render. Chapters are numbered in
   // book order, so the count has to run across the whole heading list rather
@@ -420,12 +378,9 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
               bytes: controlSheetsPdf,
               page: i,
               heightPt: CONTROLLED_HEADER_BAND_PT,
-              // The document's own render already left this strip clear, so
-              // the band lands in blank space. Reserving it a second time
-              // would shrink only the pages that carry a block — measured on
-              // a 244-page manual, those came out at 9.5pt against 11.5pt
-              // everywhere else, with double the left margin.
-              reserveSpace: false,
+              // Authored snapshots reflow before composition; uploaded PDFs
+              // must fit beneath the band because they have no editable source.
+              reserveSpace: !node.headerReserved,
             },
           }
         : {}),

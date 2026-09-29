@@ -452,7 +452,7 @@ Open the **Cover** panel on the left. Every book picks its own cover, so a safet
 Open the **Print** panel on the left:
 
 - **Paper size**, **Orientation**, and **Page margin** control the sheet. Pages go in whole, so the margin is added on top of the one each document was written with; raising it also shrinks the content.
-- **Control block on its own page** is off by default: the block sits on top of each document's first page, which every document leaves clear for it, so nothing is shrunk and no extra sheets are used. Turn it on to give each block a full sheet of its own — that costs one page per document.
+- **Control block on its own page** is off by default: the block sits on top of each document's first page. Word documents make room when the book renders. Uploaded PDFs fit below the block. No extra sheets are used. Turn it on to give each block a full sheet of its own — that costs one page per document.
 - The remaining switches turn the cover, contents, page breaks and footer on or off. Each one says what it does to the PDF.
 
 ### What a book PDF contains
@@ -509,6 +509,15 @@ Imported Word files must be .docx files and 100 MB or smaller.
 2. Page size, headers, footers, images, tables — set them in the editor, exactly like Word.
 3. Use the editor's **Review** menu for track changes and comments while a document is being reviewed.
 4. **Download DOCX** saves the working file; **Replace** swaps in a different Word file.
+
+## Document header on individual PDFs
+
+1. In **Overview**, turn on **Show document header on PDF** for a Word document.
+2. Wait for **Saved**, then open **PDF**. A table on the first page shows the title, category, issue and revision dates, approver and version. The draft preview says **Draft**.
+3. Turn the setting off to print the document without that table or its reserved space.
+4. Publish the next version to give readers that layout. Published versions keep the setting and details they were published with.
+
+The table is added to the PDF. Your Word working file keeps its own layout. A document book's **Controlled-document block** setting controls the book's tables independently and prints one table per document.
 
 ## AI assistant
 

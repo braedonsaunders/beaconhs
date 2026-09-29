@@ -18,6 +18,8 @@ export const ATTACHMENT_TENANT_REFERENCES = [
   { table: 'document_versions', column: 'content_attachment_id', onDelete: 'set null' },
   { table: 'document_versions', column: 'docx_attachment_id', onDelete: 'set null' },
   { table: 'document_versions', column: 'pdf_attachment_id', onDelete: 'set null' },
+  { table: 'document_versions', column: 'body_pdf_attachment_id', onDelete: 'set null' },
+  { table: 'document_versions', column: 'book_pdf_attachment_id', onDelete: 'set null' },
   { table: 'documents', column: 'source_attachment_id', onDelete: 'set null' },
   {
     table: 'equipment_inspection_record_attachments',

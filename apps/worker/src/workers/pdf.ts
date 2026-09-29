@@ -13,6 +13,8 @@ import {
   lockFormResponseForMutation,
   MAX_DOCUMENT_BOOK_ITEMS,
   resolveDocumentBookItems,
+  resolveBookPrintSettings,
+  loadDocumentControlHeaders,
   withSuperAdmin,
   withTenant,
   type DocumentBookCoverToken,
@@ -21,18 +23,12 @@ import {
   attachments,
   documentBookItems,
   documentBooks,
-  documentCategories,
-  documentManagementReviewDocuments,
-  documentManagementReviews,
-  documentTypes,
   documentVersions,
   documents,
   emailLog,
   pdfTemplates,
   formResponses,
-  tenantUsers,
   tenants,
-  users,
 } from '@beaconhs/db/schema'
 import { renderHtmlDocumentPdf, renderRecordSummaryPdf } from '@beaconhs/forms-pdf'
 import {
@@ -125,9 +121,11 @@ type BookRenderEntry =
       version: number
       pdfKey: string
       sizeBytes: number
+      headerReserved: boolean
       category: string | null
       type: string | null
       issuedAt: Date | null
+      revisedAt: Date | null
       approvedBy: string | null
     }
 
@@ -697,6 +695,9 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
                   documentId: documentVersions.documentId,
                   version: documentVersions.version,
                   pdfAttachmentId: documentVersions.pdfAttachmentId,
+                  bodyPdfAttachmentId: documentVersions.bodyPdfAttachmentId,
+                  bookPdfAttachmentId: documentVersions.bookPdfAttachmentId,
+                  controlHeader: documentVersions.controlHeader,
                   contentAttachmentId: documentVersions.contentAttachmentId,
                 })
                 .from(documentVersions)
@@ -714,6 +715,9 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
                 documentId: documentVersions.documentId,
                 version: documentVersions.version,
                 pdfAttachmentId: documentVersions.pdfAttachmentId,
+                bodyPdfAttachmentId: documentVersions.bodyPdfAttachmentId,
+                bookPdfAttachmentId: documentVersions.bookPdfAttachmentId,
+                controlHeader: documentVersions.controlHeader,
                 contentAttachmentId: documentVersions.contentAttachmentId,
               })
               .from(documentVersions)
@@ -728,7 +732,11 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
     const attachmentIds = [
       ...new Set(
         versions
-          .map((version) => version.pdfAttachmentId ?? version.contentAttachmentId)
+          .flatMap((version) => [
+            version.pdfAttachmentId ?? version.contentAttachmentId,
+            version.bodyPdfAttachmentId,
+            version.bookPdfAttachmentId,
+          ])
           .filter((id): id is string => id !== null),
       ),
     ]
@@ -759,111 +767,26 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
       versions,
       attachments: attachmentRows,
     })
-    // Control-sheet facts: the same fields the legacy manual printed above
-    // every policy (category, type, issue/revision dates, approver).
-    const categoryByDoc = new Map<string, string | null>()
-    const typeByDoc = new Map<string, string | null>()
-    const approverByDoc = new Map<string, string | null>()
-    const issuedByVersion = new Map<string, Date | null>()
-    if (documentIds.length > 0) {
-      const meta = await tx
-        .select({
-          documentId: documents.id,
-          category: documentCategories.name,
-          type: documentTypes.name,
-        })
-        .from(documents)
-        .leftJoin(
-          documentCategories,
-          and(
-            eq(documentCategories.tenantId, documents.tenantId),
-            eq(documentCategories.id, documents.categoryId),
-          ),
-        )
-        .leftJoin(
-          documentTypes,
-          and(
-            eq(documentTypes.tenantId, documents.tenantId),
-            eq(documentTypes.id, documents.typeId),
-          ),
-        )
-        .where(and(eq(documents.tenantId, tenantId), inArray(documents.id, documentIds)))
-      for (const m of meta) {
-        categoryByDoc.set(m.documentId, m.category)
-        typeByDoc.set(m.documentId, m.type)
-      }
-      for (const v of versions) issuedByVersion.set(v.id, null)
-      const published = await tx
-        .select({ id: documentVersions.id, publishedAt: documentVersions.publishedAt })
-        .from(documentVersions)
-        .where(
-          and(
-            eq(documentVersions.tenantId, tenantId),
-            inArray(
-              documentVersions.id,
-              versions.map((v) => v.id),
-            ),
-          ),
-        )
-      for (const p of published) issuedByVersion.set(p.id, p.publishedAt)
-
-      const approvals = await tx
-        .select({
-          documentId: documentManagementReviewDocuments.documentId,
-          periodEnd: documentManagementReviews.periodEnd,
-          // The legacy control block printed the review PARTICIPANTS as
-          // "approved by", not the review's title.
-          participants: documentManagementReviews.participants,
-        })
-        .from(documentManagementReviewDocuments)
-        .innerJoin(
-          documentManagementReviews,
-          and(
-            eq(documentManagementReviews.tenantId, documentManagementReviewDocuments.tenantId),
-            eq(documentManagementReviews.id, documentManagementReviewDocuments.managementReviewId),
-          ),
-        )
-        .where(
-          and(
-            eq(documentManagementReviewDocuments.tenantId, tenantId),
-            inArray(documentManagementReviewDocuments.documentId, documentIds),
-          ),
-        )
-        .orderBy(desc(documentManagementReviews.periodEnd))
-      // Most recent review wins; the query is ordered so the first hit per
-      // document is the latest.
-      // `participants` holds tenant_user ids, not names — printing them raw put
-      // a row of UUIDs in the "approved by" box of every control sheet.
-      const participantIds = [
-        ...new Set(approvals.flatMap((a) => a.participants ?? []).filter(Boolean)),
-      ]
-      const nameById = new Map<string, string>()
-      if (participantIds.length > 0) {
-        const members = await tx
-          .select({
-            id: tenantUsers.id,
-            displayName: tenantUsers.displayName,
-            userName: users.name,
-            email: users.email,
-          })
-          .from(tenantUsers)
-          .leftJoin(users, eq(users.id, tenantUsers.userId))
-          .where(and(eq(tenantUsers.tenantId, tenantId), inArray(tenantUsers.id, participantIds)))
-        for (const m of members) {
-          const label = m.displayName?.trim() || m.userName?.trim() || m.email?.trim()
-          if (label) nameById.set(m.id, label)
-        }
-      }
-      for (const a of approvals) {
-        if (approverByDoc.has(a.documentId)) continue
-        const names = (a.participants ?? [])
-          .map((id) => nameById.get(id))
-          .filter((n): n is string => Boolean(n))
-        // Semicolons, not commas: these are "Last, First" names, so a comma
-        // join reads as one long ambiguous list.
-        approverByDoc.set(a.documentId, names.length > 0 ? names.join('; ') : null)
-      }
-    }
+    const headers = await loadDocumentControlHeaders(tx, tenantId, documentIds)
+    const published =
+      documentIds.length === 0
+        ? []
+        : await tx
+            .select({ id: documentVersions.id, publishedAt: documentVersions.publishedAt })
+            .from(documentVersions)
+            .where(
+              and(
+                eq(documentVersions.tenantId, tenantId),
+                inArray(
+                  documentVersions.id,
+                  versions.map((v) => v.id),
+                ),
+              ),
+            )
+    const revisedByVersion = new Map(published.map((v) => [v.id, v.publishedAt]))
+    const printSettings = resolveBookPrintSettings(row.b.printSettings)
+    const versionById = new Map(versions.map((v) => [v.id, v]))
+    const attachmentById = new Map(attachmentRows.map((a) => [a.id, a]))
 
     // Rebuild the book's real order: resolveDocumentBookItems only sees
     // documents, so its results are keyed back onto the full entry list to put
@@ -876,18 +799,30 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
       }
       const item = resolvedByItemId.get(bookRow.item.id)
       if (!item) return []
+      const version = versionById.get(item.versionId)
+      const header = version?.controlHeader ?? headers.get(item.documentId)
+      const bodyId = printSettings.documentHeaders
+        ? printSettings.documentHeadersOnOwnPage
+          ? version?.bodyPdfAttachmentId
+          : version?.bookPdfAttachmentId
+        : null
+      const body = bodyId ? attachmentById.get(bodyId) : null
+      if (bodyId && (!body || body.contentType !== 'application/pdf'))
+        throw new Error(`Document body PDF is missing for ${item.documentKey}.`)
       return [
         {
           kind: 'document' as const,
-          title: item.documentTitle,
-          key: item.documentKey,
+          title: header?.title ?? item.documentTitle,
+          key: header?.key ?? item.documentKey,
           version: item.version,
-          pdfKey: item.attachmentKey,
-          sizeBytes: item.sizeBytes,
-          category: categoryByDoc.get(item.documentId) ?? null,
-          type: typeByDoc.get(item.documentId) ?? null,
-          issuedAt: issuedByVersion.get(item.versionId) ?? null,
-          approvedBy: approverByDoc.get(item.documentId) ?? null,
+          pdfKey: body?.key ?? item.attachmentKey,
+          sizeBytes: body?.sizeBytes ?? item.sizeBytes,
+          headerReserved: Boolean(body && !printSettings.documentHeadersOnOwnPage),
+          category: header?.category ?? null,
+          type: header?.type ?? null,
+          issuedAt: header?.issuedAt ? new Date(header.issuedAt) : null,
+          approvedBy: header?.approvedBy ?? null,
+          revisedAt: revisedByVersion.get(item.versionId) ?? null,
         },
       ]
     })
@@ -987,10 +922,11 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
           version: e.version,
           pdf: loaded.bytes,
           pageCount: loaded.pages,
+          headerReserved: e.headerReserved,
           category: e.category,
           type: e.type,
           issuedAt: e.issuedAt,
-          revisedAt: e.issuedAt,
+          revisedAt: e.revisedAt,
           approvedBy: e.approvedBy,
         },
       ]

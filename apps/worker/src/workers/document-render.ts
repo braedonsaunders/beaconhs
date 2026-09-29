@@ -9,8 +9,8 @@
 // Render state is tracked on the version row (renderStatus/renderError) so the
 // read view can show a preparing state instead of a broken viewer.
 
-import { and, eq, ne } from 'drizzle-orm'
-import { db, withTenant } from '@beaconhs/db'
+import { and, eq, isNull, ne, or } from 'drizzle-orm'
+import { db, withTenant, loadDocumentControlHeaders } from '@beaconhs/db'
 import { attachments, documents, documentVersions } from '@beaconhs/db/schema'
 import {
   deleteObject,
@@ -21,11 +21,7 @@ import {
 } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
 import { sofficeConvert } from '@beaconhs/office'
-import {
-  CONTROLLED_HEADER_BAND_PT,
-  reserveFirstPageBand,
-  setDocxPageSize,
-} from '@beaconhs/office/docx-page-size'
+import { addDocumentControlHeader, renderDocxToPdf } from '../lib/document-pdf'
 
 const MAX_TEXT_CHARS = 1_500_000
 const MAX_OFFICE_INPUT_BYTES = 100 * 1024 * 1024
@@ -55,33 +51,6 @@ function assertOfficeInput(
   }
 }
 
-/**
- * The paper every document is authored and printed on.
- *
- * Not configurable: a book composed from mixed paper has to scale the odd sizes
- * to fit, which shrinks their type and widens their margins against everything
- * else. The blank master new documents start from is already Letter; this is
- * what stops an imported or uploaded master reintroducing the mismatch.
- */
-const DOCUMENT_PAGE_SIZE = 'letter'
-
-/**
- * Convert a master to PDF on the house paper, with the controlled-header strip
- * left clear at the top of page one.
- *
- * Both steps hand back the original bytes when nothing needs changing, so this
- * costs nothing beyond the conversion itself.
- *
- * The strip is reserved on every document, not only the ones currently in a
- * book: a book pins exact versions, so a render that did not reserve it can
- * never be given the space later without re-rendering an approved snapshot.
- */
-export async function renderDocxToPdf(docx: Buffer): Promise<Buffer> {
-  const letter = await setDocxPageSize(docx, DOCUMENT_PAGE_SIZE)
-  const reserved = await reserveFirstPageBand(letter, CONTROLLED_HEADER_BAND_PT)
-  return sofficeConvert(reserved, 'document.docx', 'pdf')
-}
-
 export async function renderDocumentVersion(args: {
   tenantId: string
   documentId: string
@@ -93,24 +62,32 @@ export async function renderDocumentVersion(args: {
     withTenant(db, tenantId, async (tx) => {
       await tx
         .update(documentVersions)
-        .set({ renderStatus: status, renderError: error })
+        .set({ renderStatus: status, renderError: error, updatedAt: new Date() })
         .where(
           and(
             eq(documentVersions.id, versionId),
             eq(documentVersions.documentId, documentId),
-            ne(documentVersions.renderStatus, 'complete'),
+            or(
+              ne(documentVersions.renderStatus, 'complete'),
+              isNull(documentVersions.pdfAttachmentId),
+              isNull(documentVersions.bodyPdfAttachmentId),
+              isNull(documentVersions.bookPdfAttachmentId),
+            ),
           ),
         )
     })
 
-  let uploadedKey: string | null = null
+  const uploadedKeys: string[] = []
   try {
     const data = await withTenant(db, tenantId, async (tx) => {
       const [version] = await tx
         .select({
           version: documentVersions.version,
+          controlHeader: documentVersions.controlHeader,
           docxAttachmentId: documentVersions.docxAttachmentId,
           pdfAttachmentId: documentVersions.pdfAttachmentId,
+          bodyPdfAttachmentId: documentVersions.bodyPdfAttachmentId,
+          bookPdfAttachmentId: documentVersions.bookPdfAttachmentId,
           renderStatus: documentVersions.renderStatus,
         })
         .from(documentVersions)
@@ -136,14 +113,24 @@ export async function renderDocumentVersion(args: {
       return { versionNumber: version.version, version, doc, source: att }
     })
     if (!data) throw new Error('Version snapshot or its DOCX file not found')
-    if (data.version.renderStatus === 'complete' && data.version.pdfAttachmentId) return
+    if (
+      data.version.renderStatus === 'complete' &&
+      data.version.pdfAttachmentId &&
+      data.version.bodyPdfAttachmentId &&
+      data.version.bookPdfAttachmentId
+    )
+      return
 
     assertOfficeInput(data.source)
     await setStatus('processing')
 
     const docx = await getObject({ key: data.source.key })
     assertOfficeInput(data.source, docx)
-    const pdf = await renderDocxToPdf(docx)
+    const bodyPdf = await renderDocxToPdf(docx)
+    const bookPdf = await renderDocxToPdf(docx, { reserveHeader: true })
+    const pdf = data.version.controlHeader
+      ? await addDocumentControlHeader(bookPdf, data.version.controlHeader)
+      : bodyPdf
     const text = (await sofficeConvert(docx, 'document.docx', 'txt:Text'))
       .toString('utf8')
       .slice(0, MAX_TEXT_CHARS)
@@ -161,7 +148,29 @@ export async function renderDocumentVersion(args: {
       contentType: 'application/pdf',
       contentDisposition: 'inline',
     })
-    uploadedKey = key
+    uploadedKeys.push(key)
+    const layouts = [
+      { name: 'book', bytes: bookPdf },
+      ...(data.version.controlHeader ? [{ name: 'body', bytes: bodyPdf }] : []),
+    ]
+    const layoutFiles: { name: string; key: string; filename: string; sizeBytes: number }[] = []
+    for (const layout of layouts) {
+      const layoutFilename = `${baseName}-v${data.versionNumber}-${layout.name}.pdf`
+      const layoutKey = newAttachmentKey({ tenantId, kind: 'document', filename: layoutFilename })
+      await putObject({
+        key: layoutKey,
+        body: layout.bytes,
+        contentType: 'application/pdf',
+        contentDisposition: 'inline',
+      })
+      uploadedKeys.push(layoutKey)
+      layoutFiles.push({
+        name: layout.name,
+        key: layoutKey,
+        filename: layoutFilename,
+        sizeBytes: layout.bytes.length,
+      })
+    }
 
     await withTenant(db, tenantId, async (tx) => {
       const [pdfAtt] = await tx
@@ -176,13 +185,32 @@ export async function renderDocumentVersion(args: {
         })
         .returning()
       if (!pdfAtt) throw new Error('Failed to store the rendered PDF')
+      const layoutIds = new Map<string, string>()
+      for (const file of layoutFiles) {
+        const [attachment] = await tx
+          .insert(attachments)
+          .values({
+            tenantId,
+            kind: 'document',
+            r2Key: file.key,
+            filename: file.filename,
+            sizeBytes: file.sizeBytes,
+            contentType: 'application/pdf',
+          })
+          .returning({ id: attachments.id })
+        if (!attachment) throw new Error('Failed to store the document body layout')
+        layoutIds.set(file.name, attachment.id)
+      }
       const [updated] = await tx
         .update(documentVersions)
         .set({
           pdfAttachmentId: pdfAtt.id,
+          bodyPdfAttachmentId: layoutIds.get('body') ?? pdfAtt.id,
+          bookPdfAttachmentId: layoutIds.get('book'),
           textContent: text,
           renderStatus: 'complete',
           renderError: null,
+          updatedAt: new Date(),
         })
         .where(and(eq(documentVersions.id, versionId), eq(documentVersions.documentId, documentId)))
         .returning({ id: documentVersions.id })
@@ -196,12 +224,10 @@ export async function renderDocumentVersion(args: {
         metadata: { versionId, pdfAttachmentId: pdfAtt.id, sizeBytes: pdf.length },
       })
     })
-    uploadedKey = null
+    uploadedKeys.length = 0
     console.log(`[document-render] version ${versionId} rendered (${pdf.length} bytes)`)
   } catch (err) {
-    if (uploadedKey) {
-      await deleteObject({ key: uploadedKey }).catch(() => undefined)
-    }
+    await Promise.all(uploadedKeys.map((key) => deleteObject({ key }).catch(() => undefined)))
     const message = renderErrorMessage(err)
     console.error(`[document-render] version ${versionId} failed:`, message)
     await setStatus('failed', message).catch(() => {})
@@ -225,6 +251,7 @@ export async function renderDocumentMasterPdf(args: {
         key: documents.key,
         title: documents.title,
         sourceAttachmentId: documents.sourceAttachmentId,
+        showDocumentHeader: documents.showDocumentHeader,
       })
       .from(documents)
       .where(eq(documents.id, documentId))
@@ -239,14 +266,17 @@ export async function renderDocumentMasterPdf(args: {
       .from(attachments)
       .where(eq(attachments.id, doc.sourceAttachmentId))
       .limit(1)
-    return att ? { doc, source: att } : null
+    const header = doc.showDocumentHeader
+      ? (await loadDocumentControlHeaders(tx, tenantId, [documentId])).get(documentId)
+      : null
+    return att ? { doc, source: att, header } : null
   })
   if (!data) throw new Error('This document has no Word file to render')
 
   assertOfficeInput(data.source)
   const docx = await getObject({ key: data.source.key })
   assertOfficeInput(data.source, docx)
-  const pdf = await renderDocxToPdf(docx)
+  const pdf = await renderDocxToPdf(docx, { header: data.header })
 
   const stamp = Date.now()
   const base =

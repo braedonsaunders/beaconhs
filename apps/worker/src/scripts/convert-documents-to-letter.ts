@@ -20,11 +20,6 @@
 // how many are converted per run (default 40); raise it only on a machine with
 // room to spare.
 //
-// It also re-renders any version whose stored PDF predates the controlled-header
-// reserve: a book stamps its control block across the top of each document's
-// first page, and the render now leaves that strip clear so the block lands in
-// blank space instead of forcing the page to be scaled down around it.
-//
 // NOTE: this rewrites published version snapshots in place. That is deliberate
 // for a pre-launch library of imported content — the documents are being
 // corrected, not revised — but it does mean an approved snapshot's bytes change.
@@ -36,12 +31,8 @@ import { attachments, documents, documentVersions } from '@beaconhs/db/schema'
 import { getObject, newAttachmentKey, putObject } from '@beaconhs/storage'
 import { audit } from '@beaconhs/audit'
 import { sofficeConvert } from '@beaconhs/office'
-import {
-  CONTROLLED_HEADER_BAND_PT,
-  isNormalizedDocx,
-  normalizeDocxTypography,
-} from '@beaconhs/office/docx-page-size'
-import { renderDocxToPdf } from '../workers/document-render'
+import { isNormalizedDocx, normalizeDocxTypography } from '@beaconhs/office/docx-page-size'
+import { renderDocumentVersion } from '../workers/document-render'
 import { measureRenderedType } from '../lib/pdf-body-type'
 
 const TARGET = 'letter'
@@ -57,7 +48,6 @@ const TARGET = 'letter'
  * masters 291 times, oscillating 13 -> 12 -> 13 -> 12.
  */
 const TARGET_BODY_PT = 12.5
-const MAX_TEXT_CHARS = 1_500_000
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 type Candidate = {
@@ -78,25 +68,6 @@ const renderedPdf = alias(attachments, 'rendered_pdf')
 async function measureRender(docx: Buffer): Promise<{ bodyPt: number | null }> {
   const pdf = await sofficeConvert(docx, 'document.docx', 'pdf')
   return { bodyPt: (await measureRenderedType(pdf)).bodyTypePt }
-}
-
-/**
- * Whether a stored render already keeps the controlled-header strip clear.
- *
- * A first page with no text is counted as clear. In this library those eight
- * versions are genuinely empty — one page, no text and no images — and asking
- * again every run only re-rendered them forever. A first page that carried
- * nothing but an image would be missed, which is the honest limit of measuring
- * a render with a text extractor.
- *
- * The tolerance is the ascent a word box carries above the line it sits on:
- * a reserved render measures 129.3–130 against a 132pt strip, and a 2pt
- * tolerance read 262 finished documents as unfinished.
- */
-const BAND_TOLERANCE_PT = 4
-
-function reservesBand(topPt: number | null): boolean {
-  return topPt === null || topPt >= CONTROLLED_HEADER_BAND_PT - BAND_TOLERANCE_PT
 }
 
 /** Where a document's body text should start, in points from the sheet edge. */
@@ -206,7 +177,6 @@ async function main() {
       const rendered = row.pdfKey
         ? await measureRenderedType(await getObject({ key: row.pdfKey }))
         : null
-      const bandDone = reservesBand(rendered?.firstPageTopPt ?? null)
       const indentReduce = indentReduceTwips(rendered?.bodyLeftPt ?? null)
       // Asking "does it still measure wide?" never settles on its own: two
       // masters render their body 114pt and 62pt in while every indent they
@@ -214,7 +184,7 @@ async function main() {
       // the next run asks again. What settles it is whether normalising would
       // change the bytes.
       const repaired =
-        structureDone && bandDone
+        structureDone && row.pdfKey !== null
           ? await normalizeDocxTypography(docx, TARGET, {
               sizeFactor: 1,
               indentReduceTwips: indentReduce,
@@ -247,59 +217,20 @@ async function main() {
           sizeFactor,
           indentReduceTwips: indentReduce,
         }))
-      // The same path the render worker uses, so a re-rendered snapshot and a
-      // freshly saved one cannot drift apart.
-      const pdf = await renderDocxToPdf(master)
-
       const base =
         (row.docKey || row.docTitle || 'document')
           .replace(/[^\w.\- ]+/g, '')
           .trim()
           .slice(0, 180) || 'document'
       const docxName = `${base}-v${row.version}.docx`
-      const pdfName = `${base}-v${row.version}.pdf`
-      const pdfObjectKey = newAttachmentKey({
-        tenantId: row.tenantId,
-        kind: 'document',
-        filename: pdfName,
-      })
-      await putObject({
-        key: pdfObjectKey,
-        body: pdf,
-        contentType: 'application/pdf',
-        contentDisposition: 'inline',
-      })
-
-      // Only when the master itself changed: a re-render leaves the stored
-      // DOCX and its extracted text exactly as they were.
       const changedMaster = master !== docx
-      let docxObjectKey: string | null = null
-      let text: string | null = null
-      if (changedMaster) {
-        text = (await sofficeConvert(master, 'document.docx', 'txt:Text'))
-          .toString('utf8')
-          .slice(0, MAX_TEXT_CHARS)
-        docxObjectKey = newAttachmentKey({
-          tenantId: row.tenantId,
-          kind: 'document',
-          filename: docxName,
-        })
+      const docxObjectKey = changedMaster
+        ? newAttachmentKey({ tenantId: row.tenantId, kind: 'document', filename: docxName })
+        : null
+      if (docxObjectKey)
         await putObject({ key: docxObjectKey, body: master, contentType: DOCX_MIME })
-      }
 
       await withTenant(db, row.tenantId, async (tx) => {
-        const [pdfAtt] = await tx
-          .insert(attachments)
-          .values({
-            tenantId: row.tenantId,
-            kind: 'document',
-            r2Key: pdfObjectKey,
-            contentType: 'application/pdf',
-            sizeBytes: pdf.length,
-            filename: pdfName,
-          })
-          .returning()
-        if (!pdfAtt) throw new Error('Failed to store the rendered PDF')
         let docxAttachmentId: string | null = null
         if (docxObjectKey) {
           const [docxAtt] = await tx
@@ -320,9 +251,7 @@ async function main() {
           .update(documentVersions)
           .set({
             ...(docxAttachmentId ? { docxAttachmentId } : {}),
-            ...(text !== null ? { textContent: text } : {}),
-            pdfAttachmentId: pdfAtt.id,
-            renderStatus: 'complete',
+            renderStatus: 'pending',
             renderError: null,
           })
           .where(
@@ -338,7 +267,7 @@ async function main() {
           action: 'update',
           summary: changedMaster
             ? `Normalised version ${row.version} to the house page and typography`
-            : `Re-rendered version ${row.version} with the controlled-header reserve`,
+            : `Prepared version ${row.version} for PDF rendering`,
           metadata: {
             versionId: row.versionId,
             bodyPtBefore,
@@ -348,6 +277,12 @@ async function main() {
         })
       })
 
+      // The canonical worker creates every derived body layout and the published PDF.
+      await renderDocumentVersion({
+        tenantId: row.tenantId,
+        documentId: row.documentId,
+        versionId: row.versionId,
+      })
       converted++
       if (converted % 25 === 0) console.log(`  converted ${converted}…`)
     } catch (error) {

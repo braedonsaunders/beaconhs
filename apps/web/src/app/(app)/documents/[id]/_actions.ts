@@ -177,6 +177,10 @@ export async function updateDocumentMeta(input: unknown): Promise<{ ok: boolean;
       { min: 1, max: DOCUMENT_METADATA_LIMITS.reviewFrequencyMonths, integer: true },
     )
     const nextReviewOn = optionalDateInput(values.nextReviewOn, 'Next review date')
+    if (typeof values.showDocumentHeader !== 'boolean') {
+      throw new Error('The document header setting is invalid.')
+    }
+    const showDocumentHeader = values.showDocumentHeader
 
     const updated = await ctx.db(async (tx) => {
       const [before] = await tx
@@ -186,6 +190,9 @@ export async function updateDocumentMeta(input: unknown): Promise<{ ok: boolean;
         .limit(1)
         .for('update')
       if (!before) return false
+      if (showDocumentHeader && !before.sourceAttachmentId) {
+        throw new Error('PDF headers require a Word working document.')
+      }
 
       if (categoryId) {
         const [category] = await tx
@@ -214,6 +221,7 @@ export async function updateDocumentMeta(input: unknown): Promise<{ ok: boolean;
           description,
           reviewFrequencyMonths,
           nextReviewOn,
+          showDocumentHeader,
           updatedAt: new Date(),
         })
         .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
@@ -230,6 +238,7 @@ export async function updateDocumentMeta(input: unknown): Promise<{ ok: boolean;
           description: before.description,
           reviewFrequencyMonths: before.reviewFrequencyMonths,
           nextReviewOn: before.nextReviewOn,
+          showDocumentHeader: before.showDocumentHeader,
         },
         after: {
           title,
@@ -239,6 +248,7 @@ export async function updateDocumentMeta(input: unknown): Promise<{ ok: boolean;
           description,
           reviewFrequencyMonths,
           nextReviewOn,
+          showDocumentHeader,
         },
       })
       return true

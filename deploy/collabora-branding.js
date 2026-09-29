@@ -52,6 +52,11 @@
   var TEAL_RGB = '13, 148, 136' /* app accent #0d9488 */
 
   var css = [
+    /* Writer's default hit-test cursor is an arrow until a caret exists.
+     * Use an I-beam for editable text; keep native link/object/resize cursors. */
+    'body[data-doctype=text][data-beaconhs-editable=true] #document-canvas { cursor: text; }',
+    'body[data-doctype=text][data-beaconhs-editable=true] #document-canvas[style*="cursor: default;"],',
+    'body[data-doctype=text][data-beaconhs-editable=true] #document-canvas[style*="cursor: auto;"] { cursor: text !important; }',
     /* Accents (selected tab underline, selection handles, focus rings). */
     ':root, [data-doctype] {',
     '  --doc-type: ' + TEAL_RGB + ' !important;',
@@ -182,9 +187,22 @@
  * Focusing the map restores the text caret instead of the pan hand. */
 ;(function () {
   var relayouting = false
+  var permissionBound = false
+  function syncPermission() {
+    var map = window.app && window.app.map
+    document.body.setAttribute(
+      'data-beaconhs-editable',
+      String(Boolean(map && map.isEditMode && map.isEditMode())),
+    )
+  }
   function relayout(focus) {
     var map = window.app && window.app.map
     if (!map || typeof map.invalidateSize !== 'function' || relayouting) return false
+    syncPermission()
+    if (!permissionBound && window.app.events) {
+      window.app.events.on('updatepermission', syncPermission)
+      permissionBound = true
+    }
     relayouting = true
     try {
       map.invalidateSize({ animate: false, pan: false })
