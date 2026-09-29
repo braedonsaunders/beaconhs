@@ -94,6 +94,7 @@
      * visible on BeaconHS's white header, including in Viewing mode. */
     'html:not([data-theme=dark]) #viewModeDropdown .unolabel,',
     'html:not([data-theme=dark]) #readonlyMode .unolabel,',
+    'html:not([data-theme=dark]) .main-nav #main-menu > li > a,',
     'html:not([data-theme=dark]) .main-nav #shareas .unolabel {',
     '  color: #334155 !important;',
     '}',
@@ -112,7 +113,7 @@
     '  background-color: #f1f5f9 !important;',
     '  border-color: #64748b !important;',
     '}',
-    'html:not([data-theme=dark]) .main-nav .unobutton img,',
+    'html:not([data-theme=dark]) .main-nav .unoSave img,',
     'html:not([data-theme=dark]) .main-nav .document-logo {',
     '  filter: brightness(0) saturate(100%) !important;',
     '  opacity: 0.75;',
