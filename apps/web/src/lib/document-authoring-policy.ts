@@ -1,6 +1,11 @@
 import { DOCX_MIME_TYPE, MAX_DOCX_CONVERSION_BYTES } from '@beaconhs/office/limits'
+import type { documentStatus } from '@beaconhs/db/schema'
 
 export const MAX_DOCUMENT_VERSION_NOTE_CHARS = 4_000
+
+export function canPublishDocument(status: (typeof documentStatus.enumValues)[number]): boolean {
+  return status === 'draft' || status === 'under_review'
+}
 
 /**
  * Allocate a new native publication as the next whole major revision.

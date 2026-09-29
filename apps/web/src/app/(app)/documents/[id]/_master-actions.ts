@@ -24,6 +24,7 @@ import { isUuid } from '@/lib/list-params'
 import {
   documentMasterMetadataError,
   MAX_DOCUMENT_VERSION_NOTE_CHARS,
+  canPublishDocument,
   nextDocumentMajorVersion,
   type DocumentMasterMetadata,
 } from '@/lib/document-authoring-policy'
@@ -255,6 +256,7 @@ export async function publishDocumentVersion(documentId: string, changelog?: str
       // immutable snapshot is being copied.
       const [doc] = await tx
         .select({
+          status: documents.status,
           title: documents.title,
           key: documents.key,
           sourceAttachmentId: documents.sourceAttachmentId,
@@ -264,6 +266,9 @@ export async function publishDocumentVersion(documentId: string, changelog?: str
         .limit(1)
         .for('update')
       if (!doc?.sourceAttachmentId) throw new Error('This document has no Word file to publish')
+      if (!canPublishDocument(doc.status)) {
+        throw new Error('Only draft or review documents can be published.')
+      }
 
       const [attachment] = await tx
         .select({

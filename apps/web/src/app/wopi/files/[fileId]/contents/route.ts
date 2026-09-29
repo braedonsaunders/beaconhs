@@ -17,13 +17,7 @@ import {
   PPTX_MIME_TYPE,
 } from '@beaconhs/office/limits'
 import { verifyWopiToken, type WopiGrant } from '@/lib/wopi'
-import {
-  decideWopiLock,
-  decideWopiPut,
-  readWopiLockHeader,
-  WOPI_LOCK_TTL_MS,
-  type WopiLockOverride,
-} from '@/lib/wopi-protocol'
+import { decideWopiPut, readWopiLockHeader } from '@/lib/wopi-protocol'
 import { wopiGrantCanAccessFile, wopiPrincipalIsAuthorized } from '@/lib/wopi-access'
 import {
   readBoundedRequestBody,
@@ -113,12 +107,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ fileId: str
   })
 }
 
-const LOCK_OVERRIDES = new Set<WopiLockOverride>(['LOCK', 'UNLOCK', 'REFRESH_LOCK', 'GET_LOCK'])
-
-function isLockOverride(value: string): value is WopiLockOverride {
-  return LOCK_OVERRIDES.has(value as WopiLockOverride)
-}
-
 async function fileIsCurrent(grant: WopiGrant): Promise<boolean> {
   return withTenant(db, grant.tenantId, (tx) => wopiGrantCanAccessFile(tx, grant))
 }
@@ -139,7 +127,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ fileId: st
   if (!(await fileIsCurrent(grant))) return new NextResponse('File not found', { status: 404 })
 
   const override = (req.headers.get('x-wopi-override') ?? 'PUT').toUpperCase()
-  if (isLockOverride(override)) return handleWopiLock(req, grant, fileId, override)
   if (override !== 'PUT') {
     return new NextResponse(`Unsupported WOPI operation: ${override}`, { status: 501 })
   }
@@ -370,51 +357,4 @@ async function issueSaveTicket(tenantId: string, fileId: string): Promise<number
     const ticket = Number(row.wopi_save_ticket)
     return Number.isSafeInteger(ticket) ? ticket : null
   })
-}
-
-async function handleWopiLock(
-  req: NextRequest,
-  grant: WopiGrant,
-  fileId: string,
-  override: WopiLockOverride,
-): Promise<NextResponse> {
-  const requestLock = readWopiLockHeader(req.headers.get('x-wopi-lock'))
-  const oldLock = readWopiLockHeader(req.headers.get('x-wopi-oldlock'))
-  if (!requestLock.ok || !oldLock.ok) return new NextResponse('Invalid lock', { status: 400 })
-
-  const now = Date.now()
-  const decision = await withTenant(db, grant.tenantId, async (tx) => {
-    const [row] = await tx
-      .select({
-        wopiLock: attachments.wopiLock,
-        wopiLockExpiresAt: attachments.wopiLockExpiresAt,
-      })
-      .from(attachments)
-      .where(eq(attachments.id, fileId))
-      .limit(1)
-      .for('update')
-    if (!row) return null
-    const next = decideWopiLock({
-      override,
-      requestLock: requestLock.lock,
-      oldLock: oldLock.lock,
-      storedLock: row.wopiLock,
-      storedLockExpiresAt: row.wopiLockExpiresAt,
-      now,
-    })
-    if (next.kind !== 'ok' || override === 'GET_LOCK') return next
-    const expiresAt = next.lock ? new Date(now + WOPI_LOCK_TTL_MS) : null
-    // Raw SQL: a lock refresh must not bump updated_at.
-    await tx.execute(sql`
-      update attachments
-      set wopi_lock = ${next.lock || null},
-          wopi_lock_expires_at = ${expiresAt}
-      where id = ${fileId}
-    `)
-    return next
-  })
-  if (!decision) return new NextResponse('File not found', { status: 404 })
-  if (decision.kind === 'bad_request') return new NextResponse('Invalid lock', { status: 400 })
-  if (decision.kind === 'mismatch') return lockResponse(409, decision.currentLock)
-  return lockResponse(200, decision.lock)
 }

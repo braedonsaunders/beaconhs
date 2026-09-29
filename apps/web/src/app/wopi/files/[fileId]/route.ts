@@ -1,16 +1,22 @@
-// WOPI CheckFileInfo — called server-to-server by Collabora Online when a
-// PowerPoint editing session opens. Public route: authentication is the
+// WOPI CheckFileInfo and lock operations — called server-to-server by
+// Collabora Online when an office editing session opens. Public route: authentication is the
 // single-file HMAC access_token minted by the editor page (see lib/wopi.ts),
 // not a session cookie — Collabora never has one.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { db, withTenant } from '@beaconhs/db'
 import { attachments } from '@beaconhs/db/schema'
 import { verifyWopiToken } from '@/lib/wopi'
 import { wopiGrantCanAccessFile, wopiPrincipalIsAuthorized } from '@/lib/wopi-access'
 import { tenantIsActive } from '@/lib/active-tenant'
 import { isUuid } from '@/lib/list-params'
+import {
+  decideWopiLock,
+  readWopiLockHeader,
+  WOPI_LOCK_TTL_MS,
+  type WopiLockOverride,
+} from '@/lib/wopi-protocol'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,5 +81,69 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ fileId: str
       '',
     ),
     LastModifiedTime: (att.updatedAt ?? new Date(0)).toISOString(),
+  })
+}
+
+// WOPI lock operations target the file endpoint, never /contents (PutFile).
+const LOCK_OVERRIDES = new Set<WopiLockOverride>(['LOCK', 'UNLOCK', 'REFRESH_LOCK', 'GET_LOCK'])
+
+export async function POST(req: NextRequest, ctx: { params: Promise<{ fileId: string }> }) {
+  const { fileId } = await ctx.params
+  if (!isUuid(fileId)) return new NextResponse('File not found', { status: 404 })
+  const grant = verifyWopiToken(req.nextUrl.searchParams.get('access_token') ?? '', fileId)
+  if (!grant) return new NextResponse('Invalid or expired WOPI token', { status: 401 })
+  if (!(await tenantIsActive(grant.tenantId))) {
+    return new NextResponse('Workspace unavailable', { status: 403 })
+  }
+  if (!(await wopiPrincipalIsAuthorized(grant))) {
+    return new NextResponse('WOPI access has been revoked', { status: 403 })
+  }
+  if (!grant.canWrite) return new NextResponse('Read-only token', { status: 403 })
+
+  const override = (req.headers.get('x-wopi-override') ?? '').toUpperCase()
+  if (!LOCK_OVERRIDES.has(override as WopiLockOverride)) {
+    return new NextResponse(`Unsupported WOPI operation: ${override}`, { status: 501 })
+  }
+  const requestLock = readWopiLockHeader(req.headers.get('x-wopi-lock'))
+  const oldLock = readWopiLockHeader(req.headers.get('x-wopi-oldlock'))
+  if (!requestLock.ok || !oldLock.ok) return new NextResponse('Invalid lock', { status: 400 })
+
+  const now = Date.now()
+  const decision = await withTenant(db, grant.tenantId, async (tx) => {
+    if (!(await wopiGrantCanAccessFile(tx, grant))) return null
+    const [row] = await tx
+      .select({
+        wopiLock: attachments.wopiLock,
+        wopiLockExpiresAt: attachments.wopiLockExpiresAt,
+      })
+      .from(attachments)
+      .where(eq(attachments.id, fileId))
+      .limit(1)
+      .for('update')
+    if (!row) return null
+    const next = decideWopiLock({
+      override: override as WopiLockOverride,
+      requestLock: requestLock.lock,
+      oldLock: oldLock.lock,
+      storedLock: row.wopiLock,
+      storedLockExpiresAt: row.wopiLockExpiresAt,
+      now,
+    })
+    if (next.kind !== 'ok' || override === 'GET_LOCK') return next
+    const expiresAt = next.lock ? new Date(now + WOPI_LOCK_TTL_MS) : null
+    // Raw SQL: a lock refresh must not bump updated_at.
+    await tx.execute(sql`
+      update attachments
+      set wopi_lock = ${next.lock || null},
+          wopi_lock_expires_at = ${expiresAt}
+      where id = ${fileId}
+    `)
+    return next
+  })
+  if (!decision) return new NextResponse('File not found', { status: 404 })
+  if (decision.kind === 'bad_request') return new NextResponse('Invalid lock', { status: 400 })
+  return new NextResponse(null, {
+    status: decision.kind === 'mismatch' ? 409 : 200,
+    headers: { 'X-WOPI-Lock': decision.kind === 'mismatch' ? decision.currentLock : decision.lock },
   })
 }

@@ -46,6 +46,7 @@ import { ModeSwitch, type DocumentMode } from './_mode-switch'
 export function DocumentPane({
   documentId,
   canManage,
+  canPublish,
   defaultMode,
   master,
   latestPublished,
@@ -53,6 +54,7 @@ export function DocumentPane({
 }: {
   documentId: string
   canManage: boolean
+  canPublish: boolean
   defaultMode: DocumentMode
   /** The DOCX working master, when the document is authored in-app. */
   master: { attachmentId: string; filename: string } | null
@@ -235,9 +237,11 @@ export function DocumentPane({
                     >
                       <UploadCloud size={13} /> <GeneratedText id="m_05b540acc16fd1" />
                     </Button>
-                    <Button type="button" size="sm" onClick={() => setShowPublish((v) => !v)}>
-                      <GeneratedText id="m_0c072fb8baf115" />
-                    </Button>
+                    {canPublish ? (
+                      <Button type="button" size="sm" onClick={() => setShowPublish((v) => !v)}>
+                        <GeneratedText id="m_0c072fb8baf115" />
+                      </Button>
+                    ) : null}
                   </>
                 ) : null
               }
@@ -260,7 +264,7 @@ export function DocumentPane({
 
         <GeneratedValue
           value={
-            showPublish && master ? (
+            showPublish && master && canPublish ? (
               <div className="flex items-start gap-2 border-b border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
                 <Textarea
                   rows={2}

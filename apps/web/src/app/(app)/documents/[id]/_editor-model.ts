@@ -6,10 +6,12 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiSettings } from '@/lib/ai-config'
 import { isUuid } from '@/lib/list-params'
+import { canPublishDocument } from '@/lib/document-authoring-policy'
 import type { DocumentMode } from './_mode-switch'
 
 export type DocumentEditorModel = {
   documentId: string
+  canPublish: boolean
   defaultMode: DocumentMode
   master: { attachmentId: string; filename: string } | null
   latestPublished: { version: number; renderStatus: string | null } | null
@@ -27,7 +29,7 @@ export async function loadDocumentEditorModel(
 
   const data = await ctx.db(async (tx) => {
     const [doc] = await tx
-      .select({ sourceAttachmentId: documents.sourceAttachmentId })
+      .select({ sourceAttachmentId: documents.sourceAttachmentId, status: documents.status })
       .from(documents)
       .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
       .limit(1)
@@ -61,6 +63,7 @@ export async function loadDocumentEditorModel(
       : []
 
     return {
+      canPublish: canPublishDocument(doc.status),
       sourceAttachmentId: doc.sourceAttachmentId,
       published: published ?? null,
       contentAttachmentId: current?.contentAttachmentId ?? null,
@@ -73,6 +76,7 @@ export async function loadDocumentEditorModel(
   const isFileDoc = !data.sourceAttachmentId && Boolean(data.contentAttachmentId)
   return {
     documentId,
+    canPublish: data.canPublish,
     defaultMode: isFileDoc ? 'pdf' : 'write',
     master: data.master ? { attachmentId: data.master.id, filename: data.master.filename } : null,
     latestPublished: data.published

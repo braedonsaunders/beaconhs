@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { DOCX_MIME_TYPE, MAX_DOCX_CONVERSION_BYTES } from '@beaconhs/office/limits'
-import { documentMasterMetadataError, nextDocumentMajorVersion } from './document-authoring-policy'
+import {
+  canPublishDocument,
+  documentMasterMetadataError,
+  nextDocumentMajorVersion,
+} from './document-authoring-policy'
 
 const VALID = {
   kind: 'document',
@@ -10,6 +14,12 @@ const VALID = {
 }
 
 describe('document authoring policy', () => {
+  it('permits publication of drafts and reviews, but not published or archived documents', () => {
+    expect(canPublishDocument('draft')).toBe(true)
+    expect(canPublishDocument('under_review')).toBe(true)
+    expect(canPublishDocument('published')).toBe(false)
+    expect(canPublishDocument('archived')).toBe(false)
+  })
   it('accepts a DOCX at the shared conversion ceiling', () => {
     expect(documentMasterMetadataError(VALID)).toBeNull()
   })

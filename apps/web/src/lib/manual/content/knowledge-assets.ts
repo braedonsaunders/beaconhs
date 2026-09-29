@@ -528,10 +528,13 @@ The editor is blocked while an administrator is using **View as user**. Exit tha
 
 ## Publish a version
 
-1. Click **Publish** in the Write toolbar.
-2. Add a short note about what changed (optional), then confirm.
-3. BeaconHS waits for the Word editor to confirm that the working file is saved. If saving fails or times out, no version is created and you can try again without publishing a blank file.
-4. The saved draft is frozen as the next whole numbered version — v1, v2, v3 — and its PDF renders in the background. Imported decimal revisions such as v1.1 stay in the history. Readers always see the latest published version; your draft stays private until the next publish.
+1. If the document is Published, click **Unpublish** at the top of the page to return it to Draft.
+2. Click **Publish** in the Write toolbar.
+3. Add a short note about what changed (optional), then confirm.
+4. BeaconHS waits for the Word editor to confirm that the working file is saved. If saving fails or times out, no version is created and you can try again without publishing a blank file.
+5. The saved draft is frozen as the next whole numbered version — v1, v2, v3 — and its PDF renders in the background. Imported decimal revisions such as v1.1 stay in the history. Readers see the latest published version while the document is Published. Draft documents stay private until you publish them.
+
+Draft documents show **Publish**. Published documents show **Unpublish**. Only one of these actions appears at a time. **Unpublish** withdraws the document from readers until it is published again.
 
 ## Version history
 
@@ -554,7 +557,7 @@ For a toolbox talk, tap **Record group sign-off**. Use **Search people or sessio
 
 ## Uploaded PDFs
 
-Documents can also be plain uploaded PDFs (scanned or externally produced). Open the **PDF** tab and drop the file into the uploader — there is no editor for these; the file itself is the document. Once a PDF is in place, **Replace** in the PDF toolbar prepares a new draft version. Readers keep seeing the previous published version until you click **Publish** at the top of the page.
+Documents can also be plain uploaded PDFs (scanned or externally produced). Open the **PDF** tab and drop the file into the uploader — there is no editor for these; the file itself is the document. To revise a published PDF, click **Unpublish** at the top of the page, then use **Replace** in the PDF toolbar to upload the revised file. Click **Publish** at the top of the page when it is ready. The document is hidden from readers while it is Draft.
 
 ## Organize categories, types, and management reviews
 

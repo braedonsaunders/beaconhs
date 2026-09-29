@@ -51,6 +51,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { activityPageForEntity, recordAuditInTransaction } from '@/lib/audit'
 import { assertUploadedDocumentPdf } from '@/lib/document-version-policy'
+import { canPublishDocument } from '@/lib/document-authoring-policy'
 import { assertDocumentNotInPublishedBook } from '@/lib/document-book-lifecycle'
 import {
   assertComplianceTargetCanRetire,
@@ -150,7 +151,7 @@ async function publishFileDocument(formData: FormData) {
     if (!attachment) throw new Error('The uploaded PDF is missing')
     assertUploadedDocumentPdf(attachment)
 
-    if (version.publishedAt && doc.status === 'published') return false
+    if (!canPublishDocument(doc.status)) return false
     const publishedAt = version.publishedAt ?? new Date()
     await tx
       .update(documentVersions)
@@ -860,7 +861,7 @@ export default async function DocumentDetailPage({
                             <GeneratedText id="m_0d6976fc2d60c8" />
                           </Button>
                         </form>
-                      ) : isFileDoc ? (
+                      ) : isFileDoc && canPublishDocument(doc.status) ? (
                         // Authored documents publish from the Write toolbar (with a
                         // changelog) — only file-only PDFs publish from here.
                         <form action={publishFileDocument} className="inline">

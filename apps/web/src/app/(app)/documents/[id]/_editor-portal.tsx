@@ -86,6 +86,7 @@ export function DocumentEditorPortal({ model }: { model: DocumentEditorModel }) 
         key={model.documentId}
         documentId={model.documentId}
         canManage
+        canPublish={model.canPublish}
         defaultMode={model.defaultMode}
         master={model.master}
         latestPublished={model.latestPublished}

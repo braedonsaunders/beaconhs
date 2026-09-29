@@ -180,6 +180,9 @@
     }, 50)
   })
   window.addEventListener('message', function (event) {
+    var hostOrigin =
+      window.app && window.app.map && window.app.map.wopi && window.app.map.wopi.PostMessageOrigin
+    if (event.source !== window.parent || !hostOrigin || event.origin !== hostOrigin) return
     var data = event.data
     if (typeof data === 'string') {
       try {
