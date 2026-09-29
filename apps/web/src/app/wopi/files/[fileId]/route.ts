@@ -135,7 +135,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ fileId: st
     await tx.execute(sql`
       update attachments
       set wopi_lock = ${next.lock || null},
-          wopi_lock_expires_at = ${expiresAt}
+          wopi_lock_expires_at = ${sql.param(expiresAt, attachments.wopiLockExpiresAt)}
       where id = ${fileId}
     `)
     return next

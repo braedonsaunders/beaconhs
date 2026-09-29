@@ -504,7 +504,7 @@ Imported Word files must be .docx files and 100 MB or smaller.
 
 ## Edit the draft
 
-1. Open the document's **Write** tab. The Word editor opens right in the page.
+1. Open the document's **Write** tab. The Word editor opens in Editing mode with its ribbon visible. Use the Editing dropdown at the top right to switch to Viewing mode when you only want to read.
 2. Page size, headers, footers, images, tables — set them in the editor, exactly like Word.
 3. Use the editor's **Review** menu for track changes and comments while a document is being reviewed.
 4. **Download DOCX** saves the working file; **Replace** swaps in a different Word file.

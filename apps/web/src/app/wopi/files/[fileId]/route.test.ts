@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
+import type { SQL } from 'drizzle-orm'
+import { PgDialect } from 'drizzle-orm/pg-core'
 
 const state = vi.hoisted(() => ({
   validToken: true,
@@ -47,6 +49,13 @@ function request(override: string, lock?: string, oldLock?: string) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  state.execute.mockImplementation(async (query: SQL) => {
+    const compiled = new PgDialect().sqlToQuery(query)
+    // Raw SQL has no automatic column encoder: a Date here fails in the
+    // production postgres driver before it can acquire the editor lock.
+    expect(compiled.params.some((param) => param instanceof Date)).toBe(false)
+    return []
+  })
   Object.assign(state, {
     validToken: true,
     canWrite: true,
@@ -79,6 +88,9 @@ describe('WOPI file endpoint locks', () => {
     expect(response.headers.get('X-WOPI-Lock')).toBe('editor-a')
     expect(state.withTenant).toHaveBeenCalledWith({}, 'tenant-a', expect.any(Function))
     expect(state.execute).toHaveBeenCalledOnce()
+    const compiled = new PgDialect().sqlToQuery(state.execute.mock.calls[0]![0] as SQL)
+    expect(compiled.params).toEqual(['editor-a', expect.any(String), FILE_ID])
+    expect(Number.isFinite(Date.parse(compiled.params[1] as string))).toBe(true)
   })
 
   it.each(['LOCK', 'REFRESH_LOCK', 'UNLOCK'])(

@@ -145,17 +145,12 @@ export const CollaboraEmbed = forwardRef<
           originRef.current = url.origin
           // Collabora serves branding.js with a months-long max-age keyed to
           // its build hash, so our branding updates never reach an already
-          // visited browser on their own. When Collabora is routed
-          // same-origin, refresh that exact cache entry once per tab session
-          // before the frame requests it.
-          if (url.origin === window.location.origin && !sessionStorage.getItem('bhs-brand-fresh')) {
+          // visited browser on their own. Refresh that exact cache entry on
+          // every same-origin editor mount, including tabs open during a
+          // deployment, before the frame requests it.
+          if (url.origin === window.location.origin) {
             const brandingUrl = url.pathname.replace(/\/[^/]*$/, '/branding.js')
             await fetch(brandingUrl, { cache: 'reload' }).catch(() => {})
-            try {
-              sessionStorage.setItem('bhs-brand-fresh', '1')
-            } catch {
-              /* storage unavailable — refetch next mount instead */
-            }
           }
           if (cancelled) return
         }
