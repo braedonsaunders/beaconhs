@@ -27,19 +27,17 @@ function PdfPage({
   doc,
   pageNumber,
   width,
-  onVisible,
 }: {
   doc: PDFDocumentProxy
   pageNumber: number
   width: number
-  onVisible: (page: number) => void
 }) {
   const holderRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [shouldRender, setShouldRender] = useState(false)
   const [aspect, setAspect] = useState(11 / 8.5) // letter portrait until measured
 
-  // Render only when (nearly) in view; report visibility for the page counter.
+  // Prefetch nearby pages without counting them as the page being read.
   useEffect(() => {
     const el = holderRef.current
     if (!el) return
@@ -48,7 +46,6 @@ function PdfPage({
         for (const e of entries) {
           if (e.isIntersecting) {
             setShouldRender(true)
-            onVisible(pageNumber)
           }
         }
       },
@@ -56,7 +53,7 @@ function PdfPage({
     )
     io.observe(el)
     return () => io.disconnect()
-  }, [pageNumber, onVisible])
+  }, [])
 
   useEffect(() => {
     if (!shouldRender || width <= 0) return
@@ -106,6 +103,7 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
   const [zoom, setZoom] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const pagesRef = useRef<HTMLDivElement>(null)
   const [baseWidth, setBaseWidth] = useState(0)
 
   useEffect(() => {
@@ -114,7 +112,10 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
       try {
         const pdfjs = await loadPdfjs()
         const loaded = await pdfjs.getDocument({ url }).promise
-        if (!cancelled) setResource({ url, doc: loaded, error: null })
+        if (!cancelled) {
+          setResource({ url, doc: loaded, error: null })
+          setCurrentPage(1)
+        }
       } catch (err) {
         if (!cancelled) {
           setResource({
@@ -144,9 +145,32 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
     return () => ro.disconnect()
   }, [])
 
-  const onVisible = useCallback((page: number) => {
-    setCurrentPage((prev) => (prev === page ? prev : page))
+  const updateCurrentPage = useCallback(() => {
+    const viewport = scrollRef.current
+    const pages = pagesRef.current
+    if (!viewport || !pages) return
+    const bounds = viewport.getBoundingClientRect()
+    let visiblePage = 1
+    let mostVisible = 0
+    for (const page of pages.querySelectorAll<HTMLDivElement>('[data-page]')) {
+      const rect = page.getBoundingClientRect()
+      const visible = Math.min(rect.bottom, bounds.bottom) - Math.max(rect.top, bounds.top)
+      if (visible > mostVisible) {
+        mostVisible = visible
+        visiblePage = Number(page.dataset.page)
+      }
+    }
+    if (mostVisible > 0) setCurrentPage(visiblePage)
   }, [])
+
+  // Recalculate after lazy pages render, zoom changes, or the pane resizes.
+  useEffect(() => {
+    const pages = pagesRef.current
+    if (!pages) return
+    const observer = new ResizeObserver(updateCurrentPage)
+    observer.observe(pages)
+    return () => observer.disconnect()
+  }, [doc, updateCurrentPage])
 
   const width = Math.round(baseWidth * zoom)
 
@@ -193,6 +217,7 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
       </div>
       <div
         ref={scrollRef}
+        onScroll={updateCurrentPage}
         className="app-scroll min-h-0 flex-1 overflow-auto bg-slate-100 dark:bg-slate-950"
       >
         <GeneratedValue
@@ -206,16 +231,10 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
                 <Loader2 size={20} className="animate-spin text-slate-400" />
               </div>
             ) : (
-              <div className="space-y-4 px-6 py-6">
+              <div ref={pagesRef} className="space-y-4 px-6 py-6">
                 <GeneratedValue
                   value={Array.from({ length: doc.numPages }, (_, i) => (
-                    <PdfPage
-                      key={i + 1}
-                      doc={doc}
-                      pageNumber={i + 1}
-                      width={width}
-                      onVisible={onVisible}
-                    />
+                    <PdfPage key={i + 1} doc={doc} pageNumber={i + 1} width={width} />
                   ))}
                 />
               </div>

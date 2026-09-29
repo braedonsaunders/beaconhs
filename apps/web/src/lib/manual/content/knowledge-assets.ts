@@ -398,6 +398,7 @@ Open **Documents** in the left menu. You will see cards for every published docu
 2. Type a word in the search box — it says **Search title or description**. You can also filter by **Category** or **Type**.
 3. Tap **Read document** on the document you want.
 4. The published PDF opens full screen. Tap **Download** to save a copy, or **New tab** to open it for printing.
+5. Scroll inside the PDF to read each page. The page counter follows the page taking up most of the view.
 
 ## Acknowledge a document
 
