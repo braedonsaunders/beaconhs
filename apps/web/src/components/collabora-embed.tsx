@@ -74,7 +74,11 @@ export const CollaboraEmbed = forwardRef<
     resolve: () => void
     reject: (error: Error) => void
     timeout: ReturnType<typeof setTimeout>
+    /** Dirty flag captured when the save started. */
+    dirtyAtStart: boolean | null
   } | null>(null)
+  const modifiedRef = useRef<boolean | null>(null)
+  const loadedRef = useRef(false)
   const fetchSessionRef = useRef(fetchSession)
   const { resolvedTheme } = useTheme()
 
@@ -187,14 +191,39 @@ export const CollaboraEmbed = forwardRef<
       }
       let msg: {
         MessageId?: string
-        Values?: { Status?: string; success?: boolean; result?: string; errorMsg?: string }
+        Values?: {
+          Status?: string
+          success?: boolean
+          result?: string
+          errorMsg?: string
+          Modified?: boolean | string
+        }
       }
       try {
         msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
       } catch {
         return
       }
+      if (msg?.MessageId === 'Doc_ModifiedStatus') {
+        const modified = msg.Values?.Modified
+        modifiedRef.current = modified === true || modified === 'true'
+      }
       if (msg?.MessageId === 'App_LoadingStatus' && msg.Values?.Status === 'Document_Loaded') {
+        // A second load while a save is in flight is Collabora discarding the
+        // editor buffer and reloading storage. Publishing that copy would
+        // snapshot the pre-edit file.
+        if (saveRequestRef.current && loadedRef.current) {
+          const request = saveRequestRef.current
+          saveRequestRef.current = null
+          clearTimeout(request.timeout)
+          modifiedRef.current = false
+          request.reject(
+            new Error(
+              'The editor reloaded the stored file. Publish was cancelled so that copy was not published.',
+            ),
+          )
+        }
+        loadedRef.current = true
         iframeRef.current?.contentWindow?.postMessage(
           JSON.stringify({ MessageId: 'Host_PostmessageReady', SendTime: Date.now(), Values: {} }),
           originRef.current,
@@ -205,14 +234,21 @@ export const CollaboraEmbed = forwardRef<
         const request = saveRequestRef.current
         saveRequestRef.current = null
         clearTimeout(request.timeout)
-        if (msg.Values?.success === true || msg.Values?.result === 'unmodified') {
-          request.resolve()
-        } else {
+        if (msg.Values?.success !== true) {
           request.reject(
             new Error(
               msg.Values?.errorMsg || msg.Values?.result || 'The document could not be saved.',
             ),
           )
+        } else if (msg.Values.result === 'unmodified' && request.dirtyAtStart === true) {
+          request.reject(
+            new Error(
+              'The editor did not save the latest changes. Publish was cancelled so an older copy was not published.',
+            ),
+          )
+        } else {
+          if (msg.Values.result !== 'unmodified') modifiedRef.current = false
+          request.resolve()
         }
       }
     }
@@ -221,6 +257,7 @@ export const CollaboraEmbed = forwardRef<
     return () => {
       window.removeEventListener('message', onMessage)
       clearTimeout(fallback)
+      loadedRef.current = false
       if (saveRequestRef.current) {
         clearTimeout(saveRequestRef.current.timeout)
         saveRequestRef.current.reject(new Error('The editor closed before the document was saved.'))
@@ -228,6 +265,56 @@ export const CollaboraEmbed = forwardRef<
       }
     }
   }, [session])
+
+  // The iframe's percentage height can change without Collabora's window
+  // seeing a resize, so the status bar counts every page while only the first
+  // page's tiles are painted. Pin a pixel size and ask the frame to relayout.
+  useEffect(() => {
+    if (!session?.ok) return
+    const iframe = iframeRef.current
+    const parent = iframe?.parentElement
+    if (!iframe || !parent) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const postRelayout = () => {
+      const origin = originRef.current
+      const win = iframe.contentWindow
+      if (!origin || !win || !loadedRef.current) return
+      const focus = mode === 'editor'
+      win.postMessage(
+        JSON.stringify({
+          MessageId: 'BeaconHS_Relayout',
+          SendTime: Date.now(),
+          Values: { focus },
+        }),
+        origin,
+      )
+      if (focus) {
+        win.postMessage(
+          JSON.stringify({ MessageId: 'Grab_Focus', SendTime: Date.now(), Values: {} }),
+          origin,
+        )
+      }
+    }
+    const applySize = () => {
+      const width = Math.floor(parent.clientWidth)
+      const height = Math.floor(parent.clientHeight)
+      if (width < 40 || height < 40) return
+      iframe.style.width = `${width}px`
+      iframe.style.height = `${height}px`
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(postRelayout, 60)
+    }
+    const observer = new ResizeObserver(applySize)
+    observer.observe(parent)
+    applySize()
+    const onHostRelayout = () => applySize()
+    window.addEventListener('beaconhs-collabora-relayout', onHostRelayout)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('beaconhs-collabora-relayout', onHostRelayout)
+      if (timer) clearTimeout(timer)
+    }
+  }, [session, mode, loaded])
 
   useImperativeHandle(
     ref,
@@ -245,7 +332,12 @@ export const CollaboraEmbed = forwardRef<
             saveRequestRef.current = null
             reject(new Error('The document save timed out. Try publishing again.'))
           }, 30_000)
-          saveRequestRef.current = { resolve, reject, timeout }
+          saveRequestRef.current = {
+            resolve,
+            reject,
+            timeout,
+            dirtyAtStart: modifiedRef.current,
+          }
           iframeRef.current?.contentWindow?.postMessage(
             JSON.stringify({
               MessageId: 'Action_Save',

@@ -58,7 +58,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ fileId: str
     UserFriendlyName: grant.userName,
     UserCanWrite: grant.canWrite,
     SupportsUpdate: true,
-    SupportsLocks: false,
+    SupportsLocks: true,
+    SupportsGetLock: true,
+    // Opaque file version. This is the same instant as LastModifiedTime so a
+    // later CheckFileInfo agrees with the PutFile response Collabora stored.
+    Version: (att.updatedAt ?? new Date(0)).toISOString(),
     // The pptx is a master copy pinned to one deck — no Save As / rename /
     // export-to-other-locations from inside the editor (Download lives in the
     // BeaconHS UI where it is audited).

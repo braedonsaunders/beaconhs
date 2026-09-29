@@ -127,9 +127,70 @@
     })
   }
   apply()
-  new MutationObserver(function () {
-    apply()
+  // Only restyle when the chrome that carries --doc-type is created. Watching
+  // every tile mutation and rewriting styles stalls Writer's page paint.
+  function nodeNeedsTheme(node) {
+    if (!node || node.nodeType !== 1) return false
+    if (node.matches && node.matches('[data-doctype], .main-nav')) return true
+    return Boolean(node.querySelector && node.querySelector('[data-doctype], .main-nav'))
+  }
+  new MutationObserver(function (mutations) {
+    for (var i = 0; i < mutations.length; i++) {
+      var added = mutations[i].addedNodes
+      for (var j = 0; j < added.length; j++) {
+        if (nodeNeedsTheme(added[j])) {
+          apply()
+          return
+        }
+      }
+    }
   }).observe(document.documentElement, { childList: true, subtree: true })
+})()
+
+/* The host pins the iframe to a pixel size and posts BeaconHS_Relayout.
+ * Writer's page count comes from the document model; the tiles are a separate
+ * layer that stays on page 1 until the map is told its container changed.
+ * Focusing the map restores the text caret instead of the pan hand. */
+;(function () {
+  var relayouting = false
+  function relayout(focus) {
+    var map = window.app && window.app.map
+    if (!map || typeof map.invalidateSize !== 'function' || relayouting) return false
+    relayouting = true
+    try {
+      map.invalidateSize({ animate: false, pan: false })
+      if (focus && typeof map.focus === 'function') map.focus()
+    } finally {
+      relayouting = false
+    }
+    return true
+  }
+  function relayoutWhenReady(focus, attempt) {
+    if (relayout(focus)) return
+    if (attempt >= 30) return
+    setTimeout(function () {
+      relayoutWhenReady(focus, attempt + 1)
+    }, 100)
+  }
+  var resizeTimer = 0
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer)
+    resizeTimer = setTimeout(function () {
+      relayout(false)
+    }, 50)
+  })
+  window.addEventListener('message', function (event) {
+    var data = event.data
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data)
+      } catch (e) {
+        return
+      }
+    }
+    if (!data || data.MessageId !== 'BeaconHS_Relayout') return
+    relayoutWhenReady(Boolean(data.Values && data.Values.focus), 0)
+  })
 })()
 
 /* --- Stock CODE branding hook (unchanged) -------------------------------- */

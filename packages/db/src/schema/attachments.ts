@@ -46,6 +46,13 @@ export const attachments = pgTable(
     // Optional annotation layer (JSON shapes drawn over an image)
     annotations: jsonb('annotations').$type<Annotation[] | null>(),
     caption: text('caption'),
+    // Collabora session lock and save order. Lock refreshes are raw SQL so
+    // they do not bump updated_at: Collabora treats that timestamp as the
+    // file version and a bump raises a false storage-conflict dialog.
+    wopiLock: text('wopi_lock'),
+    wopiLockExpiresAt: timestamp('wopi_lock_expires_at', { withTimezone: true }),
+    wopiSaveTicket: bigint('wopi_save_ticket', { mode: 'number' }).notNull().default(0),
+    wopiAppliedTicket: bigint('wopi_applied_ticket', { mode: 'number' }).notNull().default(0),
     ...timestamps,
   },
   (t) => ({

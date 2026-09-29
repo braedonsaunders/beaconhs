@@ -64,8 +64,6 @@ import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { sendDocumentEmail } from './_send-email'
 import { deleteDocument } from '../_actions'
 import { ConfirmButton } from '@/components/confirm-button'
-import { getTenantAiSettings } from '@/lib/ai-config'
-import { DocumentPane } from './_document-pane'
 import { AcknowledgmentsPanel, type AckRow } from './_acknowledgments-panel'
 import { DocumentCompliancePanel, loadDocumentObligations } from './_compliance-panel'
 import { SearchInput } from '@/components/search-input'
@@ -454,7 +452,6 @@ export default async function DocumentDetailPage({
       currentVersions,
       publishedVersions,
       currentPeople,
-      masterAttachments,
       categories,
       types,
       versionTotalRows,
@@ -474,13 +471,6 @@ export default async function DocumentDetailPage({
         .orderBy(desc(documentVersions.version))
         .limit(1),
       tx.select().from(people).where(eq(people.userId, ctx.userId)).limit(1),
-      doc.sourceAttachmentId
-        ? tx
-            .select({ id: attachments.id, filename: attachments.filename })
-            .from(attachments)
-            .where(eq(attachments.id, doc.sourceAttachmentId))
-            .limit(1)
-        : Promise.resolve([]),
       tx
         .select({ id: documentCategories.id, name: documentCategories.name })
         .from(documentCategories)
@@ -697,7 +687,6 @@ export default async function DocumentDetailPage({
       reviewFilteredTotal: Number(reviewFilteredRows[0]?.count ?? 0),
       currentPerson,
       myAck,
-      masterAtt: masterAttachments[0] ?? null,
       categories,
       types,
     }
@@ -719,7 +708,6 @@ export default async function DocumentDetailPage({
     reviewFilteredTotal,
     currentPerson,
     myAck,
-    masterAtt,
     categories,
     types,
   } = data
@@ -728,8 +716,8 @@ export default async function DocumentDetailPage({
     : null
   const basePath = `/documents/${id}`
 
-  // Right pane: the inline Writer for authored docs, or the PDF for
-  // uploaded-file docs and read-only users.
+  // The right-hand editor is mounted by the document layout. This page keeps
+  // the slot it portals into. File-only documents still publish from here.
   const isFileDoc = !doc.sourceAttachmentId && !!currentVersion?.contentAttachmentId
   const canEmailPublishedVersion =
     doc.status === 'published' &&
@@ -737,9 +725,6 @@ export default async function DocumentDetailPage({
     Boolean(publishedVersion?.contentAttachmentId || publishedVersion?.pdfAttachmentId)
   const canReview = can(ctx, 'documents.review')
   const canRecordReview = canReview && Boolean(publishedVersion)
-  const aiSettings = canManage ? await getTenantAiSettings(ctx) : null
-  const aiEnabled = !!aiSettings && aiSettings.enabled && aiSettings.hasKey
-
   // Acknowledgments → flat rows for the panel (with signature thumbnails).
   const ackRows: AckRow[] = acks.map((a) => ({
     ackId: a.ackId,
@@ -1481,29 +1466,9 @@ export default async function DocumentDetailPage({
           </div>
         </aside>
 
-        {/* Right pane: the live editor for managers, or the published PDF for
-            uploaded-file documents and read-only users */}
-        <div className="min-h-0 flex-1">
-          <DocumentPane
-            documentId={id}
-            canManage={canManage}
-            defaultMode={isFileDoc ? 'pdf' : 'write'}
-            master={
-              doc.sourceAttachmentId && masterAtt
-                ? { attachmentId: masterAtt.id, filename: masterAtt.filename }
-                : null
-            }
-            latestPublished={
-              publishedVersion
-                ? {
-                    version: publishedVersion.version,
-                    renderStatus: publishedVersion.renderStatus,
-                  }
-                : null
-            }
-            aiEnabled={aiEnabled}
-          />
-        </div>
+        {/* Right pane: the editor is portaled here from the layout so a
+            refresh can replace this page without reloading Collabora. */}
+        <div id="document-editor-slot" className="min-h-0 min-w-0 flex-1" />
       </div>
 
       <GeneratedValue

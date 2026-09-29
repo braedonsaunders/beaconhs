@@ -288,6 +288,13 @@
       "when": 1789608000001,
       "tag": "0041_document_book_cover_template",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789608000002,
+      "tag": "0042_wopi_editor_locks",
+      "breakpoints": true
     }
   ]
 }
