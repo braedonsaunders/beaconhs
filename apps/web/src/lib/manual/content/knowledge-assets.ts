@@ -519,6 +519,8 @@ Imported Word files must be .docx files and 100 MB or smaller.
 
 The table is added to the PDF. Your Word working file keeps its own layout. A document book's **Controlled-document block** setting controls the book's tables independently and prints one table per document.
 
+Individual document headers and document books use the same brand colour. In **Admin** → **Tenant settings** → **Branding**, enter the colour in **Primary color (hex)** and press **Save settings**. Open the draft **PDF** again or press **Regenerate** to see the new colour. Publish the next version to give readers that colour. Already published PDFs keep their saved appearance.
+
 ## AI assistant
 
 If AI is set up for your company, an **AI** button appears in the Write toolbar.

@@ -11,7 +11,7 @@
 
 import { and, eq, isNull, ne, or } from 'drizzle-orm'
 import { db, withTenant, loadDocumentControlHeaders } from '@beaconhs/db'
-import { attachments, documents, documentVersions } from '@beaconhs/db/schema'
+import { attachments, documents, documentVersions, tenants } from '@beaconhs/db/schema'
 import {
   deleteObject,
   getObject,
@@ -95,9 +95,10 @@ export async function renderDocumentVersion(args: {
         .limit(1)
       if (!version?.docxAttachmentId) return null
       const [doc] = await tx
-        .select({ key: documents.key, title: documents.title })
+        .select({ key: documents.key, title: documents.title, branding: tenants.branding })
         .from(documents)
-        .where(eq(documents.id, documentId))
+        .innerJoin(tenants, eq(tenants.id, documents.tenantId))
+        .where(and(eq(documents.id, documentId), eq(tenants.id, tenantId)))
         .limit(1)
       if (!doc) return null
       const [att] = await tx
@@ -129,7 +130,11 @@ export async function renderDocumentVersion(args: {
     const bodyPdf = await renderDocxToPdf(docx)
     const bookPdf = await renderDocxToPdf(docx, { reserveHeader: true })
     const pdf = data.version.controlHeader
-      ? await addDocumentControlHeader(bookPdf, data.version.controlHeader)
+      ? await addDocumentControlHeader(
+          bookPdf,
+          data.version.controlHeader,
+          data.doc.branding.primaryColor,
+        )
       : bodyPdf
     const text = (await sofficeConvert(docx, 'document.docx', 'txt:Text'))
       .toString('utf8')
@@ -252,9 +257,11 @@ export async function renderDocumentMasterPdf(args: {
         title: documents.title,
         sourceAttachmentId: documents.sourceAttachmentId,
         showDocumentHeader: documents.showDocumentHeader,
+        branding: tenants.branding,
       })
       .from(documents)
-      .where(eq(documents.id, documentId))
+      .innerJoin(tenants, eq(tenants.id, documents.tenantId))
+      .where(and(eq(documents.id, documentId), eq(tenants.id, tenantId)))
       .limit(1)
     if (!doc?.sourceAttachmentId) return null
     const [att] = await tx
@@ -276,7 +283,10 @@ export async function renderDocumentMasterPdf(args: {
   assertOfficeInput(data.source)
   const docx = await getObject({ key: data.source.key })
   assertOfficeInput(data.source, docx)
-  const pdf = await renderDocxToPdf(docx, { header: data.header })
+  const pdf = await renderDocxToPdf(docx, {
+    header: data.header,
+    accentColor: data.doc.branding.primaryColor,
+  })
 
   const stamp = Date.now()
   const base =

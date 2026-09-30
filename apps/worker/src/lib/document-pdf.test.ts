@@ -3,7 +3,7 @@ import { CONTROLLED_HEADER_BAND_PT } from '@beaconhs/office/docx-page-size'
 import { composePdf, countPages, sofficeConvert } from '@beaconhs/office'
 import { reserveFirstPageBand } from '@beaconhs/office/docx-page-size'
 import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
-import { renderDocxToPdf } from './document-pdf'
+import { addDocumentControlHeader, renderDocxToPdf } from './document-pdf'
 
 vi.mock('@beaconhs/office', () => ({
   pageGeometry: () => ({ width: 612, height: 792 }),
@@ -16,7 +16,8 @@ vi.mock('@beaconhs/office/docx-page-size', () => ({
   setDocxPageSize: vi.fn(async (bytes: Buffer) => bytes),
   reserveFirstPageBand: vi.fn(async (bytes: Buffer) => bytes),
 }))
-vi.mock('@beaconhs/forms-pdf', () => ({
+vi.mock('@beaconhs/forms-pdf', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@beaconhs/forms-pdf')>()),
   renderHtmlDocumentPdf: vi.fn(async () => Buffer.from('table')),
 }))
 
@@ -32,6 +33,7 @@ describe('individual document PDF layout', () => {
   })
   it('reflows the first page before adding one table, without shrinking the body', async () => {
     await renderDocxToPdf(Buffer.from('Word master'), {
+      accentColor: ' #7c3aed ',
       header: {
         title: 'Hydro <test>',
         key: 'doc-430',
@@ -60,7 +62,32 @@ describe('individual document PDF layout', () => {
         ],
       }),
     )
+    expect(vi.mocked(renderHtmlDocumentPdf).mock.calls[0]?.[0].bodyHtml).toContain(
+      'background:#7c3aed;',
+    )
   })
+  it.each([undefined, '', '#fff\";><script>unexpected()</script>'])(
+    'uses the book default for a published header with missing or invalid branding (%s)',
+    async (accentColor) => {
+      await addDocumentControlHeader(
+        Buffer.from('reserved body'),
+        {
+          title: 'Procedure',
+          key: 'check',
+          category: null,
+          type: null,
+          version: 1,
+          issuedAt: null,
+          revisedAt: null,
+          approvedBy: null,
+        },
+        accentColor,
+      )
+      const html = vi.mocked(renderHtmlDocumentPdf).mock.calls[0]?.[0].bodyHtml
+      expect(html).toContain('background:#0f172a;')
+      expect(html).not.toContain('<script>')
+    },
+  )
   it('creates a book body without duplicating an individual document table', async () => {
     await renderDocxToPdf(Buffer.from('Word master'), { reserveHeader: true })
     expect(reserveFirstPageBand).toHaveBeenCalledWith(expect.any(Buffer), 132)

@@ -6,6 +6,8 @@
 // this package also owns the credential (certificate + wallet), design-studio
 // and scheduled-report printers.
 
+export { resolveHexColor } from './color'
+
 import {
   type CredentialDesignData,
   type DesignDocument,

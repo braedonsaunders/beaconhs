@@ -2,7 +2,7 @@ import { composePdf, countPages, pageGeometry, type ComposePart } from '@beaconh
 import type { DocumentBookPrintSettings } from '@beaconhs/db/schema'
 import { resolveBookPrintSettings } from '@beaconhs/db'
 import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
-import { documentControlHeaderHtml } from '../lib/document-control-header'
+import { documentAccentColor, documentControlHeaderHtml } from '../lib/document-control-header'
 import { CONTROLLED_HEADER_BAND_PT } from '@beaconhs/office/docx-page-size'
 
 // Assembling a document book.
@@ -213,7 +213,7 @@ function tableOfContentsHtml(rows: TocRow[], accent: string): string {
  */
 export async function composeDocumentBook(input: ComposeBookInput): Promise<Buffer> {
   const settings = resolveBookPrintSettings(input.settings)
-  const accent = input.accentColor?.trim() || '#0f172a'
+  const accent = documentAccentColor(input.accentColor)
   const now = input.now ?? new Date()
   const geometry = pageGeometry(settings.paperSize, settings.orientation)
   const paper = { paperSize: settings.paperSize, orientation: settings.orientation } as const

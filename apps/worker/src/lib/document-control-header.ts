@@ -1,4 +1,20 @@
 import type { DocumentControlHeader } from '@beaconhs/db/schema'
+import { resolveHexColor } from '@beaconhs/forms-pdf'
+
+export function documentAccentColor(primaryColor?: string | null): string {
+  return resolveHexColor(primaryColor, '#0f172a')
+}
+
+function titleInk(accent: string): string {
+  const raw = accent.slice(1)
+  const hex = raw.length === 3 ? [...raw].map((digit) => digit + digit).join('') : raw
+  const channel = (offset: number) => {
+    const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  }
+  const luminance = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
+  return luminance > 0.179 ? '#000' : '#fff'
+}
 
 type HeaderFields = Omit<
   DocumentControlHeader,
@@ -48,7 +64,7 @@ export function documentControlHeaderHtml(
             <td style="${value}">${escapeHtml(formatMonthYear(entry.issuedAt, timeZone))}</td>
           </tr>
           <tr>
-            <td rowspan="4" style="${cell}background:${accent};color:#fff;font-size:${titleFont}px;font-weight:700;line-height:1.2;">${escapeHtml(entry.title)}</td>
+            <td rowspan="4" style="${cell}background:${accent};color:${titleInk(accent)};font-size:${titleFont}px;font-weight:700;line-height:1.2;">${escapeHtml(entry.title)}</td>
             <td style="${label}">Revision date</td>
             <td style="${value}">${escapeHtml(formatMonthYear(entry.revisedAt, timeZone))}</td>
           </tr>

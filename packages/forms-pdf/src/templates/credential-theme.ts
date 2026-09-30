@@ -4,6 +4,8 @@
 // timezone-safe date formatting for the date-only strings the training
 // schema stores.
 
+import { resolveHexColor } from '../color'
+
 export function esc(s: string | number | null | undefined): string {
   if (s === null || s === undefined) return ''
   return String(s)
@@ -12,13 +14,6 @@ export function esc(s: string | number | null | undefined): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
-}
-
-// Tenant branding colours are admin-entered JSON; only let well-formed hex
-// through to the stylesheet.
-function safeColor(hex: string | null | undefined, fallback: string): string {
-  if (hex && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(hex.trim())) return hex.trim()
-  return fallback
 }
 
 export type CredentialDesignFormat = 'letter-landscape' | 'letter-portrait' | 'wallet'
@@ -53,7 +48,7 @@ export function normalizeCredentialDesignOptions(
   primaryFallback = '#1f3a5f',
 ): NormalizedCredentialDesignOptions {
   const raw = input ?? {}
-  const primary = safeColor(raw.primary, safeColor(primaryFallback, '#1f3a5f'))
+  const primary = resolveHexColor(raw.primary, resolveHexColor(primaryFallback, '#1f3a5f'))
   return {
     format: designFormats.includes(raw.format as CredentialDesignFormat)
       ? (raw.format as CredentialDesignFormat)
@@ -62,8 +57,8 @@ export function normalizeCredentialDesignOptions(
       ? (raw.templateId as CredentialDesignTemplateId)
       : 'sovereign-seal',
     primary,
-    accent: safeColor(raw.accent, '#c2a05c'),
-    paper: safeColor(raw.paper, '#fdfcf7'),
+    accent: resolveHexColor(raw.accent, '#c2a05c'),
+    paper: resolveHexColor(raw.paper, '#fdfcf7'),
     typeface: designTypefaces.includes(raw.typeface as CredentialDesignTypeface)
       ? (raw.typeface as CredentialDesignTypeface)
       : 'classic',

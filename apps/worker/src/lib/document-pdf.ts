@@ -6,12 +6,16 @@ import {
   setDocxPageSize,
 } from '@beaconhs/office/docx-page-size'
 import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
-import { documentControlHeaderHtml } from './document-control-header'
+import { documentAccentColor, documentControlHeaderHtml } from './document-control-header'
 
 /** Reflow only when a control table is requested; ordinary PDFs match Writer. */
 export async function renderDocxToPdf(
   docx: Buffer,
-  options: { header?: DocumentControlHeader | null; reserveHeader?: boolean } = {},
+  options: {
+    header?: DocumentControlHeader | null
+    reserveHeader?: boolean
+    accentColor?: string | null
+  } = {},
 ): Promise<Buffer> {
   const letter = await setDocxPageSize(docx, 'letter')
   const reserved = await reserveFirstPageBand(
@@ -20,13 +24,14 @@ export async function renderDocxToPdf(
   )
   const pdf = await sofficeConvert(reserved, 'document.docx', 'pdf')
   if (!options.header) return pdf
-  return addDocumentControlHeader(pdf, options.header)
+  return addDocumentControlHeader(pdf, options.header, options.accentColor)
 }
 
 /** The source has already reflowed around the header band. */
 export async function addDocumentControlHeader(
   pdf: Buffer,
   controlHeader: DocumentControlHeader,
+  accentColor?: string | null,
 ): Promise<Buffer> {
   const geometry = pageGeometry('letter', 'portrait')
   const header = await renderHtmlDocumentPdf({
@@ -34,7 +39,12 @@ export async function addDocumentControlHeader(
     orientation: 'portrait',
     pageSizePt: { width: geometry.width, height: CONTROLLED_HEADER_BAND_PT },
     marginMm: 4,
-    bodyHtml: documentControlHeaderHtml(controlHeader, '#0d9488', 'America/Toronto', false),
+    bodyHtml: documentControlHeaderHtml(
+      controlHeader,
+      documentAccentColor(accentColor),
+      'America/Toronto',
+      false,
+    ),
   })
   if ((await countPages(header)) !== 1) {
     throw new Error(

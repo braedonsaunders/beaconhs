@@ -8,7 +8,8 @@ vi.mock('@beaconhs/office', () => ({
   composePdf: vi.fn(async () => Buffer.from('composed')),
   countPages: vi.fn(async () => 1),
 }))
-vi.mock('@beaconhs/forms-pdf', () => ({
+vi.mock('@beaconhs/forms-pdf', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@beaconhs/forms-pdf')>()),
   renderHtmlDocumentPdf: vi.fn(async () => Buffer.from('generated page')),
 }))
 
@@ -31,6 +32,21 @@ const settings = { coverPage: false, tableOfContents: false, footer: false, docu
 
 describe('document book control tables', () => {
   beforeEach(() => vi.clearAllMocks())
+  it('uses the same tenant colour for book control tables', async () => {
+    await composeDocumentBook({ ...input, settings, accentColor: '#7c3aed' })
+    expect(vi.mocked(renderHtmlDocumentPdf).mock.calls[0]?.[0].bodyHtml).toContain(
+      'background:#7c3aed;',
+    )
+  })
+  it.each(['#fff', '#ffffff'])(
+    'keeps the title readable on a light brand colour (%s)',
+    async (accentColor) => {
+      await composeDocumentBook({ ...input, settings, accentColor })
+      expect(vi.mocked(renderHtmlDocumentPdf).mock.calls[0]?.[0].bodyHtml).toContain(
+        `background:${accentColor};color:#000;`,
+      )
+    },
+  )
   it('uses the reserved Word body at full size', async () => {
     await composeDocumentBook({ ...input, settings })
     expect(composePdf).toHaveBeenCalledWith(

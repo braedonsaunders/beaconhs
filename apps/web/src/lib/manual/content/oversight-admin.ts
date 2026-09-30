@@ -683,7 +683,7 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 
 ## Workspace
 
-- **Tenant settings** — branding, languages, regulatory terminology, and hierarchy. Risk matrices are configured in each module's own **Manage** area.
+- **Tenant settings** — branding, languages, regulatory terminology, and hierarchy. In **Branding**, **Primary color (hex)** sets the colour for individual document headers and document books. Press **Save settings**, then regenerate the draft PDF or publish the next version to use it. Already published PDFs keep their saved colour. Risk matrices are configured in each module's own **Manage** area.
 - **Notifications** — who gets automatic alerts and how often reminders repeat.
 - **Navigation** — reorder the sidebar and pin forms as modules.
 - **Data sources** — reference lists and live data your apps bind to. Search by name, key, or description and filter by **Reference** or **Live responses**. Click **New data source** to create a reference list or a live source from an app; the form opens in a side panel. Inside a reference source, search its row values and its Builder references separately.
