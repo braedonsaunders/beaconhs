@@ -97,7 +97,7 @@ Legend — Current/Target: `page-form` (separate /new) · `instant-create` (draf
 ### Tier 2 — sub-entities & ledgers (all **keep**, already inline/drawer)
 
 Equipment: types, categories, inspection types and criteria, log entries, check-in/out, and truck
-log. Financial rates and expenses remain in the external financial system. PPE: type criteria,
+log. Maintenance expenses belong to the equipment log. Financial rates, charges, revenue, and accounting remain in the external financial system. PPE: type criteria,
 inspections, issues, issue reports, annual records.
 Incidents: events, contributing factors, root-cause whys, preventative steps, injuries,
 lost-time, attachments. CA: photos, complete-steps. Hazard assessment: tasks, hazards, PPE,

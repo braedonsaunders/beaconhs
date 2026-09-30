@@ -309,6 +309,13 @@
       "when": 1789608000004,
       "tag": "0044_equipment_departments",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1789608000005,
+      "tag": "0045_equipment_log_amount",
+      "breakpoints": true
     }
   ]
 }

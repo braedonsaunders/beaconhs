@@ -117,7 +117,7 @@ detail page with multiple tabs, library/admin pages, and every server action
 audit-logged — matching the depth of the legacy Laravel modules.
 
 - ✅ **HazID / JSHA** (`/hazid`) — **NOT a form template**, a real module. 18 new tables (hazid_assessments + 17 join/library tables). 11-tab detail page: Overview / PPE / Q&A / Tasks / Hazards / Working at Heights / Confined Space (with sketchpad diagram + atmospheric-reading log + entry log) / Arc Flash (with CSA-Z462 reference table) / Signatures (role-flagged Internal/External + ConfinedSpaceEntrant/Attendant/Rescue) / Photos / Activity. Library admin: hazards / hazard-types / hazard-sets / tasks / assessment-types (with default PPE + default questions). Signed-report builder bundling N completed assessments into one PDF.
-- ✅ **Equipment operational expansion** — work orders, truck log, scheduled inspections, equipment types/categories, freeform equipment log, criteria-driven inspection types with auto-WO-on-fail, check-in/check-out with overdue alerts, bulk QR labels, and operational fleet/usage/maintenance reports. Billing rates, expenses, charges, and other financial records are intentionally owned by the external financial system rather than duplicated in BeaconHS.
+- ✅ **Equipment operational expansion** — work orders, truck log, scheduled inspections, equipment types/categories, freeform equipment log, criteria-driven inspection types with auto-WO-on-fail, check-in/check-out with overdue alerts, bulk QR labels, and operational fleet/usage/maintenance reports. Maintenance expenses are recorded as signed amounts on equipment maintenance logs. Billing rates, charges, revenue, and accounting remain in the external financial system.
 - ✅ **Documentation full** (`/documents`) — exact-version books, document-types CRUD, document-categories tree, canonical document-acknowledgment obligations with per-person compliance, and **management-review records** (annual board review with multi-doc + decisions + action-items tabs).
 - ✅ **Inspections legacy-style** (`/inspections/records`) — separate from the form-builder inspections. New `inspection_types` (admin-defined templates, link to existing `inspection_banks` as question banks), `inspection_records` with per-criterion responses (pass/fail/n_a + severity + non-compliance description + per-row photos + assignment + auto-spawned CA on fail+high-severity), customer signature pad, foreman field, and "pass all" shortcut. Inspection cadence and rollup are canonical unified compliance obligations.
 - ✅ **Training full** — `/training/assessments` (test banks with multi-type questions, server-side grading, exact compliance-obligation provenance, auto-cert on pass + auto training_record on pass-of-course-linked-type), canonical audience requirements under `/compliance/obligations`, `/training/matrix` (person × course grid with valid/expiring/expired/never), `/training/transcripts/[personId]` (per-person history), `/training/reports/cwb` (CWB welder roster).
@@ -171,65 +171,65 @@ App-shell nav: Frontline now includes JSHA/HazID / Toolbox talks / Lift plans; I
 
 ## 2. Decisions Locked In
 
-| Area                      | Decision                                                                           |
-| ------------------------- | ---------------------------------------------------------------------------------- |
-| **Tenancy**               | Multi-tenant SaaS, every org is a tenant, no billing on day one                    |
-| **Tenant routing**        | Single domain, tenant resolved at login (no subdomains in v1)                      |
-| **Tenant onboarding**     | Admin-invite only (super-admin creates tenants)                                    |
-| **Stack**                 | Next.js (App Router) + React + TypeScript                                          |
-| **DB**                    | PostgreSQL with row-level security for tenant isolation                            |
-| **Auth**                  | Email + password and magic-link; no MFA in v1 (architect for it)                   |
-| **Worker login**          | Email/magic link — every worker has email, no SMS/PIN flow                         |
-| **Hosting**               | Self-host friendly container deployment                                            |
-| **Residency**             | Deployment-controlled                                                              |
-| **Scale target**          | < 50 tenants / < 5k users / < 1M records (year 1–2)                                |
-| **File storage**          | Cloudflare R2 (S3-compatible, no egress)                                           |
-| **Search**                | Postgres full-text + trigram                                                       |
-| **Queue**                 | BullMQ on Redis                                                                    |
-| **i18n**                  | Tenant-configurable language list, bilingual form/PDF content                      |
-| **PWA**                   | Installable, online-only, with continuous form draft auto-save for spotty signal   |
-| **Conflict policy**       | Last-write-wins with warning banner                                                |
-| **Native**                | PWA only (no Capacitor in v1)                                                      |
-| **Data migration**        | Hard cutover, 100% historical                                                      |
-| **Form builder authors**  | Tenant admins / safety managers only                                               |
-| **Form versioning**       | Immutable versions on publish                                                      |
-| **Form drafts**           | Continuous auto-save                                                               |
-| **Form assignment**       | On-demand + scheduled + event-triggered + manually-assigned                        |
-| **Form workflows**        | Multi-step with handoffs                                                           |
-| **Form PDF**              | Auto-rendered from schema, admin can customize CSS per template                    |
-| **Photos**                | Annotation + geotag + multi-photo per field                                        |
-| **Signatures**            | Visual signature only (drawn)                                                      |
-| **Attachments**           | Documents, video, audio, voice-to-text                                             |
-| **Risk matrix**           | Fully configurable per tenant (none, 3×3, 5×5, custom)                             |
-| **JSHA module**           | Implemented as a configured form template + risk matrix (no bespoke module)        |
-| **Confined Space**        | First-class specialty module (atmospheric + permit lifecycle)                      |
-| **Incidents**             | First-class module with full taxonomy, simple linear investigation                 |
-| **Training**              | First-class module — instructor-led, self-paced, evaluator skills, external cert   |
-| **Cert expiry**           | Reminders at 90/30/7/1 days + overdue flag, no auto-blocking                       |
-| **Cert output**           | PDF + QR-verifiable public page                                                    |
-| **Equipment**             | Asset registry + QR + location history + inspections + work orders. No financials. |
-| **PPE**                   | Issue + return/replacement/discard + scheduled inspections                         |
-| **Documentation**         | Versioned library + acknowledgments + periodic review + management review books    |
-| **Corrective actions**    | Standalone records, linkable to any source                                         |
-| **Permissions**           | Built-in roles + custom roles per tenant                                           |
-| **Data scoping**          | Site/project + crew + self-only + tenant-wide (configurable per tenant)            |
-| **Field-level perms**     | Yes, configurable per form template                                                |
-| **Audit log**             | Every write with before/after diffs                                                |
-| **Dashboard**             | Drag-drop widget builder                                                           |
-| **Reports**               | Pre-built + simple custom builder                                                  |
-| **Scheduled reports**     | Subscriptions + admin-to-list + event-triggered                                    |
-| **Exports**               | PDF + Excel                                                                        |
-| **Notification channels** | Email + in-app inbox + Web Push + SMS for critical only                            |
-| **Notification prefs**    | Per-channel + per-category, user-controlled                                        |
-| **Digest**                | None — each notification immediate                                                 |
-| **Critical alerts**       | New incident                                                                       |
-| **Integrations**          | Inbound sync connectors plus outbound trigger/destination automations              |
-| **adminapp2**             | Stays separate; new app reads internal master data from it                         |
-| **External APIs**         | Public REST API with per-tenant keys                                               |
-| **Calendar**              | In-app calendar only (no Google/Outlook sync in v1)                                |
-| **Starter content**       | Curated starter library shipped to every new tenant                                |
-| **Lone-worker**           | Timer-based check-in with auto-escalation (first-class feature)                    |
-| **Bulk import**           | CSV for people/sites/equipment + UI for historical bulk upload                     |
+| Area                      | Decision                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| **Tenancy**               | Multi-tenant SaaS, every org is a tenant, no billing on day one                      |
+| **Tenant routing**        | Single domain, tenant resolved at login (no subdomains in v1)                        |
+| **Tenant onboarding**     | Admin-invite only (super-admin creates tenants)                                      |
+| **Stack**                 | Next.js (App Router) + React + TypeScript                                            |
+| **DB**                    | PostgreSQL with row-level security for tenant isolation                              |
+| **Auth**                  | Email + password and magic-link; no MFA in v1 (architect for it)                     |
+| **Worker login**          | Email/magic link — every worker has email, no SMS/PIN flow                           |
+| **Hosting**               | Self-host friendly container deployment                                              |
+| **Residency**             | Deployment-controlled                                                                |
+| **Scale target**          | < 50 tenants / < 5k users / < 1M records (year 1–2)                                  |
+| **File storage**          | Cloudflare R2 (S3-compatible, no egress)                                             |
+| **Search**                | Postgres full-text + trigram                                                         |
+| **Queue**                 | BullMQ on Redis                                                                      |
+| **i18n**                  | Tenant-configurable language list, bilingual form/PDF content                        |
+| **PWA**                   | Installable, online-only, with continuous form draft auto-save for spotty signal     |
+| **Conflict policy**       | Last-write-wins with warning banner                                                  |
+| **Native**                | PWA only (no Capacitor in v1)                                                        |
+| **Data migration**        | Hard cutover, 100% historical                                                        |
+| **Form builder authors**  | Tenant admins / safety managers only                                                 |
+| **Form versioning**       | Immutable versions on publish                                                        |
+| **Form drafts**           | Continuous auto-save                                                                 |
+| **Form assignment**       | On-demand + scheduled + event-triggered + manually-assigned                          |
+| **Form workflows**        | Multi-step with handoffs                                                             |
+| **Form PDF**              | Auto-rendered from schema, admin can customize CSS per template                      |
+| **Photos**                | Annotation + geotag + multi-photo per field                                          |
+| **Signatures**            | Visual signature only (drawn)                                                        |
+| **Attachments**           | Documents, video, audio, voice-to-text                                               |
+| **Risk matrix**           | Fully configurable per tenant (none, 3×3, 5×5, custom)                               |
+| **JSHA module**           | Implemented as a configured form template + risk matrix (no bespoke module)          |
+| **Confined Space**        | First-class specialty module (atmospheric + permit lifecycle)                        |
+| **Incidents**             | First-class module with full taxonomy, simple linear investigation                   |
+| **Training**              | First-class module — instructor-led, self-paced, evaluator skills, external cert     |
+| **Cert expiry**           | Reminders at 90/30/7/1 days + overdue flag, no auto-blocking                         |
+| **Cert output**           | PDF + QR-verifiable public page                                                      |
+| **Equipment**             | Asset registry, QR, custody, inspections, work orders, and maintenance expense logs. |
+| **PPE**                   | Issue + return/replacement/discard + scheduled inspections                           |
+| **Documentation**         | Versioned library + acknowledgments + periodic review + management review books      |
+| **Corrective actions**    | Standalone records, linkable to any source                                           |
+| **Permissions**           | Built-in roles + custom roles per tenant                                             |
+| **Data scoping**          | Site/project + crew + self-only + tenant-wide (configurable per tenant)              |
+| **Field-level perms**     | Yes, configurable per form template                                                  |
+| **Audit log**             | Every write with before/after diffs                                                  |
+| **Dashboard**             | Drag-drop widget builder                                                             |
+| **Reports**               | Pre-built + simple custom builder                                                    |
+| **Scheduled reports**     | Subscriptions + admin-to-list + event-triggered                                      |
+| **Exports**               | PDF + Excel                                                                          |
+| **Notification channels** | Email + in-app inbox + Web Push + SMS for critical only                              |
+| **Notification prefs**    | Per-channel + per-category, user-controlled                                          |
+| **Digest**                | None — each notification immediate                                                   |
+| **Critical alerts**       | New incident                                                                         |
+| **Integrations**          | Inbound sync connectors plus outbound trigger/destination automations                |
+| **adminapp2**             | Stays separate; new app reads internal master data from it                           |
+| **External APIs**         | Public REST API with per-tenant keys                                                 |
+| **Calendar**              | In-app calendar only (no Google/Outlook sync in v1)                                  |
+| **Starter content**       | Curated starter library shipped to every new tenant                                  |
+| **Lone-worker**           | Timer-based check-in with auto-escalation (first-class feature)                      |
+| **Bulk import**           | CSV for people/sites/equipment + UI for historical bulk upload                       |
 
 ---
 
@@ -502,7 +502,7 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 - Location history (current site + holder + history rows).
 - Inspections: pre-use (worker scans QR → form opens) + scheduled inspections.
 - Work orders: defect → WO opened → assigned → repaired → verified → closed.
-- **Out of scope:** rental rates, financials. Belongs in adminapp2 or equivalent.
+- **Out of scope:** rental rates, revenue, and accounting. Maintenance expenses are recorded in the equipment log; other financials belong in adminapp2 or equivalent.
 
 ### 6.6 PPE
 
@@ -785,7 +785,7 @@ A realistic phasing assuming a small focused team (1–3 engineers). Each phase 
 - Per-feature acceptance criteria. Each module will need its own spec when its phase begins.
 - Pricing / billing — explicitly out of scope.
 - Mobile app store presence — PWA only.
-- Field equipment maintenance/financial features — out of scope.
+- Equipment maintenance expense logs are in scope; billing and accounting remain external.
 - Disaster recovery / backup-restore procedures — see `docs/PRODUCTION_RUNBOOK.md`.
 - Tenant offboarding / data export — needed before any external tenant launches.
 

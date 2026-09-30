@@ -4,6 +4,7 @@ import {
   EQUIPMENT_LOG_KINDS,
   mergeEquipmentFileMetadata,
   parseEquipmentAutosaveInput,
+  parseEquipmentLogAmount,
   WORK_ORDER_PRIORITIES,
 } from './mutation-input'
 
@@ -47,6 +48,30 @@ describe('equipment mutation input', () => {
       ['currentOdometer', '-1'],
     ] as const) {
       expect(() => parseEquipmentAutosaveInput(field, value)).toThrow()
+    }
+  })
+
+  it('keeps maintenance amounts exact and rejects amounts on other log kinds', () => {
+    expect(parseEquipmentLogAmount('maintenance', ' 123.45 ')).toBe('123.45')
+    expect(parseEquipmentLogAmount('maintenance', '-1220.00')).toBe('-1220.00')
+    expect(parseEquipmentLogAmount('maintenance', '9999999999999999.99')).toBe(
+      '9999999999999999.99',
+    )
+    expect(parseEquipmentLogAmount('note', '')).toBeNull()
+    expect(parseEquipmentLogAmount('maintenance', null)).toBeNull()
+    for (const value of [
+      '1.234',
+      '1e3',
+      'NaN',
+      '1,000',
+      '10000000000000000',
+      {},
+      new File([], 'amount'),
+    ]) {
+      expect(() => parseEquipmentLogAmount('maintenance', value)).toThrow()
+    }
+    for (const kind of ['note', 'fuel', 'incident', 'modification']) {
+      expect(() => parseEquipmentLogAmount(kind, '0')).toThrow(/only available/)
     }
   })
 

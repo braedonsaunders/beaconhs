@@ -168,3 +168,16 @@ export function mergeEquipmentFileMetadata(
     label: input.label,
   }
 }
+
+/** Keep currency exact; only maintenance entries may carry an amount. */
+export function parseEquipmentLogAmount(kind: string, raw: unknown): string | null {
+  if (raw == null || raw === '') return null
+  if (typeof raw !== 'string') throw new Error('Amount is invalid.')
+  const value = raw.trim()
+  if (!value) return null
+  if (kind !== 'maintenance') throw new Error('Amount is only available for maintenance entries.')
+  if (!/^-?\d{1,16}(?:\.\d{1,2})?$/.test(value)) {
+    throw new Error('Amount must have at most 16 whole digits and two decimal places.')
+  }
+  return value
+}

@@ -3,8 +3,18 @@
 // table (which is repair-centric). Think of it as a per-asset shop journal:
 // "swapped chuck", "noticed vibration on incline", "topped up coolant", etc.
 
-import { relations } from 'drizzle-orm'
-import { date, foreignKey, index, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core'
+import { relations, sql } from 'drizzle-orm'
+import {
+  check,
+  date,
+  foreignKey,
+  index,
+  jsonb,
+  numeric,
+  pgTable,
+  text,
+  uuid,
+} from 'drizzle-orm/pg-core'
 import { id, timestamps } from './_helpers'
 import { attachments } from './attachments'
 import { tenants, tenantUsers } from './core'
@@ -24,6 +34,8 @@ export const equipmentLogEntries = pgTable(
     // 'modification' lets the list page colour-code entries without forcing
     // structure.
     kind: text('kind').default('note').notNull(),
+    // Signed amounts preserve maintenance credits and expense adjustments.
+    amount: numeric('amount', { precision: 18, scale: 2 }),
     title: text('title'),
     details: text('details').notNull(),
     // Optional pointers — useful for a tech filling in "on site X with crew Y".
@@ -35,6 +47,10 @@ export const equipmentLogEntries = pgTable(
     ...timestamps,
   },
   (t) => ({
+    maintenanceAmountCheck: check(
+      'equipment_log_entries_maintenance_amount_check',
+      sql`${t.amount} is null or ${t.kind} = 'maintenance'`,
+    ),
     tenantIdx: index('equipment_log_entries_tenant_idx').on(t.tenantId),
     itemIdx: index('equipment_log_entries_item_idx').on(t.tenantId, t.equipmentItemId, t.entryDate),
     kindIdx: index('equipment_log_entries_kind_idx').on(t.tenantId, t.kind),

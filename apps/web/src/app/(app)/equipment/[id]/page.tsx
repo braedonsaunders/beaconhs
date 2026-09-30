@@ -28,6 +28,8 @@ import {
   Wrench,
 } from 'lucide-react'
 import { NewWorkOrderDrawer } from './_work-order-drawer'
+import { EquipmentLogKindFields } from './_log-fields'
+import { FilterChips } from '@/components/filter-bar'
 import { NewTruckLogEntryDrawer } from './_truck-log-drawer'
 import { EquipmentFileDrawer } from './_files-drawer'
 import {
@@ -112,6 +114,7 @@ import {
   EQUIPMENT_STATUSES,
   mergeEquipmentFileMetadata,
   parseEquipmentAutosaveInput,
+  parseEquipmentLogAmount,
   WORK_ORDER_PRIORITIES,
 } from '@/lib/equipment/mutation-input'
 import {
@@ -443,16 +446,29 @@ async function addLogEntry(formData: FormData) {
   const itemId = requireUuidInput(formData.get('itemId'), 'Equipment item')
   const entryDate = requiredDateInput(formData.get('entryDate'), 'Entry date')
   const kind = requireEnumInput(formData.get('kind') ?? 'note', EQUIPMENT_LOG_KINDS, 'Log kind')
+  const amount = parseEquipmentLogAmount(kind, formData.get('amount'))
   const title = optionalTextInput(formData.get('title'), 'Title', 240)
   const details = requiredTextInput(formData.get('details'), 'Details', 10_000)
 
-  const inserted = await ctx.db(async (tx) => {
+  await ctx.db(async (tx) => {
     const [item] = await tx
-      .select({ id: equipmentItems.id })
+      .select({
+        id: equipmentItems.id,
+        siteId: equipmentItems.currentSiteOrgUnitId,
+        personId: equipmentItems.currentHolderPersonId,
+      })
       .from(equipmentItems)
       .where(and(eq(equipmentItems.id, itemId), isNull(equipmentItems.deletedAt)))
       .limit(1)
-    if (!item) throw new Error('Equipment item was not found.')
+    if (
+      !item ||
+      !(await canSeeRecord(ctx, tx, {
+        prefix: 'equipment',
+        siteId: item.siteId,
+        personId: item.personId,
+      }))
+    )
+      throw new Error('Equipment item was not found.')
     const [row] = await tx
       .insert(equipmentLogEntries)
       .values({
@@ -460,20 +476,20 @@ async function addLogEntry(formData: FormData) {
         equipmentItemId: itemId,
         entryDate,
         kind,
+        amount,
         title,
         details,
         createdByTenantUserId: ctx.membership?.id,
       })
       .returning({ id: equipmentLogEntries.id })
-    return row
-  })
-  if (!inserted) throw new Error('Log entry was not saved.')
-  await recordAudit(ctx, {
-    entityType: 'equipment_log_entry',
-    entityId: inserted.id,
-    action: 'create',
-    summary: `Logged ${kind} entry`,
-    after: { itemId, entryDate, kind, title, details: details.slice(0, 200) },
+    if (!row) throw new Error('Log entry was not saved.')
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment_log_entry',
+      entityId: row.id,
+      action: 'create',
+      summary: `Logged ${kind} entry`,
+      after: { itemId, entryDate, kind, amount, title, details: details.slice(0, 200) },
+    })
   })
   revalidatePath(`/equipment/${itemId}`)
   redirect(`/equipment/${itemId}?tab=log`)
@@ -961,6 +977,10 @@ export default async function EquipmentDetailPage({
     )
     const logWhere = and(
       eq(equipmentLogEntries.equipmentItemId, id),
+      typeof sp.log_kind === 'string' &&
+        EQUIPMENT_LOG_KINDS.includes(sp.log_kind as (typeof EQUIPMENT_LOG_KINDS)[number])
+        ? eq(equipmentLogEntries.kind, sp.log_kind)
+        : undefined,
       logP.q
         ? or(
             ilike(equipmentLogEntries.title, `%${logP.q}%`),
@@ -1087,7 +1107,7 @@ export default async function EquipmentDetailPage({
         .from(equipmentLogEntries)
         .leftJoin(people, eq(people.id, equipmentLogEntries.personPersonId))
         .where(logWhere)
-        .orderBy(desc(equipmentLogEntries.entryDate))
+        .orderBy(desc(equipmentLogEntries.entryDate), desc(equipmentLogEntries.id))
         .limit(SUB_PER_PAGE)
         .offset(logP.offset),
       tx
@@ -3172,17 +3192,30 @@ export default async function EquipmentDetailPage({
                             <GeneratedText id="m_1f439ae7c8b459" />
                             <GeneratedValue value={logTotal} />)
                           </CardTitle>
-                          <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
-                            <Button size="sm">
-                              <Plus size={14} /> <GeneratedText id="m_0e31f658c2f794" />
-                            </Button>
-                          </Link>
+                          {canManageEquipment ? (
+                            <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
+                              <Button size="sm">
+                                <Plus size={14} /> <GeneratedText id="m_0e31f658c2f794" />
+                              </Button>
+                            </Link>
+                          ) : null}
                         </CardHeader>
                         <CardContent className="space-y-3">
                           <SearchInput
                             paramKey="log_q"
                             pageParamKey="log_p"
                             placeholder={tGenerated('m_08b5ce52d99191')}
+                          />
+                          <FilterChips
+                            basePath={basePath}
+                            currentParams={sp}
+                            paramKey="log_kind"
+                            pageParamKey="log_p"
+                            label={tGenerated('m_1e578efe1574cd')}
+                            options={EQUIPMENT_LOG_KINDS.map((value) => ({
+                              value,
+                              label: value[0]!.toUpperCase() + value.slice(1),
+                            }))}
                           />
                           <GeneratedValue
                             value={
@@ -3195,11 +3228,13 @@ export default async function EquipmentDetailPage({
                                   )}
                                   description={tGenerated('m_195d4afe8f01da')}
                                   action={
-                                    <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
-                                      <Button size="sm" variant="outline">
-                                        <Plus size={14} /> <GeneratedText id="m_089b693b7f3e46" />
-                                      </Button>
-                                    </Link>
+                                    canManageEquipment ? (
+                                      <Link href={`${basePath}?tab=log&drawer=add-log` as Route}>
+                                        <Button size="sm" variant="outline">
+                                          <Plus size={14} /> <GeneratedText id="m_089b693b7f3e46" />
+                                        </Button>
+                                      </Link>
+                                    ) : undefined
                                   }
                                 />
                               ) : (
@@ -3217,6 +3252,9 @@ export default async function EquipmentDetailPage({
                                       </TableHead>
                                       <TableHead>
                                         <GeneratedText id="m_12e926c9216094" />
+                                      </TableHead>
+                                      <TableHead className="text-right">
+                                        <GeneratedValue value="Amount" />
                                       </TableHead>
                                     </TableRow>
                                   </TableHeader>
@@ -3252,6 +3290,9 @@ export default async function EquipmentDetailPage({
                                                   : '—'
                                               }
                                             />
+                                          </TableCell>
+                                          <TableCell className="text-right font-mono tabular-nums">
+                                            <GeneratedValue value={log.amount ?? '—'} />
                                           </TableCell>
                                         </TableRow>
                                       ))}
@@ -3309,7 +3350,7 @@ export default async function EquipmentDetailPage({
        * active tab.
        */}
       <UrlDrawer
-        open={drawerKey === 'add-log'}
+        open={drawerKey === 'add-log' && canManageEquipment}
         closeHref={closeHref}
         title={tGenerated('m_0e31f658c2f794')}
         description={tGenerated('m_09f67f2ca76754')}
@@ -3334,15 +3375,7 @@ export default async function EquipmentDetailPage({
               defaultValue={new Date().toISOString().slice(0, 10)}
             />
           </Field>
-          <Field label={tGenerated('m_1e578efe1574cd')} required>
-            <Select name="kind" defaultValue="note">
-              <option value="note">{'Note'}</option>
-              <option value="maintenance">{'Maintenance'}</option>
-              <option value="fuel">{'Fuel'}</option>
-              <option value="incident">{'Incident'}</option>
-              <option value="modification">{'Modification'}</option>
-            </Select>
-          </Field>
+          <EquipmentLogKindFields />
           <Field label={tGenerated('m_0decefd558c355')} className="sm:col-span-2">
             <Input name="title" maxLength={240} placeholder={tGenerated('m_11393661c7db12')} />
           </Field>

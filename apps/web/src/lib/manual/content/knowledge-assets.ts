@@ -688,7 +688,16 @@ Managers can change **Type**, **Category**, and **Department** on **Overview** b
 
 To assign a department, open the unit, select **Overview**, and choose **Department**. The change saves automatically. Choose **No department** to clear it. Department belongs to the unit and does not change when its site or holder changes. QR labels and equipment PDFs use the saved department.
 
-Categories organize equipment in the register, filters, and reports. Billing rates and financial records are managed outside BeaconHS.
+## Add a log entry (managers)
+
+1. Open the unit, select **Log**, then **Add log entry**.
+2. Enter the **Date** and choose the **Kind**.
+3. For **Maintenance**, enter an optional **Amount**. Use up to two decimal places. A negative amount records a credit or adjustment.
+4. Enter a title if useful and fill in **Details**, then select **Add entry**.
+
+The log shows the saved **Amount**. Other kinds do not have an amount. Use **Kind** to filter entries, the search box to find details, and **Prev** and **Next** to move through the results. Imported expense history appears as **Maintenance** entries with its original expense amount and source details. A blank amount means the source did not record one.
+
+Categories organize equipment in the register, filters, and reports. Maintenance expense history is kept in the equipment log. Billing rates, charges, revenue, and accounting remain in the external financial system.
 
 ## Add company-specific fields (managers)
 
