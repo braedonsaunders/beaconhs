@@ -2,8 +2,8 @@
 
 This is the clean-cutover inventory for the legacy BeaconHS report screens and
 scheduled reports. A green row has a production replacement. Equipment charges
-and ROI are intentionally not implemented because equipment financials are
-owned outside BeaconHS.
+and ROI remain outside BeaconHS. Maintenance expense history is recorded in
+equipment logs; billing, revenue, and accounting remain external.
 
 All replacements in the Reports module support an in-app paginated preview,
 CSV, Excel, PDF, one-time PDF email, and scheduled PDF delivery. Filters chosen
