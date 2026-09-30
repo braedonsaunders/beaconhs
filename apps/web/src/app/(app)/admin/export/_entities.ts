@@ -464,7 +464,7 @@ export const EXPORTABLE_ENTITIES: ExportEntity[] = [
     key: 'equipment',
     label: 'Equipment',
     description:
-      'Equipment register with asset tag, type, serial number, status, site, and holder.',
+      'Equipment register with asset tag, category, type, department, serial number, status, site, and holder.',
     csvHref: '/equipment/export.csv',
     sourceHref: '/equipment',
     groupLabel: 'People & assets',
@@ -482,6 +482,9 @@ export const EXPORTABLE_ENTITIES: ExportEntity[] = [
     sortOptions: [
       { value: 'asset_tag', label: 'Asset tag' },
       { value: 'name', label: 'Name' },
+      { value: 'category', label: 'Category' },
+      { value: 'type', label: 'Type' },
+      { value: 'department', label: 'Department' },
       { value: 'status', label: 'Status' },
       { value: 'site', label: 'Site' },
       { value: 'holder', label: 'Holder' },
@@ -490,7 +493,9 @@ export const EXPORTABLE_ENTITIES: ExportEntity[] = [
     columns: exportColumns([
       'Asset tag',
       'Name',
+      'Category',
       'Type',
+      'Department',
       'Serial #',
       'Status',
       'Missing',

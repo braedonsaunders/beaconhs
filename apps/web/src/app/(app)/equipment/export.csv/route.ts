@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import {
+  departments,
   equipmentCategories,
   equipmentItems,
   equipmentTypes,
@@ -18,25 +19,16 @@ import {
   csvResponse,
 } from '@/lib/csv'
 import { csvColumns, selectCsvColumns } from '@/lib/export-columns'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { equipmentRegisterQuery } from '@/lib/equipment/register-query'
 import { isRouterPrefetch } from '@/lib/router-prefetch'
 
 export const dynamic = 'force-dynamic'
-
-const SORTS = ['asset_tag', 'name', 'status', 'site', 'holder', 'purchase_date'] as const
 
 export async function GET(req: NextRequest) {
   if (isRouterPrefetch(req)) return new Response(null, { status: 204 })
 
   const url = new URL(req.url)
   const sp = Object.fromEntries(url.searchParams.entries())
-  const params = parseListParams(sp, {
-    sort: 'asset_tag',
-    dir: 'asc',
-    perPage: 25,
-    allowedSorts: SORTS,
-  })
-  const statusFilter = pickString(sp.status)
   const ctx = await requireExportContext()
   // Read-tier gate: must hold at least the site read tier (equipment has no
   // self tier), and the export is bounded to that tier so a site-scoped user
@@ -44,56 +36,30 @@ export async function GET(req: NextRequest) {
   assertCan(ctx, 'equipment.read.site')
 
   const rows = await ctx.db(async (tx) => {
-    // Mirror the register: soft-deleted assets never leave through the export.
-    const filters: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
     const scopeWhere = await moduleScopeWhere(ctx, tx, {
       prefix: 'equipment',
       siteCol: equipmentItems.currentSiteOrgUnitId,
       personCol: equipmentItems.currentHolderPersonId,
     })
-    if (scopeWhere) filters.push(scopeWhere)
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(
-        ilike(equipmentItems.assetTag, term),
-        ilike(equipmentItems.name, term),
-        ilike(equipmentItems.serialNumber, term),
-      )
-      if (cond) filters.push(cond)
-    }
-    if (statusFilter) filters.push(eq(equipmentItems.status, statusFilter as any))
-    const whereClause = filters.length > 0 ? and(...filters) : undefined
-
-    const orderBy =
-      params.sort === 'name'
-        ? [params.dir === 'asc' ? asc(equipmentItems.name) : desc(equipmentItems.name)]
-        : params.sort === 'status'
-          ? [params.dir === 'asc' ? asc(equipmentItems.status) : desc(equipmentItems.status)]
-          : params.sort === 'site'
-            ? [params.dir === 'asc' ? asc(orgUnits.name) : desc(orgUnits.name)]
-            : params.sort === 'holder'
-              ? [params.dir === 'asc' ? asc(people.lastName) : desc(people.lastName)]
-              : params.sort === 'purchase_date'
-                ? [
-                    params.dir === 'asc'
-                      ? asc(equipmentItems.purchaseDate)
-                      : desc(equipmentItems.purchaseDate),
-                  ]
-                : [
-                    params.dir === 'asc'
-                      ? asc(equipmentItems.assetTag)
-                      : desc(equipmentItems.assetTag),
-                  ]
+    const { where: whereClause, orderBy } = equipmentRegisterQuery(sp, scopeWhere)
 
     return tx
       .select({
         item: equipmentItems,
+        department: departments,
         category: equipmentCategories,
         type: equipmentTypes,
         site: orgUnits,
         holder: people,
       })
       .from(equipmentItems)
+      .leftJoin(
+        departments,
+        and(
+          eq(departments.tenantId, equipmentItems.tenantId),
+          eq(departments.id, equipmentItems.departmentId),
+        ),
+      )
       .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
@@ -110,7 +76,7 @@ export async function GET(req: NextRequest) {
     entityType: 'equipment',
     action: 'export',
     summary: `Exported ${rows.length} equipment items to CSV`,
-    metadata: { format: 'csv', filters: { q: params.q ?? null, status: statusFilter ?? null } },
+    metadata: { format: 'csv', filters: sp },
   })
 
   const columns = csvColumns([
@@ -118,6 +84,7 @@ export async function GET(req: NextRequest) {
     'Name',
     'Category',
     'Type',
+    'Department',
     'Serial #',
     'Status',
     'Missing',
@@ -130,12 +97,13 @@ export async function GET(req: NextRequest) {
   return csvResponse({
     filename: csvFilename('equipment'),
     headers: selection.headers,
-    rows: rows.map(({ item, category, type, site, holder }) =>
+    rows: rows.map(({ item, category, type, department, site, holder }) =>
       selection.project([
         item.assetTag,
         item.name,
         category?.name ?? '',
         type?.name ?? '',
+        department?.name ?? '',
         item.serialNumber ?? '',
         item.status,
         item.isMissing ? 'yes' : 'no',

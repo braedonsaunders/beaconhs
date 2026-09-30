@@ -71,10 +71,11 @@ To manage the title catalogue, open [Job titles](/people/titles) under **Manage 
 
 ## Departments
 
-Each person belongs to one department. Departments are used for grouping, compliance audiences, the training matrix, and reports.
+Each person belongs to one department. Equipment can also be assigned to a department on its **Overview** tab. Departments are used for grouping, compliance audiences, the training matrix, and reports.
 
 1. Open [Departments](/people/departments).
 2. Click **Add department** to create one, or search the list to edit one.
+3. Reassign any people, equipment, or incidents and remove compliance audiences that use the department before deleting it. Archived records can also keep a department in use.
 
 ## Add company-specific fields (managers)
 

@@ -81,6 +81,7 @@ const PICKER_LOOKUPS = [
   'equipment-work-order-filter-types',
   'equipment-edit-types',
   'equipment-edit-categories',
+  'equipment-edit-departments',
   'equipment-item-inspection-types',
   'equipment-item-pre-use-inspection-types',
   'incident-classification-parents',

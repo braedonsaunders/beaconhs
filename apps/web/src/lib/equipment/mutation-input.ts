@@ -43,7 +43,12 @@ const TEXT_LIMITS = {
 } as const
 
 const REQUIRED_TEXT_FIELDS = new Set<keyof typeof TEXT_LIMITS>(['name', 'assetTag'])
-const NULLABLE_ID_FIELDS = new Set(['typeId', 'categoryId', 'preUseInspectionTypeId'])
+const NULLABLE_ID_FIELDS = new Set([
+  'typeId',
+  'categoryId',
+  'departmentId',
+  'preUseInspectionTypeId',
+])
 const BOOLEAN_FIELDS = new Set(['requiresPreUseInspection'])
 const REGISTRY_FIELDS = new Map<string, EquipmentNativeField>(
   EQUIPMENT_FIELD_GROUPS.flatMap((group) =>

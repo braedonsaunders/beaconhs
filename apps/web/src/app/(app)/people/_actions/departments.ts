@@ -9,7 +9,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, count, eq } from 'drizzle-orm'
 import { normalizeCatalogDisplayName } from '@beaconhs/db'
-import { departments, people } from '@beaconhs/db/schema'
+import { departments, equipmentItems, incidents, people } from '@beaconhs/db/schema'
 import { countComplianceAudienceTargetUses } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
@@ -67,6 +67,7 @@ export async function saveDepartment(input: {
       before: { name: before.name, code: before.code, description: before.description },
       after: { name, code, description },
     })
+    revalidatePath('/equipment', 'layout')
     revalidatePath(BASE)
     return { ok: true }
   }
@@ -95,6 +96,7 @@ export async function saveDepartment(input: {
       after: { name, code, description },
     })
   }
+  revalidatePath('/equipment', 'layout')
   revalidatePath(BASE)
   return { ok: true }
 }
@@ -119,6 +121,19 @@ export async function deleteDepartment(formData: FormData): Promise<void> {
     const usage = Number(u?.c ?? 0)
     if (usage > 0) return { state: 'assigned' as const, row, usage }
 
+    const [assets] = await tx
+      .select({ c: count() })
+      .from(equipmentItems)
+      .where(and(eq(equipmentItems.tenantId, ctx.tenantId), eq(equipmentItems.departmentId, id)))
+    if (Number(assets?.c ?? 0) > 0)
+      return { state: 'equipment' as const, row, usage: Number(assets?.c ?? 0) }
+    const [incidentRows] = await tx
+      .select({ c: count() })
+      .from(incidents)
+      .where(and(eq(incidents.tenantId, ctx.tenantId), eq(incidents.departmentId, id)))
+    if (Number(incidentRows?.c ?? 0) > 0)
+      return { state: 'incidents' as const, row, usage: Number(incidentRows?.c ?? 0) }
+
     const requirements = await countComplianceAudienceTargetUses(tx, ctx.tenantId, {
       kind: 'department',
       entityKey: id,
@@ -141,6 +156,7 @@ export async function deleteDepartment(formData: FormData): Promise<void> {
   })
   if (result.state === 'missing') return
   if (result.state === 'assigned') {
+    revalidatePath('/equipment', 'layout')
     revalidatePath(BASE)
     redirect(
       `${BASE}?error=${encodeURIComponent(
@@ -148,7 +164,13 @@ export async function deleteDepartment(formData: FormData): Promise<void> {
       )}`,
     )
   }
+  if (result.state === 'equipment' || result.state === 'incidents') {
+    redirect(
+      `${BASE}?error=${encodeURIComponent(`"${result.row.name}" is used by ${result.usage} ${result.state === 'equipment' ? 'equipment' : 'incident'} records. Reassign them before deleting.`)}`,
+    )
+  }
   if (result.state === 'required') {
+    revalidatePath('/equipment', 'layout')
     revalidatePath(BASE)
     redirect(
       `${BASE}?error=${encodeURIComponent(
@@ -156,6 +178,7 @@ export async function deleteDepartment(formData: FormData): Promise<void> {
       )}`,
     )
   }
+  revalidatePath('/equipment', 'layout')
   revalidatePath(BASE)
   redirect(BASE)
 }

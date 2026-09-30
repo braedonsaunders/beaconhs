@@ -20,7 +20,7 @@ import {
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants, tenantUsers, users as user } from './core'
-import { orgUnits, people } from './org'
+import { departments, orgUnits, people } from './org'
 
 // Category lookup so admins can group equipment types into buckets
 // ("Tools", "Vehicles", "Lifts", "Trailers", …) without committing to an
@@ -95,6 +95,7 @@ export const equipmentItems = pgTable(
     // Nullable tenant-owned references whose parent deletion clears the
     // business ID use partial-column SET NULL constraints installed by SQL.
     categoryId: uuid('category_id'),
+    departmentId: uuid('department_id'),
     assetTag: text('asset_tag').notNull(),
     serialNumber: text('serial_number'),
     name: text('name').notNull(),
@@ -209,6 +210,12 @@ export const equipmentItems = pgTable(
     ),
     availableIdx: index('equipment_items_available_idx').on(t.tenantId, t.isAvailableForCheckout),
     categoryIdx: index('equipment_items_category_idx').on(t.tenantId, t.categoryId),
+    departmentIdx: index('equipment_items_department_idx').on(t.tenantId, t.departmentId),
+    departmentFk: foreignKey({
+      name: 'equipment_items_tenant_department_fk',
+      columns: [t.tenantId, t.departmentId],
+      foreignColumns: [departments.tenantId, departments.id],
+    }),
     typeFk: foreignKey({
       name: 'equipment_items_tenant_type_fk',
       columns: [t.tenantId, t.typeId],
@@ -372,6 +379,10 @@ export const equipmentItemsRelations = relations(equipmentItems, ({ one, many })
   category: one(equipmentCategories, {
     fields: [equipmentItems.tenantId, equipmentItems.categoryId],
     references: [equipmentCategories.tenantId, equipmentCategories.id],
+  }),
+  department: one(departments, {
+    fields: [equipmentItems.tenantId, equipmentItems.departmentId],
+    references: [departments.tenantId, departments.id],
   }),
   currentSite: one(orgUnits, {
     fields: [equipmentItems.tenantId, equipmentItems.currentSiteOrgUnitId],

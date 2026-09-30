@@ -815,6 +815,7 @@ const EQUIPMENT_ASSET = wrap(
       p('Ownership', '{{ownership}}'),
       p('Location', '{{site_name}}'),
       p('Current holder', '{{holder_name}}'),
+      p('Department', '{{department_name}}'),
     ]) +
     narrative('Description', '{{description}}'),
 )

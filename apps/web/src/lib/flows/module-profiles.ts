@@ -627,6 +627,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'model', label: 'Model', kind: 'text' },
       { key: 'vin', label: 'VIN', kind: 'text' },
       { key: 'license_plate', label: 'License plate', kind: 'text' },
+      { key: 'department_name', label: 'Department', kind: 'text' },
       { key: 'category_name', label: 'Category', kind: 'text' },
       { key: 'type_name', label: 'Type', kind: 'text' },
       { key: 'ownership', label: 'Ownership', kind: 'text' },

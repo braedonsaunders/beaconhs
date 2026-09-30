@@ -10,7 +10,7 @@ import {
   equipmentInspectionSchedules,
   equipmentItems,
   equipmentTypes,
-  orgUnits,
+  departments,
 } from '@beaconhs/db/schema'
 import type { EquipmentLabelDesignData } from '@beaconhs/design-studio'
 import type { SQL } from 'drizzle-orm'
@@ -52,12 +52,18 @@ export async function loadEquipmentLabelData(
       qrToken: equipmentItems.qrToken,
       typeName: equipmentTypes.name,
       categoryName: equipmentCategories.name,
-      siteName: orgUnits.name,
+      departmentName: departments.name,
     })
     .from(equipmentItems)
     .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
     .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
-    .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
+    .leftJoin(
+      departments,
+      and(
+        eq(departments.tenantId, equipmentItems.tenantId),
+        eq(departments.id, equipmentItems.departmentId),
+      ),
+    )
     .where(
       and(
         inArray(equipmentItems.id, ids),
@@ -100,7 +106,7 @@ export async function loadEquipmentLabelData(
         equipmentAssetTag: row.assetTag,
         equipmentSerial: row.serialNumber,
         equipmentClass: [row.categoryName, row.typeName].filter(Boolean).join(' • ') || null,
-        equipmentDivision: row.siteName,
+        equipmentDivision: row.departmentName,
         lastInspection: inspection?.lastCompletedOn ?? null,
         nextInspectionDue: inspection?.nextDueOn ?? null,
         verifyUrl: scanUrl,

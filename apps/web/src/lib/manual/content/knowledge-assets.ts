@@ -640,7 +640,7 @@ A document cannot be unpublished, archived, or deleted while it belongs to a pub
 
 ## What this is for
 
-Look up any unit to see its status, which site it is at, who is holding it, and its service history. No more radio calls asking where the compactor went.
+Look up any unit to see its department, status, which site it is at, who is holding it, and its service history. No more radio calls asking where the compactor went.
 
 ## Where to find it
 
@@ -650,9 +650,11 @@ Open **Equipment** in the left menu. That opens the full list at [Equipment](/eq
 
 1. Open [Equipment](/equipment).
 2. Type in the search box — it says **Search asset tag, name, serial #**.
-3. Or filter by **Status** (**In service**, **Out of service**, **In repair**, **Lost**, **Retired**) or by **Availability** (**Available for check-out**, **Currently checked out**).
-4. The list shows the **Asset tag**, **Name**, **Status**, **Site**, and **Holder** for each unit.
+3. Or filter by **Status** (**In service**, **Out of service**, **In repair**, **Lost**, **Retired**), by **Availability** (**Available for check-out**, **Currently checked out**), or by **All departments**.
+4. The list shows the **Asset tag**, **Name**, **Category**, **Type**, **Department**, **Status**, **Site**, and **Holder** for each unit.
 5. Tap a row to open the unit's page.
+
+The list starts with **In service** equipment. Select **All statuses** to see every status. Search also matches department names. Select **Department** in the table header to sort by department. **Export CSV** uses the current filters and includes department.
 
 ## See who has a unit and where it is
 
@@ -682,7 +684,9 @@ To update several visible units, select their checkboxes and choose **Transfer t
 
 The **Maintenance** cockpit opens a quick preview when you select a unit. It shows up to the first 25 open reminders and gives the exact total. Select **Open full record** to search and page through every reminder.
 
-Managers can change **Type** and **Category** on **Overview** by searching the complete tenant catalogue. On **Inspections**, the **Pre-use checklist** (tap **Edit** on the pre-use schedule row) and **Inspection type** also search the full set that applies to that unit's type. A saved inactive choice remains visible on an older unit or schedule. If the picker says more results exist, add more of the name or description.
+Managers can change **Type**, **Category**, and **Department** on **Overview** by searching the complete tenant catalogue. On **Inspections**, the **Pre-use checklist** (tap **Edit** on the pre-use schedule row) and **Inspection type** also search the full set that applies to that unit's type. A saved inactive choice remains visible on an older unit or schedule. If the picker says more results exist, add more of the name or description.
+
+To assign a department, open the unit, select **Overview**, and choose **Department**. The change saves automatically. Choose **No department** to clear it. Department belongs to the unit and does not change when its site or holder changes. QR labels and equipment PDFs use the saved department.
 
 Categories organize equipment in the register, filters, and reports. Billing rates and financial records are managed outside BeaconHS.
 

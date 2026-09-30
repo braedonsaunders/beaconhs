@@ -9,16 +9,18 @@ import { useGeneratedTranslations } from '@/i18n/generated'
 import { useRouter } from 'next/navigation'
 import { SearchSelect, type SelectOption } from '@beaconhs/ui'
 
-export function EquipmentTypeCategoryFilters({
+export function EquipmentRegisterFilters({
   basePath,
   currentParams,
   types,
   categories,
+  departments,
 }: {
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
   types: SelectOption[]
   categories: SelectOption[]
+  departments: SelectOption[]
 }) {
   const tGenerated = useGeneratedTranslations()
   const router = useRouter()
@@ -62,6 +64,18 @@ export function EquipmentTypeCategoryFilters({
         ariaLabel="Filter by category"
         clearable
         emptyLabel={tGenerated('m_0ad4a0d40e37f8')}
+        triggerClassName="h-9 min-w-[9rem] text-sm"
+      />
+      <SearchSelect
+        value={cur('department')}
+        onChange={(v) => nav('department', v)}
+        options={departments}
+        placeholder={tGenerated('m_12ad1237d07a59')}
+        searchPlaceholder={tGenerated('m_16c34854bcfbe2')}
+        sheetTitle="Filter by department"
+        ariaLabel="Filter by department"
+        clearable
+        emptyLabel={tGenerated('m_12ad1237d07a59')}
         triggerClassName="h-9 min-w-[9rem] text-sm"
       />
     </>

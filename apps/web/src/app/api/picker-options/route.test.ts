@@ -80,6 +80,13 @@ describe('picker options route policy', () => {
     expect(db).not.toHaveBeenCalled()
   })
 
+  it('rejects the department editor lookup for inspection-only users', async () => {
+    const db = vi.fn()
+    state.context = { isSuperAdmin: false, permissions: new Set(['equipment.inspect']), db }
+    expect((await request('lookup=equipment-edit-departments')).status).toBe(403)
+    expect(db).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['lookup=training-assessment-people', 'training.read.self'],
     ['lookup=training-course-assessment-types', 'training.course.manage'],
@@ -134,6 +141,7 @@ describe('picker options route policy', () => {
     ['lookup=equipment-work-order-filter-types', 'equipment.workorder.create'],
     ['lookup=equipment-edit-types', 'equipment.manage'],
     ['lookup=equipment-edit-categories', 'equipment.manage'],
+    ['lookup=equipment-edit-departments', 'equipment.manage'],
     ['lookup=equipment-item-inspection-types', 'equipment.manage'],
     ['lookup=equipment-item-inspection-types', 'equipment.inspect'],
     ['lookup=equipment-item-pre-use-inspection-types', 'equipment.manage'],

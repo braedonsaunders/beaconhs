@@ -10,6 +10,7 @@ import 'server-only'
 
 import { eq } from 'drizzle-orm'
 import {
+  departments,
   equipmentCategories,
   equipmentItems,
   equipmentTypes,
@@ -48,6 +49,7 @@ export function createEquipmentAssetFlowAdapter(
         tx
           .select({
             row: equipmentItems,
+            departmentName: departments.name,
             categoryName: equipmentCategories.name,
             typeName: equipmentTypes.name,
             siteName: orgUnits.name,
@@ -56,6 +58,7 @@ export function createEquipmentAssetFlowAdapter(
             holderFormal: people.formalName,
           })
           .from(equipmentItems)
+          .leftJoin(departments, eq(departments.id, equipmentItems.departmentId))
           .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
           .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
           .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
@@ -75,6 +78,7 @@ export function createEquipmentAssetFlowAdapter(
         model: r.model ?? '',
         vin: r.vin ?? '',
         license_plate: r.licensePlate ?? '',
+        department_name: e.departmentName ?? '',
         category_name: e.categoryName ?? '',
         type_name: e.typeName ?? '',
         ownership: titleize(r.ownership),

@@ -70,6 +70,7 @@ import {
 import { RawImage } from '@/components/raw-image'
 import {
   attachments,
+  departments,
   equipmentCategories,
   equipmentCheckouts,
   equipmentInspectionRecords,
@@ -199,6 +200,14 @@ async function updateEquipmentField(formData: FormData) {
       .limit(1)
       .for('update')
     if (!prior) throw new Error('Equipment item was not found.')
+    if (field === 'departmentId' && val !== null) {
+      const [department] = await tx
+        .select({ id: departments.id })
+        .from(departments)
+        .where(and(eq(departments.id, val as string), eq(departments.tenantId, ctx.tenantId)))
+        .limit(1)
+      if (!department) throw new Error('Department was not found.')
+    }
     const [updated] = await tx
       .update(equipmentItems)
       .set({
@@ -847,12 +856,20 @@ export default async function EquipmentDetailPage({
         item: equipmentItems,
         type: equipmentTypes,
         category: equipmentCategories,
+        department: departments,
         site: orgUnits,
         holder: people,
         missingReporter: { id: user.id, name: user.name },
         photoKey: attachments.r2Key,
       })
       .from(equipmentItems)
+      .leftJoin(
+        departments,
+        and(
+          eq(departments.tenantId, equipmentItems.tenantId),
+          eq(departments.id, equipmentItems.departmentId),
+        ),
+      )
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
       .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
@@ -1211,6 +1228,7 @@ export default async function EquipmentDetailPage({
     item,
     type,
     category,
+    department,
     site,
     holder,
     missingReporter,
@@ -1691,6 +1709,21 @@ export default async function EquipmentDetailPage({
                             }
                             lookup="equipment-edit-categories"
                             emptyLabel={tGenerated('m_1f4315be81761d')}
+                            disabled={locked}
+                            updateAction={updateEquipmentField}
+                          />
+                          <LiveRemoteSelect
+                            id={id}
+                            field="departmentId"
+                            label={tGenerated('m_1af68228b8305a')}
+                            initialValue={item.departmentId}
+                            initialOption={
+                              department
+                                ? { value: department.id, label: department.name }
+                                : undefined
+                            }
+                            lookup="equipment-edit-departments"
+                            emptyLabel={tGenerated('m_14ba205dfb4aab')}
                             disabled={locked}
                             updateAction={updateEquipmentField}
                           />

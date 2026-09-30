@@ -3,9 +3,10 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Wrench } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, eq, isNull } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import {
+  departments,
   equipmentCategories,
   equipmentItems,
   equipmentTypes,
@@ -16,7 +17,8 @@ import { can } from '@beaconhs/tenant'
 import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref } from '@/lib/list-params'
+import { equipmentRegisterQuery } from '@/lib/equipment/register-query'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
@@ -24,23 +26,12 @@ import { ListPageLayout } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { EquipmentRecordsTable, type EquipmentTableRow } from './_records-table'
-import { EquipmentTypeCategoryFilters } from './_filters'
+import { EquipmentRegisterFilters } from './_filters'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
   return { title: tGenerated('m_17f17df74f7e69') }
 }
-
-const SORTS = [
-  'asset_tag',
-  'name',
-  'category',
-  'type',
-  'status',
-  'site',
-  'holder',
-  'purchase_date',
-] as const
 
 const STATUS_OPTIONS = [
   { value: 'in_service', label: 'In service' },
@@ -63,25 +54,13 @@ export default async function EquipmentPage({
   const tGeneratedValue = await getGeneratedValueTranslations()
   const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
-  const params = parseListParams(sp, {
-    sort: 'asset_tag',
-    dir: 'asc',
-    perPage: 25,
-    allowedSorts: SORTS,
-  })
-  // Default the register to in-service assets; the "All statuses" chip
-  // (status=all) clears the default so every status shows.
-  const statusRaw = pickString(sp.status) ?? 'in_service'
-  const statusFilter = statusRaw === 'all' ? undefined : statusRaw
-  const availabilityFilter = pickString(sp.availability)
-  const typeFilter = pickString(sp.type)
-  const categoryFilter = pickString(sp.category)
+  const { params, statusRaw, statusFilter } = equipmentRegisterQuery(sp)
   const ctx = await requireRequestContext()
   const canManageEquipment = can(ctx, 'equipment.manage')
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'equipment.read.site')
 
-  const { rows, total, statusCounts, availabilityCounts, allTypes, allCats } = await ctx.db(
-    async (tx) => {
+  const { rows, total, statusCounts, availabilityCounts, allTypes, allCats, allDepartments } =
+    await ctx.db(async (tx) => {
       const allTypes = await tx
         .select({ id: equipmentTypes.id, name: equipmentTypes.name })
         .from(equipmentTypes)
@@ -92,6 +71,11 @@ export default async function EquipmentPage({
         .from(equipmentCategories)
         .where(eq(equipmentCategories.tenantId, ctx.tenantId))
         .orderBy(asc(equipmentCategories.sortOrder), asc(equipmentCategories.name))
+      const allDepartments = await tx
+        .select({ id: departments.id, name: departments.name })
+        .from(departments)
+        .where(eq(departments.tenantId, ctx.tenantId))
+        .orderBy(asc(departments.name))
       // Read-tier scope: equipment.read.all → every asset; read.site → assets at
       // the caller's scoped sites; neither → only assets they currently hold.
       const vis = await moduleScopeWhere(ctx, tx, {
@@ -99,55 +83,36 @@ export default async function EquipmentPage({
         siteCol: equipmentItems.currentSiteOrgUnitId,
         personCol: equipmentItems.currentHolderPersonId,
       })
-      const filters: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
-      if (vis) filters.push(vis)
-      if (params.q) {
-        const term = `%${params.q}%`
-        const cond = or(
-          ilike(equipmentItems.assetTag, term),
-          ilike(equipmentItems.name, term),
-          ilike(equipmentItems.serialNumber, term),
+      const { where: whereClause, orderBy } = equipmentRegisterQuery(sp, vis)
+
+      const [tot] = await tx
+        .select({ c: count() })
+        .from(equipmentItems)
+        .leftJoin(
+          departments,
+          and(
+            eq(departments.tenantId, equipmentItems.tenantId),
+            eq(departments.id, equipmentItems.departmentId),
+          ),
         )
-        if (cond) filters.push(cond)
-      }
-      if (statusFilter) filters.push(eq(equipmentItems.status, statusFilter as any))
-      if (availabilityFilter === 'available') {
-        filters.push(eq(equipmentItems.isAvailableForCheckout, true))
-      } else if (availabilityFilter === 'checked_out') {
-        filters.push(eq(equipmentItems.isAvailableForCheckout, false))
-      }
-      if (typeFilter) filters.push(eq(equipmentItems.typeId, typeFilter))
-      if (categoryFilter) filters.push(eq(equipmentItems.categoryId, categoryFilter))
-      const whereClause = and(...filters)
-
-      const dirFn = params.dir === 'asc' ? asc : desc
-      const orderBy =
-        params.sort === 'name'
-          ? [dirFn(equipmentItems.name)]
-          : params.sort === 'category'
-            ? [dirFn(equipmentCategories.name)]
-            : params.sort === 'type'
-              ? [dirFn(equipmentTypes.name)]
-              : params.sort === 'status'
-                ? [dirFn(equipmentItems.status)]
-                : params.sort === 'site'
-                  ? [dirFn(orgUnits.name)]
-                  : params.sort === 'holder'
-                    ? [dirFn(people.lastName)]
-                    : params.sort === 'purchase_date'
-                      ? [dirFn(equipmentItems.purchaseDate)]
-                      : [dirFn(equipmentItems.assetTag)]
-
-      const [tot] = await tx.select({ c: count() }).from(equipmentItems).where(whereClause)
+        .where(whereClause)
       const data = await tx
         .select({
           item: equipmentItems,
+          department: departments,
           category: equipmentCategories,
           type: equipmentTypes,
           site: orgUnits,
           holder: people,
         })
         .from(equipmentItems)
+        .leftJoin(
+          departments,
+          and(
+            eq(departments.tenantId, equipmentItems.tenantId),
+            eq(departments.id, equipmentItems.departmentId),
+          ),
+        )
         .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
         .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
         .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
@@ -176,25 +141,28 @@ export default async function EquipmentPage({
         } as Record<string, number>,
         allTypes,
         allCats,
+        allDepartments,
       }
-    },
-  )
+    })
 
   const typeOptions = allTypes.map((t) => ({ value: t.id, label: t.name }))
   const categoryOptions = allCats.map((c) => ({ value: c.id, label: c.name }))
 
-  const tableRows: EquipmentTableRow[] = rows.map(({ item, category, type, site, holder }) => ({
-    id: item.id,
-    assetTag: item.assetTag,
-    name: item.name,
-    categoryName: category?.name ?? null,
-    typeName: type?.name ?? null,
-    status: item.status,
-    siteName: site?.name ?? null,
-    holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
-    isMissing: item.isMissing,
-    isDraft: item.isDraft,
-  }))
+  const tableRows: EquipmentTableRow[] = rows.map(
+    ({ item, category, type, department, site, holder }) => ({
+      id: item.id,
+      assetTag: item.assetTag,
+      name: item.name,
+      categoryName: category?.name ?? null,
+      typeName: type?.name ?? null,
+      departmentName: department?.name ?? null,
+      status: item.status,
+      siteName: site?.name ?? null,
+      holderName: holder ? `${holder.firstName} ${holder.lastName}` : null,
+      isMissing: item.isMissing,
+      isDraft: item.isDraft,
+    }),
+  )
 
   return (
     <ListPageLayout
@@ -257,11 +225,12 @@ export default async function EquipmentPage({
                 count: availabilityCounts[o.value],
               }))}
             />
-            <EquipmentTypeCategoryFilters
+            <EquipmentRegisterFilters
               basePath="/equipment"
               currentParams={sp}
               types={typeOptions}
               categories={categoryOptions}
+              departments={allDepartments.map((d) => ({ value: d.id, label: d.name }))}
             />
           </TableToolbar>
         </>

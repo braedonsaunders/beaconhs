@@ -16,6 +16,7 @@ export type EquipmentTableRow = {
   name: string
   categoryName: string | null
   typeName: string | null
+  departmentName: string | null
   status: 'in_service' | 'out_of_service' | 'in_repair' | 'lost' | 'retired'
   siteName: string | null
   holderName: string | null
@@ -73,7 +74,9 @@ export function EquipmentRecordsTable({
               }
               title={tGeneratedValue(r.name)}
               meta={
-                [r.categoryName, r.typeName, r.siteName].filter(Boolean).join(' · ') || undefined
+                [r.categoryName, r.typeName, r.departmentName, r.siteName]
+                  .filter(Boolean)
+                  .join(' · ') || undefined
               }
               footer={
                 r.isMissing || r.isDraft ? (
@@ -130,6 +133,9 @@ export function EquipmentRecordsTable({
               <SortTh column="type" {...sortProps}>
                 <GeneratedText id="m_074ba2f160c506" />
               </SortTh>
+              <SortTh column="department" {...sortProps}>
+                <GeneratedText id="m_1af68228b8305a" />
+              </SortTh>
               <SortTh column="status" {...sortProps}>
                 <GeneratedText id="m_0b9da892d6faf0" />
               </SortTh>
@@ -185,6 +191,9 @@ export function EquipmentRecordsTable({
                     </td>
                     <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                       <GeneratedValue value={r.typeName ?? '—'} />
+                    </td>
+                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                      <GeneratedValue value={r.departmentName ?? '—'} />
                     </td>
                     <td className="px-3 py-2">
                       <Badge variant={r.status === 'in_service' ? 'success' : 'warning'}>

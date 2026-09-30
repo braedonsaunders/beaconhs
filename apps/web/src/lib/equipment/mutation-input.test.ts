@@ -22,6 +22,11 @@ describe('equipment mutation input', () => {
       field: 'categoryId',
       value: null,
     })
+    expect(parseEquipmentAutosaveInput('departmentId', '').value).toBeNull()
+    expect(
+      parseEquipmentAutosaveInput('departmentId', '10000000-0000-4000-8000-000000000001').value,
+    ).toBe('10000000-0000-4000-8000-000000000001')
+    expect(() => parseEquipmentAutosaveInput('departmentId', 'other-tenant')).toThrow(/invalid/)
     expect(parseEquipmentAutosaveInput('requiresPreUseInspection', 'on').value).toBe(true)
     expect(parseEquipmentAutosaveInput('purchaseDate', '2028-02-29').value).toBe('2028-02-29')
     expect(() => parseEquipmentAutosaveInput('categoryId', 'not-a-uuid')).toThrow(/invalid/)

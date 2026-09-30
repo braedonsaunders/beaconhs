@@ -14,6 +14,7 @@
 import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import {
+  departments,
   equipmentCheckouts,
   equipmentItems,
   equipmentLocationHistory,
@@ -371,10 +372,18 @@ export async function bulkExportEquipmentCsv(args: {
       .select({
         item: equipmentItems,
         type: equipmentTypes,
+        department: departments,
         site: orgUnits,
         holder: people,
       })
       .from(equipmentItems)
+      .leftJoin(
+        departments,
+        and(
+          eq(departments.tenantId, equipmentItems.tenantId),
+          eq(departments.id, equipmentItems.departmentId),
+        ),
+      )
       .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
       .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
       .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
@@ -392,6 +401,7 @@ export async function bulkExportEquipmentCsv(args: {
     'Asset tag',
     'Name',
     'Type',
+    'Department',
     'Serial #',
     'Status',
     'Site',
@@ -399,12 +409,13 @@ export async function bulkExportEquipmentCsv(args: {
     'Purchase date',
   ]
   const csvLines = [csvRow(headers)]
-  for (const { item, type, site, holder } of rows) {
+  for (const { item, type, department, site, holder } of rows) {
     csvLines.push(
       csvRow([
         item.assetTag,
         item.name,
         type?.name ?? '',
+        department?.name ?? '',
         item.serialNumber ?? '',
         item.status,
         site?.name ?? '',

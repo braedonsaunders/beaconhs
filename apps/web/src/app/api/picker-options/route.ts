@@ -327,6 +327,8 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
         'equipment.workorder.create',
         'equipment.workorder.close',
       )
+    case 'equipment-edit-departments':
+      return can(ctx, 'equipment.manage')
     case 'equipment-edit-types':
     case 'equipment-edit-categories':
     case 'equipment-item-inspection-types':
@@ -1479,7 +1481,7 @@ async function loadOptions(
       )
     }
 
-    if (lookup === 'incident-departments') {
+    if (lookup === 'incident-departments' || lookup === 'equipment-edit-departments') {
       const match = input.hasQuery
         ? or(
             ilike(departments.name, input.term),

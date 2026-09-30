@@ -13,6 +13,7 @@ import {
   equipmentInspectionRecordCriteria,
   equipmentInspectionRecords,
   equipmentInspectionTypes,
+  departments,
   equipmentItems,
   orgUnits,
   people,
@@ -64,7 +65,7 @@ export function createEquipmentInspectionFlowAdapter(
             typeName: equipmentInspectionTypes.name,
             equipmentName: equipmentItems.name,
             assetTag: equipmentItems.assetTag,
-            equipmentMetadata: equipmentItems.metadata,
+            equipmentDepartmentName: departments.name,
             siteName: orgUnits.name,
             inspectorUserName: inspU.name,
             inspectorPersonFirst: people.firstName,
@@ -84,6 +85,13 @@ export function createEquipmentInspectionFlowAdapter(
             and(
               eq(equipmentItems.tenantId, equipmentInspectionRecords.tenantId),
               eq(equipmentItems.id, equipmentInspectionRecords.equipmentItemId),
+            ),
+          )
+          .leftJoin(
+            departments,
+            and(
+              eq(departments.tenantId, equipmentItems.tenantId),
+              eq(departments.id, equipmentItems.departmentId),
             ),
           )
           .leftJoin(
@@ -224,10 +232,7 @@ export function createEquipmentInspectionFlowAdapter(
         type_name: head.typeName ?? '',
         equipment_name: head.equipmentName ?? r.equipmentNameSnapshot ?? '',
         asset_tag: head.assetTag ?? '',
-        equipment_division:
-          typeof head.equipmentMetadata?.division === 'string'
-            ? head.equipmentMetadata.division
-            : '',
+        equipment_division: head.equipmentDepartmentName ?? '',
         serial: r.serial ?? '',
         rental_provider: r.rentalProvider ?? '',
         interval_label: r.intervalLabel ?? '',
