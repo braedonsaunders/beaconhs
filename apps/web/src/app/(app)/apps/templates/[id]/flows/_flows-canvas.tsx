@@ -62,6 +62,7 @@ import { LogicBuilder } from '../designer/logic-builder'
 import { toast } from '@/lib/toast'
 import type { RecipientOptions } from '@/lib/flows/recipient-presentation'
 import { RecipientsEditor } from '@/components/flows/recipients-editor'
+import { FlowFieldReference } from '@/components/flows/flow-field-reference'
 import { useFlowAutosave } from '@/components/flows/use-flow-autosave'
 import { MAX_FLOW_NAME_LENGTH } from '@/lib/flows/flow-name-policy'
 import {
@@ -1109,6 +1110,7 @@ export function FlowsCanvas({
             />
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
+            <FlowFieldReference profile={profile} />
             <GeneratedValue
               value={
                 canEdit && selectedFlowId ? (
@@ -1365,20 +1367,24 @@ export function FlowsCanvas({
         <GeneratedValue
           value={
             selectedNode ? (
-              <NodeInspector
-                key={selectedNode.id}
-                data={selectedNode.data}
-                fieldIds={fieldIds}
-                actionFields={actionFields}
-                availableFields={availableFields}
-                profile={profile}
-                emailTemplates={emailTemplates}
-                pdfTemplates={pdfTemplates}
-                targetApps={targetApps}
-                recipientOptions={recipientOptions}
-                readOnly={!canEdit || pending}
-                onChange={(d) => patchData(selectedNode.id, d)}
-              />
+              <div className="space-y-4" key={selectedNode.id}>
+                <div className="flex justify-end">
+                  <FlowFieldReference profile={profile} />
+                </div>
+                <NodeInspector
+                  data={selectedNode.data}
+                  fieldIds={fieldIds}
+                  actionFields={actionFields}
+                  availableFields={availableFields}
+                  profile={profile}
+                  emailTemplates={emailTemplates}
+                  pdfTemplates={pdfTemplates}
+                  targetApps={targetApps}
+                  recipientOptions={recipientOptions}
+                  readOnly={!canEdit || pending}
+                  onChange={(d) => patchData(selectedNode.id, d)}
+                />
+              </div>
             ) : null
           }
         />
