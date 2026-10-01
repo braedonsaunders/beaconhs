@@ -277,7 +277,7 @@ jobs:
             name="$(jq -r '.name' <<< "$config")"
             path="$(jq -r '.path' <<< "$config")"
             if docker config inspect "$name" >/dev/null 2>&1; then
-              existing_digest="$(docker config inspect "$name" --format '{{.Spec.Data}}' | base64 --decode | sha256sum | cut -d' ' -f1)"
+              existing_digest="$(docker config inspect "$name" --format '{{json .Spec.Data}}' | jq -r . | base64 --decode | sha256sum | cut -d' ' -f1)"
               expected_digest="$(sha256sum "$staging/artifacts/$path" | cut -d' ' -f1)"
               if [ "$existing_digest" != "$expected_digest" ]; then
                 echo "::error::An existing immutable tenant plugin config has different content"
