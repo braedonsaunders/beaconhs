@@ -1,6 +1,6 @@
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 // /journals/manage — the Journals administration hub (reference implementation of
-// the unified module-admin pattern). Tiles for Records, Tags, and Compliance,
+// the unified module-admin pattern). Tiles for Tags and Automations,
 // driven by the module-admin registry. Gated to managers; self-only users go to
 // the workspace. The employee /journals workspace stays purely for writing.
 

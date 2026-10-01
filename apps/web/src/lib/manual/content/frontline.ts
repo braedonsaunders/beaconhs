@@ -36,7 +36,7 @@ A journal entry protects you and your crew. If a question comes up months later,
 
 Open **Journals** in the left menu. The page opens on your most recent entry. On a desktop your past entries sit in a list on the left. On a phone, tap **Browse** to see them.
 
-Journal managers can tap **Browse**, then **Manage journals**, on a phone. The Manage hub contains company records, tags, and automations.
+Supervisors can open **Records** beside **Journals**, or tap **Browse**, then **Records**, on a phone. This follows their assigned reading scope. **Manage** is only for journal administrators; on a phone it is **Browse** → **Manage journals**. The Manage hub contains tags and automations. The standard **Foreman / Supervisor** role can edit its own journals and read its assigned scope; it does not administer journals.
 
 ## Writing today's entry
 

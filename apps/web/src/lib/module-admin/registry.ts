@@ -57,15 +57,16 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     managePath: '/journals/manage',
     iconKey: 'journal',
     permission: 'journals.assign',
-    tabs: [{ key: 'workspace', label: 'Journals', href: '/journals' }],
-    sections: [
+    tabs: [
+      { key: 'workspace', label: 'Journals', href: '/journals' },
       {
         key: 'records',
         label: 'Records',
         href: '/journals/records',
-        iconKey: 'library',
-        desc: 'Browse, filter and read every journal you have access to.',
+        requiredAnyPermission: ['journals.read.site', 'journals.read.all'],
       },
+    ],
+    sections: [
       {
         key: 'tags',
         label: 'Tags',

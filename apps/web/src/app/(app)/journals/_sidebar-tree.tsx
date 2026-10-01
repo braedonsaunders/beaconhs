@@ -8,7 +8,7 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ChevronRight, Loader2, Plus, Search, Settings, Sparkles, X } from 'lucide-react'
+import { ChevronRight, Library, Loader2, Plus, Search, Settings, Sparkles, X } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import {
   GROUP_BY_OPTIONS,
@@ -294,14 +294,24 @@ export function SidebarTree({
 
       <GeneratedValue
         value={
-          data.canManage && !authorMode ? (
+          (data.canBrowseAll || data.canManage) && !authorMode ? (
             <div className="border-t border-slate-200 p-2 lg:hidden dark:border-slate-800">
-              <Link
-                href="/journals/manage"
-                className="flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <Settings size={16} /> <GeneratedText id="m_1eba1be1ba3296" />
-              </Link>
+              {data.canBrowseAll && (
+                <Link
+                  href="/journals/records"
+                  className="flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <Library size={16} /> <GeneratedValue value="Records" />
+                </Link>
+              )}
+              {data.canManage && (
+                <Link
+                  href="/journals/manage"
+                  className="flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <Settings size={16} /> <GeneratedText id="m_1eba1be1ba3296" />
+                </Link>
+              )}
             </div>
           ) : null
         }

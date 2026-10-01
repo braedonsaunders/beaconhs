@@ -361,7 +361,7 @@ export const BUILTIN_ROLES: Record<
       'journals.read.site',
       'journals.create',
       'journals.submit',
-      'journals.assign',
+      'journals.update.own',
       'compliance.read',
       'compliance.assign',
       'reports.read',
