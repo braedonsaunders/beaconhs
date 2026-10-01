@@ -14,7 +14,7 @@ vi.mock('../../../../lib/audit', () => ({ recordAuditInTransaction: mocks.audit 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/navigation', () => ({ redirect: mocks.redirect }))
 
-import { saveLogEntry } from './_log-actions'
+import { saveLogEntry, deleteLogEntry } from './_log-actions'
 
 const itemId = '10000000-0000-4000-8000-000000000001'
 const entryId = '20000000-0000-4000-8000-000000000002'
@@ -31,6 +31,7 @@ const whereClauses: SQL[] = []
 const selections: unknown[][] = []
 const update = vi.fn()
 const insert = vi.fn()
+const remove = vi.fn()
 const tx = {
   select: () => ({
     from: () => ({
@@ -53,6 +54,17 @@ const tx = {
         return Promise.resolve()
       },
     }),
+  }),
+  delete: () => ({
+    where: (condition: SQL) => {
+      whereClauses.push(condition)
+      return {
+        returning: async () => {
+          remove()
+          return [{ id: entryId }]
+        },
+      }
+    },
   }),
   insert: () => ({
     values: (values: unknown) => ({
@@ -171,5 +183,61 @@ describe('equipment log edits', () => {
       context,
       expect.objectContaining({ action: 'create' }),
     )
+  })
+})
+
+describe('equipment log deletion', () => {
+  it('rejects read-only users before reading or deleting records', async () => {
+    context.permissions = new Set(['equipment.read.all'])
+    await expect(deleteLogEntry(form())).rejects.toThrow()
+    expect(context.db).not.toHaveBeenCalled()
+    expect(remove).not.toHaveBeenCalled()
+  })
+  it('rejects equipment outside the manager’s scope', async () => {
+    mocks.visible.mockResolvedValue(false)
+    await expect(deleteLogEntry(form())).rejects.toThrow('Equipment item was not found')
+    expect(remove).not.toHaveBeenCalled()
+    expect(mocks.audit).not.toHaveBeenCalled()
+  })
+  it('deletes only the selected equipment entry and preserves its previous values in the audit', async () => {
+    await deleteLogEntry(form({ details: '', entryDate: '', amount: 'invalid', kind: '' }))
+    expect(new PgDialect().sqlToQuery(whereClauses[1]!).params).toEqual([entryId, itemId])
+    expect(new PgDialect().sqlToQuery(whereClauses[2]!).params).toEqual([entryId, itemId])
+    expect(remove).toHaveBeenCalledOnce()
+    expect(update).not.toHaveBeenCalled()
+    expect(mocks.audit).toHaveBeenCalledWith(
+      tx,
+      context,
+      expect.objectContaining({
+        entityId: entryId,
+        action: 'delete',
+        before: existing,
+        metadata: { itemId },
+      }),
+    )
+    expect(mocks.redirect).toHaveBeenCalledWith(
+      `/equipment/${itemId}?tab=log&log_q=service&log_p=2`,
+    )
+  })
+  it('rejects a missing entry or a stale version without deleting', async () => {
+    selections[1] = []
+    await expect(deleteLogEntry(form())).rejects.toThrow('Log entry was not found')
+    selections.push(
+      [{ id: itemId, siteId: 'site-a', personId: null }],
+      [{ ...existing, updatedAt: new Date('2026-09-30T12:01:00Z') }],
+    )
+    await expect(deleteLogEntry(form())).rejects.toThrow('This log entry changed')
+    expect(remove).not.toHaveBeenCalled()
+    expect(mocks.audit).not.toHaveBeenCalled()
+  })
+  it('requires the entry ID and record version and validates the return path', async () => {
+    await expect(deleteLogEntry(form({ entryId: '' }))).rejects.toThrow()
+    await expect(deleteLogEntry(form({ expectedUpdatedAt: '' }))).rejects.toThrow(
+      'This log entry changed',
+    )
+    await expect(
+      deleteLogEntry(form({ returnHref: 'https://external.example/equipment' })),
+    ).rejects.toThrow('Return path is invalid')
+    expect(remove).not.toHaveBeenCalled()
   })
 })

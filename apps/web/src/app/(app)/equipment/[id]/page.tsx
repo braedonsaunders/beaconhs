@@ -30,7 +30,8 @@ import {
 import { NewWorkOrderDrawer } from './_work-order-drawer'
 import { EquipmentLogKindFields } from './_log-fields'
 import { EquipmentLogRow } from './_log-row'
-import { saveLogEntry } from './_log-actions'
+import { saveLogEntry, deleteLogEntry } from './_log-actions'
+import { ConfirmButton } from '@/components/confirm-button'
 import { FilterChips } from '@/components/filter-bar'
 import { NewTruckLogEntryDrawer } from './_truck-log-drawer'
 import { EquipmentFileDrawer } from './_files-drawer'
@@ -3347,17 +3348,32 @@ export default async function EquipmentDetailPage({
         description={tGenerated('m_09f67f2ca76754')}
         size="md"
         footer={
-          <Button type="submit" form="equipment-add-log-form">
+          <div className="flex w-full items-center justify-end gap-2">
             {editingLog ? (
-              <>
-                <Check size={14} /> <GeneratedValue value="Save changes" />
-              </>
-            ) : (
-              <>
-                <Plus size={14} /> <GeneratedText id="m_1ea3a4ad13d4d7" />
-              </>
-            )}
-          </Button>
+              <ConfirmButton
+                type="submit"
+                form="equipment-add-log-form"
+                formAction={deleteLogEntry}
+                formNoValidate
+                variant="destructive"
+                className="mr-auto"
+                message={tGeneratedValue('Delete this log entry? This cannot be undone.')}
+              >
+                <Trash2 size={14} /> <GeneratedValue value="Delete entry" />
+              </ConfirmButton>
+            ) : null}
+            <Button type="submit" form="equipment-add-log-form">
+              {editingLog ? (
+                <>
+                  <Check size={14} /> <GeneratedValue value="Save changes" />
+                </>
+              ) : (
+                <>
+                  <Plus size={14} /> <GeneratedText id="m_1ea3a4ad13d4d7" />
+                </>
+              )}
+            </Button>
+          </div>
         }
       >
         <form

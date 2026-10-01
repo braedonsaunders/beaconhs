@@ -701,7 +701,15 @@ To assign a department, open the unit, select **Overview**, and choose **Departm
 2. Select an entry's row or date to open **Edit log entry**.
 3. Change the date, kind, title, details, or maintenance amount, then select **Save changes**.
 
-Editing requires permission to manage equipment. Changing the kind away from **Maintenance** clears its amount. If someone else saves the entry while your drawer is open, reopen it before saving. Closing the drawer leaves the entry unchanged. Saved edits appear in the audit history.
+Editing requires permission to manage equipment. Changing the kind away from **Maintenance** clears its amount. If someone else saves the entry while your drawer is open, reopen it before saving or deleting. Closing the drawer leaves the entry unchanged. Saved edits appear in the audit history.
+
+## Delete a log entry (managers)
+
+1. Open the unit and select **Log**.
+2. Select the entry's row or date to open **Edit log entry**.
+3. Select **Delete entry**, then confirm the deletion.
+
+Deleting requires permission to manage equipment. The entry is permanently removed from the log, and its previous values remain in the audit history. Attached files are kept. Cancel the confirmation to keep the entry.
 
 The log shows the saved **Amount**. Other kinds do not have an amount. Use **Kind** to filter entries, the search box to find details, and **Prev** and **Next** to move through the results. Imported expense history appears as **Maintenance** entries with its original expense amount and source details. A blank amount means the source did not record one.
 
