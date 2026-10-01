@@ -576,8 +576,13 @@ Each field has: `id`, `type`, `label` (i18n), `helpText` (i18n), `required`, `va
 
 ## 9. Integrations
 
-Current launch decision: BeaconHS does not ship a plugin runtime or plugin SDK.
-The earlier plugin plan was consolidated into two production integration systems:
+BeaconHS provides a small trusted server extension host for operator-installed,
+tenant-bound toolbar actions. Company-specific UI descriptors and business logic
+are built and deployed separately from the public repository and base image.
+See [Tenant extensions](TENANT_EXTENSIONS.md) for the contract and installation.
+The retired plugin marketplace, tables, and routes remain removed.
+
+The two standard production integration systems are:
 
 - `packages/sync`: inbound data connections, including CSV, database, NetSuite, and Nango-backed connectors.
 - `packages/integrations`: outbound event automations, trigger registry, destination registry, delivery worker, and idempotent export ledger.

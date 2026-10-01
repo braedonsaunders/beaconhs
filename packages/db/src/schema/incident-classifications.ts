@@ -25,7 +25,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import { id, softDelete, timestamps } from './_helpers'
-import { tenants, tenantUsers } from './core'
+import { tenants } from './core'
 import { orgUnits } from './org'
 
 // --- Classifications --------------------------------------------------------

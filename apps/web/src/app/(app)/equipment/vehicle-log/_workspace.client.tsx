@@ -18,6 +18,8 @@ import {
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { TenantPluginActions } from '@/components/tenant-plugin-actions'
+import type { InstalledPluginAction, PluginActionResult } from '@/lib/tenant-plugins/types'
 import { DownloadLink } from '@/components/download-link'
 import { useRouter } from 'next/navigation'
 import {
@@ -25,7 +27,6 @@ import {
   Bell,
   CalendarDays,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -33,17 +34,14 @@ import {
   Mail,
   Play,
   Send,
-  Settings2,
   Trash2,
-  WandSparkles,
   Zap,
 } from 'lucide-react'
-import { Badge, Button, Popover, Select, cn } from '@beaconhs/ui'
+import { Badge, Button, Select, cn } from '@beaconhs/ui'
 import { confirmDialog } from '@/lib/confirm'
 import { useReseededState } from '@/lib/use-reseeded-state'
 import type {
-  ApplyVehicleLogImportInput,
-  ApplyVehicleLogImportResult,
+  VehicleLogMonthInput,
   SaveVehicleLogEntryInput,
   VehicleLogEntryDraft,
   VehicleLogMode,
@@ -53,11 +51,8 @@ import type {
 type SaveAction = (
   input: SaveVehicleLogEntryInput,
 ) => Promise<{ ok: true; entry: VehicleLogEntryDraft } | { ok: false; error: string }>
-type ApplyAction = (
-  input: ApplyVehicleLogImportInput,
-) => Promise<{ ok: true; result: ApplyVehicleLogImportResult } | { ok: false; error: string }>
 type DeleteMonthAction = (
-  input: ApplyVehicleLogImportInput,
+  input: VehicleLogMonthInput,
 ) => Promise<{ ok: true; deleted: number } | { ok: false; error: string }>
 
 /** A manual-trigger Flow surfaced as a toolbar button (authored in /flows). */
@@ -372,18 +367,24 @@ export function VehicleLogWorkspaceClient({
   canManage,
   canEditDriverLog,
   saveAction,
-  applyAction,
+  pluginActions,
+  executePluginAction,
   deleteMonthAction,
   recordActions,
   actionEntryId,
   runAction,
 }: {
   workspace: VehicleLogWorkspace
-  /** Equipment administration (imports and bulk deletion). */
+  /** Equipment administration (bulk deletion). */
   canManage: boolean
   canEditDriverLog: boolean
   saveAction: SaveAction
-  applyAction: ApplyAction
+  pluginActions: { actions: InstalledPluginAction[]; unavailable: boolean }
+  executePluginAction: (
+    pluginId: string,
+    actionId: string,
+    fields: Record<string, string>,
+  ) => Promise<PluginActionResult>
   deleteMonthAction: DeleteMonthAction
   /** Manual-trigger flow buttons for the viewed month (already permission-filtered). */
   recordActions: VehicleLogRecordAction[]
@@ -405,16 +406,6 @@ export function VehicleLogWorkspaceClient({
   const [rowStates, setRowStates] = useReseededState<Record<string, RowState>>(scopeKey, {})
   const [rowErrors, setRowErrors] = useReseededState<Record<string, string>>(scopeKey, {})
   const [actionResult, setActionResult] = useReseededState<string | null>(scopeKey, null)
-  const [importPickerOpen, setImportPickerOpen] = useReseededState(scopeKey, false)
-  const importSources = workspace.importSources.sources
-  const importableSources = importSources.filter((source) => source.active)
-  const [selectedImportSourceChoice, setSelectedImportSourceId] = useState('')
-  const selectedImportSourceId = importSources.some(
-    (source) => source.id === selectedImportSourceChoice && source.active,
-  )
-    ? selectedImportSourceChoice
-    : (importableSources[0]?.id ?? importSources[0]?.id ?? '')
-
   const savedTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   function setDrafts(
@@ -568,48 +559,6 @@ export function VehicleLogWorkspaceClient({
     void saveRow(date, next)
   }
 
-  function applyActivity(sourceConnectionId?: string | null) {
-    if (!canManage) return
-    if (!workspace.selectedDriverId || !workspace.selectedEquipmentId) {
-      setActionResult('Choose a driver and vehicle first.')
-      return
-    }
-    const sourceId =
-      sourceConnectionId ||
-      selectedImportSourceId ||
-      (importableSources.length === 1 ? importableSources[0]?.id : null)
-    const source = workspace.importSources.sources.find((candidate) => candidate.id === sourceId)
-    if (!source || !source.active) {
-      setImportPickerOpen(workspace.importSources.sources.length > 1)
-      setActionResult(source ? `${source.name} is not ready to import.` : importHint)
-      return
-    }
-    setActionResult(null)
-    startTransition(async () => {
-      const res = await applyAction({
-        equipmentItemId: workspace.selectedEquipmentId,
-        driverPersonId: workspace.selectedDriverId,
-        month: workspace.month.key,
-        sourceConnectionId: source.id,
-      })
-      if (res.ok) {
-        const { created, updated, skipped, pulled, resolved } = res.result
-        const changed = created + updated
-        setActionResult(
-          changed === 0
-            ? `${source.name}: pulled ${pulled}, applied 0.`
-            : `${source.name}: pulled ${pulled} · resolved ${resolved} · ${created} added · ${updated} refreshed${
-                skipped ? ` · ${skipped} skipped` : ''
-              }`,
-        )
-        setImportPickerOpen(false)
-        router.refresh()
-      } else {
-        setActionResult(res.error)
-      }
-    })
-  }
-
   async function runFlowButton(action: VehicleLogRecordAction) {
     if (!actionEntryId) return
     if (action.confirm && !(await confirmDialog(action.confirm))) return
@@ -659,47 +608,7 @@ export function VehicleLogWorkspaceClient({
     })
   }
 
-  const selectedImportSource =
-    importSources.find((source) => source.id === selectedImportSourceId) ?? importableSources[0]
-  const hasActiveSource = workspace.importSources.activeSourceCount > 0
   const matchedImportDays = workspace.totals.importSourceDays
-  const importHint = !workspace.selectedDriverId
-    ? 'Choose a driver first.'
-    : !workspace.selectedEquipmentId
-      ? 'Choose a vehicle first.'
-      : !hasActiveSource
-        ? 'No vehicle log import source is configured.'
-        : importableSources.length > 1
-          ? 'Choose an import source.'
-          : selectedImportSource
-            ? `${selectedImportSource.name}: pulls ${workspace.month.label} on demand.`
-            : 'No import source is ready.'
-  const canImport = canManage && canEdit && importableSources.length > 0 && !pending
-  const hasSourcePicker = importSources.length > 1
-  const canOpenSourcePicker = canManage && canEdit && hasSourcePicker && !pending
-  const importButton = (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onClick={() => {
-        if (hasSourcePicker) setImportPickerOpen((open) => !open)
-        else void applyActivity(importableSources[0]?.id)
-      }}
-      disabled={hasSourcePicker ? !canOpenSourcePicker : !canImport}
-      title={tGeneratedValue(importHint)}
-      aria-expanded={hasSourcePicker ? importPickerOpen : undefined}
-      aria-haspopup={hasSourcePicker ? 'dialog' : undefined}
-    >
-      <GeneratedValue
-        value={
-          pending ? <Loader2 size={14} className="animate-spin" /> : <WandSparkles size={14} />
-        }
-      />
-      <GeneratedText id="m_0df79ee8347c6b" />
-      <GeneratedValue value={hasSourcePicker ? <ChevronDown size={13} /> : null} />
-    </Button>
-  )
   const emptyMessage =
     workspace.drivers.length === 0 || workspace.vehicles.length === 0
       ? 'Add an active driver and vehicle to start logging.'
@@ -837,107 +746,14 @@ export function VehicleLogWorkspaceClient({
                 </>
               )}
             </Button>
-            <GeneratedValue
-              value={
-                !canManage ? null : hasSourcePicker ? (
-                  <Popover
-                    open={importPickerOpen}
-                    onOpenChange={setImportPickerOpen}
-                    align="end"
-                    className="w-80"
-                    trigger={importButton}
-                  >
-                    <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-800">
-                      <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        <GeneratedText id="m_125dd9cb476a8d" />
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        <GeneratedText id="m_1eb189846ecd53" />
-                      </div>
-                    </div>
-                    <div className="max-h-72 overflow-y-auto py-1">
-                      <GeneratedValue
-                        value={importSources.map((source) => {
-                          const disabled = !source.active
-                          const selected = selectedImportSource?.id === source.id
-                          return (
-                            <button
-                              key={source.id}
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => setSelectedImportSourceId(source.id)}
-                              className={cn(
-                                'flex w-full items-start justify-between gap-3 px-3 py-2 text-left transition-colors',
-                                selected
-                                  ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/30 dark:text-teal-100'
-                                  : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60',
-                                disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent',
-                              )}
-                            >
-                              <span className="min-w-0">
-                                <span className="block truncate text-sm font-medium">
-                                  <GeneratedValue value={source.name} />
-                                </span>
-                                <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
-                                  <GeneratedValue value={source.connectorLabel} /> ·{' '}
-                                  <GeneratedValue value={source.status} />
-                                </span>
-                                <span className="mt-0.5 block text-[11px] text-slate-400">
-                                  <GeneratedValue
-                                    value={
-                                      source.description || (
-                                        <GeneratedText
-                                          id="m_02cc521ca76fb8"
-                                          values={{ value0: workspace.month.label }}
-                                        />
-                                      )
-                                    }
-                                  />
-                                </span>
-                              </span>
-                              <Badge variant="secondary">
-                                <GeneratedText id="m_17d18603d1b603" />
-                              </Badge>
-                            </button>
-                          )
-                        })}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2 dark:border-slate-800">
-                      <span className="truncate text-xs text-slate-500 dark:text-slate-400">
-                        <GeneratedValue
-                          value={
-                            selectedImportSource?.name ?? <GeneratedText id="m_0b247fa46434fc" />
-                          }
-                        />
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => void applyActivity(selectedImportSource?.id)}
-                        disabled={!selectedImportSource || !selectedImportSource.active || pending}
-                      >
-                        <GeneratedText id="m_0df79ee8347c6b" />
-                      </Button>
-                    </div>
-                  </Popover>
-                ) : (
-                  importButton
-                )
+            <TenantPluginActions
+              key={scopeKey}
+              actions={pluginActions.actions}
+              unavailable={pluginActions.unavailable}
+              disabled={
+                !canEdit || pending || Object.values(rowStates).some((state) => state === 'saving')
               }
-            />
-            <GeneratedValue
-              value={
-                canManage && workspace.importSources.canConfigureSources && !hasActiveSource ? (
-                  <Link
-                    href="/admin/integrations"
-                    className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800/60"
-                  >
-                    <Settings2 size={14} />
-                    <GeneratedText id="m_01ffac03eed326" />
-                  </Link>
-                ) : null
-              }
+              execute={executePluginAction}
             />
             <GeneratedValue
               value={
@@ -1020,10 +836,6 @@ export function VehicleLogWorkspaceClient({
                 actionResult ? (
                   <span className="text-slate-500 dark:text-slate-400">
                     <GeneratedValue value={actionResult} />
-                  </span>
-                ) : canManage && !canImport ? (
-                  <span className="text-slate-500 dark:text-slate-400">
-                    <GeneratedValue value={importHint} />
                   </span>
                 ) : null
               }

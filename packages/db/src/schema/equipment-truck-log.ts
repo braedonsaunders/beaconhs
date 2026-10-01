@@ -18,7 +18,6 @@ import { id, timestamps } from './_helpers'
 import { tenants, tenantUsers } from './core'
 import { equipmentItems } from './equipment'
 import { orgUnits, people } from './org'
-import { syncConnections } from './sync'
 
 export type TruckLogEntryMode = 'destination' | 'odometer'
 export type TruckLogImportStatus = 'manual' | 'suggested' | 'imported' | 'conflict'

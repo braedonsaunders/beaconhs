@@ -8,31 +8,22 @@ import {
   equipmentTypes,
   orgUnits,
   people,
-  syncConnections,
   truckLogEntries,
   vehicleLogSettings,
   type TruckLogEntryMode,
   type TruckLogImportStatus,
   type VehicleLogEnabledModes,
 } from '@beaconhs/db/schema'
-import { secureFetch, unsealSecret, type SealedSecret } from '@beaconhs/sync'
 import { assertCan, can, type RequestContext } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { recordAudit } from '@/lib/audit'
-import {
-  assertVehicleLogImportPayload,
-  collectVehicleLogOrgUnitCandidates,
-  normalizeVehicleLogImportUrl,
-  prepareVehicleLogImportDays,
-  validateVehicleLogImportEndpoint,
-} from '@/lib/vehicle-log-import-policy'
 import {
   assertCanEditDriverLog,
   vehicleDriverScopeWhere,
   vehicleLogEntryScopeWhere,
 } from './_access-policy'
 import { resolveVehicleEquipmentWhere } from './_equipment-policy'
-import { optionalUuidInput, requireUuidInput } from '@/lib/mutation-input'
+import { requireUuidInput } from '@/lib/mutation-input'
 import {
   normalizeVehicleLogEntryInput,
   type NormalizedVehicleLogEntryInput,
@@ -46,16 +37,6 @@ type VehicleLogSelectorOption = {
   id: string
   label: string
   hint?: string | null
-}
-
-type VehicleLogImportSource = {
-  id: string
-  name: string
-  connectorKey: string
-  connectorLabel: string
-  status: string
-  active: boolean
-  description: string | null
 }
 
 export type VehicleLogEntryDraft = {
@@ -137,12 +118,6 @@ export type VehicleLogWorkspace = {
   vehicles: VehicleLogSelectorOption[]
   sites: VehicleLogSelectorOption[]
   rows: VehicleLogWorkspaceRow[]
-  importSources: {
-    configuredSourceCount: number
-    activeSourceCount: number
-    canConfigureSources: boolean
-    sources: VehicleLogImportSource[]
-  }
   totals: {
     loggedDays: number
     importSourceDays: number
@@ -152,27 +127,13 @@ export type VehicleLogWorkspace = {
   }
 }
 
-export type ApplyVehicleLogImportInput = {
+export type VehicleLogMonthInput = {
   equipmentItemId: string
   driverPersonId: string
   month: string
-  sourceConnectionId?: string | null
-}
-
-export type ApplyVehicleLogImportResult = {
-  created: number
-  updated: number
-  skipped: number
-  pulled: number
-  resolved: number
 }
 
 type TruckLogRow = typeof truckLogEntries.$inferSelect
-type SyncConnectionRow = Pick<
-  typeof syncConnections.$inferSelect,
-  'id' | 'connectorKey' | 'name' | 'status' | 'config' | 'secrets'
->
-
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const MONTH = /^\d{4}-\d{2}$/
 
@@ -225,67 +186,10 @@ function monthLabel(year: number, month: number) {
   })
 }
 
-function parseNumber(value: string | number | null | undefined): number | null {
-  if (value == null || value === '') return null
-  const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, '').trim())
-  return Number.isFinite(n) ? n : null
-}
-
 function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {}
-}
-
-function stringValue(value: unknown): string | null {
-  const s = value == null ? '' : String(value).trim()
-  return s === '' ? null : s
-}
-
-type VehicleLogImportConfig = {
-  kind: 'http_monthly'
-  url: string
-  label: string
-  description: string | null
-  enabled: boolean
-  tokenSecretKey: string
-  timeoutMs: number
-}
-
-function vehicleLogImportConfig(connection: SyncConnectionRow): VehicleLogImportConfig | null {
-  const config = recordValue(connection.config)
-  const vehicleLogImport = recordValue(config.vehicleLogImport)
-  if (vehicleLogImport.kind !== 'http_monthly') return null
-
-  const rawUrl = stringValue(vehicleLogImport.url)
-  if (!rawUrl) return null
-  const url = normalizeVehicleLogImportUrl(rawUrl)
-
-  return {
-    kind: 'http_monthly',
-    url,
-    label: stringValue(vehicleLogImport.label) ?? 'External monthly source',
-    description: stringValue(vehicleLogImport.description),
-    enabled: vehicleLogImport.enabled !== false,
-    tokenSecretKey: stringValue(vehicleLogImport.tokenSecretKey) ?? 'token',
-    timeoutMs: Math.max(5_000, Math.min(120_000, Number(vehicleLogImport.timeoutMs ?? 45_000))),
-  }
-}
-
-function buildImportSources(connections: SyncConnectionRow[]): VehicleLogImportSource[] {
-  return connections.flatMap((connection) => {
-    const config = vehicleLogImportConfig(connection)
-    if (!config) return []
-    return {
-      id: connection.id,
-      name: connection.name || config.label,
-      connectorKey: connection.connectorKey,
-      connectorLabel: config.label,
-      status: connection.status,
-      active: connection.status === 'connected' && config.enabled,
-      description: config.description,
-    }
-  })
 }
 
 function computeTotalKm(input: {
@@ -437,7 +341,7 @@ export async function loadVehicleLogWorkspace(
 
   const result = await ctx.db(async (tx) => {
     const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
-    const [driversRaw, vehiclesRaw, sitesRaw, connectionRows, settingsRows] = await Promise.all([
+    const [driversRaw, vehiclesRaw, sitesRaw, settingsRows] = await Promise.all([
       tx
         .select({
           id: people.id,
@@ -478,17 +382,6 @@ export async function loadVehicleLogWorkspace(
         .orderBy(asc(orgUnits.name)),
       tx
         .select({
-          id: syncConnections.id,
-          connectorKey: syncConnections.connectorKey,
-          name: syncConnections.name,
-          status: syncConnections.status,
-          config: syncConnections.config,
-          secrets: syncConnections.secrets,
-        })
-        .from(syncConnections)
-        .where(isNull(syncConnections.deletedAt)),
-      tx
-        .select({
           enabledModes: vehicleLogSettings.enabledModes,
           defaultMode: vehicleLogSettings.defaultMode,
         })
@@ -522,13 +415,6 @@ export async function loadVehicleLogWorkspace(
     const selectedVehicle = opts.equipmentItemId
       ? (vehiclesRaw.find((v) => v.id === opts.equipmentItemId) ?? null)
       : null
-    const importSources = buildImportSources(connectionRows)
-    const importSourceMeta = {
-      configuredSourceCount: importSources.length,
-      activeSourceCount: importSources.filter((source) => source.active).length,
-      canConfigureSources: can(ctx, 'admin.integrations.manage'),
-    }
-
     // URL mode wins when enabled; otherwise the driver's own default
     // (people.metadata), then the tenant default. Disabled modes never render.
     const driverDefault = selectedDriver ? driverVehicleLogMode(selectedDriver.metadata) : null
@@ -559,7 +445,6 @@ export async function loadVehicleLogWorkspace(
         vehicles,
         sites,
         rows: [],
-        importSources: { ...importSourceMeta, sources: importSources },
         totals: {
           loggedDays: 0,
           importSourceDays: 0,
@@ -625,7 +510,6 @@ export async function loadVehicleLogWorkspace(
       vehicles,
       sites,
       rows,
-      importSources: { ...importSourceMeta, sources: importSources },
       totals: {
         loggedDays: entries.length,
         importSourceDays,
@@ -778,503 +662,9 @@ export async function updateVehicleLogEntry(
   return entryDraft(result.updated, result.normalized.entryDate, result.normalized.entryMode)
 }
 
-type VehicleLogImportEntry = {
-  sourceExternalId: string | null
-  date: string | null
-  customerExternalId: string | null
-  customerLegacyId: string | null
-  customerCode: string | null
-  customerShortform: string | null
-  customerName: string | null
-  sourceLabel: string | null
-  businessKm: number | null
-  skipReason: string | null
-  raw: Record<string, unknown>
-}
-
-type ResolvedImportEntry = VehicleLogImportEntry & {
-  date: string
-  sourceExternalId: string
-  siteOrgUnitId: string
-}
-
-type OrgUnitLookupRow = {
-  id: string
-  code: string | null
-  name: string
-  metadata: Record<string, unknown>
-}
-
-type ImportSetup = {
-  driver: {
-    id: string
-    firstName: string
-    lastName: string
-    employeeNo: string | null
-    externalEmployeeId: string | null
-    metadata: Record<string, unknown>
-  }
-  equipment: {
-    id: string
-    assetTag: string
-    name: string
-    metadata: Record<string, unknown>
-  }
-  connection: SyncConnectionRow
-  config: VehicleLogImportConfig
-}
-
-function numericValue(value: unknown): number | null {
-  return typeof value === 'string' || typeof value === 'number' ? parseNumber(value) : null
-}
-
-function metadataExternalId(metadata: unknown): string | null {
-  const meta = recordValue(metadata)
-  return (
-    stringValue(meta.netsuiteId) ??
-    stringValue(meta.NetsuiteID) ??
-    stringValue(meta.netSuiteId) ??
-    stringValue(meta.externalEmployeeId) ??
-    stringValue(meta.legacyId)
-  )
-}
-
-function driverExternalId(driver: ImportSetup['driver']): string | null {
-  return (
-    stringValue(driver.externalEmployeeId) ??
-    metadataExternalId(driver.metadata) ??
-    stringValue(driver.employeeNo)
-  )
-}
-
-function isSealedSecret(value: unknown): value is SealedSecret {
-  const record = recordValue(value)
-  return Boolean(stringValue(record.ciphertext) && stringValue(record.nonce))
-}
-
-function unsealConnectionSecret(connection: SyncConnectionRow, key: string): string | null {
-  const sealed = recordValue(connection.secrets)[key]
-  if (!isSealedSecret(sealed)) return null
-  return unsealSecret(sealed)
-}
-
-function readImportEntry(value: unknown): VehicleLogImportEntry {
-  const record = recordValue(value)
-  return {
-    sourceExternalId: stringValue(record.sourceExternalId),
-    date: stringValue(record.date),
-    customerExternalId: stringValue(record.customerExternalId),
-    customerLegacyId: stringValue(record.customerLegacyId),
-    customerCode: stringValue(record.customerCode),
-    customerShortform: stringValue(record.customerShortform),
-    customerName: stringValue(record.customerName),
-    sourceLabel: stringValue(record.sourceLabel),
-    businessKm: numericValue(record.businessKm),
-    skipReason: stringValue(record.skipReason),
-    raw: recordValue(record.raw),
-  }
-}
-
-function sourceStat(stats: Record<string, unknown>, key: string, fallback: number): number {
-  const value = numericValue(stats[key])
-  return value == null ? fallback : value
-}
-
-function normalizeLookupKey(value: string | null | undefined): string | null {
-  const text = value?.trim().toLowerCase()
-  return text ? text : null
-}
-
-function addLookup(map: Map<string, string>, key: string | null | undefined, id: string) {
-  const normalized = normalizeLookupKey(key)
-  if (normalized && !map.has(normalized)) map.set(normalized, id)
-}
-
-function resolveSiteOrgUnitId(
-  entry: VehicleLogImportEntry,
-  maps: {
-    byCode: Map<string, string>
-    byName: Map<string, string>
-    byExternalId: Map<string, string>
-  },
-): string | null {
-  const externalId = entry.customerExternalId
-  const codeCandidates = [
-    entry.customerCode,
-    entry.customerLegacyId,
-    entry.customerShortform,
-    externalId,
-    entry.customerLegacyId ? `C2-${entry.customerLegacyId}` : null,
-    entry.customerCode ? `C2-${entry.customerCode}` : null,
-    externalId ? `C2-${externalId}` : null,
-  ]
-  for (const code of codeCandidates) {
-    const id = maps.byCode.get(normalizeLookupKey(code) ?? '')
-    if (id) return id
-  }
-  for (const external of [entry.customerExternalId, entry.customerLegacyId]) {
-    const id = maps.byExternalId.get(normalizeLookupKey(external) ?? '')
-    if (id) return id
-  }
-  return maps.byName.get(normalizeLookupKey(entry.customerName) ?? '') ?? null
-}
-
-function buildOrgUnitMaps(rows: OrgUnitLookupRow[]) {
-  const byCode = new Map<string, string>()
-  const byName = new Map<string, string>()
-  const byExternalId = new Map<string, string>()
-  for (const row of rows) {
-    addLookup(byCode, row.code, row.id)
-    addLookup(byName, row.name, row.id)
-    const metadata = recordValue(row.metadata)
-    for (const key of ['netsuiteId', 'NetsuiteID', 'netSuiteId', 'legacyId', 'externalId']) {
-      addLookup(byExternalId, stringValue(metadata[key]), row.id)
-    }
-  }
-  return { byCode, byName, byExternalId }
-}
-
-function orgUnitLookupPredicates(
-  candidates: ReturnType<typeof collectVehicleLogOrgUnitCandidates>,
-): SQL[] {
-  const predicates: SQL[] = []
-  if (candidates.codes.length > 0) {
-    predicates.push(inArray(sql<string>`lower(${orgUnits.code})`, candidates.codes))
-  }
-  if (candidates.names.length > 0) {
-    predicates.push(inArray(sql<string>`lower(${orgUnits.name})`, candidates.names))
-  }
-  if (candidates.externalIds.length > 0) {
-    for (const key of ['netsuiteId', 'NetsuiteID', 'netSuiteId', 'legacyId', 'externalId']) {
-      predicates.push(
-        inArray(
-          sql<string>`lower(coalesce(${orgUnits.metadata} ->> ${key}, ''))`,
-          candidates.externalIds,
-        ),
-      )
-    }
-  }
-  return predicates
-}
-
-async function loadImportSetup(
-  ctx: RequestContext,
-  input: ApplyVehicleLogImportInput,
-): Promise<ImportSetup> {
-  return ctx.db(async (tx) => {
-    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
-    const connectionWhere = input.sourceConnectionId
-      ? and(isNull(syncConnections.deletedAt), eq(syncConnections.id, input.sourceConnectionId))
-      : and(
-          isNull(syncConnections.deletedAt),
-          eq(syncConnections.status, 'connected'),
-          sql`${syncConnections.config} -> 'vehicleLogImport' ->> 'kind' = 'http_monthly'`,
-          sql`coalesce(${syncConnections.config} -> 'vehicleLogImport' ->> 'enabled', 'true') <> 'false'`,
-        )
-    const [drivers, equipment, connections] = await Promise.all([
-      tx
-        .select({
-          id: people.id,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          employeeNo: people.employeeNo,
-          externalEmployeeId: people.externalEmployeeId,
-          metadata: people.metadata,
-        })
-        .from(people)
-        .where(eq(people.id, input.driverPersonId))
-        .limit(1),
-      tx
-        .select({
-          id: equipmentItems.id,
-          assetTag: equipmentItems.assetTag,
-          name: equipmentItems.name,
-          metadata: equipmentItems.metadata,
-        })
-        .from(equipmentItems)
-        .where(and(eq(equipmentItems.id, input.equipmentItemId), vehicleWhere))
-        .limit(1),
-      tx
-        .select({
-          id: syncConnections.id,
-          connectorKey: syncConnections.connectorKey,
-          name: syncConnections.name,
-          status: syncConnections.status,
-          config: syncConnections.config,
-          secrets: syncConnections.secrets,
-        })
-        .from(syncConnections)
-        .where(connectionWhere)
-        .limit(input.sourceConnectionId ? 1 : 2),
-    ])
-    const driver = drivers[0]
-    if (!driver) throw new Error('Driver was not found.')
-    const vehicle = equipment[0]
-    if (!vehicle) throw new Error('Vehicle was not found.')
-
-    const configured = connections
-      .map((connection) => ({ connection, config: vehicleLogImportConfig(connection) }))
-      .filter((row): row is { connection: SyncConnectionRow; config: VehicleLogImportConfig } =>
-        Boolean(row.config),
-      )
-    const active = configured.filter(
-      ({ connection, config }) => connection.status === 'connected' && config.enabled,
-    )
-    const selected = input.sourceConnectionId
-      ? configured.find(({ connection }) => connection.id === input.sourceConnectionId)
-      : active.length === 1
-        ? active[0]
-        : null
-    if (!selected) {
-      if (active.length > 1) throw new Error('Choose an import source.')
-      throw new Error('No active vehicle log import source is configured.')
-    }
-    if (selected.connection.status !== 'connected' || !selected.config.enabled) {
-      throw new Error(`${selected.connection.name} is not active.`)
-    }
-
-    return {
-      driver: { ...driver, metadata: recordValue(driver.metadata) },
-      equipment: { ...vehicle, metadata: recordValue(vehicle.metadata) },
-      connection: selected.connection,
-      config: selected.config,
-    }
-  })
-}
-
-async function fetchVehicleLogImport(
-  setup: ImportSetup,
-  input: ApplyVehicleLogImportInput,
-): Promise<{
-  entries: VehicleLogImportEntry[]
-  pulled: number
-  source: Record<string, unknown>
-}> {
-  const externalId = driverExternalId(setup.driver)
-  if (!externalId) {
-    throw new Error('The selected driver does not have an external employee ID for this source.')
-  }
-  const endpoint = await validateVehicleLogImportEndpoint(setup.config.url)
-  const token = unsealConnectionSecret(setup.connection, setup.config.tokenSecretKey)
-  if (!token) {
-    throw new Error(`${setup.connection.name} is missing its import token.`)
-  }
-
-  const body = JSON.stringify({
-    month: input.month,
-    employeeExternalId: externalId,
-    driver: {
-      id: setup.driver.id,
-      firstName: setup.driver.firstName,
-      lastName: setup.driver.lastName,
-      employeeNo: setup.driver.employeeNo,
-      externalEmployeeId: externalId,
-    },
-    equipment: {
-      id: setup.equipment.id,
-      assetTag: setup.equipment.assetTag,
-      name: setup.equipment.name,
-    },
-  })
-  const response = await secureFetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body,
-    timeoutMs: setup.config.timeoutMs,
-    maxRequestBytes: 64 * 1024,
-    maxResponseBytes: 4 * 1024 * 1024,
-    maxRedirects: 1,
-  })
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(
-      `${setup.connection.name} import failed (${response.status}): ${text.slice(0, 240)}`,
-    )
-  }
-
-  const payload: unknown = await response.json()
-  assertVehicleLogImportPayload(payload)
-  const rawEntries = payload.entries
-  const entries = rawEntries.map(readImportEntry)
-  const stats = recordValue(payload.stats)
-  return {
-    entries,
-    pulled: sourceStat(stats, 'pulled', rawEntries.length),
-    source: recordValue(payload.source),
-  }
-}
-
-function importedMeta(
-  entry: ResolvedImportEntry,
-  source: Record<string, unknown>,
-): Record<string, unknown> {
-  return {
-    source,
-    sourceLabel: entry.sourceLabel,
-    customerExternalId: entry.customerExternalId,
-    customerLegacyId: entry.customerLegacyId,
-    customerCode: entry.customerCode,
-    customerShortform: entry.customerShortform,
-    customerName: entry.customerName,
-    raw: entry.raw,
-  }
-}
-
-export async function applyVehicleLogImportToVehicleLog(
-  ctx: RequestContext,
-  input: ApplyVehicleLogImportInput,
-): Promise<ApplyVehicleLogImportResult> {
-  assertCan(ctx, 'equipment.manage')
-  const parsedMonth = parseRequiredMonth(input.month)
-  const normalizedInput: ApplyVehicleLogImportInput = {
-    equipmentItemId: requireUuidInput(input.equipmentItemId, 'Vehicle'),
-    driverPersonId: requireUuidInput(input.driverPersonId, 'Driver'),
-    month: monthKey(parsedMonth.year, parsedMonth.month),
-    sourceConnectionId: optionalUuidInput(input.sourceConnectionId, 'Import source'),
-  }
-  const { year, month } = parseRequiredMonth(normalizedInput.month)
-  const monthKeyValue = monthKey(year, month)
-  const start = dateKey(year, month, 1)
-  const next = shiftMonth(year, month, 1)
-  const endExclusive = dateKey(next.year, next.month, 1)
-
-  const setup = await loadImportSetup(ctx, normalizedInput)
-  const imported = await fetchVehicleLogImport(setup, {
-    ...normalizedInput,
-    month: monthKeyValue,
-  })
-  const prepared = prepareVehicleLogImportDays(imported.entries, start, endExclusive)
-  const candidates = collectVehicleLogOrgUnitCandidates(prepared.entries)
-  const lookupPredicates = orgUnitLookupPredicates(candidates)
-
-  const result = await ctx.db(async (tx) => {
-    const matchingOrgUnits =
-      lookupPredicates.length > 0
-        ? tx
-            .select({
-              id: orgUnits.id,
-              code: orgUnits.code,
-              name: orgUnits.name,
-              metadata: orgUnits.metadata,
-            })
-            .from(orgUnits)
-            .where(
-              and(
-                inArray(orgUnits.level, ['customer', 'project', 'site']),
-                or(...lookupPredicates),
-              ),
-            )
-            .orderBy(
-              sql`case ${orgUnits.level} when 'site' then 0 when 'project' then 1 else 2 end`,
-              asc(orgUnits.name),
-              asc(orgUnits.id),
-            )
-        : Promise.resolve([])
-    const [siteRows, existingEntries] = await Promise.all([
-      matchingOrgUnits,
-      tx
-        .select()
-        .from(truckLogEntries)
-        .where(
-          and(
-            eq(truckLogEntries.driverPersonId, normalizedInput.driverPersonId),
-            eq(truckLogEntries.equipmentItemId, normalizedInput.equipmentItemId),
-            gte(truckLogEntries.entryDate, start),
-            lt(truckLogEntries.entryDate, endExclusive),
-          ),
-        ),
-    ])
-    const siteMaps = buildOrgUnitMaps(siteRows.map((row) => ({ ...row, metadata: row.metadata })))
-    const byDate = new Map<string, ResolvedImportEntry>()
-    let skipped = prepared.skipped
-    for (const entry of prepared.entries) {
-      const siteOrgUnitId = resolveSiteOrgUnitId(entry, siteMaps)
-      if (!siteOrgUnitId) {
-        skipped += 1
-        continue
-      }
-      byDate.set(entry.date, {
-        ...entry,
-        date: entry.date,
-        sourceExternalId: entry.sourceExternalId,
-        siteOrgUnitId,
-      })
-    }
-
-    const existingByDate = new Map(existingEntries.map((entry) => [entry.entryDate, entry]))
-    let created = 0
-    let updated = 0
-
-    for (const entry of byDate.values()) {
-      const existing = existingByDate.get(entry.date)
-      const personalKm = existing?.personalKm ?? null
-      const kmDriven = computeTotalKm({
-        entryMode: 'destination',
-        businessKm: entry.businessKm,
-        personalKm,
-      })
-      const values = {
-        tenantId: ctx.tenantId,
-        equipmentItemId: normalizedInput.equipmentItemId,
-        driverPersonId: normalizedInput.driverPersonId,
-        entryDate: entry.date,
-        entryMode: 'destination' as const,
-        startOdometer: null,
-        endOdometer: null,
-        kmDriven,
-        businessKm: entry.businessKm,
-        personalKm,
-        siteOrgUnitId: entry.siteOrgUnitId,
-        otherDestination: null,
-        notes: existing?.notes ?? null,
-        sourceConnectionId: setup.connection.id,
-        sourceExternalId: entry.sourceExternalId,
-        importStatus: 'imported' as const,
-        importedAt: new Date(),
-        importMeta: importedMeta(entry, imported.source),
-        createdByTenantUserId: existing?.createdByTenantUserId ?? ctx.membership?.id ?? null,
-      }
-      const [row] = await tx
-        .insert(truckLogEntries)
-        .values(values)
-        .onConflictDoUpdate({
-          target: [
-            truckLogEntries.tenantId,
-            truckLogEntries.equipmentItemId,
-            truckLogEntries.driverPersonId,
-            truckLogEntries.entryDate,
-          ],
-          set: values,
-        })
-        .returning({ id: truckLogEntries.id })
-      if (!row) skipped += 1
-      else if (existing) updated += 1
-      else created += 1
-    }
-
-    return { created, updated, skipped, pulled: imported.pulled, resolved: byDate.size }
-  })
-
-  await recordAudit(ctx, {
-    entityType: 'truck_log_entry',
-    entityId: normalizedInput.equipmentItemId,
-    action: 'update',
-    summary: `Imported ${result.created + result.updated} vehicle log day(s) from ${setup.connection.name}`,
-    after: { ...normalizedInput, sourceConnectionId: setup.connection.id, ...result },
-    metadata: { operation: 'vehicle_log_import' },
-  })
-  revalidatePath('/equipment/vehicle-log')
-  revalidatePath(`/equipment/${normalizedInput.equipmentItemId}`)
-  return result
-}
-
 export async function deleteVehicleLogMonth(
   ctx: RequestContext,
-  input: ApplyVehicleLogImportInput,
+  input: VehicleLogMonthInput,
 ): Promise<number> {
   assertCan(ctx, 'equipment.manage')
   const equipmentItemId = requireUuidInput(input.equipmentItemId, 'Vehicle')
@@ -1329,4 +719,34 @@ function revalidateVehicleLogPaths(equipmentItemId: string, date: string) {
   if (ISO_DATE.test(date)) {
     revalidatePath(`/equipment/vehicle-log?month=${date.slice(0, 7)}`)
   }
+}
+
+/** Shared edit authorization for trusted extensions on the selected monthly workspace. */
+export async function authorizeVehicleLogTarget(
+  ctx: RequestContext,
+  input: VehicleLogMonthInput,
+): Promise<Record<string, string>> {
+  const driverPersonId = requireUuidInput(input.driverPersonId, 'Driver')
+  const equipmentItemId = requireUuidInput(input.equipmentItemId, 'Vehicle')
+  const parsed = parseRequiredMonth(input.month)
+  assertCanEditDriverLog(ctx, driverPersonId)
+  await ctx.db(async (tx) => {
+    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
+    const [driver, vehicle] = await Promise.all([
+      tx
+        .select({ id: people.id })
+        .from(people)
+        .where(
+          and(eq(people.id, driverPersonId), eq(people.status, 'active'), isNull(people.deletedAt)),
+        )
+        .limit(1),
+      tx
+        .select({ id: equipmentItems.id })
+        .from(equipmentItems)
+        .where(and(eq(equipmentItems.id, equipmentItemId), vehicleWhere))
+        .limit(1),
+    ])
+    if (!driver.length || !vehicle.length) throw new Error('Driver or vehicle is unavailable.')
+  })
+  return { driverPersonId, equipmentItemId, month: monthKey(parsed.year, parsed.month) }
 }

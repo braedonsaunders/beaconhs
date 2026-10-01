@@ -505,7 +505,7 @@ Open **Equipment** in the left menu, then the **Vehicle log** tab — or go stra
 3. If your company allows both, pick a **Log mode**: **Destination** or **Odometer**.
 4. Use the arrows to change months. **This month** jumps back to today's month.
 
-You now see the month grid — one row per day. **Edit own vehicle log** lets you enter and correct your own driver log without managing equipment. Your login must be linked to your Person record. Foreman / Supervisor roles include this permission. Other drivers’ logs stay read-only unless you have **Manage equipment**. Source imports and deleting a whole month also require **Manage equipment**.
+You now see the month grid — one row per day. **Edit own vehicle log** lets you enter and correct your own driver log without managing equipment. Your login must be linked to your Person record. Foreman / Supervisor roles include this permission. Other drivers’ logs stay read-only unless you have **Manage equipment**. Deleting a whole month requires **Manage equipment**. Your company may install a private extension that adds actions to the month toolbar. These actions are available when you can edit the selected driver’s log. If an extension is unavailable, contact your administrator.
 
 ## Logging a day (odometer mode)
 
@@ -536,7 +536,7 @@ The grid becomes a stack of day cards with big touch targets, one card per day, 
 
 1. Choose the **Driver**, **Vehicle**, and month.
 2. Wait for any saving row to finish.
-3. Select **Generate PDF** beside **Import** and **Delete month**. The current saved month opens as a PDF in a new tab.
+3. Select **Generate PDF** in the month toolbar. The current saved month opens as a PDF in a new tab.
 
 The button stays visible and becomes available after you select a driver and vehicle. You can generate a PDF without importing or deleting entries. The monthly template uses a compact portrait layout, with the driver and vehicle above the daily destinations, odometer readings, business and personal kilometres, notes, and totals. Longer notes can continue onto another page. Your administrator can change the template and paper setup under **PDF templates**.
 

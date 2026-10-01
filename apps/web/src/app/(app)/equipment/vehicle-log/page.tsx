@@ -1,3 +1,6 @@
+import { revalidatePath } from 'next/cache'
+import { loadTenantPluginActions, executeTenantPluginAction } from '@/lib/tenant-plugins/host'
+import type { PluginActionResult } from '@/lib/tenant-plugins/types'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
@@ -16,11 +19,11 @@ import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { createVehicleLogFlowAdapter } from '@/lib/flows/adapters/vehicle-log'
 import {
-  applyVehicleLogImportToVehicleLog,
+  authorizeVehicleLogTarget,
   deleteVehicleLogMonth,
   loadVehicleLogWorkspace,
   upsertVehicleLogEntry,
-  type ApplyVehicleLogImportInput,
+  type VehicleLogMonthInput,
   type SaveVehicleLogEntryInput,
 } from './_service'
 import { runVehicleLogAction } from './_flow-actions'
@@ -46,22 +49,34 @@ async function saveVehicleLogEntryAction(input: SaveVehicleLogEntryInput) {
   }
 }
 
-async function applyVehicleLogImportAction(input: ApplyVehicleLogImportInput) {
+async function executePluginAction(
+  input: VehicleLogMonthInput,
+  pluginId: string,
+  actionId: string,
+  fields: Record<string, string>,
+): Promise<PluginActionResult> {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
   try {
-    const result = await applyVehicleLogImportToVehicleLog(ctx, input)
-    return { ok: true as const, result }
+    const target = await authorizeVehicleLogTarget(ctx, input)
+    const result = await executeTenantPluginAction(
+      { ctx, surface: 'equipment.vehicle-log.month', target },
+      pluginId,
+      actionId,
+      fields,
+    )
+    revalidatePath('/equipment/vehicle-log')
+    revalidatePath(`/equipment/${target.equipmentItemId}`)
+    return { ok: true, message: result.message }
   } catch (error) {
     return {
-      ok: false as const,
-      error: safeDbErrorMessage(error, 'Failed to import vehicle log source.'),
+      ok: false,
+      error: safeDbErrorMessage(error, 'Tenant extension failed. Please try again.'),
     }
   }
 }
 
-async function deleteMonthAction(input: ApplyVehicleLogImportInput) {
+async function deleteMonthAction(input: VehicleLogMonthInput) {
   'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
@@ -94,6 +109,28 @@ export default async function VehicleLogPage({
     equipmentItemId: pickString(sp.vehicle),
     mode: pickString(sp.mode),
   })
+
+  const targetInput: VehicleLogMonthInput = {
+    driverPersonId: workspace.selectedDriverId,
+    equipmentItemId: workspace.selectedEquipmentId,
+    month: workspace.month.key,
+  }
+  let pluginActions: Awaited<ReturnType<typeof loadTenantPluginActions>> = {
+    actions: [],
+    unavailable: false,
+  }
+  if (
+    workspace.selectedDriverId &&
+    workspace.selectedEquipmentId &&
+    canEditDriverLog(ctx, workspace.selectedDriverId)
+  ) {
+    const target = await authorizeVehicleLogTarget(ctx, targetInput)
+    pluginActions = await loadTenantPluginActions({
+      ctx,
+      surface: 'equipment.vehicle-log.month',
+      target,
+    })
+  }
 
   // Manual-trigger flow buttons for the viewed month. The anchor record is the
   // month's latest saved entry — the vehicle-log adapter expands it to the
@@ -178,7 +215,8 @@ export default async function VehicleLogPage({
               canManage={can(ctx, 'equipment.manage')}
               canEditDriverLog={canEditDriverLog(ctx, workspace.selectedDriverId)}
               saveAction={saveVehicleLogEntryAction}
-              applyAction={applyVehicleLogImportAction}
+              pluginActions={pluginActions}
+              executePluginAction={executePluginAction.bind(null, targetInput)}
               deleteMonthAction={deleteMonthAction}
               recordActions={recordActions}
               actionEntryId={actionEntryId}
