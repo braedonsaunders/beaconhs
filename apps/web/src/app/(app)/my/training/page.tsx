@@ -437,7 +437,10 @@ export default async function MyTrainingPage({
           trainingCourses,
           and(
             eq(trainingCourses.tenantId, complianceStatus.tenantId),
-            eq(trainingCourses.id, sql<string>`${complianceObligations.targetRef}->>'courseId'`),
+            eq(
+              sql<string>`${trainingCourses.id}::text`,
+              sql<string>`${complianceObligations.targetRef}->>'courseId'`,
+            ),
             isNull(trainingCourses.deletedAt),
           ),
         )
@@ -446,7 +449,7 @@ export default async function MyTrainingPage({
           and(
             eq(trainingAssessmentTypes.tenantId, complianceStatus.tenantId),
             eq(
-              trainingAssessmentTypes.id,
+              sql<string>`${trainingAssessmentTypes.id}::text`,
               sql<string>`${complianceObligations.targetRef}->>'assessmentTypeId'`,
             ),
             isNull(trainingAssessmentTypes.deletedAt),
@@ -457,7 +460,7 @@ export default async function MyTrainingPage({
           and(
             eq(trainingSkillTypes.tenantId, complianceStatus.tenantId),
             eq(
-              trainingSkillTypes.id,
+              sql<string>`${trainingSkillTypes.id}::text`,
               sql<string>`${complianceObligations.targetRef}->>'skillTypeId'`,
             ),
           ),
@@ -484,7 +487,10 @@ export default async function MyTrainingPage({
           trainingCourses,
           and(
             eq(trainingCourses.tenantId, complianceStatus.tenantId),
-            eq(trainingCourses.id, sql<string>`${complianceObligations.targetRef}->>'courseId'`),
+            eq(
+              sql<string>`${trainingCourses.id}::text`,
+              sql<string>`${complianceObligations.targetRef}->>'courseId'`,
+            ),
             isNull(trainingCourses.deletedAt),
           ),
         )
@@ -493,7 +499,7 @@ export default async function MyTrainingPage({
           and(
             eq(trainingAssessmentTypes.tenantId, complianceStatus.tenantId),
             eq(
-              trainingAssessmentTypes.id,
+              sql<string>`${trainingAssessmentTypes.id}::text`,
               sql<string>`${complianceObligations.targetRef}->>'assessmentTypeId'`,
             ),
             isNull(trainingAssessmentTypes.deletedAt),
@@ -504,7 +510,7 @@ export default async function MyTrainingPage({
           and(
             eq(trainingSkillTypes.tenantId, complianceStatus.tenantId),
             eq(
-              trainingSkillTypes.id,
+              sql<string>`${trainingSkillTypes.id}::text`,
               sql<string>`${complianceObligations.targetRef}->>'skillTypeId'`,
             ),
           ),
@@ -515,7 +521,7 @@ export default async function MyTrainingPage({
             eq(trainingEnrollments.tenantId, complianceStatus.tenantId),
             eq(trainingEnrollments.personId, personId),
             eq(
-              trainingEnrollments.courseId,
+              sql<string>`${trainingEnrollments.courseId}::text`,
               sql<string>`${complianceObligations.targetRef}->>'courseId'`,
             ),
             isNull(trainingEnrollments.deletedAt),
