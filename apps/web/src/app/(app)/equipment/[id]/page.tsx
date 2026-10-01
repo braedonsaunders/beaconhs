@@ -29,6 +29,8 @@ import {
 } from 'lucide-react'
 import { NewWorkOrderDrawer } from './_work-order-drawer'
 import { EquipmentLogKindFields } from './_log-fields'
+import { EquipmentLogRow } from './_log-row'
+import { saveLogEntry } from './_log-actions'
 import { FilterChips } from '@/components/filter-bar'
 import { NewTruckLogEntryDrawer } from './_truck-log-drawer'
 import { EquipmentFileDrawer } from './_files-drawer'
@@ -110,11 +112,10 @@ import { updateCustomFieldValueAction } from '@/lib/custom-fields/actions'
 import { EQUIPMENT_FIELD_GROUPS, resolveEnabledFieldGroups } from '@/lib/equipment/field-groups'
 import {
   EQUIPMENT_FILE_KINDS,
-  EQUIPMENT_LOG_KINDS,
   EQUIPMENT_STATUSES,
+  EQUIPMENT_LOG_KINDS,
   mergeEquipmentFileMetadata,
   parseEquipmentAutosaveInput,
-  parseEquipmentLogAmount,
   WORK_ORDER_PRIORITIES,
 } from '@/lib/equipment/mutation-input'
 import {
@@ -437,62 +438,6 @@ async function transferLocation(formData: FormData) {
   revalidatePath('/equipment')
   revalidatePath('/equipment/station')
   revalidatePath('/dashboard')
-}
-
-async function addLogEntry(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
-  const itemId = requireUuidInput(formData.get('itemId'), 'Equipment item')
-  const entryDate = requiredDateInput(formData.get('entryDate'), 'Entry date')
-  const kind = requireEnumInput(formData.get('kind') ?? 'note', EQUIPMENT_LOG_KINDS, 'Log kind')
-  const amount = parseEquipmentLogAmount(kind, formData.get('amount'))
-  const title = optionalTextInput(formData.get('title'), 'Title', 240)
-  const details = requiredTextInput(formData.get('details'), 'Details', 10_000)
-
-  await ctx.db(async (tx) => {
-    const [item] = await tx
-      .select({
-        id: equipmentItems.id,
-        siteId: equipmentItems.currentSiteOrgUnitId,
-        personId: equipmentItems.currentHolderPersonId,
-      })
-      .from(equipmentItems)
-      .where(and(eq(equipmentItems.id, itemId), isNull(equipmentItems.deletedAt)))
-      .limit(1)
-    if (
-      !item ||
-      !(await canSeeRecord(ctx, tx, {
-        prefix: 'equipment',
-        siteId: item.siteId,
-        personId: item.personId,
-      }))
-    )
-      throw new Error('Equipment item was not found.')
-    const [row] = await tx
-      .insert(equipmentLogEntries)
-      .values({
-        tenantId: ctx.tenantId,
-        equipmentItemId: itemId,
-        entryDate,
-        kind,
-        amount,
-        title,
-        details,
-        createdByTenantUserId: ctx.membership?.id,
-      })
-      .returning({ id: equipmentLogEntries.id })
-    if (!row) throw new Error('Log entry was not saved.')
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'equipment_log_entry',
-      entityId: row.id,
-      action: 'create',
-      summary: `Logged ${kind} entry`,
-      after: { itemId, entryDate, kind, amount, title, details: details.slice(0, 200) },
-    })
-  })
-  revalidatePath(`/equipment/${itemId}`)
-  redirect(`/equipment/${itemId}?tab=log`)
 }
 
 async function checkOutFromItem(formData: FormData) {
@@ -1343,7 +1288,26 @@ export default async function EquipmentDetailPage({
   // Drawer state is URL-driven; the active tab is preserved in the close URL
   // so that closing the drawer doesn't kick you back to the Overview tab.
   const drawerKey = pickString(sp.drawer)
-  const closeHref = mergeHref(basePath, sp, { tab: active, drawer: undefined })
+  const closeHref = mergeHref(basePath, sp, { tab: active, drawer: undefined, entryId: undefined })
+  const editingLogId = pickString(sp.entryId) ?? ''
+  const editingLog =
+    drawerKey === 'edit-log' && canManageEquipment && isUuid(editingLogId)
+      ? ((
+          await ctx.db((tx) =>
+            tx
+              .select()
+              .from(equipmentLogEntries)
+              .where(
+                and(
+                  eq(equipmentLogEntries.id, editingLogId),
+                  eq(equipmentLogEntries.equipmentItemId, id),
+                ),
+              )
+              .limit(1),
+          )
+        )[0] ?? null)
+      : null
+  if (drawerKey === 'edit-log' && canManageEquipment && !editingLog) notFound()
   // Inspections started from this page open in a flyout over it, so the crew
   // never loses the unit they were looking at.
   const inspectionReturnTo = mergeHref(basePath, sp, {
@@ -3261,9 +3225,36 @@ export default async function EquipmentDetailPage({
                                   <TableBody>
                                     <GeneratedValue
                                       value={logEntries.map(({ log, person }) => (
-                                        <TableRow key={log.id}>
+                                        <EquipmentLogRow
+                                          key={log.id}
+                                          href={
+                                            canManageEquipment
+                                              ? mergeHref(basePath, sp, {
+                                                  tab: 'log',
+                                                  drawer: 'edit-log',
+                                                  entryId: log.id,
+                                                })
+                                              : undefined
+                                          }
+                                        >
                                           <TableCell className="font-mono text-xs">
-                                            <GeneratedValue value={log.entryDate} />
+                                            {canManageEquipment ? (
+                                              <Link
+                                                href={
+                                                  mergeHref(basePath, sp, {
+                                                    tab: 'log',
+                                                    drawer: 'edit-log',
+                                                    entryId: log.id,
+                                                  }) as Route
+                                                }
+                                                className="underline decoration-dotted underline-offset-4"
+                                                aria-label={`${tGeneratedValue('Edit log entry')}: ${log.title ?? log.entryDate}`}
+                                              >
+                                                <GeneratedValue value={log.entryDate} />
+                                              </Link>
+                                            ) : (
+                                              <GeneratedValue value={log.entryDate} />
+                                            )}
                                           </TableCell>
                                           <TableCell>
                                             <Badge variant="secondary">
@@ -3294,7 +3285,7 @@ export default async function EquipmentDetailPage({
                                           <TableCell className="text-right font-mono tabular-nums">
                                             <GeneratedValue value={log.amount ?? '—'} />
                                           </TableCell>
-                                        </TableRow>
+                                        </EquipmentLogRow>
                                       ))}
                                     />
                                   </TableBody>
@@ -3350,37 +3341,71 @@ export default async function EquipmentDetailPage({
        * active tab.
        */}
       <UrlDrawer
-        open={drawerKey === 'add-log' && canManageEquipment}
+        open={(drawerKey === 'add-log' || Boolean(editingLog)) && canManageEquipment}
         closeHref={closeHref}
-        title={tGenerated('m_0e31f658c2f794')}
+        title={editingLog ? tGeneratedValue('Edit log entry') : tGenerated('m_0e31f658c2f794')}
         description={tGenerated('m_09f67f2ca76754')}
         size="md"
         footer={
           <Button type="submit" form="equipment-add-log-form">
-            <Plus size={14} /> <GeneratedText id="m_1ea3a4ad13d4d7" />
+            {editingLog ? (
+              <>
+                <Check size={14} /> <GeneratedValue value="Save changes" />
+              </>
+            ) : (
+              <>
+                <Plus size={14} /> <GeneratedText id="m_1ea3a4ad13d4d7" />
+              </>
+            )}
           </Button>
         }
       >
         <form
           id="equipment-add-log-form"
-          action={addLogEntry}
+          key={editingLog?.id ?? 'new-log'}
+          action={saveLogEntry}
           className="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
           <input type="hidden" name="itemId" value={id} />
+          <input type="hidden" name="returnHref" value={closeHref} />
+          {editingLog ? (
+            <>
+              <input type="hidden" name="entryId" value={editingLog.id} />
+              <input
+                type="hidden"
+                name="expectedUpdatedAt"
+                value={editingLog.updatedAt.toISOString()}
+              />
+            </>
+          ) : null}
           <Field label={tGenerated('m_0285c38761c540')} required>
             <Input
               name="entryDate"
               type="date"
               required
-              defaultValue={new Date().toISOString().slice(0, 10)}
+              defaultValue={editingLog?.entryDate ?? new Date().toISOString().slice(0, 10)}
             />
           </Field>
-          <EquipmentLogKindFields />
+          <EquipmentLogKindFields
+            defaultKind={editingLog?.kind}
+            defaultAmount={editingLog?.amount}
+          />
           <Field label={tGenerated('m_0decefd558c355')} className="sm:col-span-2">
-            <Input name="title" maxLength={240} placeholder={tGenerated('m_11393661c7db12')} />
+            <Input
+              name="title"
+              defaultValue={editingLog?.title ?? undefined}
+              maxLength={240}
+              placeholder={tGenerated('m_11393661c7db12')}
+            />
           </Field>
           <Field label={tGenerated('m_1560d4e2a09d09')} required className="sm:col-span-2">
-            <Textarea name="details" rows={5} maxLength={10000} required />
+            <Textarea
+              name="details"
+              defaultValue={editingLog?.details}
+              rows={5}
+              maxLength={10000}
+              required
+            />
           </Field>
         </form>
       </UrlDrawer>

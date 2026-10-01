@@ -5,9 +5,15 @@ import { Input, Label, Select } from '@beaconhs/ui'
 import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 import { EQUIPMENT_LOG_KINDS } from '@/lib/equipment/mutation-input'
 
-export function EquipmentLogKindFields() {
+export function EquipmentLogKindFields({
+  defaultKind = 'note',
+  defaultAmount,
+}: {
+  defaultKind?: string
+  defaultAmount?: string | null
+}) {
   const t = useGeneratedValueTranslations()
-  const [kind, setKind] = useState('note')
+  const [kind, setKind] = useState(defaultKind)
 
   return (
     <>
@@ -36,6 +42,7 @@ export function EquipmentLogKindFields() {
           <Input
             id="equipment-log-amount"
             name="amount"
+            defaultValue={defaultAmount ?? undefined}
             type="number"
             step="0.01"
             min="-9999999999999999.99"
