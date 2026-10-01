@@ -87,6 +87,13 @@ describe('picker options route policy', () => {
     expect(db).not.toHaveBeenCalled()
   })
 
+  it('keeps the issuing directory gated for inspection-only users', async () => {
+    const db = vi.fn()
+    state.context = { isSuperAdmin: false, permissions: new Set(['ppe.inspect']), db }
+    expect((await request('lookup=ppe-active-people')).status).toBe(403)
+    expect(db).not.toHaveBeenCalled()
+  })
+
   it.each([
     ['lookup=training-assessment-people', 'training.read.self'],
     ['lookup=training-course-assessment-types', 'training.course.manage'],
@@ -123,6 +130,8 @@ describe('picker options route policy', () => {
     ['lookup=corrective-action-owners', 'ca.update'],
     ['lookup=document-signoff-people', 'documents.manage'],
     ['lookup=ppe-active-people', 'ppe.issue'],
+    ['lookup=ppe-inspection-supervisors', 'ppe.inspect'],
+    ['lookup=equipment-rental-inspection-types', 'equipment.inspect'],
     ['lookup=vehicle-customers', 'equipment.manage'],
     ['lookup=equipment-custody-holders', 'equipment.manage'],
     ['lookup=equipment-custody-sites', 'equipment.manage'],

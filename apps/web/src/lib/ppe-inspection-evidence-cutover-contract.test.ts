@@ -17,6 +17,17 @@ describe('PPE inspection evidence cutover contract', () => {
     expect(schema).toContain("'ppe_inspections_submitted_result_ck'")
   })
 
+  it('only offers recording when the submit permission and item lifecycle allow it', () => {
+    const page = source('../app/(app)/ppe/[id]/page.tsx')
+    expect(page).toContain("const canInspect = can(ctx, 'ppe.inspect')")
+    expect(page).toContain("open={canRecordInspection && drawerKey === 'record-inspection'}")
+    expect(page).toContain('canRecordInspection && hasPreUse')
+    expect(page).toContain('canRecordInspection && hasAnnual')
+    expect(page).toContain('canRecordInspection && hasInspections')
+    expect(page).toContain("assertCan(ctx, 'ppe.inspect')")
+    expect(page).toContain('unstable_rethrow(error)')
+  })
+
   it('validates the exact item, evidence, and tenant-owned uploads before writing', () => {
     const page = source('../app/(app)/ppe/[id]/page.tsx')
     expect(page).toContain('if (!item || item.typeId !== typeId)')

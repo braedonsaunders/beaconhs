@@ -294,6 +294,8 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
       return can(ctx, 'documents.manage')
     case 'ppe-active-people':
       return can(ctx, 'ppe.issue') || can(ctx, 'ppe.manage')
+    case 'ppe-inspection-supervisors':
+      return can(ctx, 'ppe.inspect')
     // Filtering the register is a READ. Gating this on the write
     // permissions would deny the filter to read-only PPE users.
     case 'ppe-register-filter-holders':
@@ -1668,7 +1670,7 @@ async function loadOptions(
       return boundPickerOptions(personOptions(rows))
     }
 
-    if (lookup === 'ppe-active-people') {
+    if (lookup === 'ppe-active-people' || lookup === 'ppe-inspection-supervisors') {
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)
         .from(people)

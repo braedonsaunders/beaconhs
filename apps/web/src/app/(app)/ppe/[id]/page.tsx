@@ -19,7 +19,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { DownloadLink } from '@/components/download-link'
 import { Fragment } from 'react'
-import { notFound, redirect } from 'next/navigation'
+import { notFound, redirect, unstable_rethrow } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
 import {
@@ -68,7 +68,7 @@ import {
   tenantUsers,
 } from '@beaconhs/db/schema'
 import { isUniqueViolation, safeDbErrorMessage } from '@beaconhs/db'
-import { assertCan, can } from '@beaconhs/tenant'
+import { assertCan, can, ForbiddenError } from '@beaconhs/tenant'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { attachmentUrl } from '@/lib/attachment-url'
@@ -283,7 +283,6 @@ async function updatePpeField(formData: FormData) {
 }
 
 async function recordInspection(formData: FormData) {
-  'use server'
   const ctx = await requireRequestContext()
   assertCan(ctx, 'ppe.inspect')
   const itemId = String(formData.get('itemId') ?? '')
@@ -586,6 +585,25 @@ async function recordInspection(formData: FormData) {
   redirect(`/ppe/${itemId}?tab=inspections`)
 }
 
+async function submitPpeInspection(formData: FormData) {
+  'use server'
+  try {
+    await recordInspection(formData)
+  } catch (error) {
+    unstable_rethrow(error)
+    if (error instanceof ForbiddenError) {
+      return {
+        error:
+          'You need Inspect PPE permission to record an inspection. Ask your administrator for access.',
+      }
+    }
+    console.error('[ppe-inspection] submit failed', error)
+    return {
+      error: safeDbErrorMessage(error, 'Could not record the inspection. Please try again.'),
+    }
+  }
+}
+
 async function setStatus(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
@@ -867,6 +885,7 @@ export default async function PpeDetailPage({
   const ctx = await requireRequestContext()
   const canManage = can(ctx, 'ppe.manage')
   const canIssue = can(ctx, 'ppe.issue')
+  const canInspect = can(ctx, 'ppe.inspect')
   const canChangeStatus = can(ctx, 'ppe.return') || canManage
   // Clearing failed gear is deliberately narrower than ppe.inspect — crews
   // still run pre-use checks, but only H&S/admin may declare it safe again.
@@ -975,6 +994,10 @@ export default async function PpeDetailPage({
             ? 'pre_use'
             : null
   const hasInspections = hasPreUse || hasAnnual
+  const canRecordInspection =
+    canInspect &&
+    !['discarded', 'expired'].includes(item.status) &&
+    (item.status !== 'out_of_service' || canReturnToService)
   const requiresCertificate = type.inspectionSchedule?.requiresCertificate ?? false
   const showCertificates = requiresCertificate || countData.annual > 0
 
@@ -1352,7 +1375,10 @@ export default async function PpeDetailPage({
               />
               <GeneratedValue
                 value={
-                  isOutOfService && canReturnToService && returnToServiceKind ? (
+                  canRecordInspection &&
+                  isOutOfService &&
+                  canReturnToService &&
+                  returnToServiceKind ? (
                     <Link
                       href={
                         `${basePath}?tab=inspections&drawer=record-inspection&kind=${returnToServiceKind}` as any
@@ -1709,7 +1735,7 @@ export default async function PpeDetailPage({
                     <div className="flex items-center gap-2">
                       <GeneratedValue
                         value={
-                          hasPreUse ? (
+                          canRecordInspection && hasPreUse ? (
                             <Link
                               href={
                                 `${basePath}?tab=inspections&drawer=record-inspection&kind=pre_use` as any
@@ -1724,7 +1750,7 @@ export default async function PpeDetailPage({
                       />
                       <GeneratedValue
                         value={
-                          hasAnnual ? (
+                          canRecordInspection && hasAnnual ? (
                             <Link
                               href={
                                 `${basePath}?tab=inspections&drawer=record-inspection&kind=annual` as any
@@ -1762,26 +1788,29 @@ export default async function PpeDetailPage({
                           icon={<ClipboardCheck size={24} />}
                           title={tGenerated('m_128fa3f1eca160')}
                           action={
-                            <Link
-                              href={
-                                `${basePath}?tab=inspections&drawer=record-inspection&kind=${hasPreUse ? 'pre_use' : 'annual'}` as any
-                              }
-                            >
-                              <Button size="sm" variant="outline">
-                                <ClipboardCheck size={14} /> <GeneratedText id="m_04b73b25d3382c" />{' '}
-                                <GeneratedValue
-                                  value={
-                                    hasPreUse ? (
-                                      <GeneratedText id="m_1d73764ccc174e" />
-                                    ) : (
-                                      <GeneratedText id="m_13f2e02bbd7b16" />
-                                    )
-                                  }
-                                />
-                                <GeneratedValue value={' '} />
-                                <GeneratedText id="m_1383222293f273" />
-                              </Button>
-                            </Link>
+                            canRecordInspection && hasInspections ? (
+                              <Link
+                                href={
+                                  `${basePath}?tab=inspections&drawer=record-inspection&kind=${hasPreUse ? 'pre_use' : 'annual'}` as any
+                                }
+                              >
+                                <Button size="sm" variant="outline">
+                                  <ClipboardCheck size={14} />{' '}
+                                  <GeneratedText id="m_04b73b25d3382c" />{' '}
+                                  <GeneratedValue
+                                    value={
+                                      hasPreUse ? (
+                                        <GeneratedText id="m_1d73764ccc174e" />
+                                      ) : (
+                                        <GeneratedText id="m_13f2e02bbd7b16" />
+                                      )
+                                    }
+                                  />
+                                  <GeneratedValue value={' '} />
+                                  <GeneratedText id="m_1383222293f273" />
+                                </Button>
+                              </Link>
+                            ) : undefined
                           }
                         />
                       ) : (
@@ -2387,7 +2416,7 @@ export default async function PpeDetailPage({
        * active tab.
        */}
       <PpeInspectionForm
-        open={drawerKey === 'record-inspection'}
+        open={canRecordInspection && drawerKey === 'record-inspection'}
         closeHref={closeHref}
         title={tGeneratedValue(
           inspectionKind === 'annual'
@@ -2403,7 +2432,7 @@ export default async function PpeDetailPage({
         typeId={type.id}
         kind={inspectionKind}
         criteria={inspectionCriteria}
-        action={recordInspection}
+        action={submitPpeInspection}
       />
 
       <UrlDrawer

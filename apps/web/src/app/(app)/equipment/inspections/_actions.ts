@@ -174,6 +174,9 @@ export async function startEquipmentInspection(formData: FormData) {
       .limit(1)
       .for('share')
     if (!type) throw new Error('Active inspection type not found')
+    if (targetMode === 'rental' && !type.isPreUse) {
+      throw new Error('Rented equipment can only have pre-use inspections')
+    }
 
     const [item] =
       targetMode === 'registered'

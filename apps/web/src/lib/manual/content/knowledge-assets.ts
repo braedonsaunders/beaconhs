@@ -869,7 +869,7 @@ Walking a site instead of checking a unit? Those live separately — see [Site i
 2. Choose **Registered unit** to search the fleet, or **Rental / unregistered** for a unit that is not in the equipment register.
 3. For a registered unit, pick the **Equipment item**. The **Inspection** list then shows only what is set up on that unit — its pre-use checklist and its schedules. If what you expect is missing, the unit needs it set up on the **Schedules** sub-tab first.
 4. For a rental, enter the equipment name, serial or asset identifier, and provider, then choose the **Location** — the customer, project, site, or area the unit is working at. Rentals can only take pre-use inspections; their periodic certification belongs to the rental company.
-5. Tap **Start inspection**.
+5. Search the **Inspection** list and select the check you need. Search covers the full eligible list, including checks beyond the first page. If more results exist, narrow your search. Then tap **Start inspection**. If starting fails, the panel keeps your entries and shows an error so you can retry.
 
 Starting from a unit's own page is quicker still: on the **Inspections** tab, tap **Start** on the schedule row you need. The check is already known, so nothing is asked twice and the inspection opens over the unit's page.
 6. Go through each required item and tap **Pass**, **Fail**, or **N/A**. An item marked **Optional** may be left blank.
@@ -960,15 +960,17 @@ The **My PPE** dashboard card only shows inspections that need action now. It do
 
 Do a quick pre-use check before you trust your gear, and the full periodic check when it comes due.
 
-Items marked **Discarded** or **Expired** are historical records. They cannot be inspected or issued again.
+Items marked **Discarded** or **Expired** are historical records. They cannot be inspected or issued again. You need **Inspect PPE** permission to record an inspection. Ask your administrator to add it to your role if you need to perform checks and the buttons are missing.
 
 1. Open the item and tap the **Inspections** tab.
 2. Tap **Pre-use** for a quick check, or **Annual** for the full periodic inspection.
 3. Answer every criterion: **Pass**, **Fail**, or **N/A**.
 4. If a criterion fails, describe what is wrong in **What failed?**.
 5. Add **Photo evidence** wherever it is required. Tap **Take photo or upload** to use the camera or choose pictures from your phone's photo library. You can also add optional photos to another answered criterion.
-6. Add anything worth flagging overall in the **Notes** box.
+6. Choose an optional **Supervisor** from active people, or choose **None**. Add anything worth flagging overall in the **Notes** box.
 7. Tap **Record inspection**. If something failed, the button reads **Record failed inspection** — that is fine, record it honestly.
+
+If saving fails, the panel shows an error and keeps your answers, notes, and photos. Correct the issue shown and retry.
 
 The result is worked out from your answers. An all-**N/A** checklist stays **N/A** instead of being shown as a pass. A high-severity failure automatically opens a corrective action, so it gets dealt with.
 
@@ -976,7 +978,7 @@ The result is worked out from your answers. An all-**N/A** checklist stays **N/A
 
 ## Return failed gear to service
 
-Only people with permission to return PPE to service (usually health and safety or an admin) can clear an out-of-service item. Everyone else can still record ordinary pre-use checks.
+Only people with permission to return PPE to service (usually health and safety or an admin) can clear an out-of-service item. People with **Inspect PPE** permission can still record ordinary pre-use checks on gear that is in service.
 
 1. Open the item. Tap **Return to service** in the header.
 2. Work through the checklist as normal.

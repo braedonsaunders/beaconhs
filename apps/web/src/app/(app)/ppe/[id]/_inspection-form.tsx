@@ -15,7 +15,17 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 // server-side.
 
 import * as React from 'react'
-import { Badge, Button, Input, Label, Textarea, UrlDrawer, cn } from '@beaconhs/ui'
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
+  Input,
+  Label,
+  Textarea,
+  UrlDrawer,
+  cn,
+} from '@beaconhs/ui'
 import { FileUpload, type AttachedFile } from '@/components/file-upload'
 import { InspectionStatusPill } from '@/components/inspection-status-pill'
 import { RemoteSelectField } from '@/components/remote-search-select'
@@ -54,13 +64,15 @@ export function PpeInspectionForm({
   typeId: string
   kind: 'pre_use' | 'annual'
   criteria: Criterion[]
-  action: (fd: FormData) => Promise<void>
+  action: (fd: FormData) => Promise<{ error: string } | void>
 }) {
   const tGenerated = useGeneratedTranslations()
   const [answers, setAnswers] = React.useState<Record<string, Answer>>({})
   const [reasons, setReasons] = React.useState<Record<string, string>>({})
   const [photos, setPhotos] = React.useState<Record<string, AttachedFile[]>>({})
   const [uploading, setUploading] = React.useState<Record<string, boolean>>({})
+  const [error, setError] = React.useState<string | null>(null)
+  const [pending, start] = React.useTransition()
 
   const answeredCount = criteria.filter((c) => answers[c.id]).length
   const missingEvidence = criteria.filter((criterion) => {
@@ -104,7 +116,7 @@ export function PpeInspectionForm({
             missingEvidence={missingEvidence}
             uploadingCount={uploadingCount}
           />
-          <Button type="submit" form="ppe-inspection-form" disabled={!allAnswered}>
+          <Button type="submit" form="ppe-inspection-form" disabled={!allAnswered || pending}>
             <GeneratedValue
               value={
                 status === 'fail' ? (
@@ -118,12 +130,35 @@ export function PpeInspectionForm({
         </div>
       }
     >
-      <form id="ppe-inspection-form" action={action}>
+      <form
+        id="ppe-inspection-form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (!allAnswered || pending) return
+          const data = new FormData(event.currentTarget)
+          setError(null)
+          start(async () => {
+            try {
+              const result = await action(data)
+              if (result?.error) setError(result.error)
+            } catch {
+              setError('Could not record the inspection. Your answers are kept. Please try again.')
+            }
+          })
+        }}
+      >
         <input type="hidden" name="itemId" value={itemId} />
         <input type="hidden" name="typeId" value={typeId} />
         <input type="hidden" name="kind" value={kind} />
 
         <div className="space-y-4">
+          {error ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                <GeneratedValue value={error} />
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
@@ -318,7 +353,7 @@ export function PpeInspectionForm({
               is often someone without a login. */}
             <RemoteSelectField
               name="supervisorPersonId"
-              lookup="ppe-active-people"
+              lookup="ppe-inspection-supervisors"
               placeholder={tGenerated('m_0ba815306341be')}
             />
           </div>
