@@ -197,8 +197,8 @@ describe('production-scale picker contract', () => {
       'ilike(primaryPersonTitleName(people.id, people.tenantId), input.term)',
     )
     expect(sharedPersonPicker).toContain('[row.employeeNo, row.jobTitle]')
-    expect(route.match(/\.select\(PERSON_OPTION_SELECTION\)/g)).toHaveLength(9)
-    expect(route.match(/personOptions\(rows\)/g)).toHaveLength(9)
+    expect(route.match(/\.select\(PERSON_OPTION_SELECTION\)/g)).toHaveLength(10)
+    expect(route.match(/personOptions\(rows\)/g)).toHaveLength(10)
   })
 
   it('keeps the public people kiosk PIN-gated, tenant-scoped, and bounded', () => {

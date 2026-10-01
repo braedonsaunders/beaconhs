@@ -330,6 +330,13 @@
       "when": 1790812800000,
       "tag": "0047_tenant_membership_removal",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1790812800001,
+      "tag": "0048_vehicle_log_own_edit_permission",
+      "breakpoints": true
     }
   ]
 }

@@ -16,7 +16,7 @@ import {
   type VehicleLogEnabledModes,
 } from '@beaconhs/db/schema'
 import { secureFetch, unsealSecret, type SealedSecret } from '@beaconhs/sync'
-import { can, type RequestContext } from '@beaconhs/tenant'
+import { assertCan, can, type RequestContext } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { recordAudit } from '@/lib/audit'
 import {
@@ -26,6 +26,11 @@ import {
   prepareVehicleLogImportDays,
   validateVehicleLogImportEndpoint,
 } from '@/lib/vehicle-log-import-policy'
+import {
+  assertCanEditDriverLog,
+  vehicleDriverScopeWhere,
+  vehicleLogEntryScopeWhere,
+} from './_access-policy'
 import { resolveVehicleEquipmentWhere } from './_equipment-policy'
 import { optionalUuidInput, requireUuidInput } from '@/lib/mutation-input'
 import {
@@ -453,7 +458,13 @@ export async function loadVehicleLogWorkspace(
           metadata: people.metadata,
         })
         .from(people)
-        .where(eq(people.status, 'active'))
+        .where(
+          and(
+            eq(people.status, 'active'),
+            isNull(people.deletedAt),
+            vehicleDriverScopeWhere(ctx, people.id),
+          ),
+        )
         .orderBy(asc(people.lastName), asc(people.firstName)),
       tx
         .select({
@@ -513,8 +524,10 @@ export async function loadVehicleLogWorkspace(
       hint: s.code,
     }))
 
-    const selectedDriver = opts.driverPersonId
-      ? (driversRaw.find((d) => d.id === opts.driverPersonId) ?? null)
+    const requestedDriver =
+      opts.driverPersonId ?? (can(ctx, 'equipment.vehicle-log.update.own') ? ctx.personId : null)
+    const selectedDriver = requestedDriver
+      ? (driversRaw.find((driver) => driver.id === requestedDriver) ?? null)
       : null
     const selectedVehicle = opts.equipmentItemId
       ? (vehiclesRaw.find((v) => v.id === opts.equipmentItemId) ?? null)
@@ -645,6 +658,7 @@ export async function loadVehicleLogWorkspace(
 
 export async function upsertVehicleLogEntry(ctx: RequestContext, input: SaveVehicleLogEntryInput) {
   const normalized = normalizeVehicleLogEntryInput(input)
+  assertCanEditDriverLog(ctx, normalized.driverPersonId)
   const { equipmentItemId, driverPersonId, entryDate, entryMode } = normalized
   const fields = {
     ...manualEntryFields(normalized),
@@ -715,22 +729,26 @@ export async function updateVehicleLogEntry(
 ): Promise<VehicleLogEntryDraft> {
   const entryId = requireUuidInput(entryIdValue, 'Vehicle log entry')
   const result = await ctx.db(async (tx) => {
+    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
     const [existing] = await tx
       .select({
         id: truckLogEntries.id,
+        driverPersonId: truckLogEntries.driverPersonId,
         entryMode: truckLogEntries.entryMode,
         equipmentItemId: truckLogEntries.equipmentItemId,
       })
       .from(truckLogEntries)
-      .where(eq(truckLogEntries.id, entryId))
+      .where(and(eq(truckLogEntries.id, entryId), vehicleLogEntryScopeWhere(ctx, vehicleWhere)))
       .limit(1)
       .for('update')
     if (!existing) throw new Error('Vehicle log entry was not found.')
+    assertCanEditDriverLog(ctx, existing.driverPersonId ?? '')
 
     const normalized = normalizeVehicleLogEntryInput({
       ...input,
       entryMode: existing.entryMode,
     })
+    assertCanEditDriverLog(ctx, normalized.driverPersonId)
     await assertManualVehicleLogReferences(ctx, tx, normalized)
     const fields = manualEntryFields(normalized)
     let updated: typeof truckLogEntries.$inferSelect | undefined
@@ -964,6 +982,7 @@ async function loadImportSetup(
   input: ApplyVehicleLogImportInput,
 ): Promise<ImportSetup> {
   return ctx.db(async (tx) => {
+    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
     const connectionWhere = input.sourceConnectionId
       ? and(isNull(syncConnections.deletedAt), eq(syncConnections.id, input.sourceConnectionId))
       : and(
@@ -993,7 +1012,7 @@ async function loadImportSetup(
           metadata: equipmentItems.metadata,
         })
         .from(equipmentItems)
-        .where(eq(equipmentItems.id, input.equipmentItemId))
+        .where(and(eq(equipmentItems.id, input.equipmentItemId), vehicleWhere))
         .limit(1),
       tx
         .select({
@@ -1129,6 +1148,7 @@ export async function applyVehicleLogImportToVehicleLog(
   ctx: RequestContext,
   input: ApplyVehicleLogImportInput,
 ): Promise<ApplyVehicleLogImportResult> {
+  assertCan(ctx, 'equipment.manage')
   const parsedMonth = parseRequiredMonth(input.month)
   const normalizedInput: ApplyVehicleLogImportInput = {
     equipmentItemId: requireUuidInput(input.equipmentItemId, 'Vehicle'),
@@ -1278,6 +1298,7 @@ export async function deleteVehicleLogMonth(
   ctx: RequestContext,
   input: ApplyVehicleLogImportInput,
 ): Promise<number> {
+  assertCan(ctx, 'equipment.manage')
   const equipmentItemId = requireUuidInput(input.equipmentItemId, 'Vehicle')
   const driverPersonId = requireUuidInput(input.driverPersonId, 'Driver')
   const { year, month } = parseRequiredMonth(input.month)
@@ -1286,11 +1307,13 @@ export async function deleteVehicleLogMonth(
   const endExclusive = dateKey(next.year, next.month, 1)
 
   const ids = await ctx.db(async (tx) => {
+    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
     const rows = await tx
       .select({ id: truckLogEntries.id })
       .from(truckLogEntries)
       .where(
         and(
+          vehicleLogEntryScopeWhere(ctx, vehicleWhere),
           eq(truckLogEntries.driverPersonId, driverPersonId),
           eq(truckLogEntries.equipmentItemId, equipmentItemId),
           gte(truckLogEntries.entryDate, start),

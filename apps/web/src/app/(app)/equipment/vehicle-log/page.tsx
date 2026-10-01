@@ -6,9 +6,11 @@ import { and, eq } from 'drizzle-orm'
 import { Truck } from 'lucide-react'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { evaluateLogicRule } from '@beaconhs/forms-core'
+import { safeDbErrorMessage } from '@beaconhs/db'
 import { formAutomations } from '@beaconhs/db/schema'
 import { can, assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { canReadVehicleLog, canEditDriverLog } from './_access-policy'
 import { pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
@@ -33,14 +35,13 @@ export const dynamic = 'force-dynamic'
 async function saveVehicleLogEntryAction(input: SaveVehicleLogEntryInput) {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
   try {
     const entry = await upsertVehicleLogEntry(ctx, input)
     return { ok: true as const, entry }
   } catch (error) {
     return {
       ok: false as const,
-      error: error instanceof Error ? error.message : 'Failed to save vehicle log entry.',
+      error: safeDbErrorMessage(error, 'Failed to save vehicle log entry. Please try again.'),
     }
   }
 }
@@ -55,7 +56,7 @@ async function applyVehicleLogImportAction(input: ApplyVehicleLogImportInput) {
   } catch (error) {
     return {
       ok: false as const,
-      error: error instanceof Error ? error.message : 'Failed to import vehicle log source.',
+      error: safeDbErrorMessage(error, 'Failed to import vehicle log source.'),
     }
   }
 }
@@ -70,7 +71,7 @@ async function deleteMonthAction(input: ApplyVehicleLogImportInput) {
   } catch (error) {
     return {
       ok: false as const,
-      error: error instanceof Error ? error.message : 'Failed to delete vehicle log entries.',
+      error: safeDbErrorMessage(error, 'Failed to delete vehicle log entries.'),
     }
   }
 }
@@ -83,11 +84,7 @@ export default async function VehicleLogPage({
   const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
   const ctx = await requireRequestContext()
-  if (
-    !can(ctx, 'equipment.read.all') &&
-    !can(ctx, 'equipment.read.site') &&
-    !can(ctx, 'equipment.manage')
-  ) {
+  if (!canReadVehicleLog(ctx)) {
     redirect('/dashboard')
   }
 
@@ -179,6 +176,7 @@ export default async function VehicleLogPage({
             <VehicleLogWorkspaceClient
               workspace={workspace}
               canManage={can(ctx, 'equipment.manage')}
+              canEditDriverLog={canEditDriverLog(ctx, workspace.selectedDriverId)}
               saveAction={saveVehicleLogEntryAction}
               applyAction={applyVehicleLogImportAction}
               deleteMonthAction={deleteMonthAction}

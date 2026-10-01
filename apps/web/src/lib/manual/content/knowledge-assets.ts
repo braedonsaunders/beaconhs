@@ -650,11 +650,11 @@ Open **Equipment** in the left menu. That opens the full list at [Equipment](/eq
 
 1. Open [Equipment](/equipment).
 2. Type in the search box — it says **Search asset tag, name, serial #**.
-3. Or filter by **Status** (**In service**, **Out of service**, **In repair**, **Lost**, **Retired**), by **Availability** (**Available for check-out**, **Currently checked out**), or by **All departments**.
+3. Or filter by **Status** (**In service**, **Out of service**, **In repair**, **Lost**, **Retired**), by **Availability** (**Available for check-out**, **Currently checked out**), by **All departments**, or by **All holders**. Search the holder's name and select the person to show equipment they currently hold.
 4. The list shows the **Asset tag**, **Name**, **Category**, **Type**, **Department**, **Status**, **Site**, and **Holder** for each unit.
 5. Tap a row to open the unit's page.
 
-The list starts with **In service** equipment. Select **All statuses** to see every status. Search also matches department names. Select **Department** in the table header to sort by department. **Export CSV** uses the current filters and includes department.
+The list starts with **In service** equipment. Select **All statuses** to see every status. Search also matches department names. Select **Department** in the table header to sort by department. Clear **Holder** to show all holders again. The holder picker only shows people holding equipment you can view. **Export CSV** uses the current filters, including holder, and includes department.
 
 ## See who has a unit and where it is
 

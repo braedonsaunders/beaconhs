@@ -27,6 +27,7 @@ import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
+import { canReadVehicleLog, vehicleDriverScopeWhere } from '../_access-policy'
 import { resolveVehicleEquipmentWhere } from '../_equipment-policy'
 
 export async function generateMetadata() {
@@ -83,11 +84,7 @@ export default async function TruckLogSummaryPage({
   const ctx = await requireRequestContext()
   // Same read-tier gate as /equipment/vehicle-log — this is a tenant-wide
   // fleet roll-up.
-  if (
-    !can(ctx, 'equipment.read.all') &&
-    !can(ctx, 'equipment.read.site') &&
-    !can(ctx, 'equipment.manage')
-  ) {
+  if (!canReadVehicleLog(ctx)) {
     redirect('/dashboard')
   }
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'equipment.read.all')
@@ -96,6 +93,7 @@ export default async function TruckLogSummaryPage({
   const nextFirst = ymd(year + 1, 1, 1)
 
   const { trucks, rows, monthlyTotals, total } = await ctx.db(async (tx) => {
+    const driverWhere = vehicleDriverScopeWhere(ctx, sql`monthly.driver_person_id`) ?? sql`true`
     const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
     const search: SQL<unknown> | undefined = params.q
       ? or(
@@ -144,6 +142,7 @@ export default async function TruckLogSummaryPage({
               pageIds.map((id) => sql`${id}`),
               sql`, `,
             )})
+              AND ${driverWhere}
               AND monthly.month >= ${firstDay}::date
               AND monthly.month < ${nextFirst}::date
           `)
@@ -162,6 +161,7 @@ export default async function TruckLogSummaryPage({
       LEFT JOIN ${equipmentCategories}
         ON ${equipmentCategories.id} = ${equipmentItems.categoryId}
       WHERE ${where}
+        AND ${driverWhere}
         AND monthly.month >= ${firstDay}::date
         AND monthly.month < ${nextFirst}::date
       GROUP BY extract(month from monthly.month)

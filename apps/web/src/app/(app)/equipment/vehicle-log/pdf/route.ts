@@ -7,7 +7,7 @@
 
 import type { NextRequest } from 'next/server'
 import type { OnDemandPdfJobData } from '@beaconhs/jobs'
-import { can } from '@beaconhs/tenant'
+import { canReadVehicleLog } from '../_access-policy'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
@@ -116,11 +116,7 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(req.url)
   const ctx = await requireExportContext()
-  if (
-    !can(ctx, 'equipment.read.all') &&
-    !can(ctx, 'equipment.read.site') &&
-    !can(ctx, 'equipment.manage')
-  ) {
+  if (!canReadVehicleLog(ctx)) {
     return Response.json({ error: 'Forbidden' }, { status: 403 })
   }
 

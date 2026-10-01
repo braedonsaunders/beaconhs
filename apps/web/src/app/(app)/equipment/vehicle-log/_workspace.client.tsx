@@ -372,6 +372,7 @@ function RowStatus({
 export function VehicleLogWorkspaceClient({
   workspace,
   canManage,
+  canEditDriverLog,
   saveAction,
   applyAction,
   deleteMonthAction,
@@ -380,8 +381,9 @@ export function VehicleLogWorkspaceClient({
   runAction,
 }: {
   workspace: VehicleLogWorkspace
-  /** equipment.manage — read-tier viewers get a read-only grid. */
+  /** Equipment administration (imports and bulk deletion). */
   canManage: boolean
+  canEditDriverLog: boolean
   saveAction: SaveAction
   applyAction: ApplyAction
   deleteMonthAction: DeleteMonthAction
@@ -494,7 +496,8 @@ export function VehicleLogWorkspaceClient({
     return { rows, business, personal, grand, logged }
   }, [drafts, workspace.rows, workspace.mode])
 
-  const canEdit = canManage && Boolean(workspace.selectedDriverId && workspace.selectedEquipmentId)
+  const canEdit =
+    canEditDriverLog && Boolean(workspace.selectedDriverId && workspace.selectedEquipmentId)
 
   function updateDraft(date: string, patch: Partial<VehicleLogEntryDraft>) {
     setDrafts((current) => {
@@ -631,7 +634,7 @@ export function VehicleLogWorkspaceClient({
   }
 
   async function deleteMonth() {
-    if (!canEdit) return
+    if (!canManage || !canEdit) return
     const label = `${activeDriver?.label ?? 'driver'} / ${activeVehicle?.hint ?? activeVehicle?.label}`
     if (
       !(await confirmDialog({
@@ -671,9 +674,9 @@ export function VehicleLogWorkspaceClient({
           : selectedImportSource
             ? `${selectedImportSource.name}: pulls ${workspace.month.label} on demand.`
             : 'No import source is ready.'
-  const canImport = canEdit && importableSources.length > 0 && !pending
+  const canImport = canManage && canEdit && importableSources.length > 0 && !pending
   const hasSourcePicker = importSources.length > 1
-  const canOpenSourcePicker = canEdit && hasSourcePicker && !pending
+  const canOpenSourcePicker = canManage && canEdit && hasSourcePicker && !pending
   const importButton = (
     <Button
       type="button"
@@ -710,6 +713,14 @@ export function VehicleLogWorkspaceClient({
 
   return (
     <div className="space-y-4">
+      {workspace.selectedDriverId && workspace.selectedEquipmentId && !canEdit && (
+        <p
+          role="status"
+          className="rounded-md border border-slate-200 p-3 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300"
+        >
+          <GeneratedValue value="Your permissions do not allow editing this driver’s vehicle log." />
+        </p>
+      )}
       <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="grid grid-cols-1 gap-3 border-b border-slate-100 p-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1.15fr)_auto_minmax(0,1fr)] dark:border-slate-800">
           <div className="space-y-1">

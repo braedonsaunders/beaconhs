@@ -182,7 +182,7 @@ export const NAV_MODULES: NavModule[] = [
     href: '/equipment',
     label: 'Equipment',
     iconKey: 'wrench',
-    requiredPermission: 'equipment.read.self',
+    requiredAnyPermission: ['equipment.read.self', 'equipment.vehicle-log.update.own'],
     group: 'Assets & people',
   },
   { key: 'ppe', href: '/ppe', label: 'PPE', iconKey: 'hard-hat', group: 'Assets & people' },

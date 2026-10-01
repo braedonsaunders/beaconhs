@@ -3,8 +3,9 @@ import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
-import { assertCan } from '@beaconhs/tenant'
+import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
+import { canReadVehicleLog } from '../_access-policy'
 import { pickString } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { RemoteSelectField } from '@/components/remote-search-select'
@@ -20,7 +21,7 @@ export const dynamic = 'force-dynamic'
 async function createEntry(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
+  if (!canReadVehicleLog(ctx)) redirect('/dashboard')
   const input = normalizeVehicleLogEntryInput({
     equipmentItemId: formData.get('equipmentItemId'),
     entryDate: formData.get('entryDate'),
@@ -53,11 +54,11 @@ export default async function NewTruckLogEntryPage({
   // If we already know the truck, prefer the drawer on the parent detail
   // page. The full-page route stays as a fallback when there is no item
   // context (e.g. linked from the truck-log calendar without a row click).
-  if (presetTruckId) {
+  const ctx = await requireRequestContext()
+  if (presetTruckId && can(ctx, 'equipment.manage')) {
     redirect(`/equipment/${presetTruckId}?tab=log&drawer=new-truck-log-entry`)
   }
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
+  if (!canReadVehicleLog(ctx)) redirect('/dashboard')
 
   return (
     <PageContainer>
@@ -88,7 +89,7 @@ export default async function NewTruckLogEntryPage({
                 <Field label={tGenerated('m_00385063252603')} required>
                   <RemoteSelectField
                     name="driverPersonId"
-                    defaultValue=""
+                    defaultValue={ctx.personId ?? ''}
                     lookup="vehicle-drivers"
                     placeholder={tGenerated('m_16234056fc2934')}
                     searchPlaceholder={tGenerated('m_1c51de60730f68')}

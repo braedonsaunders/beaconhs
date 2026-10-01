@@ -68,6 +68,7 @@ import {
 import { isUuid } from '../../../lib/list-params'
 import { moduleScopeWhere } from '../../../lib/visibility'
 import { templateAccessWhere } from '../../(app)/apps/_lib/access'
+import { vehicleDriverScopeWhere } from '../../(app)/equipment/vehicle-log/_access-policy'
 import { resolveVehicleEquipmentWhere } from '../../(app)/equipment/vehicle-log/_equipment-policy'
 import { loadEquipmentStationPickerOptions } from '../../../lib/equipment-station-picker'
 
@@ -297,11 +298,14 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     // permissions would deny the filter to read-only PPE users.
     case 'ppe-register-filter-holders':
       return canAny('ppe.read.all', 'ppe.manage', 'ppe.issue', 'ppe.inspect')
+    case 'equipment-register-filter-holders':
+      return canAny('equipment.read.all', 'equipment.read.site')
     case 'ppe-types':
       return can(ctx, 'ppe.manage')
     case 'vehicle-equipment':
     case 'vehicle-customers':
     case 'vehicle-drivers':
+      return canAny('equipment.manage', 'equipment.vehicle-log.update.own')
     case 'equipment-custody-holders':
     case 'equipment-custody-sites':
     case 'equipment-station-holders':
@@ -1624,6 +1628,25 @@ async function loadOptions(
       )
     }
 
+    if (lookup === 'equipment-register-filter-holders') {
+      const scope = await moduleScopeWhere(ctx, tx, {
+        prefix: 'equipment',
+        siteCol: equipmentItems.currentSiteOrgUnitId,
+        personCol: equipmentItems.currentHolderPersonId,
+      })
+      const visibleHeldItems = tx
+        .select({ id: equipmentItems.currentHolderPersonId })
+        .from(equipmentItems)
+        .where(and(isNull(equipmentItems.deletedAt), scope))
+      const rows = await tx
+        .select(PERSON_OPTION_SELECTION)
+        .from(people)
+        .where(and(inArray(people.id, visibleHeldItems), personMatch(input)))
+        .orderBy(...personOrder(input.selected))
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(personOptions(rows))
+    }
+
     if (lookup === 'ppe-register-filter-holders') {
       // Everyone who holds PPE now OR was ever issued some, so a discarded or
       // returned item stays findable by the person who actually had it.
@@ -2035,7 +2058,14 @@ async function loadOptions(
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)
         .from(people)
-        .where(and(eq(people.status, 'active'), isNull(people.deletedAt), personMatch(input)))
+        .where(
+          and(
+            eq(people.status, 'active'),
+            isNull(people.deletedAt),
+            personMatch(input),
+            lookup === 'vehicle-drivers' ? vehicleDriverScopeWhere(ctx, people.id) : undefined,
+          ),
+        )
         .orderBy(...personOrder(input.selected))
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(personOptions(rows))

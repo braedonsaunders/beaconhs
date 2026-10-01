@@ -505,7 +505,7 @@ Open **Equipment** in the left menu, then the **Vehicle log** tab — or go stra
 3. If your company allows both, pick a **Log mode**: **Destination** or **Odometer**.
 4. Use the arrows to change months. **This month** jumps back to today's month.
 
-You now see the month grid — one row per day.
+You now see the month grid — one row per day. **Edit own vehicle log** lets you enter and correct your own driver log without managing equipment. Your login must be linked to your Person record. Foreman / Supervisor roles include this permission. Other drivers’ logs stay read-only unless you have **Manage equipment**. Source imports and deleting a whole month also require **Manage equipment**.
 
 ## Logging a day (odometer mode)
 

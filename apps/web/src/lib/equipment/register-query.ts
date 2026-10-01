@@ -60,6 +60,7 @@ export function equipmentRegisterQuery(
     ['type', equipmentItems.typeId],
     ['category', equipmentItems.categoryId],
     ['department', equipmentItems.departmentId],
+    ['holder', equipmentItems.currentHolderPersonId],
   ] as const) {
     const value = pickString(sp[key])
     if (value) filters.push(isUuid(value) ? eq(column, value) : sql`false`)

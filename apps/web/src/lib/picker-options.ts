@@ -59,6 +59,7 @@ const PICKER_LOOKUPS = [
   'document-book-documents',
   'ppe-active-people',
   'ppe-register-filter-holders',
+  'equipment-register-filter-holders',
   'ppe-types',
   'vehicle-equipment',
   'vehicle-customers',

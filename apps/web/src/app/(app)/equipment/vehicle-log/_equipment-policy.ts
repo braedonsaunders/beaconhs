@@ -1,4 +1,4 @@
-import { and, count, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { and, count, isNull, sql, type SQL } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
@@ -21,15 +21,22 @@ export async function resolveVehicleEquipmentWhere(
     personCol: equipmentItems.currentHolderPersonId,
   })
   const accessible = and(isNull(equipmentItems.deletedAt), scope)!
-  const vehicleTaxonomy = or(
-    ilike(equipmentCategories.name, '%vehicle%'),
-    ilike(equipmentTypes.name, '%truck%'),
-  )!
+  // The returned predicate is also used by mutation queries that select only
+  // equipment_items. Keep taxonomy checks self-contained rather than requiring
+  // every consumer to join the category and type tables.
+  const vehicleTaxonomy = sql`(
+    exists (select 1 from ${equipmentCategories}
+      where ${equipmentCategories.id} = ${equipmentItems.categoryId}
+        and ${equipmentCategories.tenantId} = ${equipmentItems.tenantId}
+        and ${equipmentCategories.name} ilike ${'%vehicle%'})
+    or exists (select 1 from ${equipmentTypes}
+      where ${equipmentTypes.id} = ${equipmentItems.typeId}
+        and ${equipmentTypes.tenantId} = ${equipmentItems.tenantId}
+        and ${equipmentTypes.name} ilike ${'%truck%'})
+  )`
   const [classified] = await tx
     .select({ c: count() })
     .from(equipmentItems)
-    .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
-    .leftJoin(equipmentCategories, eq(equipmentCategories.id, equipmentItems.categoryId))
     .where(and(accessible, vehicleTaxonomy))
   const usesVehicleTaxonomy = Number(classified?.c ?? 0) > 0
   return {

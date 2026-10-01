@@ -10,12 +10,15 @@
 import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
 import { evaluateLogicRule, planAutomation, type AutomationPlan } from '@beaconhs/forms-core'
+import { safeDbErrorMessage } from '@beaconhs/db'
 import { formAutomations, truckLogEntries } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { executeFlowPlan } from '@/lib/flows/execute-flow-plan'
 import { createVehicleLogFlowAdapter } from '@/lib/flows/adapters/vehicle-log'
+import { canReadVehicleLog, vehicleLogEntryScopeWhere } from './_access-policy'
+import { resolveVehicleEquipmentWhere } from './_equipment-policy'
 import { isUuid } from '@/lib/list-params'
 
 export async function runVehicleLogAction(input: {
@@ -36,11 +39,7 @@ export async function runVehicleLogAction(input: {
     ) {
       return { ok: false, error: 'Action not found' }
     }
-    if (
-      !can(ctx, 'equipment.read.all') &&
-      !can(ctx, 'equipment.read.site') &&
-      !can(ctx, 'equipment.manage')
-    ) {
+    if (!canReadVehicleLog(ctx)) {
       return { ok: false, error: 'Action not found' }
     }
 
@@ -66,13 +65,16 @@ export async function runVehicleLogAction(input: {
 
     // The anchor entry must exist under the caller's tenant (RLS-scoped read —
     // this action is network-callable with arbitrary ids).
-    const [entry] = await ctx.db((tx) =>
-      tx
+    const [entry] = await ctx.db(async (tx) => {
+      const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
+      return tx
         .select({ id: truckLogEntries.id })
         .from(truckLogEntries)
-        .where(eq(truckLogEntries.id, input.entryId))
-        .limit(1),
-    )
+        .where(
+          and(eq(truckLogEntries.id, input.entryId), vehicleLogEntryScopeWhere(ctx, vehicleWhere)),
+        )
+        .limit(1)
+    })
     if (!entry) return { ok: false, error: 'Action not found' }
 
     const adapter = createVehicleLogFlowAdapter(ctx, input.entryId)

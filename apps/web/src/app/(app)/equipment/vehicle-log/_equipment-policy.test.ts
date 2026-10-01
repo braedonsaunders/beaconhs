@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { equipmentItems } from '@beaconhs/db/schema'
 import { PgDialect } from 'drizzle-orm/pg-core'
 import type { Database } from '@beaconhs/db'
 import type { RequestContext } from '@beaconhs/tenant'
@@ -30,7 +32,6 @@ function context(siteId: string): RequestContext {
 function countOnlyTx(classifiedCount: number): Database {
   const query = {
     from: () => query,
-    leftJoin: () => query,
     where: async () => [{ c: classifiedCount }],
   }
   return { select: () => query } as unknown as Database
@@ -49,6 +50,24 @@ describe('vehicle-log equipment visibility', () => {
     expect(query.sql).toContain('"equipment_items"."current_site_org_unit_id" in')
     expect(query.params).toContain(SITE_A)
     expect(query.params).not.toContain(SITE_B)
+  })
+
+  it('supports mutation and picker selects without outer taxonomy joins', async () => {
+    const { where } = await resolveVehicleEquipmentWhere(context(SITE_A), countOnlyTx(12))
+    const query = drizzle
+      .mock()
+      .select({ id: equipmentItems.id })
+      .from(equipmentItems)
+      .where(where)
+      .toSQL()
+    expect(query.sql).toContain('from "equipment_items" where')
+    expect(query.sql).toContain('from "equipment_categories"')
+    expect(query.sql).toContain('from "equipment_types"')
+    expect(query.sql).toContain(
+      '"equipment_categories"."tenant_id" = "equipment_items"."tenant_id"',
+    )
+    expect(query.sql).not.toContain(' join ')
+    expect(query.params).toContain(SITE_A)
   })
 
   it('resolves the same policy independently for site B', async () => {

@@ -2,6 +2,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { Wrench } from 'lucide-react'
 import { and, asc, count, eq, isNull } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
@@ -20,6 +21,7 @@ import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref } from '@/lib/list-params'
 import { equipmentRegisterQuery } from '@/lib/equipment/register-query'
 import { SearchInput } from '@/components/search-input'
+import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
@@ -56,6 +58,12 @@ export default async function EquipmentPage({
   const sp = await searchParams
   const { params, statusRaw, statusFilter } = equipmentRegisterQuery(sp)
   const ctx = await requireRequestContext()
+  if (
+    can(ctx, 'equipment.vehicle-log.update.own') &&
+    !can(ctx, 'equipment.read.self') &&
+    !can(ctx, 'equipment.manage')
+  )
+    redirect('/equipment/vehicle-log')
   const canManageEquipment = can(ctx, 'equipment.manage')
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'equipment.read.site')
 
@@ -231,6 +239,15 @@ export default async function EquipmentPage({
               types={typeOptions}
               categories={categoryOptions}
               departments={allDepartments.map((d) => ({ value: d.id, label: d.name }))}
+            />
+            <RemoteSearchFilter
+              lookup="equipment-register-filter-holders"
+              basePath="/equipment"
+              currentParams={sp}
+              paramKey="holder"
+              placeholder={tGeneratedValue('All holders')}
+              searchPlaceholder={tGeneratedValue('Search holders…')}
+              ariaLabel={tGeneratedValue('Filter by holder')}
             />
           </TableToolbar>
         </>

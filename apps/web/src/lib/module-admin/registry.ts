@@ -24,7 +24,13 @@ type AdminSection = {
   permission?: string
 }
 
-export type ModuleAdminTab = { key: string; label: string; href: string; permission?: string }
+export type ModuleAdminTab = {
+  key: string
+  label: string
+  href: string
+  permission?: string
+  requiredAnyPermission?: string[]
+}
 
 export type ModuleAdmin = {
   /** Matches a NAV_MODULES key (lib/nav/registry.ts): 'journals', 'incidents', … */
@@ -239,11 +245,36 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     iconKey: 'wrench',
     permission: 'equipment.manage',
     tabs: [
-      { key: 'equipment', label: 'Equipment', href: '/equipment' },
-      { key: 'maintenance', label: 'Maintenance', href: '/equipment/maintenance' },
-      { key: 'station', label: 'Check in / out', href: '/equipment/station' },
-      { key: 'work-orders', label: 'Work orders', href: '/equipment/work-orders' },
-      { key: 'vehicle-log', label: 'Vehicle log', href: '/equipment/vehicle-log' },
+      {
+        key: 'equipment',
+        label: 'Equipment',
+        href: '/equipment',
+        permission: 'equipment.read.self',
+      },
+      {
+        key: 'maintenance',
+        label: 'Maintenance',
+        href: '/equipment/maintenance',
+        permission: 'equipment.read.self',
+      },
+      {
+        key: 'station',
+        label: 'Check in / out',
+        href: '/equipment/station',
+        permission: 'equipment.read.self',
+      },
+      {
+        key: 'work-orders',
+        label: 'Work orders',
+        href: '/equipment/work-orders',
+        permission: 'equipment.read.self',
+      },
+      {
+        key: 'vehicle-log',
+        label: 'Vehicle log',
+        href: '/equipment/vehicle-log',
+        requiredAnyPermission: ['equipment.read.self', 'equipment.vehicle-log.update.own'],
+      },
       {
         key: 'inspections',
         label: 'Equipment Checks',

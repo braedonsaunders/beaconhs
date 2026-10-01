@@ -35,6 +35,13 @@ describe('equipment register and export query', () => {
     expect(query.params.filter((p) => p === departmentId)).toHaveLength(3)
   })
 
+  it('filters the current holder consistently for the register and its export', () => {
+    const query = where({ holder: departmentId, department: departmentId, status: 'all' })
+    expect(query.sql).toContain('"equipment_items"."current_holder_person_id" =')
+    expect(query.params.filter((value) => value === departmentId)).toHaveLength(2)
+    expect(where({ holder: 'not-a-person-id' }).sql).toContain('false')
+  })
+
   it('fails closed on malformed reference filters and supports stable department sorting', () => {
     expect(where({ department: 'bad-id' }).sql).toContain('false')
     const query = equipmentRegisterQuery({ sort: 'department', dir: 'desc' })

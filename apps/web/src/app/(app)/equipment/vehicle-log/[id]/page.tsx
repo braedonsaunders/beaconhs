@@ -4,7 +4,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { Button, Card, CardContent, DetailHeader, Input, Label, Textarea } from '@beaconhs/ui'
 import { equipmentItems, orgUnits, people, truckLogEntries } from '@beaconhs/db/schema'
 import { assertCan, can } from '@beaconhs/tenant'
@@ -19,6 +19,8 @@ import { TabNav, pickActiveTab } from '@/components/tab-nav'
 import { RemoteSelectField } from '@/components/remote-search-select'
 import { updateVehicleLogEntry } from '../_service'
 import { normalizeVehicleLogEntryInput } from '../_entry-input'
+import { canReadVehicleLog, canEditDriverLog, vehicleLogEntryScopeWhere } from '../_access-policy'
+import { resolveVehicleEquipmentWhere } from '../_equipment-policy'
 import { requireUuidInput } from '@/lib/mutation-input'
 import { SearchInput } from '@/components/search-input'
 import { FilterChips } from '@/components/filter-bar'
@@ -34,7 +36,6 @@ const ACTIVITY_SORTS = ['recent', 'oldest'] as const
 async function updateEntry(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
   const id = requireUuidInput(formData.get('id'), 'Vehicle log entry')
   const input = normalizeVehicleLogEntryInput({
     equipmentItemId: formData.get('equipmentItemId'),
@@ -59,13 +60,14 @@ async function deleteEntry(formData: FormData) {
   assertCan(ctx, 'equipment.manage')
   const id = requireUuidInput(formData.get('id'), 'Vehicle log entry')
   const removed = await ctx.db(async (tx) => {
+    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
     const [existing] = await tx
       .select({
         entryDate: truckLogEntries.entryDate,
         equipmentItemId: truckLogEntries.equipmentItemId,
       })
       .from(truckLogEntries)
-      .where(eq(truckLogEntries.id, id))
+      .where(and(eq(truckLogEntries.id, id), vehicleLogEntryScopeWhere(ctx, vehicleWhere)))
       .limit(1)
     if (!existing) return null
     const [deleted] = await tx
@@ -117,8 +119,9 @@ export default async function TruckLogDetailPage({
 
   const ctx = await requireRequestContext()
   const canManage = can(ctx, 'equipment.manage')
-  if (active === 'edit' && !canManage) redirect(`/equipment/vehicle-log/${id}`)
+  if (!canReadVehicleLog(ctx)) notFound()
   const data = await ctx.db(async (tx) => {
+    const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
     const [row] = await tx
       .select({
         entry: truckLogEntries,
@@ -130,7 +133,7 @@ export default async function TruckLogDetailPage({
       .leftJoin(equipmentItems, eq(equipmentItems.id, truckLogEntries.equipmentItemId))
       .leftJoin(people, eq(people.id, truckLogEntries.driverPersonId))
       .leftJoin(orgUnits, eq(orgUnits.id, truckLogEntries.siteOrgUnitId))
-      .where(eq(truckLogEntries.id, id))
+      .where(and(eq(truckLogEntries.id, id), vehicleLogEntryScopeWhere(ctx, vehicleWhere)))
       .limit(1)
     if (!row) return null
     return row
@@ -138,6 +141,8 @@ export default async function TruckLogDetailPage({
 
   if (!data) notFound()
   const { entry, truck, driver, site } = data
+  const canEdit = canEditDriverLog(ctx, entry.driverPersonId)
+  if (active === 'edit' && !canEdit) redirect(`/equipment/vehicle-log/${id}`)
   const activityData =
     active === 'activity'
       ? await activityPageForEntity(ctx, 'truck_log_entry', id, {
@@ -169,7 +174,7 @@ export default async function TruckLogDetailPage({
           active={active}
           tabs={[
             { key: 'overview', label: 'Overview' },
-            ...(canManage ? ([{ key: 'edit', label: 'Edit' }] as const) : []),
+            ...(canEdit ? ([{ key: 'edit', label: 'Edit' }] as const) : []),
             { key: 'activity', label: 'Activity', count: activityData.total },
           ]}
         />
