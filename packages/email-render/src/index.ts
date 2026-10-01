@@ -168,7 +168,7 @@ export function interpolate(
     const inner = tpl.slice(contentStart, end).trim()
     if (triple || inner.length > EMAIL_RENDER_LIMITS.expressionChars) {
       out.append(original)
-    } else if (/^[a-zA-Z0-9_]+$/.test(inner)) {
+    } else if (/^[a-zA-Z0-9_-]+$/.test(inner)) {
       const value = plainValue(values[inner])
       out.append(opts?.escapeHtml ? escapeHtml(value) : value)
     } else {

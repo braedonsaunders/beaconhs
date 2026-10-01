@@ -73,6 +73,20 @@ describe('renderEmail — inline', () => {
 })
 
 describe('interpolate', () => {
+  it('renders custom-app UUID field markers in inline subjects and message text', () => {
+    const field = 'f_36b0e26a-2cd7-427d-968d-fded4527bc97'
+    const token = `{{${field}}}`
+    const result = renderEmail(
+      { mode: 'inline', subject: `Assessment - ${token}`, bodyTemplate: `Project: ${token}` },
+      { [field]: 'Shop & yard' },
+    )
+    expect(result.subject).toBe('Assessment - Shop & yard')
+    expect(result.text).toContain('Project: Shop & yard')
+    expect(result.html).toContain('Project: Shop &amp; yard')
+    expect(result.text).not.toContain(token)
+    expect(interpolate(token, {})).toBe('')
+    expect(interpolate('{{#each rows}}{{/each}}', {})).toBe('{{#each rows}}{{/each}}')
+  })
   it('escapes substituted values when escapeHtml is set, not the template', () => {
     const out = interpolate('<p>{{x}}</p>', { x: 'A & "B"' }, { escapeHtml: true })
     expect(out).toBe('<p>A &amp; &quot;B&quot;</p>')
