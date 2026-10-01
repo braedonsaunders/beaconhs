@@ -9,7 +9,12 @@ import {
   type PickerOptionsResponse,
 } from '@/lib/picker-options'
 import { parseRemoteSearchInput, remoteSearchTerm } from '@/lib/remote-search-policy'
-import { getAuthorPersonId, journalCanBrowseAll, journalScopeWhere } from '../_lib'
+import {
+  getAuthorPersonId,
+  journalCanBrowseAll,
+  journalScopeWhere,
+  journalAuthorPersonId,
+} from '../_lib'
 
 async function reviewerScope() {
   const ctx = await requireRequestContext()
@@ -146,7 +151,7 @@ export async function loadJournalRecordAuthorOptions(
         count: sql<number>`count(*)::int`,
       })
       .from(journalEntries)
-      .innerJoin(people, eq(people.id, journalEntries.personId))
+      .innerJoin(people, eq(people.id, journalAuthorPersonId()))
       .where(
         and(
           eq(journalEntries.tenantId, ctx.tenantId),

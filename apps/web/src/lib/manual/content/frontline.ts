@@ -82,7 +82,7 @@ Tags help people find entries later (for example a tag for concrete pours). Tap 
 3. Tap **Drafts** in the list to see entries you have not submitted yet.
 4. If you have a long history, tap **Load older entries** at the bottom to bring in the next group. Nothing is silently left out.
 
-If your role can browse other people's journals, open **Records**. Use **All authors**, **All locations**, and **Any tag** to search the complete set of filter values used by journals you are allowed to open. If a picker says more results exist, add more of the person's name, location, or tag.
+If your role can browse other people's journals, open **Records**. Assigned data scopes can cover departments, People groups, crews, selected people, or locations. You also keep access to your own journals. Only **View all journals** grants access across the whole workspace. Use **All authors**, **All locations**, and **Any tag** to search the complete set of filter values used by journals you are allowed to open. If a picker says more results exist, add more of the person's name, location, or tag.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 

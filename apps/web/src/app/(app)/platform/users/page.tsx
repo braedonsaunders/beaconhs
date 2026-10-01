@@ -9,6 +9,7 @@ import {
   count,
   desc,
   eq,
+  isNull,
   exists,
   ilike,
   inArray,
@@ -115,6 +116,7 @@ export default async function PlatformUsersPage({
       const membershipTotals = tx
         .select({ userId: tenantUsers.userId, total: count().as('membership_total') })
         .from(tenantUsers)
+        .where(isNull(tenantUsers.removedAt))
         .groupBy(tenantUsers.userId)
         .as('membership_totals')
       const membershipCount = sql<number>`coalesce(${membershipTotals.total}, 0)`
@@ -128,7 +130,11 @@ export default async function PlatformUsersPage({
                 .from(tenantUsers)
                 .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
                 .where(
-                  and(eq(tenantUsers.userId, users.id), ilike(tenants.name, `%${listParams.q}%`)),
+                  and(
+                    isNull(tenantUsers.removedAt),
+                    eq(tenantUsers.userId, users.id),
+                    ilike(tenants.name, `%${listParams.q}%`),
+                  ),
                 ),
             ),
           )
@@ -143,7 +149,7 @@ export default async function PlatformUsersPage({
                   tx
                     .select({ id: tenantUsers.id })
                     .from(tenantUsers)
-                    .where(eq(tenantUsers.userId, users.id)),
+                    .where(and(eq(tenantUsers.userId, users.id), isNull(tenantUsers.removedAt))),
                 )
               : undefined
       const where = and(search, viewWhere)
@@ -197,7 +203,7 @@ export default async function PlatformUsersPage({
               })
               .from(tenantUsers)
               .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
-              .where(inArray(tenantUsers.userId, accountIds))
+              .where(and(inArray(tenantUsers.userId, accountIds), isNull(tenantUsers.removedAt)))
               .orderBy(asc(tenants.name))
       return {
         accounts: accountRows,

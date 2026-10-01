@@ -21,7 +21,7 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { auditLog, roles, tenantUsers, tenants, users } from '@beaconhs/db/schema'
 import { assertNotImpersonating } from '@beaconhs/tenant'
@@ -31,6 +31,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { setActiveTenant } from '@/lib/actions'
 import { sendMembershipInviteEmail } from '@/lib/invite-email'
+import { removeTenantMembership, restoreRemovedMembership } from '@/lib/tenant-membership-lifecycle'
 import { upsertRoleAssignments } from '@/lib/role-assignment-upsert'
 
 type Ctx = Awaited<ReturnType<typeof requireRequestContext>>
@@ -63,7 +64,7 @@ async function loadMembership(tx: Database, membershipId: string, lock = false) 
     .from(tenantUsers)
     .innerJoin(users, eq(users.id, tenantUsers.userId))
     .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
-    .where(eq(tenantUsers.id, membershipId))
+    .where(and(eq(tenantUsers.id, membershipId), isNull(tenantUsers.removedAt)))
     .limit(1)
   if (lock) query = query.for('update') as typeof query
   const [row] = await query
@@ -199,7 +200,7 @@ export async function addMembership(formData: FormData): Promise<void> {
     }
 
     const invitedAt = new Date()
-    const [m] = await tx
+    const [inserted] = await tx
       .insert(tenantUsers)
       .values({
         tenantId,
@@ -212,6 +213,16 @@ export async function addMembership(formData: FormData): Promise<void> {
       })
       .onConflictDoNothing({ target: [tenantUsers.tenantId, tenantUsers.userId] })
       .returning()
+    const m =
+      inserted ??
+      (await restoreRemovedMembership(tx, {
+        tenantId,
+        userId,
+        displayName: null,
+        status: mode === 'active' ? 'active' : 'invited',
+        invitedAt,
+        invitedBy: ctx.userId,
+      }))
     if (!m) {
       return { ok: false, error: `${u.email} is already a member of ${t.name}.` }
     }
@@ -257,7 +268,7 @@ export async function addMembership(formData: FormData): Promise<void> {
       membershipId: m.id,
       tenantId,
       userId,
-      invitedAt,
+      invitedAt: m.invitedAt!,
       name: u.name,
     }
   })
@@ -370,8 +381,9 @@ export async function removeMembership(formData: FormData): Promise<void> {
     if (row.membership.userId === ctx.userId) {
       return { ok: false, error: "Manage your own membership from the tenant's Users page." }
     }
-    // Cascade removes role assignments + permission overrides (FK onDelete cascade).
-    await tx.delete(tenantUsers).where(eq(tenantUsers.id, membershipId))
+    // Preserve the actor identity referenced by historical records while revoking access.
+    if (!(await removeTenantMembership(tx, row.tenant.id, membershipId)))
+      return { ok: false, error: 'Membership no longer exists.' }
     await materializeUserIdentityAudienceObligations(tx, row.tenant.id, [row.account.id])
     await tx.insert(auditLog).values({
       tenantId: row.tenant.id,
@@ -467,6 +479,7 @@ export async function openMembershipInTenant(formData: FormData): Promise<void> 
       .where(
         and(
           eq(tenantUsers.id, membershipId),
+          isNull(tenantUsers.removedAt),
           eq(tenantUsers.tenantId, tenantId),
           eq(tenantUsers.userId, userId),
         ),

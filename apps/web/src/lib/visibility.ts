@@ -19,7 +19,7 @@ import { can, type RequestContext } from '@beaconhs/tenant'
 
 type RecordOwnerColumns = {
   /** Person the record is about/assigned to (holder, owner, assignee, author). */
-  personCol?: PgColumn
+  personCol?: PgColumn | SQL
   /** tenant_users id of whoever created the record. */
   createdByCol?: PgColumn
   /** The record's site/org unit, for the `sites` scope. */
@@ -43,20 +43,21 @@ function textArray(ids: string[]): SQL {
  * Call inside the list query's `ctx.db((tx) => …)` so the people sub-selects run
  * under the same RLS-bounded transaction.
  */
-export async function recordVisibilityWhere(
+export function recordScopeWhere(
   ctx: RequestContext,
-  tx: Database,
   cols: RecordOwnerColumns,
-): Promise<SQL | undefined> {
+  allowTenantScope = true,
+): SQL | undefined {
   if (ctx.isSuperAdmin) return undefined
   const scopes = ctx.scopes
-  if (scopes.some((s) => s.type === 'tenant')) return undefined
+  if (allowTenantScope && scopes.some((s) => s.type === 'tenant')) return undefined
 
   const conds: SQL[] = []
+  const personCol = cols.personCol ? sql`${cols.personCol}` : undefined
 
   // Always include the caller's own records (as subject and/or creator).
-  if (cols.personCol && ctx.personId) {
-    conds.push(eq(cols.personCol, ctx.personId))
+  if (personCol && ctx.personId) {
+    conds.push(eq(personCol, ctx.personId))
   }
   const myUserId = ctx.membership?.id
   if (cols.createdByCol && myUserId) {
@@ -66,16 +67,16 @@ export async function recordVisibilityWhere(
   for (const s of scopes) {
     if (s.type === 'sites' && cols.siteCol && s.siteIds.length > 0) {
       conds.push(inArray(cols.siteCol, s.siteIds))
-    } else if (s.type === 'people' && cols.personCol && s.personIds.length > 0) {
-      conds.push(inArray(cols.personCol, s.personIds))
-    } else if (s.type === 'crews' && cols.personCol && s.crewIds.length > 0) {
+    } else if (s.type === 'people' && personCol && s.personIds.length > 0) {
+      conds.push(inArray(personCol, s.personIds))
+    } else if (s.type === 'crews' && personCol && s.crewIds.length > 0) {
       conds.push(
         inArray(
-          cols.personCol,
-          tx.select({ id: people.id }).from(people).where(inArray(people.crewId, s.crewIds)),
+          personCol,
+          sql`(select ${people.id} from ${people} where ${inArray(people.crewId, s.crewIds)})`,
         ),
       )
-    } else if (s.type === 'team' && cols.personCol) {
+    } else if (s.type === 'team' && personCol) {
       const member: SQL[] = []
       if (s.departmentIds.length > 0) member.push(inArray(people.departmentId, s.departmentIds))
       if (s.groupIds.length > 0)
@@ -83,7 +84,7 @@ export async function recordVisibilityWhere(
       const memberWhere = or(...member)
       if (memberWhere) {
         conds.push(
-          inArray(cols.personCol, tx.select({ id: people.id }).from(people).where(memberWhere)),
+          inArray(personCol, sql`(select ${people.id} from ${people} where ${memberWhere})`),
         )
       }
     }
@@ -92,6 +93,15 @@ export async function recordVisibilityWhere(
   // No scope grants anything → see nothing (defensive; never fall through to all).
   if (conds.length === 0) return sql`false`
   return conds.length === 1 ? conds[0] : or(...conds)
+}
+
+/** Scope subqueries execute under the enclosing tenant-bound transaction. */
+export async function recordVisibilityWhere(
+  ctx: RequestContext,
+  _tx: Database,
+  cols: RecordOwnerColumns,
+): Promise<SQL | undefined> {
+  return recordScopeWhere(ctx, cols)
 }
 
 // ---------------------------------------------------------------------------

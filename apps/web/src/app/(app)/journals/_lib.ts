@@ -2,12 +2,26 @@
 // are plain functions consumed by the page (server component), the query layer
 // and the action layer.
 
-import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
-import { journalEntries, people } from '@beaconhs/db/schema'
+import { and, eq, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { journalEntries, people, tenantUsers } from '@beaconhs/db/schema'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import type { Database } from '@beaconhs/db'
 export { htmlToText } from '@beaconhs/forms-core'
 import { nextReference } from '@/lib/reference'
+import { recordScopeWhere } from '@/lib/visibility'
+
+/** Resolve the journal subject first, then its recorded account author in this tenant. */
+export function journalAuthorPersonId(): SQL {
+  return sql`coalesce(${journalEntries.personId}, (
+          select ${people.id} from ${people}
+          inner join ${tenantUsers} on ${tenantUsers.userId} = ${people.userId}
+            and ${tenantUsers.tenantId} = ${people.tenantId}
+          where ${tenantUsers.id} = ${journalEntries.createdByTenantUserId}
+            and ${people.tenantId} = ${journalEntries.tenantId}
+            and ${people.deletedAt} is null
+          limit 1
+        ))`
+}
 
 /** Can this context read every journal in the tenant (vs site/self scope)? */
 export function journalCanReadAll(ctx: RequestContext): boolean {
@@ -22,7 +36,7 @@ export function journalCanBrowseAll(ctx: RequestContext): boolean {
 /**
  * Visibility predicate for journal_entries based on the caller's read tier:
  *   read.all  → no extra filter (RLS already bounds to tenant)
- *   read.site → entries at the caller's scoped sites, UNION their own
+ *   read.site → entries in assigned sites, departments, groups, crews or people, UNION own
  *   read.self → only entries authored by, or created by, the caller (default)
  *
  * The caller's OWN entries are visible at every tier — a site-scoped reviewer
@@ -36,28 +50,25 @@ export function journalScopeWhere(
 ): SQL | undefined {
   if (journalCanReadAll(ctx)) return undefined
 
-  const own: SQL[] = []
-  if (authorPersonId) own.push(eq(journalEntries.personId, authorPersonId))
-  const tenantUserId = authorTenantUserId(ctx)
-  if (tenantUserId) own.push(eq(journalEntries.createdByTenantUserId, tenantUserId))
-  const ownWhere = own.length === 0 ? null : own.length === 1 ? own[0]! : or(...own)!
-
   if (can(ctx, 'journals.read.site')) {
-    const siteIds = ctx.scopes.flatMap((s) => (s.type === 'sites' ? s.siteIds : []))
-    if (siteIds.length > 0) {
-      const siteWhere = inArray(journalEntries.siteOrgUnitId, siteIds)
-      return ownWhere ? or(siteWhere, ownWhere)! : siteWhere
-    }
+    return recordScopeWhere(
+      { ...ctx, personId: authorPersonId },
+      {
+        personCol: journalAuthorPersonId(),
+        createdByCol: journalEntries.createdByTenantUserId,
+        siteCol: journalEntries.siteOrgUnitId,
+      },
+      false,
+    )
   }
-
-  return ownWhere ?? sql`false`
+  return journalSelfScopeWhere(ctx, authorPersonId)
 }
 
 /** A specific author's entries (by subject person and/or the tenant_user who
  *  created them). `false` when neither is known. */
 function journalByAuthorWhere(personId: string | null, tenantUserId: string | null): SQL {
   const conds: SQL[] = []
-  if (personId) conds.push(eq(journalEntries.personId, personId))
+  if (personId) conds.push(eq(journalAuthorPersonId(), personId))
   if (tenantUserId) conds.push(eq(journalEntries.createdByTenantUserId, tenantUserId))
   if (conds.length === 0) return sql`false`
   return conds.length === 1 ? conds[0]! : or(...conds)!
@@ -67,7 +78,7 @@ function journalByAuthorWhere(personId: string | null, tenantUserId: string | nu
  * Visibility for browsing a SPECIFIC author's journals (the records "Open full
  * entry" workspace): the target author's entries, AND-bounded by the viewer's
  * own read tier so an admin never sees beyond their scope (read.all → all of the
- * author's; read.site → the author's at the viewer's sites).
+ * author's; read.site → the author's within the viewer's assigned data scope).
  */
 export function journalAuthorScopeWhere(
   ctx: RequestContext,

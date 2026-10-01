@@ -38,6 +38,7 @@ import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { IMPERSONATION_TTL_MS } from '@/lib/impersonation'
 import { sendMembershipInviteEmail } from '@/lib/invite-email'
 import { upsertRoleAssignments } from '@/lib/role-assignment-upsert'
+import { removeTenantMembership, restoreRemovedMembership } from '@/lib/tenant-membership-lifecycle'
 import { parseRoleScope } from './_scope-data'
 
 const PERMISSIONS = new Set<string>(PERMISSION_CATALOGUE as unknown as string[])
@@ -88,7 +89,7 @@ async function loadMember(ctx: Ctx, membershipId: string) {
       .from(tenantUsers)
       .innerJoin(users, eq(users.id, tenantUsers.userId))
       .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
-      .where(eq(tenantUsers.id, membershipId))
+      .where(and(eq(tenantUsers.id, membershipId), isNull(tenantUsers.removedAt)))
       .limit(1)
     return m ?? null
   })
@@ -151,7 +152,7 @@ export async function inviteUser(formData: FormData): Promise<void> {
     if (!userId) return { error: 'Could not create or resolve this user identity.' } as const
 
     const invitedAt = new Date()
-    const [m] = await tx
+    const [inserted] = await tx
       .insert(tenantUsers)
       .values({
         tenantId: ctx.tenantId,
@@ -163,6 +164,16 @@ export async function inviteUser(formData: FormData): Promise<void> {
       })
       .onConflictDoNothing({ target: [tenantUsers.tenantId, tenantUsers.userId] })
       .returning()
+    const m =
+      inserted ??
+      (await restoreRemovedMembership(tx, {
+        tenantId: ctx.tenantId,
+        userId,
+        displayName: name || null,
+        status: 'invited',
+        invitedAt,
+        invitedBy: ctx.userId,
+      }))
     if (!m) {
       // The insert waits for a concurrent conflicting transaction, so at READ
       // COMMITTED the winning membership is visible to this reload.
@@ -210,7 +221,7 @@ export async function inviteUser(formData: FormData): Promise<void> {
       membershipId: m.id,
       already: false as const,
       userId,
-      invitedAt,
+      invitedAt: m.invitedAt!,
       tenantName: tenant.name,
     }
   })
@@ -258,7 +269,7 @@ export async function resendInvite(formData: FormData): Promise<void> {
       .from(tenantUsers)
       .innerJoin(users, eq(users.id, tenantUsers.userId))
       .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
-      .where(eq(tenantUsers.id, membershipId))
+      .where(and(eq(tenantUsers.id, membershipId), isNull(tenantUsers.removedAt)))
       .limit(1)
       .for('update')
     if (!row) return { error: 'Membership not found.' } as const
@@ -354,7 +365,10 @@ export async function updateMemberDisplayName(formData: FormData): Promise<void>
   const displayName = String(formData.get('displayName') ?? '').trim() || null
   if (!membershipId) return
   await ctx.db((tx) =>
-    tx.update(tenantUsers).set({ displayName }).where(eq(tenantUsers.id, membershipId)),
+    tx
+      .update(tenantUsers)
+      .set({ displayName })
+      .where(and(eq(tenantUsers.id, membershipId), isNull(tenantUsers.removedAt))),
   )
   await recordAudit(ctx, {
     entityType: 'tenant_user',
@@ -378,7 +392,7 @@ export async function setMemberStatus(formData: FormData): Promise<void> {
       .select({ membership: tenantUsers, account: users })
       .from(tenantUsers)
       .innerJoin(users, eq(users.id, tenantUsers.userId))
-      .where(eq(tenantUsers.id, membershipId))
+      .where(and(eq(tenantUsers.id, membershipId), isNull(tenantUsers.removedAt)))
       .limit(1)
       .for('update')
     if (!member) return { error: 'Membership not found.' } as const
@@ -443,7 +457,13 @@ export async function removeMember(formData: FormData): Promise<void> {
       .select({ membership: tenantUsers, account: users })
       .from(tenantUsers)
       .innerJoin(users, eq(users.id, tenantUsers.userId))
-      .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.id, membershipId)))
+      .where(
+        and(
+          eq(tenantUsers.tenantId, ctx.tenantId),
+          eq(tenantUsers.id, membershipId),
+          isNull(tenantUsers.removedAt),
+        ),
+      )
       .limit(1)
       .for('update')
     if (!member) return { error: 'Membership not found.' } as const
@@ -454,12 +474,8 @@ export async function removeMember(formData: FormData): Promise<void> {
       return { error: 'Only a super-admin can remove a super-admin account.' } as const
     }
 
-    // Cascade removes role assignments + permission overrides (FK onDelete cascade).
-    const [deleted] = await tx
-      .delete(tenantUsers)
-      .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.id, membershipId)))
-      .returning({ id: tenantUsers.id })
-    if (!deleted) return { error: 'Membership no longer exists.' } as const
+    const removed = await removeTenantMembership(tx, ctx.tenantId, membershipId)
+    if (!removed) return { error: 'Membership no longer exists.' } as const
     await materializeUserIdentityAudienceObligations(tx, ctx.tenantId, [member.account.id])
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'tenant_user',
@@ -487,8 +503,9 @@ export async function assignRole(formData: FormData): Promise<void> {
     const [membership] = await tx
       .select({ id: tenantUsers.id, userId: tenantUsers.userId })
       .from(tenantUsers)
-      .where(eq(tenantUsers.id, membershipId))
+      .where(and(eq(tenantUsers.id, membershipId), isNull(tenantUsers.removedAt)))
       .limit(1)
+      .for('update')
     if (!membership) return
     const [role] = await tx
       .select({ id: roles.id, name: roles.name })
@@ -528,8 +545,15 @@ export async function removeAssignment(formData: FormData): Promise<void> {
     const [membership] = await tx
       .select({ userId: tenantUsers.userId })
       .from(tenantUsers)
-      .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.id, membershipId)))
+      .where(
+        and(
+          eq(tenantUsers.tenantId, ctx.tenantId),
+          eq(tenantUsers.id, membershipId),
+          isNull(tenantUsers.removedAt),
+        ),
+      )
       .limit(1)
+      .for('update')
     if (!membership) return false
     const [assignment] = await tx
       .delete(roleAssignments)
@@ -567,8 +591,9 @@ export async function setPermissionOverride(formData: FormData): Promise<void> {
     const [membership] = await tx
       .select({ id: tenantUsers.id })
       .from(tenantUsers)
-      .where(eq(tenantUsers.id, membershipId))
+      .where(and(eq(tenantUsers.id, membershipId), isNull(tenantUsers.removedAt)))
       .limit(1)
+      .for('update')
     if (!membership) return false
     await tx
       .insert(userPermissionOverrides)
@@ -688,7 +713,13 @@ export async function setUserPersonLink(formData: FormData): Promise<void> {
         .select({ membership: tenantUsers, account: users })
         .from(tenantUsers)
         .innerJoin(users, eq(users.id, tenantUsers.userId))
-        .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.id, membershipId)))
+        .where(
+          and(
+            eq(tenantUsers.tenantId, ctx.tenantId),
+            eq(tenantUsers.id, membershipId),
+            isNull(tenantUsers.removedAt),
+          ),
+        )
         .limit(1)
         .for('update')
       if (!member) {

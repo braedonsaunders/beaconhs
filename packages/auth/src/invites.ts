@@ -1,5 +1,5 @@
 import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { auditLog, tenants, tenantUsers, users } from '@beaconhs/db/schema'
 import { materializeUserIdentityAudienceObligations } from '@beaconhs/compliance'
@@ -222,7 +222,7 @@ async function loadInviteRecord(tx: Database, membershipId: string, lock: boolea
     .from(tenantUsers)
     .innerJoin(users, eq(users.id, tenantUsers.userId))
     .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
-    .where(eq(tenantUsers.id, membershipId))
+    .where(and(eq(tenantUsers.id, membershipId), isNull(tenantUsers.removedAt)))
     .limit(1)
   if (lock) query = query.for('update') as typeof query
   const [row] = await query
@@ -256,6 +256,7 @@ export async function acceptInviteAfterMagicLink(
           eq(tenantUsers.tenantId, verified.payload.tenantId),
           eq(tenantUsers.userId, verified.payload.userId),
           eq(tenantUsers.status, 'invited'),
+          isNull(tenantUsers.removedAt),
           eq(tenantUsers.invitedAt, new Date(verified.payload.invitedAt)),
         ),
       )

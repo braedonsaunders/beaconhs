@@ -93,7 +93,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'documents.review': 'Review documents',
 
   'journals.read.all': 'View all journals',
-  'journals.read.site': 'View site journals',
+  'journals.read.site': 'View journals in assigned scope',
   'journals.read.self': 'View own journals',
   'journals.create': 'Create journals',
   'journals.update.own': 'Edit own journals',

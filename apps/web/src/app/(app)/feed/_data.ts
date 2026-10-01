@@ -31,7 +31,13 @@ import type { Database } from '@beaconhs/db'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { templateAccessWhere } from '@/app/(app)/apps/_lib/access'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
-import { getAuthorPersonId, htmlToText, journalScopeWhere, snippetOf } from '../journals/_lib'
+import {
+  getAuthorPersonId,
+  htmlToText,
+  journalScopeWhere,
+  journalAuthorPersonId,
+  snippetOf,
+} from '../journals/_lib'
 import type { FeedEvent, FeedKind, FeedPage, FeedSummary, FeedTag } from './_types'
 
 const PAGE = 20
@@ -122,7 +128,7 @@ export async function getFeed(
           siteName: orgUnits.name,
         })
         .from(journalEntries)
-        .leftJoin(author, eq(author.id, journalEntries.personId))
+        .leftJoin(author, eq(author.id, journalAuthorPersonId()))
         .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
         .where(
           whereAll(

@@ -111,7 +111,7 @@ export async function getSignedInAccessSummary(): Promise<SignedInAccessSummary 
       })
       .from(tenantUsers)
       .innerJoin(tenants, eq(tenants.id, tenantUsers.tenantId))
-      .where(eq(tenantUsers.userId, session.user.id))
+      .where(and(eq(tenantUsers.userId, session.user.id), isNull(tenantUsers.removedAt)))
       .orderBy(asc(tenants.name)),
   )
   return { userId: session.user.id, email: session.user.email, memberships }
@@ -200,6 +200,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
               eq(tenantUsers.tenantId, tenants.id),
               eq(tenantUsers.userId, userId),
               eq(tenantUsers.status, 'active'),
+              isNull(tenantUsers.removedAt),
             ),
           )
           .where(activeTenantPredicate())
@@ -221,6 +222,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
             eq(tenantUsers.userId, userId),
             eq(tenantUsers.tenantId, tenant.id),
             eq(tenantUsers.status, 'active'),
+            isNull(tenantUsers.removedAt),
           ),
         )
         .limit(1)
@@ -248,6 +250,7 @@ export const getRequestContext = cache(async (): Promise<RequestContext | null> 
         and(
           eq(tenantUsers.userId, userId),
           eq(tenantUsers.status, 'active'),
+          isNull(tenantUsers.removedAt),
           activeTenantPredicate(),
         ),
       )
@@ -357,6 +360,7 @@ async function resolveImpersonation(
         eq(tenantUsers.userId, target.id),
         eq(tenantUsers.tenantId, s.tenantId),
         eq(tenantUsers.status, 'active'),
+        isNull(tenantUsers.removedAt),
       ),
     )
     .limit(1)
@@ -434,6 +438,7 @@ export async function listAccessibleTenants(): Promise<
         and(
           eq(tenantUsers.userId, userId),
           eq(tenantUsers.status, 'active'),
+          isNull(tenantUsers.removedAt),
           activeTenantPredicate(),
         ),
       )

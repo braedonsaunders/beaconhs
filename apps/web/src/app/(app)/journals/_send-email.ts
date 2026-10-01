@@ -9,7 +9,12 @@ import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { journalEntries, orgUnits, people } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
-import { getAuthorPersonId, journalCanReadAll, journalScopeWhere } from './_lib'
+import {
+  getAuthorPersonId,
+  journalCanReadAll,
+  journalScopeWhere,
+  journalAuthorPersonId,
+} from './_lib'
 import { textToHtml } from './_format'
 
 const authorPerson = alias(people, 'jmail_author')
@@ -47,7 +52,7 @@ export async function sendJournalEntryEmail(ctx: RequestContext, entryId: string
       })
       .from(journalEntries)
       .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
-      .leftJoin(authorPerson, eq(authorPerson.id, journalEntries.personId))
+      .leftJoin(authorPerson, eq(authorPerson.id, journalAuthorPersonId()))
       .leftJoin(supPerson, eq(supPerson.id, journalEntries.supervisorPersonId))
       .where(entryWhere)
       .limit(1)

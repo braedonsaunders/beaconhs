@@ -183,6 +183,8 @@ export const tenantUsers = pgTable(
     invitedAt: timestamp('invited_at', { withTimezone: true }),
     invitedBy: text('invited_by').references(() => users.id),
     joinedAt: timestamp('joined_at', { withTimezone: true }),
+    // Retain the identity for historical actor FKs after workspace access is removed.
+    removedAt: timestamp('removed_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => ({

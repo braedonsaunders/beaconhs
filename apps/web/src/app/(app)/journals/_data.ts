@@ -34,6 +34,7 @@ import {
   getAuthorPersonId,
   htmlToText,
   journalAuthorScopeWhere,
+  journalAuthorPersonId,
   journalCanBrowseAll,
   journalCanReadAll,
   journalScopeWhere,
@@ -132,7 +133,7 @@ function entryWhere(
     conds.push(or(ft, ilike(journalEntries.title, term), ilike(journalEntries.bodyText, term))!)
   }
   if (filters.site) conds.push(eq(journalEntries.siteOrgUnitId, filters.site))
-  if (filters.person) conds.push(eq(journalEntries.personId, filters.person))
+  if (filters.person) conds.push(eq(journalAuthorPersonId(), filters.person))
   if (filters.status) conds.push(eq(journalEntries.status, filters.status))
   if (filters.definition) conds.push(eq(journalEntries.definition, filters.definition))
   if (filters.from) conds.push(gte(journalEntries.entryDate, filters.from))
@@ -232,7 +233,7 @@ export async function listEntries(
       })
       .from(journalEntries)
       .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
-      .leftJoin(authorPerson, eq(authorPerson.id, journalEntries.personId))
+      .leftJoin(authorPerson, eq(authorPerson.id, journalAuthorPersonId()))
       .where(where)
       .orderBy(...orderBy)
       .limit(limit)
@@ -345,7 +346,7 @@ export async function getEntry(
       })
       .from(journalEntries)
       .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
-      .leftJoin(authorPerson, eq(authorPerson.id, journalEntries.personId))
+      .leftJoin(authorPerson, eq(authorPerson.id, journalAuthorPersonId()))
       .where(and(eq(journalEntries.id, id), isNull(journalEntries.deletedAt), scope))
       .limit(1)
     if (!row) return null
@@ -462,7 +463,7 @@ export async function buildTree(
       })
       .from(journalEntries)
       .leftJoin(orgUnits, eq(orgUnits.id, journalEntries.siteOrgUnitId))
-      .leftJoin(authorPerson, eq(authorPerson.id, journalEntries.personId))
+      .leftJoin(authorPerson, eq(authorPerson.id, journalAuthorPersonId()))
       .where(and(where, lte(journalEntries.createdAt, pageAsOf), afterCursor))
       .orderBy(
         desc(journalEntries.entryDate),

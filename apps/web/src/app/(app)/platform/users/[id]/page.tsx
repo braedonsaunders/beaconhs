@@ -2,7 +2,19 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound, redirect } from 'next/navigation'
-import { and, asc, count, desc, eq, exists, ilike, inArray, or, type SQL } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  isNull,
+  exists,
+  ilike,
+  inArray,
+  or,
+  type SQL,
+} from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -106,7 +118,7 @@ export default async function PlatformUserDetailPage({
           ),
         )
       : undefined
-    const baseWhere = eq(tenantUsers.userId, id)
+    const baseWhere = and(eq(tenantUsers.userId, id), isNull(tenantUsers.removedAt))
     const where = and(
       baseWhere,
       search,

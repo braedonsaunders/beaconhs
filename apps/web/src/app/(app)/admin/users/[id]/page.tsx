@@ -2,7 +2,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound, redirect } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -84,7 +84,7 @@ export default async function AdminUserDetailPage({
       .select({ membership: tenantUsers, account: user })
       .from(tenantUsers)
       .innerJoin(user, eq(user.id, tenantUsers.userId))
-      .where(eq(tenantUsers.id, id))
+      .where(and(eq(tenantUsers.id, id), isNull(tenantUsers.removedAt)))
       .limit(1)
     if (!member) return null
     const assignments = await tx

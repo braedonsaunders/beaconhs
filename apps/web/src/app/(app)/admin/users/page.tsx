@@ -3,7 +3,19 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { and, asc, count, desc, eq, exists, ilike, inArray, or, type SQL } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  isNull,
+  exists,
+  ilike,
+  inArray,
+  or,
+  type SQL,
+} from 'drizzle-orm'
 import { Badge, Button, DetailHeader, EmptyState } from '@beaconhs/ui'
 import { roleAssignments, roles, tenantUsers, users as user } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
@@ -90,6 +102,7 @@ export default async function AdminUsersPage({
         )
       : undefined
     const where = and(
+      isNull(tenantUsers.removedAt),
       search,
       statusFilter === 'all' ? undefined : eq(tenantUsers.status, statusFilter),
     )
@@ -106,12 +119,12 @@ export default async function AdminUsersPage({
       tx.select({ c: count() }).from(tenantUsers).innerJoin(user, eq(user.id, tenantUsers.userId))
     const [totalRow, activeRow, countRows, memberRows] = await Promise.all([
       baseCount().where(where),
-      baseCount().where(eq(tenantUsers.status, 'active')),
+      baseCount().where(and(eq(tenantUsers.status, 'active'), isNull(tenantUsers.removedAt))),
       tx
         .select({ status: tenantUsers.status, c: count() })
         .from(tenantUsers)
         .innerJoin(user, eq(user.id, tenantUsers.userId))
-        .where(search)
+        .where(and(search, isNull(tenantUsers.removedAt)))
         .groupBy(tenantUsers.status),
       tx
         .select({ membership: tenantUsers, account: user })

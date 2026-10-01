@@ -605,12 +605,12 @@ Open the member to manage only this workspace's settings:
 
 - **Display name in this tenant** changes how the name appears here.
 - **Person record** links the login to the right employee record.
-- **Roles & scope** controls what the member can do and which records they can reach.
+- **Roles & scope** controls what the member can do and which records they can reach. For a Shop supervisor reviewing journals, give **View journals in assigned scope** and set their data scope to the **Shop** department. Assign employees to Shop in the source system when their People records are synced; otherwise assign the department in **People**. An empty department adds no colleagues’ journals. They can see Shop employees’ journals and their own. **View all journals** is only needed for tenant-wide access.
 - **Permissions** adds a specific grant or denial when a role needs an exception.
 - **Suspend member** blocks this workspace without changing the person's other workspaces.
 - **Reactivate** restores a suspended membership.
 - **Reset password** sends an active member a one-time reset link. Administrators never see or choose the member's password.
-- **Remove from tenant** deletes this membership, its role assignments, and its overrides.
+- **Remove from tenant** revokes workspace access and removes its role assignments and permission overrides. The person disappears from the member list. Saved safety records keep their original author and inspector history. Their global account and other workspace memberships remain available. To bring them back, invite them again and assign the roles they now need.
 
 Pending invitations cannot be marked active by an administrator. The person must prove control of the invited email by using the one-time link.
 
@@ -626,7 +626,7 @@ Platform super-admins manage global identity from **Platform → Users**. Search
 
 - Link the correct **Person record** before assigning self-scoped work.
 - Give the smallest role and scope the person needs.
-- Suspend access when someone is temporarily away. Remove the membership only when its tenant-specific role history is no longer needed.`,
+- Suspend access when someone is temporarily away. Remove the membership when their workspace access should end. Saved record history is preserved.`,
   },
   {
     slug: 'admin',

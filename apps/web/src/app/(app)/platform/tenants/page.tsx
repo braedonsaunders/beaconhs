@@ -3,7 +3,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, ilike, or, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -88,6 +88,7 @@ export default async function AdminTenantsPage({
     const memberTotals = tx
       .select({ tenantId: tenantUsers.tenantId, total: count().as('member_total') })
       .from(tenantUsers)
+      .where(isNull(tenantUsers.removedAt))
       .groupBy(tenantUsers.tenantId)
       .as('member_totals')
     const peopleTotals = tx
