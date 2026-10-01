@@ -200,6 +200,7 @@ function mapRow(
         phone: g('phone'),
         jobTitle: g('jobTitle'),
         departmentName: g('departmentName'),
+        departmentExternalId: g('departmentExternalId'),
         tradeName: g('tradeName'),
         hireDate: datePart(g('hireDate')),
         status: personStatus(g('status'), g('inactive')),

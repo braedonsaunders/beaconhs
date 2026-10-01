@@ -55,6 +55,11 @@ const ENTITY_FIELDS: Record<string, { key: string; label: string; help?: string 
     { key: 'phone', label: 'Phone' },
     { key: 'jobTitle', label: 'Job title' },
     { key: 'departmentName', label: 'Department' },
+    {
+      key: 'departmentExternalId',
+      label: 'Department external ID',
+      help: 'Optional. A department ID without a resolved department name fails safely.',
+    },
     { key: 'tradeName', label: 'Trade' },
     { key: 'hireDate', label: 'Hire date' },
     { key: 'status', label: 'Status' },

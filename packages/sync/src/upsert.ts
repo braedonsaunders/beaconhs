@@ -16,7 +16,6 @@ import {
 } from '@beaconhs/db'
 import {
   customerContacts,
-  departments,
   equipmentItems,
   equipmentTypes,
   orgUnits,
@@ -38,6 +37,7 @@ import type {
   SyncEntityKey,
   SyncLogger,
 } from './types'
+import { resolvePersonDepartment } from './person-department'
 import {
   decideNaturalPersonAdoption,
   decidePersonSync,
@@ -49,7 +49,6 @@ export type { SyncOwnershipMode } from './person-sync-policy'
 type JsonRecord = Record<string, unknown>
 
 export interface Lookups {
-  deptByName: Map<string, string>
   tradeByName: Map<string, string>
   equipTypeByName: Map<string, string>
   orgUnitIdByCode: Map<string, string>
@@ -92,8 +91,7 @@ interface ArchiveMissingResult {
 
 export async function loadLookups(tx: Database): Promise<Lookups> {
   // RLS scopes all tenant reads to the current tenant.
-  const [depts, trds, etypes, ous, ppl] = await Promise.all([
-    tx.select({ id: departments.id, name: departments.name }).from(departments),
+  const [trds, etypes, ous, ppl] = await Promise.all([
     tx.select({ id: trades.id, name: trades.name }).from(trades),
     tx.select({ id: equipmentTypes.id, name: equipmentTypes.name }).from(equipmentTypes),
     tx
@@ -123,7 +121,6 @@ export async function loadLookups(tx: Database): Promise<Lookups> {
     }
   }
   return {
-    deptByName: lower(depts),
     tradeByName: lower(trds),
     equipTypeByName: lower(etypes),
     orgUnitIdByCode,
@@ -1021,6 +1018,12 @@ async function upsertPerson(
     return { action: 'skipped', message }
   }
   const normalizedJobTitle = normalizeCatalogDisplayName(data.jobTitle)
+  if (
+    normalizeCatalogDisplayName(data.departmentExternalId) &&
+    !normalizeCatalogDisplayName(data.departmentName)
+  ) {
+    throw new Error(`Source department ${data.departmentExternalId} has no resolved name.`)
+  }
   const rowHash = hashData({ ...data, jobTitle: normalizedJobTitle })
   const metadata = data.metadata as JsonRecord | undefined
   const fields: PersonFields = {
@@ -1033,11 +1036,7 @@ async function upsertPerson(
     jobTitle: normalizedJobTitle,
     hireDate: data.hireDate ?? null,
     status: data.status ?? 'active',
-    departmentId: data.departmentName
-      ? (ctx.lookups.deptByName.get(
-          normalizeCatalogDisplayName(data.departmentName)?.toLowerCase() ?? '',
-        ) ?? null)
-      : null,
+    departmentId: await resolvePersonDepartment(tx, ctx, data.departmentName),
     tradeId: data.tradeName
       ? (ctx.lookups.tradeByName.get(
           normalizeCatalogDisplayName(data.tradeName)?.toLowerCase() ?? '',

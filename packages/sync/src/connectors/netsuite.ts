@@ -185,6 +185,8 @@ function mapNetsuiteRow(
         email: g('email'),
         phone: g('phone'),
         jobTitle: g('jobTitle'),
+        departmentName: g('departmentName'),
+        departmentExternalId: g('departmentExternalId'),
         hireDate: datePart(g('hireDate')),
       }
       if (!data.firstName && !data.lastName) return null

@@ -835,6 +835,8 @@ Integration connections can reach public **HTTPS** services only. External datab
 
 If a sync uses **Archive after safe full pulls**, BeaconHS applies it only after a complete full snapshot. An empty entity or failed record blocks archiving and marks the run partial. A page-limit warning means BeaconHS processed only part of the source, so it also skips archiving. Check the run details before trying again.
 
+For employee departments, map **Department** to the department name from the source, not its numeric ID. If employees store a department ID, use a custom query that joins the source department list. You can also map **Department external ID** to detect a missing department name: the affected employee fails safely instead of losing their department. BeaconHS reuses matching departments and creates new department names as needed. Synced employees’ departments follow the source on each run, so correct them in NetSuite or your HR source. Department data scopes use these same assignments.
+
 On a connection, **Run history** shows every attempt. Search by trigger, status, or error, or use **Status** and **Type** to separate live runs from previews. Use **Next** and **Prev** to move through older runs.
 
 On a sync run, use the record-decision search and the **Action** and **Entity** filters to review created, updated, skipped, failed, or conflicting rows. Click a sortable heading when you need a different order.

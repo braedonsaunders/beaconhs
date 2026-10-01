@@ -18,6 +18,8 @@ export interface CanonicalPerson {
   phone?: string | null
   jobTitle?: string | null
   departmentName?: string | null
+  /** When supplied, a nonblank source department ID requires a resolved name. */
+  departmentExternalId?: string | null
   tradeName?: string | null
   hireDate?: string | null // YYYY-MM-DD
   status?: 'active' | 'inactive' | 'terminated'
