@@ -16,17 +16,9 @@ import {
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 
-type RecipientOptionsData = {
-  people: { id: string; name: string }[]
-  roles: { key: string; name: string }[]
-  departments: { id: string; name: string }[]
-  personGroups: { id: string; name: string }[]
-  contacts: { id: string; name: string; orgUnitName: string }[]
-  obligations: { id: string; name: string }[]
-  spreadsheetTemplates: { id: string; name: string }[]
-}
+import type { RecipientOptions } from './recipient-presentation'
 
-export async function loadRecipientOptions(ctx: RequestContext): Promise<RecipientOptionsData> {
+export async function loadRecipientOptions(ctx: RequestContext): Promise<RecipientOptions> {
   return ctx.db(async (tx) => {
     const ppl = await tx
       .select({ id: people.id, first: people.firstName, last: people.lastName })
@@ -51,6 +43,7 @@ export async function loadRecipientOptions(ctx: RequestContext): Promise<Recipie
         .select({
           id: customerContacts.id,
           name: customerContacts.name,
+          email: customerContacts.email,
           orgUnitName: orgUnits.name,
         })
         .from(customerContacts)
