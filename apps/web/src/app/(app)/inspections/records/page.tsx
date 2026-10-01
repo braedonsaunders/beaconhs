@@ -1,5 +1,7 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
+import { PeopleStatusFilter } from '@/components/people-status-filter'
+import { includeInactivePeople } from '@/lib/people-filter'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { ClipboardList } from 'lucide-react'
@@ -343,8 +345,14 @@ export default async function InspectionRecordsPage({
                 allLabel="All locations"
                 searchPlaceholder={tGenerated('m_016e087c3c8544')}
               />
+              <PeopleStatusFilter
+                basePath="/inspections/records"
+                currentParams={sp}
+                personParamKey="inspector"
+              />
               <RemoteSearchFilter
                 lookup="inspection-record-filter-inspectors"
+                includeInactive={includeInactivePeople(sp)}
                 basePath="/inspections/records"
                 currentParams={sp}
                 paramKey="inspector"

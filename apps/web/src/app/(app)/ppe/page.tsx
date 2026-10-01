@@ -1,5 +1,7 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
+import { PeopleStatusFilter } from '@/components/people-status-filter'
+import { includeInactivePeople } from '@/lib/people-filter'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { HardHat } from 'lucide-react'
@@ -405,8 +407,10 @@ export default async function PpePage({
               allLabel="All PPE types"
               options={types.map((type) => ({ value: type.id, label: type.name }))}
             />
+            <PeopleStatusFilter basePath="/ppe" currentParams={sp} personParamKey="holder" />
             <RemoteSearchFilter
               lookup="ppe-register-filter-holders"
+              includeInactive={includeInactivePeople(sp)}
               basePath="/ppe"
               currentParams={sp}
               paramKey="holder"

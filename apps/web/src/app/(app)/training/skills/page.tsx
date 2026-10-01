@@ -1,5 +1,7 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
+import { PeopleStatusFilter } from '@/components/people-status-filter'
+import { includeInactivePeople, personFilterWhere } from '@/lib/people-filter'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Skills — the operational list of externally-issued skills & certifications
 // held by people (training_skill_assignments × skill type × authority).
@@ -221,7 +223,13 @@ export default async function SkillsPage({
       })
       .from(trainingSkillAssignments)
       .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
-      .where(and(isNull(trainingSkillAssignments.deletedAt), vis))
+      .where(
+        and(
+          isNull(trainingSkillAssignments.deletedAt),
+          vis,
+          personFilterWhere(includeInactivePeople(sp), personFilter),
+        ),
+      )
       .orderBy(asc(people.lastName), asc(people.firstName))
     const skillTypesList = await tx
       .selectDistinct({
@@ -265,6 +273,11 @@ export default async function SkillsPage({
           <TrainingSubNav active="skills" />
           <TableToolbar>
             <SearchInput placeholder={tGenerated('m_0bd32260bea276')} />
+            <PeopleStatusFilter
+              basePath="/training/skills"
+              currentParams={sp}
+              personParamKey="person"
+            />
             <GeneratedValue
               value={
                 peopleList.length > 0 ? (

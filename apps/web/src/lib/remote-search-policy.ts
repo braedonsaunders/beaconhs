@@ -5,6 +5,7 @@ const REMOTE_SEARCH_TEXT_LIMIT = 100
 export type RemoteSearchInput = {
   query: string
   selected: string | null
+  includeInactive?: boolean
 }
 
 type SelectedKind = 'uuid' | 'text'
@@ -41,21 +42,31 @@ function boundedText(value: unknown, field: string): string {
 export function parseRemoteSearchInput(
   value: unknown,
   selectedKind: SelectedKind,
+  allowInactive = false,
 ): RemoteSearchInput {
   const record = asRecord(value)
-  assertExactKeys(record, ['query', 'selected'])
+  assertExactKeys(
+    record,
+    allowInactive ? ['query', 'selected', 'includeInactive'] : ['query', 'selected'],
+  )
+  if (record.includeInactive !== undefined && typeof record.includeInactive !== 'boolean') {
+    throw new Error('People status is invalid.')
+  }
+  const status =
+    record.includeInactive === undefined ? {} : { includeInactive: record.includeInactive }
   const query = boundedText(record.query, 'Search text')
-  if (record.selected === null || record.selected === '') return { query, selected: null }
+  if (record.selected === null || record.selected === '')
+    return { query, selected: null, ...status }
 
   if (selectedKind === 'uuid') {
     if (typeof record.selected !== 'string' || !isUuid(record.selected)) {
       throw new Error('Selected option is invalid.')
     }
-    return { query, selected: record.selected.toLowerCase() }
+    return { query, selected: record.selected.toLowerCase(), ...status }
   }
 
   const selected = boundedText(record.selected, 'Selected option')
-  return { query, selected: selected || null }
+  return { query, selected: selected || null, ...status }
 }
 
 /** Escape user text before wrapping it in a parameterised ILIKE pattern. */

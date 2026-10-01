@@ -1,5 +1,7 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
+import { PeopleStatusFilter } from '@/components/people-status-filter'
+import { includeInactivePeople } from '@/lib/people-filter'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Wrench } from 'lucide-react'
@@ -342,8 +344,14 @@ export default async function WorkOrdersPage({
                 { value: 'overdue30', label: 'High prio · 7d+' },
               ]}
             />
+            <PeopleStatusFilter
+              basePath="/equipment/work-orders"
+              currentParams={sp}
+              personParamKey="assignee"
+            />
             <RemoteSearchFilter
               lookup="equipment-work-order-filter-assignees"
+              includeInactive={includeInactivePeople(sp)}
               basePath="/equipment/work-orders"
               currentParams={sp}
               paramKey="assignee"

@@ -247,7 +247,7 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     id: 'personal-my-ppe',
     category: 'personal',
     label: 'My PPE',
-    description: 'PPE inspections that are overdue, due today, or required now.',
+    description: 'PPE assigned to you, with inspection status and inspection shortcuts.',
     defaultSize: { w: 6, h: 5 },
     minSize: { w: 3, h: 4 },
   },

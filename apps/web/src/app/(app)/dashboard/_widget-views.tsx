@@ -1439,10 +1439,7 @@ function MyPpeCard({ items }: { items: DashboardMetrics['myPpe'] }) {
   return (
     <CardShell
       title={tGenerated('m_1dc869deae5302')}
-      caption={tGenerated('m_1016c228103293', {
-        value0: items.length,
-        value1: items.length === 1 ? '' : 's',
-      })}
+      caption={tGenerated('m_0d1771967df0ec', { value0: items.length })}
       icon={HardHat}
       href="/ppe"
       accent="teal"
@@ -1451,7 +1448,7 @@ function MyPpeCard({ items }: { items: DashboardMetrics['myPpe'] }) {
         value={
           items.length === 0 ? (
             <EmptyRow>
-              <GeneratedText id="m_1cfc961e45cf3d" />
+              <GeneratedValue value="No PPE assigned to you." />
             </EmptyRow>
           ) : (
             <ul className="space-y-0.5 px-2 pb-2">
@@ -1480,16 +1477,24 @@ function MyPpeCard({ items }: { items: DashboardMetrics['myPpe'] }) {
                           >
                             <GeneratedValue value={p.typeName} />
                           </Link>
-                          <PpeInspectionBadge state={p.inspectionState} />
+                          {p.status === 'out_of_service' ? (
+                            <Badge variant="destructive">
+                              <GeneratedValue value="Out of service" />
+                            </Badge>
+                          ) : (
+                            <PpeInspectionBadge state={p.inspectionState} />
+                          )}
                         </div>
                         <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
                           <GeneratedValue value={sub} />
                         </div>
                       </div>
-                      <InspectButton
-                        href={`/ppe/${p.id}?tab=${p.inspectionKind === 'annual' ? 'annual' : 'inspections'}&drawer=record-inspection&kind=${p.inspectionKind}`}
-                        tone="teal"
-                      />
+                      {p.inspectionKind && (
+                        <InspectButton
+                          href={`/ppe/${p.id}?tab=${p.inspectionKind === 'annual' ? 'annual' : 'inspections'}&drawer=record-inspection&kind=${p.inspectionKind}`}
+                          tone="teal"
+                        />
+                      )}
                     </motion.li>
                   )
                 })}

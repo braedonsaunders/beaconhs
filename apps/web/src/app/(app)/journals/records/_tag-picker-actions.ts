@@ -1,5 +1,7 @@
 'use server'
 
+import { personFilterWhere } from '@/lib/people-filter'
+
 import { and, asc, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm'
 import { journalEntries, journalEntryTags, orgUnits, people } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
@@ -126,7 +128,7 @@ export async function loadJournalRecordSiteOptions(input: unknown): Promise<Pick
 export async function loadJournalRecordAuthorOptions(
   input: unknown,
 ): Promise<PickerOptionsResponse> {
-  const search = parseRemoteSearchInput(input, 'uuid')
+  const search = parseRemoteSearchInput(input, 'uuid', true)
   const { ctx, scope } = await reviewerScope()
   const term = remoteSearchTerm(search.query)
 
@@ -157,6 +159,7 @@ export async function loadJournalRecordAuthorOptions(
           eq(journalEntries.tenantId, ctx.tenantId),
           isNull(journalEntries.deletedAt),
           scope,
+          personFilterWhere(search.includeInactive === true, search.selected),
           match,
         ),
       )

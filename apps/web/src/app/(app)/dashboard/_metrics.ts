@@ -26,7 +26,6 @@ import {
   ppeItems,
   ppeIssueReports,
   ppeTypes,
-  ppeTypeInspectionCriteria,
   trainingCourses,
   trainingRecords,
   truckLogEntries,
@@ -36,7 +35,7 @@ import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { resolveComplianceLink } from '../compliance/_resolve-link'
 import { templateAccessWhere } from '../apps/_lib/access'
 import { moduleScope } from '../feed/_data'
-import { resolvePpeInspectionDue, type PpeInspectionState } from '@/lib/ppe-inspection-due'
+import { loadPersonalPpe } from './_personal-ppe'
 
 /**
  * One 12-element series of monthly values, oldest -> newest. Used to draw the
@@ -144,15 +143,7 @@ export type DashboardMetrics = {
 
   // Personal — "my" widgets, scoped to the logged-in user's person record.
   // Empty / zeroed when the account isn't linked to a person (`linked: false`).
-  myPpe: Array<{
-    id: string
-    typeName: string
-    serialNumber: string | null
-    size: string | null
-    inspectionKind: 'pre_use' | 'annual'
-    inspectionState: PpeInspectionState
-    inspectionDueOn: string | null
-  }>
+  myPpe: Awaited<ReturnType<typeof loadPersonalPpe>>
   myEquipment: Array<{
     id: string
     checkoutId: string
@@ -904,81 +895,7 @@ export async function loadDashboardMetrics(
       : []
     const myPersonId = myPerson?.id ?? null
 
-    // PPE currently issued to me that has an actionable checklist. Resolve the
-    // state in one canonical helper so the dashboard and PPE register agree.
-    const myPpe = myPersonId
-      ? (
-          await tx
-            .select({
-              id: ppeItems.id,
-              serialNumber: ppeItems.serialNumber,
-              size: ppeItems.size,
-              lastInspectionOn: ppeItems.lastInspectionOn,
-              nextInspectionDue: ppeItems.nextInspectionDue,
-              lastAnnualInspectionOn: ppeItems.lastAnnualInspectionOn,
-              nextAnnualInspectionDue: ppeItems.nextAnnualInspectionDue,
-              typeName: ppeTypes.name,
-              isInspectable: ppeTypes.isInspectable,
-              preUseCriteriaCount: sql<number>`(
-                select count(*)::int from ${ppeTypeInspectionCriteria} c
-                where c.ppe_type_id = ${ppeTypes.id} and c.inspection_kind = 'pre_use'
-              )`,
-              annualCriteriaCount: sql<number>`(
-                select count(*)::int from ${ppeTypeInspectionCriteria} c
-                where c.ppe_type_id = ${ppeTypes.id} and c.inspection_kind = 'annual'
-              )`,
-            })
-            .from(ppeItems)
-            .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
-            .where(
-              and(
-                eq(ppeItems.currentHolderPersonId, myPersonId),
-                eq(ppeItems.status, 'issued'),
-                isNull(ppeItems.deletedAt),
-              ),
-            )
-            .orderBy(asc(ppeTypes.name), asc(ppeItems.serialNumber))
-        )
-          .map((r) => ({
-            row: r,
-            due: resolvePpeInspectionDue({
-              todayIso,
-              isInspectable: r.isInspectable,
-              preUseCriteriaCount: Number(r.preUseCriteriaCount),
-              annualCriteriaCount: Number(r.annualCriteriaCount),
-              lastInspectionOn: r.lastInspectionOn ? String(r.lastInspectionOn) : null,
-              nextInspectionDue: r.nextInspectionDue ? String(r.nextInspectionDue) : null,
-              lastAnnualInspectionOn: r.lastAnnualInspectionOn
-                ? String(r.lastAnnualInspectionOn)
-                : null,
-              nextAnnualInspectionDue: r.nextAnnualInspectionDue
-                ? String(r.nextAnnualInspectionDue)
-                : null,
-            }),
-          }))
-          .filter(
-            (
-              entry,
-            ): entry is typeof entry & { due: typeof entry.due & { kind: 'pre_use' | 'annual' } } =>
-              entry.due.actionable && entry.due.kind !== null,
-          )
-          .sort((a, b) => {
-            const rank = { overdue: 0, never_inspected: 1, required: 2, due_today: 3 } as const
-            const aRank = rank[a.due.state as keyof typeof rank] ?? 4
-            const bRank = rank[b.due.state as keyof typeof rank] ?? 4
-            return aRank - bRank || (a.due.dueOn ?? '').localeCompare(b.due.dueOn ?? '')
-          })
-          .slice(0, 12)
-          .map(({ row, due }) => ({
-            id: row.id,
-            typeName: row.typeName,
-            serialNumber: row.serialNumber,
-            size: row.size,
-            inspectionKind: due.kind,
-            inspectionState: due.state,
-            inspectionDueOn: due.dueOn,
-          }))
-      : []
+    const myPpe = await loadPersonalPpe(tx, myPersonId, todayIso)
 
     // Equipment checked out to me — open checkouts (returnedAt IS NULL) are the
     // source of truth; oldest checkout first.

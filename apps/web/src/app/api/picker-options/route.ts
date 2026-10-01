@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { personFilterWhere, tenantUserFilterWhere } from '@/lib/people-filter'
 import {
   and,
   asc,
@@ -78,6 +79,7 @@ const MAX_QUERY_LENGTH = 100
 
 type Option = PickerOptionsResponse['options'][number]
 type PickerQuery = {
+  includeInactive: boolean
   term: string
   hasQuery: boolean
   selected: string | null
@@ -420,6 +422,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       selected,
       selectedKey,
       contextId: contextIdParam,
+      includeInactive: url.searchParams.get('includeInactive') === '1',
     })
     return json(response)
   } catch (error) {
@@ -1162,7 +1165,13 @@ async function loadOptions(
           .select(PERSON_OPTION_SELECTION)
           .from(trainingAssessments)
           .innerJoin(people, eq(people.id, trainingAssessments.personId))
-          .where(and(assessmentBase, personMatch(input)))
+          .where(
+            and(
+              assessmentBase,
+              personFilterWhere(input.includeInactive, input.selected),
+              personMatch(input),
+            ),
+          )
           .groupBy(people.id, people.firstName, people.lastName, people.employeeNo)
           .orderBy(...personOrder(input.selected))
           .limit(PICKER_RESULT_LIMIT + 1)
@@ -1373,7 +1382,14 @@ async function loadOptions(
         .from(inspectionRecords)
         .innerJoin(tenantUsers, eq(tenantUsers.id, inspectionRecords.inspectorTenantUserId))
         .leftJoin(users, eq(users.id, tenantUsers.userId))
-        .where(and(scope, isNull(inspectionRecords.deletedAt), match))
+        .where(
+          and(
+            scope,
+            isNull(inspectionRecords.deletedAt),
+            tenantUserFilterWhere(input.includeInactive, input.selected),
+            match,
+          ),
+        )
         .groupBy(tenantUsers.id, tenantUsers.displayName, users.name, users.email)
         .orderBy(
           ...(input.selected ? [desc(sql`${tenantUsers.id} = ${input.selected}`)] : []),
@@ -1643,7 +1659,13 @@ async function loadOptions(
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)
         .from(people)
-        .where(and(inArray(people.id, visibleHeldItems), personMatch(input)))
+        .where(
+          and(
+            inArray(people.id, visibleHeldItems),
+            personFilterWhere(input.includeInactive, input.selected),
+            personMatch(input),
+          ),
+        )
         .orderBy(...personOrder(input.selected))
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(personOptions(rows))
@@ -1657,7 +1679,7 @@ async function loadOptions(
         .from(people)
         .where(
           and(
-            isNull(people.deletedAt),
+            personFilterWhere(input.includeInactive, input.selected),
             personMatch(input),
             or(
               sql`exists (select 1 from ${ppeItems} pi where pi.current_holder_person_id = ${people.id})`,
@@ -1785,7 +1807,7 @@ async function loadOptions(
         .innerJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
         .innerJoin(tenantUsers, eq(tenantUsers.id, equipmentWorkOrders.assignedToTenantUserId))
         .leftJoin(users, eq(users.id, tenantUsers.userId))
-        .where(and(scope, match))
+        .where(and(scope, tenantUserFilterWhere(input.includeInactive, input.selected), match))
         .groupBy(tenantUsers.id, tenantUsers.displayName, users.name, users.email)
         .orderBy(
           ...(input.selected ? [desc(sql`${tenantUsers.id} = ${input.selected}`)] : []),

@@ -1,3 +1,4 @@
+import { drizzle, type NodePgClient } from 'drizzle-orm/node-postgres'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
@@ -169,5 +170,58 @@ describe('picker options route policy', () => {
     consoleError.mockRestore()
     expect(response.status).toBe(500)
     expect(db).toHaveBeenCalledOnce()
+  })
+})
+
+describe('people filter and assignment SQL boundaries', () => {
+  const historical = [
+    ['ppe-register-filter-holders', 'people'],
+    ['equipment-register-filter-holders', 'people'],
+    ['training-assessment-people', 'people'],
+    ['inspection-record-filter-inspectors', 'tenant_users'],
+    ['equipment-work-order-filter-assignees', 'tenant_users'],
+  ] as const
+  async function queries(lookup: string, includeInactive: boolean) {
+    const captured: { text: string; values: unknown[] }[] = []
+    const client = {
+      query: async (config: { text: string }, values: unknown[]) => {
+        captured.push({ text: config.text, values })
+        return { rows: [] }
+      },
+    } as unknown as NodePgClient
+    const tx = drizzle(client)
+    state.context = {
+      isSuperAdmin: true,
+      permissions: new Set(['*']),
+      db: vi.fn((callback) => callback(tx)),
+    }
+    const response = await request(`lookup=${lookup}${includeInactive ? '&includeInactive=1' : ''}`)
+    expect(response.status).toBe(200)
+    return captured.at(-1)!
+  }
+  it.each(historical)(
+    'defaults %s to active people and allows historical opt-in',
+    async (lookup, table) => {
+      const active = await queries(lookup, false)
+      expect(active.text).toContain(`"${table}"."status" =`)
+      expect(active.values).toContain('active')
+      const all = await queries(lookup, true)
+      expect(all.text).not.toContain(`"${table}"."status" =`)
+      expect(all.text).toContain('limit $')
+      if (lookup === 'inspection-record-filter-inspectors') {
+        expect(all.text).toContain('\"inspection_records\".\"deleted_at\" is null')
+      }
+    },
+  )
+  it.each([
+    'ppe-active-people',
+    'ppe-inspection-supervisors',
+    'equipment-custody-holders',
+    'equipment-work-order-assignees',
+    'inspection-people',
+  ])('keeps %s active-only even with a forged historical flag', async (lookup) => {
+    const query = await queries(lookup, true)
+    expect(query.text).toMatch(/"(?:people|tenant_users)"\."status" =/)
+    expect(query.values).toContain('active')
   })
 })

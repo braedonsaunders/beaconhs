@@ -1,5 +1,7 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
+import { PeopleStatusFilter } from '@/components/people-status-filter'
+import { includeInactivePeople } from '@/lib/people-filter'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -386,8 +388,14 @@ export default async function AssessmentsPage({
                 count: statusCounts[o.value],
               }))}
             />
+            <PeopleStatusFilter
+              basePath="/training/assessments"
+              currentParams={sp}
+              personParamKey="person"
+            />
             <RemoteSearchFilter
               lookup="training-assessment-people"
+              includeInactive={includeInactivePeople(sp)}
               basePath="/training/assessments"
               currentParams={sp}
               paramKey="person"

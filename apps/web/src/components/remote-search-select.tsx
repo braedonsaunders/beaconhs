@@ -14,12 +14,14 @@ export type RemoteSearchLoader = (input: {
   query: string
   selected: string | null
   contextId?: string
+  includeInactive?: boolean
 }) => Promise<unknown>
 
 export function RemoteSearchSelect({
   lookup,
   loadOptions,
   contextId,
+  includeInactive,
   value,
   onChange,
   onOptionChange,
@@ -43,6 +45,7 @@ export function RemoteSearchSelect({
   loadOptions?: RemoteSearchLoader
   /** Required only by lookups whose candidate set belongs to one parent row. */
   contextId?: string
+  includeInactive?: boolean
   value: string
   onChange: (value: string) => void
   /** Optional selected option payload for multi-value parents that retain labels locally. */
@@ -82,12 +85,14 @@ export function RemoteSearchSelect({
             query,
             selected: value || null,
             ...(contextId ? { contextId } : {}),
+            ...(includeInactive ? { includeInactive: true } : {}),
           })
         } else {
           if (!lookup) throw new Error('Picker lookup is not configured')
           const params = new URLSearchParams({ lookup, q: query })
           if (contextId) params.set('contextId', contextId)
           if (value) params.set('selected', value)
+          if (includeInactive) params.set('includeInactive', '1')
           const response = await fetch(`/api/picker-options?${params.toString()}`, {
             credentials: 'same-origin',
             cache: 'no-store',
@@ -120,7 +125,7 @@ export function RemoteSearchSelect({
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [contextId, disabled, loadOptions, lookup, query, value])
+  }, [contextId, disabled, includeInactive, loadOptions, lookup, query, value])
 
   const options = useMemo(() => {
     const excluded = new Set(excludedValues)
@@ -211,6 +216,7 @@ export function RemoteSearchFilter({
   lookup,
   loadOptions,
   contextId,
+  includeInactive,
   basePath,
   currentParams,
   paramKey,
@@ -226,6 +232,7 @@ export function RemoteSearchFilter({
   lookup?: PickerLookup
   loadOptions?: RemoteSearchLoader
   contextId?: string
+  includeInactive?: boolean
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
   paramKey: string
@@ -246,6 +253,7 @@ export function RemoteSearchFilter({
       lookup={lookup}
       loadOptions={loadOptions}
       contextId={contextId}
+      includeInactive={includeInactive}
       value={value}
       onChange={(next) =>
         router.push(

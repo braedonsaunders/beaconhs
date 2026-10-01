@@ -294,7 +294,7 @@ describe('inspection record atomicity contract', () => {
       /isNull\(inspectionRecords\.deletedAt\)[\s\S]*gte\(inspectionRecords\.occurredAt, startOfMonth\)/,
     )
     expect(
-      pickerOptions.match(/and\(scope, isNull\(inspectionRecords\.deletedAt\), match\)/g),
+      pickerOptions.match(/and\(\s*scope,\s*isNull\(inspectionRecords\.deletedAt\)/g),
     ).toHaveLength(3)
     expect(flowAdapter.match(/isNull\(inspectionRecords\.deletedAt\)/g)).toHaveLength(2)
     expect(flowAdapter).toContain('eq(inspectionRecords.tenantId, ctx.tenantId)')

@@ -27,6 +27,7 @@ export function FilterChips({
   defaultValue,
   pageParamKey = 'page',
   hideAll = false,
+  clearParams = [],
 }: {
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
@@ -45,13 +46,17 @@ export function FilterChips({
   pageParamKey?: string
   /** Hide the generic All option for controls such as sort selectors. */
   hideAll?: boolean
+  /** Dependent selections to clear when the filter changes. */
+  clearParams?: readonly string[]
 }) {
   const [open, setOpen] = useState(false)
   const raw =
     typeof currentParams[paramKey] === 'string' ? (currentParams[paramKey] as string) : undefined
   const current = raw ?? defaultValue
   const active = options.find((o) => o.value === current)
+  const clearedParams = Object.fromEntries(clearParams.map((key) => [key, undefined]))
   const allHref = mergeHref(basePath, currentParams, {
+    ...clearedParams,
     [paramKey]: defaultValue ? 'all' : undefined,
     [pageParamKey]: 1,
   })
@@ -119,6 +124,7 @@ export function FilterChips({
             <FilterItem
               key={opt.value}
               href={mergeHref(basePath, currentParams, {
+                ...clearedParams,
                 [paramKey]: opt.value,
                 [pageParamKey]: 1,
               })}

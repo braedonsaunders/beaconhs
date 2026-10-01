@@ -1,5 +1,7 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
+import { PeopleStatusFilter } from '@/components/people-status-filter'
+import { includeInactivePeople } from '@/lib/people-filter'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -240,8 +242,10 @@ export default async function EquipmentPage({
               categories={categoryOptions}
               departments={allDepartments.map((d) => ({ value: d.id, label: d.name }))}
             />
+            <PeopleStatusFilter basePath="/equipment" currentParams={sp} personParamKey="holder" />
             <RemoteSearchFilter
               lookup="equipment-register-filter-holders"
+              includeInactive={includeInactivePeople(sp)}
               basePath="/equipment"
               currentParams={sp}
               paramKey="holder"

@@ -108,6 +108,8 @@ Choose **Additional fields** on an authority or skill type to search field names
 
 When you edit a worker's held skill, **Person** and **Skill / certification** search the complete active tenant directory and skill catalogue. The currently saved value stays visible while you review an older record, even if that value is no longer active. If the picker says more results exist, add more of the name, employee number, code, or authority to the search.
 
+On **Certificates**, **Skills**, and **Assessments**, the person filter starts on **People: Active only**. Choose **Include inactive** to search former employees. Changing this choice clears the selected person. Historical records stay in the list.
+
 On **Assessments**, search by person, assessment, or course. The person, assessment type, course, status, and date controls narrow the same list; no filter option is hidden after the first few values. Select an assessment title or use **Continue**, **Review**, or **View** to open the record. Completed and cancelled assessments open read-only. Historical imported assessments show their recorded dates without inventing an attempt duration that the old system did not preserve.
 
 To start one, click **New assessment**. In the flyout, choose the person, then choose an active assessment type. BeaconHS creates the assessment and immediately opens the same record page used to answer, submit, review, or cancel it.
@@ -654,7 +656,7 @@ Open **Equipment** in the left menu. That opens the full list at [Equipment](/eq
 4. The list shows the **Asset tag**, **Name**, **Category**, **Type**, **Department**, **Status**, **Site**, and **Holder** for each unit.
 5. Tap a row to open the unit's page.
 
-The list starts with **In service** equipment. Select **All statuses** to see every status. Search also matches department names. Select **Department** in the table header to sort by department. Clear **Holder** to show all holders again. The holder picker only shows people holding equipment you can view. **Export CSV** uses the current filters, including holder, and includes department.
+The list starts with **In service** equipment. Select **All statuses** to see every status. Search also matches department names. Select **Department** in the table header to sort by department. Clear **Holder** to show all holders again. The holder picker only shows people holding equipment you can view. **People** starts on **Active only**. Choose **Include inactive** to search former employees or inactive accounts; changing this choice clears the selected person. Historical records stay in the list. **Export CSV** uses the current filters, including holder, and includes department.
 
 ## See who has a unit and where it is
 
@@ -735,7 +737,7 @@ If your role can see them, work orders track repairs.
 1. On a unit, tap the **Work orders** tab to see repairs for that unit.
 2. Or open the full list at [Work orders](/equipment/work-orders).
 3. Statuses run from **Open** through **In progress** and **Awaiting parts** to **Repaired**, **Verified**, and **Completed**.
-4. Use **All assignees** and **All equipment types** to search the filter values used by work orders you are allowed to open. If a picker says more results exist, add more of the person's name or equipment type.
+4. Use **All assignees** and **All equipment types** to search the filter values used by work orders you are allowed to open. If a picker says more results exist, add more of the person's name or equipment type. **People** starts on **Active only**. Choose **Include inactive** to search former employees or inactive accounts; changing this choice clears the selected person. Historical records stay in the list.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
@@ -946,7 +948,7 @@ Every serialized item has its own record: who holds it, when it was last inspect
 
 ## Where to find it
 
-Open **PPE** in the left menu. That opens the list at [PPE](/ppe). It starts on **Active** gear — everything in stock, issued, returned, or out of service. Discarded and expired items are still there: pick **Discarded**, **Expired**, or **All statuses** from the **Status** filter. Search by type, serial number, or holder. **Holder** is a search box — start typing a name, and it finds people who hold gear now or ever did, so returned and discarded items stay findable. Sort by **Status changed** to see what moved most recently.
+Open **PPE** in the left menu. That opens the list at [PPE](/ppe). It starts on **Active** gear — everything in stock, issued, returned, or out of service. Discarded and expired items are still there: pick **Discarded**, **Expired**, or **All statuses** from the **Status** filter. Search by type, serial number, or holder. **Holder** is a search box — start typing a name, and it finds people who hold gear now or ever did, so returned and discarded items stay findable. Sort by **Status changed** to see what moved most recently. **People** starts on **Active only**. Choose **Include inactive** to search former employees or inactive accounts; changing this choice clears the selected person. Historical records stay in the list.
 
 ## See your issued gear
 
@@ -954,7 +956,7 @@ Open **PPE** in the left menu. That opens the list at [PPE](/ppe). It starts on 
 2. Find your items — **Assigned to** shows the holder and assignment date. **Inspection** shows **Overdue**, **Due today**, **Due soon**, **Current**, **Never inspected**, or **Not required**.
 3. Tap an item to open it. The **Status & schedule** panel shows **Currently with**, **Last inspection**, and **Next inspection due**.
 
-The **My PPE** dashboard card only shows inspections that need action now. It does not list issued gear whose inspection is current or not required. Tap **Inspect** to open the due pre-use or annual checklist directly.
+The **My PPE** dashboard card shows gear assigned to you, including items whose inspection is **Current** or **Not required**. Items marked **Out of service** must not be used. Tap **Inspect** beside an inspectable item to open its pre-use or annual checklist directly.
 
 ## Inspect your PPE
 

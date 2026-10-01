@@ -1,5 +1,7 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
+import { PeopleStatusFilter } from '@/components/people-status-filter'
+import { includeInactivePeople } from '@/lib/people-filter'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // /journals/records — the admin / safety "browse all journals" surface.
 // A standard list page (header + sortable table + filter toolbar + pagination)
@@ -170,8 +172,14 @@ export default async function JournalRecordsPage({
               allLabel="Any type"
               options={TYPE_OPTIONS}
             />
+            <PeopleStatusFilter
+              basePath="/journals/records"
+              currentParams={sp}
+              personParamKey="person"
+            />
             <RemoteSearchFilter
               loadOptions={loadJournalRecordAuthorOptions}
+              includeInactive={includeInactivePeople(sp)}
               basePath="/journals/records"
               currentParams={sp}
               paramKey="person"

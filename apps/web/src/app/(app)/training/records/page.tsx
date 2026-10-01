@@ -1,5 +1,7 @@
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
+import { PeopleStatusFilter } from '@/components/people-status-filter'
+import { includeInactivePeople, personFilterWhere } from '@/lib/people-filter'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Dedicated /training/records list page. The /training landing page is the
 // rolled-up dashboard; this is the flat, paginated, bulk-actionable list of
@@ -227,7 +229,13 @@ export default async function TrainingRecordsPage({
         })
         .from(trainingRecords)
         .innerJoin(people, eq(people.id, trainingRecords.personId))
-        .where(and(isNull(trainingRecords.deletedAt), vis))
+        .where(
+          and(
+            isNull(trainingRecords.deletedAt),
+            vis,
+            personFilterWhere(includeInactivePeople(sp), personFilter),
+          ),
+        )
         .orderBy(asc(people.lastName), asc(people.firstName))
       const coursesList = await tx
         .select({ id: trainingCourses.id, name: trainingCourses.name, code: trainingCourses.code })
@@ -291,6 +299,11 @@ export default async function TrainingRecordsPage({
           <TrainingSubNav active="records" />
           <TableToolbar>
             <SearchInput placeholder={tGenerated('m_13cc8f5d50e7ff')} />
+            <PeopleStatusFilter
+              basePath="/training/records"
+              currentParams={sp}
+              personParamKey="person"
+            />
             <GeneratedValue
               value={
                 peopleList.length > 0 ? (

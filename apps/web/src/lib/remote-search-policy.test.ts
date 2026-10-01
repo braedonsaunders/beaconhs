@@ -36,3 +36,17 @@ describe('action-backed remote search policy', () => {
     ).toThrow(/request is invalid/i)
   })
 })
+
+describe('historical people search opt-in', () => {
+  it('accepts the flag only for explicitly enabled historical loaders', () => {
+    const input = { query: '', selected: null, includeInactive: true }
+    expect(() => parseRemoteSearchInput(input, 'uuid')).toThrow(/request is invalid/i)
+    expect(parseRemoteSearchInput(input, 'uuid', true)).toEqual(input)
+    expect(() =>
+      parseRemoteSearchInput({ ...input, includeInactive: 'true' }, 'uuid', true),
+    ).toThrow(/People status is invalid/)
+    expect(() => parseRemoteSearchInput({ ...input, tenantId: ID }, 'uuid', true)).toThrow(
+      /request is invalid/i,
+    )
+  })
+})
