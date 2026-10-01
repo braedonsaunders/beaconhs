@@ -396,6 +396,10 @@ export const incidentAttachments = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('incident_attachments_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
     incidentIdx: index('incident_attachments_incident_idx').on(t.tenantId, t.incidentId),
     incidentOrderIdx: index('incident_attachments_incident_order_idx').on(
       t.tenantId,

@@ -59,6 +59,10 @@ export const ppeAnnualRecords = pgTable(
     ...timestamps,
   },
   (t) => ({
+    certificateAttachmentIdRefIdx: index('ppe_annual_records_certificate_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.certificateAttachmentId,
+    ),
     tenantIdx: index('ppe_annual_records_tenant_idx').on(t.tenantId),
     itemIdx: index('ppe_annual_records_item_idx').on(t.tenantId, t.itemId, t.inspectedOn),
     itemYearUx: uniqueIndex('ppe_annual_records_item_year_ux').on(t.tenantId, t.itemId, t.year),

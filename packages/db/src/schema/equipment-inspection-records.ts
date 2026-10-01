@@ -220,6 +220,10 @@ export const equipmentInspectionRecordAttachments = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('equipment_inspection_record_attachments_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
     recordIdx: index('equipment_inspection_record_attachments_record_idx').on(
       t.tenantId,
       t.recordId,

@@ -69,6 +69,10 @@ export const documents = pgTable(
     ...softDelete,
   },
   (t) => ({
+    sourceAttachmentIdRefIdx: index('documents_source_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.sourceAttachmentId,
+    ),
     tenantIdx: index('documents_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('documents_tenant_id_id_ux').on(t.tenantId, t.id),
     keyUnique: uniqueIndex('documents_tenant_key_live_ux')
@@ -133,6 +137,26 @@ export const documentVersions = pgTable(
     ...timestamps,
   },
   (t) => ({
+    contentAttachmentIdRefIdx: index('document_versions_content_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.contentAttachmentId,
+    ),
+    docxAttachmentIdRefIdx: index('document_versions_docx_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.docxAttachmentId,
+    ),
+    pdfAttachmentIdRefIdx: index('document_versions_pdf_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.pdfAttachmentId,
+    ),
+    bodyPdfAttachmentIdRefIdx: index('document_versions_body_pdf_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.bodyPdfAttachmentId,
+    ),
+    bookPdfAttachmentIdRefIdx: index('document_versions_book_pdf_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.bookPdfAttachmentId,
+    ),
     documentIdx: uniqueIndex('document_versions_document_idx').on(t.documentId, t.version),
     tenantIdx: index('document_versions_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('document_versions_tenant_id_id_ux').on(t.tenantId, t.id),
@@ -235,6 +259,9 @@ export const documentAcknowledgments = pgTable(
     ...timestamps,
   },
   (t) => ({
+    signatureAttachmentIdRefIdx: index(
+      'document_acknowledgments_signature_attachment_id_ref_idx',
+    ).on(t.tenantId, t.signatureAttachmentId),
     docPersonIdx: index('document_acks_doc_person_idx').on(t.tenantId, t.documentId, t.personId),
     sessionIdx: index('document_acks_session_idx').on(t.tenantId, t.sessionId),
     sessionDocumentVersionIdx: index('document_acks_tenant_doc_version_session_idx').on(

@@ -89,6 +89,9 @@ export const inspectionRecords = pgTable(
     ...softDelete,
   },
   (t) => ({
+    customerSignatureAttachmentIdRefIdx: index(
+      'inspection_records_customer_signature_attachment_id_ref_idx',
+    ).on(t.tenantId, t.customerSignatureAttachmentId),
     tenantIdx: index('inspection_records_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('inspection_records_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantReferenceUx: uniqueIndex('inspection_records_tenant_reference_ux').on(
@@ -181,6 +184,10 @@ export const inspectionRecordAttachments = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('inspection_record_attachments_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
     recordAttachmentUx: uniqueIndex('inspection_record_attachments_record_attachment_ux').on(
       t.tenantId,
       t.recordId,

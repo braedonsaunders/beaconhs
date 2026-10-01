@@ -191,6 +191,14 @@ export const people = pgTable(
     ...softDelete,
   },
   (t) => ({
+    photoAttachmentIdRefIdx: index('people_photo_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.photoAttachmentId,
+    ),
+    signatureAttachmentIdRefIdx: index('people_signature_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.signatureAttachmentId,
+    ),
     tenantIdx: index('people_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('people_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantEmployeeNoUx: uniqueIndex('people_tenant_employee_no_ux').on(t.tenantId, t.employeeNo),

@@ -312,6 +312,10 @@ export const formResponses = pgTable(
     ...softDelete,
   },
   (t) => ({
+    pdfAttachmentIdRefIdx: index('form_responses_pdf_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.pdfAttachmentId,
+    ),
     tenantIdx: index('form_responses_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('form_responses_tenant_id_id_ux').on(t.tenantId, t.id),
     tenantTemplateIdUx: uniqueIndex('form_responses_tenant_template_id_ux').on(
@@ -465,6 +469,10 @@ export const formResponseSteps = pgTable(
     ...timestamps,
   },
   (t) => ({
+    signatureAttachmentIdRefIdx: index('form_response_steps_signature_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.signatureAttachmentId,
+    ),
     responseIdx: index('form_response_steps_response_idx').on(t.tenantId, t.responseId, t.sequence),
     tenantIdx: index('form_response_steps_tenant_idx').on(t.tenantId),
     statusIdx: index('form_response_steps_status_idx').on(t.tenantId, t.status),
@@ -644,6 +652,10 @@ export const flowGates = pgTable(
     ...timestamps,
   },
   (t) => ({
+    signatureAttachmentIdRefIdx: index('flow_gates_signature_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.signatureAttachmentId,
+    ),
     subjectIdx: index('flow_gates_subject_idx').on(
       t.tenantId,
       t.subjectType,

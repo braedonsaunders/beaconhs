@@ -128,6 +128,10 @@ export const journalEntryPhotos = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('journal_entry_photos_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
     tenantIdx: index('journal_entry_photos_tenant_idx').on(t.tenantId),
     entryIdx: index('journal_entry_photos_entry_idx').on(t.entryId),
   }),

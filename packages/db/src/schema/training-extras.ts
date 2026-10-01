@@ -46,6 +46,10 @@ export const trainingCourseFiles = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('training_course_files_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
     tenantIdx: index('training_course_files_tenant_idx').on(t.tenantId),
     courseIdx: index('training_course_files_course_idx').on(t.tenantId, t.courseId),
     courseFk: foreignKey({

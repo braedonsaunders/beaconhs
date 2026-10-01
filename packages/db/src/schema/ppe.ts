@@ -151,6 +151,9 @@ export const ppeIssues = pgTable(
     ...timestamps,
   },
   (t) => ({
+    receiptSignatureAttachmentIdRefIdx: index(
+      'ppe_issues_receipt_signature_attachment_id_ref_idx',
+    ).on(t.tenantId, t.receiptSignatureAttachmentId),
     itemIdx: index('ppe_issues_item_idx').on(t.tenantId, t.itemId),
     personIdx: index('ppe_issues_person_idx').on(t.tenantId, t.personId),
     issuedByIdx: index('ppe_issues_issued_by_idx').on(t.tenantId, t.issuedByTenantUserId),
@@ -309,6 +312,10 @@ export const ppeInspectionAttachments = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('ppe_inspection_attachments_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
     tenantIdx: index('ppe_inspection_attachments_tenant_idx').on(t.tenantId),
     inspectionIdx: index('ppe_inspection_attachments_inspection_idx').on(
       t.tenantId,

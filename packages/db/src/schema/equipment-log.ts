@@ -47,6 +47,10 @@ export const equipmentLogEntries = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('equipment_log_entries_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
     maintenanceAmountCheck: check(
       'equipment_log_entries_maintenance_amount_check',
       sql`${t.amount} is null or ${t.kind} = 'maintenance'`,

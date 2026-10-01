@@ -245,6 +245,9 @@ export const hazidAssessmentSignatures = pgTable(
     ...timestamps,
   },
   (t) => ({
+    signatureAttachmentIdRefIdx: index(
+      'hazid_assessment_signatures_signature_attachment_id_ref_idx',
+    ).on(t.tenantId, t.signatureAttachmentId),
     assessmentIdx: index('hazid_assessment_signatures_assessment_idx').on(
       t.tenantId,
       t.assessmentId,
@@ -349,6 +352,10 @@ export const hazidAssessmentPhotos = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('hazid_assessment_photos_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
     assessmentIdx: index('hazid_assessment_photos_assessment_idx').on(t.tenantId, t.assessmentId),
     assessmentOrderIdx: index('hazid_assessment_photos_assessment_order_idx').on(
       t.tenantId,

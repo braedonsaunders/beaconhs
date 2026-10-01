@@ -189,6 +189,14 @@ export const equipmentItems = pgTable(
     ...softDelete,
   },
   (t) => ({
+    manualAttachmentIdRefIdx: index('equipment_items_manual_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.manualAttachmentId,
+    ),
+    photoAttachmentIdRefIdx: index('equipment_items_photo_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.photoAttachmentId,
+    ),
     tenantTagUx: uniqueIndex('equipment_items_tenant_tag_ux').on(t.tenantId, t.assetTag),
     tenantIdIdUx: uniqueIndex('equipment_items_tenant_id_id_ux').on(t.tenantId, t.id),
     qrUx: uniqueIndex('equipment_items_qr_ux').on(t.qrToken),

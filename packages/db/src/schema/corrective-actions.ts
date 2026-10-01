@@ -146,6 +146,7 @@ export const caPhotos = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('ca_photos_attachment_id_ref_idx').on(t.tenantId, t.attachmentId),
     caIdx: index('ca_photos_ca_idx').on(t.caId),
     caOrderIdx: index('ca_photos_ca_order_idx').on(t.tenantId, t.caId, t.sortOrder),
     tenantIdx: index('ca_photos_tenant_idx').on(t.tenantId),
@@ -176,6 +177,10 @@ export const caCompleteSteps = pgTable(
     ...timestamps,
   },
   (t) => ({
+    signatureAttachmentIdRefIdx: index('ca_complete_steps_signature_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.signatureAttachmentId,
+    ),
     caIdx: index('ca_complete_steps_ca_idx').on(t.caId, t.entityOrder),
     tenantIdx: index('ca_complete_steps_tenant_idx').on(t.tenantId),
   }),

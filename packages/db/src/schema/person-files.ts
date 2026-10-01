@@ -31,6 +31,7 @@ export const personFiles = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('person_files_attachment_id_ref_idx').on(t.tenantId, t.attachmentId),
     tenantIdx: index('person_files_tenant_idx').on(t.tenantId),
     personIdx: index('person_files_person_idx').on(t.tenantId, t.personId),
     kindIdx: index('person_files_kind_idx').on(t.tenantId, t.kind),

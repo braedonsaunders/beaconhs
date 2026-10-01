@@ -201,6 +201,10 @@ export const reportRuns = pgTable(
     ...timestamps,
   },
   (t) => ({
+    pdfAttachmentIdRefIdx: index('report_runs_pdf_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.pdfAttachmentId,
+    ),
     tenantIdx: index('report_runs_tenant_idx').on(t.tenantId),
     scheduleIdx: index('report_runs_schedule_idx').on(t.scheduleId, t.startedAt),
     statusIdx: index('report_runs_status_idx').on(t.status),

@@ -68,6 +68,9 @@ export const jobTitleTaskAcknowledgments = pgTable(
     ...timestamps,
   },
   (t) => ({
+    signatureAttachmentIdRefIdx: index(
+      'job_title_task_acknowledgments_signature_attachment_id_ref_idx',
+    ).on(t.tenantId, t.signatureAttachmentId),
     tenantIdx: index('job_title_task_acks_tenant_idx').on(t.tenantId),
     taskIdx: index('job_title_task_acks_task_idx').on(t.tenantId, t.taskId),
     personIdx: index('job_title_task_acks_person_idx').on(t.tenantId, t.personId),

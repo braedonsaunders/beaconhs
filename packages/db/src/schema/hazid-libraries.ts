@@ -74,6 +74,10 @@ export const hazidHazards = pgTable(
     ...softDelete,
   },
   (t) => ({
+    photoAttachmentIdRefIdx: index('hazid_hazards_photo_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.photoAttachmentId,
+    ),
     tenantIdx: index('hazid_hazards_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('hazid_hazards_tenant_id_id_ux').on(t.tenantId, t.id),
     nameIdx: index('hazid_hazards_name_idx').on(t.tenantId, t.name),

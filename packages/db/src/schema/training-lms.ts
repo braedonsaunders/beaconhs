@@ -142,6 +142,14 @@ export const trainingLessons = pgTable(
     ...softDelete,
   },
   (t) => ({
+    attachmentIdRefIdx: index('training_lessons_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
+    sourceAttachmentIdRefIdx: index('training_lessons_source_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.sourceAttachmentId,
+    ),
     tenantIdx: index('training_lessons_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('training_lessons_tenant_id_id_ux').on(t.tenantId, t.id),
     courseIdx: index('training_lessons_course_idx').on(t.tenantId, t.courseId),
@@ -316,6 +324,9 @@ export const trainingLessonProgress = pgTable(
     ...timestamps,
   },
   (t) => ({
+    evaluationSignatureAttachmentIdRefIdx: index(
+      'training_lesson_progress_evaluation_signature_attachme_19064006',
+    ).on(t.tenantId, t.evaluationSignatureAttachmentId),
     tenantIdx: index('training_lesson_progress_tenant_idx').on(t.tenantId),
     enrollmentIdx: index('training_lesson_progress_enrollment_idx').on(t.tenantId, t.enrollmentId),
     lessonIdx: index('training_lesson_progress_lesson_idx').on(t.tenantId, t.lessonId),
@@ -442,6 +453,14 @@ export const trainingContentItems = pgTable(
     ...softDelete,
   },
   (t) => ({
+    sourceAttachmentIdRefIdx: index('training_content_items_source_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.sourceAttachmentId,
+    ),
+    attachmentIdRefIdx: index('training_content_items_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
     tenantIdx: index('training_content_items_tenant_idx').on(t.tenantId),
     kindIdx: index('training_content_items_kind_idx').on(t.tenantId, t.kind),
   }),

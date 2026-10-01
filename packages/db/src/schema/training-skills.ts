@@ -95,6 +95,9 @@ export const trainingSkillAssignments = pgTable(
     ...softDelete,
   },
   (t) => ({
+    evidenceAttachmentIdRefIdx: index(
+      'training_skill_assignments_evidence_attachment_id_ref_idx',
+    ).on(t.tenantId, t.evidenceAttachmentId),
     tenantIdx: index('training_skill_assignments_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('training_skill_assignments_tenant_id_id_ux').on(t.tenantId, t.id),
     personIdx: index('training_skill_assignments_person_idx').on(t.tenantId, t.personId),
@@ -174,6 +177,10 @@ export const trainingSkillAssignmentFiles = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('training_skill_assignment_files_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
     tenantIdx: index('training_skill_assignment_files_tenant_idx').on(t.tenantId),
     assignmentIdx: index('training_skill_assignment_files_assignment_idx').on(
       t.tenantId,

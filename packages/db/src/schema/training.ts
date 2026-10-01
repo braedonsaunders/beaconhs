@@ -148,6 +148,9 @@ export const trainingClassAttendees = pgTable(
     ...timestamps,
   },
   (t) => ({
+    signatureAttachmentIdRefIdx: index(
+      'training_class_attendees_signature_attachment_id_ref_idx',
+    ).on(t.tenantId, t.signatureAttachmentId),
     classIdx: index('training_class_attendees_class_idx').on(t.tenantId, t.classId),
     personIdx: index('training_class_attendees_person_idx').on(t.tenantId, t.personId),
     classPersonUx: uniqueIndex('training_class_attendees_tenant_class_person_ux').on(
@@ -234,6 +237,10 @@ export const trainingRecords = pgTable(
     ...softDelete,
   },
   (t) => ({
+    certificateAttachmentIdRefIdx: index('training_records_certificate_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.certificateAttachmentId,
+    ),
     tenantIdx: index('training_records_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('training_records_tenant_id_id_ux').on(t.tenantId, t.id),
     personCourseIdx: index('training_records_person_course_idx').on(
@@ -302,6 +309,10 @@ export const trainingRecordFiles = pgTable(
     ...timestamps,
   },
   (t) => ({
+    attachmentIdRefIdx: index('training_record_files_attachment_id_ref_idx').on(
+      t.tenantId,
+      t.attachmentId,
+    ),
     tenantIdx: index('training_record_files_tenant_idx').on(t.tenantId),
     recordIdx: index('training_record_files_record_idx').on(t.tenantId, t.recordId),
     kindIdx: index('training_record_files_kind_idx').on(t.tenantId, t.kind),
