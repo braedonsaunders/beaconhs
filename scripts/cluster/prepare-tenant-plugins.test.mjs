@@ -44,7 +44,11 @@ test('verified artifact gets an immutable digest path and a checksum without exe
       bytes,
     )
     const configs = JSON.parse(await readFile(join(directory, 'configs.json'), 'utf8'))
-    assert.equal(configs[0].name, `beaconhs-plugin-example-${plugin.sha256}`)
+    assert.equal(
+      configs[0].name,
+      `beaconhs-plugin-${createHash('sha256').update(configs[0].path).digest('hex').slice(0, 48)}`,
+    )
+    assert.ok(configs[0].name.length <= 64)
     const compose = renderTenantPluginCompose(
       'services:\n  web:\n    # TENANT_PLUGIN_CONFIG_MOUNTS\n    image: example\n',
       result.installations,
@@ -90,3 +94,24 @@ test('redirect stays independent of the retired app and preserves path/query cap
     }),
   )
 })
+
+test('maximum plugin identifiers produce bounded, distinct Swarm names', () =>
+  temporary(async (directory) => {
+    const plugins = [
+      { ...plugin, pluginId: 'a'.repeat(64) },
+      { ...plugin, pluginId: 'a'.repeat(63) + 'b' },
+    ]
+    const { installations } = await prepareTenantPlugins(
+      JSON.stringify({ version: 1, plugins }),
+      directory,
+    )
+    const configs = JSON.parse(await readFile(join(directory, 'configs.json'), 'utf8'))
+    assert.equal(new Set(configs.map((item) => item.name)).size, 2)
+    for (const item of configs)
+      assert.match(item.name, /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9]$/)
+    const compose = renderTenantPluginCompose(
+      'services:\n  web:\n    # TENANT_PLUGIN_CONFIG_MOUNTS\n    image: example\n',
+      installations,
+    )
+    for (const item of configs) assert.ok(compose.includes(`source: ${item.name}`))
+  }))

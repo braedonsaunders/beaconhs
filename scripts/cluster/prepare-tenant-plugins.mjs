@@ -14,6 +14,11 @@ function exactKeys(value, keys) {
     keys.every((key) => Object.hasOwn(value, key))
   )
 }
+// Swarm names allow at most 64 characters. Hash the full artifact identity so
+// long plugin IDs stay distinct while existing-content checks remain fail-closed.
+function configName(path) {
+  return `beaconhs-plugin-${createHash('sha256').update(path).digest('hex').slice(0, 48)}`
+}
 /** Prepare only operator-provided, digest-verified artifacts; never execute them here. */
 export async function prepareTenantPlugins(raw, directory) {
   const bundle = raw ? JSON.parse(raw) : { version: 1, plugins: [] }
@@ -74,7 +79,7 @@ export async function prepareTenantPlugins(raw, directory) {
     mode: 0o600,
   })
   const configs = [...artifacts.keys()].map((path) => ({
-    name: `beaconhs-plugin-${path.slice(0, -4)}`,
+    name: configName(path),
     path,
     target: `/opt/beaconhs-tenant-plugins/${path}`,
   }))
@@ -98,15 +103,13 @@ export function renderTenantPluginCompose(
       [...unique]
         .map(
           ([path, target]) =>
-            `      - source: beaconhs-plugin-${path.slice(0, -4)}\n        target: ${target}\n        mode: 0444`,
+            `      - source: ${configName(path)}\n        target: ${target}\n        mode: 0444`,
         )
         .join('\n')
     : marker
   const declarations = unique.size
     ? '\nconfigs:\n' +
-      [...unique.keys()]
-        .map((path) => `  beaconhs-plugin-${path.slice(0, -4)}:\n    external: true`)
-        .join('\n') +
+      [...unique.keys()].map((path) => `  ${configName(path)}:\n    external: true`).join('\n') +
       '\n'
     : ''
   const redirectMarker = '      # LEGACY_HOST_REDIRECT_LABELS'
