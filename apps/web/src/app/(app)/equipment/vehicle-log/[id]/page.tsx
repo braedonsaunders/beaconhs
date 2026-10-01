@@ -47,8 +47,6 @@ async function updateEntry(formData: FormData) {
     businessKm: formData.get('businessKm'),
     personalKm: formData.get('personalKm'),
     siteOrgUnitId: formData.get('siteOrgUnitId'),
-    hoursOnSite: formData.get('hoursOnSite'),
-    manpowerCount: formData.get('manpowerCount'),
     notes: formData.get('notes'),
   })
   await updateVehicleLogEntry(ctx, id, input)
@@ -230,8 +228,6 @@ export default async function TruckLogDetailPage({
                           { label: 'Personal km', value: entry.personalKm ?? '—' },
                         ]),
                     { label: 'Km driven', value: entry.kmDriven ?? '—' },
-                    { label: 'Hours on site', value: entry.hoursOnSite ?? '—' },
-                    { label: 'Crew count', value: entry.manpowerCount ?? '—' },
                   ]}
                 />
                 <GeneratedValue
@@ -401,26 +397,6 @@ export default async function TruckLogDetailPage({
                             )
                           }
                         />
-                        <Field label={tGenerated('m_0c5fdf4fb3e86b')}>
-                          <Input
-                            name="hoursOnSite"
-                            type="number"
-                            min="0"
-                            max="24"
-                            step="0.25"
-                            defaultValue={entry.hoursOnSite ?? ''}
-                          />
-                        </Field>
-                        <Field label={tGenerated('m_0b59683e270c38')}>
-                          <Input
-                            name="manpowerCount"
-                            type="number"
-                            min="0"
-                            max="100000"
-                            step="1"
-                            defaultValue={entry.manpowerCount ?? ''}
-                          />
-                        </Field>
                       </div>
                       <Field label={tGenerated('m_0b8dadcb78cd08')}>
                         <Textarea

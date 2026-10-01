@@ -113,8 +113,6 @@ function hasMeaningfulDraft(entry: VehicleLogEntryDraft) {
   return Boolean(
     entry.siteOrgUnitId ||
     entry.otherDestination ||
-    entry.hoursOnSite ||
-    entry.manpowerCount != null ||
     entry.notes ||
     entry.startOdometer != null ||
     entry.endOdometer != null ||
@@ -541,8 +539,6 @@ export function VehicleLogWorkspaceClient({
       personalKm: draft.personalKm,
       siteOrgUnitId: draft.siteOrgUnitId,
       otherDestination: draft.otherDestination,
-      hoursOnSite: draft.hoursOnSite,
-      manpowerCount: draft.manpowerCount,
       notes: draft.notes,
     })
     if (res.ok) {

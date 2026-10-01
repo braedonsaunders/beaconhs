@@ -765,7 +765,7 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
   seed(
     'vehicle_log_monthly',
     'Vehicle Log — Monthly Summary',
-    'Asset-by-month vehicle log summary with driver, distance, hours, crew, and source coverage.',
+    'Asset-by-month vehicle log summary with driver, distance and source coverage.',
     'equipment',
     rows(
       'vehicle_log_monthly',
@@ -778,8 +778,6 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
         'business_km',
         'personal_km',
         'total_km',
-        'hours_on_site',
-        'manpower_count',
         'imported_days',
         'manual_days',
         'site_count',
@@ -805,7 +803,6 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
         'status',
         'site_name',
         'holder_name',
-        'hours_ytd',
         'km_ytd',
         'last_inspection_on',
         'next_inspection_due',

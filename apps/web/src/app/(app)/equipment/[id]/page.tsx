@@ -632,8 +632,6 @@ async function createTruckLogEntryAction(input: {
   startOdometer: number | null
   endOdometer: number | null
   siteOrgUnitId: string | null
-  hoursOnSite: string | null
-  manpowerCount: number | null
   notes: string | null
 }): Promise<{ ok: boolean; error?: string }> {
   'use server'

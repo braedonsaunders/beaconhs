@@ -109,12 +109,10 @@ export function createVehicleLogFlowAdapter(
       let monthBusiness = 0
       let monthPersonal = 0
       let monthTotal = 0
-      let monthHours = 0
       const entries = monthRows.map(({ row: e, siteName }) => {
         monthBusiness += e.businessKm ?? 0
         monthPersonal += e.personalKm ?? 0
         monthTotal += e.kmDriven ?? 0
-        monthHours += e.hoursOnSite ? Number(e.hoursOnSite) : 0
         const dateObj = new Date(`${e.entryDate}T00:00:00`)
         return {
           date: fmtDate(e.entryDate),
@@ -127,8 +125,6 @@ export function createVehicleLogFlowAdapter(
           business_km: num(e.businessKm),
           personal_km: num(e.personalKm),
           total_km: num(e.kmDriven),
-          hours_on_site: e.hoursOnSite ?? '',
-          crew_count: num(e.manpowerCount),
           notes: e.notes ?? '',
         }
       })
@@ -155,8 +151,6 @@ export function createVehicleLogFlowAdapter(
         business_km: r.businessKm,
         personal_km: r.personalKm,
         total_km: r.kmDriven,
-        hours_on_site: r.hoursOnSite ?? '',
-        crew_count: r.manpowerCount,
         notes: r.notes ?? '',
         month_key: range.key,
         month_label: monthLabel(range.key),
@@ -164,7 +158,6 @@ export function createVehicleLogFlowAdapter(
         month_business_km: monthBusiness,
         month_personal_km: monthPersonal,
         month_total_km: monthTotal,
-        month_hours_on_site: monthHours.toFixed(2),
         // FK ids for conditions / recipient `field` targets.
         driver_person_id: r.driverPersonId ?? null,
         equipment_item_id: r.equipmentItemId ?? null,

@@ -538,7 +538,11 @@ The grid becomes a stack of day cards with big touch targets, one card per day, 
 2. Wait for any saving row to finish.
 3. Select **Generate PDF** beside **Import** and **Delete month**. The current saved month opens as a PDF in a new tab.
 
-The button stays visible and becomes available after you select a driver and vehicle. You can generate a PDF without importing or deleting entries. The monthly template uses a compact portrait layout, with the driver and vehicle above the daily rows and totals. Longer notes can continue onto another page. Your administrator can change the template and paper setup under **PDF templates**.
+The button stays visible and becomes available after you select a driver and vehicle. You can generate a PDF without importing or deleting entries. The monthly template uses a compact portrait layout, with the driver and vehicle above the daily destinations, odometer readings, business and personal kilometres, notes, and totals. Longer notes can continue onto another page. Your administrator can change the template and paper setup under **PDF templates**.
+
+## Submit your month by email
+
+If your company has configured a monthly email flow, select **Submit** after the rows have saved. Confirm the email prompt. The flow sends the selected driver and vehicle’s saved month PDF to the recipients your administrator configured.
 
 ## Annual summary
 

@@ -25,8 +25,6 @@ type CreateTruckLogInput = {
   startOdometer: number | null
   endOdometer: number | null
   siteOrgUnitId: string | null
-  hoursOnSite: string | null
-  manpowerCount: number | null
   notes: string | null
 }
 
@@ -60,8 +58,6 @@ export function NewTruckLogEntryDrawer({
   const [siteOrgUnitId, setSiteOrgUnitId] = useState('')
   const [startOdometer, setStartOdometer] = useState('')
   const [endOdometer, setEndOdometer] = useState('')
-  const [hoursOnSite, setHoursOnSite] = useState('')
-  const [manpowerCount, setManpowerCount] = useState('')
   const [notes, setNotes] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -84,8 +80,6 @@ export function NewTruckLogEntryDrawer({
         startOdometer: safeInt(startOdometer),
         endOdometer: safeInt(endOdometer),
         siteOrgUnitId: siteOrgUnitId || null,
-        hoursOnSite: hoursOnSite.trim() || null,
-        manpowerCount: safeInt(manpowerCount),
         notes: notes.trim() || null,
       })
       if (res.ok) {
@@ -102,7 +96,7 @@ export function NewTruckLogEntryDrawer({
       open={open}
       closeHref={closeHref}
       title={tGenerated('m_1a9195530e3b90')}
-      description={tGenerated('m_0228cd09987995')}
+      description={tGenerated('m_0faa1b97d97436')}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -199,35 +193,6 @@ export function NewTruckLogEntryDrawer({
               step="1"
               value={endOdometer}
               onChange={(e) => setEndOdometer(e.currentTarget.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="tl-hours">
-              <GeneratedText id="m_0c5fdf4fb3e86b" />
-            </Label>
-            <Input
-              id="tl-hours"
-              type="number"
-              min="0"
-              max="24"
-              step="0.25"
-              placeholder={tGenerated('m_0d366c65426260')}
-              value={hoursOnSite}
-              onChange={(e) => setHoursOnSite(e.currentTarget.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="tl-manpower">
-              <GeneratedText id="m_0b59683e270c38" />
-            </Label>
-            <Input
-              id="tl-manpower"
-              type="number"
-              min="0"
-              max="100000"
-              step="1"
-              value={manpowerCount}
-              onChange={(e) => setManpowerCount(e.currentTarget.value)}
             />
           </div>
         </div>

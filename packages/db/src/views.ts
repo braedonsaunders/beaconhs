@@ -251,8 +251,6 @@ export const REPORT_VIEWS_SQL: string[] = [
          THEN GREATEST(tl.end_odometer - tl.start_odometer, 0)
        ELSE NULL
      END                                    AS total_km,
-     tl.hours_on_site                       AS hours_on_site,
-     tl.manpower_count                      AS manpower_count,
      tl.site_org_unit_id                    AS site_org_unit_id,
      site.code                              AS site_code,
      site.name                              AS site_name,
@@ -293,8 +291,6 @@ export const REPORT_VIEWS_SQL: string[] = [
      COALESCE(SUM(business_km), 0)::int       AS business_km,
      COALESCE(SUM(personal_km), 0)::int       AS personal_km,
      COALESCE(SUM(total_km), 0)::int          AS total_km,
-     COALESCE(SUM(hours_on_site), 0)::numeric AS hours_on_site,
-     COALESCE(SUM(manpower_count), 0)::int    AS manpower_count,
      COUNT(*) FILTER (WHERE import_status = 'imported')::int AS imported_days,
      COUNT(*) FILTER (WHERE import_status = 'manual')::int   AS manual_days,
      MIN(start_odometer)                      AS first_odometer,
@@ -312,7 +308,7 @@ export const REPORT_VIEWS_SQL: string[] = [
      driver_name`,
 
   // Fleet register — one row per (non-deleted) asset with type/site/holder names
-  // baked in plus YTD + all-time usage (hours/km). OPERATIONAL ONLY: equipment
+  // baked in plus YTD distance (km). OPERATIONAL ONLY: equipment
   // financials (rates, expenses, purchase price, ROI, project charges) are owned by
   // a separate financial system, not this app. Drives the Fleet, Upcoming-inspection
   // and Upcoming-oil-change reports. All base tables are FORCE-RLS, so every row is
@@ -344,9 +340,7 @@ export const REPORT_VIEWS_SQL: string[] = [
      e.next_oil_change_due                AS next_oil_change_due,
      e.oil_change_interval_months         AS oil_change_interval_months,
      e.purchase_date                      AS purchase_date,
-     usage.hours_ytd                      AS hours_ytd,
-     usage.km_ytd                         AS km_ytd,
-     usage.hours_total                    AS hours_total
+     usage.km_ytd                         AS km_ytd
    FROM equipment_items e
    LEFT JOIN equipment_types t ON t.id = e.type_id AND t.tenant_id = e.tenant_id
    LEFT JOIN equipment_categories type_category
@@ -362,9 +356,7 @@ export const REPORT_VIEWS_SQL: string[] = [
    ) sched ON true
    LEFT JOIN LATERAL (
      SELECT
-       COALESCE(SUM(tl.hours_on_site) FILTER (WHERE tl.entry_date >= date_trunc('year', CURRENT_DATE)::date), 0) AS hours_ytd,
-       COALESCE(SUM(tl.km_driven)     FILTER (WHERE tl.entry_date >= date_trunc('year', CURRENT_DATE)::date), 0) AS km_ytd,
-       COALESCE(SUM(tl.hours_on_site), 0) AS hours_total
+       COALESCE(SUM(tl.km_driven)     FILTER (WHERE tl.entry_date >= date_trunc('year', CURRENT_DATE)::date), 0) AS km_ytd
      FROM truck_log_entries tl
      WHERE tl.equipment_item_id = e.id AND tl.tenant_id = e.tenant_id
    ) usage ON true

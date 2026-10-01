@@ -70,8 +70,6 @@ export async function GET(req: NextRequest) {
         monthly.equipment_item_id,
         extract(month from monthly.month)::int AS month,
         monthly.total_km,
-        monthly.hours_on_site,
-        monthly.manpower_count,
         monthly.logged_days
       FROM report_vehicle_log_monthly monthly
       INNER JOIN ${equipmentItems}
@@ -88,8 +86,6 @@ export async function GET(req: NextRequest) {
       equipmentItemId: String(row.equipment_item_id ?? ''),
       month: Number(row.month ?? 0),
       kmTotal: Number(row.total_km ?? 0),
-      hoursTotal: Number(row.hours_on_site ?? 0),
-      manpowerTotal: Number(row.manpower_count ?? 0),
       entryDays: Number(row.logged_days ?? 0),
     }))
     return { trucks: t, rows: r }
@@ -98,15 +94,14 @@ export async function GET(req: NextRequest) {
   const overflow = csvExportOverflowResponse(trucks.length)
   if (overflow) return overflow
 
-  type MonthRollup = { km: number; hours: number; manpower: number; days: number }
+  type MonthRollup = { km: number; days: number }
   const grid = new Map<string, Map<number, MonthRollup>>()
   for (const r of rows) {
     const inner = grid.get(r.equipmentItemId) ?? new Map<number, MonthRollup>()
+    const previous = inner.get(Number(r.month))
     inner.set(Number(r.month), {
-      km: Number(r.kmTotal ?? 0),
-      hours: Number(r.hoursTotal ?? 0),
-      manpower: Number(r.manpowerTotal ?? 0),
-      days: Number(r.entryDays ?? 0),
+      km: (previous?.km ?? 0) + Number(r.kmTotal ?? 0),
+      days: (previous?.days ?? 0) + Number(r.entryDays ?? 0),
     })
     grid.set(r.equipmentItemId, inner)
   }
@@ -125,32 +120,19 @@ export async function GET(req: NextRequest) {
     'Nov',
     'Dec',
   ]
-  const headers = [
-    'Asset tag',
-    'Name',
-    ...MONTHS.flatMap((m) => [`${m} km`, `${m} hours`, `${m} crew count`]),
-    'Total km',
-    'Total hours',
-    'Total crew count',
-  ]
+  const headers = ['Asset tag', 'Name', ...MONTHS.map((m) => `${m} km`), 'Total km']
 
   const csvRows: (string | number | null)[][] = trucks.map((t) => {
     const months = grid.get(t.id) ?? new Map<number, MonthRollup>()
     let totalKm = 0
-    let totalHours = 0
-    let totalMan = 0
     const cells: (string | number)[] = [t.assetTag, t.name]
     for (let i = 1; i <= 12; i++) {
       const m = months.get(i)
       const km = m?.km ?? 0
-      const h = m?.hours ?? 0
-      const man = m?.manpower ?? 0
       totalKm += km
-      totalHours += h
-      totalMan += man
-      cells.push(km, Number(h.toFixed(2)), man)
+      cells.push(km)
     }
-    cells.push(totalKm, Number(totalHours.toFixed(2)), totalMan)
+    cells.push(totalKm)
     return cells
   })
 

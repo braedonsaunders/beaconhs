@@ -4,7 +4,7 @@
 // authored on the 'vehicle-log' subject (/equipment/vehicle-log/flows); the
 // anchor record is a truck_log_entries row in the month being viewed, and the
 // flow's value map carries that whole month (see the vehicle-log adapter) — so
-// "Email month PDF" style actions act on the sheet the user is looking at.
+// monthly email actions act on the sheet the user is looking at.
 // Mirrors the Builder record-action runner: same executor, no second system.
 
 import { revalidatePath } from 'next/cache'

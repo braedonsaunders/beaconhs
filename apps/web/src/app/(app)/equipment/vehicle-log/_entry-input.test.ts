@@ -20,7 +20,6 @@ describe('vehicle-log entry input', () => {
         ...validInput(),
         startOdometer: 100,
         endOdometer: 125,
-        hoursOnSite: '8.5',
         notes: '  complete  ',
         importStatus: 'imported',
         sourceExternalId: 'spoofed',
@@ -28,7 +27,6 @@ describe('vehicle-log entry input', () => {
     ).toMatchObject({
       startOdometer: 100,
       endOdometer: 125,
-      hoursOnSite: '8.50',
       notes: 'complete',
     })
     expect(normalizeVehicleLogEntryInput(validInput())).not.toHaveProperty('importStatus')
@@ -51,8 +49,8 @@ describe('vehicle-log entry input', () => {
     for (const patch of [
       { startOdometer: 100, endOdometer: 99 },
       { businessKm: -1 },
-      { manpowerCount: 1.5 },
-      { hoursOnSite: '24.01' },
+      { businessKm: 1.5 },
+      { startOdometer: 2_147_483_648 },
       { notes: 'x'.repeat(5_001) },
     ]) {
       expect(() => normalizeVehicleLogEntryInput({ ...validInput(), ...patch })).toThrow()

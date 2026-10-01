@@ -337,6 +337,13 @@
       "when": 1790812800001,
       "tag": "0048_vehicle_log_own_edit_permission",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1790812800002,
+      "tag": "0049_remove_vehicle_log_hours_crew",
+      "breakpoints": true
     }
   ]
 }

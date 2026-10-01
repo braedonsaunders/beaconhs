@@ -764,7 +764,7 @@ const TRAINING_CLASS = wrap(
     ]),
 )
 
-// The legacy monthly truck-log sheet: the value map carries the whole
+// The monthly vehicle-log sheet: the value map carries the whole
 // driver+vehicle month (`entries` + month totals) anchored on one entry.
 const VEHICLE_LOG_CELL = `${TD}padding:3px 4px;font-size:11px;line-height:1.2;`
 const VEHICLE_LOG_TOTALS =
@@ -773,8 +773,7 @@ const VEHICLE_LOG_TOTALS =
   `<td style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_business_km}}</td>` +
   `<td style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_personal_km}}</td>` +
   `<td style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_total_km}}</td>` +
-  `<td style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_hours_on_site}}</td>` +
-  `<td colspan="2" style="${VEHICLE_LOG_CELL}background:#e2e8f0;font-weight:700;">{{month_days_logged}} days logged</td>` +
+  `<td style="${VEHICLE_LOG_CELL}background:#e2e8f0;font-weight:700;">{{month_days_logged}} days logged</td>` +
   `</tr>`
 
 const VEHICLE_LOG = wrap(
@@ -788,16 +787,14 @@ const VEHICLE_LOG = wrap(
       'entries',
       [
         ['Day', '{{day}} {{weekday}}', 'width:8%;white-space:nowrap;'],
-        ['Customer / site', '{{site_name}}', 'width:12%;'],
-        ['Other destination', '{{other_destination}}', 'width:12%;'],
+        ['Customer / site', '{{site_name}}', 'width:16%;'],
+        ['Other destination', '{{other_destination}}', 'width:16%;'],
         ['Start odo', '{{start_odometer}}', RIGHT + 'width:10%;'],
         ['End odo', '{{end_odometer}}', RIGHT + 'width:10%;'],
         ['Business km', '{{business_km}}', RIGHT + 'width:8%;'],
         ['Personal km', '{{personal_km}}', RIGHT + 'width:8%;'],
         ['Total km', '{{total_km}}', RIGHT + 'width:8%;'],
-        ['Hours', '{{hours_on_site}}', RIGHT + 'width:7%;'],
-        ['Crew', '{{crew_count}}', RIGHT + 'width:6%;'],
-        ['Notes', '{{notes}}', 'width:11%;'],
+        ['Notes', '{{notes}}', 'width:16%;'],
       ],
       VEHICLE_LOG_TOTALS,
       true,

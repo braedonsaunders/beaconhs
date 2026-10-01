@@ -97,7 +97,7 @@ export default async function VehicleLogPage({
 
   // Manual-trigger flow buttons for the viewed month. The anchor record is the
   // month's latest saved entry — the vehicle-log adapter expands it to the
-  // whole driver+vehicle month, so actions like "Email month PDF" cover the
+  // whole driver+vehicle month, so monthly email actions cover the
   // sheet on screen. Authored permission/showIf gates are applied server-side.
   let recordActions: VehicleLogRecordAction[] = []
   const actionEntryId = [...workspace.rows].reverse().find((row) => row.entry.id)?.entry.id ?? null

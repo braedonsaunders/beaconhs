@@ -69,8 +69,6 @@ export type VehicleLogEntryDraft = {
   totalKm: number | null
   siteOrgUnitId: string | null
   otherDestination: string | null
-  hoursOnSite: string | null
-  manpowerCount: number | null
   notes: string | null
   importStatus: TruckLogImportStatus | null
 }
@@ -151,8 +149,6 @@ export type VehicleLogWorkspace = {
     businessKm: number
     personalKm: number
     totalKm: number
-    hoursOnSite: number
-    crewCount: number
   }
 }
 
@@ -371,8 +367,6 @@ function manualEntryFields(input: NormalizedVehicleLogEntryInput) {
     personalKm,
     siteOrgUnitId,
     otherDestination,
-    hoursOnSite,
-    manpowerCount,
     notes,
   } = input
   const kmDriven = computeTotalKm({ entryMode, startOdometer, endOdometer, businessKm, personalKm })
@@ -385,8 +379,6 @@ function manualEntryFields(input: NormalizedVehicleLogEntryInput) {
     personalKm,
     siteOrgUnitId,
     otherDestination,
-    hoursOnSite,
-    manpowerCount,
     notes,
   }
 }
@@ -417,8 +409,6 @@ function entryDraft(
     totalKm,
     siteOrgUnitId: row?.siteOrgUnitId ?? null,
     otherDestination: row?.otherDestination ?? null,
-    hoursOnSite: row?.hoursOnSite ?? null,
-    manpowerCount: row?.manpowerCount ?? null,
     notes: row?.notes ?? null,
     importStatus: row?.importStatus ?? null,
   }
@@ -576,8 +566,6 @@ export async function loadVehicleLogWorkspace(
           businessKm: 0,
           personalKm: 0,
           totalKm: 0,
-          hoursOnSite: 0,
-          crewCount: 0,
         },
       }
     }
@@ -598,8 +586,6 @@ export async function loadVehicleLogWorkspace(
     let businessKm = 0
     let personalKm = 0
     let totalKm = 0
-    let hoursOnSite = 0
-    let crewCount = 0
     let importSourceDays = 0
     for (let day = 1; day <= dim; day++) {
       const date = dateKey(year, month, day)
@@ -609,8 +595,6 @@ export async function loadVehicleLogWorkspace(
       businessKm += entry.businessKm ?? 0
       personalKm += entry.personalKm ?? 0
       totalKm += entry.totalKm ?? 0
-      hoursOnSite += parseNumber(entry.hoursOnSite) ?? 0
-      crewCount += entry.manpowerCount ?? 0
       rows.push({
         date,
         day,
@@ -648,8 +632,6 @@ export async function loadVehicleLogWorkspace(
         businessKm,
         personalKm,
         totalKm,
-        hoursOnSite,
-        crewCount,
       },
     }
   })
@@ -786,8 +768,6 @@ export async function updateVehicleLogEntry(
       driverPersonId: result.normalized.driverPersonId,
       entryDate: result.normalized.entryDate,
       kmDriven: result.updated.kmDriven,
-      manpowerCount: result.normalized.manpowerCount,
-      hoursOnSite: result.normalized.hoursOnSite,
     },
   })
   revalidateVehicleLogPaths(result.normalized.equipmentItemId, result.normalized.entryDate)
@@ -1250,8 +1230,6 @@ export async function applyVehicleLogImportToVehicleLog(
         personalKm,
         siteOrgUnitId: entry.siteOrgUnitId,
         otherDestination: null,
-        hoursOnSite: existing?.hoursOnSite ?? null,
-        manpowerCount: existing?.manpowerCount ?? null,
         notes: existing?.notes ?? null,
         sourceConnectionId: setup.connection.id,
         sourceExternalId: entry.sourceExternalId,

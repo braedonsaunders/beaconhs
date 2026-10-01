@@ -1,5 +1,5 @@
 // Truck log — per-driver per-vehicle daily log: odometer in/out, kilometres,
-// crew count, hours-on-site. Drives the monthly billing summary report.
+// destinations and personal/business kilometres. Drives the monthly summary report.
 
 import { relations } from 'drizzle-orm'
 import {
@@ -8,7 +8,6 @@ import {
   index,
   integer,
   jsonb,
-  numeric,
   pgTable,
   text,
   timestamp,
@@ -42,8 +41,6 @@ export const truckLogEntries = pgTable(
     personalKm: integer('personal_km'),
     siteOrgUnitId: uuid('site_org_unit_id'),
     otherDestination: text('other_destination'),
-    hoursOnSite: numeric('hours_on_site', { precision: 6, scale: 2 }),
-    manpowerCount: integer('manpower_count'),
     notes: text('notes'),
     sourceConnectionId: uuid('source_connection_id'),
     sourceExternalId: text('source_external_id'),

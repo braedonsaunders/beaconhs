@@ -134,8 +134,6 @@ export default async function TruckLogSummaryPage({
               monthly.equipment_item_id,
               extract(month from monthly.month)::int AS month,
               monthly.total_km,
-              monthly.hours_on_site,
-              monthly.manpower_count,
               monthly.logged_days
             FROM report_vehicle_log_monthly monthly
             WHERE monthly.equipment_item_id IN (${sql.join(
@@ -150,8 +148,6 @@ export default async function TruckLogSummaryPage({
       SELECT
         extract(month from monthly.month)::int AS month,
         coalesce(sum(monthly.total_km), 0) AS total_km,
-        coalesce(sum(monthly.hours_on_site), 0) AS hours_on_site,
-        coalesce(sum(monthly.manpower_count), 0) AS manpower_count,
         coalesce(sum(monthly.logged_days), 0) AS logged_days
       FROM report_vehicle_log_monthly monthly
       INNER JOIN ${equipmentItems}
@@ -171,15 +167,11 @@ export default async function TruckLogSummaryPage({
       equipmentItemId: String(row.equipment_item_id ?? ''),
       month: Number(row.month ?? 0),
       kmTotal: Number(row.total_km ?? 0),
-      hoursTotal: Number(row.hours_on_site ?? 0),
-      manpowerTotal: Number(row.manpower_count ?? 0),
       entryDays: Number(row.logged_days ?? 0),
     }))
     const totals = extractRows(totalsResult).map((row) => ({
       month: Number(row.month ?? 0),
       kmTotal: Number(row.total_km ?? 0),
-      hoursTotal: Number(row.hours_on_site ?? 0),
-      manpowerTotal: Number(row.manpower_count ?? 0),
       entryDays: Number(row.logged_days ?? 0),
     }))
     return {
@@ -190,53 +182,40 @@ export default async function TruckLogSummaryPage({
     }
   })
 
-  type MonthRollup = { km: number; hours: number; manpower: number; days: number }
+  type MonthRollup = { km: number; days: number }
   const grid = new Map<string, Map<number, MonthRollup>>()
   for (const r of rows) {
     const inner = grid.get(r.equipmentItemId) ?? new Map<number, MonthRollup>()
+    const previous = inner.get(Number(r.month))
     inner.set(Number(r.month), {
-      km: Number(r.kmTotal ?? 0),
-      hours: Number(r.hoursTotal ?? 0),
-      manpower: Number(r.manpowerTotal ?? 0),
-      days: Number(r.entryDays ?? 0),
+      km: (previous?.km ?? 0) + Number(r.kmTotal ?? 0),
+      days: (previous?.days ?? 0) + Number(r.entryDays ?? 0),
     })
     grid.set(r.equipmentItemId, inner)
   }
 
-  const grandTotals = { km: 0, hours: 0, manpower: 0, days: 0 }
+  const grandTotals = { km: 0, days: 0 }
   const monthTotals: MonthRollup[] = Array.from({ length: 12 }, () => ({
     km: 0,
-    hours: 0,
-    manpower: 0,
     days: 0,
   }))
   const truckTotals = new Map<string, MonthRollup>()
   for (const r of monthlyTotals) {
     const km = Number(r.kmTotal ?? 0)
-    const hours = Number(r.hoursTotal ?? 0)
-    const man = Number(r.manpowerTotal ?? 0)
     const days = Number(r.entryDays ?? 0)
     grandTotals.km += km
-    grandTotals.hours += hours
-    grandTotals.manpower += man
     grandTotals.days += days
     const idx = Number(r.month) - 1
     if (idx >= 0 && idx < 12) {
       monthTotals[idx]!.km += km
-      monthTotals[idx]!.hours += hours
-      monthTotals[idx]!.manpower += man
       monthTotals[idx]!.days += days
     }
   }
   for (const r of rows) {
     const km = Number(r.kmTotal ?? 0)
-    const hours = Number(r.hoursTotal ?? 0)
-    const man = Number(r.manpowerTotal ?? 0)
     const days = Number(r.entryDays ?? 0)
-    const tt = truckTotals.get(r.equipmentItemId) ?? { km: 0, hours: 0, manpower: 0, days: 0 }
+    const tt = truckTotals.get(r.equipmentItemId) ?? { km: 0, days: 0 }
     tt.km += km
-    tt.hours += hours
-    tt.manpower += man
     tt.days += days
     truckTotals.set(r.equipmentItemId, tt)
   }
@@ -247,7 +226,7 @@ export default async function TruckLogSummaryPage({
         <>
           <PageHeader
             title={tGenerated('m_062636ebd477e6')}
-            description={tGenerated('m_02683b214e28b7', { value0: year })}
+            description={tGenerated('m_083b7021fe4ccd', { value0: year })}
             actions={
               <div className="flex items-center gap-2">
                 <Link href={{ pathname: BASE, query: { ...sp, year: year - 1, page: undefined } }}>
@@ -348,8 +327,6 @@ export default async function TruckLogSummaryPage({
                       const months = grid.get(t.id) ?? new Map<number, MonthRollup>()
                       const totals = truckTotals.get(t.id) ?? {
                         km: 0,
-                        hours: 0,
-                        manpower: 0,
                         days: 0,
                       }
                       return (
@@ -385,14 +362,6 @@ export default async function TruckLogSummaryPage({
                                       <GeneratedValue value={m.km} />{' '}
                                       <GeneratedText id="m_052eec8e5ae8ca" />
                                     </div>
-                                    <div className="text-slate-500 dark:text-slate-400">
-                                      <GeneratedValue value={m.hours.toFixed(1)} />{' '}
-                                      <GeneratedText id="m_0e3010419001f6" />
-                                    </div>
-                                    <div className="text-slate-500 dark:text-slate-400">
-                                      <GeneratedValue value={m.manpower} />{' '}
-                                      <GeneratedText id="m_02e2faa9b2f319" />
-                                    </div>
                                   </Link>
                                 </TableCell>
                               )
@@ -402,14 +371,6 @@ export default async function TruckLogSummaryPage({
                             <div>
                               <GeneratedValue value={totals.km} />{' '}
                               <GeneratedText id="m_052eec8e5ae8ca" />
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              <GeneratedValue value={totals.hours.toFixed(1)} />{' '}
-                              <GeneratedText id="m_0e3010419001f6" />
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              <GeneratedValue value={totals.manpower} />{' '}
-                              <GeneratedText id="m_02e2faa9b2f319" />
                             </div>
                           </TableCell>
                         </TableRow>
@@ -429,14 +390,6 @@ export default async function TruckLogSummaryPage({
                           <div className="text-xs font-medium text-slate-900 dark:text-slate-100">
                             <GeneratedValue value={m.km} /> <GeneratedText id="m_052eec8e5ae8ca" />
                           </div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            <GeneratedValue value={m.hours.toFixed(1)} />{' '}
-                            <GeneratedText id="m_0e3010419001f6" />
-                          </div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            <GeneratedValue value={m.manpower} />{' '}
-                            <GeneratedText id="m_02e2faa9b2f319" />
-                          </div>
                         </TableCell>
                       ))}
                     />
@@ -444,14 +397,6 @@ export default async function TruckLogSummaryPage({
                       <div className="text-sm font-semibold">
                         <GeneratedValue value={grandTotals.km} />{' '}
                         <GeneratedText id="m_052eec8e5ae8ca" />
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        <GeneratedValue value={grandTotals.hours.toFixed(1)} />{' '}
-                        <GeneratedText id="m_0e3010419001f6" />
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        <GeneratedValue value={grandTotals.manpower} />{' '}
-                        <GeneratedText id="m_02e2faa9b2f319" />
                       </div>
                     </TableCell>
                   </TableRow>

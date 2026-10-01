@@ -22,8 +22,6 @@ export type SaveVehicleLogEntryInput = {
   personalKm?: number | null
   siteOrgUnitId?: string | null
   otherDestination?: string | null
-  hoursOnSite?: string | null
-  manpowerCount?: number | null
   notes?: string | null
 }
 
@@ -38,8 +36,6 @@ export type NormalizedVehicleLogEntryInput = {
   personalKm: number | null
   siteOrgUnitId: string | null
   otherDestination: string | null
-  hoursOnSite: string | null
-  manpowerCount: number | null
   notes: string | null
 }
 
@@ -52,11 +48,6 @@ export function normalizeVehicleLogEntryInput(value: unknown): NormalizedVehicle
   if (startOdometer != null && endOdometer != null && endOdometer < startOdometer) {
     throw new Error('End odometer cannot be less than start odometer.')
   }
-  const hours = optionalNumberInput(input.hoursOnSite, 'Hours on site', {
-    min: 0,
-    max: 24,
-    maxScale: 2,
-  })
 
   return {
     equipmentItemId: requireUuidInput(input.equipmentItemId, 'Equipment item'),
@@ -69,12 +60,6 @@ export function normalizeVehicleLogEntryInput(value: unknown): NormalizedVehicle
     personalKm: optionalNumberInput(input.personalKm, 'Personal km', KM_BOUNDS),
     siteOrgUnitId: optionalUuidInput(input.siteOrgUnitId, 'Customer or site'),
     otherDestination: optionalTextInput(input.otherDestination, 'Other destination', 500),
-    hoursOnSite: hours == null ? null : hours.toFixed(2),
-    manpowerCount: optionalNumberInput(input.manpowerCount, 'Crew count', {
-      min: 0,
-      max: 100_000,
-      integer: true,
-    }),
     notes: optionalTextInput(input.notes, 'Notes', 5_000),
   }
 }

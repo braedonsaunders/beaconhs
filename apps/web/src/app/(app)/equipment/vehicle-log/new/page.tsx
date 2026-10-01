@@ -30,8 +30,6 @@ async function createEntry(formData: FormData) {
     startOdometer: formData.get('startOdometer'),
     endOdometer: formData.get('endOdometer'),
     siteOrgUnitId: formData.get('siteOrgUnitId'),
-    hoursOnSite: formData.get('hoursOnSite'),
-    manpowerCount: formData.get('manpowerCount'),
     notes: formData.get('notes'),
   })
   await upsertVehicleLogEntry(ctx, input)
@@ -114,19 +112,6 @@ export default async function NewTruckLogEntryPage({
                 </Field>
                 <Field label={tGenerated('m_14beb2fa6adb50')}>
                   <Input name="endOdometer" type="number" min="0" max="2147483647" step="1" />
-                </Field>
-                <Field label={tGenerated('m_0c5fdf4fb3e86b')}>
-                  <Input
-                    name="hoursOnSite"
-                    type="number"
-                    min="0"
-                    max="24"
-                    step="0.25"
-                    placeholder={tGenerated('m_0d366c65426260')}
-                  />
-                </Field>
-                <Field label={tGenerated('m_0b59683e270c38')}>
-                  <Input name="manpowerCount" type="number" min="0" max="100000" step="1" />
                 </Field>
               </div>
               <Field label={tGenerated('m_0b8dadcb78cd08')}>

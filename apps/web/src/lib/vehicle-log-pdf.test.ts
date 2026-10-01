@@ -23,8 +23,6 @@ describe('monthly vehicle-log portrait PDF', () => {
         business_km: 140,
         personal_km: 10,
         total_km: 150,
-        hours_on_site: '8.00',
-        crew_count: 2,
         notes: '',
       }))
       const values = {
@@ -37,7 +35,6 @@ describe('monthly vehicle-log portrait PDF', () => {
         month_business_km: 4340,
         month_personal_km: 310,
         month_total_km: 4650,
-        month_hours_on_site: '248.00',
         month_days_logged: 31,
       }
       const html = renderTemplate(expandRepeatMarkers(template.html), values, { escapeHtml: true })
@@ -45,6 +42,8 @@ describe('monthly vehicle-log portrait PDF', () => {
       expect(html).toContain('31 Thu')
       expect(html).toContain('4650')
       expect(html).not.toContain('Employee #')
+      expect(html).not.toMatch(/>Hours<|>Crew</)
+      expect(html.match(/<th\b/g)).toHaveLength(9)
       expect(html).not.toContain('{{')
       const pdf = await renderHtmlDocumentPdf({
         bodyHtml: html,
