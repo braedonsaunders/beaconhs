@@ -51,7 +51,7 @@ import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
 import { useReseededState } from '@/lib/use-reseeded-state'
 import { LessonSurface, type LessonSaveController } from './_lesson-surface'
-import { LatestAutosaveQueue, type AutosaveSnapshot } from './_lib/autosave-queue'
+import { LatestAutosaveQueue, type AutosaveSnapshot } from '@/lib/autosave-queue'
 import {
   CoursePresenter,
   type AssessmentMeta,

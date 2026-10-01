@@ -517,6 +517,8 @@ Flows run automatically when things happen on your form.
 2. Add a trigger, like **A record is submitted** or **A field matches a condition**.
 3. Connect actions, like **Send email**, **Create CAPA**, **Notify role**, or **Export PDF**.
 
+Changes to a flow save automatically, including removed sections and recipients. Watch **Saving…** change to **Saved** in the toolbar or settings panel before refreshing or leaving. If you see **Not saved — retry**, select it to retry; your edits stay in the editor and the error explains what needs fixing. **Save** in the toolbar saves pending changes immediately. The same behaviour applies to built-in modules and custom apps.
+
 Rename a flow from its pencil button. Flow names can be up to 200 characters.
 
 Watch for the amber warning bar above the canvas. It appears when a flow would do something that saves cleanly but behaves badly — most often attaching the record PDF to **A record is created** on hazard assessments or site inspections. Those records are started empty and filled in afterwards, so the attached PDF is blank; use **A record is submitted** to send the finished document. The warning never blocks a save, so you can keep the setup if you meant it.

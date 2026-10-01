@@ -16,6 +16,21 @@ afterEach(() => {
 })
 
 describe('LatestAutosaveQueue', () => {
+  it('discards a deleted flow without losing saves for other flows', async () => {
+    vi.useFakeTimers()
+    const queue = new LatestAutosaveQueue()
+    const deleted = vi.fn(async () => {})
+    const retained = vi.fn(async () => {})
+    queue.schedule('deleted', 500, deleted)
+    queue.schedule('retained', 500, retained)
+    await queue.pauseAndWait()
+    queue.discard('deleted')
+    queue.resume()
+    await queue.flush()
+    expect(deleted).not.toHaveBeenCalled()
+    expect(retained).toHaveBeenCalledTimes(1)
+  })
+
   it('debounces each key and keeps only its latest pending task', async () => {
     vi.useFakeTimers()
     const queue = new LatestAutosaveQueue()

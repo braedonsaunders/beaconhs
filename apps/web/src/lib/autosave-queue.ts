@@ -68,6 +68,17 @@ export class LatestAutosaveQueue {
     this.emit()
   }
 
+  /** Discard a deleted channel after its active write has settled. */
+  discard(key: string): void {
+    if (this.running?.key === key) throw new Error('Wait for the active save before discarding it.')
+    const timer = this.timers.get(key)
+    if (timer) clearTimeout(timer)
+    this.timers.delete(key)
+    if (this.pending.delete(key)) this.failure = null
+    this.ready.delete(key)
+    this.emit()
+  }
+
   hasWork(): boolean {
     return this.running !== null || this.pending.size > 0
   }

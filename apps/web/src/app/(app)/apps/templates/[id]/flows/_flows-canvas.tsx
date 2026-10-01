@@ -62,6 +62,7 @@ import { LogicBuilder } from '../designer/logic-builder'
 import { toast } from '@/lib/toast'
 import type { RecipientOptions } from '@/lib/flows/recipient-presentation'
 import { RecipientsEditor } from '@/components/flows/recipients-editor'
+import { useFlowAutosave } from '@/components/flows/use-flow-autosave'
 import { MAX_FLOW_NAME_LENGTH } from '@/lib/flows/flow-name-policy'
 import {
   createFlow,
@@ -645,8 +646,8 @@ export function FlowsCanvas({
     [profile],
   )
   // Working graphs live in a ref keyed by flow id; switching flows captures the
-  // current canvas into the ref and loads the target's graph. Save persists the
-  // selected flow only (n8n-style). The sidebar list holds name/enabled.
+  // current canvas into the ref and loads the target's graph. Each changed graph
+  // autosaves through the shared serial queue. The sidebar holds name/enabled.
   const graphs = useRef<Map<string, AutomationGraph>>(new Map(flows.map((f) => [f.id, f.graph])))
   const [flowList, setFlowList] = useState<FlowMeta[]>(
     flows.map((f) => ({ id: f.id, name: f.name, enabled: f.enabled })),
@@ -662,6 +663,32 @@ export function FlowsCanvas({
   const [showAi, setShowAi] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [showTemplates, setShowTemplates] = useState(false)
+  const graph = useMemo(() => fromFlow(nodes, edges), [nodes, edges])
+  const initialGraphs = useMemo(
+    () =>
+      flows.map((flow) => ({
+        id: flow.id,
+        graph: fromFlow(toFlow(flow.graph).nodes, toFlow(flow.graph).edges),
+      })),
+    [flows],
+  )
+  const {
+    queue: saveQueue,
+    snapshot: saveSnapshot,
+    acknowledgePersisted,
+  } = useFlowAutosave({
+    initial: initialGraphs,
+    flowId: selectedFlowId,
+    graph,
+    enabled: canEdit,
+    saveFlow,
+  })
+  const saveStatus =
+    saveSnapshot.state === 'saved'
+      ? 'Saved'
+      : saveSnapshot.state === 'error'
+        ? 'Not saved — retry'
+        : 'Saving…'
 
   // Follow the app's dark theme so React Flow's canvas / controls / minimap /
   // edges render dark too (the `.dark` class is toggled by the theme switcher).
@@ -704,12 +731,14 @@ export function FlowsCanvas({
   )
 
   const selectFlow = (id: string) => {
-    if (id === selectedFlowId) return
+    // Keep an AI draft or terminal operation attached to its original canvas.
+    if (pending || id === selectedFlowId) return
     captureCurrent()
     loadFlow(id)
   }
 
   const addFlow = () => {
+    if (pending) return
     start(async () => {
       const res = await createFlow(subject, 'New flow')
       if (!res.ok || !res.id) {
@@ -717,6 +746,7 @@ export function FlowsCanvas({
         return
       }
       captureCurrent()
+      acknowledgePersisted(res.id, emptyAutomationGraph())
       graphs.current.set(res.id, emptyAutomationGraph())
       setFlowList((l) => [...l, { id: res.id!, name: 'New flow', enabled: false }])
       loadFlow(res.id)
@@ -725,24 +755,32 @@ export function FlowsCanvas({
   }
 
   const toggleEnabled = (id: string, enabled: boolean) => {
+    if (pending) return
     setFlowList((l) => l.map((f) => (f.id === id ? { ...f, enabled } : f)))
     start(async () => {
-      const result = await setFlowEnabled(id, enabled)
-      if (!result.ok) {
+      try {
+        // Enabling must validate the latest graph, including recipient removals.
+        // Disabling remains available even when an unfinished graph cannot save.
+        if (enabled) await saveQueue.flush()
+        const result = await setFlowEnabled(id, enabled)
+        if (!result.ok)
+          throw new Error(
+            result.error ??
+              (enabled ? tGenerated('m_02c65a444f151a') : tGenerated('m_1e6f44ac3a3238')),
+          )
+      } catch (error) {
         setFlowList((list) =>
           list.map((flow) => (flow.id === id ? { ...flow, enabled: !enabled } : flow)),
         )
         toast.error(
-          tGeneratedValue(
-            result.error ??
-              (enabled ? tGenerated('m_02c65a444f151a') : tGenerated('m_1e6f44ac3a3238')),
-          ),
+          tGeneratedValue(error instanceof Error ? error.message : tGenerated('m_141dec99716e82')),
         )
       }
     })
   }
 
   const commitRename = (id: string) => {
+    if (pending) return
     const nm = editName.trim() || 'Flow'
     if (nm.length > MAX_FLOW_NAME_LENGTH) {
       toast.error(tGenerated('m_1e52dceb23405d', { value0: MAX_FLOW_NAME_LENGTH }))
@@ -765,13 +803,27 @@ export function FlowsCanvas({
   }
 
   const removeFlow = (id: string) => {
+    if (pending) return
     start(async () => {
-      await deleteFlow(id)
-      graphs.current.delete(id)
-      const next = flowList.filter((f) => f.id !== id)
-      setFlowList(next)
-      if (id === selectedFlowId) loadFlow(next[0]?.id ?? null)
-      toast.success(tGenerated('m_0ac2f784b6e43b'))
+      await saveQueue.pauseAndWait()
+      try {
+        const result = await deleteFlow(id)
+        if (!result.ok) {
+          toast.error(tGeneratedValue('Could not delete the flow. Please retry.'))
+          return
+        }
+        saveQueue.discard(id)
+        graphs.current.delete(id)
+        const next = flowList.filter((f) => f.id !== id)
+        setFlowList(next)
+        if (id === selectedFlowId) loadFlow(next[0]?.id ?? null)
+        toast.success(tGenerated('m_0ac2f784b6e43b'))
+      } catch {
+        toast.error(tGeneratedValue('Could not delete the flow. Please retry.'))
+      } finally {
+        saveQueue.resume()
+        if (saveQueue.hasWork()) void saveQueue.flush().catch(() => {})
+      }
     })
   }
 
@@ -811,32 +863,45 @@ export function FlowsCanvas({
   )
 
   const save = () => {
-    if (!selectedFlowId) return
-    const graph = fromFlow(nodes, edges)
-    graphs.current.set(selectedFlowId, graph)
+    if (!canEdit || !selectedFlowId) return
     start(async () => {
-      const res = await saveFlow(selectedFlowId, graph)
-      if (!res.ok) {
-        toast.error(tGeneratedValue(res.error ?? tGenerated('m_141dec99716e82')))
-        return
+      try {
+        await saveQueue.flush()
+      } catch (error) {
+        toast.error(
+          tGeneratedValue(
+            error instanceof Error ? error.message : 'Could not save the flow. Please retry.',
+          ),
+        )
       }
-      toast.success(tGenerated('m_03c918fe3c11b7'))
     })
   }
 
   const runAi = () => {
+    if (pending) return
     if (!selectedFlowId) {
       toast.error(tGenerated('m_0776dc4696267a'))
       return
     }
     start(async () => {
+      try {
+        await saveQueue.flush()
+      } catch (error) {
+        toast.error(
+          tGeneratedValue(
+            error instanceof Error ? error.message : 'Could not save the flow. Please retry.',
+          ),
+        )
+        return
+      }
       const res = await generateFlowDraft(selectedFlowId, aiPrompt)
       if (!res.ok || !res.graph) {
         toast.error(tGeneratedValue(res.error ?? tGenerated('m_0a2bad9c653946')))
         return
       }
-      graphs.current.set(selectedFlowId, res.graph)
       const f = toFlow(res.graph)
+      acknowledgePersisted(selectedFlowId, fromFlow(f.nodes, f.edges))
+      graphs.current.set(selectedFlowId, res.graph)
       setNodes(f.nodes)
       setEdges(f.edges)
       setSelectedNodeId(null)
@@ -846,6 +911,7 @@ export function FlowsCanvas({
   }
 
   const applyTemplate = (t: FlowTemplate) => {
+    if (pending) return
     if (!selectedFlowId) {
       toast.error(tGenerated('m_0776dc4696267a'))
       return
@@ -910,6 +976,7 @@ export function FlowsCanvas({
                     <div
                       key={f.id}
                       onClick={() => selectFlow(f.id)}
+                      aria-disabled={pending}
                       className={`group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm ${
                         active
                           ? 'bg-white shadow-sm ring-1 ring-teal-300 dark:bg-slate-800 dark:ring-teal-700'
@@ -918,7 +985,7 @@ export function FlowsCanvas({
                     >
                       <MiniToggle
                         checked={f.enabled}
-                        disabled={!canEdit}
+                        disabled={!canEdit || pending}
                         onChange={(v) => toggleEnabled(f.id, v)}
                       />
                       <GeneratedValue
@@ -1046,16 +1113,36 @@ export function FlowsCanvas({
               value={
                 canEdit && selectedFlowId ? (
                   <>
-                    <Button variant="outline" size="sm" onClick={() => addNode('trigger')}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addNode('trigger')}
+                      disabled={pending}
+                    >
                       <Plus size={13} /> <GeneratedText id="m_1db1e5c9ca41ce" />
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => addNode('condition')}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addNode('condition')}
+                      disabled={pending}
+                    >
                       <Plus size={13} /> <GeneratedText id="m_0c33471afd0f99" />
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => addNode('gate')}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addNode('gate')}
+                      disabled={pending}
+                    >
                       <Plus size={13} /> <GeneratedText id="m_0f7bb45f90ba7e" />
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => addNode('action')}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addNode('action')}
+                      disabled={pending}
+                    >
                       <Plus size={13} /> <GeneratedText id="m_0bad495a7046e9" />
                     </Button>
                   </>
@@ -1065,7 +1152,12 @@ export function FlowsCanvas({
             <GeneratedValue
               value={
                 canEdit && selectedFlowId ? (
-                  <Button variant="outline" size="sm" onClick={() => setShowTemplates(true)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowTemplates(true)}
+                    disabled={pending}
+                  >
                     <Rocket size={13} /> <GeneratedText id="m_0a19e6387037d4" />
                   </Button>
                 ) : null
@@ -1106,6 +1198,27 @@ export function FlowsCanvas({
           </div>
         </header>
 
+        {canEdit && selectedFlowId ? (
+          <div
+            role="status"
+            className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-3 py-2 text-xs dark:border-slate-800"
+          >
+            <button
+              type="button"
+              onClick={save}
+              disabled={pending || saveSnapshot.state === 'saved'}
+              className="font-medium"
+            >
+              <GeneratedValue value={saveStatus} />
+            </button>
+            {saveSnapshot.error ? (
+              <span className="text-red-600 dark:text-red-400">
+                <GeneratedValue value={saveSnapshot.error} />
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
         <GeneratedValue
           value={
             graphWarnings.length > 0 ? (
@@ -1138,7 +1251,9 @@ export function FlowsCanvas({
                   onNodeClick={(_, n) => setSelectedNodeId(n.id)}
                   onPaneClick={() => setSelectedNodeId(null)}
                   nodeTypes={nodeTypes}
-                  nodesConnectable={canEdit}
+                  nodesConnectable={canEdit && !pending}
+                  nodesDraggable={canEdit && !pending}
+                  deleteKeyCode={canEdit && !pending ? ['Backspace', 'Delete'] : null}
                   colorMode={isDark ? 'dark' : 'light'}
                   fitView
                   fitViewOptions={{ padding: 0.3, maxZoom: 0.8 }}
@@ -1219,9 +1334,31 @@ export function FlowsCanvas({
         size="lg"
         footer={
           selectedNode && canEdit ? (
-            <Button variant="outline" onClick={() => removeNode(selectedNode.id)}>
-              <Trash2 size={14} className="text-rose-500" /> <GeneratedText id="m_09838d30eb3121" />
-            </Button>
+            <div className="flex w-full items-center justify-between gap-3">
+              <Button
+                variant="outline"
+                onClick={() => removeNode(selectedNode.id)}
+                disabled={pending}
+              >
+                <Trash2 size={14} className="text-rose-500" />{' '}
+                <GeneratedText id="m_09838d30eb3121" />
+              </Button>
+              <div role="status" className="min-w-0 text-right text-xs">
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={pending || saveSnapshot.state === 'saved'}
+                  className="font-medium"
+                >
+                  <GeneratedValue value={saveStatus} />
+                </button>
+                {saveSnapshot.error ? (
+                  <p className="text-red-600 dark:text-red-400">
+                    <GeneratedValue value={saveSnapshot.error} />
+                  </p>
+                ) : null}
+              </div>
+            </div>
           ) : null
         }
       >
@@ -1239,7 +1376,7 @@ export function FlowsCanvas({
                 pdfTemplates={pdfTemplates}
                 targetApps={targetApps}
                 recipientOptions={recipientOptions}
-                readOnly={!canEdit}
+                readOnly={!canEdit || pending}
                 onChange={(d) => patchData(selectedNode.id, d)}
               />
             ) : null
