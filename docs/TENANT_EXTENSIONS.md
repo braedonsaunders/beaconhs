@@ -35,19 +35,30 @@ and visible vehicle before discovery and again before execution. Readers cannot
 invoke these actions. Deleting a whole month still requires equipment management.
 The surface works for empty months and does not need an existing log entry.
 
-## Install
+## Install through the deployment workflow
 
 1. Build the private plugin separately against the host contract. Its artifact
-   must bundle all its runtime code; host SDK imports must be types only.
-2. Mount the artifact directory read-only into **every web replica**, at the same
-   absolute path. Do not add private artifacts to the base image or public repo.
-3. Set `TENANT_PLUGIN_INSTALLATIONS` to a JSON array. Each entry contains a tenant
-   UUID, matching `pluginId`, and absolute `modulePath` to its `.cjs` artifact.
-4. Restart or roll the web service during the approved deployment window.
-5. Verify the action appears for an editor in the installed tenant, stays absent
-   for a reader and other tenants, executes successfully, and writes an audit row.
+   must bundle all runtime code; host SDK imports must be types only.
+2. Provide a private `TENANT_PLUGIN_BUNDLE` repository secret containing JSON:
+   `version: 1` and a `plugins` array. Each entry has `tenantId`, `pluginId`,
+   the artifact's lowercase hexadecimal `sha256`, and `contentBase64`.
+   GitHub secrets limit the complete JSON value to 48 KB. Larger installations
+   need a separately authenticated artifact delivery path before deployment.
+3. Run the gated main deployment. The preparer validates all IDs, exact fields,
+   canonical encoding, and digests before any files or database changes. It
+   creates immutable Swarm configs and adds their read-only mounts to web.
+   Artifacts are distributed by Swarm, so every web replica receives the same
+   private module without putting it in the public repository or image.
+4. Verify actions for an editor in the installed tenant, absence for readers
+   and other tenants, successful execution, preserved authored rows, and audit.
 
-The default `[]` loads no modules and renders no extension actions. A missing or
-invalid artifact produces an extension-unavailable notice without stopping native
-editing. Invocation fails closed. Installation configuration is not editable by
-tenant users. Artifact updates require a web rollout because Node caches modules.
+The workflow derives `TENANT_PLUGIN_INSTALLATIONS` using absolute module paths
+under `/opt/beaconhs-tenant-plugins`. Empty configuration loads no modules.
+Missing or invalid artifacts show an extension-unavailable notice without
+stopping native editing. Invocation fails closed. Tenant users cannot edit
+installation configuration. Node caches modules; new artifacts get new digest
+paths and are loaded by the next web rollout. Existing Swarm configs are
+retained for rollback; active configs must not be pruned.
+
+An operator can also supply `TENANT_PLUGIN_INSTALLATIONS` and read-only mounts
+outside this workflow, using the same contract and explicit tenant binding.

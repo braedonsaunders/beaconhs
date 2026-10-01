@@ -83,6 +83,7 @@ jobs:
       - run: pnpm deadcode:check
       - name: Test deployment host safeguards
         run: |
+          node --test scripts/cluster/prepare-tenant-plugins.test.mjs
           scripts/cluster/dokploy-curl.test.sh
           scripts/ci/require-current-main.test.sh
           scripts/ci/workflow-repository-immutability.test.sh

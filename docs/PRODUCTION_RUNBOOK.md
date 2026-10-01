@@ -293,10 +293,29 @@ the synthetic path or job.
    restore to a new database from the pre-change backup and perform an
    explicit cutover.
 
-A brief dual-version window exists between the migration and Swarm's service
-convergence: the old app containers keep serving against the migrated schema.
-Keep migrations backward-compatible with the previous release for that window,
-or accept the transient errors on the dev environment.
+Web runs three replicas, spread across nodes labeled `beaconhs-web=true`.
+Use a shared Server Actions encryption key and the commit deployment ID. Swarm
+starts one replacement before stopping its predecessor, monitors health, and
+rolls back on failure. Verify all three replicas have the expected image and
+version; one successful readiness response alone does not prove convergence.
+Private modules are read-only Swarm configs installed before migration; see
+[Tenant extensions](TENANT_EXTENSIONS.md).
+
+Rolling application updates require database changes compatible with both
+versions during convergence. A release dropping columns or otherwise breaking
+old writers still needs a maintenance window, a fresh verified backup, and a
+writer fence. Set the repository Actions variable `REQUIRE_WRITER_FENCE=true`
+for that release; the workflow persists zero writer replicas, stops web/worker/
+scheduler, and waits before migration. Clear the variable after a successful
+cutover. A migration failure keeps the fence in place. Three replicas alone cannot make destructive schema cutovers safe.
+Never restore old writers after a partially committed migration; repair forward
+or explicitly restore a verified database backup.
+
+When retiring an old hostname, configure `LEGACY_APP_HOST` in repository secrets.
+The deployment renderer adds independent HTTP/HTTPS redirect routers on the new
+web service, preserving path and query and using the new application origin.
+Verify the redirects before disabling automatic deployment and stopping the old
+Dokploy compose. Keep its database, volumes, and backups until retention expires.
 
 One-time data backfills (`apps/web/scripts/backfill-*.ts`) are run manually
 with `pnpm --filter @beaconhs/web run cutover:run <script>`; they are no longer

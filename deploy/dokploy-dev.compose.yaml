@@ -13,6 +13,7 @@ services:
       HOSTNAME: 0.0.0.0
       PORT: '3000'
       APP_VERSION: ${APP_VERSION}
+      TENANT_PLUGIN_INSTALLATIONS: ${TENANT_PLUGIN_INSTALLATIONS:-[]}
       SENTRY_DSN: ${SENTRY_DSN}
       SENTRY_ENVIRONMENT: dev
       DATABASE_URL: ${DATABASE_URL}
@@ -41,6 +42,7 @@ services:
       # On-prem AdminApp2 MSSQL (10.0.0.44). Override via env when another host
       # must be allowlisted; an empty value would block the private-IP sync.
       SYNC_DATABASE_HOST_ALLOWLIST: ${SYNC_DATABASE_HOST_ALLOWLIST:-10.0.0.44}
+    # TENANT_PLUGIN_CONFIG_MOUNTS
     networks: [infra-net, dokploy-network]
     healthcheck:
       test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:3000/api/health/ready']
@@ -49,12 +51,22 @@ services:
       retries: 5
       start_period: 30s
     deploy:
-      # The deploy workflow first persists WRITER_REPLICAS=0 as a control-plane
-      # fence. A concurrent Dokploy deploy therefore cannot revive old database
-      # writers during migration; the final exact-SHA deploy restores this to 1.
-      replicas: ${WRITER_REPLICAS}
+      # LEGACY_HOST_REDIRECT_LABELS
+      replicas: ${WEB_REPLICAS:-3}
       placement:
-        constraints: [node.hostname==dokploy-mgr]
+        constraints: [node.labels.beaconhs-web==true]
+        preferences:
+          - spread: node.hostname
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+        monitor: 30s
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
       restart_policy:
         condition: any
         delay: 5s

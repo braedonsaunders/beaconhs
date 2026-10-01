@@ -82,7 +82,7 @@ COPY --chown=node:node --from=builder /app/apps/web/.next/static ./apps/web/.nex
 COPY --chown=node:node --from=builder /app/apps/web/public ./apps/web/public
 COPY --chown=node:node --from=builder /prod/worker ./apps/worker
 COPY --chown=node:node docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh && mkdir -p /opt/beaconhs-tenant-plugins
 
 ENV APP_ROLE=web
 ENV HOME=/home/node

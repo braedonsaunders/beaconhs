@@ -262,6 +262,89 @@ jobs:
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
       - run: pnpm install --frozen-lockfile
 
+      - name: Install private tenant extension artifacts
+        env:
+          TENANT_PLUGIN_BUNDLE: ${{ secrets.TENANT_PLUGIN_BUNDLE }}
+          LEGACY_APP_HOST: ${{ secrets.LEGACY_APP_HOST }}
+          APP_URL: ${{ secrets.DEV_APP_URL }}
+        run: |
+          set -euo pipefail
+          umask 077
+          staging="$(mktemp -d)"
+          trap 'rm -rf "$staging"' EXIT
+          node scripts/cluster/prepare-tenant-plugins.mjs "$staging" deploy/dokploy-dev.compose.yaml
+          while IFS= read -r config; do
+            name="$(jq -r '.name' <<< "$config")"
+            path="$(jq -r '.path' <<< "$config")"
+            if docker config inspect "$name" >/dev/null 2>&1; then
+              existing_digest="$(docker config inspect "$name" --format '{{.Spec.Data}}' | base64 --decode | sha256sum | cut -d' ' -f1)"
+              expected_digest="$(sha256sum "$staging/artifacts/$path" | cut -d' ' -f1)"
+              if [ "$existing_digest" != "$expected_digest" ]; then
+                echo "::error::An existing immutable tenant plugin config has different content"
+                exit 1
+              fi
+            else
+              docker config create "$name" "$staging/artifacts/$path" >/dev/null
+            fi
+          done < <(jq -c '.[]' "$staging/configs.json")
+          compose_file="$(mktemp "$RUNNER_TEMP/beaconhs-plugins-compose.XXXXXX")"
+          config_file="$(mktemp "$RUNNER_TEMP/beaconhs-plugins-configs.XXXXXX")"
+          cp "$staging/compose.yaml" "$compose_file"
+          cp "$staging/configs.json" "$config_file"
+          printf 'TENANT_PLUGIN_COMPOSE_FILE=%s\n' "$compose_file" >> "$GITHUB_ENV"
+          printf 'TENANT_PLUGIN_CONFIG_FILE=%s\n' "$config_file" >> "$GITHUB_ENV"
+          printf 'TENANT_PLUGIN_INSTALLATIONS=%s\n' "$(cat "$staging/installations.json")" >> "$GITHUB_ENV"
+
+      # Destructive schema releases opt in explicitly. Persist the fence before
+      # stopping current writers so a concurrent Dokploy deploy cannot revive them.
+      - name: Fence old database writers for a maintenance cutover
+        if: vars.REQUIRE_WRITER_FENCE == 'true'
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          before="$(mktemp)"
+          after="$(mktemp)"
+          fenced_env="$(mktemp)"
+          response="$(mktemp)"
+          trap 'rm -f "$before" "$after" "$fenced_env" "$response"' EXIT
+          if [ "$DOKPLOY_DEPLOY_MODE" = api ]; then
+            scripts/cluster/dokploy-curl.sh -sS --fail --max-time 20 \
+              --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" --resolve "$DOKPLOY_CURL_RESOLVE" \
+              -G "${DOKPLOY_URL%/}/api/compose.one" --data-urlencode "composeId=$COMPOSE_ID" > "$before"
+            jq -r '.env' "$before" | sed -E '/^(WEB|WRITER)_REPLICAS=/d' > "$fenced_env"
+            printf 'WRITER_REPLICAS=0\nWEB_REPLICAS=0\n' >> "$fenced_env"
+            jq -n --arg id "$COMPOSE_ID" --rawfile env "$fenced_env" '{composeId:$id,env:$env}' \
+              | scripts/cluster/dokploy-curl.sh -sS --fail --max-time 30 \
+                --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" --resolve "$DOKPLOY_CURL_RESOLVE" \
+                -X POST "${DOKPLOY_URL%/}/api/compose.update" -H 'content-type: application/json' --data @- > "$response"
+            scripts/cluster/dokploy-curl.sh -sS --fail --max-time 20 \
+              --noproxy "${DOKPLOY_CURL_RESOLVE%%:*}" --resolve "$DOKPLOY_CURL_RESOLVE" \
+              -G "${DOKPLOY_URL%/}/api/compose.one" --data-urlencode "composeId=$COMPOSE_ID" > "$after"
+            jq -e --arg id "$COMPOSE_ID" --rawfile env "$fenced_env" --slurpfile before "$before" \
+              '.composeId==$id and .env==$env and .composeFile==$before[0].composeFile' "$after" >/dev/null
+          else
+            echo '::error::A maintenance writer fence requires a reachable Dokploy control plane'
+            exit 1
+          fi
+          docker service scale --detach=true \
+            "${DOKPLOY_TARGET_STACK}_web=0" "${DOKPLOY_TARGET_STACK}_worker=0" "${DOKPLOY_TARGET_STACK}_scheduler=0"
+          deadline=$((SECONDS + 120))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            active=0
+            for role in web worker scheduler; do
+              states="$(docker service ps "${DOKPLOY_TARGET_STACK}_$role" --format '{{.CurrentState}}')"
+              if grep -Eq '^(Running|Starting|Ready|Preparing|Assigned|Pending)' <<< "$states"; then active=1; fi
+            done
+            if [ "$active" = 0 ]; then echo 'Old database writers are stopped'; exit 0; fi
+            sleep 2
+          done
+          echo '::error::Old database writers did not stop; migration will not run'
+          exit 1
+
       # Forward-only schema migrations run before the redeploy. The unpooled
       # migrator login can SET ROLE to the NOLOGIN owner; neither credential
       # reaches the long-running deployment containers.
@@ -328,7 +411,7 @@ jobs:
           env_block_file="$(mktemp)"
           trap 'rm -f "$update_response" "$compose_state" "$env_block_file"' EXIT
           IMAGE="${IMAGE_NAME}@${IMAGE_DIGEST}"
-          COMPOSE_FILE="$(cat deploy/dokploy-dev.compose.yaml)"
+          COMPOSE_FILE="$(cat "$TENANT_PLUGIN_COMPOSE_FILE")"
           # Collabora is served same-origin on the app domain (Traefik path
           # routes), so both editor and WOPI-callback bases are APP_URL; the
           # server_name is the bare host for Collabora's generated URLs.
@@ -337,6 +420,7 @@ jobs:
             printf 'IMAGE=%s\n' "$IMAGE"
             printf 'APP_VERSION=%s\n' "$GITHUB_SHA"
             printf 'WRITER_REPLICAS=1\n'
+            printf 'WEB_REPLICAS=3\n'
             printf 'COLLABORA_IMAGE=%s\n' "$COLLABORA_IMAGE"
             printf 'COLLABORA_URL=%s\n' "$APP_URL"
             printf 'COLLABORA_WOPI_URL=%s\n' "$APP_URL"
@@ -356,6 +440,7 @@ jobs:
             printf 'VAPID_PRIVATE_KEY=%s\n' "$VAPID_PRIVATE_KEY"
             printf 'VAPID_SUBJECT=%s\n' "$VAPID_SUBJECT"
             printf 'SENTRY_DSN=%s\n' "$SENTRY_DSN"
+            printf 'TENANT_PLUGIN_INSTALLATIONS=%s\n' "$TENANT_PLUGIN_INSTALLATIONS"
             printf 'SYNC_DATABASE_HOST_ALLOWLIST=%s\n' "${SYNC_DATABASE_HOST_ALLOWLIST:-10.0.0.44}"
           } > "$env_block_file"
           jq -n --arg id "$COMPOSE_ID" --arg cf "$COMPOSE_FILE" \
@@ -412,13 +497,30 @@ jobs:
           image="${IMAGE_NAME}@${IMAGE_DIGEST}"
           for role in web worker scheduler; do
             service="${DOKPLOY_TARGET_STACK}_${role}"
+            role_settings=()
+            if [ "$role" = web ]; then
+              role_settings=(--replicas 3 --update-order start-first --update-parallelism 1 --update-delay 10s --update-failure-action rollback --update-monitor 30s --env-rm TENANT_PLUGIN_INSTALLATIONS --env-add "TENANT_PLUGIN_INSTALLATIONS=$TENANT_PLUGIN_INSTALLATIONS")
+              existing_configs="$(docker service inspect "$service" --format '{{json .Spec.TaskTemplate.ContainerSpec.Configs}}')"
+              while IFS= read -r config; do
+                name="$(jq -r '.name' <<< "$config")"
+                target="$(jq -r '.target' <<< "$config")"
+                if ! jq -e --arg name "$name" '.[]? | select(.ConfigName==$name)' <<< "$existing_configs" >/dev/null; then
+                  role_settings+=(--config-add "source=$name,target=$target,mode=0444")
+                fi
+              done < <(jq -c '.[]' "$TENANT_PLUGIN_CONFIG_FILE")
+            fi
             docker service update --detach=true --with-registry-auth \
-              --image "$image" --env-rm APP_VERSION \
+              "${role_settings[@]}" --image "$image" --env-rm APP_VERSION \
               --env-add "APP_VERSION=$GITHUB_SHA" "$service"
           done
           docker service update --detach=true --with-registry-auth \
             --image "$image" "${DOKPLOY_TARGET_STACK}_storage-init"
           echo "Requested direct immutable-image rollout for $DOKPLOY_TARGET_STACK"
+
+      - name: Remove private extension staging metadata
+        if: always()
+        run: |
+          rm -f -- "${TENANT_PLUGIN_COMPOSE_FILE:-}" "${TENANT_PLUGIN_CONFIG_FILE:-}"
 
       - name: Wait for external readiness
         env:
