@@ -11,7 +11,7 @@ overrides:
   # BeaconHS has no Sass sources. Remove the optional compiler peer from the
   # exact framework/tool versions so pnpm does not resolve an unused native
   # toolchain merely because another package once exposed Sass transitively.
-  'next@16.3.5>sass': '-'
+  'next@16.3.6>sass': '-'
   # The application loads pdfjs-dist only in a client component. Its optional
   # Node canvas backend is unused and otherwise installs a second native ABI.
   'pdfjs-dist@4.10.38>@napi-rs/canvas': '-'
