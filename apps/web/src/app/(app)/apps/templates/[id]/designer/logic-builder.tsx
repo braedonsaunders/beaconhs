@@ -1,9 +1,10 @@
 'use client'
 
-import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
 
+import { useId } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { Button, Input, Select } from '@beaconhs/ui'
+import { Button, Input, Label, Select } from '@beaconhs/ui'
 import type { LogicRule } from '@beaconhs/forms-core'
 
 const OPS: {
@@ -46,20 +47,20 @@ function displayClauseValue(raw: unknown): string {
   return String(raw ?? '')
 }
 
-/**
- * Two-mode logic editor:
- *   - "all"/"any" combinator over a flat list of clauses (simple, covers ~90%)
- *   - "raw JSON" fallback for nested/advanced rules
- */
+/** Shared all/any condition controls, sized to their panel rather than the viewport. */
 export function LogicBuilder({
   rule,
   availableFields,
   onChange,
+  disabled = false,
 }: {
   rule: LogicRule | undefined
   availableFields: { id: string; label: string }[]
   onChange: (rule: LogicRule | undefined) => void
+  disabled?: boolean
 }) {
+  const tGeneratedValue = useGeneratedValueTranslations()
+  const controlId = useId()
   const { combinator, clauses } = normalize(rule)
 
   function setCombinator(next: 'and' | 'or') {
@@ -96,20 +97,22 @@ export function LogicBuilder({
 
   if (availableFields.length === 0) {
     return (
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-500 dark:text-slate-400">
         <GeneratedText id="m_05d940858b4013" />
       </p>
     )
   }
 
   return (
-    <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50/50 p-2">
+    <div className="@container min-w-0 space-y-3 rounded-md border border-slate-200 bg-slate-50/50 p-2 dark:border-slate-700 dark:bg-slate-900/50">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-slate-600">
+        <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
           <GeneratedText id="m_1909228b977073" />
         </span>
         <Select
-          className="h-7 w-24 text-xs"
+          className="h-8 w-28 shrink-0 text-xs"
+          aria-label={tGeneratedValue('Match conditions')}
+          disabled={disabled}
           value={combinator}
           onChange={(e) => setCombinator(e.target.value as 'and' | 'or')}
         >
@@ -120,52 +123,96 @@ export function LogicBuilder({
       <GeneratedValue
         value={
           clauses.length === 0 ? (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               <GeneratedText id="m_1f4f0e0d31c570" />
             </p>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="min-w-0 space-y-3">
               <GeneratedValue
                 value={clauses.map((c, i) => {
                   const clause = c as SimpleRule
                   const opMeta = OPS.find((o) => o.value === clause.op)
                   return (
-                    <li key={i} className="flex items-center gap-1">
-                      <Select
-                        className="h-8 flex-1 text-xs"
-                        value={clause.field}
-                        onChange={(e) => updateClause(i, { field: e.target.value })}
+                    <li
+                      key={i}
+                      className="min-w-0 space-y-2 rounded-md border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-950"
+                    >
+                      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_2rem] items-end gap-2">
+                        <div className="min-w-0 space-y-1">
+                          <Label htmlFor={`${controlId}-field-${i}`} className="text-xs">
+                            <GeneratedValue value="Record field" />
+                          </Label>
+                          <Select
+                            id={`${controlId}-field-${i}`}
+                            aria-label={tGeneratedValue('Record field')}
+                            className="h-8 w-full min-w-0 text-xs"
+                            value={clause.field}
+                            disabled={disabled}
+                            onChange={(e) => updateClause(i, { field: e.target.value })}
+                          >
+                            {availableFields.map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          disabled={disabled}
+                          aria-label={tGeneratedValue('Remove condition')}
+                          onClick={() => removeClause(i)}
+                          className="h-8 w-8 shrink-0 text-slate-400 hover:text-red-500"
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
+                      <div
+                        className={
+                          opMeta?.takesValue
+                            ? 'grid min-w-0 grid-cols-1 gap-2 @min-[32rem]:grid-cols-[10rem_minmax(0,1fr)]'
+                            : 'min-w-0'
+                        }
                       >
-                        {availableFields.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.label} ({f.id})
-                          </option>
-                        ))}
-                      </Select>
-                      <Select
-                        className="h-8 w-28 text-xs"
-                        value={clause.op}
-                        onChange={(e) => {
-                          const nextOp = e.target.value as SimpleRule['op']
-                          updateClause(i, {
-                            op: nextOp,
-                            value: OPS.find((o) => o.value === nextOp)?.takesValue
-                              ? coerceClauseValue(nextOp, clause.value)
-                              : undefined,
-                          })
-                        }}
-                      >
-                        {OPS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </Select>
-                      <GeneratedValue
-                        value={
-                          opMeta?.takesValue ? (
+                        <div className="min-w-0 space-y-1">
+                          <Label htmlFor={`${controlId}-op-${i}`} className="text-xs">
+                            <GeneratedValue value="Comparison" />
+                          </Label>
+                          <Select
+                            id={`${controlId}-op-${i}`}
+                            aria-label={tGeneratedValue('Comparison')}
+                            className="h-8 w-full min-w-0 text-xs"
+                            value={clause.op}
+                            disabled={disabled}
+                            onChange={(e) => {
+                              const nextOp = e.target.value as SimpleRule['op']
+                              updateClause(i, {
+                                op: nextOp,
+                                value: OPS.find((o) => o.value === nextOp)?.takesValue
+                                  ? coerceClauseValue(nextOp, clause.value)
+                                  : undefined,
+                              })
+                            }}
+                          >
+                            {OPS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        {opMeta?.takesValue ? (
+                          <div className="min-w-0 space-y-1">
+                            <Label htmlFor={`${controlId}-value-${i}`} className="text-xs">
+                              <GeneratedValue value="Value" />
+                            </Label>
                             <Input
-                              className="h-8 flex-1 text-xs"
+                              id={`${controlId}-value-${i}`}
+                              aria-label={tGeneratedValue('Value')}
+                              className="h-8 w-full min-w-0 text-xs"
+                              disabled={disabled}
                               value={displayClauseValue(clause.value)}
                               onChange={(e) =>
                                 updateClause(i, {
@@ -173,16 +220,9 @@ export function LogicBuilder({
                                 })
                               }
                             />
-                          ) : null
-                        }
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeClause(i)}
-                        className="text-slate-400 hover:text-red-500"
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </li>
                   )
                 })}
@@ -191,7 +231,7 @@ export function LogicBuilder({
           )
         }
       />
-      <Button size="sm" variant="outline" onClick={addClause}>
+      <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={addClause}>
         <Plus size={12} /> <GeneratedText id="m_040c74bbbf4722" />
       </Button>
     </div>

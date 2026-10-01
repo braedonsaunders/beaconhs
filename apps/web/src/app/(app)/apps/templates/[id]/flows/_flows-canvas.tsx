@@ -1517,6 +1517,7 @@ function NodeInspector({
             t.trigger === 'on_field_value' ? (
               <Field label={tGenerated('m_19a82ebc42ebe3')}>
                 <LogicBuilder
+                  disabled={readOnly}
                   rule={t.rule}
                   availableFields={availableFields}
                   onChange={(rule) =>
@@ -1667,6 +1668,7 @@ function NodeInspector({
                 </Field>
                 <Field label={tGenerated('m_0ef7e5f0c544da')}>
                   <LogicBuilder
+                    disabled={readOnly}
                     rule={t.showIf}
                     availableFields={availableFields}
                     onChange={(rule) =>
@@ -1701,6 +1703,7 @@ function NodeInspector({
         </Field>
         <Field label={tGenerated('m_16a46bc46302d1')}>
           <LogicBuilder
+            disabled={readOnly}
             rule={data.rule}
             availableFields={availableFields}
             onChange={(rule) =>
@@ -2099,7 +2102,7 @@ function ActionInspector({
                   ) : null
                 }
               />
-              <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <div className="min-w-0 space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -2138,7 +2141,7 @@ function ActionInspector({
                 {(a.spreadsheetAttachments ?? []).map((attachment, index) => (
                   <div
                     key={`${attachment.templateAttachmentId}:${index}`}
-                    className="space-y-3 rounded-md bg-slate-50 p-3 dark:bg-slate-900/50"
+                    className="min-w-0 space-y-3 rounded-md bg-slate-50 p-3 dark:bg-slate-900/50"
                   >
                     <div className="flex items-end gap-2">
                       <div className="min-w-0 flex-1">
@@ -2199,6 +2202,7 @@ function ActionInspector({
                         <GeneratedText id="m_05928758fdadda" />
                       </p>
                       <LogicBuilder
+                        disabled={readOnly}
                         rule={attachment.when}
                         availableFields={availableFields}
                         onChange={(rule) => {
