@@ -228,6 +228,11 @@ export const WALKTHROUGHS: Walkthrough[] = [
         body: 'Driving the same route all week? Use quick fill to copy an entry across several days instead of typing it again.',
       },
       {
+        title: 'Generate PDF',
+        target: '[data-walkthrough="vehicle-log-pdf"]',
+        body: 'Choose a driver, vehicle, and month, then select Generate PDF beside the month actions. Wait for saving rows to finish first. The saved month opens in a new tab.',
+      },
+      {
         title: 'Keep it current',
         body: 'Fill it in as you go — end of day works. It beats reconstructing a whole month from memory.',
       },

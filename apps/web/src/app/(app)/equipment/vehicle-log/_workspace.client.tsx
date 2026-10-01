@@ -443,6 +443,10 @@ export function VehicleLogWorkspaceClient({
   const activeDriver = workspace.drivers.find((d) => d.id === workspace.selectedDriverId)
   const activeVehicle = workspace.vehicles.find((v) => v.id === workspace.selectedEquipmentId)
   const modeOptions = MODES.filter((m) => workspace.modeOptions.includes(m.value))
+  const canGeneratePdf =
+    Boolean(workspace.selectedDriverId && workspace.selectedEquipmentId) &&
+    !pending &&
+    !Object.values(rowStates).includes('saving')
 
   const baseParams = useMemo(() => {
     const params = new URLSearchParams()
@@ -810,21 +814,33 @@ export function VehicleLogWorkspaceClient({
                 )
               })}
             />
-            <GeneratedValue
-              value={
-                workspace.selectedDriverId && workspace.selectedEquipmentId ? (
-                  <DownloadLink
-                    href={`/equipment/vehicle-log/pdf?${baseParams.toString()}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-800/60"
-                  >
-                    <FileText size={14} />
-                    <GeneratedText id="m_1a2b2ed6729166" />
-                  </DownloadLink>
-                ) : null
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-walkthrough="vehicle-log-pdf"
+              asChild={canGeneratePdf}
+              disabled={!canGeneratePdf}
+              title={
+                !workspace.selectedDriverId || !workspace.selectedEquipmentId
+                  ? tGeneratedValue('Choose a driver and vehicle to generate a PDF.')
+                  : undefined
               }
-            />
+            >
+              {canGeneratePdf ? (
+                <DownloadLink
+                  href={`/equipment/vehicle-log/pdf?${baseParams.toString()}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <FileText size={14} /> <GeneratedValue value="Generate PDF" />
+                </DownloadLink>
+              ) : (
+                <>
+                  <FileText size={14} /> <GeneratedValue value="Generate PDF" />
+                </>
+              )}
+            </Button>
             <GeneratedValue
               value={
                 !canManage ? null : hasSourcePicker ? (

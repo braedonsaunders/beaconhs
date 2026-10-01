@@ -140,9 +140,20 @@ function columnWidths(cols: Col[]): string[] {
   return declared.map((w) => `${w ? Number(w) : share}%`)
 }
 
-function collection(title: string, eachKey: string, cols: Col[], footerRow = ''): string {
-  const ths = cols.map(([h, , s]) => `<th style="${TH}${s ?? ''}">${h}</th>`).join('')
-  const tds = cols.map(([, c, s]) => `<td style="${TD}${s ?? ''}">${c}</td>`).join('')
+function collection(
+  title: string,
+  eachKey: string,
+  cols: Col[],
+  footerRow = '',
+  compact = false,
+): string {
+  const headerStyle = compact
+    ? `${TH}padding:3px 4px;font-size:10px;line-height:1.2;text-transform:none;letter-spacing:0;overflow-wrap:anywhere;`
+    : TH
+  const cellStyle = compact ? `${TD}padding:3px 4px;font-size:11px;line-height:1.2;` : TD
+  const headingStyle = compact ? 'border:none;padding:4px 0 5px;' : HEAD_CELL
+  const ths = cols.map(([h, , s]) => `<th style="${headerStyle}${s ?? ''}">${h}</th>`).join('')
+  const tds = cols.map(([, c, s]) => `<td style="${cellStyle}${s ?? ''}">${c}</td>`).join('')
   // <colgroup> is what fixed layout reads FIRST, so the widths hold even though
   // the section heading below is a colspan row that says nothing about columns.
   // It is also the single place the designer's column resizer writes to.
@@ -159,7 +170,7 @@ function collection(title: string, eachKey: string, cols: Col[], footerRow = '')
     `<table style="${TABLE}">` +
     colgroup +
     `<thead>` +
-    `<tr data-if="${eachKey}"><td colspan="${cols.length}" style="${HEAD_CELL}"><div style="${H2}">${title}</div></td></tr>` +
+    `<tr data-if="${eachKey}"><td colspan="${cols.length}" style="${headingStyle}"><div style="${H2}">${title}</div></td></tr>` +
     `<tr data-if="${eachKey}">${ths}</tr>` +
     `</thead>` +
     `<tr data-each="${eachKey}" style="${ROW}">${tds}</tr>` +
@@ -755,46 +766,41 @@ const TRAINING_CLASS = wrap(
 
 // The legacy monthly truck-log sheet: the value map carries the whole
 // driver+vehicle month (`entries` + month totals) anchored on one entry.
+const VEHICLE_LOG_CELL = `${TD}padding:3px 4px;font-size:11px;line-height:1.2;`
 const VEHICLE_LOG_TOTALS =
   `<tr data-if="entries" style="${ROW}">` +
-  `<td colspan="5" style="${TD}${RIGHT}background:#e2e8f0;font-weight:700;">Month total</td>` +
-  `<td style="${TD}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_business_km}}</td>` +
-  `<td style="${TD}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_personal_km}}</td>` +
-  `<td style="${TD}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_total_km}}</td>` +
-  `<td style="${TD}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_hours_on_site}}</td>` +
-  `<td colspan="2" style="${TD}background:#e2e8f0;font-weight:700;">{{month_days_logged}} days logged</td>` +
+  `<td colspan="5" style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">Month total</td>` +
+  `<td style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_business_km}}</td>` +
+  `<td style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_personal_km}}</td>` +
+  `<td style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_total_km}}</td>` +
+  `<td style="${VEHICLE_LOG_CELL}${RIGHT}background:#e2e8f0;font-weight:700;">{{month_hours_on_site}}</td>` +
+  `<td colspan="2" style="${VEHICLE_LOG_CELL}background:#e2e8f0;font-weight:700;">{{month_days_logged}} days logged</td>` +
   `</tr>`
 
 const VEHICLE_LOG = wrap(
   letterhead(
     'Vehicle Log',
-    '{{month_label}} · {{driver_name}} · {{vehicle_name}}',
+    '{{month_label}} · {{driver_name}} · {{vehicle_name}}{{#if driver_employee_no}} · Employee # {{driver_employee_no}}{{/if}}',
     '{{month_key}}',
   ) +
-    heading('Details') +
-    grid([
-      p('Driver', '{{driver_name}}'),
-      p('Employee #', '{{driver_employee_no}}'),
-      p('Vehicle', '{{vehicle_name}}'),
-      p('Month', '{{month_label}}'),
-    ]) +
     collection(
       'Daily entries',
       'entries',
       [
-        ['Day', '{{day}} {{weekday}}', 'width:7%;white-space:nowrap;'],
-        ['Customer / site', '{{site_name}}'],
-        ['Other destination', '{{other_destination}}'],
-        ['Start odo', '{{start_odometer}}', RIGHT + 'width:7%;'],
-        ['End odo', '{{end_odometer}}', RIGHT + 'width:7%;'],
-        ['Business km', '{{business_km}}', RIGHT + 'width:7%;'],
-        ['Personal km', '{{personal_km}}', RIGHT + 'width:7%;'],
-        ['Total km', '{{total_km}}', RIGHT + 'width:7%;'],
-        ['Hours', '{{hours_on_site}}', RIGHT + 'width:6%;'],
-        ['Crew', '{{crew_count}}', RIGHT + 'width:5%;'],
-        ['Notes', '{{notes}}', 'width:12%;'],
+        ['Day', '{{day}} {{weekday}}', 'width:8%;white-space:nowrap;'],
+        ['Customer / site', '{{site_name}}', 'width:12%;'],
+        ['Other destination', '{{other_destination}}', 'width:12%;'],
+        ['Start odo', '{{start_odometer}}', RIGHT + 'width:10%;'],
+        ['End odo', '{{end_odometer}}', RIGHT + 'width:10%;'],
+        ['Business km', '{{business_km}}', RIGHT + 'width:8%;'],
+        ['Personal km', '{{personal_km}}', RIGHT + 'width:8%;'],
+        ['Total km', '{{total_km}}', RIGHT + 'width:8%;'],
+        ['Hours', '{{hours_on_site}}', RIGHT + 'width:7%;'],
+        ['Crew', '{{crew_count}}', RIGHT + 'width:6%;'],
+        ['Notes', '{{notes}}', 'width:11%;'],
       ],
       VEHICLE_LOG_TOTALS,
+      true,
     ),
 )
 
@@ -958,7 +964,7 @@ export const MODULE_PDF_TEMPLATE_SEEDS: ModulePdfTemplateSeed[] = [
     name: 'Vehicle Log — Monthly Sheet (PDF)',
     subjectKey: 'vehicle-log',
     html: VEHICLE_LOG,
-    orientation: 'landscape',
+    orientation: 'portrait',
     header: 'Vehicle log {{month_label}}',
   },
   {

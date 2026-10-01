@@ -532,6 +532,14 @@ The **Total km** column and the month totals at the bottom update as you type.
 
 The grid becomes a stack of day cards with big touch targets, one card per day, with the same fields. Fill them the same way.
 
+## Download your month as a PDF
+
+1. Choose the **Driver**, **Vehicle**, and month.
+2. Wait for any saving row to finish.
+3. Select **Generate PDF** beside **Import** and **Delete month**. The current saved month opens as a PDF in a new tab.
+
+The button stays visible and becomes available after you select a driver and vehicle. You can generate a PDF without importing or deleting entries. The monthly template uses a compact portrait layout, with the driver and vehicle above the daily rows and totals. Longer notes can continue onto another page. Your administrator can change the template and paper setup under **PDF templates**.
+
 ## Annual summary
 
 Open **Summary** to review vehicles across a year. Search by asset tag, name, category, or type. Use **Next** and **Prev** to move through the vehicle list; the totals row still covers every vehicle that matches the current search. Site-scoped roles only see vehicles at their assigned sites (plus equipment currently issued to them).
@@ -546,7 +554,7 @@ Open **Settings** from the vehicle log to choose which entry modes the company u
 
 ## Tips
 
-- Tap **PDF** to get the printable monthly sheet for the selected driver and vehicle.
+- Tap **Generate PDF** to get the printable monthly sheet for the selected driver and vehicle.
 - Log daily. Rebuilding a month from memory is painful and usually wrong.`,
   },
   {
