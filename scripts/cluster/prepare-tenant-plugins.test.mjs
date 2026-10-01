@@ -79,6 +79,12 @@ test('redirect stays independent of the retired app and preserves path/query cap
     appUrl: 'https://new.example.com',
   })
   assert.match(output, /noop@internal/)
+  assert.ok(output.includes('Host(`new.example.com`)'))
+  assert.ok(output.includes('Host(`old.example.com`)'))
+  assert.match(output, /traefik.swarm.network: \"dokploy-network\"/)
+  assert.match(output, /loadbalancer.server.port: \"3000\"/)
+  assert.match(output, /beaconhs-app-[a-f0-9]{12}-websecure.service/)
+  assert.ok(output.includes('redirect-to-https@file'))
   assert.ok(output.includes('https://new.example.com/$${1}'))
   assert.ok(output.includes('websecure'))
   assert.throws(() =>

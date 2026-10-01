@@ -132,8 +132,20 @@ export function renderTenantPluginCompose(
       !source.includes(redirectMarker)
     )
       throw new Error('Invalid legacy redirect configuration.')
+    // Dokploy treats explicit deploy labels as a complete routing definition,
+    // so include the app routes alongside the legacy redirect.
+    const router = `beaconhs-app-${createHash('sha256').update(url.host).digest('hex').slice(0, 12)}`
     const labels = {
       'traefik.enable': 'true',
+      'traefik.swarm.network': 'dokploy-network',
+      [`traefik.http.routers.${router}-web.rule`]: `Host(\`${url.hostname}\`)`,
+      [`traefik.http.routers.${router}-web.entrypoints`]: 'web',
+      [`traefik.http.routers.${router}-web.middlewares`]: 'redirect-to-https@file',
+      [`traefik.http.routers.${router}-web.service`]: router,
+      [`traefik.http.routers.${router}-websecure.rule`]: `Host(\`${url.hostname}\`)`,
+      [`traefik.http.routers.${router}-websecure.entrypoints`]: 'websecure',
+      [`traefik.http.routers.${router}-websecure.service`]: router,
+      [`traefik.http.services.${router}.loadbalancer.server.port`]: '3000',
       'traefik.http.routers.beaconhs-legacy-redirect.rule': `Host(\`${legacyHost}\`)`,
       'traefik.http.routers.beaconhs-legacy-redirect.priority': '1000',
       'traefik.http.routers.beaconhs-legacy-redirect.entrypoints': 'websecure',

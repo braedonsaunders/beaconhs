@@ -372,3 +372,8 @@ runbook and fingerprint/read-only guards remain authoritative. At minimum:
 - Readiness returning green is necessary but not sufficient: verify a real
   tenant-scoped read, worker dependency health, queue progress, and storage
   signed read/write after recovery.
+
+Explicit web deployment labels include both the native app routes and the legacy
+redirect. Dokploy does not add its automatic domain labels when custom deploy
+labels already exist. Keep the app host, backend port, and overlay network in
+the same generated routing definition and verify every ingress node.
