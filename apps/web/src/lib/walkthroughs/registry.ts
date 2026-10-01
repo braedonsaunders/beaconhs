@@ -107,7 +107,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Finding old entries',
-        body: 'Past entries are grouped by date on the left. Use search to jump to a day or a keyword.',
+        body: 'Open the year and month on the left, then tap a date to open that day’s entry. Use search to find a keyword.',
       },
     ],
   },

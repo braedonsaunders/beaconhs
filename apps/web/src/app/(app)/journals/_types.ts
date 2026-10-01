@@ -96,15 +96,6 @@ export type JournalEntryDetail = {
 }
 
 export type HeatmapCell = { date: string; count: number }
-export type OnThisDayItem = {
-  id: string
-  entryDate: string
-  title: string | null
-  authorName: string | null
-  snippet: string
-  yearsAgo: number
-}
-
 /** Sort columns for the records list (URL `sort` param). */
 export type JournalSort = 'date' | 'author' | 'site' | 'status' | 'reference'
 
@@ -133,7 +124,6 @@ export type WorkspaceData = {
   treeHasMore: boolean
   treeNextCursor: TreeCursor | null
   heatmap: HeatmapCell[]
-  onThisDay: OnThisDayItem[]
   counts: WorkspaceCounts
   /** Tenant tags (used most-first, then defined-but-unused) — feeds tag autocomplete. */
   tagSuggestions: TagSuggestion[]

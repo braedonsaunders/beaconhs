@@ -53,7 +53,6 @@ import type {
   JournalListItem,
   JournalRecordsFacets,
   JournalSort,
-  OnThisDayItem,
   TagSuggestion,
   TreeCursor,
   TreeNode,
@@ -519,43 +518,28 @@ function leaf(r: TreeRow): TreeNode {
 }
 
 function treeByDate(rows: TreeRow[]): TreeNode[] {
-  const years = new Map<string, Map<string, Map<string, TreeRow[]>>>()
+  const years = new Map<string, Map<string, TreeNode[]>>()
   for (const r of rows) {
     const [y, m] = r.entryDate.split('-')
     if (!years.has(y!)) years.set(y!, new Map())
     const months = years.get(y!)!
-    if (!months.has(m!)) months.set(m!, new Map())
-    const days = months.get(m!)!
-    if (!days.has(r.entryDate)) days.set(r.entryDate, [])
-    days.get(r.entryDate)!.push(r)
+    if (!months.has(m!)) months.set(m!, [])
+    months.get(m!)!.push({ ...leaf(r), label: dayLabel(r.entryDate) })
   }
-  const out: TreeNode[] = []
-  for (const [y, months] of years) {
-    const monthNodes: TreeNode[] = []
-    let yearCount = 0
-    for (const [m, days] of months) {
-      const dayNodes: TreeNode[] = []
-      let monthCount = 0
-      for (const [iso, entries] of days) {
-        monthCount += entries.length
-        dayNodes.push({
-          key: `d-${iso}`,
-          label: dayLabel(iso),
-          count: entries.length,
-          children: entries.map(leaf),
-        })
-      }
-      yearCount += monthCount
-      monthNodes.push({
-        key: `${y}-${m}`,
-        label: MONTHS[Number(m) - 1]!,
-        count: monthCount,
-        children: dayNodes,
-      })
+  return Array.from(years, ([year, months]) => {
+    const children = Array.from(months, ([month, entries]) => ({
+      key: `${year}-${month}`,
+      label: MONTHS[Number(month) - 1]!,
+      count: entries.length,
+      children: entries,
+    }))
+    return {
+      key: year,
+      label: year,
+      count: children.reduce((total, month) => total + month.count, 0),
+      children,
     }
-    out.push({ key: y, label: y, count: yearCount, children: monthNodes })
-  }
-  return out
+  })
 }
 
 function treeByKey(rows: TreeRow[], keyOf: (r: TreeRow) => string): TreeNode[] {
@@ -636,35 +620,6 @@ async function heatmap(ctx: RequestContext, where: SQL | undefined): Promise<Hea
   })
 }
 
-async function onThisDay(ctx: RequestContext, where: SQL | undefined): Promise<OnThisDayItem[]> {
-  return ctx.db(async (tx) => {
-    const cond = sql`to_char(${journalEntries.entryDate}, 'MM-DD') = to_char(current_date, 'MM-DD') and extract(year from ${journalEntries.entryDate}) < extract(year from current_date)`
-    const rows = await tx
-      .select({
-        id: journalEntries.id,
-        entryDate: journalEntries.entryDate,
-        title: journalEntries.title,
-        bodyText: journalEntries.bodyText,
-        firstName: authorPerson.firstName,
-        lastName: authorPerson.lastName,
-      })
-      .from(journalEntries)
-      .leftJoin(authorPerson, eq(authorPerson.id, journalEntries.personId))
-      .where(where ? and(where, cond) : cond)
-      .orderBy(desc(journalEntries.entryDate))
-      .limit(10)
-    const thisYear = new Date().getFullYear()
-    return rows.map((r) => ({
-      id: r.id,
-      entryDate: r.entryDate,
-      title: r.title,
-      authorName: r.firstName ? `${r.firstName} ${r.lastName ?? ''}`.trim() : null,
-      snippet: treeSnippet(r.bodyText),
-      yearsAgo: thisYear - Number(r.entryDate.slice(0, 4)),
-    }))
-  })
-}
-
 /**
  * Everything the sidebar needs in one payload. Self-scoped by default (the
  * personal compose workspace). When `targetAuthor` is set (records "Open full
@@ -687,10 +642,9 @@ export async function getWorkspaceData(
       : journalSelfScopeWhere(ctx, authorPersonId),
   )
 
-  const [treePage, hm, otd, tagSuggestions, counts] = await Promise.all([
+  const [treePage, hm, tagSuggestions, counts] = await Promise.all([
     buildTree(ctx, groupBy, filters, selfOnly, targetAuthor),
     heatmap(ctx, scopeOnly),
-    onThisDay(ctx, scopeOnly),
     listTagSuggestions(ctx, scopeOnly),
     ctx.db(async (tx) => {
       const [row] = await tx
@@ -709,7 +663,6 @@ export async function getWorkspaceData(
     treeHasMore: treePage.hasMore,
     treeNextCursor: treePage.nextCursor,
     heatmap: hm,
-    onThisDay: otd,
     counts: {
       total: Number(counts?.total ?? 0),
       drafts: Number(counts?.drafts ?? 0),

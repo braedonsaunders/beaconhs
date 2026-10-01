@@ -3,21 +3,12 @@
 import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 
 // The auto-generated folder tree — the headline rediscovery surface. Groups
-// entries by Date / Site / Topic / Person (rebuilt from data, never foldered by
-// hand), with quick filters, On-This-Day memories, and the activity heatmap.
+// entries by Date / Location / Topic (rebuilt from data, never foldered by
+// hand), with quick filters and the activity heatmap.
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import {
-  CalendarClock,
-  ChevronRight,
-  Loader2,
-  Plus,
-  Search,
-  Settings,
-  Sparkles,
-  X,
-} from 'lucide-react'
+import { ChevronRight, Loader2, Plus, Search, Settings, Sparkles, X } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
 import {
   GROUP_BY_OPTIONS,
@@ -209,54 +200,8 @@ export function SidebarTree({
         </div>
       </div>
 
-      {/* Scroll body: on-this-day + tree */}
+      {/* Scroll body: entry tree */}
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
-        <GeneratedValue
-          value={
-            data.onThisDay.length > 0 ? (
-              <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2 dark:border-amber-500/25 dark:bg-amber-500/10">
-                <div className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-300">
-                  <CalendarClock size={12} /> <GeneratedText id="m_0d0c9d0b8f54c9" />
-                </div>
-                <GeneratedValue
-                  value={data.onThisDay.slice(0, 3).map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => onSelect(m.id)}
-                      className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs text-amber-900 hover:bg-amber-100/70 dark:text-amber-200 dark:hover:bg-amber-500/15"
-                    >
-                      <span className="shrink-0 rounded bg-amber-200/70 px-1 text-[10px] font-medium dark:bg-amber-500/25">
-                        <GeneratedValue value={m.yearsAgo} />
-                        <GeneratedText id="m_0e8b7c350cf08e" />
-                      </span>
-                      <span className="min-w-0 flex-1 truncate">
-                        <span className="font-medium">
-                          <GeneratedValue
-                            value={
-                              m.authorName ?? m.title ?? <GeneratedText id="m_10c742aace3a46" />
-                            }
-                          />
-                        </span>
-                        <GeneratedValue
-                          value={
-                            m.snippet ? (
-                              <span className="text-amber-700/80 dark:text-amber-300/80">
-                                {' '}
-                                — <GeneratedValue value={m.snippet} />
-                              </span>
-                            ) : null
-                          }
-                        />
-                      </span>
-                    </button>
-                  ))}
-                />
-              </div>
-            ) : null
-          }
-        />
-
         <GeneratedValue
           value={
             loading ? (

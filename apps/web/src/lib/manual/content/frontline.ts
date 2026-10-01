@@ -78,7 +78,7 @@ Tags help people find entries later (for example a tag for concrete pours). Tap 
 ## Viewing past entries
 
 1. Open [Journals](/journals). On a phone, tap **Browse**.
-2. Entries are grouped by date. Tap one to open it.
+2. Open the year and month, then tap a date to open that day’s entry directly.
 3. Tap **Drafts** in the list to see entries you have not submitted yet.
 4. If you have a long history, tap **Load older entries** at the bottom to bring in the next group. Nothing is silently left out.
 
