@@ -168,7 +168,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Answer the checklist',
-        body: 'Work through each item. Tap Pass / Fail / N/A, Yes / No, pick one configured choice, or enter the requested text or number. Anything that fails, note what you saw and add a photo — that is what gets fixed.',
+        body: 'Work through each item. Tap Pass / Fail / N/A, Yes / No, pick one configured choice, or enter the requested text or number. For a failed item, describe the problem and choose Follow-up required or Resolved on site. A resolved finding needs an action taken and correction date. Add photos as evidence.',
       },
       {
         title: 'Draft or submit',

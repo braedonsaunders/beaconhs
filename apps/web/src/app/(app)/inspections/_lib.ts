@@ -7,7 +7,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { and, eq, isNull, sql } from 'drizzle-orm'
-import type { RequestContext } from '@beaconhs/tenant'
+import { assertCan, type RequestContext } from '@beaconhs/tenant'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
 import { correctiveActionCreatedEvent } from '@beaconhs/integrations'
@@ -21,6 +21,10 @@ import {
 } from '@beaconhs/db/schema'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
+import {
+  resolveCorrectiveActionInTx,
+  resumeCorrectiveActionInTx,
+} from '@/lib/corrective-action-resolution'
 import { inspectionCriterionIsAnswered } from '@/lib/inspection-response-config'
 import { inspectionStatusMilestonePatch } from '@/lib/inspection-record-lifecycle'
 import { canSeeRecord } from '@/lib/visibility'
@@ -155,28 +159,9 @@ export async function materialiseCriteriaForRecordInTx(
 }
 
 /**
- * Decide whether a fail-severity combination should trigger an auto-CA.
- * Spec: severity ≥ high.
- */
-function shouldSpawnCorrectiveAction(
-  answer: CriterionAnswer | null,
-  severity: CriterionSeverity | null,
-): boolean {
-  return answer === 'fail' && (severity === 'high' || severity === 'critical')
-}
-
-/**
- * Idempotently spawn (or link) a corrective_action for a failed criterion
- * row, then update the row's correctiveActionId pointer.
- *
- * If a CA already exists for this row, we update the existing one with the
- * latest description / severity / due date / assignee instead of spawning a
- * duplicate.
- *
- * Returns `{ caId, created }` — caId is null when no CA should exist (answer
- * was changed back to pass/N-A, or severity dropped below high). When a NEW
- * CA is spawned, its create audit (both the CA-side and record-side entries)
- * is written here so every caller path is audited consistently.
+ * Synchronize active linked actions on submission regardless of severity.
+ * Unresolved failures create actions when the type enables them; corrected
+ * findings retain their evidence without creating a new open action.
  */
 async function syncCorrectiveActionForCriterionInTx(
   tx: InspectionTx,
@@ -223,12 +208,11 @@ async function syncCorrectiveActionForCriterionInTx(
 
   const answer = row.c.answer as CriterionAnswer | null
   const severity = row.c.severity as CriterionSeverity | null
-  const shouldHaveCA =
-    row.type.enableCorrectiveActions && shouldSpawnCorrectiveAction(answer, severity)
+  const shouldHaveCA = row.type.enableCorrectiveActions && answer === 'fail' && !row.c.correctedOn
 
   // Keep provenance for previously issued actions. Re-answering a finding must
   // never orphan an active action or mint a duplicate if it fails again.
-  if (!shouldHaveCA) return { caId: row.c.correctiveActionId, created: false }
+  if (answer !== 'fail') return { caId: row.c.correctiveActionId, created: false }
 
   const title = `Inspection finding: ${row.c.questionTextSnapshot.slice(0, 80)}`
   const description =
@@ -244,7 +228,8 @@ async function syncCorrectiveActionForCriterionInTx(
   dueDate.setDate(dueDate.getDate() + dayOffset)
   const dueOn = row.c.assignedDueDate ?? dueDate.toISOString().slice(0, 10)
   const caSeverity = severity ?? 'high'
-  const caOwnerTenantUserId = row.c.assignedToTenantUserId ?? ctx.membership?.id ?? null
+  const caOwnerTenantUserId =
+    row.c.assignedToTenantUserId ?? row.record.inspectorTenantUserId ?? null
 
   if (row.c.correctiveActionId) {
     const [existing] = await tx
@@ -260,6 +245,22 @@ async function syncCorrectiveActionForCriterionInTx(
       .limit(1)
       .for('update')
     if (existing) {
+      if (existing.locked || existing.status === 'closed' || existing.status === 'cancelled') {
+        return { caId: existing.id, created: false }
+      }
+      if (row.c.correctedOn || existing.status === 'pending_verification') {
+        assertCan(ctx, 'ca.update')
+        if (
+          !(await canSeeRecord(ctx, tx, {
+            prefix: 'ca',
+            ownerIds: [existing.ownerTenantUserId],
+            siteId: existing.siteOrgUnitId,
+          }))
+        ) {
+          throw new Error('Corrective action not found.')
+        }
+      }
+      const ownerTenantUserId = row.c.assignedToTenantUserId ?? existing.ownerTenantUserId
       const changed =
         existing.title !== title ||
         existing.description !== description ||
@@ -267,7 +268,7 @@ async function syncCorrectiveActionForCriterionInTx(
         existing.dueOn !== dueOn ||
         existing.siteOrgUnitId !== row.record.siteOrgUnitId ||
         existing.actionTaken !== row.c.actionTaken ||
-        existing.ownerTenantUserId !== caOwnerTenantUserId
+        existing.ownerTenantUserId !== ownerTenantUserId
       if (changed) {
         const [updated] = await tx
           .update(correctiveActions)
@@ -278,7 +279,7 @@ async function syncCorrectiveActionForCriterionInTx(
             dueOn,
             siteOrgUnitId: row.record.siteOrgUnitId,
             actionTaken: row.c.actionTaken,
-            ownerTenantUserId: caOwnerTenantUserId,
+            ownerTenantUserId,
           })
           .where(
             and(
@@ -299,12 +300,29 @@ async function syncCorrectiveActionForCriterionInTx(
             severity: existing.severity,
             dueOn: existing.dueOn,
           },
-          after: { title, severity: caSeverity, dueOn, ownerTenantUserId: caOwnerTenantUserId },
+          after: {
+            title,
+            severity: caSeverity,
+            dueOn,
+            ownerTenantUserId,
+            description,
+            actionTaken: row.c.actionTaken,
+          },
         })
         await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
           sourceModule: 'corrective_action',
           targetRef: {},
         })
+      }
+      if (row.c.correctedOn) {
+        const result = await resolveCorrectiveActionInTx(tx, ctx, existing.id, {
+          allowPendingVerification: true,
+          notes: `Resolved on site in ${row.record.reference} on ${row.c.correctedOn}: ${row.c.actionTaken}`,
+        })
+        if (!result.ok) throw new Error(result.error)
+      } else if (existing.status === 'pending_verification') {
+        const result = await resumeCorrectiveActionInTx(tx, ctx, existing.id)
+        if (!result.ok) throw new Error(result.error)
       }
       return { caId: existing.id, created: false }
     }
@@ -322,6 +340,8 @@ async function syncCorrectiveActionForCriterionInTx(
       )
   }
 
+  if (!shouldHaveCA) return { caId: null, created: false }
+
   const reference = await nextReference(tx, ctx.tenantId, 'corrective_action')
   const [ca] = await tx
     .insert(correctiveActions)
@@ -330,6 +350,7 @@ async function syncCorrectiveActionForCriterionInTx(
       reference,
       title,
       description,
+      actionTaken: row.c.actionTaken,
       severity: caSeverity,
       status: 'open',
       source: 'inspection',
@@ -446,8 +467,10 @@ async function findIncompleteCriteriaInTx(
     }
     if (r.answer === 'fail') {
       if (!r.severity) missing.push(`${r.questionTextSnapshot}: severity`)
-      if (!r.nonComplianceDescription)
+      if (!r.nonComplianceDescription?.trim())
         missing.push(`${r.questionTextSnapshot}: non-compliance description`)
+      if (r.correctedOn && !r.actionTaken?.trim())
+        missing.push(`${r.questionTextSnapshot}: action taken for the on-site correction`)
     }
     if (r.requiresPhoto && r.answer !== 'n_a' && (r.photoAttachmentIds ?? []).length === 0)
       missing.push(`${r.questionTextSnapshot}: photo evidence`)

@@ -36,6 +36,8 @@ describe('inspection report layout', () => {
           non_compliance: 'The access route needed clearing.',
           action_taken: 'Access cleared before work resumed.',
           severity: 'High',
+          resolution: 'Resolved on site',
+          corrected_on: '2026-10-02',
         },
       ],
       photos: Array.from({ length: 6 }, (_, i) => ({
@@ -55,6 +57,8 @@ describe('inspection report layout', () => {
     expect(result.text).toContain('Example supervisor')
     expect(result.text).toContain('END OF LONG ANSWER')
     expect(result.text).toContain('Context for this failed finding.')
+    expect(result.text).toContain('Resolved on site')
+    expect(result.text).toContain('2026-10-02')
     expect(result.text).toContain('Photo 6 - retained caption')
     expect(result.totalPages).toBeLessThanOrEqual(4)
     if (process.env.BEACON_PDF_REVIEW_PATH) {

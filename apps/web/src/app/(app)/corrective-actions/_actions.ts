@@ -24,7 +24,10 @@ import {
   users as user,
 } from '@beaconhs/db/schema'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
-import { correctiveActionClosedEvent } from '@beaconhs/integrations'
+import {
+  resolveCorrectiveActionInTx,
+  resumeCorrectiveActionInTx,
+} from '@/lib/corrective-action-resolution'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
@@ -476,66 +479,13 @@ export async function closeCorrectiveAction(args: {
   const cost = args.costImpact?.trim()
   const parsedCost = cost && /^[0-9]+(\.[0-9]{1,2})?$/.test(cost) ? cost : null
 
-  const closedAt = new Date()
-  const closed = await ctx.db(async (tx) => {
-    const [updated] = await tx
-      .update(correctiveActions)
-      .set({
-        status: 'closed',
-        locked: true,
-        closedAt,
-        costImpact: parsedCost as any,
-      })
-      .where(and(eq(correctiveActions.id, args.caId), eq(correctiveActions.locked, false)))
-      .returning({ id: correctiveActions.id })
-    if (!updated) return false
-    await recordDomainEvent(tx, {
-      tenantId: ctx.tenantId,
-      eventType: 'corrective_action.closed',
-      subjectId: args.caId,
-      dedupKey: `corrective_action.closed:${args.caId}:${closedAt.toISOString()}`,
-      payload: {
-        notification: {
-          kind: 'corrective_action_completed',
-          caId: args.caId,
-        },
-        integration: correctiveActionClosedEvent(ctx.tenantId, {
-          id: args.caId,
-          reference: ca.reference,
-          title: ca.title,
-          status: 'closed',
-          severity: ca.severity,
-          closedAt,
-        }),
-        web: moduleFlowCommand(ctx, {
-          subjectId: args.caId,
-          moduleKey: 'corrective-actions',
-          event: 'status_change',
-          toStatus: 'closed',
-        }),
-      },
-    })
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'corrective_action',
-      entityId: args.caId,
-      action: 'update',
-      summary: 'Closed + locked',
-      after: { status: 'closed', closedAt: closedAt.toISOString(), costImpact: parsedCost },
-    })
-    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
-      sourceModule: 'corrective_action',
-      targetRef: {},
-    })
-    return true
-  })
-  if (!closed) return { ok: false, error: 'This corrective action is already closed.' }
-  if (args.closeNotes && args.closeNotes.trim().length > 0) {
-    await insertCompleteStep(ctx, {
-      caId: args.caId,
-      kind: 'action_taken',
-      description: `Close note: ${args.closeNotes.trim()}`,
-    })
-  }
+  const result = await ctx.db((tx) =>
+    resolveCorrectiveActionInTx(tx, ctx, args.caId, {
+      costImpact: parsedCost,
+      notes: args.closeNotes?.trim() ? `Close note: ${args.closeNotes.trim()}` : null,
+    }),
+  )
+  if (!result.ok) return result
   revalidatePath(`/corrective-actions/${args.caId}`)
   revalidatePath('/corrective-actions')
   revalidatePath('/corrective-actions/reports/overdue')
@@ -550,33 +500,8 @@ export async function closeCorrectiveAction(args: {
 export async function reopenCorrectiveAction(caId: string): Promise<ActionResult> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'ca.update')
-  const ca = await loadCA(ctx, caId)
-  if (!ca) return { ok: false, error: 'Corrective action not found.' }
-  if (!ca.locked && ca.status !== 'closed') {
-    return { ok: false, error: 'Action is not closed.' }
-  }
-  await ctx.db(async (tx) => {
-    await tx
-      .update(correctiveActions)
-      .set({
-        status: 'in_progress',
-        locked: false,
-        closedAt: null,
-        verifiedAt: null,
-        verifiedByTenantUserId: null,
-      })
-      .where(eq(correctiveActions.id, caId))
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'corrective_action',
-      entityId: caId,
-      action: 'update',
-      summary: 'Reopened',
-    })
-    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
-      sourceModule: 'corrective_action',
-      targetRef: {},
-    })
-  })
+  const result = await ctx.db((tx) => resumeCorrectiveActionInTx(tx, ctx, caId))
+  if (!result.ok) return result
   revalidatePath(`/corrective-actions/${caId}`)
   revalidatePath('/corrective-actions')
   return { ok: true }

@@ -19,6 +19,7 @@ function expectCorrectiveMaterialization(value: string): void {
 }
 
 const actions = source('../app/(app)/corrective-actions/_actions.ts')
+const resolution = source('./corrective-action-resolution.ts')
 const detail = source('../app/(app)/corrective-actions/[id]/page.tsx')
 const createPage = source('../app/(app)/corrective-actions/new/page.tsx')
 const api = source('./api/write.ts')
@@ -62,10 +63,21 @@ describe('corrective-action compliance evidence lifecycle', () => {
     )
     const bulk = between(actions, 'export async function bulkReassignCorrectiveActions', '')
 
-    for (const value of [status, close, reopen, bulk]) expectCorrectiveMaterialization(value)
+    expect(close).toContain('ctx.db((tx) =>')
+    expect(close).toContain('resolveCorrectiveActionInTx(tx, ctx, args.caId,')
+    expect(reopen).toContain('ctx.db((tx) => resumeCorrectiveActionInTx(tx, ctx, caId))')
+    const closeInTx = between(
+      resolution,
+      'export async function resolveCorrectiveActionInTx',
+      'export async function resumeCorrectiveActionInTx',
+    )
+    const reopenInTx = between(resolution, 'export async function resumeCorrectiveActionInTx', '')
+    for (const value of [closeInTx, reopenInTx]) expect(value).toContain(".for('update')")
+    for (const value of [status, closeInTx, reopenInTx, bulk])
+      expectCorrectiveMaterialization(value)
     expect(field).toContain("field === 'dueOn' || field === 'ownerTenantUserId'")
     expectCorrectiveMaterialization(field)
-    for (const value of [status, field, close, reopen, bulk]) {
+    for (const value of [status, field, closeInTx, reopenInTx, bulk]) {
       expect(value).toContain('await recordAuditInTransaction(tx, ctx')
     }
   })

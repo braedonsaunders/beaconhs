@@ -212,6 +212,7 @@ function inspectionItems(): string {
       {{#if notes}}<div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:5px;"><strong>Notes:</strong> {{notes}}</div>{{/if}}
       {{#if non_compliance}}<div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:5px;"><strong>Non-compliance:</strong> {{non_compliance}}</div>{{/if}}
       {{#if action_taken}}<div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:5px;"><strong>Action taken:</strong> {{action_taken}}</div>{{/if}}
+      {{#if resolution}}<div style="margin-top:5px;"><strong>Resolution:</strong> {{resolution}}{{#if corrected_on}} — {{corrected_on}}{{/if}}</div>{{/if}}
     </td></tr></tbody></table>`
   )
 }

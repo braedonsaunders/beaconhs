@@ -45,7 +45,7 @@ import { assertCan, can } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
-import { formatDate, formatDateTime } from '@/lib/datetime'
+import { dateIsoInTimeZone, formatDate, formatDateTime } from '@/lib/datetime'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { isUuid, pickString } from '@/lib/list-params'
 import { canSeeRecord } from '@/lib/visibility'
@@ -310,6 +310,7 @@ async function toggleLock(formData: FormData) {
   })
   if (!changed) return
   revalidatePath(`/inspections/records/${id}`)
+  revalidatePath('/corrective-actions', 'layout')
 }
 
 async function lockInspection(formData: FormData) {
@@ -893,7 +894,15 @@ async function setCriterionCorrectedOn(formData: FormData) {
   const rowId = String(formData.get('rowId') ?? '')
   const value = String(formData.get('correctedOn') ?? '').trim() || null
   if (!recordId || !rowId) return
-  if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('Correction date is invalid')
+  if (
+    value &&
+    (!/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+      !Number.isFinite(Date.parse(value)) ||
+      new Date(value).toISOString().slice(0, 10) !== value ||
+      value > dateIsoInTimeZone(new Date(), ctx.timezone))
+  ) {
+    throw new Error('Correction date must be a valid date that is not in the future')
+  }
   const changed = await withLockedCriterionMutation(
     ctx,
     recordId,
@@ -903,6 +912,36 @@ async function setCriterionCorrectedOn(formData: FormData) {
         throw new Error('A correction date applies only to a failed criterion')
       }
       if (criterion.correctedOn === value) return false
+      if (criterion.correctiveActionId) {
+        assertCan(ctx, 'ca.update')
+        const [ca] = await tx
+          .select()
+          .from(correctiveActions)
+          .where(
+            and(
+              eq(correctiveActions.tenantId, ctx.tenantId),
+              eq(correctiveActions.id, criterion.correctiveActionId),
+              isNull(correctiveActions.deletedAt),
+            ),
+          )
+          .limit(1)
+          .for('update')
+        if (ca && (ca.locked || ca.status === 'closed' || ca.status === 'cancelled')) {
+          throw new Error(
+            'Manage the linked corrective action to change its resolution. Closed actions keep their history.',
+          )
+        }
+        if (
+          ca &&
+          !(await canSeeRecord(ctx, tx, {
+            prefix: 'ca',
+            ownerIds: [ca.ownerTenantUserId],
+            siteId: ca.siteOrgUnitId,
+          }))
+        ) {
+          throw new Error('Corrective action not found.')
+        }
+      }
       const [updated] = await tx
         .update(inspectionRecordCriteria)
         .set({ correctedOn: value })
@@ -2285,6 +2324,9 @@ export default async function InspectionRecordDetailPage({
                                     .filter((p): p is NonNullable<typeof p> => Boolean(p))}
                                   correctiveActionRef={row.ca?.reference ?? null}
                                   correctiveActionId={row.c.correctiveActionId}
+                                  correctiveActionStatus={row.ca?.status ?? null}
+                                  canResolveAction={can(ctx, 'ca.update')}
+                                  today={dateIsoInTimeZone(new Date(), ctx.timezone)}
                                   locked={recordImmutable}
                                   allowCompliantNotes={type.allowCompliantNotes}
                                   actions={criterionActions}

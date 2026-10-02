@@ -104,6 +104,9 @@ export function CriterionCard({
   photoPreviews,
   correctiveActionRef,
   correctiveActionId,
+  correctiveActionStatus,
+  canResolveAction,
+  today,
   locked,
   allowCompliantNotes,
   actions,
@@ -133,6 +136,9 @@ export function CriterionCard({
   photoPreviews: import('@/components/photo-gallery').GalleryPhoto[]
   correctiveActionRef: string | null
   correctiveActionId: string | null
+  correctiveActionStatus: string | null
+  canResolveAction: boolean
+  today: string
   locked: boolean
   allowCompliantNotes: boolean
   actions: CriterionActions
@@ -149,6 +155,11 @@ export function CriterionCard({
   const [assignee, setAssignee] = useState(assignedToPersonId ?? '')
   const [due, setDue] = useState(assignedDueDate ?? '')
   const [corrected, setCorrected] = useState(correctedOn ?? '')
+  const resolutionLocked =
+    Boolean(correctiveActionId) &&
+    (!canResolveAction ||
+      correctiveActionStatus === 'closed' ||
+      correctiveActionStatus === 'cancelled')
 
   const labels = isInspectionOutcomeResponseType(responseType) ? ANSWER_LABELS[responseType] : null
   const responseAnswered = inspectionCriterionIsAnswered({
@@ -299,7 +310,20 @@ export function CriterionCard({
                           href={`/corrective-actions/${correctiveActionId}`}
                           className="text-teal-700 hover:underline dark:text-teal-400"
                         >
-                          ↳ <GeneratedValue value={correctiveActionRef} />
+                          ↳ <GeneratedValue value={correctiveActionRef} /> ·{' '}
+                          <GeneratedValue
+                            value={
+                              correctiveActionStatus === 'pending_verification'
+                                ? 'Pending verification'
+                                : correctiveActionStatus === 'in_progress'
+                                  ? 'In progress'
+                                  : correctiveActionStatus === 'closed'
+                                    ? 'Closed'
+                                    : correctiveActionStatus === 'cancelled'
+                                      ? 'Cancelled'
+                                      : 'Open'
+                            }
+                          />
                         </Link>
                       ) : null
                     }
@@ -417,7 +441,7 @@ export function CriterionCard({
                 onPick={pickSeverity}
                 helper={
                   <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                    <GeneratedText id="m_1f08915d9ec184" />
+                    <GeneratedValue value="Severity sets urgency. Unresolved findings can create follow-up actions on submission." />
                   </p>
                 }
               />
@@ -434,6 +458,34 @@ export function CriterionCard({
                 placeholder={tGenerated('m_0692fe3c89bfd4')}
                 onCommit={(v) => save(actions.setActionTaken, { recordId, rowId, value: v })}
               />
+
+              <div className="space-y-1">
+                <Label htmlFor={`resolution-${rowId}`} className="text-xs">
+                  <GeneratedValue value="Finding resolution" />
+                </Label>
+                <Select
+                  id={`resolution-${rowId}`}
+                  value={corrected ? 'resolved' : 'follow_up'}
+                  disabled={resolutionLocked}
+                  onChange={(event) => {
+                    const date = event.target.value === 'resolved' ? corrected || today : ''
+                    setCorrected(date)
+                    save(actions.setCorrected, { recordId, rowId, correctedOn: date })
+                  }}
+                >
+                  <option value="follow_up">{tGeneratedValue('Follow-up required')}</option>
+                  <option value="resolved">{tGeneratedValue('Resolved on site')}</option>
+                </Select>
+                <p className="text-xs text-slate-500">
+                  <GeneratedValue
+                    value={
+                      resolutionLocked
+                        ? 'Manage the linked corrective action to change its resolution. Closed actions keep their history.'
+                        : 'Resolved findings need an action taken and correction date. Linked actions close on submission, or await required verification.'
+                    }
+                  />
+                </p>
+              </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1 sm:col-span-1">
@@ -475,7 +527,11 @@ export function CriterionCard({
                   <Input
                     type="date"
                     value={corrected}
+                    disabled={resolutionLocked || !corrected}
+                    max={today}
+                    required={Boolean(corrected)}
                     onChange={(e) => {
+                      if (!e.target.value) return
                       setCorrected(e.target.value)
                       save(actions.setCorrected, { recordId, rowId, correctedOn: e.target.value })
                     }}
@@ -535,6 +591,11 @@ export function CriterionCard({
             assignedDueDate ||
             corrected) ? (
             <div className="mt-2 space-y-0.5 border-t border-slate-200 pt-2 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
+              {answer === 'fail' && (
+                <div>
+                  <GeneratedValue value={corrected ? 'Resolved on site' : 'Follow-up required'} />
+                </div>
+              )}
               <GeneratedValue
                 value={
                   severity ? (

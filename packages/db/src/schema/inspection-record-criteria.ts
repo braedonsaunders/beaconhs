@@ -4,7 +4,7 @@
 // created. Each row tracks either the inspector's outcome answer or one value
 // from an immutable configured-choice snapshot. Outcome failures also carry
 // severity, remediation, photos, assignment, due date, and an optional link
-// to the auto-spawned corrective_action when severity >= high.
+// to the corrective_action issued on submission for unresolved failures.
 //
 // Legacy parity: app/Models/InspectionCriteria.php fields:
 //   QuestionOrder, Question, Answer (Yes/No/N/A), Severity, NonComplianceReason,
@@ -104,7 +104,7 @@ export const inspectionRecordCriteria = pgTable(
     // themselves are stored in the global `attachments` table.
     photoAttachmentIds: jsonb('photo_attachment_ids').$type<string[]>().default([]).notNull(),
 
-    // Auto-spawned corrective action (when severity = high|critical on a fail)
+    // Corrective action issued for a failed finding that needs follow-up.
     correctiveActionId: uuid('corrective_action_id'),
 
     ...timestamps,

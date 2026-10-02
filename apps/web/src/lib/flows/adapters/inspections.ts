@@ -148,6 +148,7 @@ export function createInspectionFlowAdapter(
               severity: inspectionRecordCriteria.severity,
               nonCompliance: inspectionRecordCriteria.nonComplianceDescription,
               actionTaken: inspectionRecordCriteria.actionTaken,
+              correctedOn: inspectionRecordCriteria.correctedOn,
               notes: inspectionRecordCriteria.compliantNote,
             })
             .from(inspectionRecordCriteria)
@@ -248,6 +249,9 @@ export function createInspectionFlowAdapter(
           severity: titleize(c.severity),
           non_compliance: c.nonCompliance ?? '',
           action_taken: c.actionTaken ?? '',
+          resolution:
+            c.answer === 'fail' ? (c.correctedOn ? 'Resolved on site' : 'Follow-up required') : '',
+          corrected_on: c.correctedOn ?? '',
         })),
         photos: await Promise.all(
           photos.map(async (p) => {
