@@ -249,6 +249,31 @@ each environment is first configured, trigger a synthetic client error and a
 synthetic server/worker error, verify release and environment tags, then remove
 the synthetic path or job.
 
+Web logs also emit structured `request_error` events with the framework route,
+method, error classification, digest and release, even without a Sentry DSN.
+Node `http_response` events record unfinished responses, HTTP 5xx responses and
+responses taking at least three seconds. They contain a known module name,
+method, status (null if headers were never sent), completion flag, incoming
+request-abort flag, elapsed time and release. Query strings, headers, record IDs,
+request bodies and arbitrary error messages are excluded. A closed response is
+not automatically a failed application operation: inspect completion and timing
+alongside the route error. Browser navigation and network interruptions can
+close a render before it finishes.
+
+The pinned Next.js compression patch makes `removeListener`/`off` remove drain
+callbacks from the same Gzip stream where the middleware registered them. This
+preserves compression and backpressure while allowing Node's one-shot listeners
+to remove themselves. The streaming regression test must pass before changing
+or removing the patch during a framework upgrade; do not raise listener limits
+to hide a cleanup regression.
+
+Email attachments are checked with a bounded linear base64 scan before queueing.
+The per-file and aggregate decoded limit is 10 MiB. When recovering a failed PDF
+email, inspect the retained job and delivery history first, then retry only the
+reviewed job after fixing its cause. Confirm every intended recipient has a new
+successful delivery; retain the original failed-attempt history. Do not replay
+unrelated jobs or broadly resend a report to work around a partial delivery.
+
 ## Deployment and rollback
 
 1. Back up and verify the schema/data before a destructive migration or private

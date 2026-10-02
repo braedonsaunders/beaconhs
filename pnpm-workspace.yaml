@@ -63,6 +63,9 @@ peerDependencyRules:
     '@radix-ui/react-presence@1.0.0>react-dom': '19.2.7'
 
 patchedDependencies:
+  # Compression redirects drain registrations to Gzip; removals must follow
+  # the same emitter so Node once-listeners are actually removed after firing.
+  next@16.3.6: patches/next@16.3.6.patch
   pagedjs@0.4.3: patches/pagedjs@0.4.3.patch
 
 allowUnusedPatches: true
