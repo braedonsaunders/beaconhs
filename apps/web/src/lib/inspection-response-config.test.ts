@@ -1,3 +1,4 @@
+import { inspectionCompliancePercent } from './inspection-response-config'
 import { describe, expect, it } from 'vitest'
 import {
   inspectionCriterionIsAnswered,
@@ -121,5 +122,13 @@ describe('inspection response config', () => {
       inspectionCriterionIsAnswered({ ...base, responseType: 'number', numberAnswer: '0' }),
     ).toBe(true)
     expect(inspectionCriterionIsAnswered({ ...base, responseType: 'number' })).toBe(false)
+  })
+})
+
+describe('inspection compliance percentage', () => {
+  it('uses only pass/fail outcomes, independently of supplemental and N/A questions', () => {
+    expect(inspectionCompliancePercent(22, 4)).toBe(85)
+    expect(inspectionCompliancePercent(3, 0)).toBe(100)
+    expect(inspectionCompliancePercent(0, 0)).toBe(0)
   })
 })

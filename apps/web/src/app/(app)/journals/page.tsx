@@ -2,6 +2,7 @@ import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { requireRequestContext } from '@/lib/auth'
 import { ModuleNav } from '@/components/module-admin/module-nav'
 import { getEntry, getWorkspaceData, listEntries } from './_data'
+import { todayISO } from './_lib'
 import { JournalWorkspace } from './_workspace'
 
 export const dynamic = 'force-dynamic'
@@ -16,8 +17,13 @@ export default async function JournalsPage() {
 
   const [data, recent] = await Promise.all([
     getWorkspaceData(ctx, groupBy, {}),
-    // Open the user's OWN most-recent entry (the workspace is personal).
-    listEntries(ctx, {}, { limit: 1 }, true),
+    // Resume today only; earlier entries stay in Browse.
+    listEntries(
+      ctx,
+      { from: todayISO(ctx.timezone), to: todayISO(ctx.timezone) },
+      { limit: 1 },
+      true,
+    ),
   ])
   const initialEntry = recent[0] ? await getEntry(ctx, recent[0].id) : null
 

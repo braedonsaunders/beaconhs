@@ -48,8 +48,13 @@ describe('record header actions submit contract', () => {
     )
 
     expect(lockForm).toContain('<ConfirmedSubmitButton')
-    expect(source).toContain('void confirmDialog({ title, message, confirmLabel }).then((ok) => {')
-    expect(source).toContain('if (ok) button.form?.requestSubmit(button)')
+    expect(source).toContain(
+      'void confirmDialog({ title, message, confirmLabel }).then(async (ok) => {',
+    )
+    expect(source).toContain('if (!ok) return')
+    expect(source.indexOf('await flushRecordSaves()')).toBeLessThan(
+      source.indexOf('button.form?.requestSubmit(button)'),
+    )
   })
 
   it('translates the module-supplied lock label instead of rendering it raw', () => {

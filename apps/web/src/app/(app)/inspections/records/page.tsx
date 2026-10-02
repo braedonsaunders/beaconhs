@@ -1,3 +1,4 @@
+import { inspectionCompliancePercent } from '@/lib/inspection-response-config'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { PeopleStatusFilter } from '@/components/people-status-filter'
@@ -416,11 +417,10 @@ export default async function InspectionRecordsPage({
                 <MobileCardList>
                   <GeneratedValue
                     value={rows.map((r) => {
-                      const total = Number(r.totalCount ?? 0)
                       const pass = Number(r.passCount ?? 0)
                       const fail = Number(r.failCount ?? 0)
                       const na = Number(r.naCount ?? 0)
-                      const passPct = total > 0 ? Math.round((pass / total) * 100) : null
+                      const passPct = inspectionCompliancePercent(pass, fail)
                       return (
                         <ListCard
                           key={r.record.id}
@@ -466,20 +466,6 @@ export default async function InspectionRecordsPage({
                                   ) : null
                                 }
                               />
-                              <Badge
-                                variant={r.record.customerSignedAt ? 'success' : 'outline'}
-                                className="text-[10px]"
-                              >
-                                <GeneratedValue
-                                  value={
-                                    r.record.customerSignedAt ? (
-                                      <GeneratedText id="m_142c80b0b4c3f4" />
-                                    ) : (
-                                      <GeneratedText id="m_0eced23f75962c" />
-                                    )
-                                  }
-                                />
-                              </Badge>
                             </>
                           }
                         />
@@ -522,9 +508,7 @@ export default async function InspectionRecordsPage({
                         <TableHead>
                           <GeneratedText id="m_1f787fe77f7e09" />
                         </TableHead>
-                        <TableHead className="w-20">
-                          <GeneratedText id="m_142c80b0b4c3f4" />
-                        </TableHead>
+
                         <SortableTh
                           {...sortProps}
                           column="status"
@@ -537,11 +521,10 @@ export default async function InspectionRecordsPage({
                     <TableBody>
                       <GeneratedValue
                         value={rows.map((r) => {
-                          const total = Number(r.totalCount ?? 0)
                           const pass = Number(r.passCount ?? 0)
                           const fail = Number(r.failCount ?? 0)
                           const na = Number(r.naCount ?? 0)
-                          const passPct = total > 0 ? Math.round((pass / total) * 100) : null
+                          const passPct = inspectionCompliancePercent(pass, fail)
                           return (
                             <TableRow key={r.record.id}>
                               <TableCell className="font-mono text-xs">
@@ -639,21 +622,7 @@ export default async function InspectionRecordsPage({
                                   }
                                 />
                               </TableCell>
-                              <TableCell>
-                                <GeneratedValue
-                                  value={
-                                    r.record.customerSignedAt ? (
-                                      <Badge variant="success" className="text-[10px]">
-                                        <GeneratedText id="m_142c80b0b4c3f4" />
-                                      </Badge>
-                                    ) : (
-                                      <Badge variant="outline" className="text-[10px]">
-                                        <GeneratedText id="m_0eced23f75962c" />
-                                      </Badge>
-                                    )
-                                  }
-                                />
-                              </TableCell>
+
                               <TableCell>
                                 <Badge
                                   variant={

@@ -43,6 +43,7 @@ import {
   snippetOf,
   todayISO,
 } from './_lib'
+import { journalMutationScope } from './_mutation-policy'
 import { isUuid } from '@/lib/list-params'
 import { CSV_EXPORT_QUERY_LIMIT } from '@/lib/csv'
 import type {
@@ -405,7 +406,12 @@ export async function getEntry(
       siteName: row.siteName ?? null,
       updatedAt: row.e.updatedAt.toISOString(),
       submittedAt: row.e.submittedAt ? row.e.submittedAt.toISOString() : null,
-      locked: Boolean(row.e.lockedAt),
+      locked: Boolean(row.e.lockedAt) || row.e.status !== 'draft',
+      canEdit:
+        journalMutationScope(ctx, 'edit') === 'read_scope' ||
+        (journalMutationScope(ctx, 'edit') === 'self' &&
+          ((Boolean(authorPersonId) && row.e.personId === authorPersonId) ||
+            (Boolean(ctx.membership?.id) && row.e.createdByTenantUserId === ctx.membership?.id))),
     }
   })
 }
@@ -690,6 +696,9 @@ export async function getOrCreateEntryForDate(
   if (!authorPersonId && !tenantUserId) return null
   const today = dateISO ?? todayISO(ctx.timezone)
   return ctx.db(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`${ctx.tenantId}:${tenantUserId ?? authorPersonId}:${today}`}, 0))`,
+    )
     // Most-recent live entry on this date authored by / created by this user.
     const ownership: SQL[] = []
     if (authorPersonId) ownership.push(eq(journalEntries.personId, authorPersonId))

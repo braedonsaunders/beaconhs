@@ -16,7 +16,8 @@ import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
-import { assertCanManageModule } from '@/lib/module-admin/guard'
+import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
+import { canManageModule } from '@/lib/module-admin/guard'
 import {
   lockVisibleInspectionRecordForMutation,
   materialiseCriteriaForRecordInTx,
@@ -165,13 +166,17 @@ export async function copyInspection(formData: FormData) {
 /** Manager-only soft deletion preserving evidence, audit, and lifecycle history. */
 export async function deleteInspection(formData: FormData) {
   const ctx = await requireRequestContext()
-  assertCanManageModule(ctx, 'inspections')
   const id = String(formData.get('id') ?? '')
   if (!isUuid(id)) throw new Error('Inspection record was not found')
   await ctx.db(async (tx) => {
     const record = await lockVisibleInspectionRecordForMutation(tx, ctx, id, {
       allowLocked: true,
     })
+    if (
+      !canManageModule(ctx, 'inspections') &&
+      !canDeleteOwnRecord(ctx, 'inspections.delete.own', record.inspectorTenantUserId)
+    )
+      throw new Error('You cannot delete this inspection.')
     const [deleted] = await tx
       .update(inspectionRecords)
       .set({ deletedAt: new Date() })

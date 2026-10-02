@@ -34,14 +34,14 @@ A journal entry protects you and your crew. If a question comes up months later,
 
 ## Where to find it
 
-Open **Journals** in the left menu. The page opens on your most recent entry. On a desktop your past entries sit in a list on the left. On a phone, tap **Browse** to see them.
+Open **Journals** in the left menu. The page opens on today’s entry. If none exists, a fresh editor opens automatically; start typing to save it. On a desktop your past entries sit in a list on the left. On a phone, tap **Browse** to see them.
 
 Supervisors can open **Records** beside **Journals**, or tap **Browse**, then **Records**, on a phone. This follows their assigned reading scope. **Manage** is only for journal administrators; on a phone it is **Browse** → **Manage journals**. The Manage hub contains tags and automations. The standard **Foreman / Supervisor** role can edit its own journals and read its assigned scope; it does not administer journals.
 
 ## Writing today's entry
 
 1. Open [Journals](/journals).
-2. Tap **New entry**. An entry for today opens.
+2. Resume today’s draft, or start typing in the fresh editor. Older entries stay in **Browse**.
 3. Type what happened. Your words save automatically as you go — there is no save button.
 4. Use the microphone button to dictate by voice instead of typing, if you prefer.
 5. Set the location and people in the bar above the text, if they apply.
@@ -59,7 +59,7 @@ BeaconHS leaves your original words in place until the AI response finishes. If 
 ## Adding photos
 
 1. Scroll to the **Photos** section under the text.
-2. Tap **Take photo or upload**. Take a new photo or choose one or more pictures from your phone's photo library.
+2. Tap **Take photo or upload**. Photos attach automatically after upload; there is no second Add photo step. Take a new photo or choose one or more pictures from your phone's photo library.
 3. Tap the pencil button to add a caption or draw attention to something in the photo. The editor keeps the photo's original shape while you work. Large camera photos are optimized automatically when they upload.
 4. To remove a photo, tap the trash button on it.
 5. Use the left and right arrow buttons to put several photos in the order you want.
@@ -73,7 +73,7 @@ Tags help people find entries later (for example a tag for concrete pours). Tap 
 ## Submitting
 
 1. When your entry is done, tap **Submit** at the top.
-2. Submitted entries are shared with the people allowed to see them. Until then the entry is a draft only you can see.
+2. Submitted entries become read-only. To correct your own entry, tap **Unlock**, confirm, make your changes, then **Submit** again. Unlocking is permission-checked and recorded in Activity.
 
 ## Viewing past entries
 
@@ -268,9 +268,11 @@ Inspecting a unit or tool instead of a site? Those live separately — see [Equi
 
 1. Tap **New inspection**.
 2. Use the search box to find the inspection type and tap it. The list shows how many checks each type has.
-3. A new draft record opens. Choose the **Location**, enter the more specific **Location on site**, then fill in the foreman and notes. Fields save as you go.
+3. A new draft record opens. Choose the **Location**, enter the more specific **Location on site**, then select the **Supervisor** and fill in the foreman and notes. Fields save as you go.
 
 ## Answering the criteria
+
+Use **Notes** for context on passing or failing items. Notes stay when you change the answer and appear in the PDF. The compliance percentage counts only Pass and Fail; N/A and text questions are excluded.
 
 1. Work down the list. Tap **Pass**, **Fail**, or **N/A** on each item. Some items use **Yes** / **No**. For **Select one**, pick the exact answer that applies. Other items ask for **Text**, **Long text**, or a **Number**; enter the requested value instead of a pass/fail result.
 2. When you tap **Fail**, extra fields open on that item:
@@ -286,25 +288,21 @@ Inspecting a unit or tool instead of a site? Those live separately — see [Equi
 
 Managers build inspection types under **Site Inspections** → **Manage** → **Types**. Open a type, add or edit a question, then choose its **Response type**. Use **Text** for a short answer, **Long text** for a narrative, or **Number** when the answer must be numeric. For **Select one**, enter at least two unique **Options (one per line)**. New inspections copy the response type and options into the record, so changing the type later does not rewrite an inspector's saved answer contract. Reusable banks use the same question editor under **Banks**.
 
-## Draft vs submitted
+## Submitting and corrections
 
-A record stays a draft while you work — you can leave and come back. When every item is answered:
+Tap **Submit & lock** when all required answers and evidence are complete. Submission waits for pending saves. High and critical findings create corrective actions only after successful submission, with their saved details. Draft edits do not send corrective-action emails.
 
-1. Tap **Submit & lock** in the header and confirm. This submits the inspection, runs its submit flows, and makes it read-only in one step.
-2. If the inspection should stay editable after submission, open **Status & workflow**, choose **Submitted**, and tap **Update status** instead.
-3. Choosing **Closed** also submits and locks the inspection. Every submission path requires all required answers, comments, photos, and signatures.
-
-If an edit removes required information from a submitted record, it returns to **In progress**. Complete the missing item and submit it again.
-
-To correct a locked or closed record, tap **Unlock** and confirm. A closed record reopens as **Submitted** so you can make the correction. Tap **Resubmit & lock** when you are done; this locks the revised record and runs its submit flows again.
+Tap **Unlock** to correct a submitted inspection, then **Resubmit & lock**. Existing corrective actions remain linked so resubmission does not create duplicates. A resolved finding does not automatically close an issued corrective action; review that action separately.
 
 ## Record actions
+
+**Activity** includes all saved events. Search or filter it and use the page controls for older changes. **Show changes** compares old and new values.
 
 Use the buttons in the header to **Print / PDF**, **Send email**, **Copy inspection**, lock, unlock, or delete an inspection. On a phone, keep the lock button visible and tap **More actions** for the rest.
 
 - **Copy inspection** starts a new draft with the same setup and checklist. Answers, photos, signatures, approvals, and corrective-action history are not copied. The button reads **Copying…** while the new draft is built, then opens it — tap it once and wait.
 - **Send email** sends the inspection summary and saved checklist only to the addresses you enter.
-- **Delete** is available to inspection managers. Confirm it carefully; the record leaves operational lists, while its audit history is retained.
+- **Delete** is available to inspection managers and people with permission to delete their own inspection records. Confirm it carefully; the record leaves operational lists, while its audit history is retained.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 

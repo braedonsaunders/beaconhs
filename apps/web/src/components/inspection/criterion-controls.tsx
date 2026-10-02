@@ -6,9 +6,9 @@ import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2 } from 'lucide-react'
 import { Button, Label, Textarea, cn } from '@beaconhs/ui'
-import { FileUpload, type AttachedFile } from '@/components/file-upload'
+import { PhotoUploaderSection } from '@/components/photo-uploader-section'
+import { FLUSH_RECORD_SAVES, trackRecordSave, forgetRecordSave } from '@/lib/pending-record-saves'
 import { PhotoGallery, type GalleryPhoto, type PhotoEdits } from '@/components/photo-gallery'
 import { toast } from '@/lib/toast'
 import type { InspectionSeverity } from '@/components/builder/inspection-severity'
@@ -25,6 +25,19 @@ export function useCriterionAutosave() {
   const [state, setState] = React.useState<CriterionSaveState>('idle')
   const [, startTransition] = React.useTransition()
   const router = useRouter()
+  const saveKeys = React.useRef(new Map<(formData: FormData) => Promise<void>, symbol>())
+  const failedSaves = React.useRef(new Map<symbol, () => void>())
+  React.useEffect(() => {
+    const keys = saveKeys.current
+    const retryFailed = () => {
+      for (const retry of failedSaves.current.values()) retry()
+    }
+    window.addEventListener(FLUSH_RECORD_SAVES, retryFailed)
+    return () => {
+      window.removeEventListener(FLUSH_RECORD_SAVES, retryFailed)
+      for (const key of keys.values()) forgetRecordSave(key)
+    }
+  }, [])
   const queue = React.useRef<Promise<void>>(Promise.resolve())
   const latestSave = React.useRef(0)
   const savedTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -38,6 +51,12 @@ export function useCriterionAutosave() {
 
   const save = React.useCallback(
     (action: (formData: FormData) => Promise<void>, fields: Record<string, string>) => {
+      let key = saveKeys.current.get(action)
+      if (!key) {
+        key = Symbol('criterion-field')
+        saveKeys.current.set(action, key)
+      }
+      const taskKey = key
       const saveId = ++latestSave.current
       if (savedTimer.current) {
         clearTimeout(savedTimer.current)
@@ -50,21 +69,25 @@ export function useCriterionAutosave() {
         for (const [key, value] of Object.entries(fields)) formData.set(key, value)
         await action(formData)
       }
-      const pending = enqueueSerialTask(queue.current, run)
-      queue.current = pending
-
-      startTransition(async () => {
-        try {
-          await pending
-          if (saveId !== latestSave.current) return
-          setState('saved')
-          savedTimer.current = setTimeout(() => {
-            if (saveId === latestSave.current) setState('idle')
-          }, 1500)
-        } catch {
-          if (saveId === latestSave.current) setState('error')
-        }
-      })
+      const attempt = () => {
+        failedSaves.current.delete(taskKey)
+        const pending = trackRecordSave(taskKey, enqueueSerialTask(queue.current, run))
+        queue.current = pending
+        startTransition(async () => {
+          try {
+            await pending
+            if (saveId !== latestSave.current) return
+            setState('saved')
+            savedTimer.current = setTimeout(() => {
+              if (saveId === latestSave.current) setState('idle')
+            }, 1500)
+          } catch {
+            failedSaves.current.set(taskKey, attempt)
+            if (saveId === latestSave.current) setState('error')
+          }
+        })
+      }
+      attempt()
     },
     [],
   )
@@ -74,13 +97,22 @@ export function useCriterionAutosave() {
 
 export function CriterionSaveIndicator({ state }: { state: CriterionSaveState }) {
   if (state === 'idle') return null
+  if (state === 'error')
+    return (
+      <button
+        type="button"
+        className="text-xs text-red-600 underline"
+        onClick={() => window.dispatchEvent(new Event(FLUSH_RECORD_SAVES))}
+      >
+        <GeneratedText id="m_13b78c61dbb517" />
+      </button>
+    )
   return (
     <span
       className={cn(
         'text-[11px] font-medium',
         state === 'saving' && 'text-slate-400',
         state === 'saved' && 'text-emerald-600',
-        state === 'error' && 'text-red-600',
       )}
     >
       <GeneratedValue
@@ -129,6 +161,12 @@ export function AutosaveTextarea({
     },
     [],
   )
+
+  React.useEffect(() => {
+    const flush = () => commit(value)
+    window.addEventListener(FLUSH_RECORD_SAVES, flush)
+    return () => window.removeEventListener(FLUSH_RECORD_SAVES, flush)
+  })
 
   function commit(next: string) {
     if (timer.current) {
@@ -245,58 +283,17 @@ function CriterionPhotoUploader({
   addPhotos: (formData: FormData) => Promise<void>
   onDone: () => void
 }) {
-  const tGeneratedValue = useGeneratedValueTranslations()
-  const tGenerated = useGeneratedTranslations()
-  const [pending, startTransition] = React.useTransition()
-  const [staged, setStaged] = React.useState<AttachedFile[]>([])
-
-  function attach() {
-    if (staged.length === 0 || pending) return
-    const formData = new FormData()
-    formData.set('recordId', recordId)
-    formData.set('rowId', rowId)
-    formData.set('attachmentIds', staged.map((file) => file.attachmentId).join(','))
-    startTransition(async () => {
-      try {
-        await addPhotos(formData)
-        setStaged([])
-        onDone()
-      } catch (error) {
-        toast.error(
-          tGeneratedValue(error instanceof Error ? error.message : tGenerated('m_135b02e62854c3')),
-        )
-      }
-    })
-  }
-
   return (
-    <div className="space-y-2">
-      <FileUpload variant="photo" value={staged} onChange={setStaged} />
-      <GeneratedValue
-        value={
-          staged.length > 0 ? (
-            <Button type="button" size="sm" onClick={attach} disabled={pending}>
-              <GeneratedValue
-                value={
-                  pending ? (
-                    <GeneratedText id="m_1a0172e9314d7c" />
-                  ) : (
-                    <>
-                      <CheckCircle2 size={14} /> <GeneratedText id="m_0acd5c1caaf69c" />{' '}
-                      <GeneratedValue value={staged.length} />{' '}
-                      <GeneratedText id="m_07cb1cfb72cff4" />
-                      <GeneratedValue
-                        value={staged.length === 1 ? '' : <GeneratedText id="m_00ded356f0f424" />}
-                      />
-                    </>
-                  )
-                }
-              />
-            </Button>
-          ) : null
-        }
-      />
-    </div>
+    <PhotoUploaderSection
+      attachAction={async (ids) => {
+        const formData = new FormData()
+        formData.set('recordId', recordId)
+        formData.set('rowId', rowId)
+        formData.set('attachmentIds', ids.join(','))
+        await addPhotos(formData)
+        onDone()
+      }}
+    />
   )
 }
 

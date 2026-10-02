@@ -45,6 +45,7 @@ const PICKER_LOOKUPS = [
   'incident-people',
   'incident-injury-types',
   'inspection-sites',
+  'inspection-supervisors',
   'inspection-people',
   'inspection-record-filter-types',
   'inspection-record-filter-sites',

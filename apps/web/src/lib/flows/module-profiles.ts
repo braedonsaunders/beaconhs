@@ -462,6 +462,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
           { key: 'answer', label: 'Answer', kind: 'text' },
           { key: 'severity', label: 'Severity', kind: 'text' },
           { key: 'non_compliance', label: 'Non-compliance', kind: 'text' },
+          { key: 'notes', label: 'Item notes', kind: 'text' },
           { key: 'action_taken', label: 'Action taken', kind: 'text' },
         ],
       },

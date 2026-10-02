@@ -97,17 +97,23 @@ async function mutationWhere(
   ctx: RequestContext,
   id: string,
   mutation: JournalMutation,
+  requireDraft = true,
 ): Promise<SQL> {
   if (!isUuid(id)) return sql`false`
   const scope = journalMutationScope(ctx, mutation)
-  if (scope === 'read_scope') return scopedWhere(ctx, id)
   if (scope === 'none') return sql`false`
   const authorPersonId = await getAuthorPersonId(ctx)
-  return and(
-    eq(journalEntries.id, id),
-    isNull(journalEntries.deletedAt),
-    journalSelfScopeWhere(ctx, authorPersonId),
-  )!
+  const owned =
+    scope === 'read_scope'
+      ? await scopedWhere(ctx, id)
+      : and(
+          eq(journalEntries.id, id),
+          isNull(journalEntries.deletedAt),
+          journalSelfScopeWhere(ctx, authorPersonId),
+        )!
+  return mutation === 'edit' && requireDraft
+    ? and(owned, eq(journalEntries.status, 'draft'), isNull(journalEntries.lockedAt))!
+    : owned
 }
 
 function validDate(value: string): boolean {
@@ -140,6 +146,42 @@ export async function createEntryForDate(
   if (!id) return { ok: false, error: NO_AUTHOR_IDENTITY }
   revalidatePath('/journals')
   return { ok: true, id }
+}
+
+export async function unlockEntry(id: string): Promise<ActionOk | ActionErr> {
+  const ctx = await requireRequestContext()
+  // Author edit permission is required even when the entry is visible to a team.
+  const scope = journalMutationScope(ctx, 'edit')
+  if (scope === 'none' || !isUuid(id))
+    return { ok: false, error: 'You cannot unlock this journal.' }
+  const owned =
+    scope === 'read_scope'
+      ? await scopedWhere(ctx, id)
+      : and(
+          eq(journalEntries.id, id),
+          isNull(journalEntries.deletedAt),
+          journalSelfScopeWhere(ctx, await getAuthorPersonId(ctx)),
+        )!
+  const changed = await ctx.db(async (tx) => {
+    const [entry] = await tx
+      .update(journalEntries)
+      .set({ status: 'draft', lockedAt: null })
+      .where(and(owned, eq(journalEntries.status, 'submitted')))
+      .returning({ id: journalEntries.id })
+    if (!entry) return false
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'journal_entry',
+      entityId: id,
+      action: 'update',
+      summary: 'Unlocked submitted journal for correction',
+      before: { status: 'submitted' },
+      after: { status: 'draft' },
+    })
+    return true
+  })
+  if (!changed) return { ok: false, error: 'Submitted journal not found or already unlocked.' }
+  revalidatePath('/journals')
+  return { ok: true }
 }
 
 // ---- update (autosave) ------------------------------------------------------
@@ -269,7 +311,7 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
   const [row] = await ctx.db(async (tx) => {
     const rows = await tx
       .update(journalEntries)
-      .set({ status: 'submitted', submittedAt })
+      .set({ status: 'submitted', submittedAt, lockedAt: submittedAt })
       .where(and(where, eq(journalEntries.status, 'draft')))
       .returning({ reference: journalEntries.reference })
     const submitted = rows[0]
@@ -337,7 +379,7 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
 
 export async function deleteEntry(id: string): Promise<ActionOk | ActionErr> {
   const ctx = await requireRequestContext()
-  const where = await mutationWhere(ctx, id, 'edit')
+  const where = await mutationWhere(ctx, id, 'edit', false)
   const [row] = await ctx.db(async (tx) => {
     const rows = await tx
       .update(journalEntries)
@@ -454,12 +496,20 @@ export async function attachJournalPhotos(input: {
       .from(journalEntries)
       .where(where)
       .limit(1)
+      .for('update')
     if (!e) return null
     const availableAttachmentIds = await validateTenantImageAttachmentIdsInTx(
       tx,
       ctx.tenantId,
       attachmentIds,
     )
+    const existing = await tx
+      .select({ attachmentId: journalEntryPhotos.attachmentId })
+      .from(journalEntryPhotos)
+      .where(eq(journalEntryPhotos.entryId, input.entryId))
+    const existingIds = new Set(existing.map((row) => row.attachmentId))
+    const newIds = availableAttachmentIds.filter((id) => !existingIds.has(id))
+    if (!newIds.length) return []
     const [{ maxOrder } = { maxOrder: -1 }] = await tx
       .select({ maxOrder: sql<number>`coalesce(max(${journalEntryPhotos.sortOrder}), -1)::int` })
       .from(journalEntryPhotos)
@@ -468,7 +518,7 @@ export async function attachJournalPhotos(input: {
     const inserted = await tx
       .insert(journalEntryPhotos)
       .values(
-        availableAttachmentIds.map((attachmentId, i) => ({
+        newIds.map((attachmentId, i) => ({
           tenantId: ctx.tenantId,
           entryId: input.entryId,
           attachmentId,
@@ -512,6 +562,7 @@ export async function removeJournalPhoto(photoId: string): Promise<ActionOk | Ac
       .from(journalEntries)
       .where(where)
       .limit(1)
+      .for('update')
     if (!e) return false
     await tx.delete(journalEntryPhotos).where(eq(journalEntryPhotos.id, photoId))
     return true
@@ -630,6 +681,7 @@ export async function updateJournalPhoto(
       .from(journalEntries)
       .where(where)
       .limit(1)
+      .for('update')
     if (!entry) return false
     await tx
       .update(journalEntryPhotos)
@@ -696,6 +748,7 @@ export async function describeJournalPhoto(
       .from(journalEntries)
       .where(where)
       .limit(1)
+      .for('update')
     return !!e
   })
   if (!visible) return { ok: false, error: 'Photo not found.' }

@@ -148,6 +148,7 @@ export function createInspectionFlowAdapter(
               severity: inspectionRecordCriteria.severity,
               nonCompliance: inspectionRecordCriteria.nonComplianceDescription,
               actionTaken: inspectionRecordCriteria.actionTaken,
+              notes: inspectionRecordCriteria.compliantNote,
             })
             .from(inspectionRecordCriteria)
             .where(
@@ -232,6 +233,7 @@ export function createInspectionFlowAdapter(
         // Collections.
         criteria: criteria.map((c) => ({
           group: c.groupLabel ?? '',
+          notes: c.notes ?? '',
           question: c.question ?? '',
           response_type: c.responseType,
           options: c.choiceOptions.join(' | '),

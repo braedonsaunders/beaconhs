@@ -1,3 +1,4 @@
+import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -459,7 +460,9 @@ export default async function HazidAssessmentDetailPage({
   } = data
   // Single unified page: anyone in the tenant edits an unlocked assessment;
   // module managers additionally get the destructive actions (delete).
-  const canManage = canManageModule(ctx, 'hazid')
+  const canManage =
+    canManageModule(ctx, 'hazid') ||
+    canDeleteOwnRecord(ctx, 'hazid.delete.own', a.reportedByTenantUserId)
   const canReview = can(ctx, 'hazid.review')
   const activity = await recentActivityForEntity(ctx, 'hazid_assessment', id, 25)
 

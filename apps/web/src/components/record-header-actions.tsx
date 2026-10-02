@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { flushRecordSaves } from '@/lib/pending-record-saves'
+import { toast } from '@/lib/toast'
 import { type ReactNode, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { Button } from '@beaconhs/ui'
@@ -49,8 +51,14 @@ function ConfirmedSubmitButton({
       onClick={(event) => {
         event.preventDefault()
         const button = event.currentTarget
-        void confirmDialog({ title, message, confirmLabel }).then((ok) => {
-          if (ok) button.form?.requestSubmit(button)
+        void confirmDialog({ title, message, confirmLabel }).then(async (ok) => {
+          if (!ok) return
+          try {
+            await flushRecordSaves()
+            button.form?.requestSubmit(button)
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Save failed. Please retry.')
+          }
         })
       }}
     >

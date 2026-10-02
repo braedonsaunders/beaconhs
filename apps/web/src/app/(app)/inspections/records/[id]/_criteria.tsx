@@ -491,15 +491,10 @@ export function CriterionCard({
           require a comment always get the field (the submit gate enforces it). */}
       <GeneratedValue
         value={
-          (allowCompliantNotes || requiresComment) &&
-          responseAnswered &&
-          answer !== 'fail' &&
-          !locked ? (
+          (allowCompliantNotes || requiresComment) && responseAnswered && !locked ? (
             <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
               <AutoTextarea
-                label={tGeneratedValue(
-                  requiresComment ? tGenerated('m_1d0999bf7378f8') : tGenerated('m_0256671f892999'),
-                )}
+                label={tGeneratedValue(requiresComment ? 'Notes (required)' : 'Notes')}
                 initial={compliantNote}
                 rows={1}
                 placeholder={tGenerated('m_152b01fa42432d')}

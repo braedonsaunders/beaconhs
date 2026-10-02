@@ -32,7 +32,8 @@ import { cn } from '@beaconhs/ui'
 import type { AppLocale } from '@beaconhs/i18n'
 import { DownloadLink } from '@/components/download-link'
 import { confirmDialog } from '@/lib/confirm'
-import { deleteEntry, emailEntry, submitEntry, updateEntry } from './_actions'
+import { flushRecordSaves } from '@/lib/pending-record-saves'
+import { deleteEntry, emailEntry, submitEntry, updateEntry, unlockEntry } from './_actions'
 import { JournalEditor } from './_editor'
 import { MetadataBar } from './_metadata-bar'
 import { Photos } from './_photos'
@@ -62,9 +63,9 @@ export function EditorPane({
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const locale = useLocale() as AppLocale
-  const editable = !entry.locked
   const [saveState, setSaveState] = useState<SaveState>('saved')
   const [submitting, startSubmit] = useTransition()
+  const editable = entry.canEdit && !entry.locked && entry.status === 'draft' && !submitting
   const [menuOpen, setMenuOpen] = useState(false)
 
   const pending = useRef<EntryPatch>({})
@@ -114,6 +115,7 @@ export function EditorPane({
   }
 
   function queue(patch: EntryPatch, delay = 700) {
+    if (!editable) return
     Object.assign(pending.current, patch)
     setSaveState('saving')
     if (timer.current) clearTimeout(timer.current)
@@ -149,12 +151,18 @@ export function EditorPane({
       // Persist the last debounced edits BEFORE submitting — the on-submit
       // flows / recap email / AI read the body from the DB.
       if (!(await flush())) return
+      try {
+        await flushRecordSaves()
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Changes are still saving.')
+        return
+      }
       const r = await submitEntry(entry.id)
       if (!r.ok) {
         toast.error(tGeneratedValue(r.error))
         return
       }
-      onLocalPatch({ status: 'submitted' })
+      onLocalPatch({ status: 'submitted', locked: true })
       toast.success(tGenerated('m_071487076d53a9'))
       onMutated()
     })
@@ -245,6 +253,33 @@ export function EditorPane({
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
+          {entry.status === 'submitted' && entry.canEdit ? (
+            <button
+              type="button"
+              disabled={submitting}
+              className="rounded border px-3 py-1 text-sm"
+              onClick={() =>
+                startSubmit(async () => {
+                  if (
+                    !(await confirmDialog({
+                      message: 'Unlock this submitted journal to make a correction?',
+                    }))
+                  )
+                    return
+                  const result = await unlockEntry(entry.id)
+                  if (!result.ok) {
+                    toast.error(result.error)
+                    return
+                  }
+                  onLocalPatch({ status: 'draft', locked: false })
+                  onMutated()
+                })
+              }
+            >
+              <GeneratedValue value={'Unlock'} />
+            </button>
+          ) : null}
+
           <GeneratedValue
             value={
               entry.status === 'draft' ? (

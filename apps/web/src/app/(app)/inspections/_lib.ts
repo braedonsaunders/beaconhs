@@ -178,7 +178,7 @@ function shouldSpawnCorrectiveAction(
  * CA is spawned, its create audit (both the CA-side and record-side entries)
  * is written here so every caller path is audited consistently.
  */
-export async function syncCorrectiveActionForCriterionInTx(
+async function syncCorrectiveActionForCriterionInTx(
   tx: InspectionTx,
   ctx: RequestContext,
   recordId: string,
@@ -216,29 +216,19 @@ export async function syncCorrectiveActionForCriterionInTx(
     .limit(1)
   if (!row) throw new Error('Inspection criterion not found')
 
+  // Draft and unlocked edits must never create or dispatch corrective actions.
+  if (!row.record.locked || !['submitted', 'closed'].includes(row.record.status)) {
+    return { caId: row.c.correctiveActionId, created: false }
+  }
+
   const answer = row.c.answer as CriterionAnswer | null
   const severity = row.c.severity as CriterionSeverity | null
   const shouldHaveCA =
     row.type.enableCorrectiveActions && shouldSpawnCorrectiveAction(answer, severity)
 
-  // Removing the link never deletes a CA that may already be under active
-  // remediation; it only stops the criterion from treating it as its current
-  // auto-synchronized action.
-  if (!shouldHaveCA) {
-    if (row.c.correctiveActionId) {
-      await tx
-        .update(inspectionRecordCriteria)
-        .set({ correctiveActionId: null })
-        .where(
-          and(
-            eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
-            eq(inspectionRecordCriteria.recordId, recordId),
-            eq(inspectionRecordCriteria.id, criterionRowId),
-          ),
-        )
-    }
-    return { caId: null, created: false }
-  }
+  // Keep provenance for previously issued actions. Re-answering a finding must
+  // never orphan an active action or mint a duplicate if it fails again.
+  if (!shouldHaveCA) return { caId: row.c.correctiveActionId, created: false }
 
   const title = `Inspection finding: ${row.c.questionTextSnapshot.slice(0, 80)}`
   const description =
@@ -536,6 +526,25 @@ export class InspectionTransitionError extends Error {
   }
 }
 
+/** Called only after a validated submission, in the same parent-locked transaction. */
+export async function syncInspectionCorrectiveActionsOnSubmitInTx(
+  tx: InspectionTx,
+  ctx: RequestContext,
+  recordId: string,
+): Promise<void> {
+  const findings = await tx
+    .select({ id: inspectionRecordCriteria.id })
+    .from(inspectionRecordCriteria)
+    .where(
+      and(
+        eq(inspectionRecordCriteria.tenantId, ctx.tenantId),
+        eq(inspectionRecordCriteria.recordId, recordId),
+      ),
+    )
+  for (const finding of findings)
+    await syncCorrectiveActionForCriterionInTx(tx, ctx, recordId, finding.id)
+}
+
 export async function assertInspectionStatusTransitionInTx(
   tx: InspectionTx,
   tenantId: string,
@@ -552,7 +561,7 @@ export async function assertInspectionStatusTransitionInTx(
       )
     }
   }
-  if (nextStatus !== 'closed') return
+  if (!submitting) return
 
   const [type] = await tx
     .select({
@@ -565,12 +574,12 @@ export async function assertInspectionStatusTransitionInTx(
   if (!type) throw new InspectionTransitionError('Inspection type no longer exists')
   if (type.requiresCustomerSignature && !record.customerSignatureAttachmentId) {
     throw new InspectionTransitionError(
-      'Cannot close: this inspection type requires a customer signature.',
+      'Cannot submit: this inspection type requires a customer signature.',
     )
   }
   if (type.requiresForeman && !record.foremanText && (record.foremanPersonIds ?? []).length === 0) {
     throw new InspectionTransitionError(
-      'Cannot close: this inspection type requires a foreman on the record.',
+      'Cannot submit: this inspection type requires a foreman on the record.',
     )
   }
 }

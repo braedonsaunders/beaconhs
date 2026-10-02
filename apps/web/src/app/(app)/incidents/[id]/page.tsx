@@ -1,3 +1,4 @@
+import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -87,7 +88,7 @@ import { nextReference } from '@/lib/reference'
 import { assertCan, can, getRegulatoryTerminology } from '@beaconhs/tenant'
 import { canSeeRecord } from '@/lib/visibility'
 import { canManageModule } from '@/lib/module-admin/guard'
-import { recentActivityForEntity, recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { recentActivityForEntity, recordAuditInTransaction, recordAudit } from '@/lib/audit'
 import { parseIncidentInjuryInput } from '@/lib/incident-injury-input'
 import {
   isIncidentFactorCategory,
@@ -769,17 +770,29 @@ async function copyIncident(formData: FormData) {
 async function deleteIncident(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
-  if (!canManageModule(ctx, 'incidents')) throw new Error('Not authorized')
   const id = String(formData.get('id') ?? '')
   if (!id) return
-  await ctx.db((tx) =>
-    tx.update(incidents).set({ deletedAt: new Date() }).where(eq(incidents.id, id)),
-  )
-  await recordAudit(ctx, {
-    entityType: 'incident',
-    entityId: id,
-    action: 'delete',
-    summary: 'Deleted incident',
+  await assertCanSeeIncident(ctx, id)
+  await ctx.db(async (tx) => {
+    const [record] = await tx
+      .select()
+      .from(incidents)
+      .where(and(eq(incidents.id, id), isNull(incidents.deletedAt)))
+      .limit(1)
+      .for('update')
+    if (
+      !record ||
+      (!canManageModule(ctx, 'incidents') &&
+        !canDeleteOwnRecord(ctx, 'incidents.delete.own', record.reportedByTenantUserId))
+    )
+      throw new Error('You cannot delete this incident.')
+    await tx.update(incidents).set({ deletedAt: new Date() }).where(eq(incidents.id, id))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'incident',
+      entityId: id,
+      action: 'delete',
+      summary: 'Soft-deleted incident',
+    })
   })
   revalidatePath('/incidents')
   redirect('/incidents')
@@ -1715,7 +1728,9 @@ export default async function IncidentDetailPage({
     prevSteps,
   } = data
 
-  const canManage = canManageModule(ctx, 'incidents')
+  const canManage =
+    canManageModule(ctx, 'incidents') ||
+    canDeleteOwnRecord(ctx, 'incidents.delete.own', incident.reportedByTenantUserId)
   const canInvestigate = can(ctx, 'incidents.investigate')
   const locked = incident.locked
   const activity = await recentActivityForEntity(ctx, 'incident', id, 25)

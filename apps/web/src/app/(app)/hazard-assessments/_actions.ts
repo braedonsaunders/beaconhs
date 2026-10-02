@@ -36,7 +36,8 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { assertCanManageModule } from '@/lib/module-admin/guard'
+import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
+import { canManageModule, assertCanManageModule } from '@/lib/module-admin/guard'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
@@ -86,7 +87,7 @@ async function assertAssessmentEditable(ctx: HazidCtx, assessmentId: string): Pr
 async function resolveAssessmentAccess(
   ctx: HazidCtx,
   assessmentId: string,
-): Promise<{ locked: boolean }> {
+): Promise<{ locked: boolean; reportedByTenantUserId: string | null }> {
   const row = await ctx.db(async (tx) => {
     const [found] = await tx
       .select({
@@ -106,7 +107,7 @@ async function resolveAssessmentAccess(
     return visible ? found : null
   })
   if (!row) throw new Error('Assessment not found')
-  return { locked: row.locked }
+  return { locked: row.locked, reportedByTenantUserId: row.reportedByTenantUserId }
 }
 
 const PATHS = (id: string) => [`/hazard-assessments/${id}`, '/hazard-assessments']
@@ -121,7 +122,7 @@ async function lockVisibleAssessment(
   ctx: HazidCtx,
   tx: HazidTx,
   assessmentId: string,
-): Promise<{ locked: boolean }> {
+): Promise<{ locked: boolean; reportedByTenantUserId: string | null }> {
   const [row] = await tx
     .select({
       reportedByTenantUserId: hazidAssessments.reportedByTenantUserId,
@@ -145,7 +146,7 @@ async function lockVisibleAssessment(
     siteId: row.siteOrgUnitId,
   })
   if (!visible) throw new Error('Assessment not found')
-  return { locked: row.locked }
+  return { locked: row.locked, reportedByTenantUserId: row.reportedByTenantUserId }
 }
 
 async function lockEditableAssessment(
@@ -1076,12 +1077,15 @@ export async function unlockAssessment(formData: FormData) {
 
 export async function deleteAssessment(formData: FormData) {
   const ctx = await ctxWithTenant()
-  // Delete is a module-manager action — `hazid.update` alone is not enough.
-  assertCanManageModule(ctx, 'hazid')
   const id = String(formData.get('id') ?? '')
   await assertCanSeeAssessment(ctx, id)
   await ctx.db(async (tx) => {
-    await lockVisibleAssessment(ctx, tx, id)
+    const record = await lockVisibleAssessment(ctx, tx, id)
+    if (
+      !canManageModule(ctx, 'hazid') &&
+      !canDeleteOwnRecord(ctx, 'hazid.delete.own', record.reportedByTenantUserId)
+    )
+      throw new Error('You cannot delete this assessment.')
     await tx
       .update(hazidAssessments)
       .set({ deletedAt: new Date() })

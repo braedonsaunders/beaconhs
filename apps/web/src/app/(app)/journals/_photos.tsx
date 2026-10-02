@@ -4,7 +4,7 @@ import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/
 import { useTransition } from 'react'
 import { FileText, Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
-import { FileUpload, type AttachedFile } from '@/components/file-upload'
+import { PhotoUploaderSection } from '@/components/photo-uploader-section'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { toast } from 'sonner'
 import {
@@ -31,25 +31,6 @@ export function Photos({
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const [busy, start] = useTransition()
-
-  function onUploaded(files: AttachedFile[]) {
-    if (files.length === 0) return
-    start(async () => {
-      const result = await attachJournalPhotos({
-        entryId,
-        attachmentIds: files.map((file) => file.attachmentId),
-      })
-      if (!result.ok) {
-        toast.error(tGeneratedValue(result.error))
-        return
-      }
-      onChange()
-      if (aiEnabled && result.photoIds.length > 0) {
-        await Promise.all(result.photoIds.map((id) => describeJournalPhoto(id)))
-        onChange()
-      }
-    })
-  }
 
   function describe(id: string) {
     start(async () => {
@@ -164,7 +145,17 @@ export function Photos({
 
       {editable ? (
         <div className={cn(photos.length > 0 && 'max-w-xs')}>
-          <FileUpload variant="photo" value={[]} onChange={onUploaded} />
+          <PhotoUploaderSection
+            attachAction={async (ids) => {
+              const result = await attachJournalPhotos({ entryId, attachmentIds: ids })
+              if (!result.ok) throw new Error(result.error)
+              onChange()
+              if (aiEnabled) {
+                await Promise.all(result.photoIds.map((id) => describeJournalPhoto(id)))
+                onChange()
+              }
+            }}
+          />
         </div>
       ) : null}
     </div>

@@ -64,6 +64,7 @@ import {
   lockInspectionRecordForMutation,
   materialiseCriteriaForRecordInTx,
   nextInspectionReferenceInTx,
+  syncInspectionCorrectiveActionsOnSubmitInTx,
 } from '@/app/(app)/inspections/_lib'
 import { nextReference } from '@/lib/reference'
 import { openEquipmentCheckoutItemIds, refreshEquipmentAvailability } from '@/lib/equipment-custody'
@@ -1029,6 +1030,7 @@ async function updateInspection(
           new Date(),
         ),
       )
+      if (requestedStatus === 'submitted') patch.locked = true
     } else if (requestedStatus !== undefined) {
       patch.status = requestedStatus
     }
@@ -1068,6 +1070,7 @@ async function updateInspection(
       const wasSubmitted = before.status === 'submitted'
       const isSubmitted = updated.status === 'submitted' || updated.status === 'closed'
       if (isSubmitted && !wasSubmitted) {
+        await syncInspectionCorrectiveActionsOnSubmitInTx(tx, ctx, id)
         await recordModuleFlowEvent(tx, ctx, {
           subjectId: id,
           moduleKey: 'inspections',

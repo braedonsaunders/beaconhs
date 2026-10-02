@@ -82,9 +82,32 @@ export function ActivityFeed({
                         <summary className="cursor-pointer text-slate-500 select-none hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
                           <GeneratedValue value={copy.showChanges} />
                         </summary>
-                        <pre className="mt-1 overflow-x-auto rounded bg-slate-50 p-2 text-[11px] text-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                          {JSON.stringify(e.after, null, 2)}
-                        </pre>
+                        <dl className="mt-2 space-y-2">
+                          {Object.entries(e.after)
+                            .filter(
+                              ([key, value]) =>
+                                !['id', 'rowId'].includes(key) &&
+                                JSON.stringify(e.before?.[key]) !== JSON.stringify(value),
+                            )
+                            .map(([key, value]) => (
+                              <div key={key} className="grid gap-1 sm:grid-cols-[10rem_1fr]">
+                                <dt className="font-medium">
+                                  {humanise(key.replace(/([a-z])([A-Z])/g, '$1 $2'))}
+                                </dt>
+                                <dd className="break-words whitespace-pre-wrap">
+                                  {e.before && key in e.before ? (
+                                    <>
+                                      <span className="text-slate-500">
+                                        {displayValue(e.before[key], timeZone, locale)}
+                                      </span>{' '}
+                                      →{' '}
+                                    </>
+                                  ) : null}
+                                  {displayValue(value, timeZone, locale)}
+                                </dd>
+                              </div>
+                            ))}
+                        </dl>
                       </details>
                     ) : null
                   }
@@ -128,4 +151,24 @@ const COPY: Record<AppLocale, { empty: string; by: string; showChanges: string }
     by: 'por',
     showChanges: 'mostrar cambios',
   },
+}
+
+function displayValue(value: unknown, timeZone: string, locale: string): string {
+  if (value === null || value === undefined || value === '') return 'Not set'
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (Array.isArray(value))
+    return value.length ? value.map((v) => displayValue(v, timeZone, locale)).join(', ') : 'None'
+  if (typeof value === 'object')
+    return Object.entries(value)
+      .map(([k, v]) => `${humanise(k)}: ${displayValue(v, timeZone, locale)}`)
+      .join(' · ')
+  if (
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T/.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  )
+    return new Date(value).toLocaleString(locale, { timeZone })
+  return String(value)
+    .replace(/<[^>]*>/g, '')
+    .replace(/_/g, ' ')
 }

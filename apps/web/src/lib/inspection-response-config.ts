@@ -148,3 +148,8 @@ export function inspectionCriterionDisplayAnswer(input: {
   }
   return input.outcomeAnswer === 'pass' ? 'Pass' : input.outcomeAnswer === 'fail' ? 'Fail' : 'N/A'
 }
+
+/** Compliance excludes N/A and supplemental text/number questions. */
+export function inspectionCompliancePercent(passed: number, failed: number): number {
+  return passed + failed > 0 ? Math.round((passed / (passed + failed)) * 100) : 0
+}

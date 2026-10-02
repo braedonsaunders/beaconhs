@@ -28,6 +28,7 @@ import {
   cn,
   type SelectOption,
 } from '@beaconhs/ui'
+import { FLUSH_RECORD_SAVES, trackRecordSave, forgetRecordSave } from '@/lib/pending-record-saves'
 import { useLazyRecord } from './lazy-record'
 import { RemoteSearchSelect } from './remote-search-select'
 import { toast } from '@/lib/toast'
@@ -58,6 +59,11 @@ export function useAutoSave({
 }) {
   const [state, setState] = useState<SaveState>('idle')
   const [, start] = useTransition()
+  const saveKey = useRef(Symbol('field'))
+  useEffect(() => {
+    const key = saveKey.current
+    return () => forgetRecordSave(key)
+  }, [])
   const latest = useRef<string>('')
   const inFlight = useRef(false)
 
@@ -68,29 +74,26 @@ export function useAutoSave({
     setState('saving')
     start(async () => {
       try {
-        const fd = await prepare(value)
-        if (!fd) {
-          inFlight.current = false
-          setState('error')
-          return
-        }
-        await updateAction(fd)
-        onSaved?.(value)
-        inFlight.current = false
-        if (latest.current !== value) {
-          save(latest.current) // user kept typing while we saved
-        } else {
-          setState('saved')
-          setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000)
-          onSettled?.()
-        }
+        await trackRecordSave(
+          saveKey.current,
+          (async () => {
+            for (;;) {
+              const current = latest.current
+              const fd = await prepare(current)
+              if (!fd) throw new Error('Record could not be prepared for saving.')
+              await updateAction(fd)
+              onSaved?.(current)
+              if (latest.current === current) break
+            }
+          })(),
+        )
+        setState('saved')
+        setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000)
+        onSettled?.()
       } catch {
+        setState('error')
+      } finally {
         inFlight.current = false
-        if (latest.current !== value) {
-          save(latest.current) // a newer edit is queued — attempt it before surfacing the error
-        } else {
-          setState('error')
-        }
       }
     })
   }
@@ -265,6 +268,19 @@ export function LiveField({
     },
   })
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const flush = () => {
+      if (!disabled) commit(value)
+    }
+    window.addEventListener(FLUSH_RECORD_SAVES, flush)
+    return () => window.removeEventListener(FLUSH_RECORD_SAVES, flush)
+  })
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    [],
+  )
 
   // Server revalidation (another section saved) refreshes props; adopt the
   // new value unless the user has unsaved edits in this exact field.
@@ -551,6 +567,19 @@ export function LiveDateTime({
     },
   })
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const flush = () => {
+      if (!disabled) commit(value)
+    }
+    window.addEventListener(FLUSH_RECORD_SAVES, flush)
+    return () => window.removeEventListener(FLUSH_RECORD_SAVES, flush)
+  })
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    [],
+  )
 
   // Adopt the server value on revalidation while idle.
   useEffect(() => {
@@ -835,6 +864,19 @@ export function LiveRichText({
     },
   })
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const flush = () => {
+      if (!disabled) commit(value)
+    }
+    window.addEventListener(FLUSH_RECORD_SAVES, flush)
+    return () => window.removeEventListener(FLUSH_RECORD_SAVES, flush)
+  })
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current)
+    },
+    [],
+  )
 
   // Adopt the server value on revalidation, unless we're editing this field.
   useEffect(() => {

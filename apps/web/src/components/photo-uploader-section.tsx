@@ -1,17 +1,14 @@
 'use client'
 
-import { GeneratedText, GeneratedValue } from '@/i18n/generated'
-
-import { useState, useTransition } from 'react'
+import { GeneratedValue } from '@/i18n/generated'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Camera } from 'lucide-react'
 import { Button } from '@beaconhs/ui'
 import { FileUpload, type AttachedFile } from './file-upload'
+import { trackRecordSave, forgetRecordSave } from '@/lib/pending-record-saves'
 
-/**
- * Compose the FileUpload primitive with a server action that links the
- * resulting attachment to a parent record (e.g. incident_attachments).
- */
+/** Upload and link are one operation from the user's perspective. A failed link
+ * retains uploaded IDs so retry never uploads the same photo twice. */
 export function PhotoUploaderSection({
   attachAction,
 }: {
@@ -19,43 +16,48 @@ export function PhotoUploaderSection({
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
-  const [staged, setStaged] = useState<AttachedFile[]>([])
-
-  function attach() {
-    if (staged.length === 0) return
+  const [failed, setFailed] = useState<AttachedFile[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const saveKey = useRef(Symbol('photo-attachment'))
+  useEffect(() => {
+    const key = saveKey.current
+    return () => forgetRecordSave(key)
+  }, [])
+  function attach(files: AttachedFile[]) {
+    if (!files.length || pending) return
+    setError(null)
     start(async () => {
-      await attachAction(staged.map((s) => s.attachmentId))
-      setStaged([])
-      router.refresh()
+      try {
+        await trackRecordSave(saveKey.current, attachAction(files.map((file) => file.attachmentId)))
+        setFailed([])
+        router.refresh()
+      } catch (error) {
+        setFailed(files)
+        setError(error instanceof Error ? error.message : 'Could not attach photos. Please retry.')
+      }
     })
   }
-
   return (
-    <div className="space-y-2 rounded-md border border-dashed border-slate-300 bg-slate-50/50 p-3 dark:border-slate-700">
-      <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-        <Camera size={14} /> <GeneratedText id="m_0d742b49add734" />
-      </div>
-      <FileUpload variant="photo" value={staged} onChange={setStaged} />
-      <GeneratedValue
-        value={
-          staged.length > 0 ? (
-            <Button onClick={attach} disabled={pending}>
-              <GeneratedValue
-                value={
-                  pending ? (
-                    <GeneratedText id="m_1a0172e9314d7c" />
-                  ) : (
-                    <GeneratedText
-                      id="m_13e1e9a41e0cb0"
-                      values={{ value0: staged.length, value1: staged.length === 1 ? '' : 's' }}
-                    />
-                  )
-                }
-              />
-            </Button>
-          ) : null
-        }
+    <div className="space-y-2">
+      <FileUpload
+        variant="photo"
+        value={[]}
+        onChange={attach}
+        disabled={pending || failed.length > 0}
       />
+      {pending ? (
+        <p role="status" className="text-sm text-slate-500">
+          <GeneratedValue value={'Saving photos…'} />
+        </p>
+      ) : null}
+      {error ? (
+        <div role="alert" className="space-y-2 text-sm text-red-600">
+          <p>{error}</p>
+          <Button type="button" onClick={() => attach(failed)} disabled={pending}>
+            <GeneratedValue value={'Retry saving photos'} />
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -50,7 +50,6 @@ describe('inspection record atomicity contract', () => {
     expect(visibilityLock).toContain("record.status === 'closed'")
 
     const directActions = [
-      ['updateStatus', 'async function toggleLock'],
       ['toggleLock', 'async function updateRecordField'],
       ['updateRecordField', 'async function setCriterionAnswer'],
       ['passAll', 'async function markSectionNa'],
@@ -108,7 +107,7 @@ describe('inspection record atomicity contract', () => {
   })
 
   it('uses one shared close gate and transaction-owned lifecycle effects in UI and API', () => {
-    const uiStatus = functionSlice(page, 'updateStatus', 'async function toggleLock')
+    const uiStatus = functionSlice(page, 'toggleLock', 'async function updateRecordField')
     const apiUpdate = functionSlice(
       apiWrites,
       'updateInspection',
@@ -173,7 +172,7 @@ describe('inspection record atomicity contract', () => {
     const startWork = functionSlice(
       page,
       'markInspectionInProgressIfDraft',
-      'async function updateStatus',
+      'async function toggleLock',
     )
     expect(startWork).toContain("record.status !== 'draft'")
     expect(startWork).toContain("eq(inspectionRecords.status, 'draft')")

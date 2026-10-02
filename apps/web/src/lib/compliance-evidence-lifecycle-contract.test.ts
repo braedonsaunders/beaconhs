@@ -54,8 +54,8 @@ describe('immediate compliance evidence lifecycle', () => {
   it('materializes inspection status, occurrence, inspector, and archive changes atomically', () => {
     const updateStatus = between(
       inspectionPage,
-      'async function updateStatus',
       'async function toggleLock',
+      'async function updateRecordField',
     )
     const updateField = between(
       inspectionPage,

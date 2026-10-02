@@ -93,6 +93,7 @@ export type JournalEntryDetail = {
   updatedAt: string
   submittedAt: string | null
   locked: boolean
+  canEdit: boolean
 }
 
 export type HeatmapCell = { date: string; count: number }

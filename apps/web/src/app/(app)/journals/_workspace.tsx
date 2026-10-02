@@ -13,6 +13,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { NotebookPen, Plus, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { SidebarTree } from './_sidebar-tree'
+import { TodayComposer } from './_today-composer'
 import { EditorPane } from './_editor-pane'
 import {
   createEntryForDate,
@@ -190,6 +191,10 @@ export function JournalWorkspace({
   }
 
   async function onMutated() {
+    if (entry) {
+      const refreshed = await fetchEntry(entry.id)
+      if (refreshed) setEntry(refreshed)
+    }
     await reloadSidebar()
   }
 
@@ -275,6 +280,12 @@ export function JournalWorkspace({
                   onMutated={onMutated}
                   onDeleted={onDeleted}
                   onLocalPatch={onLocalPatch}
+                  onBrowse={() => setTreeOpen(true)}
+                />
+              ) : !authorEntryId ? (
+                <TodayComposer
+                  aiEnabled={data.aiEnabled}
+                  onCreated={openCreated}
                   onBrowse={() => setTreeOpen(true)}
                 />
               ) : (

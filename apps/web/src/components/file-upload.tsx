@@ -7,6 +7,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { Camera, FileUp, Loader2, Trash2 } from 'lucide-react'
 import { Button, uploadReservedFile } from '@beaconhs/ui'
+import { trackRecordSave, forgetRecordSave } from '@/lib/pending-record-saves'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { RawImage } from '@/components/raw-image'
 import type { PhotoAttachmentValue } from '@beaconhs/forms-core'
@@ -31,6 +32,7 @@ export function FileUpload({
   onUploadingChange,
   variant = 'file',
   showFileList = true,
+  disabled = false,
 }: {
   value: AttachedFile[]
   onChange: (files: AttachedFile[]) => void
@@ -39,10 +41,16 @@ export function FileUpload({
   maxFiles?: number
   onUploadingChange?: (uploading: boolean) => void
   variant?: 'photo' | 'file' | 'video' | 'audio'
+  disabled?: boolean
   showFileList?: boolean
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
+  const saveKey = useRef(Symbol('upload'))
+  useEffect(() => {
+    const key = saveKey.current
+    return () => forgetRecordSave(key)
+  }, [])
   const inputRef = useRef<HTMLInputElement>(null)
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -108,13 +116,26 @@ export function FileUpload({
     }
     setError(tGeneratedValue(null))
     start(async () => {
-      const next: AttachedFile[] = []
-      for (const f of Array.from(files).slice(0, remaining)) {
-        const uploaded = await uploadOne(f)
-        if (uploaded) next.push(uploaded)
+      try {
+        await trackRecordSave(
+          saveKey.current,
+          (async () => {
+            const next: AttachedFile[] = []
+            let failed = false
+            for (const f of Array.from(files).slice(0, remaining)) {
+              const uploaded = await uploadOne(f)
+              if (uploaded) next.push(uploaded)
+              else failed = true
+            }
+            if (next.length) onChange([...value, ...next])
+            if (inputRef.current) inputRef.current.value = ''
+            if (failed)
+              throw new Error('Some files did not upload. Please retry them before submitting.')
+          })(),
+        )
+      } catch (error) {
+        setError(error instanceof Error ? error.message : 'Upload failed. Please retry.')
       }
-      onChange([...value, ...next])
-      if (inputRef.current) inputRef.current.value = ''
     })
   }
 
@@ -143,7 +164,7 @@ export function FileUpload({
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        disabled={pending || (maxFiles !== undefined && value.length >= maxFiles)}
+        disabled={disabled || pending || (maxFiles !== undefined && value.length >= maxFiles)}
         className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-6 text-sm text-slate-600 hover:border-teal-500 hover:bg-teal-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-teal-950/40"
       >
         <GeneratedValue

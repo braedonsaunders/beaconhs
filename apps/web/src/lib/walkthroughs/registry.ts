@@ -97,9 +97,8 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         path: '/journals',
-        target: '[data-walkthrough="journals-new"]',
         title: 'Start an entry',
-        body: 'Tap New entry to open a fresh journal for today.',
+        body: 'Today’s draft opens automatically. If there is no entry yet, start typing in the fresh editor. Submitted journals are read-only until you unlock them.',
       },
       {
         title: 'Write it down',

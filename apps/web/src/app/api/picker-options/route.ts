@@ -271,6 +271,7 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
         can(ctx, 'incidents.update') ||
         can(ctx, 'incidents.investigate')
       )
+    case 'inspection-supervisors':
     case 'inspection-sites':
     case 'inspection-people':
       return can(ctx, 'inspections.update') || can(ctx, 'inspections.create')
@@ -1273,7 +1274,7 @@ async function loadOptions(
       return boundPickerOptions(rows.map((row) => option(row.id, row.name, row.code)))
     }
 
-    if (lookup === 'training-class-instructors') {
+    if (lookup === 'training-class-instructors' || lookup === 'inspection-supervisors') {
       const displayName = sql<string>`coalesce(${tenantUsers.displayName}, ${users.name})`
       const match = input.hasQuery
         ? or(

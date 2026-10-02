@@ -191,15 +191,28 @@ function narrative(title: string, token: string, gate = ''): string {
   )
 }
 
-/** Photo list: gated heading + one bordered image per row with its caption. */
+/** Compact contact sheet. Keep each photo with its caption, without cropping. */
 function photos(eachKey = 'photos', title = 'Photos'): string {
+  return `{{#if ${eachKey}}}<div style="${H2}margin:14px 0 8px;break-after:avoid;page-break-after:avoid;">${title}</div>
+    <div style="font-size:0;">{{#each ${eachKey}}}<div style="display:inline-block;vertical-align:top;width:48%;margin:0 2% 10px 0;page-break-inside:avoid;">
+      <img src="{{url}}" style="display:block;width:100%;height:210px;object-fit:contain;border:1px solid #e2e8f0;" alt="" />
+      <div style="font-size:10px;color:#64748b;white-space:pre-wrap;overflow-wrap:anywhere;padding-top:3px;">{{caption}}</div>
+    </div>{{/each}}</div>{{/if}}`
+}
+
+/** Findings use full-width narrative cells so long answers remain readable. */
+function inspectionItems(): string {
   return (
-    `<table style="${TABLE}">` +
-    `<tr data-if="${eachKey}"><td style="${HEAD_CELL}"><div style="${H2}">${title}</div></td></tr>` +
-    `<tr data-each="${eachKey}" style="${ROW}"><td style="border:none;padding:4px 0 8px;">` +
-    `<img src="{{url}}" width="320" style="border:1px solid #e2e8f0;border-radius:4px;display:block;" alt="" />` +
-    `<div style="font-size:10px;color:#64748b;padding-top:3px;">{{caption}}</div>` +
-    `</td></tr></table>`
+    heading('Inspection items') +
+    `<table style="${TABLE}"><tbody>
+    <tr data-each="criteria" style="page-break-inside:auto;"><td style="${TD}padding:10px;">
+      <div style="font-size:10px;color:#64748b;">{{group}}</div>
+      <div style="font-weight:700;margin-bottom:6px;">{{question}} <span style="float:right;font-weight:400;">{{severity}}</span></div>
+      <div style="white-space:pre-wrap;overflow-wrap:anywhere;"><strong>Answer:</strong> {{answer}}</div>
+      {{#if notes}}<div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:5px;"><strong>Notes:</strong> {{notes}}</div>{{/if}}
+      {{#if non_compliance}}<div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:5px;"><strong>Non-compliance:</strong> {{non_compliance}}</div>{{/if}}
+      {{#if action_taken}}<div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:5px;"><strong>Action taken:</strong> {{action_taken}}</div>{{/if}}
+    </td></tr></tbody></table>`
   )
 }
 
@@ -491,14 +504,7 @@ const INSPECTION = wrap(
       pIf('submitted_at', 'Submitted at', '{{submitted_at}}'),
       pIf('closed_at', 'Closed at', '{{closed_at}}'),
     ]) +
-    collection('Inspection items', 'criteria', [
-      ['Group', '{{group}}', 'width:14%;'],
-      ['Item', '{{question}}'],
-      ['Answer', '{{answer}}', 'width:9%;'],
-      ['Severity', '{{severity}}', 'width:9%;'],
-      ['Non-compliance', '{{non_compliance}}', 'width:20%;'],
-      ['Action taken', '{{action_taken}}', 'width:20%;'],
-    ]) +
+    inspectionItems() +
     narrative('Notes', '{{notes}}') +
     heading('Customer sign-off', 'customer_name') +
     grid([
