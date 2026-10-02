@@ -13,6 +13,10 @@ const BASE: EmailDeliveryInput = {
   text: 'Safe',
 }
 
+function zeroBytesBase64(bytes: number): string {
+  return 'AAAA'.repeat(Math.floor(bytes / 3)) + ['', 'AA==', 'AAA='][bytes % 3]
+}
+
 describe('normalizeEmailDeliveryInput', () => {
   it('normalizes the subject and deduplicates trimmed recipients case-insensitively', () => {
     expect(
@@ -72,6 +76,70 @@ describe('normalizeEmailDeliveryInput', () => {
         attachments: [{ filename: 'report.pdf', content: 'cGRm', contentType: 'application/pdf' }],
       }).attachments,
     ).toHaveLength(1)
+  })
+
+  it.each([5_234_102, EMAIL_DELIVERY_LIMITS.attachmentBytes])(
+    'accepts a valid %i-byte attachment without overflowing the stack',
+    (size) => {
+      const content = zeroBytesBase64(size)
+      expect(
+        normalizeEmailDeliveryInput({
+          ...BASE,
+          attachments: [{ filename: 'journal.pdf', content }],
+        }).attachments?.[0]?.content,
+      ).toBe(content)
+    },
+  )
+
+  it.each(['A', 'AAA', 'A===', '====', 'AA=A', 'AA==AAAA', 'AAAA\n', 'AAA_', 'AA😀'])(
+    'rejects malformed base64 %j',
+    (content) => {
+      expect(() =>
+        normalizeEmailDeliveryInput({
+          ...BASE,
+          attachments: [{ filename: 'report.pdf', content }],
+        }),
+      ).toThrow('base64')
+    },
+  )
+
+  it.each(['', 'AA==', 'AAA=', 'AAAA', '+/AA'])('accepts base64 %j', (content) => {
+    expect(() =>
+      normalizeEmailDeliveryInput({
+        ...BASE,
+        attachments: [{ filename: 'report.pdf', content }],
+      }),
+    ).not.toThrow()
+  })
+
+  it('rejects an invalid final character in a large attachment', () => {
+    const content = 'AAAA'.repeat(2_000_000) + 'AAA!'
+    expect(() =>
+      normalizeEmailDeliveryInput({
+        ...BASE,
+        attachments: [{ filename: 'report.pdf', content }],
+      }),
+    ).toThrow('base64')
+  })
+
+  it('enforces decoded and aggregate attachment size limits', () => {
+    const oversized = zeroBytesBase64(EMAIL_DELIVERY_LIMITS.attachmentBytes + 1)
+    expect(() =>
+      normalizeEmailDeliveryInput({
+        ...BASE,
+        attachments: [{ filename: 'report.pdf', content: oversized }],
+      }),
+    ).toThrow(/limit|bounded/)
+    const content = zeroBytesBase64(6 * 1024 * 1024)
+    expect(() =>
+      normalizeEmailDeliveryInput({
+        ...BASE,
+        attachments: [
+          { filename: 'a.pdf', content },
+          { filename: 'b.pdf', content },
+        ],
+      }),
+    ).toThrow(/attachment/i)
   })
 
   it('omits an empty attachment list from the normalized provider payload', () => {

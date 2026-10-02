@@ -37,7 +37,26 @@ export const EMAIL_DELIVERY_LIMITS = {
 } as const
 
 const MAX_EMAIL_ADDRESS_LENGTH = 254
-const BASE64_QUANTUM = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+// Scan once without recursive regular-expression backtracking or allocating a
+// decoded copy. Nested quantum regexes overflow V8's stack on valid large PDFs.
+function isBase64(value: string): boolean {
+  if (value.length % 4 !== 0) return false
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
+  const end = value.length - padding
+  for (let index = 0; index < end; index += 1) {
+    const code = value.charCodeAt(index)
+    if (
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      (code >= 48 && code <= 57) ||
+      code === 43 ||
+      code === 47
+    )
+      continue
+    return false
+  }
+  return true
+}
 
 /**
  * Provider-compatible ASCII mailbox validation for envelope/sender addresses.
@@ -121,7 +140,7 @@ function validateAttachment(attachment: EmailAttachmentPayload, index: number): 
 
   // Reject oversized input before applying the full base64 syntax scan.
   const maxEncodedChars = Math.ceil(EMAIL_DELIVERY_LIMITS.attachmentBytes / 3) * 4
-  if (attachment.content.length > maxEncodedChars || !BASE64_QUANTUM.test(attachment.content)) {
+  if (attachment.content.length > maxEncodedChars || !isBase64(attachment.content)) {
     throw new Error(`${label} is not valid bounded base64 content.`)
   }
   const decodedBytes = decodedBase64Bytes(attachment.content)
