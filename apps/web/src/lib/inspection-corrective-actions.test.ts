@@ -133,6 +133,18 @@ describe('inspection finding action lifecycle', () => {
       expect(db.inserts).toHaveLength(0)
     },
   )
+  it('does not write a synthetic super-admin membership into an action foreign key', async () => {
+    const db = setup()
+    const admin = { ...ctx, membership: { id: 'super-admin' } } as RequestContext
+    await syncInspectionCorrectiveActionsOnSubmitInTx(db.tx, admin, 'record-a')
+    expect(db.inserts).toContainEqual({
+      table: correctiveActions,
+      value: expect.objectContaining({
+        assignedByTenantUserId: null,
+        ownerTenantUserId: 'inspector-a',
+      }),
+    })
+  })
   it('honors inspection types with automatic actions disabled', async () => {
     const db = setup({ enabled: false, severity: 'critical' })
     await syncInspectionCorrectiveActionsOnSubmitInTx(db.tx, ctx, 'record-a')

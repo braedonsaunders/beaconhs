@@ -359,7 +359,8 @@ async function syncCorrectiveActionForCriterionInTx(
       siteOrgUnitId: row.record.siteOrgUnitId,
       assignedOn: new Date().toISOString().slice(0, 10),
       dueOn,
-      assignedByTenantUserId: ctx.membership?.id ?? null,
+      assignedByTenantUserId:
+        ctx.membership?.id === 'super-admin' ? null : (ctx.membership?.id ?? null),
       ownerTenantUserId: caOwnerTenantUserId,
     })
     .returning()
