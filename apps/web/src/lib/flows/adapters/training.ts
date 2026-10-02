@@ -12,7 +12,11 @@ import {
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
-import type { RequestContext } from '@beaconhs/tenant'
+import {
+  formatAssessmentAnswer,
+  assessmentOptionsText,
+} from '@/app/(app)/training/_lib/assessment-display'
+import { can, type RequestContext } from '@beaconhs/tenant'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { fmtDateTime, personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
@@ -66,6 +70,8 @@ export function createTrainingFlowAdapter(
         tx
           .select({
             prompt: trainingAssessmentResults.promptSnapshot,
+            kind: trainingAssessmentResults.kindSnapshot,
+            options: trainingAssessmentResults.optionsSnapshot,
             answer: trainingAssessmentResults.answer,
             correctAnswer: trainingAssessmentResults.correctAnswerSnapshot,
             correct: trainingAssessmentResults.correct,
@@ -75,7 +81,10 @@ export function createTrainingFlowAdapter(
           })
           .from(trainingAssessmentResults)
           .where(eq(trainingAssessmentResults.assessmentId, assessmentId))
-          .orderBy(asc(trainingAssessmentResults.createdAt)),
+          .orderBy(
+            asc(trainingAssessmentResults.positionSnapshot),
+            asc(trainingAssessmentResults.id),
+          ),
       )
 
       return {
@@ -113,8 +122,16 @@ export function createTrainingFlowAdapter(
         // Collections.
         questions: questions.map((q) => ({
           prompt: q.prompt ?? '',
-          answer: q.answer ?? '',
-          correct_answer: q.correctAnswer ?? '',
+          options_text: assessmentOptionsText(q.options),
+          answer: formatAssessmentAnswer(q.answer, q.kind, q.options),
+          correct_answer:
+            a.status === 'submitted' &&
+            a.graded &&
+            (can(ctx, 'training.record.create') || can(ctx, 'training.class.manage'))
+              ? formatAssessmentAnswer(q.correctAnswer, q.kind, q.options)
+              : '',
+          is_correct: a.graded && q.correct === true,
+          is_incorrect: a.graded && q.correct === false,
           result: !a.graded
             ? 'Recorded'
             : q.correct === true

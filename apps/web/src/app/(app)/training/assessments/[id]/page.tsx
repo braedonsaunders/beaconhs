@@ -1,3 +1,4 @@
+import { validChoiceOptions, formatAssessmentAnswer } from '../../_lib/assessment-display'
 import { getGeneratedValueTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
@@ -94,7 +95,7 @@ export default async function AssessmentAttemptDetailPage({
       .select()
       .from(trainingAssessmentResults)
       .where(eq(trainingAssessmentResults.assessmentId, id))
-      .orderBy(asc(trainingAssessmentResults.createdAt))
+      .orderBy(asc(trainingAssessmentResults.positionSnapshot), asc(trainingAssessmentResults.id))
     return { attempt, type, person, course, results, isMine }
   })
 
@@ -353,8 +354,9 @@ export default async function AssessmentAttemptDetailPage({
                                       <GeneratedValue value={' '} />
                                       <span className="font-mono">
                                         <GeneratedValue
-                                          value={formatChoiceAnswer(
+                                          value={formatAssessmentAnswer(
                                             r.correctAnswerSnapshot,
+                                            r.kindSnapshot,
                                             r.optionsSnapshot,
                                           )}
                                         />
@@ -518,32 +520,6 @@ export default async function AssessmentAttemptDetailPage({
       </div>
     </PageContainer>
   )
-}
-
-type ChoiceOption = { value: string; label: string }
-
-function validChoiceOptions(options: unknown): ChoiceOption[] {
-  if (!Array.isArray(options)) return []
-  return options.filter(
-    (option): option is ChoiceOption =>
-      option != null &&
-      typeof option === 'object' &&
-      'value' in option &&
-      typeof option.value === 'string' &&
-      'label' in option &&
-      typeof option.label === 'string',
-  )
-}
-
-function formatChoiceAnswer(answer: string, options: unknown): string {
-  const choices = validChoiceOptions(options)
-  if (choices.length === 0) return answer
-  const labels = new Map(choices.map((option) => [option.value, option.label]))
-  return answer
-    .split(',')
-    .map((value) => labels.get(value.trim()) ?? value.trim())
-    .filter(Boolean)
-    .join(', ')
 }
 
 function AnswerInput({

@@ -63,3 +63,61 @@ describe('inspection report layout', () => {
     }
   }, 180000)
 })
+
+describe('training assessment PDF', () => {
+  it('prints choice options, readable answers, and distinct correct and incorrect results', async () => {
+    const training = MODULE_PDF_TEMPLATE_SEEDS.find((seed) => seed.subjectKey === 'training')!
+    const html = renderTemplate(
+      expandRepeatMarkers(training.html),
+      {
+        assessment_name: 'Equipment safety',
+        person_name: 'Example learner',
+        status_label: 'Submitted',
+        pass_fail: 'Pass',
+        questions: [
+          {
+            prompt: 'First question: select the safe action',
+            options_text: '1. Isolate the energy source\n2. Start work',
+            answer: 'Isolate the energy source',
+            correct_answer: 'Isolate the energy source',
+            result: 'Correct',
+            is_correct: true,
+            is_incorrect: false,
+            points: '1/1',
+          },
+          {
+            prompt: 'Second question: the statement is true',
+            answer: 'False',
+            correct_answer: 'True',
+            result: 'Incorrect',
+            is_correct: false,
+            is_incorrect: true,
+            points: '0/1',
+          },
+        ],
+      },
+      { escapeHtml: true },
+    )
+    expect(html).not.toContain('{{')
+    expect(html).toContain('✓ Correct')
+    expect(html).toContain('✗ Incorrect')
+    const pdf = await renderHtmlDocumentPdf({
+      bodyHtml: html,
+      paperSize: 'letter',
+      orientation: 'portrait',
+      marginMm: 14,
+    })
+    const result = await extractText(new Uint8Array(pdf), { mergePages: true })
+    expect(result.text.indexOf('First question')).toBeLessThan(
+      result.text.indexOf('Second question'),
+    )
+    expect(result.text).toContain('2. Start work')
+    expect(result.text).toContain('Isolate the energy source')
+    expect(result.text).toContain('False')
+    expect(result.text).toContain('True')
+    if (process.env.BEACON_PDF_REVIEW_PATH) {
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(process.env.BEACON_PDF_REVIEW_PATH.replace('.pdf', '-training.pdf'), pdf)
+    }
+  }, 180000)
+})

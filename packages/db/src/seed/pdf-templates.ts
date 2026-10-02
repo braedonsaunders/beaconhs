@@ -517,6 +517,23 @@ const INSPECTION = wrap(
     photos(),
 )
 
+function trainingQuestions(): string {
+  return (
+    heading('Questions & responses') +
+    `<table style="${TABLE}"><tbody><tr data-each="questions" style="page-break-inside:auto;"><td style="${TD}padding:10px;">
+      <div style="font-weight:700;margin-bottom:5px;">{{@number}}. {{prompt}}</div>
+      {{#if options_text}}<div style="white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0 10px;">{{options_text}}</div>{{/if}}
+      <div style="display:flex;gap:12px;break-inside:avoid;">
+        <div style="flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;"><strong>Answer</strong><br />{{answer}}</div>
+        {{#if correct_answer}}<div style="flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;"><strong>Correct answer</strong><br />{{correct_answer}}</div>{{/if}}
+        <div style="width:85px;"><strong>Result</strong><br />{{#if is_correct}}<span style="color:#15803d;font-weight:700;">✓ {{result}}</span>{{else}}{{#if is_incorrect}}<span style="color:#b91c1c;font-weight:700;">✗ {{result}}</span>{{else}}{{result}}{{/if}}{{/if}}</div>
+        {{#if points}}<div style="width:45px;"><strong>Points</strong><br />{{points}}</div>{{/if}}
+      </div>
+      {{#if review_notes}}<div style="white-space:pre-wrap;margin-top:6px;"><strong>Review notes:</strong> {{review_notes}}</div>{{/if}}
+    </td></tr></tbody></table>`
+  )
+}
+
 const TRAINING = wrap(
   letterhead('Training Assessment', '{{assessment_name}}', '{{person_name}}') +
     chips('{{status_label}}', '{{pass_fail}}') +
@@ -529,14 +546,7 @@ const TRAINING = wrap(
       p('Completed', '{{completed_at}}'),
     ]) +
     narrative('About this assessment', '{{assessment_description}}') +
-    collection('Questions & responses', 'questions', [
-      ['#', '{{@number}}', 'width:5%;'],
-      ['Question', '{{prompt}}'],
-      ['Answer', '{{answer}}', 'width:18%;'],
-      ['Correct answer', '{{correct_answer}}', 'width:18%;'],
-      ['Result', '{{result}}', 'width:9%;'],
-      ['Points', '{{points}}', RIGHT + 'width:7%;'],
-    ]),
+    trainingQuestions(),
 )
 
 const JOURNAL = wrap(

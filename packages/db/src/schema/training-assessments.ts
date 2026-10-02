@@ -277,6 +277,7 @@ export const trainingAssessmentResults = pgTable(
     // If an admin later edits the question, an in-progress or historical
     // attempt must remain the exact assessment that was originally started.
     promptSnapshot: text('prompt_snapshot').notNull(),
+    positionSnapshot: integer('position_snapshot').notNull().default(0),
     helpTextSnapshot: text('help_text_snapshot'),
     correctAnswerSnapshot: text('correct_answer_snapshot'),
     kindSnapshot: trainingAssessmentQuestionKind('kind_snapshot').notNull(),

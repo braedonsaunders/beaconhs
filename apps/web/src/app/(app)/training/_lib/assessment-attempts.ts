@@ -123,11 +123,12 @@ export async function createAssessmentAttempt(
 
   if (questions.length > 0) {
     await tx.insert(trainingAssessmentResults).values(
-      questions.map((q) => ({
+      questions.map((q, index) => ({
         tenantId: args.tenantId,
         assessmentId: attempt.id,
         questionId: q.id,
         promptSnapshot: q.prompt,
+        positionSnapshot: index + 1,
         helpTextSnapshot: q.helpText,
         correctAnswerSnapshot: q.correctAnswer,
         kindSnapshot: q.kind,

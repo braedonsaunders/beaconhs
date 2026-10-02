@@ -124,7 +124,7 @@ To start one, click **New assessment**. In the flyout, choose the person, then c
 6. A graded assessment with a free-text answer shows **Awaiting review**. Your answers are locked while training staff award the points. Other graded assessments show the score and pass or fail result immediately.
 7. A completion-only assessment shows **Completed**. It records your answers without inventing a score or pass mark.
 
-Use **Print / PDF** in the assessment header for a paper copy of the attempt with every question and answer. A passed assessment also offers **Certificate**.
+Use **Print / PDF** in the assessment header for a paper copy in the same question order as the page, including every answer choice and your selected answer. Results use a green check for correct answers and a red cross for incorrect answers. Training staff can also see the correct answer after submission. A passed assessment also offers **Certificate**.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 
