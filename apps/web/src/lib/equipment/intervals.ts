@@ -54,8 +54,16 @@ export function addInterval(from: Date, value: number, unit: EquipmentIntervalUn
   const next = new Date(from)
   if (unit === 'day') next.setUTCDate(next.getUTCDate() + value)
   else if (unit === 'week') next.setUTCDate(next.getUTCDate() + value * 7)
-  else if (unit === 'month') next.setUTCMonth(next.getUTCMonth() + value)
-  else next.setUTCFullYear(next.getUTCFullYear() + value)
+  else {
+    const day = next.getUTCDate()
+    next.setUTCDate(1)
+    if (unit === 'month') next.setUTCMonth(next.getUTCMonth() + value)
+    else next.setUTCFullYear(next.getUTCFullYear() + value)
+    const lastDay = new Date(
+      Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0),
+    ).getUTCDate()
+    next.setUTCDate(Math.min(day, lastDay))
+  }
   return dateOnly(next)
 }
 

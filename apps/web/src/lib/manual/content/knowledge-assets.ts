@@ -640,6 +640,12 @@ A document cannot be unpublished, archived, or deleted while it belongs to a pub
     ],
     body: `Equipment is the registry of every unit and tool your company tracks.
 
+## Oil changes and inspection schedules
+
+Open the unit’s **Overview** or **Inspections** tab, then **Oil changes**. For applicable units, enter **Last oil change**, **Interval (months)**, and **Engine hours at oil change**, then choose **Save oil change**. A new date adds a maintenance log entry and recalculates the next due date. Use a maintenance log entry for any expense or receipt as well.
+
+In **Inspections**, schedules with a checklist have **Start**. Schedules for outside inspections have **Record completion**: enter the completion date and certificate reference or notes. Saving advances the next due date and adds history. Inspection names and intervals are configured by your company.
+
 ## What this is for
 
 Look up any unit to see its department, status, which site it is at, who is holding it, and its service history. No more radio calls asking where the compactor went.

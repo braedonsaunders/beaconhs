@@ -10,6 +10,7 @@ import {
   equipmentInspectionSchedules,
   equipmentInspectionTypes,
   equipmentItems,
+  equipmentLogEntries,
   equipmentReminders,
   people,
 } from '@beaconhs/db/schema'
@@ -17,7 +18,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { canSeeRecord, moduleScopeWhere } from '@/lib/visibility'
 import {
   addIntervalToDate,
   formatInterval,
@@ -91,6 +92,32 @@ export async function saveEquipmentSchedule(input: {
         .where(eq(equipmentInspectionTypes.id, inspectionTypeId))
         .limit(1)
       if (!type) return null
+    }
+    if (input.isActive) {
+      const existing = await tx
+        .select()
+        .from(equipmentInspectionSchedules)
+        .where(
+          and(
+            eq(equipmentInspectionSchedules.equipmentItemId, input.equipmentItemId),
+            eq(equipmentInspectionSchedules.isActive, true),
+          ),
+        )
+      if (
+        existing.some(
+          (row) =>
+            row.id !== input.id &&
+            row.intervalValue === interval.value &&
+            row.intervalUnit === interval.unit &&
+            (inspectionTypeId
+              ? row.inspectionTypeId === inspectionTypeId
+              : !row.inspectionTypeId && row.label?.trim().toLowerCase() === label?.toLowerCase()),
+        )
+      ) {
+        throw new Error(
+          'This unit already has an active schedule for that inspection and interval. Edit the existing schedule.',
+        )
+      }
     }
     const values = {
       inspectionTypeId,
@@ -398,4 +425,69 @@ export async function deleteEquipmentReminder(input: {
   })
   revalidateMaintenance(input.equipmentItemId)
   return { ok: true }
+}
+
+/** External certification has no checklist, but still needs dated completion evidence. */
+export async function completeEquipmentSchedule(form: FormData) {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
+  const id = requireUuidInput(form.get('scheduleId'), 'Schedule')
+  const completedOn = requiredDateInput(form.get('completedOn'), 'Completion date')
+  const evidence = requiredTextInput(
+    form.get('evidence'),
+    'Completion notes or certificate reference',
+    5000,
+  )
+  const itemId = await ctx.db(async (tx) => {
+    const [schedule] = await tx
+      .select()
+      .from(equipmentInspectionSchedules)
+      .where(eq(equipmentInspectionSchedules.id, id))
+      .limit(1)
+      .for('update')
+    if (!schedule || !schedule.isActive) throw new Error('Active schedule not found.')
+    const [item] = await tx
+      .select()
+      .from(equipmentItems)
+      .where(and(eq(equipmentItems.id, schedule.equipmentItemId), isNull(equipmentItems.deletedAt)))
+      .limit(1)
+    if (
+      !item ||
+      !(await canSeeRecord(ctx, tx, {
+        prefix: 'equipment',
+        siteId: item.currentSiteOrgUnitId,
+        personId: item.currentHolderPersonId,
+      }))
+    )
+      throw new Error('Equipment not found.')
+    if (schedule.inspectionTypeId)
+      throw new Error('Use Start to complete the linked inspection checklist.')
+    if (schedule.lastCompletedOn && completedOn < schedule.lastCompletedOn)
+      throw new Error('Completion cannot precede the last completed inspection.')
+    if (schedule.lastCompletedOn === completedOn) return schedule.equipmentItemId
+    const nextDueOn = addIntervalToDate(completedOn, schedule.intervalValue, schedule.intervalUnit)
+    await tx
+      .update(equipmentInspectionSchedules)
+      .set({ lastCompletedOn: completedOn, nextDueOn, dueNotifiedFor: null })
+      .where(eq(equipmentInspectionSchedules.id, id))
+    await tx.insert(equipmentLogEntries).values({
+      tenantId: ctx.tenantId,
+      equipmentItemId: schedule.equipmentItemId,
+      kind: 'maintenance',
+      entryDate: completedOn,
+      title: `${schedule.label ?? 'External inspection'} completed`,
+      details: `${evidence}\nNext due: ${nextDueOn}`,
+      createdByTenantUserId: ctx.membership?.id ?? null,
+    })
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment',
+      entityId: schedule.equipmentItemId,
+      action: 'update',
+      summary: `Completed ${schedule.label ?? 'external inspection'}`,
+      before: { lastCompletedOn: schedule.lastCompletedOn, nextDueOn: schedule.nextDueOn },
+      after: { lastCompletedOn: completedOn, nextDueOn, evidence, scheduleId: id },
+    })
+    return schedule.equipmentItemId
+  })
+  revalidateMaintenance(itemId)
 }

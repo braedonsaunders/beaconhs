@@ -1,3 +1,5 @@
+import { CompleteSchedule } from '../_complete-schedule'
+import { OilChangeCard } from './_oil-change'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -1638,6 +1640,20 @@ export default async function EquipmentDetailPage({
              * server-rendered swap triggers an AnimatePresence cycle so the
              * outgoing panel fades while the incoming one slides in.
              */}
+            {active === 'overview' || active === 'inspections' ? (
+              <OilChangeCard
+                key={`${item.updatedAt}`}
+                itemId={id}
+                enabled={item.requiresOilChange}
+                interval={item.oilChangeIntervalMonths}
+                last={item.lastOilChangeOn}
+                next={item.nextOilChangeDue}
+                hours={
+                  typeof item.metadata.lastOilHours === 'number' ? item.metadata.lastOilHours : null
+                }
+                canEdit={canManageEquipment}
+              />
+            ) : null}
             <TabContent tabKey={active}>
               <GeneratedValue
                 value={
@@ -2761,6 +2777,9 @@ export default async function EquipmentDetailPage({
                                                     </TableCell>
                                                     <TableCell>
                                                       <div className="flex items-center justify-end gap-3">
+                                                        {!schedule.inspectionTypeId && !locked ? (
+                                                          <CompleteSchedule id={schedule.id} />
+                                                        ) : null}
                                                         <GeneratedValue
                                                           value={
                                                             schedule.inspectionTypeId ? (
