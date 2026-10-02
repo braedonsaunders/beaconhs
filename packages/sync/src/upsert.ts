@@ -1025,7 +1025,19 @@ async function upsertPerson(
     throw new Error(`Source department ${data.departmentExternalId} has no resolved name.`)
   }
   const rowHash = hashData({ ...data, jobTitle: normalizedJobTitle })
-  const metadata = data.metadata as JsonRecord | undefined
+  const sourceEmploymentType = data.employmentType?.trim()
+  const metadata: JsonRecord | undefined = sourceEmploymentType
+    ? {
+        ...data.metadata,
+        employmentType: sourceEmploymentType,
+        personType: /contractor|subcontractor/i.test(sourceEmploymentType)
+          ? 'contractor'
+          : /employee|exempt/i.test(sourceEmploymentType)
+            ? 'employee'
+            : 'unknown',
+      }
+    : data.metadata
+
   const fields: PersonFields = {
     firstName: data.firstName,
     lastName: data.lastName,

@@ -14,6 +14,7 @@ export type PeopleTableRow = {
   id: string
   firstName: string
   lastName: string
+  personType: string
   employeeNo: string | null
   primaryTitleName: string | null
   departmentName: string | null
@@ -82,7 +83,7 @@ export function PeopleRecordsTable({
                         : 'destructive'
                   }
                 >
-                  <GeneratedValue value={r.status} />
+                  <GeneratedValue value={r.status} /> · {r.personType}
                 </Badge>
               }
               title={tGeneratedValue(`${r.lastName}, ${r.firstName}`)}
@@ -198,7 +199,7 @@ export function PeopleRecordsTable({
                               : 'destructive'
                         }
                       >
-                        <GeneratedValue value={r.status} />
+                        <GeneratedValue value={r.status} /> · {r.personType}
                       </Badge>
                     </td>
                   </tr>

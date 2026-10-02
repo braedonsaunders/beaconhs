@@ -13,6 +13,7 @@ export interface CanonicalPerson {
   firstName: string
   lastName: string
   employeeNo?: string | null
+  employmentType?: string | null
   externalEmployeeId?: string | null
   email?: string | null
   phone?: string | null

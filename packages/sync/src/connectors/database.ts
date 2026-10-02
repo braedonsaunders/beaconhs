@@ -195,6 +195,7 @@ function mapRow(
         firstName,
         lastName,
         employeeNo: g('employeeNo'),
+        employmentType: g('employmentType'),
         externalEmployeeId: g('externalEmployeeId'),
         email: g('email'),
         phone: g('phone'),

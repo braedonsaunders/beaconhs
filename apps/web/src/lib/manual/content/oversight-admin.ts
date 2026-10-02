@@ -31,6 +31,10 @@ export const OVERSIGHT_ADMIN_ARTICLES: ManualArticle[] = [
     ],
     body: `The People directory lists everyone in your company — workers, contractors, and supervisors.
 
+## Employees and contractors
+
+**People** includes both employees and contractors. Use **Worker type** to filter the directory. The worker type appears beside the person’s status. Both types can have safety records, equipment, PPE, and training. The inbound connector’s **Employment type** mapping keeps this classification current. People without a known source classification show **Unclassified**.
+
 ## What this is for
 
 People power almost everything else in the app. Training records, compliance, PPE, and incidents all point back to a person here. Keeping this list correct keeps the rest of the app correct.

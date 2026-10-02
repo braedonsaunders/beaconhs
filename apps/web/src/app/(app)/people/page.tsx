@@ -3,7 +3,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Users } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { primaryPersonTitleName } from '@beaconhs/db'
 import { departments, people, trades } from '@beaconhs/db/schema'
@@ -52,6 +52,7 @@ export default async function PeoplePage({
   const statusFilter: StatusFilter = (STATUS_FILTERS as readonly string[]).includes(rawStatus)
     ? (rawStatus as StatusFilter)
     : 'active'
+  const personTypeFilter = pickString(sp.personType)
   const departmentFilter = pickString(sp.department) ?? null
   const ctx = await requireRequestContext()
   const canManage = canManageModule(ctx, 'people')
@@ -71,6 +72,8 @@ export default async function PeoplePage({
       if (cond) baseFilters.push(cond)
     }
     if (departmentFilter) baseFilters.push(eq(people.departmentId, departmentFilter))
+    if (personTypeFilter === 'employee' || personTypeFilter === 'contractor')
+      baseFilters.push(sql`${people.metadata}->>'personType' = ${personTypeFilter}`)
     const filters = [...baseFilters]
     if (statusFilter !== 'all') {
       filters.push(eq(people.status, statusFilter))
@@ -141,6 +144,12 @@ export default async function PeoplePage({
       firstName: person.firstName,
       lastName: person.lastName,
       employeeNo: person.employeeNo,
+      personType:
+        person.metadata.personType === 'contractor'
+          ? 'Contractor'
+          : person.metadata.personType === 'employee'
+            ? 'Employee'
+            : 'Unclassified',
       primaryTitleName,
       departmentName: department?.name ?? null,
       tradeName: trade?.name ?? null,
@@ -185,6 +194,16 @@ export default async function PeoplePage({
           />
           <PeopleSubNav active="directory" />
           <div className="flex flex-wrap items-center gap-3">
+            <FilterChips
+              basePath="/people"
+              currentParams={sp}
+              paramKey="personType"
+              label={tGeneratedValue('Worker type')}
+              options={[
+                { value: 'employee', label: 'Employees' },
+                { value: 'contractor', label: 'Contractors' },
+              ]}
+            />
             <SearchInput placeholder={tGenerated('m_1561c55102f953')} />
             <FilterChips
               basePath="/people"

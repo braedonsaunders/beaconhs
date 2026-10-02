@@ -49,6 +49,7 @@ const ENTITY_FIELDS: Record<string, { key: string; label: string; help?: string 
     { key: 'fullName', label: 'Full name', help: 'Split into first/last if those are blank' },
     { key: 'firstName', label: 'First name' },
     { key: 'lastName', label: 'Last name' },
+    { key: 'employmentType', label: 'Employment type (employee / contractor)' },
     { key: 'employeeNo', label: 'Employee no.' },
     { key: 'externalEmployeeId', label: 'External employee ID' },
     { key: 'email', label: 'Email' },
