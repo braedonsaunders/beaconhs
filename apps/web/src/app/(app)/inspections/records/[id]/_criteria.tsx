@@ -441,7 +441,7 @@ export function CriterionCard({
                 onPick={pickSeverity}
                 helper={
                   <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                    <GeneratedValue value="Severity sets urgency. Unresolved findings can create follow-up actions on submission." />
+                    <GeneratedValue value="Choose a severity (required). Severity sets urgency. Unresolved findings can create follow-up actions on submission." />
                   </p>
                 }
               />

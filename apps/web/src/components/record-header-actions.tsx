@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { unstable_rethrow } from 'next/navigation'
 import { flushRecordSaves } from '@/lib/pending-record-saves'
 import { toast } from '@/lib/toast'
 import { type ReactNode, useState } from 'react'
@@ -17,6 +18,8 @@ import {
 } from '@/i18n/generated'
 
 type FormAction = (formData: FormData) => Promise<void>
+type LockResult = { error: string; details?: string[] } | void
+type LockAction = (formData: FormData) => Promise<LockResult>
 
 /**
  * Submit button that asks first. Lock and unlock both run tenant flows
@@ -133,8 +136,8 @@ export function RecordHeaderActions({
   copyAction: FormAction
   /** Module wording for the copy control, e.g. "Copy inspection". */
   copyLabel?: string
-  lockAction: FormAction
-  unlockAction: FormAction
+  lockAction: LockAction
+  unlockAction: LockAction
   lockLabel?: string
   /**
    * Why this record cannot be submitted yet. The server is authoritative and
@@ -146,8 +149,22 @@ export function RecordHeaderActions({
   const tGenerated = useGeneratedTranslations()
   const tGeneratedValue = useGeneratedValueTranslations()
   const [open, setOpen] = useState(false)
+  const [lockError, setLockError] = useState<Exclude<LockResult, void> | null>(null)
+  async function changeLock(formData: FormData): Promise<void> {
+    setLockError(null)
+    try {
+      const result = await (locked ? unlockAction : lockAction)(formData)
+      if (result) setLockError(result)
+    } catch (error) {
+      unstable_rethrow(error)
+      setLockError({
+        error:
+          'Could not update this record. Your work was not reported as complete. Please retry.',
+      })
+    }
+  }
   const lockForm = (
-    <form action={locked ? unlockAction : lockAction}>
+    <form action={changeLock}>
       <input type="hidden" name="id" value={id} />
       <ConfirmedSubmitButton
         title={locked ? tGenerated('m_0ada1228bbdfc0') : tGenerated('m_1b0351e1b7075e')}
@@ -158,6 +175,18 @@ export function RecordHeaderActions({
         {locked ? <Unlock size={14} /> : <Lock size={14} />}
         {locked ? <GeneratedText id="m_0ca830c9381fd6" /> : <GeneratedValue value={lockLabel} />}
       </ConfirmedSubmitButton>
+      {lockError ? (
+        <div role="alert" className="mt-2 max-w-sm text-sm text-red-700 dark:text-red-300">
+          <GeneratedValue value={lockError.error} />
+          {lockError.details?.length ? (
+            <ul className="mt-1 list-disc pl-5">
+              {lockError.details.map((detail, index) => (
+                <li key={`${index}-${detail}`}>{detail}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
     </form>
   )
   const menuItem =

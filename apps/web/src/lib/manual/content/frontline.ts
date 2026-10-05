@@ -280,7 +280,7 @@ Use **Notes** for context on passing or failing items. Notes stay when you chang
    - **Reason for non-compliance** — what is wrong.
    - **Action taken** — what was done to fix it.
    - **Finding resolution** — choose **Resolved on site** when the fix is complete, or leave **Follow-up required**. Resolved findings require an **Action taken** and **Corrected on** date.
-   - A severity, and a person the finding is assigned to, if your company uses those.
+   - A **Severity** for every failed item. Choose the person assigned to the finding if your company uses assignments.
 3. Add photos on any failed item. Tap **Take photo or upload** to use the camera or choose pictures from your phone's photo library. Some items require a photo before you can submit — they show a **Photo** tag.
 4. Tap the pencil button on a photo to add a caption or draw attention to a problem. The editor keeps the photo's original shape. Large camera photos are optimized automatically when they upload. Tap the trash button to remove the wrong photo. Use the arrow buttons to put several photos in order.
 5. If most outcome items pass, tap **Mark unanswered as pass** above the inspection items to fill those items in one tap. **Select one**, **Text**, **Long text**, and **Number** items are never filled by this shortcut; answer each one yourself. Only use the shortcut when you actually checked the items.
@@ -293,6 +293,8 @@ Managers build inspection types under **Site Inspections** → **Manage** → **
 ## Submitting and corrections
 
 Tap **Submit & lock** when all required answers and evidence are complete. Submission waits for pending saves. When the inspection type enables corrective actions, failed findings marked **Follow-up required** create an action after successful submission, at any severity. **Resolved on site** findings do not create new open actions. Draft edits do not send corrective-action emails.
+
+If something is missing, the page stays open and lists the item and missing field below **Submit & lock**. Complete those fields and try again. Your inspection stays editable until submission succeeds.
 
 Tap **Unlock** to correct a submitted inspection, then **Resubmit & lock**. Existing corrective actions remain linked so resubmission does not create duplicates. Updated finding details synchronize to active linked actions even when you lower severity. A finding marked **Resolved on site** closes its active linked action on submission if you have permission to update that action. If verification is required, the action moves to **Pending verification** instead. Closed and cancelled actions keep their history; open the linked action to reopen it when more work is needed. Changing an answer to **Pass** or **N/A** alone does not close an action. The action link shows its current status.
 

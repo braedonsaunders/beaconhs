@@ -69,6 +69,7 @@ import { SectionNav, type SectionNavItem } from '@/components/section-nav'
 import { LiveDateTime, LiveField, LiveRemoteSelect } from '@/components/live-field'
 import {
   assertInspectionStatusTransitionInTx,
+  InspectionTransitionError,
   inspectionStatusMilestonePatch,
   lockVisibleInspectionRecordForMutation,
   parseAnswer,
@@ -316,7 +317,14 @@ async function toggleLock(formData: FormData) {
 async function lockInspection(formData: FormData) {
   'use server'
   formData.set('lock', 'true')
-  await toggleLock(formData)
+  try {
+    await toggleLock(formData)
+  } catch (error) {
+    if (error instanceof InspectionTransitionError) {
+      return { error: error.message, details: error.details }
+    }
+    throw error
+  }
 }
 
 async function unlockInspection(formData: FormData) {
