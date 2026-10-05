@@ -114,12 +114,16 @@ export class LatestAutosaveQueue {
   }
 
   private async flushInternal(): Promise<void> {
-    this.clearTimers()
-    for (const key of this.pending.keys()) this.ready.add(key)
     this.failure = null
-    this.emit()
-    await this.ensureDrain()
-    if (this.failure) throw new Error(this.failure)
+    do {
+      this.clearTimers()
+      for (const key of this.pending.keys()) this.ready.add(key)
+      this.emit()
+      await this.ensureDrain()
+      if (this.failure) throw new Error(this.failure)
+      // An edit made while the previous write was in flight may still be
+      // debouncing. A navigation/submit barrier must persist that edit too.
+    } while (this.hasWork())
   }
 
   private clearTimers(): void {

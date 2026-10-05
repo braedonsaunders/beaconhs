@@ -12,7 +12,7 @@ import {
 // editor, and photos. Owns autosave (debounced) and the per-entry mutations.
 // Journals have no individual title — the date is the identifier.
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useLocale } from 'next-intl'
 import {
   AlertCircle,
@@ -38,7 +38,8 @@ import { JournalEditor } from './_editor'
 import { MetadataBar } from './_metadata-bar'
 import { Photos } from './_photos'
 import { formatDate, isToday, statusMeta, textToHtml } from './_format'
-import type { EntryPatch, JournalEntryDetail, TagSuggestion } from './_types'
+import type { JournalEntryDetail, TagSuggestion } from './_types'
+import { useJournalAutosave } from './_use-autosave'
 
 type SaveState = 'saving' | 'saved' | 'error'
 
@@ -63,63 +64,28 @@ export function EditorPane({
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const locale = useLocale() as AppLocale
-  const [saveState, setSaveState] = useState<SaveState>('saved')
   const [submitting, startSubmit] = useTransition()
   const editable = entry.canEdit && !entry.locked && entry.status === 'draft' && !submitting
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const pending = useRef<EntryPatch>({})
-  const inFlight = useRef<Promise<boolean> | null>(null)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // The editor emits one onChange as it hydrates a loaded entry; that's not a
-  // user edit. We capture it as a baseline and skip it so opening an entry never
-  // autosaves (which, for migrated entries whose HTML lived in body_text, would
-  // otherwise overwrite body_text with empty and destroy the content).
-  const bodyBaseline = useRef<string | null>(null)
+  const {
+    schedule: queue,
+    flush: persist,
+    snapshot,
+  } = useJournalAutosave(entry.id, editable, updateEntry)
+  const saveState: SaveState = snapshot.state === 'dirty' ? 'saving' : snapshot.state
 
   useEffect(() => {
-    return () => {
-      if (timer.current) clearTimeout(timer.current)
-    }
-  }, [])
+    if (snapshot.error) toast.error(tGeneratedValue(snapshot.error))
+  }, [snapshot.error, tGeneratedValue])
 
   async function flush(): Promise<boolean> {
-    if (timer.current) clearTimeout(timer.current)
-    if (inFlight.current) return inFlight.current
-    if (Object.keys(pending.current).length === 0) return true
-
-    const run = (async () => {
-      while (Object.keys(pending.current).length > 0) {
-        const patch = pending.current
-        pending.current = {}
-        setSaveState('saving')
-        const result = await updateEntry({ id: entry.id, patch })
-        if (!result.ok) {
-          // Put the failed fields back while keeping any newer edit for the
-          // same field authoritative. The visible retry can now persist it.
-          pending.current = { ...patch, ...pending.current }
-          setSaveState('error')
-          toast.error(tGeneratedValue(result.error))
-          return false
-        }
-      }
-      setSaveState('saved')
-      return true
-    })()
-    inFlight.current = run
     try {
-      return await run
-    } finally {
-      if (inFlight.current === run) inFlight.current = null
+      await persist()
+      return true
+    } catch {
+      return false
     }
-  }
-
-  function queue(patch: EntryPatch, delay = 700) {
-    if (!editable) return
-    Object.assign(pending.current, patch)
-    setSaveState('saving')
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => void flush(), delay)
   }
 
   function onMeta(
@@ -135,14 +101,7 @@ export function EditorPane({
   }
 
   function onBody(html: string) {
-    // Skip the editor's first emission after an entry loads (hydration echo);
-    // only genuine subsequent edits autosave.
-    if (bodyBaseline.current === null) {
-      bodyBaseline.current = html
-      return
-    }
-    if (html === bodyBaseline.current) return
-    bodyBaseline.current = html
+    onLocalPatch({ bodyHtml: html })
     queue({ bodyHtml: html })
   }
 
@@ -171,6 +130,7 @@ export function EditorPane({
   function emailRecap() {
     setMenuOpen(false)
     startSubmit(async () => {
+      if (!(await flush())) return
       const r = await emailEntry(entry.id)
       if (!r.ok) toast.error(tGeneratedValue(r.error))
       else
@@ -190,6 +150,7 @@ export function EditorPane({
     )
       return
     startSubmit(async () => {
+      if (!(await flush())) return
       const r = await deleteEntry(entry.id)
       if (!r.ok) {
         toast.error(tGeneratedValue(r.error))

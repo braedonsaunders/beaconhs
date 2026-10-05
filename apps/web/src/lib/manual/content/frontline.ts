@@ -46,7 +46,7 @@ Supervisors can open **Records** beside **Journals**, or tap **Browse**, then **
 4. Use the microphone button to dictate by voice instead of typing, if you prefer.
 5. Set the location and people in the bar above the text, if they apply.
 
-The header changes from **Saving…** to **Saved** after your latest edit is stored. If it shows **Not saved — retry**, tap that message before leaving or submitting the entry.
+The header changes from **Saving…** to **Saved** after your latest edit is stored. Wait for **Saved** before closing or refreshing the browser. Opening another entry saves your pending changes first. If a save fails, your words stay in the editor. Tap **Not saved — retry** and wait for **Saved** before leaving or submitting the entry.
 
 ## Using AI writing help
 

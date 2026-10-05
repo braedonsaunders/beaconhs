@@ -1,10 +1,11 @@
 'use client'
 
 import { GeneratedValue } from '@/i18n/generated'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@beaconhs/ui'
 import { JournalEditor } from './_editor'
 import { createTodayEntry, updateEntry } from './_actions'
+import { FLUSH_RECORD_SAVES, forgetRecordSave, trackRecordSave } from '@/lib/pending-record-saves'
 
 /** A fresh editor needs no database row until the author actually writes. */
 export function TodayComposer({
@@ -17,14 +18,30 @@ export function TodayComposer({
   onBrowse: () => void
 }) {
   const latest = useRef('')
-  const running = useRef(false)
+  const running = useRef<Promise<void> | null>(null)
+  const persisted = useRef('')
+  const [saveKey] = useState(() => Symbol('new-journal-save'))
   const id = useRef<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [opening, setOpening] = useState(false)
-  async function save() {
-    if (running.current || !latest.current) return
-    running.current = true
+  function save(): Promise<void> {
+    if (running.current) return running.current
+    if (!latest.current) return Promise.resolve()
+    const task = trackRecordSave(saveKey, persist())
+    running.current = task
+    void task.then(
+      () => {
+        running.current = null
+      },
+      () => {
+        running.current = null
+      },
+    )
+    return task
+  }
+
+  async function persist() {
     setSaving(true)
     setError(null)
     try {
@@ -39,16 +56,38 @@ export function TodayComposer({
         const result = await updateEntry({ id: id.current, patch: { bodyHtml: saved } })
         if (!result.ok) throw new Error(result.error)
       } while (latest.current !== saved)
+      persisted.current = saved
       setOpening(true)
       await onCreated(id.current)
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not save your journal.')
+      throw error
     } finally {
-      running.current = false
       setSaving(false)
       setOpening(false)
     }
   }
+  const saveRef = useRef(save)
+  useEffect(() => {
+    saveRef.current = save
+  }, [save])
+  useEffect(() => {
+    const flush = () => void saveRef.current().catch(() => {})
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (!running.current && latest.current === persisted.current) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener(FLUSH_RECORD_SAVES, flush)
+    window.addEventListener('beforeunload', beforeUnload)
+    return () => {
+      window.removeEventListener(FLUSH_RECORD_SAVES, flush)
+      window.removeEventListener('beforeunload', beforeUnload)
+      if (running.current || latest.current !== persisted.current) flush()
+      else forgetRecordSave(saveKey)
+    }
+  }, [saveKey])
+
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center justify-between">
@@ -73,7 +112,7 @@ export function TodayComposer({
         onChange={(html, text) => {
           if (!text.trim() && !id.current) return
           latest.current = html
-          void save()
+          void save().catch(() => {})
         }}
       />
       {saving ? (
@@ -84,7 +123,7 @@ export function TodayComposer({
       {error ? (
         <div role="alert">
           <p>{error}</p>
-          <Button onClick={() => void save()}>
+          <Button onClick={() => void save().catch(() => {})}>
             <GeneratedValue value={'Retry save'} />
           </Button>
         </div>

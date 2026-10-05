@@ -90,6 +90,22 @@ describe('LatestAutosaveQueue', () => {
     expect(saved).toEqual(['rich', 'meta'])
   })
 
+  it('flushes edits made during an active save even when their debounce has not elapsed', async () => {
+    vi.useFakeTimers()
+    const queue = new LatestAutosaveQueue()
+    const gate = deferred()
+    const saved: string[] = []
+    queue.schedule('body', 700, () => gate.promise)
+    const flush = queue.flush()
+    queue.schedule('body', 700, async () => {
+      saved.push('latest')
+    })
+    gate.resolve()
+    await flush
+    expect(saved).toEqual(['latest'])
+    expect(queue.hasWork()).toBe(false)
+  })
+
   it('retains a failed latest task and exposes it to retry', async () => {
     vi.useFakeTimers()
     const queue = new LatestAutosaveQueue()

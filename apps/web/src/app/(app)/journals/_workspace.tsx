@@ -26,6 +26,7 @@ import {
 } from './_actions'
 import type { GroupBy, JournalEntryDetail, JournalFilters, WorkspaceData } from './_types'
 import { mergeTreePages } from './_tree-pages'
+import { flushRecordSaves } from '@/lib/pending-record-saves'
 
 export function JournalWorkspace({
   initialData,
@@ -95,9 +96,22 @@ export function JournalWorkspace({
     return () => document.removeEventListener('keydown', onKey)
   }, [treeOpen])
 
+  async function saveBeforeLeaving(): Promise<boolean> {
+    try {
+      await flushRecordSaves()
+      return true
+    } catch (error) {
+      toast.error(
+        tGeneratedValue(error instanceof Error ? error.message : 'Could not save your journal.'),
+      )
+      return false
+    }
+  }
+
   async function selectEntry(id: string) {
     setTreeOpen(false)
     if (id === entry?.id) return
+    if (!(await saveBeforeLeaving())) return
     const detail = await fetchEntry(id)
     if (detail) {
       setEntry(detail)
@@ -159,6 +173,7 @@ export function JournalWorkspace({
   function newEntry() {
     if (authorEntryId) return // author flyout is review/edit only — no create-as-other
     startNav(async () => {
+      if (!(await saveBeforeLeaving())) return
       const r = await createTodayEntry()
       if (!r.ok) {
         toast.error(tGeneratedValue(r.error))
@@ -171,6 +186,7 @@ export function JournalWorkspace({
   function pickDate(dateISO: string) {
     if (authorEntryId) return
     startNav(async () => {
+      if (!(await saveBeforeLeaving())) return
       const r = await createEntryForDate(dateISO)
       if (!r.ok) {
         toast.error(tGeneratedValue(r.error))
@@ -192,8 +208,26 @@ export function JournalWorkspace({
 
   async function onMutated() {
     if (entry) {
+      if (!(await saveBeforeLeaving())) return
       const refreshed = await fetchEntry(entry.id)
-      if (refreshed) setEntry(refreshed)
+      if (refreshed) {
+        setEntry((current) => {
+          if (!current || current.id !== entry.id) return current
+          // Edits made during the refresh remain authoritative. The editor
+          // itself stays mounted and never rehydrates from this response.
+          return current === entry
+            ? refreshed
+            : {
+                ...refreshed,
+                bodyHtml: current.bodyHtml,
+                tags: current.tags,
+                definition: current.definition,
+                siteOrgUnitId: current.siteOrgUnitId,
+                supervisorPersonId: current.supervisorPersonId,
+                entryDate: current.entryDate,
+              }
+        })
+      }
     }
     await reloadSidebar()
   }

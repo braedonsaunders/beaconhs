@@ -129,15 +129,10 @@ export function JournalEditor({
     },
   })
 
-  // Re-hydrate when switching to a different entry.
+  // The parent keys this editor by entry ID. Content is loaded once; a photo
+  // or metadata refresh must never replace text the author is still writing.
   useEffect(() => {
-    if (editor && initialHtml !== editor.getHTML()) {
-      editor.commands.setContent(initialHtml, { emitUpdate: false })
-    }
-  }, [editor, initialHtml])
-
-  useEffect(() => {
-    if (editor) editor.setEditable(editable)
+    if (editor) editor.setEditable(editable, false)
   }, [editor, editable])
 
   // Close AI menu on outside click.
@@ -168,7 +163,7 @@ export function JournalEditor({
       return
     }
     setAiBusy(mode)
-    editor.setEditable(false)
+    editor.setEditable(false, false)
     try {
       let generated = ''
       for await (const chunk of streamAI(mode, source)) generated += chunk
@@ -194,7 +189,7 @@ export function JournalEditor({
         tGeneratedValue(err instanceof Error ? err.message : tGenerated('m_144eb024879229')),
       )
     } finally {
-      if (!editor.isDestroyed) editor.setEditable(editable)
+      if (!editor.isDestroyed) editor.setEditable(editable, false)
       setAiBusy(null)
     }
   }
