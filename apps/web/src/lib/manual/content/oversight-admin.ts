@@ -57,6 +57,16 @@ Open [People](/people) from the sidebar.
 3. Fill in their name, employee number, **Primary job title**, department, and hire date.
 4. Click **Create person**. They now show up in pickers across the app.
 
+## Delete a manually managed person (managers)
+
+1. Open the person's page.
+2. Click **Delete person** in the header.
+3. Read the confirmation, then click **Delete person** again.
+
+The person leaves the directory and future selections. Existing safety records and their original person details are kept. Their login account and workspace access stay unchanged; manage access separately in **Users**. A deleted person's employee number can be used for the correct replacement record.
+
+**Delete person** is disabled for people linked to an external sync, even if its schedule is paused. Remove them in the source system. Manually entered people can be deleted whether or not the workspace also syncs other people.
+
 ## Job titles
 
 **Primary job title** is the one shown in the directory, org chart, reports, and people pickers. **Held titles** can include extra duties, such as a carpenter who also acts as a relief foreman.

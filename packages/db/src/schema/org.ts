@@ -201,7 +201,9 @@ export const people = pgTable(
     ),
     tenantIdx: index('people_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('people_tenant_id_id_ux').on(t.tenantId, t.id),
-    tenantEmployeeNoUx: uniqueIndex('people_tenant_employee_no_ux').on(t.tenantId, t.employeeNo),
+    tenantEmployeeNoUx: uniqueIndex('people_tenant_employee_no_ux')
+      .on(t.tenantId, t.employeeNo)
+      .where(sql`${t.deletedAt} is null`),
     nameIdx: index('people_name_idx').on(t.tenantId, t.lastName, t.firstName),
     departmentIdx: index('people_department_idx').on(t.tenantId, t.departmentId),
     tradeIdx: index('people_trade_idx').on(t.tenantId, t.tradeId),

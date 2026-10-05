@@ -100,6 +100,7 @@ import { setPersonGroups } from '../_actions/groups'
 import { setPersonTitles, setPrimaryPersonTitle } from '../_actions/titles'
 import { deletePersonFile } from '../_actions/files'
 import { PersonFilesDrawers } from './_files-drawers'
+import { DeletePersonButton } from './_delete-person-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -633,6 +634,7 @@ export default async function PersonDetailPage({
           actions={
             canEdit ? (
               <div className="flex flex-wrap gap-2">
+                <DeletePersonButton id={id} synced={synced} />
                 <Button asChild variant="outline" size="sm">
                   <DownloadLink href={`${basePath}/badge`} target="_blank" rel="noreferrer">
                     <IdCard size={14} /> <GeneratedText id="m_1036403447ff0f" />
