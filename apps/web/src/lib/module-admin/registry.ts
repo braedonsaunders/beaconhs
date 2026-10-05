@@ -414,8 +414,16 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     href: '/ppe',
     managePath: '/ppe/manage',
     iconKey: 'hard-hat',
-    permission: 'ppe.read.all',
-    tabs: [{ key: 'records', label: 'Records', href: '/ppe' }],
+    permission: 'ppe.manage',
+    tabs: [
+      { key: 'records', label: 'Records', href: '/ppe' },
+      {
+        key: 'inspections',
+        label: 'Inspections',
+        href: '/ppe/inspections',
+        permission: 'ppe.manage',
+      },
+    ],
     sections: [
       {
         key: 'types',
@@ -457,7 +465,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
     href: '/ppe',
     managePath: '/ppe/manage',
     iconKey: 'hard-hat',
-    permission: 'ppe.read.all',
+    permission: 'ppe.manage',
     tabs: [{ key: 'records', label: 'Records', href: '/ppe' }],
     sections: [],
   },

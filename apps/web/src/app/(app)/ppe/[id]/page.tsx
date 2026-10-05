@@ -1241,7 +1241,15 @@ export default async function PpeDetailPage({
   const openInspectionId = pickString(sp.inspectionId) ?? ''
   const openInspection =
     drawerKey === 'inspection' && isUuid(openInspectionId)
-      ? inspections.find(({ insp }) => insp.id === openInspectionId)
+      ? await ctx.db(async (tx) => {
+          const [row] = await tx
+            .select({ insp: ppeInspections, supervisor: people })
+            .from(ppeInspections)
+            .leftJoin(people, eq(people.id, ppeInspections.supervisorPersonId))
+            .where(and(eq(ppeInspections.id, openInspectionId), eq(ppeInspections.itemId, id)))
+            .limit(1)
+          return row
+        })
       : undefined
   const inspectionEvidence = openInspection
     ? await ctx.db(async (tx) => {

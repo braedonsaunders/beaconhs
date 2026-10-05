@@ -205,21 +205,25 @@ export function searchManualArticles(ctx: RequestContext, query: string): Manual
         score += 5
         hitThisTerm = true
       }
+      let headingHit = false
+      let bodyHit = false
       for (const section of sections) {
         // A heading naming the term is what someone is actually looking for.
         if (section.heading.toLowerCase().includes(term)) {
-          score += 11
+          headingHit = true
           hitThisTerm = true
         }
         const index = section.body.toLowerCase().indexOf(term)
         if (index < 0) continue
-        score += 2
+        bodyHit = true
         hitThisTerm = true
         const terms = sectionTerms.get(section) ?? new Set<string>()
         terms.add(term)
         sectionTerms.set(section, terms)
         if (!best || terms.size > best.hits) best = { section, index, hits: terms.size }
       }
+      if (headingHit) score += 11
+      if (bodyHit) score += 2
       if (hitThisTerm) matched += 1
     }
 

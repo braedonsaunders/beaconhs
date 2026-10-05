@@ -5,7 +5,7 @@
 // criterion as a line item. Uses the tenant's configured template for the
 // `ppe` module when one is set, else the generic record summary.
 
-import { assertCan } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { and, eq } from 'drizzle-orm'
 import { ppeInspections } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
@@ -31,7 +31,7 @@ export async function GET(
   if (!ctx.tenantId) {
     return Response.json({ error: 'No active tenant' }, { status: 400 })
   }
-  assertCan(ctx, 'ppe.read.all')
+  if (!can(ctx, 'ppe.manage')) assertCan(ctx, 'ppe.read.all')
 
   // Re-scope before rendering: the inspection must belong to the item in the
   // URL, so a guessed id can't pull another item's inspection.
@@ -44,13 +44,15 @@ export async function GET(
   )
   if (!inspection) return Response.json({ error: 'Not found' }, { status: 404 })
 
-  await recordAudit(ctx, {
-    entityType: 'ppe_inspection',
-    entityId: inspectionId,
-    action: 'export',
-    summary: 'Exported PDF',
-    metadata: { format: 'pdf' },
-  })
+  const response = await renderModulePdfResponse(ctx, { moduleKey: 'ppe', recordId: inspectionId })
+  if (response.ok)
+    await recordAudit(ctx, {
+      entityType: 'ppe_inspection',
+      entityId: inspectionId,
+      action: 'export',
+      summary: 'Exported PDF',
+      metadata: { format: 'pdf' },
+    })
 
-  return renderModulePdfResponse(ctx, { moduleKey: 'ppe', recordId: inspectionId })
+  return response
 }

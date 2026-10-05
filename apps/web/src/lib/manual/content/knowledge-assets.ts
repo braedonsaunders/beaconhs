@@ -964,6 +964,10 @@ Open **PPE** in the left menu. That opens the list at [PPE](/ppe). It starts on 
 
 The **My PPE** dashboard card shows gear assigned to you, including items whose inspection is **Current** or **Not required**. Items marked **Out of service** must not be used. Tap **Inspect** beside an inspectable item to open its pre-use or annual checklist directly.
 
+## Review all PPE inspections (managers)
+
+People with **Manage PPE** permission can open **PPE → Inspections**, between **Records** and **Manage**. This list covers every PPE item, including historical items. Search by item, inspector, location, or notes. Filter by kind, result, or status, select a column heading to sort, and use **Prev** and **Next** to move through results. Select the PPE item to open that exact checklist, or **PDF** to print it.
+
 ## Inspect your PPE
 
 Do a quick pre-use check before you trust your gear, and the full periodic check when it comes due.
