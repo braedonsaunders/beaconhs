@@ -262,6 +262,8 @@ export async function publishDocumentVersion(documentId: string, changelog?: str
           key: documents.key,
           sourceAttachmentId: documents.sourceAttachmentId,
           showDocumentHeader: documents.showDocumentHeader,
+          headerVersionLabel: documents.headerVersionLabel,
+          headerRevisedOn: documents.headerRevisedOn,
         })
         .from(documents)
         .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
@@ -340,9 +342,9 @@ export async function publishDocumentVersion(documentId: string, changelog?: str
           controlHeader: header
             ? {
                 ...header,
-                version: nextVersion,
+                version: doc.headerVersionLabel || nextVersion,
                 issuedAt: header.issuedAt ?? publishedAt.toISOString(),
-                revisedAt: publishedAt.toISOString(),
+                revisedAt: doc.headerRevisedOn || publishedAt.toISOString(),
               }
             : null,
           publishedAt,

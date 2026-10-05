@@ -33,6 +33,7 @@ import { finalizeUpload, requestUpload } from '@/lib/uploads'
 import { MAX_DOCUMENT_VERSION_NOTE_CHARS } from '@/lib/document-authoring-policy'
 import { CollaboraEmbed, type CollaboraHandle } from '@/components/collabora-embed'
 import { DownloadLink } from '@/components/download-link'
+import { flushRecordSaves } from '@/lib/pending-record-saves'
 import {
   createBlankDocumentMaster,
   getDocumentWriterSession,
@@ -93,6 +94,7 @@ export function DocumentPane({
       try {
         const editor = editorRef.current
         if (!editor) throw new Error('Wait for the document editor to finish loading.')
+        await flushRecordSaves()
         await editor.save()
         await publishDocumentVersion(documentId, changelog)
         setShowPublish(false)

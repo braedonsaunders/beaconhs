@@ -25,6 +25,7 @@ import { requestUpload, finalizeUpload } from '@/lib/uploads'
 import { PdfViewer } from '@/components/pdf-viewer'
 import { attachFileVersion, getDocumentPdfUrl } from './_actions'
 import { ModeSwitch, type DocumentMode } from './_mode-switch'
+import { flushRecordSaves } from '@/lib/pending-record-saves'
 
 export function DocumentPdfPane({
   documentId,
@@ -82,7 +83,15 @@ export function DocumentPdfPane({
 
   const requestPdf = useCallback(() => {
     const sequence = ++requestSequence.current
-    return getDocumentPdfUrl(documentId, { draft }).then((result) => applyResult(sequence, result))
+    return (draft ? flushRecordSaves() : Promise.resolve())
+      .then(() => getDocumentPdfUrl(documentId, { draft }))
+      .then((result) => applyResult(sequence, result))
+      .catch((error) =>
+        applyResult(sequence, {
+          ok: false,
+          error: error instanceof Error ? error.message : 'Document details could not be saved.',
+        }),
+      )
   }, [applyResult, documentId, draft])
 
   useEffect(() => {

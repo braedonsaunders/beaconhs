@@ -58,8 +58,11 @@ describe('document publish save contract', () => {
 
   it('does not snapshot a version until the editor save completes', () => {
     const save = pane.indexOf('await editor.save()')
+    const metadataSave = pane.indexOf('await flushRecordSaves()')
     const publish = pane.indexOf('await publishDocumentVersion(documentId, changelog)')
     expect(save).toBeGreaterThanOrEqual(0)
+    expect(metadataSave).toBeGreaterThanOrEqual(0)
+    expect(metadataSave).toBeLessThan(save)
     expect(publish).toBeGreaterThan(save)
   })
 

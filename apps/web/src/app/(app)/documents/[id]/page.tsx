@@ -960,6 +960,7 @@ export default async function DocumentDetailPage({
               value={
                 active === 'overview' ? (
                   <DocumentOverview
+                    key={id}
                     documentId={id}
                     categories={categories}
                     types={types}
@@ -974,6 +975,10 @@ export default async function DocumentDetailPage({
                         doc.reviewFrequencyMonths != null ? String(doc.reviewFrequencyMonths) : '',
                       nextReviewOn: doc.nextReviewOn ?? '',
                       showDocumentHeader: doc.showDocumentHeader,
+                      headerIssuedOn: doc.headerIssuedOn ?? '',
+                      headerRevisedOn: doc.headerRevisedOn ?? '',
+                      headerApprovedBy: doc.headerApprovedBy ?? '',
+                      headerVersionLabel: doc.headerVersionLabel ?? '',
                     }}
                   />
                 ) : null

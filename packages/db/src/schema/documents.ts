@@ -32,7 +32,7 @@ export type DocumentControlHeader = {
   issuedAt: string | null
   revisedAt: string | null
   approvedBy: string | null
-  version: number | 'Draft'
+  version: number | string
 }
 
 export const documentStatus = pgEnum('document_status', [
@@ -59,6 +59,10 @@ export const documents = pgTable(
     reviewFrequencyMonths: integer('review_frequency_months'),
     nextReviewOn: date('next_review_on'),
     showDocumentHeader: boolean('show_document_header').default(false).notNull(),
+    headerIssuedOn: date('header_issued_on'),
+    headerRevisedOn: date('header_revised_on'),
+    headerApprovedBy: text('header_approved_by'),
+    headerVersionLabel: text('header_version_label'),
     // DOCX master copy: the working draft, edited inline in Collabora Writer
     // (page setup, headers/footers, comments and track changes all live in the
     // file). Publishing snapshots it into an immutable document_versions row.

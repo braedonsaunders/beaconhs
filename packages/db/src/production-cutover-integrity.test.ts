@@ -104,6 +104,7 @@ describe('production cutover migration integrity', () => {
       '0052_backfill_assessment_order_with_tenant_context.sql',
       '0053_inspection_resolution_pdf.sql',
       '0054_training_class_location_print.sql',
+      '0055_document_header_details.sql',
     ])
 
     const journal = JSON.parse(readFileSync(new URL('_journal.json', metaFolder), 'utf8')) as {
@@ -164,6 +165,7 @@ describe('production cutover migration integrity', () => {
       { idx: 51, tag: '0052_backfill_assessment_order_with_tenant_context' },
       { idx: 52, tag: '0053_inspection_resolution_pdf' },
       { idx: 53, tag: '0054_training_class_location_print' },
+      { idx: 54, tag: '0055_document_header_details' },
     ])
     for (let index = 1; index < journal.entries.length; index++) {
       expect(journal.entries[index]!.when).toBeGreaterThan(journal.entries[index - 1]!.when)

@@ -27,6 +27,11 @@ export async function loadDocumentControlHeaders(
       key: documents.key,
       category: documentCategories.name,
       type: documentTypes.name,
+      status: documents.status,
+      headerIssuedOn: documents.headerIssuedOn,
+      headerRevisedOn: documents.headerRevisedOn,
+      headerApprovedBy: documents.headerApprovedBy,
+      headerVersionLabel: documents.headerVersionLabel,
     })
     .from(documents)
     .leftJoin(
@@ -47,14 +52,19 @@ export async function loadDocumentControlHeaders(
       key: row.key,
       category: row.category,
       type: row.type,
-      issuedAt: null,
-      revisedAt: null,
-      approvedBy: null,
-      version: 'Draft',
+      issuedAt: row.headerIssuedOn,
+      revisedAt: row.headerRevisedOn,
+      approvedBy: row.headerApprovedBy,
+      version: row.headerVersionLabel || 'Draft',
     })
   }
+  const metadataById = new Map(metadata.map((row) => [row.id, row]))
   const published = await tx
-    .select({ documentId: documentVersions.documentId, publishedAt: documentVersions.publishedAt })
+    .select({
+      documentId: documentVersions.documentId,
+      publishedAt: documentVersions.publishedAt,
+      version: documentVersions.version,
+    })
     .from(documentVersions)
     .where(
       and(
@@ -63,10 +73,19 @@ export async function loadDocumentControlHeaders(
         isNotNull(documentVersions.publishedAt),
       ),
     )
-    .orderBy(asc(documentVersions.publishedAt))
+    .orderBy(asc(documentVersions.version))
   for (const row of published) {
     const header = result.get(row.documentId)
     if (header && !header.issuedAt) header.issuedAt = row.publishedAt!.toISOString()
+    const document = metadataById.get(row.documentId)
+    if (header && document) {
+      if (!document.headerRevisedOn) header.revisedAt = row.publishedAt!.toISOString()
+      if (
+        !document.headerVersionLabel &&
+        (document.status === 'published' || document.status === 'archived')
+      )
+        header.version = row.version
+    }
   }
   const reviews = await tx
     .select({
@@ -113,7 +132,7 @@ export async function loadDocumentControlHeaders(
     if (seen.has(row.documentId)) continue
     seen.add(row.documentId)
     const header = result.get(row.documentId)
-    if (header)
+    if (header && !header.approvedBy)
       header.approvedBy =
         (row.participants ?? [])
           .map((id) => names.get(id))

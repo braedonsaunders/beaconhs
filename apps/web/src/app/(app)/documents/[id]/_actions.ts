@@ -177,6 +177,18 @@ export async function updateDocumentMeta(input: unknown): Promise<{ ok: boolean;
       { min: 1, max: DOCUMENT_METADATA_LIMITS.reviewFrequencyMonths, integer: true },
     )
     const nextReviewOn = optionalDateInput(values.nextReviewOn, 'Next review date')
+    const headerIssuedOn = optionalDateInput(values.headerIssuedOn, 'Issue date')
+    const headerRevisedOn = optionalDateInput(values.headerRevisedOn, 'Revision date')
+    const headerApprovedBy = optionalTextInput(
+      values.headerApprovedBy,
+      'Approved by',
+      DOCUMENT_METADATA_LIMITS.headerApprovedBy,
+    )
+    const headerVersionLabel = optionalTextInput(
+      values.headerVersionLabel,
+      'Printed version',
+      DOCUMENT_METADATA_LIMITS.headerVersionLabel,
+    )
     if (typeof values.showDocumentHeader !== 'boolean') {
       throw new Error('The document header setting is invalid.')
     }
@@ -222,6 +234,10 @@ export async function updateDocumentMeta(input: unknown): Promise<{ ok: boolean;
           reviewFrequencyMonths,
           nextReviewOn,
           showDocumentHeader,
+          headerIssuedOn,
+          headerRevisedOn,
+          headerApprovedBy,
+          headerVersionLabel,
           updatedAt: new Date(),
         })
         .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)))
@@ -239,6 +255,10 @@ export async function updateDocumentMeta(input: unknown): Promise<{ ok: boolean;
           reviewFrequencyMonths: before.reviewFrequencyMonths,
           nextReviewOn: before.nextReviewOn,
           showDocumentHeader: before.showDocumentHeader,
+          headerIssuedOn: before.headerIssuedOn,
+          headerRevisedOn: before.headerRevisedOn,
+          headerApprovedBy: before.headerApprovedBy,
+          headerVersionLabel: before.headerVersionLabel,
         },
         after: {
           title,
@@ -249,6 +269,10 @@ export async function updateDocumentMeta(input: unknown): Promise<{ ok: boolean;
           reviewFrequencyMonths,
           nextReviewOn,
           showDocumentHeader,
+          headerIssuedOn,
+          headerRevisedOn,
+          headerApprovedBy,
+          headerVersionLabel,
         },
       })
       return true

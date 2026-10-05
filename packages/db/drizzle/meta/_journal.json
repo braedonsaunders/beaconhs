@@ -379,6 +379,13 @@
       "when": 1791216595285,
       "tag": "0054_training_class_location_print",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1791220488828,
+      "tag": "0055_document_header_details",
+      "breakpoints": true
     }
   ]
 }

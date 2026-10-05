@@ -34,11 +34,15 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
 }
-function formatMonthYear(value: Date | string | null | undefined, timeZone: string): string {
+function formatHeaderDate(value: Date | string | null | undefined, timeZone: string): string {
   if (!value) return '—'
-  return new Intl.DateTimeFormat('en-CA', { month: 'long', year: 'numeric', timeZone }).format(
-    new Date(value),
-  )
+  const dateOnly = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+  return new Intl.DateTimeFormat('en-CA', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: dateOnly ? 'UTC' : timeZone,
+  }).format(new Date(value))
 }
 
 export function documentControlHeaderHtml(
@@ -61,12 +65,12 @@ export function documentControlHeaderHtml(
           <tr>
             <td style="${cell}text-transform:uppercase;letter-spacing:.06em;color:#334155;font-size:${categoryFont}px;">${escapeHtml(entry.category ?? '')}</td>
             <td style="${label}">Issue date</td>
-            <td style="${value}">${escapeHtml(formatMonthYear(entry.issuedAt, timeZone))}</td>
+            <td style="${value}">${escapeHtml(formatHeaderDate(entry.issuedAt, timeZone))}</td>
           </tr>
           <tr>
             <td rowspan="4" style="${cell}background:${accent};color:${titleInk(accent)};font-size:${titleFont}px;font-weight:700;line-height:1.2;">${escapeHtml(entry.title)}</td>
             <td style="${label}">Revision date</td>
-            <td style="${value}">${escapeHtml(formatMonthYear(entry.revisedAt, timeZone))}</td>
+            <td style="${value}">${escapeHtml(formatHeaderDate(entry.revisedAt, timeZone))}</td>
           </tr>
           <tr>
             <td style="${label}">Approved by</td>

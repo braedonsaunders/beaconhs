@@ -24,14 +24,15 @@ type BookEntry = {
   /** Per-page text extents, null where a page has nothing measurable. */
   key: string
   version: number
+  headerVersion?: number | string
   /** The published PDF for this document version. */
   pdf: Buffer
   pageCount: number
   headerReserved: boolean
   category?: string | null
   type?: string | null
-  issuedAt?: Date | null
-  revisedAt?: Date | null
+  issuedAt?: Date | string | null
+  revisedAt?: Date | string | null
   approvedBy?: string | null
 }
 
@@ -245,7 +246,7 @@ export async function composeDocumentBook(input: ComposeBookInput): Promise<Buff
           bodyHtml: documents
             .map(
               (entry, i) =>
-                `<div style="${i > 0 ? 'page-break-before:always;' : ''}">${documentControlHeaderHtml(entry, accent, input.timeZone, settings.documentHeadersOnOwnPage)}</div>`,
+                `<div style="${i > 0 ? 'page-break-before:always;' : ''}">${documentControlHeaderHtml({ ...entry, version: entry.headerVersion ?? entry.version }, accent, input.timeZone, settings.documentHeadersOnOwnPage)}</div>`,
             )
             .join(''),
         })

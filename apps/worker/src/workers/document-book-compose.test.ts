@@ -38,6 +38,26 @@ describe('document book control tables', () => {
       'background:#7c3aed;',
     )
   })
+  it('keeps the published header label and calendar dates when composing a book', async () => {
+    await composeDocumentBook({
+      ...input,
+      settings,
+      entries: [
+        {
+          ...entry,
+          headerVersion: 'Rev B',
+          issuedAt: '2026-09-01',
+          revisedAt: '2026-09-30',
+          approvedBy: 'Peter',
+        },
+      ],
+    })
+    const html = vi.mocked(renderHtmlDocumentPdf).mock.calls[0]?.[0].bodyHtml
+    expect(html).toContain('Rev B')
+    expect(html).toContain('September 1, 2026')
+    expect(html).toContain('September 30, 2026')
+    expect(html).toContain('Peter')
+  })
   it.each(['#fff', '#ffffff'])(
     'keeps the title readable on a light brand colour (%s)',
     async (accentColor) => {

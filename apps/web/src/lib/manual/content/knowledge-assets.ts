@@ -504,7 +504,7 @@ ${CSV_EXPORT_LIMIT_GUIDANCE}
 2. On the **Write** tab, pick **Import Word file** (drop in a .docx) or **Start blank**. Set the title and details in the panel on the left.
 3. The file becomes the working draft. The editor saves as you work, and publishing performs one final confirmed save before it creates the version.
 
-The **Key** is the document's short identifier. It can be up to 120 characters and must be unique among live documents. The save badge changes to **Not saved** and shows the reason if any detail cannot be saved.
+The **Key** is the document's short identifier. It can be up to 120 characters and must be unique among live documents. The save badge changes to **Not saved — retry** and shows the reason if any detail cannot be saved. Tap it to retry; your edits stay in the fields.
 
 Imported Word files must be .docx files and 100 MB or smaller.
 
@@ -518,11 +518,12 @@ Imported Word files must be .docx files and 100 MB or smaller.
 ## Document header on individual PDFs
 
 1. In **Overview**, turn on **Show document header on PDF** for a Word document.
-2. Wait for **Saved**, then open **PDF**. A table on the first page shows the title, category, issue and revision dates, approver and version. The draft preview says **Draft**.
-3. Turn the setting off to print the document without that table or its reserved space.
-4. Publish the next version to give readers that layout. Published versions keep the setting and details they were published with.
+2. Edit **Title**, **Category**, **Type**, and **Key** in **Overview**. Set **Issue date**, **Revision date**, **Approved by**, and **Printed version** for the header. Leave these four fields blank to use publication dates, review participants, and the published version number. An unpublished document shows **Draft** unless you enter a printed version label. The label does not change publication status or version history.
+3. Wait for **Saved**, then open **PDF**. The preview uses the saved header details. PDF preview and publishing wait for pending detail changes before continuing.
+4. Turn the setting off to print the document without that table or its reserved space.
+5. Publish the next version to give readers that layout. Published versions keep the setting and details they were published with. To change a published copy, use **Unpublish**, edit the details, and **Publish** the next version.
 
-The table is added to the PDF. Your Word working file keeps its own layout. A document book's **Controlled-document block** setting controls the book's tables independently and prints one table per document.
+The table is added to the PDF. Your Word working file keeps its own layout. A document book's **Controlled-document block** setting controls the book's tables independently and prints one table per document. The same editable header fields apply to books, including documents uploaded as PDF files.
 
 Individual document headers and document books use the same brand colour. In **Admin** → **Tenant settings** → **Branding**, enter the colour in **Primary color (hex)** and press **Save settings**. Open the draft **PDF** again or press **Regenerate** to see the new colour. Publish the next version to give readers that colour. Already published PDFs keep their saved appearance.
 

@@ -124,8 +124,9 @@ type BookRenderEntry =
       headerReserved: boolean
       category: string | null
       type: string | null
-      issuedAt: Date | null
-      revisedAt: Date | null
+      issuedAt: Date | string | null
+      revisedAt: Date | string | null
+      headerVersion: number | string
       approvedBy: string | null
     }
 
@@ -815,14 +816,15 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
           title: header?.title ?? item.documentTitle,
           key: header?.key ?? item.documentKey,
           version: item.version,
+          headerVersion: header?.version ?? item.version,
           pdfKey: body?.key ?? item.attachmentKey,
           sizeBytes: body?.sizeBytes ?? item.sizeBytes,
           headerReserved: Boolean(body && !printSettings.documentHeadersOnOwnPage),
           category: header?.category ?? null,
           type: header?.type ?? null,
-          issuedAt: header?.issuedAt ? new Date(header.issuedAt) : null,
+          issuedAt: header?.issuedAt ?? null,
           approvedBy: header?.approvedBy ?? null,
-          revisedAt: revisedByVersion.get(item.versionId) ?? null,
+          revisedAt: header?.revisedAt ?? revisedByVersion.get(item.versionId) ?? null,
         },
       ]
     })
@@ -920,6 +922,7 @@ async function renderDocumentBook(tenantId: string, bookId: string): Promise<Sto
           title: e.title,
           key: e.key,
           version: e.version,
+          headerVersion: e.headerVersion,
           pdf: loaded.bytes,
           pageCount: loaded.pages,
           headerReserved: e.headerReserved,
