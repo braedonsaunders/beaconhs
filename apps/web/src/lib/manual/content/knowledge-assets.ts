@@ -269,7 +269,7 @@ Presenting never changes anyone's records. When the class is done, issue records
 ## Schedule and complete a class
 
 1. Open **Training → Classes** and select **Schedule new class**.
-2. On **Details**, choose the course, times, site, instructor, and maximum attendance.
+2. On **Details**, choose the course, times, site, instructor, and maximum attendance. Enter an address or room in **Location** when needed. Leave it blank to use the selected site.
 3. Open **Roster**. Search the existing roster or use **Add a person to the roster…** to search active workers by name, employee number, job title, or email. If the picker says more results exist, add more detail to the search. Select the worker and choose **Add**.
 4. Open **Completion** after the class. Search the roster and review attendance, grade, and pass state for every person on the current page.
 5. Choose **Save this page** before moving to another page. The reviewed count shows how many people remain.
@@ -277,7 +277,7 @@ Presenting never changes anyone's records. When the class is done, issue records
 
 A person marked as a no-show cannot pass. A cancelled class is read-only; choose **Reopen class** before changing details, the roster, or completion decisions. A completed class stays locked so its issued records cannot drift.
 
-Use **Print / PDF** in the class header for a paper session sheet. It lists everyone on the roster with a blank **Signature** box beside each name, so the printout doubles as the attendance sheet you pass around on the day. An administrator can widen or remove that column under **Admin** → **PDF templates**.
+Use **Print / PDF** in the class header for a paper session sheet. Times match the timezone used on the class page. The sheet includes the entered **Location** or selected site and omits the course description. It lists everyone on the roster with a blank **Signature** box beside each name, so the printout doubles as the attendance sheet you pass around on the day. An administrator can widen or remove that column under **Admin** → **PDF templates**.
 
 ## The class calendar
 

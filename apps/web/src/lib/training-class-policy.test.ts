@@ -44,6 +44,19 @@ describe('training class mutation policy', () => {
     )
   })
 
+  it('accepts and bounds a free-text class location', () => {
+    expect(
+      parseTrainingClassField('location', '  Shop classroom, 12 Main St  ', 'America/Toronto'),
+    ).toEqual({ field: 'location', value: 'Shop classroom, 12 Main St' })
+    expect(parseTrainingClassField('location', '', 'America/Toronto')).toEqual({
+      field: 'location',
+      value: null,
+    })
+    expect(() => parseTrainingClassField('location', 'x'.repeat(501), 'America/Toronto')).toThrow(
+      /too long/,
+    )
+  })
+
   it('requires an ordered schedule', () => {
     const start = new Date('2026-07-13T13:00:00.000Z')
     expect(() => assertTrainingClassSchedule(start, start)).toThrow(/after/)

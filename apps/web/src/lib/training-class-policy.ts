@@ -19,6 +19,7 @@ const TRAINING_CLASS_MUTABLE_FIELDS = [
   'startsAt',
   'endsAt',
   'siteOrgUnitId',
+  'location',
   'instructorTenantUserId',
   'capacity',
   'notes',
@@ -32,6 +33,7 @@ export type ParsedTrainingClassField =
   | { field: 'startsAt'; value: Date }
   | { field: 'endsAt'; value: Date }
   | { field: 'siteOrgUnitId'; value: string | null }
+  | { field: 'location'; value: string | null }
   | { field: 'instructorTenantUserId'; value: string | null }
   | { field: 'capacity'; value: number | null }
   | { field: 'notes'; value: string | null }
@@ -57,6 +59,8 @@ export function parseTrainingClassField(
       if (!parsed) throw new Error(`${field === 'startsAt' ? 'Start' : 'End'} time is invalid.`)
       return { field, value: parsed }
     }
+    case 'location':
+      return { field, value: optionalTextInput(value, 'Location', 500) }
     case 'siteOrgUnitId':
       return { field, value: optionalUuidInput(value, 'Site') }
     case 'instructorTenantUserId':

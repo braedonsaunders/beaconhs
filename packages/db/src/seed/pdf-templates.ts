@@ -767,7 +767,6 @@ const TRAINING_CLASS = wrap(
         '{{attendee_count}} enrolled · {{attended_count}} attended · {{absent_count}} absent',
       ),
     ]) +
-    narrative('About this course', '{{course_description}}') +
     narrative('Notes', '{{notes}}') +
     // The printed class sheet doubles as the attendance register, so every
     // enrolled person gets a ruled box to sign on the day. The column is part of
@@ -775,7 +774,7 @@ const TRAINING_CLASS = wrap(
     collection('Attendees', 'attendees', [
       ['#', '{{@number}}', 'width:5%;'],
       ['Name', '{{name}}', 'width:26%;'],
-      ['Email', '{{email}}', 'width:27%;'],
+      ['Email', '{{email}}', 'width:27%;overflow-wrap:anywhere;'],
       ['Status', '{{status}}', 'width:12%;'],
       ['Signature', '&nbsp;', `width:30%;${BLANK_BOX}`],
     ]),

@@ -74,6 +74,7 @@ export const trainingClasses = pgTable(
     courseId: uuid('course_id').notNull(),
     title: text('title').notNull(),
     siteOrgUnitId: uuid('site_org_unit_id'),
+    location: text('location'),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
     endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
     instructorTenantUserId: uuid('instructor_tenant_user_id'),

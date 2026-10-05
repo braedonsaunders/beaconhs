@@ -202,7 +202,7 @@ export default async function TrainingClassesCalendarPage({
         start,
         cancelled: !!r.cls.cancelledAt,
         completed: !!r.cls.completedAt,
-        siteName: r.siteName,
+        siteName: r.cls.location || r.siteName,
         instructorName: r.instructorName,
         attendees: r.attendees,
         day: offset + 1,

@@ -25,8 +25,9 @@ import {
 } from '@beaconhs/db/schema'
 import { alias } from 'drizzle-orm/pg-core'
 import type { RequestContext } from '@beaconhs/tenant'
+import { datetimeLocalValue } from '@/lib/datetime'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
-import { fmtDateTime, personName, titleize } from '../format'
+import { personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
 
 function deriveClassStatus(cls: {
@@ -57,7 +58,9 @@ export function createTrainingClassFlowAdapter(
         heading: 'Training class',
         reference: values.title,
         subtitle: values.course_name,
-        values,
+        values: Object.fromEntries(
+          Object.entries(values).filter(([key]) => key !== 'course_description'),
+        ),
       }),
 
     async loadValues() {
@@ -119,12 +122,12 @@ export function createTrainingClassFlowAdapter(
         course_description: head.courseDescription ?? '',
         status,
         status_label: titleize(status),
-        starts_at: fmtDateTime(c.startsAt),
-        ends_at: fmtDateTime(c.endsAt),
-        site_name: head.siteName ?? '',
+        starts_at: datetimeLocalValue(c.startsAt, ctx.timezone).replace('T', ' '),
+        ends_at: datetimeLocalValue(c.endsAt, ctx.timezone).replace('T', ' '),
+        site_name: c.location || head.siteName || '',
         instructor_name: head.instructorName ?? '',
         capacity: c.capacity ?? null,
-        notes: c.notes ?? '',
+        notes: c.notes?.trim().toLowerCase() === 'null' ? '' : (c.notes ?? ''),
         attendee_count: active.length,
         attended_count: active.filter((a) => a.status === 'attended').length,
         absent_count: active.filter((a) => a.status === 'no_show').length,

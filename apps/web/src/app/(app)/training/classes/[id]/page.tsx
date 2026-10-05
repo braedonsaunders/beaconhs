@@ -421,6 +421,7 @@ export default async function TrainingClassPage({
                   startsAt: datetimeLocalValue(startsAt, ctx.timezone),
                   endsAt: datetimeLocalValue(endsAt, ctx.timezone),
                   siteOrgUnitId: cls.siteOrgUnitId,
+                  location: cls.location,
                   instructorTenantUserId: cls.instructorTenantUserId,
                   capacity: cls.capacity != null ? String(cls.capacity) : null,
                   notes: cls.notes,

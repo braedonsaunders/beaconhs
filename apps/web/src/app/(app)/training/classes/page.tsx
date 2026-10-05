@@ -80,6 +80,7 @@ export default async function TrainingClassesPage({
         ilike(trainingCourses.name, term),
         ilike(trainingCourses.code, term),
         ilike(orgUnits.name, term),
+        ilike(trainingClasses.location, term),
       )
       if (search) filters.push(search)
     }
@@ -289,7 +290,7 @@ export default async function TrainingClassesPage({
                             </Link>
                           </TableCell>
                           <TableCell className="text-slate-600 dark:text-slate-400">
-                            <GeneratedValue value={row.site?.name ?? '—'} />
+                            <GeneratedValue value={row.cls.location || row.site?.name || '—'} />
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">

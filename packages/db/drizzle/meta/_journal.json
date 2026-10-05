@@ -372,6 +372,13 @@
       "when": 1790812800006,
       "tag": "0053_inspection_resolution_pdf",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1791216595285,
+      "tag": "0054_training_class_location_print",
+      "breakpoints": true
     }
   ]
 }

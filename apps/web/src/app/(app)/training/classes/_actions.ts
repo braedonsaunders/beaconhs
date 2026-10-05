@@ -477,6 +477,8 @@ function classFieldUpdate(
       return { startsAt: parsed.value }
     case 'endsAt':
       return { endsAt: parsed.value }
+    case 'location':
+      return { location: parsed.value }
     case 'siteOrgUnitId':
       return { siteOrgUnitId: parsed.value }
     case 'instructorTenantUserId':

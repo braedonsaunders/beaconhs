@@ -13,6 +13,7 @@ type ClassFieldValues = {
   startsAt: string // datetime-local string
   endsAt: string // datetime-local string
   siteOrgUnitId: string | null
+  location: string | null
   instructorTenantUserId: string | null
   capacity: string | null
   notes: string | null
@@ -128,6 +129,18 @@ export function ClassDetailFields({
             updateAction={updateAction}
           />
         </div>
+        <LiveField
+          id={id}
+          field="location"
+          label={tGenerated('m_055f11420b2da4')}
+          initialValue={initial.location}
+          maxLength={500}
+          disabled={disabled}
+          updateAction={updateAction}
+        />
+        <p className="text-xs text-slate-500">
+          <GeneratedText id="m_1ceec74b520e0b" />
+        </p>
         <LiveField
           id={id}
           field="capacity"
