@@ -7,16 +7,24 @@ import { flushRecordSaves } from '@/lib/pending-record-saves'
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
+  submit: vi.fn(),
   edit: null as null | ((html: string, text: string) => void),
 }))
-vi.mock('./_actions', () => ({ createTodayEntry: mocks.create, updateEntry: mocks.update }))
+vi.mock('./_actions', () => ({
+  createTodayEntry: mocks.create,
+  updateEntry: mocks.update,
+  submitEntry: mocks.submit,
+}))
 vi.mock('./_editor', () => ({
   JournalEditor: ({ onChange }: { onChange: typeof mocks.edit }) => {
     mocks.edit = onChange
     return null
   },
 }))
-vi.mock('@/i18n/generated', () => ({ GeneratedValue: ({ value }: { value: unknown }) => value }))
+vi.mock('@/i18n/generated', () => ({
+  GeneratedValue: ({ value }: { value: unknown }) => value,
+  useGeneratedValueTranslations: () => (value: string) => value,
+}))
 import { TodayComposer } from './_today-composer'
 
 let root: Root
@@ -26,13 +34,14 @@ beforeEach(async () => {
   vi.clearAllMocks()
   mocks.create.mockResolvedValue({ ok: true, id: 'new-entry' })
   mocks.update.mockResolvedValue({ ok: true })
+  mocks.submit.mockResolvedValue({ ok: true })
   open.mockResolvedValue(undefined)
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
   await act(async () =>
-    root.render(<TodayComposer aiEnabled={false} onCreated={open} onBrowse={() => {}} />),
+    root.render(<TodayComposer aiEnabled={false} canSubmit onCreated={open} onBrowse={() => {}} />),
   )
 })
 afterEach(async () => {
@@ -82,5 +91,117 @@ describe('new journal save barrier', () => {
     expect(mocks.create).toHaveBeenCalledOnce()
     expect(mocks.update).toHaveBeenCalledTimes(2)
     expect(open).toHaveBeenCalledExactlyOnceWith('new-entry')
+  })
+})
+
+function submitButton() {
+  return [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent?.trim() === 'Submit',
+  )!
+}
+async function clickSubmit() {
+  await act(async () => submitButton().click())
+}
+
+describe('fresh journal submission', () => {
+  it('shows Submit before the first save, but requires some text', () => {
+    expect(submitButton()).toBeDefined()
+    expect(submitButton().disabled).toBe(true)
+  })
+  it('saves all text typed during creation before submitting the same entry', async () => {
+    let finish!: (value: { ok: true; id: string }) => void
+    mocks.create.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    await act(async () => mocks.edit!('<p>First line</p>', 'First line'))
+    await act(async () => mocks.edit!('<p>Final line</p>', 'Final line'))
+    expect(submitButton().disabled).toBe(false)
+    await clickSubmit()
+    expect(mocks.submit).not.toHaveBeenCalled()
+    expect(open).not.toHaveBeenCalled()
+    await act(async () => finish({ ok: true, id: 'new-entry' }))
+    expect(mocks.update).toHaveBeenCalledExactlyOnceWith({
+      id: 'new-entry',
+      patch: { bodyHtml: '<p>Final line</p>' },
+    })
+    expect(mocks.submit).toHaveBeenCalledExactlyOnceWith('new-entry')
+    expect(open).toHaveBeenCalledExactlyOnceWith('new-entry')
+    expect(mocks.update.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.submit.mock.invocationCallOrder[0]!,
+    )
+    expect(mocks.submit.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0]!)
+  })
+  it('blocks submission on a failed save and retains visible feedback above the text', async () => {
+    let finish!: (value: { ok: false; error: string }) => void
+    mocks.update.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    await act(async () => mocks.edit!('<p>Unsaved words</p>', 'Unsaved words'))
+    await clickSubmit()
+    await act(async () => finish({ ok: false, error: 'Connection unavailable' }))
+    expect(mocks.submit).not.toHaveBeenCalled()
+    expect(open).not.toHaveBeenCalled()
+    expect(container.querySelector('[role="alert"]')?.parentElement?.className).toContain(
+      'shrink-0',
+    )
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Connection unavailable',
+    )
+    await clickSubmit()
+    expect(mocks.create).toHaveBeenCalledOnce()
+    expect(mocks.submit).toHaveBeenCalledExactlyOnceWith('new-entry')
+    expect(open).toHaveBeenCalledOnce()
+  })
+  it('keeps a draft when the submit action fails and allows retry without a duplicate', async () => {
+    let finish!: (value: { ok: true }) => void
+    mocks.update.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    mocks.submit.mockResolvedValueOnce({ ok: false, error: 'Submission unavailable' })
+    await act(async () => mocks.edit!('<p>Journal</p>', 'Journal'))
+    await clickSubmit()
+    await act(async () => finish({ ok: true }))
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Submission unavailable',
+    )
+    expect(open).not.toHaveBeenCalled()
+    await clickSubmit()
+    expect(mocks.create).toHaveBeenCalledOnce()
+    expect(mocks.submit).toHaveBeenCalledTimes(2)
+    expect(open).toHaveBeenCalledOnce()
+  })
+  it('does not re-submit if opening the submitted journal fails', async () => {
+    let finish!: (value: { ok: true }) => void
+    mocks.update.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    open.mockRejectedValueOnce(new Error('Open failed'))
+    await act(async () => mocks.edit!('<p>Journal</p>', 'Journal'))
+    await clickSubmit()
+    await act(async () => finish({ ok: true }))
+    expect(container.textContent).toContain('Submitted')
+    expect(container.textContent).toContain('Open failed')
+    const retry = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Retry opening journal'),
+    )!
+    await act(async () => retry.click())
+    expect(mocks.submit).toHaveBeenCalledOnce()
+    expect(open).toHaveBeenCalledTimes(2)
+  })
+  it('does not offer submission to accounts without the permission', async () => {
+    await act(async () =>
+      root.render(
+        <TodayComposer aiEnabled={false} canSubmit={false} onCreated={open} onBrowse={() => {}} />,
+      ),
+    )
+    expect(submitButton()).toBeUndefined()
   })
 })

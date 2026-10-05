@@ -105,6 +105,10 @@ export const WALKTHROUGHS: Walkthrough[] = [
         body: 'Type what happened in your own words. Add photos from your phone camera or photo library, and add tags so the entry is easy to find later.',
       },
       {
+        title: 'Submit your entry',
+        body: 'When you have finished writing, tap Submit in the header. It waits for your latest words to save. Your journal then shows Submitted and becomes read-only.',
+      },
+      {
         title: 'Finding old entries',
         body: 'Open the year and month on the left, then tap a date to open that day’s entry. Use search to find a keyword.',
       },

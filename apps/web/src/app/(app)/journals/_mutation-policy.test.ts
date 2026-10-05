@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { RequestContext } from '@beaconhs/tenant'
-import { canCreateJournal, canEmailJournal, journalMutationScope } from './_mutation-policy'
+import {
+  canCreateJournal,
+  canEmailJournal,
+  canMutateJournalEntry,
+  journalMutationScope,
+} from './_mutation-policy'
 
 function context(permissions: string[] = [], isSuperAdmin = false): RequestContext {
   return {
@@ -50,5 +55,37 @@ describe('journal mutation policy', () => {
     expect(canCreateJournal(ctx)).toBe(true)
     expect(canEmailJournal(ctx)).toBe(true)
     expect(journalMutationScope(ctx, 'edit')).toBe('read_scope')
+  })
+})
+
+describe('journal action control permissions', () => {
+  const other = { personId: 'other-person', createdByTenantUserId: 'other-membership' }
+  it('keeps a reviewer from seeing Submit on someone else’s draft', () => {
+    const ctx = context(['journals.read.all', 'journals.submit'])
+    expect(canMutateJournalEntry(ctx, 'submit', 'person-1', other)).toBe(false)
+    expect(
+      canMutateJournalEntry(ctx, 'submit', 'person-1', { ...other, personId: 'person-1' }),
+    ).toBe(true)
+    expect(
+      canMutateJournalEntry(ctx, 'submit', null, {
+        ...other,
+        createdByTenantUserId: 'membership-1',
+      }),
+    ).toBe(true)
+  })
+  it('requires submit permission separately from editing and refuses missing identities', () => {
+    const ctx = context(['journals.update.own'])
+    const own = { personId: 'person-1', createdByTenantUserId: 'membership-1' }
+    expect(canMutateJournalEntry(ctx, 'edit', 'person-1', own)).toBe(true)
+    expect(canMutateJournalEntry(ctx, 'submit', 'person-1', own)).toBe(false)
+    expect(
+      canMutateJournalEntry({ ...context(['journals.submit']), membership: null }, 'submit', null, {
+        personId: null,
+        createdByTenantUserId: null,
+      }),
+    ).toBe(false)
+    expect(canMutateJournalEntry(context(['journals.assign']), 'submit', 'person-1', other)).toBe(
+      true,
+    )
   })
 })

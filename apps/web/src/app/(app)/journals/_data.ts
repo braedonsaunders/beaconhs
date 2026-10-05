@@ -43,7 +43,7 @@ import {
   snippetOf,
   todayISO,
 } from './_lib'
-import { journalMutationScope } from './_mutation-policy'
+import { canMutateJournalEntry, journalMutationScope } from './_mutation-policy'
 import { isUuid } from '@/lib/list-params'
 import { CSV_EXPORT_QUERY_LIMIT } from '@/lib/csv'
 import type {
@@ -407,11 +407,8 @@ export async function getEntry(
       updatedAt: row.e.updatedAt.toISOString(),
       submittedAt: row.e.submittedAt ? row.e.submittedAt.toISOString() : null,
       locked: Boolean(row.e.lockedAt) || row.e.status !== 'draft',
-      canEdit:
-        journalMutationScope(ctx, 'edit') === 'read_scope' ||
-        (journalMutationScope(ctx, 'edit') === 'self' &&
-          ((Boolean(authorPersonId) && row.e.personId === authorPersonId) ||
-            (Boolean(ctx.membership?.id) && row.e.createdByTenantUserId === ctx.membership?.id))),
+      canEdit: canMutateJournalEntry(ctx, 'edit', authorPersonId, row.e),
+      canSubmit: canMutateJournalEntry(ctx, 'submit', authorPersonId, row.e),
     }
   })
 }
@@ -678,6 +675,7 @@ export async function getWorkspaceData(
     canReadAll: journalCanReadAll(ctx),
     canBrowseAll: journalCanBrowseAll(ctx),
     canManage: ctx.isSuperAdmin || can(ctx, 'journals.assign'),
+    canSubmit: journalMutationScope(ctx, 'submit') !== 'none',
     aiEnabled: (await getTenantAiConfig(ctx)) !== null,
   }
 }

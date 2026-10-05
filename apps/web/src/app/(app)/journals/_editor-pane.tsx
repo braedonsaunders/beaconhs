@@ -13,17 +13,16 @@ import {
 // Journals have no individual title — the date is the identifier.
 
 import { useEffect, useState, useTransition } from 'react'
+import { unstable_rethrow } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import {
   AlertCircle,
   Check,
   CloudUpload,
   FileText,
-  Loader2,
   Mail,
   MoreHorizontal,
   NotebookPen,
-  Send,
   Sparkles,
   Trash2,
 } from 'lucide-react'
@@ -34,6 +33,7 @@ import { DownloadLink } from '@/components/download-link'
 import { confirmDialog } from '@/lib/confirm'
 import { flushRecordSaves } from '@/lib/pending-record-saves'
 import { deleteEntry, emailEntry, submitEntry, updateEntry, unlockEntry } from './_actions'
+import { JournalSubmitButton } from './_submit-button'
 import { JournalEditor } from './_editor'
 import { MetadataBar } from './_metadata-bar'
 import { Photos } from './_photos'
@@ -116,14 +116,23 @@ export function EditorPane({
         toast.error(error instanceof Error ? error.message : 'Changes are still saving.')
         return
       }
-      const r = await submitEntry(entry.id)
-      if (!r.ok) {
-        toast.error(tGeneratedValue(r.error))
-        return
+      try {
+        const r = await submitEntry(entry.id)
+        if (!r.ok) {
+          toast.error(tGeneratedValue(r.error))
+          return
+        }
+        onLocalPatch({ status: 'submitted', locked: true })
+        toast.success(tGenerated('m_071487076d53a9'))
+        onMutated()
+      } catch (error) {
+        unstable_rethrow(error)
+        toast.error(
+          tGeneratedValue(
+            error instanceof Error ? error.message : 'Could not submit your journal.',
+          ),
+        )
       }
-      onLocalPatch({ status: 'submitted', locked: true })
-      toast.success(tGenerated('m_071487076d53a9'))
-      onMutated()
     })
   }
 
@@ -171,7 +180,7 @@ export function EditorPane({
       }}
     >
       {/* Header */}
-      <div className="flex items-center gap-2.5 border-b border-slate-200 px-3 py-2.5 sm:gap-3 sm:px-6 dark:border-slate-800">
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-slate-200 px-3 py-2.5 sm:gap-3 sm:px-6 dark:border-slate-800">
         {/* Mobile: open the entries drawer (replaces the old separate top bar). */}
         <button
           type="button"
@@ -213,7 +222,7 @@ export function EditorPane({
           </div>
         </div>
 
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {entry.status === 'submitted' && entry.canEdit ? (
             <button
               type="button"
@@ -241,29 +250,9 @@ export function EditorPane({
             </button>
           ) : null}
 
-          <GeneratedValue
-            value={
-              entry.status === 'draft' ? (
-                <button
-                  type="button"
-                  onClick={submit}
-                  disabled={submitting}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-teal-700 px-3 text-xs font-medium text-white transition-colors hover:bg-teal-800 disabled:opacity-60"
-                >
-                  <GeneratedValue
-                    value={
-                      submitting ? (
-                        <Loader2 size={13} className="animate-spin" />
-                      ) : (
-                        <Send size={13} />
-                      )
-                    }
-                  />
-                  <GeneratedText id="m_09ee2ce911f04f" />
-                </button>
-              ) : null
-            }
-          />
+          {entry.status === 'draft' && entry.canSubmit ? (
+            <JournalSubmitButton submitting={submitting} onClick={submit} />
+          ) : null}
 
           <div className="relative">
             <button

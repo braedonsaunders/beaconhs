@@ -198,11 +198,10 @@ export function JournalWorkspace({
 
   async function openCreated(id: string) {
     const detail = await fetchEntry(id)
-    if (detail) {
-      setEntry(detail)
-      setUrl(id)
-      setTreeOpen(false)
-    }
+    if (!detail) throw new Error('Could not open your journal.')
+    setEntry(detail)
+    setUrl(id)
+    setTreeOpen(false)
     void reloadSidebar()
   }
 
@@ -319,6 +318,7 @@ export function JournalWorkspace({
               ) : !authorEntryId ? (
                 <TodayComposer
                   aiEnabled={data.aiEnabled}
+                  canSubmit={data.canSubmit}
                   onCreated={openCreated}
                   onBrowse={() => setTreeOpen(true)}
                 />

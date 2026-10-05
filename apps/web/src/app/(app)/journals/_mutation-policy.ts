@@ -25,3 +25,19 @@ export function canCreateJournal(ctx: RequestContext): boolean {
 export function canEmailJournal(ctx: RequestContext): boolean {
   return ctx.isSuperAdmin || can(ctx, 'journals.submit') || can(ctx, 'journals.assign')
 }
+
+/** Match the mutation scope to the actual author, for truthful action controls. */
+export function canMutateJournalEntry(
+  ctx: RequestContext,
+  mutation: JournalMutation,
+  authorPersonId: string | null,
+  entry: { personId: string | null; createdByTenantUserId: string | null },
+): boolean {
+  const scope = journalMutationScope(ctx, mutation)
+  return (
+    scope === 'read_scope' ||
+    (scope === 'self' &&
+      ((authorPersonId != null && entry.personId === authorPersonId) ||
+        (ctx.membership != null && entry.createdByTenantUserId === ctx.membership.id)))
+  )
+}

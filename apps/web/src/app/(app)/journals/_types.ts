@@ -94,6 +94,7 @@ export type JournalEntryDetail = {
   submittedAt: string | null
   locked: boolean
   canEdit: boolean
+  canSubmit: boolean
 }
 
 export type HeatmapCell = { date: string; count: number }
@@ -132,6 +133,7 @@ export type WorkspaceData = {
   /** read.all OR read.site — may browse the records page (beyond own entries). */
   canBrowseAll: boolean
   canManage: boolean
+  canSubmit: boolean
   aiEnabled: boolean
 }
 

@@ -72,8 +72,9 @@ Tags help people find entries later (for example a tag for concrete pours). Tap 
 
 ## Submitting
 
-1. When your entry is done, tap **Submit** at the top.
-2. Submitted entries become read-only. To correct your own entry, tap **Unlock**, confirm, make your changes, then **Submit** again. Unlocking is permission-checked and recorded in Activity.
+1. When your entry is done, tap **Submit** in the header. It is available in the fresh editor as soon as you start writing, and stays above the scrolling text on a phone.
+2. **Submit** waits for your latest words to save, then marks the entry **Submitted**. Autosave alone keeps an entry as a draft. If saving or submission fails, the error appears above the text; retry before leaving.
+3. Submitted entries become read-only. To correct your own entry, tap **Unlock**, confirm, make your changes, then **Submit** again. Unlocking is permission-checked and recorded in Activity.
 
 ## Viewing past entries
 
