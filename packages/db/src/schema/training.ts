@@ -23,6 +23,7 @@ import { id, softDelete, timestamps } from './_helpers'
 import { attachments } from './attachments'
 import { tenants, tenantUsers, users } from './core'
 import { orgUnits, people } from './org'
+import type { DomainEventActor } from './domain-events'
 
 export const trainingDeliveryType = pgEnum('training_delivery_type', [
   'classroom',
@@ -88,6 +89,10 @@ export const trainingClasses = pgTable(
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     notes: text('notes'),
+    emailQueuedAt: timestamp('email_queued_at', { withTimezone: true }),
+    emailActor: jsonb('email_actor').$type<DomainEventActor>(),
+    reminderHours: integer('reminder_hours'),
+    reminderQueuedFor: timestamp('reminder_queued_for', { withTimezone: true }),
     ...timestamps,
   },
   (t) => ({
@@ -100,6 +105,10 @@ export const trainingClasses = pgTable(
       t.instructorTenantUserId,
     ),
     startsIdx: index('training_classes_starts_idx').on(t.tenantId, t.startsAt),
+    reminderHoursCheck: check(
+      'training_classes_reminder_hours_check',
+      sql`${t.reminderHours} is null or ${t.reminderHours} in (24, 48, 168)`,
+    ),
     courseFk: foreignKey({
       name: 'training_classes_tenant_course_fk',
       columns: [t.tenantId, t.courseId],

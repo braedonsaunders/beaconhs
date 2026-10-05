@@ -30,12 +30,18 @@ function context(location: string | null, notes: string | null, startsAt: string
 
 describe('training class print and flow values', () => {
   it('uses the class page timezone and free-text location, hiding imported null notes', async () => {
-    const ctx = context('Shop classroom', 'null', '2026-10-30T11:30:00Z', '2026-10-30T18:00:00Z')
+    const ctx = context(
+      'North Conference Room',
+      'null',
+      '2026-10-30T11:30:00Z',
+      '2026-10-30T16:00:00Z',
+    )
     const adapter = createTrainingClassFlowAdapter(ctx, 'class')
     const values = await adapter.loadValues()
-    expect(values.starts_at).toBe('2026-10-30 07:30')
-    expect(values.ends_at).toBe('2026-10-30 14:00')
-    expect(values.site_name).toBe('Shop classroom')
+    expect(values.starts_at).toBe('Oct 30, 2026, 7:30 AM')
+    expect(values.ends_at).toBe('Oct 30, 2026, 12:00 PM')
+    expect(values.site_name).toBe('North Conference Room')
+    expect(values).not.toHaveProperty('course_description')
     expect(values.notes).toBe('')
     const job = adapter.pdfJob!(values)
     if (!job) throw new Error('Expected a printable class summary')
@@ -50,8 +56,8 @@ describe('training class print and flow values', () => {
       'class',
     )
     const values = await adapter.loadValues()
-    expect(values.starts_at).toBe('2026-12-01 08:30')
-    expect(values.ends_at).toBe('2026-12-01 14:00')
+    expect(values.starts_at).toBe('Dec 1, 2026, 8:30 AM')
+    expect(values.ends_at).toBe('Dec 1, 2026, 2:00 PM')
     expect(values.site_name).toBe('Saved site')
     expect(values.notes).toBe('Bring PPE')
   })

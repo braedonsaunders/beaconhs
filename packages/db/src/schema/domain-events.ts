@@ -57,6 +57,8 @@ export type DomainWebCommand =
         | 'on_lock'
         | 'on_unlock'
         | 'on_delete'
+        | 'class_confirmed'
+        | 'class_reminder'
       toStatus?: string
       actor: DomainEventActor
     }

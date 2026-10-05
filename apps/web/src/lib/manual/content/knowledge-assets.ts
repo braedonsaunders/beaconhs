@@ -79,14 +79,20 @@ To filter first, then print, open **Reports → Training — Wallet cards**. Add
 2. Each certificate is a card. Tap a card to flip it and see the details.
 3. You can download a print-ready pass for any card.
 
-## Automatic class emails (managers)
+## Class emails and optional reminders (managers)
 
-If you manage training, class changes can send emails on their own — for example, a cancellation notice to everyone registered.
+Creating or editing a class does not send an initial email. A manager sends it when the class is confirmed and its roster is ready.
 
 1. Open the Manage hub at [Training manage](/training/manage) and tap **Class automations**.
-2. Pick a trigger: **A record is created** (a class is scheduled) or a status change to **Cancelled** or **Completed**.
+2. For the initial email, choose **A manager clicks Email class**. For an optional reminder, choose **A class reminder is due**. Cancellation and completion notices can still use a status change to **Cancelled** or **Completed**.
 3. Connect actions like **Send email** or **Notify role**. To email everyone on the roster, set the recipient to the **Attendee emails** field.
 4. Turn the flow on.
+
+Class automation starter templates use the manual **Email class** trigger. Starters with actions or fields that the module cannot use are hidden.
+
+On the class, check the details and roster, then tap **Email class** and confirm. **Class email queued.** means the email is waiting for delivery; it is not a delivery receipt. Check **Admin → Email log** for delivery results.
+
+To send one reminder, choose **Automatic reminder email** on **Details**: **1 day before class**, **2 days before class**, or **1 week before class**. It starts **Off**. A reminder only runs after a manager queues the initial email, while the class is still upcoming and has an active roster. Cancelled and completed classes receive no reminder.
 
 ## Design certificates and wallet cards (managers)
 
@@ -271,7 +277,8 @@ Presenting never changes anyone's records. When the class is done, issue records
 ## Schedule and complete a class
 
 1. Open **Training → Classes** and select **Schedule new class**.
-2. On **Details**, choose the course, times, site, instructor, and maximum attendance. Enter an address or room in **Location** when needed. Leave it blank to use the selected site.
+2. On **Details**, choose the course, times, optional saved site, instructor, and maximum attendance. Type an address or room such as North Conference Room in **Class location**. This is a free-text field. Leave it blank to use the selected site.
+   - **Starts** and **Ends** save together. Enter both times. If End is not after Start, the page explains what to fix and keeps your edits until the range is valid.
 3. Open **Roster**. Search the existing roster or use **Add a person to the roster…** to search active workers by name, employee number, job title, or email. If the picker says more results exist, add more detail to the search. Select the worker and choose **Add**.
 4. Open **Completion** after the class. Search the roster and review attendance, grade, and pass state for every person on the current page.
 5. Choose **Save this page** before moving to another page. The reviewed count shows how many people remain.
@@ -279,7 +286,9 @@ Presenting never changes anyone's records. When the class is done, issue records
 
 A person marked as a no-show cannot pass. A cancelled class is read-only; choose **Reopen class** before changing details, the roster, or completion decisions. A completed class stays locked so its issued records cannot drift.
 
-Use **Print / PDF** in the class header for a paper session sheet. Times match the timezone used on the class page. The sheet includes the entered **Location** or selected site and omits the course description. It lists everyone on the roster with a blank **Signature** box beside each name, so the printout doubles as the attendance sheet you pass around on the day. An administrator can widen or remove that column under **Admin** → **PDF templates**.
+Use **Print / PDF** in the class header for a paper session sheet. Times match the timezone used on the class page. The sheet includes the entered **Class location** or selected site and omits the course description. It lists everyone on the roster with a blank **Signature** box beside each name, so the printout doubles as the attendance sheet you pass around on the day. An administrator can widen or remove that column under **Admin** → **PDF templates**.
+
+Once the details and roster are confirmed, choose **Email class** in the header and confirm. Initial emails are always manual. You can opt into **Automatic reminder email** on **Details** after configuring a reminder flow. Class emails use the class times and location and omit the course-description block containing qualified-instructor information.
 
 ## The class calendar
 

@@ -535,6 +535,8 @@ Changes to a flow save automatically, including removed sections and recipients.
 
 Rename a flow from its pencil button. Flow names can be up to 200 characters.
 
+Starter templates only appear when their actions and fields fit the app or module. For a built-in module, the starter uses a supported completion trigger. Training class email starters use **A manager clicks Email class**, so creating a draft does not send an initial email.
+
 Watch for the amber warning bar above the canvas. It appears when a flow would do something that saves cleanly but behaves badly — most often attaching the record PDF to **A record is created** on hazard assessments or site inspections. Those records are started empty and filled in afterwards, so the attached PDF is blank; use **A record is submitted** to send the finished document. The warning never blocks a save, so you can keep the setup if you meant it.
 
 For **Send email**, **SMS (text)**, and **In-app notification**, recipients are split into **Always included** and **Conditional recipients**. Each conditional row shows its location, department, or assignment rule. Search by recipient or condition and use **Previous** and **Next** for long lists. Click a recipient row to open its settings. This is the same editor for built-in modules and custom apps. **Always included** means included whenever that message action runs; conditions elsewhere in the flow still apply.

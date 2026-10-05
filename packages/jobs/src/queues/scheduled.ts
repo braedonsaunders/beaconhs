@@ -12,6 +12,7 @@ export type ScheduledTick =
   | { kind: 'escalation_scan' }
   | { kind: 'digest_scan' }
   | { kind: 'scheduled_flow_scan' }
+  | { kind: 'training_class_reminder_scan' }
   | { kind: 'sync_scan' }
   | { kind: 'sync_run'; tenantId: string; connectionId: string; trigger: 'scheduled' | 'manual' }
   | { kind: 'db_maintenance'; trigger?: 'scheduled' | 'manual' }
@@ -29,6 +30,7 @@ const SCHEDULED_KINDS = new Set<ScheduledTick['kind']>([
   'escalation_scan',
   'digest_scan',
   'scheduled_flow_scan',
+  'training_class_reminder_scan',
   'sync_scan',
   'sync_run',
   'db_maintenance',
@@ -107,6 +109,13 @@ const SCHEDULES: Array<{
   jobId: string
   repeatKey: string
 }> = [
+  {
+    name: 'tick:training_class_reminders',
+    data: { kind: 'training_class_reminder_scan' },
+    pattern: '*/5 * * * *',
+    jobId: 'tick:training_class_reminders',
+    repeatKey: 'tick-training-class-reminders',
+  },
   {
     name: 'tick:form_session',
     data: { kind: 'form_session_overdue_scan' },

@@ -521,25 +521,27 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
   // Training CLASSES (scheduled instructor-led sessions) — distinct from the
   // 'training' subject above, which is one assessment attempt. There is no
   // status column: the lifecycle is derived (scheduled → cancelled | completed)
-  // and the class actions fire status_change with the derived value.
+  // and the class actions fire status_change with the derived value. The
+  // initial announcement is class_confirmed, explicitly queued by a manager;
+  // class_reminder is an opt-in reminder on an already announced class.
   // `attendee_emails` is a comma-separated address list so a send_email
   // recipient `field` target reaches the whole roster.
   'training-classes': {
     subjectType: 'module',
     subjectKey: 'training-classes',
     label: 'Training classes',
-    triggers: ['on_create', 'status_change', 'manual'],
+    triggers: ['class_confirmed', 'class_reminder', 'status_change', 'manual'],
+    completionTrigger: 'class_confirmed',
     actions: ['send_email', 'notify_role', 'webhook', 'export_pdf'],
     statusValues: ['scheduled', 'cancelled', 'completed'],
     fields: [
       { key: 'title', label: 'Class title', kind: 'text' },
       { key: 'course_name', label: 'Course', kind: 'text' },
       { key: 'course_code', label: 'Course code', kind: 'text' },
-      { key: 'course_description', label: 'Course description', kind: 'text' },
       { key: 'status_label', label: 'Status', kind: 'text' },
       { key: 'starts_at', label: 'Starts at', kind: 'date' },
       { key: 'ends_at', label: 'Ends at', kind: 'date' },
-      { key: 'site_name', label: 'Location', kind: 'text' },
+      { key: 'site_name', label: 'Class location', kind: 'text' },
       { key: 'instructor_name', label: 'Instructor', kind: 'text' },
       { key: 'capacity', label: 'Capacity', kind: 'number' },
       { key: 'notes', label: 'Notes', kind: 'text' },

@@ -10,6 +10,20 @@ import {
 const ID = '10000000-0000-4000-8000-000000000001'
 
 describe('training class mutation policy', () => {
+  it('keeps reminders off by default and only accepts the offered lead times', () => {
+    expect(parseTrainingClassField('reminderHours', '', 'America/Toronto')).toEqual({
+      field: 'reminderHours',
+      value: null,
+    })
+    for (const hours of ['24', '48', '168'])
+      expect(parseTrainingClassField('reminderHours', hours, 'America/Toronto').value).toBe(
+        Number(hours),
+      )
+    for (const invalid of ['0', '-24', '25', 'abc', null])
+      expect(() => parseTrainingClassField('reminderHours', invalid, 'America/Toronto')).toThrow(
+        'Choose a reminder time',
+      )
+  })
   it('parses bounded fields and viewer-local timestamps', () => {
     expect(parseTrainingClassField('courseId', ID, 'America/Toronto')).toEqual({
       field: 'courseId',
@@ -19,9 +33,18 @@ describe('training class mutation policy', () => {
       field: 'title',
       value: 'Lift training',
     })
-    expect(parseTrainingClassField('startsAt', '2026-01-15T14:30', 'America/Toronto')).toEqual({
-      field: 'startsAt',
-      value: new Date('2026-01-15T19:30:00.000Z'),
+    expect(
+      parseTrainingClassField(
+        'schedule',
+        JSON.stringify({ startsAt: '2026-01-15T07:30', endsAt: '2026-01-15T12:00' }),
+        'America/Toronto',
+      ),
+    ).toEqual({
+      field: 'schedule',
+      value: {
+        startsAt: new Date('2026-01-15T12:30:00.000Z'),
+        endsAt: new Date('2026-01-15T17:00:00.000Z'),
+      },
     })
     expect(parseTrainingClassField('capacity', '', 'America/Toronto')).toEqual({
       field: 'capacity',
@@ -39,9 +62,13 @@ describe('training class mutation policy', () => {
       /invalid/,
     )
     expect(() => parseTrainingClassField('capacity', '1001', 'America/Toronto')).toThrow(/range/)
-    expect(() => parseTrainingClassField('endsAt', '2026-02-30T09:00', 'America/Toronto')).toThrow(
-      /invalid/,
-    )
+    expect(() =>
+      parseTrainingClassField(
+        'schedule',
+        JSON.stringify({ startsAt: '2026-02-30T09:00', endsAt: '2026-02-30T12:00' }),
+        'America/Toronto',
+      ),
+    ).toThrow(/invalid/)
   })
 
   it('accepts and bounds a free-text class location', () => {

@@ -94,6 +94,8 @@ export const triggerDataSchema = z.discriminatedUnion('trigger', [
   // engine dispatches them by literal exactly like on_submit. A subject's
   // FlowSubjectProfile decides which of these are offered in the canvas.
   z.object({ trigger: z.literal('on_create') }),
+  z.object({ trigger: z.literal('class_confirmed') }),
+  z.object({ trigger: z.literal('class_reminder') }),
   z.object({ trigger: z.literal('on_sign') }),
   z.object({ trigger: z.literal('on_lock') }),
   z.object({ trigger: z.literal('on_unlock') }),
@@ -298,6 +300,36 @@ export function emptyAutomationGraph(): AutomationGraph {
 }
 
 // --- Static lint (best-effort; surfaced in the builder) ---------------------
+
+/** Adapt generic presets to the subject; never offer an unsupported starter. */
+export function prepareFlowStarter(
+  graph: AutomationGraph,
+  fieldIds: Set<string>,
+  profile: FlowSubjectProfile,
+): AutomationGraph | null {
+  const trigger = profile.completionTrigger ?? profile.triggers[0]
+  const parsed = triggerDataSchema.safeParse(
+    trigger === 'manual'
+      ? { trigger: 'manual', buttonId: 'starter-button', label: 'Run flow' }
+      : { trigger },
+  )
+  if (!profile.triggers.includes('on_submit') && !parsed.success) return null
+  const adapted: AutomationGraph = {
+    ...graph,
+    nodes: graph.nodes.map((node) => {
+      if (
+        node.data.kind !== 'trigger' ||
+        node.data.trigger.trigger !== 'on_submit' ||
+        profile.triggers.includes('on_submit') ||
+        !trigger
+      )
+        return node
+      if (!parsed.success) return node
+      return { ...node, data: { ...node.data, trigger: parsed.data } }
+    }),
+  }
+  return lintAutomationGraph(adapted, fieldIds, profile).length ? null : adapted
+}
 
 export function lintAutomationGraph(
   graph: AutomationGraph,

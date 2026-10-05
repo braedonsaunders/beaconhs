@@ -13,6 +13,7 @@ import { scanCompliance } from '../lib/compliance-scanner'
 import { scanEscalations } from '../lib/escalation-scanner'
 import { scanDigests } from '../lib/digest-scanner'
 import { scanScheduledFlows } from '../lib/scheduled-flow-runner'
+import { scanTrainingClassReminders } from '../lib/training-class-reminders'
 import { runSyncConnection, scanSyncConnections } from '../lib/sync-scanner'
 import { runSessionOverdueFlows } from '../lib/session-overdue-flows'
 import { runDatabaseMaintenance } from '../lib/db-maintenance'
@@ -67,6 +68,11 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       if (r.errors > 0) {
         throw new Error(`Scheduled flow scan completed with ${r.errors} flow error(s)`)
       }
+      return
+    }
+    case 'training_class_reminder_scan': {
+      const queued = await scanTrainingClassReminders()
+      if (queued) console.log(`[scheduled] training class reminders: ${queued} queued`)
       return
     }
     case 'report_schedule_scan':

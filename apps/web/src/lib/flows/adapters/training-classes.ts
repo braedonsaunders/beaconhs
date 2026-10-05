@@ -3,7 +3,7 @@ import 'server-only'
 // Training CLASS FlowSubjectAdapter — subject = one training_classes row (a
 // scheduled instructor-led session). Distinct from the 'training' subject,
 // which is an assessment attempt. Covers the legacy class-lifecycle emails:
-// class scheduled, class cancelled, attendance missed, training completed.
+// manually announced class, optional reminder, cancellation and completion.
 //
 // training_classes has no status column — the lifecycle is derived from
 // cancelled_at / completed_at (scheduled → cancelled | completed), and the
@@ -25,7 +25,7 @@ import {
 } from '@beaconhs/db/schema'
 import { alias } from 'drizzle-orm/pg-core'
 import type { RequestContext } from '@beaconhs/tenant'
-import { datetimeLocalValue } from '@/lib/datetime'
+import { formatDateTime } from '@/lib/datetime'
 import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { personName, titleize } from '../format'
 import type { FlowSubjectAdapter } from '../types'
@@ -58,9 +58,7 @@ export function createTrainingClassFlowAdapter(
         heading: 'Training class',
         reference: values.title,
         subtitle: values.course_name,
-        values: Object.fromEntries(
-          Object.entries(values).filter(([key]) => key !== 'course_description'),
-        ),
+        values,
       }),
 
     async loadValues() {
@@ -72,7 +70,6 @@ export function createTrainingClassFlowAdapter(
             c: trainingClasses,
             courseName: trainingCourses.name,
             courseCode: trainingCourses.code,
-            courseDescription: trainingCourses.description,
             siteName: orgUnits.name,
             instructorName: instU.name,
           })
@@ -119,11 +116,10 @@ export function createTrainingClassFlowAdapter(
         title: c.title ?? '',
         course_name: head.courseName ?? '',
         course_code: head.courseCode ?? '',
-        course_description: head.courseDescription ?? '',
         status,
         status_label: titleize(status),
-        starts_at: datetimeLocalValue(c.startsAt, ctx.timezone).replace('T', ' '),
-        ends_at: datetimeLocalValue(c.endsAt, ctx.timezone).replace('T', ' '),
+        starts_at: formatDateTime(c.startsAt, ctx.timezone, ctx.defaultLocale),
+        ends_at: formatDateTime(c.endsAt, ctx.timezone, ctx.defaultLocale),
         site_name: c.location || head.siteName || '',
         instructor_name: head.instructorName ?? '',
         capacity: c.capacity ?? null,

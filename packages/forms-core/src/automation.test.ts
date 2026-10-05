@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   lintWorkerTriggerCompatibility,
+  prepareFlowStarter,
   planAutomation,
   actionDataSchema,
   type ActionData,
@@ -8,6 +9,70 @@ import {
   type TriggerData,
 } from './automation'
 import type { EvalContext } from './evaluator'
+import type { FlowSubjectProfile } from './flow-subjects'
+
+describe('subject-aware flow starters', () => {
+  const profile: FlowSubjectProfile = {
+    subjectType: 'module',
+    subjectKey: 'training-classes',
+    label: 'Training classes',
+    triggers: ['class_confirmed', 'class_reminder'],
+    completionTrigger: 'class_confirmed',
+    actions: ['send_email'],
+    fields: [],
+  }
+  function starter(): AutomationGraph {
+    return {
+      schemaVersion: 1,
+      nodes: [
+        {
+          id: 'trigger',
+          position: { x: 0, y: 0 },
+          data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+        },
+        {
+          id: 'email',
+          position: { x: 100, y: 0 },
+          data: {
+            kind: 'action',
+            action: {
+              action: 'send_email',
+              mode: 'inline',
+              subject: 'Class',
+              bodyTemplate: 'Ready',
+              to: [{ type: 'submitter' }],
+            },
+          },
+        },
+      ],
+      edges: [{ id: 'edge', source: 'trigger', target: 'email', sourceHandle: 'next' }],
+    }
+  }
+  it('makes the class email starter manual without mutating its source', () => {
+    const original = starter()
+    const adapted = prepareFlowStarter(original, new Set(), profile)
+    expect(adapted?.nodes[0]?.data).toEqual({
+      kind: 'trigger',
+      trigger: { trigger: 'class_confirmed' },
+    })
+    expect(original.nodes[0]?.data).toEqual({ kind: 'trigger', trigger: { trigger: 'on_submit' } })
+  })
+  it('hides starters with actions the module cannot run', () => {
+    expect(
+      prepareFlowStarter(starter(), new Set(), { ...profile, actions: ['notify_role'] }),
+    ).toBeNull()
+  })
+  it('keeps supported form submit starters unchanged', () => {
+    const original = starter()
+    expect(
+      prepareFlowStarter(original, new Set(), {
+        ...profile,
+        triggers: ['on_submit'],
+        completionTrigger: undefined,
+      }),
+    ).toEqual(original)
+  })
+})
 
 function graphWith(action: AutomationGraph['nodes'][number]['data']): AutomationGraph {
   return {

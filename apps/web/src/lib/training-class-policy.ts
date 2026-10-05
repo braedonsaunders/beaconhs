@@ -16,13 +16,13 @@ const MAX_TRAINING_CLASS_NOTES_LENGTH = 20_000
 const TRAINING_CLASS_MUTABLE_FIELDS = [
   'courseId',
   'title',
-  'startsAt',
-  'endsAt',
+  'schedule',
   'siteOrgUnitId',
   'location',
   'instructorTenantUserId',
   'capacity',
   'notes',
+  'reminderHours',
 ] as const
 
 type TrainingClassMutableField = (typeof TRAINING_CLASS_MUTABLE_FIELDS)[number]
@@ -30,13 +30,13 @@ type TrainingClassMutableField = (typeof TRAINING_CLASS_MUTABLE_FIELDS)[number]
 export type ParsedTrainingClassField =
   | { field: 'courseId'; value: string }
   | { field: 'title'; value: string }
-  | { field: 'startsAt'; value: Date }
-  | { field: 'endsAt'; value: Date }
+  | { field: 'schedule'; value: { startsAt: Date; endsAt: Date } }
   | { field: 'siteOrgUnitId'; value: string | null }
   | { field: 'location'; value: string | null }
   | { field: 'instructorTenantUserId'; value: string | null }
   | { field: 'capacity'; value: number | null }
   | { field: 'notes'; value: string | null }
+  | { field: 'reminderHours'; value: number | null }
 
 export function parseTrainingClassField(
   fieldInput: unknown,
@@ -52,15 +52,30 @@ export function parseTrainingClassField(
         field,
         value: requiredTextInput(value, 'Class title', MAX_TRAINING_CLASS_TITLE_LENGTH),
       }
-    case 'startsAt':
-    case 'endsAt': {
-      const raw = typeof value === 'string' ? value.trim() : ''
-      const parsed = parseDatetimeLocal(raw, timezone)
-      if (!parsed) throw new Error(`${field === 'startsAt' ? 'Start' : 'End'} time is invalid.`)
-      return { field, value: parsed }
+    case 'schedule': {
+      let raw: { startsAt?: unknown; endsAt?: unknown }
+      try {
+        raw = JSON.parse(typeof value === 'string' ? value : '') as typeof raw
+      } catch {
+        throw new Error('Class schedule is invalid.')
+      }
+      const startsAt =
+        typeof raw?.startsAt === 'string' ? parseDatetimeLocal(raw.startsAt, timezone) : null
+      const endsAt =
+        typeof raw?.endsAt === 'string' ? parseDatetimeLocal(raw.endsAt, timezone) : null
+      if (!startsAt || !endsAt) throw new Error('Class schedule is invalid.')
+      assertTrainingClassSchedule(startsAt, endsAt)
+      return { field, value: { startsAt, endsAt } }
     }
     case 'location':
-      return { field, value: optionalTextInput(value, 'Location', 500) }
+      return { field, value: optionalTextInput(value, 'Class location', 500) }
+    case 'reminderHours': {
+      const hours = value === '' ? null : Number(value)
+      if (hours !== null && ![24, 48, 168].includes(hours)) {
+        throw new Error('Choose a reminder time from the list.')
+      }
+      return { field, value: hours }
+    }
     case 'siteOrgUnitId':
       return { field, value: optionalUuidInput(value, 'Site') }
     case 'instructorTenantUserId':

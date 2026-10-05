@@ -585,7 +585,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         label: 'Class automations',
         href: '/training/classes/flows',
         iconKey: 'workflow',
-        desc: 'When a class is scheduled, cancelled or completed, email the roster, notify roles or call a webhook.',
+        desc: 'Send class emails manually, opt into reminders, or notify the roster when a class is cancelled or completed.',
       },
     ],
   },

@@ -393,6 +393,13 @@
       "when": 1791223199674,
       "tag": "0056_deleted_person_employee_number",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1791228060124,
+      "tag": "0057_manual_class_emails",
+      "breakpoints": true
     }
   ]
 }

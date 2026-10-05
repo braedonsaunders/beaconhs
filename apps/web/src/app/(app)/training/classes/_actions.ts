@@ -25,12 +25,14 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
+import type { Database } from '@beaconhs/db'
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
 import { trainingClassCompletedEvent } from '@beaconhs/integrations'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { dateIsoInTimeZone } from '@/lib/datetime'
+import { assertClassEmailConfigured, ClassEmailError } from '@/lib/training-class-email'
 import { requireUuidInput } from '@/lib/mutation-input'
 import {
   MAX_TRAINING_CLASS_ATTENDEES,
@@ -42,6 +44,83 @@ import {
   type ParsedTrainingClassField,
 } from '@/lib/training-class-policy'
 import { addMonthsIso } from '../_lib/dates'
+
+export async function emailClass(formData: FormData): Promise<{ error?: string }> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'training.class.manage')
+  const id = requireTrainingClassId(formData.get('id'))
+  try {
+    await ctx.db(async (tx) => {
+      const [cls] = await tx
+        .select()
+        .from(trainingClasses)
+        .where(eq(trainingClasses.id, id))
+        .limit(1)
+        .for('update')
+      if (!cls) throw new ClassEmailError('Class not found.')
+      if (cls.cancelledAt || cls.completedAt)
+        throw new ClassEmailError('Only an upcoming class can be emailed.')
+      if (cls.startsAt <= new Date())
+        throw new ClassEmailError('Set a future class start time before emailing the class.')
+      if (cls.title === 'Untitled class')
+        throw new ClassEmailError('Enter the class title before emailing the class.')
+      const [roster] = await tx
+        .select({ total: count() })
+        .from(trainingClassAttendees)
+        .where(
+          and(
+            eq(trainingClassAttendees.classId, id),
+            inArray(trainingClassAttendees.status, ['registered', 'attended']),
+          ),
+        )
+      if (!Number(roster?.total))
+        throw new ClassEmailError('Add employees to the roster before emailing the class.')
+      const txCtx = {
+        ...ctx,
+        db<T>(fn: (tx: Database) => Promise<T>) {
+          return fn(tx)
+        },
+      }
+      await assertClassEmailConfigured(txCtx, id, 'class_confirmed')
+      const now = new Date()
+      await tx
+        .update(trainingClasses)
+        .set({
+          emailQueuedAt: now,
+          emailActor: {
+            userId: ctx.userId,
+            membershipId:
+              ctx.membership?.id === 'super-admin' ? null : (ctx.membership?.id ?? null),
+            personId: ctx.personId,
+            timezone: ctx.timezone,
+          },
+        })
+        .where(eq(trainingClasses.id, id))
+      await recordModuleFlowEvent(
+        tx,
+        { ...ctx, membership: ctx.membership?.id === 'super-admin' ? null : ctx.membership },
+        {
+          subjectId: id,
+          moduleKey: 'training-classes',
+          event: 'class_confirmed',
+          occurrenceKey: randomUUID(),
+        },
+      )
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'training_class',
+        entityId: id,
+        action: 'export',
+        summary: 'Queued class email after manager confirmation',
+        after: { attendeeCount: Number(roster?.total) },
+      })
+    })
+  } catch (error) {
+    if (error instanceof ClassEmailError) return { error: error.message }
+    throw error
+  }
+  revalidatePath(`/training/classes/${id}`)
+  return {}
+}
 
 // Create a draft class and jump straight into its unified record page — no
 // intermediate form. Course/date/instructor/roster are all filled in inline on
@@ -75,14 +154,6 @@ export async function startClass(): Promise<void> {
         endsAt,
       })
       .returning({ id: trainingClasses.id })
-    if (row) {
-      await recordModuleFlowEvent(tx, ctx, {
-        subjectId: row.id,
-        moduleKey: 'training-classes',
-        event: 'on_create',
-        occurrenceKey: row.id,
-      })
-    }
     return row?.id ?? null
   })
 
@@ -473,10 +544,8 @@ function classFieldUpdate(
       return { courseId: parsed.value }
     case 'title':
       return { title: parsed.value }
-    case 'startsAt':
-      return { startsAt: parsed.value }
-    case 'endsAt':
-      return { endsAt: parsed.value }
+    case 'schedule':
+      return parsed.value
     case 'location':
       return { location: parsed.value }
     case 'siteOrgUnitId':
@@ -487,11 +556,17 @@ function classFieldUpdate(
       return { capacity: parsed.value }
     case 'notes':
       return { notes: parsed.value }
+    case 'reminderHours':
+      return { reminderHours: parsed.value }
   }
 }
 
-function classFieldAuditValue(parsed: ParsedTrainingClassField): string | number | null {
-  return parsed.value instanceof Date ? parsed.value.toISOString() : parsed.value
+function classFieldAuditValue(
+  parsed: ParsedTrainingClassField,
+): string | number | null | Record<string, string> {
+  return parsed.field === 'schedule'
+    ? { startsAt: parsed.value.startsAt.toISOString(), endsAt: parsed.value.endsAt.toISOString() }
+    : parsed.value
 }
 
 export async function updateClassField(formData: FormData): Promise<void> {
@@ -499,6 +574,10 @@ export async function updateClassField(formData: FormData): Promise<void> {
   assertCan(ctx, 'training.class.manage')
   const id = requireTrainingClassId(formData.get('id'))
   const parsed = parseTrainingClassField(formData.get('field'), formData.get('value'), ctx.timezone)
+
+  if (parsed.field === 'reminderHours' && parsed.value !== null) {
+    await assertClassEmailConfigured(ctx, id, 'class_reminder')
+  }
 
   await ctx.db(async (tx) => {
     const [cls] = await tx
@@ -548,8 +627,8 @@ export async function updateClassField(formData: FormData): Promise<void> {
       if (!instructor) throw new Error('Instructor not found.')
     }
 
-    const startsAt = parsed.field === 'startsAt' ? parsed.value : cls.startsAt
-    const endsAt = parsed.field === 'endsAt' ? parsed.value : cls.endsAt
+    const startsAt = parsed.field === 'schedule' ? parsed.value.startsAt : cls.startsAt
+    const endsAt = parsed.field === 'schedule' ? parsed.value.endsAt : cls.endsAt
     assertTrainingClassSchedule(startsAt, endsAt)
 
     if (parsed.field === 'capacity' && parsed.value != null) {

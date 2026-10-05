@@ -25,6 +25,10 @@ export async function executeModuleFlowsNow(
   executionId?: string,
 ): Promise<{ ran: string[]; failed: string[] }> {
   if (!ctx.tenantId) return { ran: [], failed: [] }
+  // A stale creation event must never announce an unfinished class, including
+  // events queued by the preceding release before this cutover.
+  if (args.moduleKey === 'training-classes' && args.event === 'on_create')
+    return { ran: [], failed: [] }
   const flows = await ctx.db((tx) =>
     tx
       .select({ id: formAutomations.id, graph: formAutomations.graph })
@@ -42,6 +46,13 @@ export async function executeModuleFlowsNow(
   const adapter = buildFlowAdapter(ctx, 'module', args.moduleKey, args.subjectId)
   if (!adapter) return { ran: [], failed: [] }
   const values = await adapter.loadValues()
+  if (
+    args.moduleKey === 'training-classes' &&
+    (args.event === 'class_confirmed' || args.event === 'class_reminder') &&
+    (values.status !== 'scheduled' || !Number(values.attendee_count))
+  ) {
+    return { ran: [], failed: [] }
+  }
 
   const ran: string[] = []
   const failed: string[] = []

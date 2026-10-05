@@ -1,11 +1,15 @@
-import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
+import {
+  GeneratedText,
+  useGeneratedTranslations,
+  useGeneratedValueTranslations,
+  GeneratedValue,
+} from '@/i18n/generated'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, type SelectOption } from '@beaconhs/ui'
-import { LiveDateTime, LiveField, LiveRemoteSelect } from '@/components/live-field'
+import { LiveField, LiveRemoteSelect, LiveSelect } from '@/components/live-field'
+import { ClassSchedule } from './_class-schedule'
 
-// The class "Class details" card — the auto-saving field set shared by the
-// record page (id present) and the lazy /new page (id omitted; the row is
-// created on first edit via LazyRecordProvider).
+// The class "Class details" card — autosaving fields on the class record.
 
 type ClassFieldValues = {
   courseId: string
@@ -17,6 +21,7 @@ type ClassFieldValues = {
   instructorTenantUserId: string | null
   capacity: string | null
   notes: string | null
+  reminderHours: string | null
 }
 
 type ClassFieldOptions = {
@@ -34,8 +39,7 @@ export function ClassDetailFields({
   notice,
   updateAction,
 }: {
-  /** Omit for a new (lazy) record — the row is created on first save. */
-  id?: string
+  id: string
   initial: ClassFieldValues
   options: ClassFieldOptions
   disabled?: boolean
@@ -44,6 +48,7 @@ export function ClassDetailFields({
   updateAction: (formData: FormData) => Promise<void>
 }) {
   const tGenerated = useGeneratedTranslations()
+  const tValue = useGeneratedValueTranslations()
   return (
     <Card>
       <CardHeader>
@@ -87,24 +92,13 @@ export function ClassDetailFields({
           disabled={disabled}
           updateAction={updateAction}
         />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <LiveDateTime
-            id={id}
-            field="startsAt"
-            label={tGenerated('m_1fbd4c28375213')}
-            initialValue={initial.startsAt}
-            disabled={disabled}
-            updateAction={updateAction}
-          />
-          <LiveDateTime
-            id={id}
-            field="endsAt"
-            label={tGenerated('m_1c40705ea1aabf')}
-            initialValue={initial.endsAt}
-            disabled={disabled}
-            updateAction={updateAction}
-          />
-        </div>
+        <ClassSchedule
+          id={id}
+          startsAt={initial.startsAt}
+          endsAt={initial.endsAt}
+          disabled={disabled}
+          updateAction={updateAction}
+        />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <LiveRemoteSelect
             id={id}
@@ -132,7 +126,7 @@ export function ClassDetailFields({
         <LiveField
           id={id}
           field="location"
-          label={tGenerated('m_055f11420b2da4')}
+          label={tValue('Class location')}
           initialValue={initial.location}
           maxLength={500}
           disabled={disabled}
@@ -163,6 +157,23 @@ export function ClassDetailFields({
           disabled={disabled}
           updateAction={updateAction}
         />
+        <LiveSelect
+          id={id}
+          field="reminderHours"
+          label={tValue('Automatic reminder email')}
+          initialValue={initial.reminderHours}
+          options={[
+            { value: '24', label: tValue('1 day before class') },
+            { value: '48', label: tValue('2 days before class') },
+            { value: '168', label: tValue('1 week before class') },
+          ]}
+          emptyLabel={tValue('Off')}
+          disabled={disabled}
+          updateAction={updateAction}
+        />
+        <p className="text-xs text-slate-500">
+          <GeneratedValue value="Reminders only send after a manager uses Email class. Creating or editing a class does not send its initial email." />
+        </p>
       </CardContent>
     </Card>
   )

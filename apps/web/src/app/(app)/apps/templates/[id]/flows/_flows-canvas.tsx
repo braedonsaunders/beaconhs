@@ -57,7 +57,7 @@ import type {
   FlowSubjectProfile,
   TriggerData,
 } from '@beaconhs/forms-core'
-import { emptyAutomationGraph, warnAutomationGraph } from '@beaconhs/forms-core'
+import { emptyAutomationGraph, prepareFlowStarter, warnAutomationGraph } from '@beaconhs/forms-core'
 import { LogicBuilder } from '../designer/logic-builder'
 import { toast } from '@/lib/toast'
 import type { RecipientOptions } from '@/lib/flows/recipient-presentation'
@@ -172,6 +172,10 @@ function triggerSummary(t: TriggerData): string {
       return 'Session check-in overdue'
     case 'on_create':
       return 'On create'
+    case 'class_confirmed':
+      return 'Manager emails the class'
+    case 'class_reminder':
+      return 'Class reminder is due'
     case 'on_sign':
       return 'On sign'
     case 'on_lock':
@@ -208,6 +212,8 @@ const TRIGGER_LABEL: Record<TriggerData['trigger'], string> = {
   scheduled: 'On a schedule',
   session_overdue: 'A monitored session goes overdue',
   on_create: 'A record is created',
+  class_confirmed: 'A manager clicks Email class',
+  class_reminder: 'A class reminder is due',
   on_sign: 'A record is signed',
   on_lock: 'A record is locked / closed',
   on_unlock: 'A record is unlocked / reopened',
@@ -927,6 +933,15 @@ export function FlowsCanvas({
     toast.success(tGenerated('m_0e58c2382f9cda'))
   }
 
+  const availableTemplates = useMemo(
+    () =>
+      FLOW_TEMPLATES.flatMap((template) => {
+        const graph = prepareFlowStarter(template.build(), new Set(fieldIds), profile)
+        return graph ? [{ ...template, build: () => graph }] : []
+      }),
+    [fieldIds, profile],
+  )
+
   return (
     <div className="flex h-full min-h-0">
       {/* Left rail — flows list */}
@@ -1297,7 +1312,7 @@ export function FlowsCanvas({
                         canEdit ? (
                           <div className="mt-3 grid grid-cols-1 gap-2 text-left sm:grid-cols-2">
                             <GeneratedValue
-                              value={FLOW_TEMPLATES.map((t) => (
+                              value={availableTemplates.map((t) => (
                                 <button
                                   key={t.key}
                                   type="button"
@@ -1399,7 +1414,7 @@ export function FlowsCanvas({
       >
         <div className="space-y-2">
           <GeneratedValue
-            value={FLOW_TEMPLATES.map((t) => (
+            value={availableTemplates.map((t) => (
               <button
                 key={t.key}
                 type="button"
@@ -1513,7 +1528,7 @@ function NodeInspector({
           >
             {profile.triggers.map((tk) => (
               <option key={tk} value={tk}>
-                {TRIGGER_LABEL[tk]}
+                <GeneratedValue value={TRIGGER_LABEL[tk]} />
               </option>
             ))}
           </Select>

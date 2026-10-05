@@ -60,6 +60,7 @@ import {
 import { DeleteClassButton } from './_delete-class-button'
 import { CompletionDecisionFields } from './_completion-decision-fields'
 import { ClassAttendeePicker } from './_attendee-picker'
+import { EmailClassButton } from './_email-class-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -344,7 +345,8 @@ export default async function TrainingClassPage({
           }
           actions={
             !canManageClasses ? null : (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {!isCancelled && !isCompleted ? <EmailClassButton id={id} /> : null}
                 <DownloadLink href={`/training/classes/${cls.id}/pdf`}>
                   <Button variant="outline" size="sm">
                     <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
@@ -425,6 +427,7 @@ export default async function TrainingClassPage({
                   instructorTenantUserId: cls.instructorTenantUserId,
                   capacity: cls.capacity != null ? String(cls.capacity) : null,
                   notes: cls.notes,
+                  reminderHours: cls.reminderHours == null ? null : String(cls.reminderHours),
                 }}
                 options={{
                   course: course
