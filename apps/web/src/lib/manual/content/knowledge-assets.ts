@@ -184,6 +184,8 @@ Only **Self-paced** courses completed inside BeaconHS issue automatically. Their
 
 An assessment needs at least one question before anyone can start it.
 
+To remove a type, open **Settings**, choose **Delete type**, and confirm. A successful deletion returns you to the assessment types list. A type still used by a compliance requirement must be removed from that requirement first.
+
 ## Review free-text assessment answers
 
 1. Open **Training → Assessments**.

@@ -11,7 +11,7 @@ import * as React from 'react'
 import { Reorder, useDragControls } from 'framer-motion'
 import { Boxes, GripVertical, LayoutList, ListChecks, Plus, Trash2 } from 'lucide-react'
 import { Badge, Button, Drawer, EmptyState } from '@beaconhs/ui'
-import { useRouter } from 'next/navigation'
+import { unstable_rethrow, useRouter } from 'next/navigation'
 import { toast } from '@/lib/toast'
 import { confirmDialog } from '@/lib/confirm'
 import { useReseededState } from '@/lib/use-reseeded-state'
@@ -140,6 +140,7 @@ export function useBuilderActionRunner(defaultError = 'Something went wrong') {
         try {
           await action()
         } catch (error) {
+          unstable_rethrow(error)
           toast.error(tGeneratedValue(error instanceof Error ? error.message : errorMessage))
           router.refresh()
         }
@@ -799,6 +800,7 @@ export function useConfirmedBuilderDelete({
         await action()
         onDeleted()
       } catch (error) {
+        unstable_rethrow(error)
         toast.error(
           tGeneratedValue(error instanceof Error ? error.message : tGenerated('m_1ac2672da698ce')),
         )
