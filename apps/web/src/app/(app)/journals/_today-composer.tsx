@@ -1,7 +1,7 @@
 'use client'
 
 import { GeneratedValue } from '@/i18n/generated'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Button } from '@beaconhs/ui'
 import { JournalEditor } from './_editor'
 import { createTodayEntry, updateEntry } from './_actions'
@@ -67,12 +67,9 @@ export function TodayComposer({
       setOpening(false)
     }
   }
-  const saveRef = useRef(save)
+  const saveLatest = useEffectEvent(() => save().catch(() => {}))
   useEffect(() => {
-    saveRef.current = save
-  }, [save])
-  useEffect(() => {
-    const flush = () => void saveRef.current().catch(() => {})
+    const flush = () => void saveLatest()
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (!running.current && latest.current === persisted.current) return
       event.preventDefault()
