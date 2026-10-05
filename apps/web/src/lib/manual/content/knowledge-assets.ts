@@ -180,6 +180,7 @@ Only **Self-paced** courses completed inside BeaconHS issue automatically. Their
    - Turn on **Graded** to calculate points, a score, and pass or fail. The pass mark applies only in this mode.
    - Turn off **Graded** to make the assessment completion-only. Answers are recorded, and completing it can still issue the linked course record.
 7. Use **Activity** to review changes to the assessment type.
+8. Select **PDF** in the header to print a blank copy for handwriting. It includes the saved questions and choices in their current order, with space for answers, name, date, and signature. Correct answers are not printed. Add at least one question before printing.
 
 An assessment needs at least one question before anyone can start it.
 

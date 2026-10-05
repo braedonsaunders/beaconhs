@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
-import { asc, eq } from 'drizzle-orm'
-import { Badge, DetailHeader } from '@beaconhs/ui'
+import { and, asc, eq, isNull } from 'drizzle-orm'
+import { Badge, Button, DetailHeader } from '@beaconhs/ui'
 import {
   trainingAssessmentTypeQuestions,
   trainingAssessmentTypes,
@@ -13,6 +13,8 @@ import { recentActivityForEntity } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
 import { getGeneratedTranslations, getGeneratedValueTranslations } from '@/i18n/generated.server'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
+import { FileDown } from 'lucide-react'
+import { DownloadLink } from '@/components/download-link'
 import { TrainingAssessmentTypeBuilder } from './_type-builder'
 
 export const dynamic = 'force-dynamic'
@@ -36,7 +38,7 @@ export default async function AssessmentTypeDetailPage({
     const [type] = await tx
       .select()
       .from(trainingAssessmentTypes)
-      .where(eq(trainingAssessmentTypes.id, id))
+      .where(and(eq(trainingAssessmentTypes.id, id), isNull(trainingAssessmentTypes.deletedAt)))
       .limit(1)
     if (!type) return null
     const [questions, courses] = await Promise.all([
@@ -60,6 +62,19 @@ export default async function AssessmentTypeDetailPage({
         <DetailHeader
           back={{ href: '/training/assessments/types', label: 'Back to assessment types' }}
           title={tGeneratedValue(data.type.name)}
+          actions={
+            data.questions.length > 0 ? (
+              <DownloadLink href={`/training/assessments/types/${id}/pdf`} target="_blank">
+                <Button variant="outline" size="sm">
+                  <FileDown size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
+                </Button>
+              </DownloadLink>
+            ) : (
+              <Button variant="outline" size="sm" disabled>
+                <FileDown size={14} /> <GeneratedText id="m_1a2b2ed6729166" />
+              </Button>
+            )
+          }
           badge={
             <Badge variant={data.type.active ? 'success' : 'secondary'}>
               <GeneratedValue
