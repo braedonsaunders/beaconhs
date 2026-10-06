@@ -16,6 +16,8 @@ import {
 } from '@beaconhs/design-studio'
 import {
   buildReportDocumentCss,
+  buildReportDocumentFontCss,
+  REPORT_DOCUMENT_FONT_FAMILY,
   buildReportPageCss,
   renderReportDocumentBodyHtml,
   resolveReportLayout,
@@ -124,16 +126,32 @@ function wrapDocument(body: string, title: string): string {
 // --- Scheduled-report PDF -------------------------------------------------
 //
 // Prints the SAME document body and CSS as the in-app paper preview, on the
-// definition's configured paper (size/orientation/margins). There is no
-// PDF-only header/footer chrome, which would introduce a second font and layout.
+// definition's configured paper. A small running footer shares the document
+// font and reserves enough bottom margin even on a tightly packed layout.
 
 export async function renderReportPdf(
-  input: ReportDocumentInput & { layout?: Partial<ReportLayoutConfig> | null },
+  input: ReportDocumentInput & {
+    layout?: Partial<ReportLayoutConfig> | null
+    timezone?: string
+    locale?: string
+  },
 ): Promise<Buffer> {
   const layout = resolveReportLayout(input.layout)
+  const bottomMargin = `${Math.max(layout.marginMm, 12)}mm`
+  const printedAt = new Intl.DateTimeFormat(input.locale ?? 'en-CA', {
+    timeZone: input.timezone ?? 'UTC',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
+  }).format(input.generatedAt ?? new Date())
+  const printedLabel = input.translate?.('Printed') ?? 'Printed'
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"/><title>${escapeHtml(input.reportName)}</title>
-<style>${buildReportPageCss(layout)} body { margin: 0; } ${buildReportDocumentCss(input.primaryColor, layout.density)}</style>
+<style>${buildReportPageCss(layout)} @page { margin-bottom: ${bottomMargin}; } body { margin: 0; } ${buildReportDocumentCss(input.primaryColor, layout.density)}</style>
 </head><body>${renderReportDocumentBodyHtml({
     ...input,
     summary: layout.showSummary ? input.summary : undefined,
@@ -146,8 +164,14 @@ export async function renderReportPdf(
     const pdf = await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,
-      displayHeaderFooter: false,
-      margin: { top: m, bottom: m, left: m, right: m },
+      displayHeaderFooter: true,
+      headerTemplate: '<div></div>',
+      footerTemplate: `<style>${buildReportDocumentFontCss()}</style>
+        <div style='font-family:${REPORT_DOCUMENT_FONT_FAMILY};font-size:8px;color:#64748b;width:100%;padding:0 ${m};display:flex;justify-content:space-between;'>
+          <span>${escapeHtml(printedLabel)} ${escapeHtml(printedAt)}</span>
+          <span><span class="pageNumber"></span> / <span class="totalPages"></span></span>
+        </div>`,
+      margin: { top: m, bottom: bottomMargin, left: m, right: m },
     })
     return Buffer.from(pdf)
   } finally {

@@ -8,6 +8,7 @@ import {
 } from '@beaconhs/reports'
 import { assertCan } from '@beaconhs/tenant'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
+import { createSystemTranslator } from '@beaconhs/i18n/messages'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
@@ -125,6 +126,9 @@ export async function GET(
     reportName: definition.name,
     dateRangeLabel: definition.description ?? '',
     generatedAt: new Date(),
+    timezone: ctx.timezone,
+    locale: ctx.locale,
+    translate: createSystemTranslator(ctx.locale),
     summary: run.result.summary,
     groups: run.result.groups,
     layout: definition.layout,

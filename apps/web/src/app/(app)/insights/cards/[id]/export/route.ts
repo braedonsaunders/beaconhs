@@ -4,6 +4,7 @@
 
 import type { BhqlResult } from '@beaconhs/analytics'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
+import { createSystemTranslator } from '@beaconhs/i18n/messages'
 import { resolveReportLayout } from '@beaconhs/reports'
 import { NextResponse, type NextRequest } from 'next/server'
 import { runAuthorizedBhql } from '@/lib/analytics-access'
@@ -92,6 +93,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       reportName: card.name,
       dateRangeLabel: 'Live data snapshot',
       generatedAt: new Date(),
+      timezone: ctx.timezone,
+      locale: ctx.locale,
+      translate: createSystemTranslator(ctx.locale),
       summary: document.summary,
       groups: document.groups,
       layout: resolveReportLayout({

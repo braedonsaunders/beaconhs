@@ -163,6 +163,8 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
             reportName: snapshot.scheduleName || snapshot.definition.name,
             dateRangeLabel: rangeLabel,
             generatedAt: new Date(),
+            timezone: requestCtx.timezone,
+            locale,
             summary: result.summary,
             groups: result.groups,
             translate: createSystemTranslator(locale),

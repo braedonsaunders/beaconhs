@@ -253,7 +253,7 @@ The seeded catalogue replaces the former Beacon reports for training certificate
 1. Open the report.
 2. Set the filters and grouping, then click **Apply and run**.
 3. Click **CSV**, **Excel**, or **PDF**. On **Training — Wallet cards**, **PDF** prints the designed CR80 card fronts (one card per page, printer size). The on-screen preview stays the filter table so you can pick who prints.
-4. The export uses the same filters and grouping shown in the preview. CSV and Excel are the table rows. Other reports' **PDF** still matches the paper preview.
+4. The export uses the same filters and grouping shown in the preview. CSV and Excel are the table rows. Other reports' **PDF** uses the paper preview layout. Each report PDF page has a small footer with its page number and the date and time printed, in your account time zone. Scheduled report PDFs use the schedule owner's time zone.
 
 ## Schedule a report by email
 
