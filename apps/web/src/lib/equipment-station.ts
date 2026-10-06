@@ -140,7 +140,7 @@ function cleanCode(raw: string): string {
 /**
  * Typeahead for the station field: surface matching assets + people as the
  * operator types (so they don't need an exact scan). Equipment is matched on
- * asset tag / name; people on name / employee number. "out" uses the cached
+ * the shared equipment identifiers and details; people on name / employee number. "out" uses the cached
  * availability flag so it lines up with the equipment register's filter.
  */
 export async function searchStationCore(

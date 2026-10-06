@@ -1,3 +1,4 @@
+import { PPE_ACTIVE_STATUSES, ppeRegisterQuery } from '@/lib/ppe-register-query'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { PeopleStatusFilter } from '@/components/people-status-filter'
@@ -5,18 +6,12 @@ import { includeInactivePeople } from '@/lib/people-filter'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { HardHat } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, eq, isNull, sql } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
-import {
-  people,
-  ppeIssues,
-  ppeItems,
-  ppeTypeInspectionCriteria,
-  ppeTypes,
-} from '@beaconhs/db/schema'
+import { people, ppeItems, ppeTypeInspectionCriteria, ppeTypes } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { buildExportHref, isUuid, parseListParams, pickString } from '@/lib/list-params'
+import { buildExportHref, pickString } from '@/lib/list-params'
 import { resolvePpeInspectionDue } from '@/lib/ppe-inspection-due'
 import { DownloadLink } from '@/components/download-link'
 import { SearchInput } from '@/components/search-input'
@@ -35,19 +30,6 @@ export async function generateMetadata() {
   return { title: tGenerated('m_18391e161b9ed6') }
 }
 
-const SORTS = [
-  'type',
-  'serial',
-  'size',
-  'status',
-  'holder',
-  'assigned',
-  'last_inspection',
-  'next_inspection',
-  'status_changed',
-  'updated',
-] as const
-
 const STATUS_OPTIONS = [
   { value: 'in_stock', label: 'In stock' },
   { value: 'issued', label: 'Issued' },
@@ -63,7 +45,6 @@ const STATUS_OPTIONS = [
  * every search — the old default was `issued` alone, which hid returned stock
  * too and made a discarded item look deleted.
  */
-const ACTIVE_STATUSES = ['in_stock', 'issued', 'returned', 'out_of_service'] as const
 const STATUS_FILTER_OPTIONS = [{ value: 'active', label: 'Active' }, ...STATUS_OPTIONS]
 
 const INSPECTION_OPTIONS = [
@@ -82,172 +63,20 @@ export default async function PpePage({
   const tGeneratedValue = await getGeneratedValueTranslations()
   const tGenerated = await getGeneratedTranslations()
   const sp = await searchParams
-  const params = parseListParams(sp, {
-    // Most-recently-moved first: the register is read as a worklist, and a
-    // due-date sort buried anything that just changed hands.
-    sort: 'status_changed',
-    dir: 'desc',
-    perPage: 25,
-    allowedSorts: SORTS,
-  })
-  // Default to in-circulation gear; `status=active` is that default made
-  // explicit, and `status=all` clears it. Unknown values would throw a
-  // Postgres enum error, so they're whitelisted to "no filter".
-  const statusRaw = pickString(sp.status) ?? 'active'
-  const statusFilter = STATUS_FILTER_OPTIONS.some((o) => o.value === statusRaw)
-    ? statusRaw
-    : undefined
-  const inspectionRaw = pickString(sp.inspection)
-  const inspectionFilter = INSPECTION_OPTIONS.some((option) => option.value === inspectionRaw)
-    ? inspectionRaw
-    : undefined
-  const typeRaw = pickString(sp.type)
-  const typeFilter = typeRaw && isUuid(typeRaw) ? typeRaw : undefined
-  const holderRaw = pickString(sp.holder)
-  const holderFilter = holderRaw && isUuid(holderRaw) ? holderRaw : undefined
+  const {
+    params,
+    statusFilter,
+    holderFilter,
+    todayIso,
+    where: whereClause,
+    assignedAtSql,
+    orderBy,
+  } = ppeRegisterQuery(sp)
   const ctx = await requireRequestContext()
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'ppe.read.all')
   const canIssue = can(ctx, 'ppe.issue') || can(ctx, 'ppe.manage')
 
-  const todayIso = new Date().toISOString().slice(0, 10)
-  const dueSoonDate = new Date(`${todayIso}T00:00:00.000Z`)
-  dueSoonDate.setUTCDate(dueSoonDate.getUTCDate() + 7)
-  const dueSoonIso = dueSoonDate.toISOString().slice(0, 10)
-
   const { rows, total, statusCounts, types, selectedHolder } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = [isNull(ppeItems.deletedAt)]
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(
-        ilike(ppeItems.serialNumber, term),
-        ilike(ppeTypes.name, term),
-        ilike(people.firstName, term),
-        ilike(people.lastName, term),
-        ilike(sql<string>`concat_ws(' ', ${people.firstName}, ${people.lastName})`, term),
-      )
-      if (cond) filters.push(cond)
-    }
-    if (statusFilter === 'active') {
-      filters.push(inArray(ppeItems.status, [...ACTIVE_STATUSES]))
-    } else if (statusFilter) {
-      filters.push(
-        eq(
-          ppeItems.status,
-          statusFilter as
-            'in_stock' | 'issued' | 'returned' | 'out_of_service' | 'discarded' | 'expired',
-        ),
-      )
-    }
-    if (typeFilter) filters.push(eq(ppeItems.typeId, typeFilter))
-    if (holderFilter) {
-      // Match the CURRENT holder or anyone the item was ever issued to.
-      // Discarding and returning both null the holder column, so a
-      // current-holder-only match made returned and discarded gear
-      // unfindable by the person who actually had it.
-      filters.push(
-        or(
-          eq(ppeItems.currentHolderPersonId, holderFilter),
-          sql`exists (
-            select 1 from ${ppeIssues} pi
-            where pi.item_id = ${ppeItems.id} and pi.person_id = ${holderFilter}
-          )`,
-        )!,
-      )
-    }
-
-    const preUseCriteriaExists = sql<boolean>`exists (
-      select 1 from ${ppeTypeInspectionCriteria} c
-      where c.ppe_type_id = ${ppeTypes.id} and c.inspection_kind = 'pre_use'
-    )`
-    const annualCriteriaExists = sql<boolean>`exists (
-      select 1 from ${ppeTypeInspectionCriteria} c
-      where c.ppe_type_id = ${ppeTypes.id} and c.inspection_kind = 'annual'
-    )`
-    const inspectionRequired = sql<boolean>`(
-      ${ppeTypes.isInspectable} = true and (${preUseCriteriaExists} or ${annualCriteriaExists})
-    )`
-    const inspectionActionable = sql<boolean>`(
-      ${inspectionRequired} and (
-        (${preUseCriteriaExists} and (${ppeItems.nextInspectionDue} is null or ${ppeItems.nextInspectionDue} <= ${todayIso}))
-        or (${annualCriteriaExists} and (${ppeItems.nextAnnualInspectionDue} is null or ${ppeItems.nextAnnualInspectionDue} <= ${todayIso}))
-      )
-    )`
-    if (inspectionFilter === 'needs_inspection') filters.push(inspectionActionable)
-    if (inspectionFilter === 'overdue') {
-      filters.push(sql`(${inspectionRequired} and (
-        (${preUseCriteriaExists} and ${ppeItems.nextInspectionDue} < ${todayIso})
-        or (${annualCriteriaExists} and ${ppeItems.nextAnnualInspectionDue} < ${todayIso})
-      ))`)
-    }
-    if (inspectionFilter === 'due_soon') {
-      filters.push(sql`(${inspectionRequired} and not ${inspectionActionable} and (
-        (${preUseCriteriaExists} and ${ppeItems.nextInspectionDue} <= ${dueSoonIso})
-        or (${annualCriteriaExists} and ${ppeItems.nextAnnualInspectionDue} <= ${dueSoonIso})
-      ))`)
-    }
-    if (inspectionFilter === 'current') {
-      filters.push(sql`(${inspectionRequired} and not ${inspectionActionable} and
-        least(
-          coalesce(${ppeItems.nextInspectionDue}, '9999-12-31'::date),
-          coalesce(${ppeItems.nextAnnualInspectionDue}, '9999-12-31'::date)
-        ) > ${dueSoonIso})`)
-    }
-    if (inspectionFilter === 'not_required') filters.push(sql`not ${inspectionRequired}`)
-    const whereClause = and(...filters)
-
-    // "Date assigned" = the most recent issue/replace event for the item (when
-    // its current holder received it). Correlated subquery so we can both sort
-    // and display it; there is no assigned-date column on ppe_items.
-    const assignedAtSql = sql<string | null>`(
-      select max(${ppeIssues.occurredAt})
-      from ${ppeIssues}
-      where ${ppeIssues.itemId} = ${ppeItems.id}
-        and ${ppeIssues.action} in ('issue', 'replace')
-    )`
-
-    const dirFn = params.dir === 'asc' ? asc : desc
-    const orderBy =
-      params.sort === 'serial'
-        ? [dirFn(ppeItems.serialNumber)]
-        : params.sort === 'size'
-          ? [dirFn(ppeItems.size)]
-          : params.sort === 'status'
-            ? [dirFn(ppeItems.status)]
-            : params.sort === 'holder'
-              ? [dirFn(people.lastName)]
-              : params.sort === 'assigned'
-                ? // Never-assigned items sink to the bottom in both directions.
-                  [
-                    params.dir === 'asc'
-                      ? sql`${assignedAtSql} asc nulls last`
-                      : sql`${assignedAtSql} desc nulls last`,
-                  ]
-                : params.sort === 'last_inspection'
-                  ? // Never-inspected items sink to the bottom in both directions.
-                    [
-                      params.dir === 'asc'
-                        ? sql`${ppeItems.lastInspectionOn} asc nulls last`
-                        : sql`${ppeItems.lastInspectionOn} desc nulls last`,
-                    ]
-                  : params.sort === 'next_inspection'
-                    ? [
-                        sql`case when ${inspectionActionable} then 0 else 1 end asc`,
-                        sql`least(
-                          coalesce(${ppeItems.nextInspectionDue}, '9999-12-31'::date),
-                          coalesce(${ppeItems.nextAnnualInspectionDue}, '9999-12-31'::date)
-                        ) ${params.dir === 'asc' ? sql`asc` : sql`desc`}`,
-                      ]
-                    : params.sort === 'status_changed'
-                      ? // Items whose status never moved sink to the bottom.
-                        [
-                          params.dir === 'asc'
-                            ? sql`${ppeItems.statusChangedAt} asc nulls last`
-                            : sql`${ppeItems.statusChangedAt} desc nulls last`,
-                        ]
-                      : params.sort === 'updated'
-                        ? [dirFn(ppeItems.updatedAt)]
-                        : [dirFn(ppeTypes.name)]
-
     const [tot] = await tx
       .select({ c: count() })
       .from(ppeItems)
@@ -391,7 +220,7 @@ export default async function PpePage({
                 ...o,
                 count:
                   o.value === 'active'
-                    ? ACTIVE_STATUSES.reduce((sum, s) => sum + (statusCounts[s] ?? 0), 0)
+                    ? PPE_ACTIVE_STATUSES.reduce((sum, s) => sum + (statusCounts[s] ?? 0), 0)
                     : statusCounts[o.value],
               }))}
             />

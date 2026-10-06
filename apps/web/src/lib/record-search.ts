@@ -10,6 +10,8 @@ import {
   hazidAssessments,
   incidents,
   people,
+  ppeItems,
+  ppeTypes,
 } from '@beaconhs/db/schema'
 
 /** Literal substring search: user-entered % and _ are not SQL wildcards. */
@@ -20,6 +22,7 @@ export function recordSearchTerm(query: string): string {
 // Search business fields deliberately, independently of table columns. Do not
 // include verification tokens, internal IDs, or arbitrary private metadata.
 const fields = {
+  ppe: [ppeItems.serialNumber, ppeItems.size, ppeItems.notes],
   equipment: [
     equipmentItems.assetTag,
     equipmentItems.name,
@@ -97,6 +100,20 @@ export function recordSearchWhere(
           and ${ilike(name, term)}
       )`)
     }
+  }
+  if (kind === 'ppe') {
+    matches.push(sql`exists (
+      select 1 from ${ppeTypes}
+      where ${ppeTypes.id} = ${ppeItems.typeId}
+        and ${ppeTypes.tenantId} = ${ppeItems.tenantId}
+        and ${or(ilike(ppeTypes.name, term), ilike(ppeTypes.category, term))}
+    )`)
+    matches.push(sql`exists (
+      select 1 from ${people}
+      where ${people.id} = ${ppeItems.currentHolderPersonId}
+        and ${people.tenantId} = ${ppeItems.tenantId}
+        and ${recordSearchWhere('people', trimmed)}
+    )`)
   }
   return or(...matches)
 }
