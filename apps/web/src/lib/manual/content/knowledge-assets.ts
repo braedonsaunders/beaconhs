@@ -694,7 +694,7 @@ To check a unit in or out yourself, use the station. See [Equipment check-in / c
 ## Record a custody change (managers)
 
 1. Open the unit and select **Location & custody**.
-2. Select **Transfer** to change its site or holder. Add a note, then select **Record transfer**. The movement is added to **Location history**.
+2. Select **Transfer** to change its site or holder. Add a note, then select **Record transfer**. When changing only the holder, you can leave the current location as it is, including an imported customer location. New site selections must be active sites, and new holders must be active people. The movement is added to **Location history**, and the drawer closes after saving.
 3. Select **Check out** to issue an available unit. A **Destination site** is required; the person and expected return date are optional.
 4. Select **Check in** to close the open check-out. The unit returns to the default check-in location configured for the station.
 

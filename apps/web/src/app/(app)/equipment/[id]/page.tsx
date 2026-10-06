@@ -1,3 +1,4 @@
+import { transferLocation } from './_custody-actions'
 import { activePeopleWhere } from '@beaconhs/db'
 import { CompleteSchedule } from '../_complete-schedule'
 import { OilChangeCard } from './_oil-change'
@@ -364,81 +365,6 @@ async function reportFound(formData: FormData) {
   })
   revalidatePath(`/equipment/${id}`)
   redirect(`/equipment/${id}`)
-}
-
-async function transferLocation(formData: FormData) {
-  'use server'
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
-  const id = requireUuidInput(formData.get('id'), 'Equipment item')
-  const siteOrgUnitId = optionalUuidInput(formData.get('siteOrgUnitId'), 'Site')
-  const holderPersonId = optionalUuidInput(formData.get('holderPersonId'), 'Holder')
-  const note = optionalTextInput(formData.get('note'), 'Transfer note', 2_000)
-
-  await ctx.db(async (tx) => {
-    const [item] = await lockEquipmentCustodyRows(tx, [id])
-    if (!item || item.deletedAt) throw new Error('Equipment item not found')
-    if (siteOrgUnitId) {
-      const [site] = await tx
-        .select({ id: orgUnits.id })
-        .from(orgUnits)
-        .where(
-          and(
-            eq(orgUnits.id, siteOrgUnitId),
-            eq(orgUnits.level, 'site'),
-            isNull(orgUnits.deletedAt),
-          ),
-        )
-        .limit(1)
-      if (!site) throw new Error('Select an active site')
-    }
-    if (holderPersonId) {
-      const [person] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(and(eq(people.id, holderPersonId), activePeopleWhere()))
-        .limit(1)
-      if (!person) throw new Error('Select an active holder')
-    }
-    const openIds = await openEquipmentCheckoutItemIds(tx, [id])
-    if (openIds.has(id)) {
-      throw new Error('Check this item in before recording a direct custody transfer')
-    }
-    const now = new Date()
-    await tx
-      .update(equipmentItems)
-      .set({
-        currentSiteOrgUnitId: siteOrgUnitId,
-        currentHolderPersonId: holderPersonId,
-        lastSeenSiteOrgUnitId: siteOrgUnitId,
-        lastSeenHolderPersonId: holderPersonId,
-        lastSeenAt: now,
-        isMissing: false,
-        missingFoundAt: item.isMissing ? now : undefined,
-      })
-      .where(eq(equipmentItems.id, id))
-    await tx.insert(equipmentLocationHistory).values({
-      tenantId: ctx.tenantId,
-      itemId: id,
-      siteOrgUnitId,
-      holderPersonId,
-      recordedByTenantUserId: ctx.membership?.id,
-      recordedAt: now,
-      note,
-    })
-    await refreshEquipmentAvailability(tx, [id])
-  })
-  await recordAudit(ctx, {
-    entityType: 'equipment',
-    entityId: id,
-    action: 'update',
-    summary: 'Equipment transferred',
-    after: { siteOrgUnitId, holderPersonId, note },
-  })
-  revalidatePath(`/equipment/${id}`)
-  revalidatePath('/equipment')
-  revalidatePath('/equipment/station')
-  revalidatePath('/dashboard')
 }
 
 async function checkOutFromItem(formData: FormData) {
