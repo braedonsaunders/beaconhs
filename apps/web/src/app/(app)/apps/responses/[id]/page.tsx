@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -492,12 +493,12 @@ export default async function FormResponsePage({
           employeeNo: people.employeeNo,
         })
         .from(people)
-        .where(eq(people.status, 'active'))
+        .where(activePeopleWhere())
         .orderBy(asc(people.lastName), asc(people.firstName)),
       tx
         .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
         .from(people)
-        .where(eq(people.userId, ctx.userId ?? ''))
+        .where(and(eq(people.userId, ctx.userId ?? ''), activePeopleWhere()))
         .limit(1),
       tx
         .select({ id: formAutomations.id, graph: formAutomations.graph })

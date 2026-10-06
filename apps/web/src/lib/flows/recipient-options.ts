@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import 'server-only'
 
 // Active people / roles / departments for the send_email recipient pickers in
@@ -23,7 +24,7 @@ export async function loadRecipientOptions(ctx: RequestContext): Promise<Recipie
     const ppl = await tx
       .select({ id: people.id, first: people.firstName, last: people.lastName })
       .from(people)
-      .where(and(isNull(people.deletedAt), eq(people.status, 'active')))
+      .where(activePeopleWhere())
       .orderBy(asc(people.lastName), asc(people.firstName))
     const rls = await tx
       .select({ key: roles.key, name: roles.name })

@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { GeneratedText } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
@@ -77,8 +78,7 @@ export default async function StationPage({
             and(
               eq(people.tenantId, ctx.tenantId),
               eq(people.id, ctx.personId),
-              eq(people.status, 'active'),
-              isNull(people.deletedAt),
+              activePeopleWhere(),
             ),
           )
           .limit(1)

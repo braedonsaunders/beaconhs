@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Bulk-action server actions for /equipment.
 //
 // Four actions surface in the floating bulk-action bar:
@@ -179,9 +181,7 @@ export async function bulkAssignEquipmentToHolder(args: {
         lastName: people.lastName,
       })
       .from(people)
-      .where(
-        and(eq(people.id, args.personId), eq(people.status, 'active'), isNull(people.deletedAt)),
-      )
+      .where(and(eq(people.id, args.personId), activePeopleWhere()))
       .limit(1)
     if (!p) return { ok: false as const, error: 'Active holder not found.' }
 

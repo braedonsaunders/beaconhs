@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Server actions for the per-person skill-assignment detail page
 // (/training/skills/[id]). Skill assignments were previously only created by
 // the seed/migration path — this is the first UI that edits, renews, deletes,
@@ -180,9 +182,7 @@ export async function updateSkillAssignmentField(formData: FormData): Promise<vo
       const [person] = await tx
         .select({ id: people.id })
         .from(people)
-        .where(
-          and(eq(people.id, update.value), eq(people.status, 'active'), isNull(people.deletedAt)),
-        )
+        .where(and(eq(people.id, update.value), activePeopleWhere()))
         .limit(1)
       if (!person) throw new Error('The selected person is not active in this workspace.')
     }
@@ -279,13 +279,7 @@ export async function renewSkillAssignment(formData: FormData): Promise<void> {
     const [person] = await tx
       .select({ id: people.id })
       .from(people)
-      .where(
-        and(
-          eq(people.id, assignment.personId),
-          eq(people.status, 'active'),
-          isNull(people.deletedAt),
-        ),
-      )
+      .where(and(eq(people.id, assignment.personId), activePeopleWhere()))
       .limit(1)
     if (!person) throw new Error('Only an active person can receive a renewed skill.')
     const [skillType] = await tx

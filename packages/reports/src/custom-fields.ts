@@ -1,3 +1,4 @@
+import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import {
@@ -159,7 +160,7 @@ export async function loadBeaconReportCatalog(
         lastName: people.lastName,
       })
       .from(people)
-      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
+      .where(activePeopleWhere())
       .orderBy(asc(people.lastName), asc(people.firstName)),
     tx
       .select({ value: departments.id, label: departments.name })
@@ -195,7 +196,7 @@ export async function loadBeaconReportCatalog(
     tx
       .select({ value: tenantUsers.id, label: tenantUsers.displayName })
       .from(tenantUsers)
-      .where(eq(tenantUsers.status, 'active'))
+      .where(activeTenantUsersWhere())
       .orderBy(asc(tenantUsers.displayName)),
     tx
       .select({ value: orgUnits.id, label: orgUnits.name })

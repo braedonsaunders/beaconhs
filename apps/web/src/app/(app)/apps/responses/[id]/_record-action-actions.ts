@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Run a CONFIGURABLE record-action button. Each button is a `manual`-trigger
 // Flow stored in form_automations (authored in the designer's Actions tab /
 // flows canvas). Clicking it plans that flow from its manual trigger and runs it
@@ -183,7 +185,7 @@ export async function runRecordAction(input: {
         tx
           .select({ id: people.id })
           .from(people)
-          .where(and(inArray(people.id, personIds), isNull(people.deletedAt))),
+          .where(and(inArray(people.id, personIds), activePeopleWhere())),
       )
       if (available.length !== personIds.length) {
         return { ok: false, error: 'One or more selected people are unavailable' }

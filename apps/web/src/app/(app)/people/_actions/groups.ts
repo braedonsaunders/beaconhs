@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Server actions for /people/groups admin pages. Every mutation records an
 // audit entry and refreshes the denormalised `people.groupIds` cache so list
 // pages can filter by group without a 3-way join.
@@ -250,12 +252,7 @@ export async function setGroupMembership(formData: FormData): Promise<void> {
         .select({ id: people.id })
         .from(people)
         .where(
-          and(
-            eq(people.tenantId, ctx.tenantId),
-            inArray(people.id, toAdd),
-            eq(people.status, 'active'),
-            isNull(people.deletedAt),
-          ),
+          and(eq(people.tenantId, ctx.tenantId), inArray(people.id, toAdd), activePeopleWhere()),
         )
         .orderBy(asc(people.id))
         .for('update')

@@ -478,6 +478,7 @@ export function LivePersonSelect({
   label,
   initialValue,
   options,
+  initialOption,
   sheetTitle = 'Select person',
   placeholder = 'Select a person…',
   searchPlaceholder = 'Search active people…',
@@ -489,6 +490,7 @@ export function LivePersonSelect({
   label: string
   initialValue: string | null
   options: SelectOption[]
+  initialOption?: SelectOption
   sheetTitle?: string
   placeholder?: string
   searchPlaceholder?: string
@@ -526,7 +528,11 @@ export function LivePersonSelect({
           setValue(next)
           save(next)
         }}
-        options={options}
+        options={
+          initialOption?.value === value && !options.some((option) => option.value === value)
+            ? [initialOption, ...options]
+            : options
+        }
         placeholder={tGeneratedValue(placeholder)}
         searchPlaceholder={tGeneratedValue(searchPlaceholder)}
         sheetTitle={sheetTitle}

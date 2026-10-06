@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
+
 // All server actions used by the HazID detail page and its sub-sections.
 // Keep these co-located so the detail page wiring is straightforward and the
 // audit-log call is consistent.
@@ -7,7 +9,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { randomUUID } from 'node:crypto'
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, max, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, max } from 'drizzle-orm'
 import { assertCan, can, type RequestContext } from '@beaconhs/tenant'
 import { htmlToText, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import {
@@ -34,6 +36,7 @@ import {
   hazidTasks,
   orgUnits,
   people,
+  tenantUsers,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
@@ -394,6 +397,15 @@ async function createAssessment(formData: FormData): Promise<{ id: string }> {
 
   const created = await ctx.db(async (tx) => {
     if (copyFromId) await lockVisibleAssessment(ctx, tx, copyFromId)
+    if (supervisorPersonId) {
+      if (!isUuid(supervisorPersonId)) throw new Error('Choose an active supervisor')
+      const [supervisor] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(and(eq(people.id, supervisorPersonId), activePeopleWhere()))
+        .limit(1)
+      if (!supervisor) throw new Error('Choose an active supervisor')
+    }
     const reference = await nextReference(tx, ctx.tenantId, 'hazid')
 
     const [row] = await tx
@@ -630,7 +642,7 @@ async function createAssessment(formData: FormData): Promise<{ id: string }> {
     const [authorPerson] = await tx
       .select({ id: people.id })
       .from(people)
-      .where(and(eq(people.userId, ctx.userId), isNull(people.deletedAt)))
+      .where(and(eq(people.userId, ctx.userId), activePeopleWhere()))
       .limit(1)
     if (authorPerson) {
       await tx.insert(hazidAssessmentSignatures).values({
@@ -882,6 +894,15 @@ export async function updateTextField(formData: FormData) {
 
   await ctx.db(async (tx) => {
     await lockEditableAssessment(ctx, tx, id)
+    if (field === 'supervisorPersonId' && val) {
+      if (!isUuid(String(val))) throw new Error('Choose an active supervisor')
+      const [supervisor] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(and(eq(people.id, String(val)), activePeopleWhere()))
+        .limit(1)
+      if (!supervisor) throw new Error('Choose an active supervisor')
+    }
     if (field === 'siteOrgUnitId' && val) {
       if (!isUuid(String(val))) throw new Error('Invalid location')
       const [location] = await tx
@@ -1149,6 +1170,20 @@ export async function copyAssessment(formData: FormData) {
     // consistent: HAZ-<year>-<counter>.
     const reference = await nextReference(tx, ctx.tenantId, 'hazid')
 
+    const [supervisor] = src.supervisorPersonId
+      ? await tx
+          .select({ id: people.id })
+          .from(people)
+          .where(and(eq(people.id, src.supervisorPersonId), activePeopleWhere()))
+          .limit(1)
+      : []
+    const [supervisorAccount] = src.supervisorTenantUserId
+      ? await tx
+          .select({ id: tenantUsers.id })
+          .from(tenantUsers)
+          .where(and(eq(tenantUsers.id, src.supervisorTenantUserId), activeTenantUsersWhere()))
+          .limit(1)
+      : []
     const jobScope = src.jobScope ? `${src.jobScope} (copy)` : '(copy)'
 
     const [row] = await tx
@@ -1160,8 +1195,8 @@ export async function copyAssessment(formData: FormData) {
         siteOrgUnitId: src.siteOrgUnitId,
         projectOrgUnitId: src.projectOrgUnitId,
         locationOnSite: src.locationOnSite,
-        supervisorPersonId: src.supervisorPersonId,
-        supervisorTenantUserId: src.supervisorTenantUserId,
+        supervisorPersonId: supervisor?.id ?? null,
+        supervisorTenantUserId: supervisorAccount?.id ?? null,
         reportedByTenantUserId: ctx.membership?.id ?? null,
         assessmentTypeId: src.assessmentTypeId,
         jobScope,
@@ -1914,6 +1949,15 @@ export async function addSignature(formData: FormData) {
     signatureDataUrl,
     async (tx, attachmentId) => {
       await lockEditableAssessment(ctx, tx, assessmentId)
+      if (personId) {
+        if (!isUuid(personId)) throw new Error('Choose an active signer')
+        const [signer] = await tx
+          .select({ id: people.id })
+          .from(people)
+          .where(and(eq(people.id, personId), activePeopleWhere()))
+          .limit(1)
+        if (!signer) throw new Error('Choose an active signer')
+      }
       const [created] = await tx
         .insert(hazidAssessmentSignatures)
         .values({

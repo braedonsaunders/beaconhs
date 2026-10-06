@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Bulk-action server actions for /people.
 //
 // Four actions surface in the floating bulk-action bar:
@@ -12,7 +14,7 @@
 // cache so list-page filters stay accurate.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import {
   departments,
   people,
@@ -101,14 +103,7 @@ export async function bulkAssignPeopleToGroup(args: {
     const validRows = await tx
       .select({ id: people.id })
       .from(people)
-      .where(
-        and(
-          eq(people.tenantId, ctx.tenantId),
-          inArray(people.id, ids),
-          eq(people.status, 'active'),
-          isNull(people.deletedAt),
-        ),
-      )
+      .where(and(eq(people.tenantId, ctx.tenantId), inArray(people.id, ids), activePeopleWhere()))
       .orderBy(asc(people.id))
       .for('update')
     const validIds = validRows.map((row) => row.id)

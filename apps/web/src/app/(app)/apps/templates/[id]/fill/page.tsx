@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound, redirect } from 'next/navigation'
 import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm'
@@ -183,14 +184,14 @@ export default async function FillTemplatePage({
           employeeNo: people.employeeNo,
         })
         .from(people)
-        .where(eq(people.status, 'active'))
+        .where(activePeopleWhere())
         .orderBy(asc(people.lastName), asc(people.firstName)),
       // Look up the active user's person record (if any) — used for the
       // `current_user_person_id` / `current_user_name` default-value resolvers.
       tx
         .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
         .from(people)
-        .where(eq(people.userId, ctx.userId ?? ''))
+        .where(and(eq(people.userId, ctx.userId ?? ''), activePeopleWhere()))
         .limit(1),
     ])
     return {

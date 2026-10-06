@@ -1,10 +1,11 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Trash2, Users } from 'lucide-react'
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+import { asc, eq, inArray } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -57,9 +58,10 @@ export default async function GroupDetailPage({
         lastName: people.lastName,
         employeeNo: people.employeeNo,
         status: people.status,
+        deletedAt: people.deletedAt,
       })
       .from(people)
-      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
+      .where(activePeopleWhere())
       .orderBy(asc(people.lastName), asc(people.firstName))
     const members = await tx
       .select({ personId: personGroupMemberships.personId })
@@ -77,6 +79,7 @@ export default async function GroupDetailPage({
               lastName: people.lastName,
               employeeNo: people.employeeNo,
               status: people.status,
+              deletedAt: people.deletedAt,
             })
             .from(people)
             .where(inArray(people.id, memberIds))

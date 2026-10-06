@@ -1,3 +1,4 @@
+import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -7,16 +8,7 @@ import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
-import {
-  Building2,
-  Camera,
-  CheckCircle2,
-  History,
-  ListChecks,
-  Lock,
-  PenLine,
-  ShieldAlert,
-} from 'lucide-react'
+import { Building2, Camera, History, ListChecks, Lock, PenLine, ShieldAlert } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
@@ -394,7 +386,7 @@ async function updateRecordField(formData: FormData) {
           and(
             eq(tenantUsers.tenantId, ctx.tenantId),
             eq(tenantUsers.id, String(val)),
-            eq(tenantUsers.status, 'active'),
+            activeTenantUsersWhere(),
           ),
         )
         .limit(1)
@@ -840,15 +832,14 @@ async function setCriterionAssignment(formData: FormData) {
             and(
               eq(tenantUsers.tenantId, people.tenantId),
               eq(tenantUsers.userId, people.userId),
-              eq(tenantUsers.status, 'active'),
+              activeTenantUsersWhere(),
             ),
           )
           .where(
             and(
               eq(people.tenantId, ctx.tenantId),
               eq(people.id, assignedToPersonId),
-              eq(people.status, 'active'),
-              isNull(people.deletedAt),
+              activePeopleWhere(),
             ),
           )
           .limit(1)

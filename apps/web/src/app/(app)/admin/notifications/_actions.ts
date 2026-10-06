@@ -1,5 +1,7 @@
 'use server'
 
+import { activeTenantUsersWhere } from '@beaconhs/db'
+
 import { revalidatePath } from 'next/cache'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import {
@@ -84,7 +86,7 @@ async function loadAllowedRecipients(ctx: RequestContext, items: CategorySetting
             .where(
               and(
                 eq(tenantUsers.tenantId, ctx.tenantId),
-                eq(tenantUsers.status, 'active'),
+                activeTenantUsersWhere(),
                 inArray(tenantUsers.userId, requestedUserIds),
               ),
             )

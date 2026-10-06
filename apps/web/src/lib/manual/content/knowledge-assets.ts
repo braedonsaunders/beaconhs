@@ -49,7 +49,7 @@ Open **Training** in the left menu. You will see tabs for **Certificates**, **Co
 
 ## Certificate people and course choices
 
-The certificate **Person / employee** picker searches active people by name, employee number, email, or job title. Deleted people are not offered for a new certificate. Search courses by name or code. If more matches exist, add more detail. Existing certificates keep their original person and course labels even if they were later removed.
+The certificate **Person / employee** picker searches active people by name, employee number, email, or job title. Inactive, terminated, and deleted people are not offered for a new certificate, skill assignment, class roster, or assessment. Search courses by name or code. If more matches exist, add more detail. Existing certificates keep their original person and course labels even if they were later removed.
 
 ## Check your certificates and expiry dates
 

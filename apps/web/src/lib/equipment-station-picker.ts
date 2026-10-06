@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { and, asc, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm'
 import { primaryPersonTitleName, type Database } from '@beaconhs/db'
 import { orgUnits, people } from '@beaconhs/db/schema'
@@ -108,14 +109,7 @@ export async function loadEquipmentStationPickerOptions(
         jobTitle: primaryPersonTitleName(people.id, people.tenantId),
       })
       .from(people)
-      .where(
-        and(
-          eq(people.tenantId, tenantId),
-          eq(people.status, 'active'),
-          isNull(people.deletedAt),
-          match,
-        ),
-      )
+      .where(and(eq(people.tenantId, tenantId), activePeopleWhere(), match))
       .orderBy(
         ...(input.selected ? [desc(sql`${people.id} = ${input.selected}`)] : []),
         asc(people.lastName),

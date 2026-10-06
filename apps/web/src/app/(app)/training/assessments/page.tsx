@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { PeopleStatusFilter } from '@/components/people-status-filter'
@@ -300,7 +301,7 @@ export default async function AssessmentsPage({
                 employeeNo: people.employeeNo,
               })
               .from(people)
-              .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
+              .where(activePeopleWhere())
               .orderBy(asc(people.lastName), asc(people.firstName)),
           ])
           return { types, peopleRows }
@@ -317,10 +318,9 @@ export default async function AssessmentsPage({
   })
   const requestedPersonId = pickString(sp.personId)
   const defaultPersonId =
-    (requestedPersonId && isUuid(requestedPersonId) ? requestedPersonId : undefined) ??
-    (personFilter && isUuid(personFilter) ? personFilter : undefined) ??
-    ctx.personId ??
-    undefined
+    [requestedPersonId, personFilter, ctx.personId].find(
+      (id) => id && newAssessmentOptions.peopleRows.some((person) => person.id === id),
+    ) ?? undefined
   const complianceObligationId = pickString(sp.obligationId)
 
   return (

@@ -1,3 +1,4 @@
+import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 // Write handlers for the public API. Writes do NOT go through the read registry
 // (that includes views and only a reporting subset of columns) — each writable
 // entity has a hand-written, validated create that mirrors the real server
@@ -175,7 +176,7 @@ async function ensurePerson(
   const [person] = await tx
     .select({ id: people.id })
     .from(people)
-    .where(and(eq(people.id, id), isNull(people.deletedAt)))
+    .where(and(eq(people.id, id), activePeopleWhere()))
     .limit(1)
   if (!person) throw ApiError.invalid(`No ${label} with id ${id} in this tenant`)
 }
@@ -193,7 +194,7 @@ async function ensureTenantUser(
   const [member] = await tx
     .select({ id: tenantUsers.id })
     .from(tenantUsers)
-    .where(eq(tenantUsers.id, id))
+    .where(and(eq(tenantUsers.id, id), activeTenantUsersWhere()))
     .limit(1)
   if (!member) throw ApiError.invalid(`No ${label} with id ${id} in this tenant`)
 }
@@ -366,7 +367,8 @@ async function updateIncident(ctx: RequestContext, id: string, raw: unknown): Pr
     if (before.locked) throw ApiError.invalid('Incident is locked and cannot be updated')
 
     await ensureSite(tx, b.siteOrgUnitId)
-    await ensurePerson(tx, b.supervisorPersonId, 'supervisor')
+    if (b.supervisorPersonId !== before.supervisorPersonId)
+      await ensurePerson(tx, b.supervisorPersonId, 'supervisor')
     if (b.departmentId) {
       const [department] = await tx
         .select({ id: departments.id })
@@ -675,7 +677,8 @@ async function updateCorrectiveAction(
     if (before.locked) throw ApiError.invalid('Corrective action is locked and cannot be updated')
 
     await ensureSite(tx, b.siteOrgUnitId)
-    await ensureTenantUser(tx, b.ownerTenantUserId, 'owner tenant user')
+    if (b.ownerTenantUserId !== before.ownerTenantUserId)
+      await ensureTenantUser(tx, b.ownerTenantUserId, 'owner tenant user')
     const sourceType =
       hasOwn(b, 'sourceEntityType') && typeof b.sourceEntityType !== 'undefined'
         ? stripEmpty(b.sourceEntityType)
@@ -983,11 +986,19 @@ async function updateInspection(
       throw ApiError.invalid('Inspection type cannot be changed after record creation')
     }
     await ensureSite(tx, b.siteOrgUnitId)
-    await ensureTenantUser(tx, b.inspectorTenantUserId, 'inspector')
-    await ensureTenantUser(tx, b.supervisorTenantUserId, 'supervisor')
-    if (b.foremanPersonIds) await ensurePeople(tx, b.foremanPersonIds, 'foreman')
+    if (b.inspectorTenantUserId !== before.inspectorTenantUserId)
+      await ensureTenantUser(tx, b.inspectorTenantUserId, 'inspector')
+    if (b.supervisorTenantUserId !== before.supervisorTenantUserId)
+      await ensureTenantUser(tx, b.supervisorTenantUserId, 'supervisor')
+    if (b.foremanPersonIds)
+      await ensurePeople(
+        tx,
+        b.foremanPersonIds.filter((id) => !before.foremanPersonIds.includes(id)),
+        'foreman',
+      )
     await ensureOrgUnit(tx, b.customerOrgUnitId, 'customer org unit')
-    await ensurePerson(tx, b.customerContactPersonId, 'customer contact')
+    if (b.customerContactPersonId !== before.customerContactPersonId)
+      await ensurePerson(tx, b.customerContactPersonId, 'customer contact')
 
     const patch: Partial<typeof inspectionRecords.$inferInsert> = {}
     if (hasOwn(b, 'occurredAt')) patch.occurredAt = b.occurredAt
@@ -1326,7 +1337,8 @@ async function updateDocument(ctx: RequestContext, id: string, raw: unknown): Pr
 
       await ensureDocumentType(tx, b.typeId)
       await ensureDocumentCategory(tx, b.categoryId)
-      await ensureTenantUser(tx, b.ownerTenantUserId, 'document owner')
+      if (b.ownerTenantUserId !== before.ownerTenantUserId)
+        await ensureTenantUser(tx, b.ownerTenantUserId, 'document owner')
 
       const patch: Partial<typeof documents.$inferInsert> = {}
       if (hasOwn(b, 'title')) patch.title = b.title
@@ -1491,16 +1503,6 @@ async function ensureEquipmentReferences(
   }
   await ensureSite(tx, input.currentSiteOrgUnitId)
   await ensurePerson(tx, input.currentHolderPersonId, 'holder')
-  if (input.currentHolderPersonId) {
-    const [activeHolder] = await tx
-      .select({ id: people.id })
-      .from(people)
-      .where(and(eq(people.id, input.currentHolderPersonId), eq(people.status, 'active')))
-      .limit(1)
-    if (!activeHolder) {
-      throw ApiError.invalid(`Holder ${input.currentHolderPersonId} is not active`)
-    }
-  }
 }
 
 async function createEquipment(ctx: RequestContext, raw: unknown): Promise<WriteResult> {
@@ -1624,7 +1626,13 @@ async function updateEquipment(
       .for('update')
     if (!before || before.deletedAt) throw ApiError.notFound(`No equipment with id ${id}`)
 
-    await ensureEquipmentReferences(tx, b)
+    await ensureEquipmentReferences(tx, {
+      ...b,
+      currentHolderPersonId:
+        b.currentHolderPersonId !== before.currentHolderPersonId
+          ? b.currentHolderPersonId
+          : undefined,
+    })
 
     const nextAssetTag = hasOwn(b, 'assetTag') ? b.assetTag : undefined
     if (nextAssetTag && nextAssetTag !== before.assetTag) {
@@ -1960,7 +1968,8 @@ async function updatePpe(ctx: RequestContext, id: string, raw: unknown): Promise
         .limit(1)
       if (!type) throw ApiError.invalid(`No PPE type with id ${b.typeId} in this tenant`)
     }
-    await ensurePerson(tx, b.currentHolderPersonId, 'holder')
+    if (b.currentHolderPersonId !== before.currentHolderPersonId)
+      await ensurePerson(tx, b.currentHolderPersonId, 'holder')
 
     if (hasOwn(b, 'serialNumber') && b.serialNumber && b.serialNumber !== before.serialNumber) {
       const [existing] = await tx
@@ -2128,7 +2137,7 @@ async function createTrainingRecord(ctx: RequestContext, raw: unknown): Promise<
     const [person] = await tx
       .select({ id: people.id })
       .from(people)
-      .where(eq(people.id, b.personId))
+      .where(and(eq(people.id, b.personId), activePeopleWhere()))
       .limit(1)
     if (!person) throw ApiError.invalid(`No person with id ${b.personId} in this tenant`)
     const [course] = await tx
@@ -2213,11 +2222,11 @@ async function updateTrainingRecord(
     if (!before || before.deletedAt) {
       throw ApiError.notFound(`No training_records with id ${id}`)
     }
-    if (b.personId) {
+    if (b.personId && b.personId !== before.personId) {
       const [person] = await tx
         .select({ id: people.id })
         .from(people)
-        .where(eq(people.id, b.personId))
+        .where(and(eq(people.id, b.personId), activePeopleWhere()))
         .limit(1)
       if (!person) throw ApiError.invalid(`No person with id ${b.personId} in this tenant`)
     }
@@ -2231,7 +2240,8 @@ async function updateTrainingRecord(
         throw ApiError.invalid(`No training course with id ${b.courseId} in this tenant`)
       }
     }
-    await ensurePerson(tx, b.evaluatorPersonId, 'evaluator')
+    if (b.evaluatorPersonId !== before.evaluatorPersonId)
+      await ensurePerson(tx, b.evaluatorPersonId, 'evaluator')
 
     const patch: Partial<typeof trainingRecords.$inferInsert> = {}
     if (hasOwn(b, 'personId')) patch.personId = b.personId

@@ -1,12 +1,14 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Vehicle log settings mutations — tenant-level enabled modes / default mode
 // (vehicle_log_settings, one row per tenant) and per-driver default-mode
 // overrides (people.metadata.vehicleLogMode). Gated by equipment.manage via
 // the module-admin guard; every change is audited.
 
 import { revalidatePath } from 'next/cache'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { people, vehicleLogSettings, type VehicleLogEnabledModes } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
@@ -94,7 +96,7 @@ export async function setDriverDefaultMode(input: {
       const [person] = await tx
         .select({ id: people.id, metadata: people.metadata })
         .from(people)
-        .where(and(eq(people.id, personId), eq(people.status, 'active'), isNull(people.deletedAt)))
+        .where(and(eq(people.id, personId), activePeopleWhere()))
         .limit(1)
         .for('update')
       if (!person) return 'missing' as const
@@ -109,7 +111,7 @@ export async function setDriverDefaultMode(input: {
       const [updated] = await tx
         .update(people)
         .set({ metadata })
-        .where(and(eq(people.id, person.id), eq(people.status, 'active'), isNull(people.deletedAt)))
+        .where(and(eq(people.id, person.id), activePeopleWhere()))
         .returning({ id: people.id })
       if (!updated) return 'missing' as const
       await recordAuditInTransaction(tx, ctx, {

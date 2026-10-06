@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { CompleteSchedule } from '../_complete-schedule'
 import { OilChangeCard } from './_oil-change'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
@@ -112,7 +113,7 @@ import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-se
 import { CustomFieldInput } from '@/components/custom-fields/custom-field-input'
 import { loadVisibleCustomFieldDefs, type CustomFieldDefRow } from '@/lib/custom-fields/queries'
 import { updateCustomFieldValueAction } from '@/lib/custom-fields/actions'
-import { EQUIPMENT_FIELD_GROUPS, resolveEnabledFieldGroups } from '@/lib/equipment/field-groups'
+import { resolveEnabledFieldGroups } from '@/lib/equipment/field-groups'
 import {
   EQUIPMENT_FILE_KINDS,
   EQUIPMENT_STATUSES,
@@ -125,7 +126,6 @@ import {
   optionalDateInput,
   optionalTextInput,
   optionalUuidInput,
-  requiredDateInput,
   requiredTextInput,
   requireEnumInput,
   requireRecordInput,
@@ -396,9 +396,7 @@ async function transferLocation(formData: FormData) {
       const [person] = await tx
         .select({ id: people.id })
         .from(people)
-        .where(
-          and(eq(people.id, holderPersonId), eq(people.status, 'active'), isNull(people.deletedAt)),
-        )
+        .where(and(eq(people.id, holderPersonId), activePeopleWhere()))
         .limit(1)
       if (!person) throw new Error('Select an active holder')
     }
@@ -488,9 +486,7 @@ async function checkOutFromItem(formData: FormData) {
       const [person] = await tx
         .select({ id: people.id })
         .from(people)
-        .where(
-          and(eq(people.id, holderPersonId), eq(people.status, 'active'), isNull(people.deletedAt)),
-        )
+        .where(and(eq(people.id, holderPersonId), activePeopleWhere()))
         .limit(1)
       if (!person) throw new Error('Select an active holder')
     }

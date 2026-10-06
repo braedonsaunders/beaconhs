@@ -1,5 +1,7 @@
 'use server'
 
+import { activeTenantUsersWhere } from '@beaconhs/db'
+
 // Generic, GLOBAL AI conversation history. Reusable by ANY feature — pass a
 // `scope` (+ optional `scopeRefId`) to namespace the threads.
 //
@@ -480,7 +482,7 @@ export async function shareConversation(args: {
       const [member] = await tx
         .select({ id: tenantUsers.id })
         .from(tenantUsers)
-        .where(and(eq(tenantUsers.userId, args.targetId), eq(tenantUsers.status, 'active')))
+        .where(and(eq(tenantUsers.userId, args.targetId), activeTenantUsersWhere()))
         .limit(1)
       if (!member) return { ok: false, error: 'That user is not an active tenant member.' }
     } else {

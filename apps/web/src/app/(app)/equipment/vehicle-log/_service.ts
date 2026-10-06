@@ -1,6 +1,7 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
-import { and, asc, eq, gte, inArray, isNull, lt, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNull, lt } from 'drizzle-orm'
 import { type Database, isUniqueViolation } from '@beaconhs/db'
 import {
   equipmentCategories,
@@ -236,13 +237,7 @@ async function assertManualVehicleLogReferences(
   const [driver] = await tx
     .select({ id: people.id })
     .from(people)
-    .where(
-      and(
-        eq(people.id, input.driverPersonId),
-        eq(people.status, 'active'),
-        isNull(people.deletedAt),
-      ),
-    )
+    .where(and(eq(people.id, input.driverPersonId), activePeopleWhere()))
     .limit(1)
   if (!driver) throw new Error('Select an active driver.')
 
@@ -352,13 +347,7 @@ export async function loadVehicleLogWorkspace(
           metadata: people.metadata,
         })
         .from(people)
-        .where(
-          and(
-            eq(people.status, 'active'),
-            isNull(people.deletedAt),
-            vehicleDriverScopeWhere(ctx, people.id),
-          ),
-        )
+        .where(and(activePeopleWhere(), vehicleDriverScopeWhere(ctx, people.id)))
         .orderBy(asc(people.lastName), asc(people.firstName)),
       tx
         .select({
@@ -736,9 +725,7 @@ export async function authorizeVehicleLogTarget(
       tx
         .select({ id: people.id })
         .from(people)
-        .where(
-          and(eq(people.id, driverPersonId), eq(people.status, 'active'), isNull(people.deletedAt)),
-        )
+        .where(and(eq(people.id, driverPersonId), activePeopleWhere()))
         .limit(1),
       tx
         .select({ id: equipmentItems.id })

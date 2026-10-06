@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -399,8 +400,16 @@ export default async function HazidAssessmentDetailPage({
       ? await tx
           .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
           .from(people)
-          .where(eq(people.status, 'active'))
+          .where(activePeopleWhere())
           .orderBy(asc(people.lastName), asc(people.firstName))
+      : []
+
+    const [selectedSupervisor] = row.a.supervisorPersonId
+      ? await tx
+          .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
+          .from(people)
+          .where(eq(people.id, row.a.supervisorPersonId))
+          .limit(1)
       : []
 
     return {
@@ -417,6 +426,12 @@ export default async function HazidAssessmentDetailPage({
       hazardSets,
       taskLibrary,
       peopleList,
+      supervisorOption: selectedSupervisor
+        ? {
+            value: selectedSupervisor.id,
+            label: `${selectedSupervisor.lastName}, ${selectedSupervisor.firstName}`,
+          }
+        : undefined,
       referencedHazards,
       projectOptions,
       typeOptions,
@@ -517,12 +532,12 @@ export default async function HazidAssessmentDetailPage({
               employeeNo: people.employeeNo,
             })
             .from(people)
-            .where(eq(people.status, 'active'))
+            .where(activePeopleWhere())
             .orderBy(asc(people.lastName), asc(people.firstName)),
           tx
             .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
             .from(people)
-            .where(eq(people.userId, ctx.userId ?? ''))
+            .where(and(eq(people.userId, ctx.userId ?? ''), activePeopleWhere()))
             .limit(1),
         ])
         return { version, allPeople, currentPerson: currentPersonRow[0] ?? null }
@@ -1040,6 +1055,7 @@ export default async function HazidAssessmentDetailPage({
                   field="supervisorPersonId"
                   label={tGenerated('m_0ccb8e5b917b17')}
                   initialValue={a.supervisorPersonId}
+                  initialOption={data.supervisorOption}
                   options={peopleList.map((p) => ({
                     value: p.id,
                     label: `${p.lastName}, ${p.firstName}`,

@@ -1,5 +1,7 @@
 'use server'
 
+import { activeTenantUsersWhere } from '@beaconhs/db'
+
 // Conversation management for the assistant area — thin wrappers over
 // ai-conversations.ts (which enforces ownership) plus revalidation, and the
 // share-dialog data loader (active people + roles as share targets).
@@ -144,7 +146,7 @@ export async function loadAssistantShareTargets(input: unknown): Promise<PickerO
         .innerJoin(users, eq(users.id, tenantUsers.userId))
         .where(
           and(
-            eq(tenantUsers.status, 'active'),
+            activeTenantUsersWhere(),
             ne(tenantUsers.userId, ctx.userId),
             match,
             notExists(

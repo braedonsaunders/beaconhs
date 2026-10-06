@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Bulk-action server actions for /training/records.
 //
 // The mutation/export actions surfaced in the floating bulk-action bar:
@@ -220,9 +222,7 @@ export async function updateTrainingRecordField(formData: FormData): Promise<voi
       const [person] = await tx
         .select({ id: people.id })
         .from(people)
-        .where(
-          and(eq(people.id, update.value), eq(people.status, 'active'), isNull(people.deletedAt)),
-        )
+        .where(and(eq(people.id, update.value), activePeopleWhere()))
         .limit(1)
       if (!person) throw new Error('The selected person is not active in this workspace.')
     }
@@ -318,9 +318,7 @@ export async function renewTrainingRecord(formData: FormData): Promise<void> {
     const [person] = await tx
       .select({ id: people.id })
       .from(people)
-      .where(
-        and(eq(people.id, record.personId), eq(people.status, 'active'), isNull(people.deletedAt)),
-      )
+      .where(and(eq(people.id, record.personId), activePeopleWhere()))
       .limit(1)
     if (!person) throw new Error('Only an active person can receive a renewed record.')
     const [course] = await tx

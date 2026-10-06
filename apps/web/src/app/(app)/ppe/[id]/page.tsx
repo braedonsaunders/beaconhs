@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -427,7 +428,7 @@ async function recordInspection(formData: FormData) {
       const [supervisor] = await tx
         .select({ id: people.id })
         .from(people)
-        .where(and(eq(people.id, supervisorPersonId), isNull(people.deletedAt)))
+        .where(and(eq(people.id, supervisorPersonId), activePeopleWhere()))
         .limit(1)
       if (!supervisor) throw new Error('Supervisor was not found')
     }

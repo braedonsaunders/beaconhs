@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Server actions for equipment maintenance scheduling: per-unit inspection
 // schedules (recurring cadences) and ad-hoc reminders. Shared by the asset
 // detail page (Inspections tab) and the maintenance cockpit.
@@ -272,13 +274,7 @@ export async function saveEquipmentReminder(input: {
       const [assignee] = await tx
         .select({ id: people.id })
         .from(people)
-        .where(
-          and(
-            eq(people.id, parsed.assignedToPersonId),
-            eq(people.status, 'active'),
-            isNull(people.deletedAt),
-          ),
-        )
+        .where(and(eq(people.id, parsed.assignedToPersonId), activePeopleWhere()))
         .limit(1)
       if (!assignee) return { ok: false as const, error: 'Select an active assignee.' }
     }

@@ -1,5 +1,6 @@
 'use server'
 
+import { activeTenantUsersWhere } from '@beaconhs/db'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
@@ -8,6 +9,7 @@ import {
   documentManagementReviews,
   documents,
   documentVersions,
+  tenantUsers,
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
@@ -72,8 +74,27 @@ export async function updateReviewMeta(
 ): Promise<void> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
-  await ctx.db((tx) =>
-    tx
+  if (!isUuid(id) || patch.participants.some((id) => !isUuid(id))) {
+    throw new Error('Invalid management review or participant')
+  }
+  const participants = [...new Set(patch.participants)]
+  await ctx.db(async (tx) => {
+    const [current] = await tx
+      .select({ participants: documentManagementReviews.participants })
+      .from(documentManagementReviews)
+      .where(eq(documentManagementReviews.id, id))
+      .limit(1)
+      .for('update')
+    if (!current) throw new Error('Management review not found')
+    const added = participants.filter((id) => !current.participants.includes(id))
+    if (added.length) {
+      const eligible = await tx
+        .select({ id: tenantUsers.id })
+        .from(tenantUsers)
+        .where(and(inArray(tenantUsers.id, added), activeTenantUsersWhere()))
+      if (eligible.length !== added.length) throw new Error('Choose active participants')
+    }
+    await tx
       .update(documentManagementReviews)
       .set({
         title: patch.title,
@@ -82,10 +103,10 @@ export async function updateReviewMeta(
         nextReviewOn: patch.nextReviewOn,
         discussionNotes: patch.discussionNotes,
         decisions: patch.decisions,
-        participants: patch.participants,
+        participants,
       })
-      .where(eq(documentManagementReviews.id, id)),
-  )
+      .where(eq(documentManagementReviews.id, id))
+  })
   await recordAudit(ctx, {
     entityType: 'document_management_review',
     entityId: id,

@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
+
 // Safe Distance writes are safety-record mutations. Every action is permission
 // gated, tenant-scoped, runtime validated, serialized on the parent row, and
 // audited inside the same database transaction as the business write.
@@ -81,7 +83,7 @@ async function validateReferences(
     const [supervisor] = await tx
       .select({ id: tenantUsers.id })
       .from(tenantUsers)
-      .where(and(eq(tenantUsers.id, refs.supervisorTenantUserId), eq(tenantUsers.status, 'active')))
+      .where(and(eq(tenantUsers.id, refs.supervisorTenantUserId), activeTenantUsersWhere()))
       .limit(1)
     if (!supervisor) return 'The selected supervisor is not an active workspace member.'
   }
@@ -89,13 +91,7 @@ async function validateReferences(
     const [operator] = await tx
       .select({ id: people.id })
       .from(people)
-      .where(
-        and(
-          eq(people.id, refs.operatorPersonId),
-          eq(people.status, 'active'),
-          isNull(people.deletedAt),
-        ),
-      )
+      .where(and(eq(people.id, refs.operatorPersonId), activePeopleWhere()))
       .limit(1)
     if (!operator) return 'The selected operator is not an active person in this workspace.'
   }

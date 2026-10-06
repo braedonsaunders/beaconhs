@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 // Read & search tools for the assistant. Every record-bearing tool applies the
 // SAME permission-tier predicate its module list uses (`moduleScopeWhere`, plus
 // `recordVisibilityWhere` for the people directory picker) so the agent only
@@ -641,7 +642,7 @@ const findPeople: AssistantToolDef = {
     const limit = Math.min(a.limit ?? 15, 25)
     return ctx.db(async (tx) => {
       const t = like(a.query)
-      const conds: SQL[] = [isNull(people.deletedAt), eq(people.status, 'active')]
+      const conds: SQL[] = [activePeopleWhere()]
       const m = or(
         ilike(people.firstName, t),
         ilike(people.lastName, t),

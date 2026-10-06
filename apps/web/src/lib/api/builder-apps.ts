@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import 'server-only'
 
 import { revalidatePath } from 'next/cache'
@@ -315,7 +316,7 @@ async function ensurePerson(ctx: RequestContext, id: string | null | undefined):
     const [person] = await tx
       .select({ id: people.id })
       .from(people)
-      .where(and(eq(people.id, id), isNull(people.deletedAt)))
+      .where(and(eq(people.id, id), activePeopleWhere()))
       .limit(1)
     if (!person) throw ApiError.invalid(`No person with id ${id} in this tenant`)
   })
@@ -632,7 +633,6 @@ export async function updateBuilderAppResponse(
   if (body.data) assertKnownDataKeys(app.schema, body.data)
   if (body.fields) assertKnownDataKeys(app.schema, body.fields)
   await ensureSite(ctx, body.siteOrgUnitId)
-  await ensurePerson(ctx, body.subjectPersonId)
 
   const result = await ctx.db(async (tx) => {
     const mutable = await lockApiResponseForMutation(tx, ctx, id)
@@ -659,6 +659,8 @@ export async function updateBuilderAppResponse(
       .limit(1)
     if (!row) throw ApiError.notFound(`No response with id ${id}`)
     if (row.response.locked) throw ApiError.invalid('Response is locked and cannot be updated')
+    if (body.subjectPersonId !== row.response.subjectPersonId)
+      await ensurePerson(ctx, body.subjectPersonId)
 
     const rawNextData = body.data
       ? body.data

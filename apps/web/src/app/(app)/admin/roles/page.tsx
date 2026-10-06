@@ -1,3 +1,4 @@
+import { activeTenantUsersWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -112,7 +113,7 @@ export default async function AdminRolesPage({
           })
           .from(tenantUsers)
           .innerJoin(user, eq(user.id, tenantUsers.userId))
-          .where(eq(tenantUsers.status, 'active'))
+          .where(activeTenantUsersWhere())
           .orderBy(asc(user.name))
       : []
     const allAssignments = canBulkManageRoles

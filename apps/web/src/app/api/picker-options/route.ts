@@ -1,3 +1,4 @@
+import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import { recordSearchWhere } from '@/lib/record-search'
 import { NextResponse } from 'next/server'
 import { personFilterWhere, tenantUserFilterWhere } from '@/lib/people-filter'
@@ -444,7 +445,7 @@ async function loadOptions(
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)
         .from(people)
-        .where(and(eq(people.status, 'active'), isNull(people.deletedAt), personMatch(input)))
+        .where(and(activePeopleWhere(), personMatch(input)))
         .orderBy(...personOrder(input.selected))
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(personOptions(rows))
@@ -486,7 +487,7 @@ async function loadOptions(
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)
         .from(people)
-        .where(and(eq(people.status, 'active'), isNull(people.deletedAt), personMatch(input)))
+        .where(and(activePeopleWhere(), personMatch(input)))
         .orderBy(...personOrder(input.selected))
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(personOptions(rows))
@@ -1058,8 +1059,7 @@ async function loadOptions(
         .from(people)
         .where(
           and(
-            isNull(people.deletedAt),
-            eq(people.status, 'active'),
+            activePeopleWhere(),
             personMatch(input),
             notExists(
               tx
@@ -1081,23 +1081,10 @@ async function loadOptions(
     }
 
     if (lookup === 'training-skill-assignment-people') {
-      const available = or(
-        eq(people.status, 'active'),
-        input.selected ? eq(people.id, input.selected) : undefined,
-      )
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)
         .from(people)
-        .where(
-          and(
-            or(
-              isNull(people.deletedAt),
-              input.selected ? eq(people.id, input.selected) : undefined,
-            ),
-            available,
-            personMatch(input),
-          ),
-        )
+        .where(and(activePeopleWhere(), personMatch(input)))
         .orderBy(...personOrder(input.selected))
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(personOptions(rows))
@@ -1161,8 +1148,7 @@ async function loadOptions(
         .from(people)
         .where(
           and(
-            eq(people.status, 'active'),
-            isNull(people.deletedAt),
+            activePeopleWhere(),
             candidateMatch,
             notExists(
               tx
@@ -1328,7 +1314,7 @@ async function loadOptions(
         })
         .from(tenantUsers)
         .innerJoin(users, eq(users.id, tenantUsers.userId))
-        .where(and(eq(tenantUsers.status, 'active'), match))
+        .where(and(activeTenantUsersWhere(), match))
         .orderBy(
           ...(input.selected ? [desc(sql`${tenantUsers.id} = ${input.selected}`)] : []),
           asc(displayName),
@@ -1496,7 +1482,7 @@ async function loadOptions(
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)
         .from(people)
-        .where(and(eq(people.status, 'active'), isNull(people.deletedAt), personMatch(input)))
+        .where(and(activePeopleWhere(), personMatch(input)))
         .orderBy(...personOrder(input.selected))
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(personOptions(rows))
@@ -1525,7 +1511,7 @@ async function loadOptions(
         })
         .from(tenantUsers)
         .leftJoin(users, eq(users.id, tenantUsers.userId))
-        .where(and(eq(tenantUsers.status, 'active'), match))
+        .where(and(activeTenantUsersWhere(), match))
         .orderBy(
           ...(input.selected ? [desc(sql`${tenantUsers.id} = ${input.selected}`)] : []),
           asc(displayName),
@@ -1732,7 +1718,7 @@ async function loadOptions(
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)
         .from(people)
-        .where(and(eq(people.status, 'active'), isNull(people.deletedAt), personMatch(input)))
+        .where(and(activePeopleWhere(), personMatch(input)))
         .orderBy(...personOrder(input.selected))
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(personOptions(rows))
@@ -2118,8 +2104,7 @@ async function loadOptions(
         .from(people)
         .where(
           and(
-            eq(people.status, 'active'),
-            isNull(people.deletedAt),
+            activePeopleWhere(),
             personMatch(input),
             lookup === 'vehicle-drivers' ? vehicleDriverScopeWhere(ctx, people.id) : undefined,
           ),
@@ -2169,7 +2154,7 @@ async function loadOptions(
         })
         .from(tenantUsers)
         .leftJoin(users, eq(users.id, tenantUsers.userId))
-        .where(and(eq(tenantUsers.status, 'active'), match))
+        .where(and(activeTenantUsersWhere(), match))
         .orderBy(
           ...(input.selected ? [desc(sql`${tenantUsers.id} = ${input.selected}`)] : []),
           asc(displayName),

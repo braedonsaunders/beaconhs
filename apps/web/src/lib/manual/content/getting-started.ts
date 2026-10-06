@@ -89,6 +89,12 @@ Use the search button in the top bar to find incidents, corrective actions, peop
 
 Search covers useful record information even when it is not shown in the table. For example, find equipment by licence plate or VIN, people by email or full name, documents by document key or description, and hazard assessments by job scope or specific location. Module lists and their CSV exports use the same search fields as global search. Your permissions and the list's status and other filters still apply.
 
+## Selecting a person
+
+Employee and person pickers offer active people who have not been deleted. Instructor, supervisor, owner, participant, and user-recipient choices also exclude inactive or deleted linked employees. An active account without an employee link can still be selected where the field asks for a user.
+
+Saved records keep their original names for history. A former employee shown on an existing record is not offered for a new assignment. Some record lists have **Include inactive people** for finding past work; this does not change who you can select on a new form. If someone is missing from a picker, ask an administrator to check their **People** status and account link.
+
 ## Changing what is on your dashboard
 
 Your dashboard is made of tiles (widgets), and you choose which ones you see and where they sit. Changes are yours alone — they do not affect anyone else.

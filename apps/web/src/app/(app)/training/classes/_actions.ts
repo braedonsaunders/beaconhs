@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
+
 // Server actions for the training-class record page.
 //
 //   updateClassField  per-field auto-save ({id, field, value}) for the shared
@@ -194,7 +196,7 @@ export async function addClassAttendee(formData: FormData): Promise<void> {
     const [person] = await tx
       .select({ id: people.id })
       .from(people)
-      .where(and(eq(people.id, personId), eq(people.status, 'active'), isNull(people.deletedAt)))
+      .where(and(eq(people.id, personId), activePeopleWhere()))
       .limit(1)
     if (!person) throw new Error('Active person not found.')
 
@@ -622,7 +624,7 @@ export async function updateClassField(formData: FormData): Promise<void> {
       const [instructor] = await tx
         .select({ id: tenantUsers.id })
         .from(tenantUsers)
-        .where(and(eq(tenantUsers.id, parsed.value), eq(tenantUsers.status, 'active')))
+        .where(and(eq(tenantUsers.id, parsed.value), activeTenantUsersWhere()))
         .limit(1)
       if (!instructor) throw new Error('Instructor not found.')
     }

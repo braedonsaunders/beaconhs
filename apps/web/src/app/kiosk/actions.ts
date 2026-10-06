@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 import { and, asc, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm'
 import { auditLog, crews, kioskScans, orgUnits, people } from '@beaconhs/db/schema'
 import {
@@ -105,14 +107,7 @@ export async function loadKioskOptions(input: unknown): Promise<PickerOptionsRes
           jobTitle: primaryPersonTitleName(people.id, people.tenantId),
         })
         .from(people)
-        .where(
-          and(
-            eq(people.tenantId, parsed.tenantId),
-            eq(people.status, 'active'),
-            isNull(people.deletedAt),
-            match,
-          ),
-        )
+        .where(and(eq(people.tenantId, parsed.tenantId), activePeopleWhere(), match))
         .orderBy(
           ...(selected ? [desc(sql`${people.id} = ${selected}`)] : []),
           asc(people.lastName),
@@ -241,8 +236,7 @@ export async function recordKioskScan(
           and(
             eq(people.tenantId, input.tenantId),
             eq(people.id, input.personId),
-            eq(people.status, 'active'),
-            isNull(people.deletedAt),
+            activePeopleWhere(),
           ),
         )
         .limit(1)

@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import 'server-only'
 
 import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
@@ -254,8 +255,7 @@ export async function submitFormResponseLifecycle(
               and(
                 eq(people.tenantId, ctx.tenantId),
                 inArray(people.id, personIds),
-                eq(people.status, 'active'),
-                isNull(people.deletedAt),
+                activePeopleWhere(),
               ),
             )
         : Promise.resolve([]),
@@ -329,7 +329,9 @@ export async function submitFormResponseLifecycle(
               and(
                 eq(people.id, subjectPersonId),
                 eq(people.tenantId, ctx.tenantId),
-                isNull(people.deletedAt),
+                subjectPersonId === existing?.subjectPersonId
+                  ? isNull(people.deletedAt)
+                  : activePeopleWhere(),
               ),
             )
             .limit(1)

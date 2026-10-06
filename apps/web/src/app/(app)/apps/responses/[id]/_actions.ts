@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Server actions backing the workflow-step UI on the form-response detail page.
 // These are the **only** writers to form_response_steps + form_responses.workflow_state
 // for the sign / advance / reject lifecycle.
@@ -352,9 +354,7 @@ export async function signWorkflowStep(args: {
       tx
         .select({ id: people.id })
         .from(people)
-        .where(
-          and(eq(people.id, personId), eq(people.tenantId, ctx.tenantId), isNull(people.deletedAt)),
-        )
+        .where(and(eq(people.id, personId), eq(people.tenantId, ctx.tenantId), activePeopleWhere()))
         .limit(1),
     )
     if (!person) return { ok: false, error: 'Signer not found' }

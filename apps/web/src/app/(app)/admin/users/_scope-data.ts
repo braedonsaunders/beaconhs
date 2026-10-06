@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 // Shared (server-side) helpers for role-assignment data scopes: load the
 // ACTIVE-only option lists the ScopePicker needs, and summarise a stored
 // RoleScope into human text for the assignment list. Not a 'use server' module —
@@ -83,7 +84,7 @@ export async function loadScopeOptions(ctx: Ctx): Promise<ScopeOptions> {
         employeeNo: people.employeeNo,
       })
       .from(people)
-      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
+      .where(activePeopleWhere())
       .orderBy(asc(people.lastName), asc(people.firstName))
     return {
       sites,

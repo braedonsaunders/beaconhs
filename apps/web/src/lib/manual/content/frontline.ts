@@ -186,6 +186,8 @@ Some assessment types skip risk ratings and work as a simple checklist instead. 
 1. Tap **Add PPE** to list the gear the task needs.
 2. Add a note on when or why each item is needed.
 
+Supervisors and internal signers must be active people who have not been deleted. A copied assessment clears any supervisor who is no longer eligible; choose the current supervisor before using the copy.
+
 ## Crew sign-on
 
 1. In the signatures section, tap **Add signature**.
@@ -594,6 +596,8 @@ One place for all the paperwork. Nothing gets lost in a truck cab, and the offic
 - **Assigned forms** show up in your [Workspace](/my) and your Inbox when someone assigns one to you, and under [My compliance](/help/compliance) if it is required.
 
 Only published forms allowed for the role you are currently using appear. If you switch roles, your pinned forms and available form records update with that role.
+
+Person fields on forms offer active people who have not been deleted. If a person has left the company, ask an administrator to update their People status.
 
 ## Filling out a pinned form
 

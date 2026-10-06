@@ -1,3 +1,4 @@
+import { activePeopleWhere } from './people-selection'
 // Shared entity-attribute loader for picker-bound formulas.
 //
 // Used by:
@@ -105,13 +106,7 @@ export async function loadEntitiesForFormPickers(
         crewId: people.crewId,
       })
       .from(people)
-      .where(
-        and(
-          inArray(people.id, [...personIds]),
-          eq(people.status, 'active'),
-          isNull(people.deletedAt),
-        ),
-      )
+      .where(and(inArray(people.id, [...personIds]), activePeopleWhere()))
 
     const managerIds = rows.map((r) => r.managerPersonId).filter((x): x is string => !!x)
     const deptIds = rows.map((r) => r.departmentId).filter((x): x is string => !!x)

@@ -1,5 +1,7 @@
 'use server'
 
+import { activeTenantUsersWhere } from '@beaconhs/db'
+
 // Server actions behind /admin/roles — create / edit / duplicate / delete roles
 // and the permission set each role grants. Gated on `admin.roles.manage`.
 //
@@ -332,7 +334,12 @@ export async function bulkUpdateRoleAssignments(formData: FormData): Promise<voi
       })
       .from(tenantUsers)
       .innerJoin(user, eq(user.id, tenantUsers.userId))
-      .where(inArray(tenantUsers.id, membershipIds))
+      .where(
+        and(
+          inArray(tenantUsers.id, membershipIds),
+          operation === 'remove' ? undefined : activeTenantUsersWhere(),
+        ),
+      )
 
     const eligibleMembers = selectedMembers.filter(
       (member) => member.userId !== ctx.userId && (ctx.isSuperAdmin || !member.isSuperAdmin),
@@ -494,7 +501,7 @@ export async function addRoleMembers(formData: FormData): Promise<void> {
       })
       .from(tenantUsers)
       .innerJoin(user, eq(user.id, tenantUsers.userId))
-      .where(and(inArray(tenantUsers.id, membershipIds), eq(tenantUsers.status, 'active')))
+      .where(and(inArray(tenantUsers.id, membershipIds), activeTenantUsersWhere()))
 
     const eligibleIds = selected
       .filter((m) => m.userId !== ctx.userId && (ctx.isSuperAdmin || !m.isSuperAdmin))

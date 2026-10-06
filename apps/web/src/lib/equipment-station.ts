@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { recordSearchWhere, recordSearchTerm } from './record-search'
 // Equipment Station — shared, context-free core for scan-driven check in/out.
 //
@@ -180,8 +181,7 @@ export async function searchStationCore(
     .from(people)
     .where(
       and(
-        isNull(people.deletedAt),
-        eq(people.status, 'active'),
+        activePeopleWhere(),
         or(
           ilike(people.firstName, like),
           ilike(people.lastName, like),
@@ -221,7 +221,7 @@ async function personName(
   const [p] = await tx
     .select({ first: people.firstName, last: people.lastName })
     .from(people)
-    .where(and(eq(people.id, personId), eq(people.status, 'active'), isNull(people.deletedAt)))
+    .where(and(eq(people.id, personId), activePeopleWhere()))
     .limit(1)
   return p ? `${p.first} ${p.last}`.trim() : null
 }
@@ -289,9 +289,7 @@ export async function stationScanCore(
         jobTitle: primaryPersonTitleName(people.id, people.tenantId),
       })
       .from(people)
-      .where(
-        and(isNull(people.deletedAt), eq(people.status, 'active'), eq(people.employeeNo, code)),
-      )
+      .where(and(activePeopleWhere(), eq(people.employeeNo, code)))
       .limit(1)
     if (p) {
       return {

@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
@@ -193,6 +194,15 @@ async function updatePersonField(formData: FormData) {
 
     const beforeValue = (row as Record<string, unknown>)[field]
     if (beforeValue === value) return
+    if (field === 'managerPersonId' && value) {
+      if (!isUuid(value)) throw new Error('Choose an active manager')
+      const [manager] = await tx
+        .select({ id: people.id })
+        .from(people)
+        .where(and(eq(people.id, value), activePeopleWhere()))
+        .limit(1)
+      if (!manager) throw new Error('Choose an active manager')
+    }
     const [updated] = await tx
       .update(people)
       .set({ [field]: value } as Partial<typeof people.$inferInsert>)
@@ -441,7 +451,7 @@ export default async function PersonDetailPage({
           employeeNo: people.employeeNo,
         })
         .from(people)
-        .where(and(ne(people.id, id), eq(people.status, 'active'), isNull(people.deletedAt)))
+        .where(and(ne(people.id, id), activePeopleWhere()))
         .orderBy(asc(people.lastName), asc(people.firstName)),
       getPersonSyncOrigin(tx, id),
     ])
@@ -1042,6 +1052,14 @@ export default async function PersonDetailPage({
                           field="managerPersonId"
                           label={tGenerated('m_10b68359e74254')}
                           initialValue={person.managerPersonId}
+                          initialOption={
+                            managerRow
+                              ? {
+                                  value: managerRow.id,
+                                  label: `${managerRow.lastName}, ${managerRow.firstName}`,
+                                }
+                              : undefined
+                          }
                           options={managerOptions.map((m) => ({
                             value: m.id,
                             label: `${m.lastName}, ${m.firstName}`,

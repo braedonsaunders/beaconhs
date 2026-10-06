@@ -108,8 +108,7 @@ describe('production-scale picker contract', () => {
       "if (lookup === 'training-record-people')",
       "if (lookup === 'training-record-courses')",
     )
-    expect(certificatePeople).toContain("eq(people.status, 'active')")
-    expect(certificatePeople).toContain('isNull(people.deletedAt)')
+    expect(certificatePeople).toContain('activePeopleWhere()')
     expect(certificatePeople).toContain('.limit(PICKER_RESULT_LIMIT + 1)')
 
     const injuryTypeBranch = between(

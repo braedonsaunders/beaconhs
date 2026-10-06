@@ -1,3 +1,4 @@
+import { activeTenantUsersWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -123,7 +124,7 @@ export default async function AdminRoleEditPage({
           .innerJoin(user, eq(user.id, tenantUsers.userId))
           .where(
             and(
-              eq(tenantUsers.status, 'active'),
+              activeTenantUsersWhere(),
               heldIds.length > 0 ? notInArray(tenantUsers.id, heldIds) : undefined,
             ),
           )

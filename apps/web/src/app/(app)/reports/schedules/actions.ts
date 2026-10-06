@@ -1,8 +1,9 @@
 'use server'
 
+import { activeTenantUsersWhere } from '@beaconhs/db'
 import { revalidatePath } from 'next/cache'
-import { and, eq } from 'drizzle-orm'
-import { reportDefinitions, reportSchedules } from '@beaconhs/db/schema'
+import { and, eq, inArray } from 'drizzle-orm'
+import { reportDefinitions, reportSchedules, tenantUsers } from '@beaconhs/db/schema'
 import { enqueueReportRun } from '@beaconhs/jobs'
 import {
   assertBoundedReportFilters,
@@ -32,6 +33,25 @@ export async function saveSchedule(
     assertReportRecipientLimit(value.recipientUserIds, value.recipientEmails)
     const nextRunAt = computeNextRunAt(value)
     const scheduleId = await ctx.db(async (tx) => {
+      const [current] = id
+        ? await tx
+            .select({ recipientUserIds: reportSchedules.recipientUserIds })
+            .from(reportSchedules)
+            .where(and(eq(reportSchedules.tenantId, ctx.tenantId!), eq(reportSchedules.id, id)))
+            .limit(1)
+            .for('update')
+        : []
+      if (id && !current) throw new Error('Schedule not found.')
+      const added = [...new Set(value.recipientUserIds)].filter(
+        (userId) => !current?.recipientUserIds.includes(userId),
+      )
+      if (added.length) {
+        const eligible = await tx
+          .select({ userId: tenantUsers.userId })
+          .from(tenantUsers)
+          .where(and(inArray(tenantUsers.userId, added), activeTenantUsersWhere()))
+        if (eligible.length !== added.length) throw new Error('Choose active report recipients.')
+      }
       const [definition] = await tx
         .select({ id: reportDefinitions.id, query: reportDefinitions.query })
         .from(reportDefinitions)

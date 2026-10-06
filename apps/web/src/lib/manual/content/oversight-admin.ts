@@ -55,7 +55,7 @@ Open [People](/people) from the sidebar.
 1. Open [People](/people).
 2. Click **Add person**.
 3. Fill in their name, employee number, **Primary job title**, department, and hire date.
-4. Click **Create person**. They now show up in pickers across the app.
+4. Click **Create person**. Active people who have not been deleted show up in pickers across the app. Inactive and terminated people remain in historical records but cannot be chosen for new assignments.
 
 ## Delete a manually managed person (managers)
 

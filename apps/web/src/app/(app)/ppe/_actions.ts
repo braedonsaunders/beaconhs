@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Bulk-action server actions for /ppe.
 //
 // Three actions surface in the floating bulk-action bar:
@@ -13,7 +15,7 @@
 // summary entry, sharing a batchId.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { isUniqueViolation, safeDbErrorMessage } from '@beaconhs/db'
 import { people, ppeIssues, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
@@ -60,7 +62,7 @@ export async function bulkIssuePpeToPerson(args: {
     const [p] = await tx
       .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
       .from(people)
-      .where(and(eq(people.id, args.personId), isNull(people.deletedAt)))
+      .where(and(eq(people.id, args.personId), activePeopleWhere()))
       .limit(1)
     return p ?? null
   })
@@ -376,13 +378,7 @@ export async function createAndIssuePpe(input: {
         const [person] = await tx
           .select({ id: people.id })
           .from(people)
-          .where(
-            and(
-              eq(people.id, input.personId),
-              eq(people.status, 'active'),
-              isNull(people.deletedAt),
-            ),
-          )
+          .where(and(eq(people.id, input.personId), activePeopleWhere()))
           .limit(1)
         if (!person) throw new Error('Active holder not found.')
       }

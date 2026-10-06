@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -45,9 +46,7 @@ import type { AppLocale } from '@beaconhs/i18n'
 import {
   attachments,
   correctiveActions,
-  departments,
   incidentAttachments,
-  incidentClassifications,
   incidentContributingFactors,
   incidentEvents,
   incidentInjuries,
@@ -923,11 +922,17 @@ async function saveIncidentInjury(input: InjuryInput): Promise<{ ok: boolean; er
         throw new IncidentInjuryMutationError('Injury not found on this incident.')
       }
 
-      if (parsed.personId) {
+      if (parsed.personId && parsed.personId !== before?.personId) {
         const [person] = await tx
           .select({ id: people.id })
           .from(people)
-          .where(and(eq(people.tenantId, ctx.tenantId), eq(people.id, parsed.personId)))
+          .where(
+            and(
+              eq(people.tenantId, ctx.tenantId),
+              eq(people.id, parsed.personId),
+              activePeopleWhere(),
+            ),
+          )
           .limit(1)
         if (!person) throw new IncidentInjuryMutationError('Injured person not found.')
       }

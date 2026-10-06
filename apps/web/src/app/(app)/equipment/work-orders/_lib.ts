@@ -1,3 +1,4 @@
+import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 // Shared work-order creation used by the full-page /equipment/work-orders/new
 // form and the item-detail "New work order" drawer, so reference generation,
 // audit, module flows (on_create automations), and revalidation stay in one
@@ -53,9 +54,7 @@ export async function assertEquipmentWorkOrderReferences(
     const [assignee] = await tx
       .select({ id: tenantUsers.id })
       .from(tenantUsers)
-      .where(
-        and(eq(tenantUsers.id, input.assignedToTenantUserId), eq(tenantUsers.status, 'active')),
-      )
+      .where(and(eq(tenantUsers.id, input.assignedToTenantUserId), activeTenantUsersWhere()))
       .limit(1)
       .for('share')
     if (!assignee) throw new Error('Select an active assignee.')
@@ -65,13 +64,7 @@ export async function assertEquipmentWorkOrderReferences(
     const [reporter] = await tx
       .select({ id: people.id })
       .from(people)
-      .where(
-        and(
-          eq(people.id, input.reportedByPersonId),
-          eq(people.status, 'active'),
-          isNull(people.deletedAt),
-        ),
-      )
+      .where(and(eq(people.id, input.reportedByPersonId), activePeopleWhere()))
       .limit(1)
       .for('share')
     if (!reporter) throw new Error('Select an active reporter.')

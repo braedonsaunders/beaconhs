@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Server actions behind /admin/users — membership lifecycle (invite, status,
 // remove), role assignment + per-assignment data scope, per-user permission
 // overrides, and impersonation. Every mutating action gates on the relevant
@@ -669,14 +671,25 @@ export async function loadPersonLinkData(
         userId: people.userId,
       })
       .from(people)
-      .where(and(eq(people.status, 'active'), isNull(people.deletedAt)))
+      .where(activePeopleWhere())
       .orderBy(asc(people.lastName), asc(people.firstName))
     const toItem = (r: (typeof rows)[number]): LinkablePerson => ({
       id: r.id,
       name: `${r.firstName} ${r.lastName}`.trim(),
       hint: r.employeeNo ?? r.jobTitle ?? null,
     })
-    const linked = rows.find((r) => r.userId === userId)
+    const [linked] = await tx
+      .select({
+        id: people.id,
+        firstName: people.firstName,
+        lastName: people.lastName,
+        employeeNo: people.employeeNo,
+        jobTitle: primaryPersonTitleName(people.id, people.tenantId),
+        userId: people.userId,
+      })
+      .from(people)
+      .where(and(eq(people.userId, userId), isNull(people.deletedAt)))
+      .limit(1)
     return {
       linked: linked ? toItem(linked) : null,
       // Unlinked people + (defensively) the one already ours.

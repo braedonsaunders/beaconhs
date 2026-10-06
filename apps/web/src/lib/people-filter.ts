@@ -1,4 +1,5 @@
-import { and, eq, isNull, or, sql } from 'drizzle-orm'
+import { activeTenantUsersWhere } from '@beaconhs/db'
+import { and, eq, isNull, or } from 'drizzle-orm'
 import { people, tenantUsers } from '@beaconhs/db/schema'
 import { pickString } from './list-params'
 
@@ -22,20 +23,5 @@ export function personFilterWhere(includeInactive: boolean, selected?: string | 
 export function tenantUserFilterWhere(includeInactive: boolean, selected?: string | null) {
   return includeInactive
     ? undefined
-    : or(
-        and(
-          eq(tenantUsers.status, 'active'),
-          isNull(tenantUsers.removedAt),
-          // An active login does not make a linked former employee active.
-          // Accounts without an employee record remain valid filter choices.
-          sql`not exists (
-            select 1 from ${people} p
-            where p.tenant_id = ${tenantUsers.tenantId}
-              and p.user_id = ${tenantUsers.userId}
-              and p.deleted_at is null
-              and p.status <> ${'active'}
-          )`,
-        ),
-        selected ? eq(tenantUsers.id, selected) : undefined,
-      )
+    : or(activeTenantUsersWhere(), selected ? eq(tenantUsers.id, selected) : undefined)
 }

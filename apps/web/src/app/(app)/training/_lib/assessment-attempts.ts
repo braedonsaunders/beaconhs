@@ -4,8 +4,9 @@
 // launcher so the attempt shape can never drift between the two paths.
 
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
-import type { Database } from '@beaconhs/db'
+import { activePeopleWhere, type Database } from '@beaconhs/db'
 import {
+  people,
   trainingAssessmentResults,
   trainingAssessmentTypeQuestions,
   trainingAssessmentTypes,
@@ -65,6 +66,15 @@ export async function createAssessmentAttempt(
       .limit(1)
     if (existing) return { attempt: existing, created: false }
   }
+
+  const [person] = await tx
+    .select({ id: people.id })
+    .from(people)
+    .where(
+      and(eq(people.tenantId, args.tenantId), eq(people.id, args.personId), activePeopleWhere()),
+    )
+    .limit(1)
+  if (!person) throw new Error('Choose an active person for this assessment')
 
   const questions = await tx
     .select()

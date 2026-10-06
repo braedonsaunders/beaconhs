@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Server actions for the Journals workspace: entry mutations, AI analysis,
 // photos, and thin data-fetch wrappers the client calls on interaction.
 // Every mutation runs inside ctx.db() (tenant + RLS), records an audit row, and
@@ -7,7 +9,7 @@
 // entries even though RLS only bounds to the tenant.
 
 import { revalidatePath } from 'next/cache'
-import { and, asc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   attachments,
   journalEntries,
@@ -258,7 +260,7 @@ export async function updateEntry(input: {
       const [supervisor] = await tx
         .select({ id: people.id })
         .from(people)
-        .where(and(eq(people.id, values.supervisorPersonId), isNull(people.deletedAt)))
+        .where(and(eq(people.id, values.supervisorPersonId), activePeopleWhere()))
         .limit(1)
       if (!supervisor) return []
     }

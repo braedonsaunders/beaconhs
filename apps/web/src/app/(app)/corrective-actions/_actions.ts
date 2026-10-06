@@ -1,5 +1,7 @@
 'use server'
 
+import { activeTenantUsersWhere } from '@beaconhs/db'
+
 // Server actions for the corrective-actions suite.
 //
 // Every mutation records an audit-log entry so the activity tab tells a
@@ -646,7 +648,7 @@ export async function bulkReassignCorrectiveActions(args: {
         and(
           eq(tenantUsers.id, newOwnerTenantUserId),
           eq(tenantUsers.tenantId, ctx.tenantId),
-          eq(tenantUsers.status, 'active'),
+          activeTenantUsersWhere(),
         ),
       )
       .limit(1)

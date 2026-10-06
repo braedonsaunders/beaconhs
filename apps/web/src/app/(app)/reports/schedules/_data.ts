@@ -1,3 +1,4 @@
+import { activeTenantUsersWhere } from '@beaconhs/db'
 import { asc, eq } from 'drizzle-orm'
 import { tenantUsers, users } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
@@ -24,7 +25,7 @@ export async function loadScheduleFormData(ctx: RequestContext): Promise<{
       })
       .from(tenantUsers)
       .innerJoin(users, eq(users.id, tenantUsers.userId))
-      .where(eq(tenantUsers.status, 'active'))
+      .where(activeTenantUsersWhere())
       .orderBy(asc(tenantUsers.displayName)),
   }))
   return {

@@ -181,7 +181,7 @@ describe('people filter and assignment SQL boundaries', () => {
     ['inspection-record-filter-inspectors', 'tenant_users'],
     ['equipment-work-order-filter-assignees', 'tenant_users'],
   ] as const
-  async function queries(lookup: string, includeInactive: boolean) {
+  async function queries(lookup: string, includeInactive: boolean, selected = '') {
     const captured: { text: string; values: unknown[] }[] = []
     const client = {
       query: async (config: { text: string }, values: unknown[]) => {
@@ -195,7 +195,9 @@ describe('people filter and assignment SQL boundaries', () => {
       permissions: new Set(['*']),
       db: vi.fn((callback) => callback(tx)),
     }
-    const response = await request(`lookup=${lookup}${includeInactive ? '&includeInactive=1' : ''}`)
+    const response = await request(
+      `lookup=${lookup}${includeInactive ? '&includeInactive=1' : ''}${selected ? `&selected=${selected}` : ''}`,
+    )
     expect(response.status).toBe(200)
     return captured.at(-1)!
   }
@@ -214,14 +216,48 @@ describe('people filter and assignment SQL boundaries', () => {
     },
   )
   it.each([
+    'training-record-people',
+    'training-skill-assignment-people',
+    'compliance-obligation-audience-people',
+    'report-people',
+    'journal-supervisors',
+    'safe-distance-operators',
+    'compliance-by-person',
+    'incident-people',
+    'inspection-people',
+    'document-signoff-people',
     'ppe-active-people',
     'ppe-inspection-supervisors',
+    'vehicle-drivers',
     'equipment-custody-holders',
+    'equipment-reminder-assignees',
+    'equipment-work-order-reporters',
+  ])(
+    'keeps %s active and undeleted even with forged historical/selected parameters',
+    async (lookup) => {
+      const query = await queries(lookup, true, '10000000-0000-4000-8000-000000000001')
+      expect(query.text).toContain('"people"."status" =')
+      expect(query.text).toContain('"people"."deleted_at" is null')
+      expect(query.values).toContain('active')
+      // Eligibility remains an AND clause; a selected ID only helps match/order eligible rows.
+      expect(query.text).toMatch(
+        /where \(\("people"\."status" = \$\d+ and "people"\."deleted_at" is null\)/,
+      )
+    },
+  )
+  it.each([
+    'training-class-instructors',
+    'inspection-supervisors',
+    'safe-distance-supervisors',
+    'corrective-action-owners',
+    'management-review-members',
     'equipment-work-order-assignees',
-    'inspection-people',
-  ])('keeps %s active-only even with a forged historical flag', async (lookup) => {
-    const query = await queries(lookup, true)
-    expect(query.text).toMatch(/"(?:people|tenant_users)"\."status" =/)
-    expect(query.values).toContain('active')
+  ])('checks membership and linked employee eligibility for %s', async (lookup) => {
+    const query = await queries(lookup, true, '10000000-0000-4000-8000-000000000001')
+    expect(query.text).toContain('"tenant_users"."removed_at" is null')
+    expect(query.text).toContain('linked_person.deleted_at is null')
+    expect(query.text).toContain('linked_person.status =')
+    expect(query.text).toContain('linked_person.tenant_id = "tenant_users"."tenant_id"')
+    expect(query.values.filter((value) => value === 'active')).toHaveLength(2)
   })
 })

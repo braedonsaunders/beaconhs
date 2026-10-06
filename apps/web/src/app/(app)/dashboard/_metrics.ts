@@ -1,3 +1,4 @@
+import { activePeopleWhere } from '@beaconhs/db'
 // Dashboard KPI queries. Centralised so the page stays readable and so we
 // can re-use them from /reports/dashboard previews later.
 
@@ -25,7 +26,6 @@ import {
   people,
   ppeItems,
   ppeIssueReports,
-  ppeTypes,
   trainingCourses,
   trainingRecords,
   truckLogEntries,
@@ -412,8 +412,7 @@ export async function loadDashboardMetrics(
             isNotNull(trainingRecords.expiresOn),
             gte(trainingRecords.expiresOn, todayIso),
             lte(trainingRecords.expiresOn, ninetyIso),
-            eq(people.status, 'active'),
-            isNull(people.deletedAt),
+            activePeopleWhere(),
             latestTrainingRecordOnly(),
           ),
         )
@@ -449,7 +448,7 @@ export async function loadDashboardMetrics(
       tx
         .select({ c: count() })
         .from(people)
-        .where(eq(people.status, 'active'))
+        .where(activePeopleWhere())
         .then((r) => r[0]),
       tx
         .select({ c: count() })
@@ -869,8 +868,7 @@ export async function loadDashboardMetrics(
           isNotNull(trainingRecords.expiresOn),
           gte(trainingRecords.expiresOn, todayIso),
           lte(trainingRecords.expiresOn, thirtyIso),
-          eq(people.status, 'active'),
-          isNull(people.deletedAt),
+          activePeopleWhere(),
           latestTrainingRecordOnly(),
         ),
       )

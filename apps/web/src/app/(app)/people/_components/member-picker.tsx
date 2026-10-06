@@ -26,6 +26,7 @@ type Candidate = {
   employeeNo: string | null
   /** Person status — non-active members render with a hint and are not re-addable. */
   status?: 'active' | 'inactive' | 'terminated'
+  deletedAt?: Date | null
 }
 
 export function MemberPicker({
@@ -67,7 +68,7 @@ export function MemberPicker({
         .filter((c) => !selectedMembers.has(c.id))
         // Only active people are addable — a removed inactive member must not
         // reappear as a candidate.
-        .filter((c) => (c.status ?? 'active') === 'active')
+        .filter((c) => (c.status ?? 'active') === 'active' && !c.deletedAt)
         .filter((c) => matches(c, leftQuery))
         .sort(compareByName),
     [candidates, selectedMembers, leftQuery],

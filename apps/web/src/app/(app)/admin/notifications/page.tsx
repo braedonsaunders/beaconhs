@@ -1,3 +1,4 @@
+import { activeTenantUsersWhere } from '@beaconhs/db'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { redirect } from 'next/navigation'
 import { and, asc, eq, isNull } from 'drizzle-orm'
@@ -46,7 +47,7 @@ export default async function NotificationSettingsPage() {
       })
       .from(tenantUsers)
       .innerJoin(users, eq(users.id, tenantUsers.userId))
-      .where(and(eq(tenantUsers.tenantId, ctx.tenantId), eq(tenantUsers.status, 'active')))
+      .where(and(eq(tenantUsers.tenantId, ctx.tenantId), activeTenantUsersWhere()))
       .orderBy(asc(tenantUsers.displayName))
     return { roleRows, memberRows }
   })

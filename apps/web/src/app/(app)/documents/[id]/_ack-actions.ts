@@ -1,5 +1,7 @@
 'use server'
 
+import { activePeopleWhere } from '@beaconhs/db'
+
 // Acknowledgments are legal evidence tied to one immutable published version.
 // Every path below resolves and validates the document/version/person/session
 // relationship server-side, stores signatures in the same saga as the write,
@@ -176,11 +178,7 @@ export async function acknowledgeDocument(input: unknown): Promise<Ok | Err> {
         .select({ id: people.id })
         .from(people)
         .where(
-          and(
-            eq(people.tenantId, ctx.tenantId),
-            eq(people.id, ctx.personId),
-            isNull(people.deletedAt),
-          ),
+          and(eq(people.tenantId, ctx.tenantId), eq(people.id, ctx.personId), activePeopleWhere()),
         )
         .limit(1)
       if (!person) throw new AcknowledgmentError('Your person record is no longer active')
@@ -285,11 +283,7 @@ export async function addSignOffSigner(
           .select({ id: people.id, firstName: people.firstName, lastName: people.lastName })
           .from(people)
           .where(
-            and(
-              eq(people.tenantId, ctx.tenantId),
-              eq(people.id, personId),
-              isNull(people.deletedAt),
-            ),
+            and(eq(people.tenantId, ctx.tenantId), eq(people.id, personId), activePeopleWhere()),
           )
           .limit(1)
         if (!person) throw new AcknowledgmentError('Person not found')
