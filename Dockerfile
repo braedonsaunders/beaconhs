@@ -45,9 +45,13 @@ RUN --mount=type=secret,id=next_server_actions_key,required=true \
 # deps of the bundled workspace packages, e.g. `postgres` via @beaconhs/db —
 # all resolve from the top-level node_modules (pnpm's default isolated layout
 # nests them and the bundle can't find them).
+# Inject workspace copies only for deployment, leaving development links intact.
+# The modern deploy path derives its frozen graph from the tested lockfile;
+# offline packaging prevents a fresh registry resolution after the CI gates.
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     npm_config_node_linker=hoisted \
-    pnpm --filter=@beaconhs/worker deploy --prod --legacy /prod/worker
+    pnpm --filter=@beaconhs/worker --config.inject-workspace-packages=true \
+    deploy --prod --offline /prod/worker
 
 # --- Runtime ---
 FROM base AS runner
