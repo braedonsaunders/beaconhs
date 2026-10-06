@@ -1,4 +1,5 @@
 import { executeParameterizedRows, type Database } from '@beaconhs/db'
+import { withDomainCellTones } from './cell-tones'
 import {
   compileCustomReport,
   customReportResult,
@@ -54,7 +55,7 @@ export async function runBeaconReport(
   const compiled = compileCustomReport({ ...query, filters }, tenantId, catalog, options)
   const startedAt = performance.now()
   const rows = await executeParameterizedRows(tx, compiled.sql, compiled.params)
-  return customReportResult(compiled, [...rows], performance.now() - startedAt)
+  return withDomainCellTones(customReportResult(compiled, [...rows], performance.now() - startedAt))
 }
 
 function mergeFilters(

@@ -92,6 +92,37 @@ describe('Beacon AppKit report catalogue', () => {
     )
   })
 
+  it('shows bookings in missing training without treating booked employees as certified', () => {
+    const missing = BEACON_REPORT_SEEDS.find(
+      (definition) => definition.seedKey === 'training_missing',
+    )!
+    const compiled = compileCustomReport(
+      missing.query,
+      '00000000-0000-4000-8000-000000000001',
+      BEACON_REPORT_CATALOG,
+    )
+    expect(compiled.columns).toContainEqual(
+      expect.objectContaining({ key: 'booking_coverage_status', label: 'Coverage' }),
+    )
+    expect(compiled.sql).toContain(
+      "CASE WHEN coverage_status IN ('missing', 'expired') AND booked_starts_at IS NOT NULL THEN 'booked' ELSE coverage_status END",
+    )
+    expect(missing.query.filters?.rules).toContainEqual({
+      field: 'coverage_status',
+      op: 'in',
+      value: ['missing', 'expired', 'expiring'],
+    })
+    for (const key of [
+      'training_certificates',
+      'training_expired_upcoming',
+      'training_wallet_cards',
+    ]) {
+      const definition = BEACON_REPORT_SEEDS.find((definition) => definition.seedKey === key)!
+      expect(definition.query.columns).toContain('coverage_status')
+      expect(definition.query.columns).not.toContain('booking_coverage_status')
+    }
+  })
+
   it('seeds employment status and wallet-card PDF export on training reports', () => {
     const trainingSeeds = BEACON_REPORT_SEEDS.filter(
       (definition) => definition.query.entity === 'training_matrix',

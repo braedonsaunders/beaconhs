@@ -370,6 +370,13 @@ export async function loadBeaconReportCatalog(
   ])
   const derivedOptionsByColumn = new Map<string, { value: string; label: string }[]>([
     [
+      'training_matrix.booking_coverage_status',
+      ['booked', 'missing', 'expired', 'expiring', 'valid'].map((value) => ({
+        value,
+        label: prettifyEnumLabel(value),
+      })),
+    ],
+    [
       'training_matrix.coverage_status',
       ['missing', 'expired', 'expiring', 'valid'].map((value) => ({
         value,

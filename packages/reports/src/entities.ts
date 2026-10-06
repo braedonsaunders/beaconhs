@@ -342,9 +342,15 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'completed_on', label: 'Completed on', kind: 'date' },
       { key: 'expires_on', label: 'Expires on', kind: 'date' },
       { key: 'coverage_status', label: 'Coverage', kind: 'enum' },
-      // Coverage stays honest — expired is expired until the class is sat —
-      // while these say a seat is already booked, so the missing-training
-      // report does not send coordinators chasing people who are handled.
+      // Scheduling status for the missing-training report. Certificate coverage
+      // remains separate so bookings never count as an earned qualification.
+      {
+        key: 'booking_coverage_status',
+        label: 'Coverage (including bookings)',
+        kind: 'enum',
+        expression:
+          "CASE WHEN coverage_status IN ('missing', 'expired') AND booked_starts_at IS NOT NULL THEN 'booked' ELSE coverage_status END",
+      },
       { key: 'booked_starts_at', label: 'Booked for', kind: 'timestamp' },
       {
         key: 'booked',

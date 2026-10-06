@@ -31,15 +31,15 @@ describe('withDomainCellTones', () => {
     })
   })
 
-  it('does not pretend "booked" is a coverage status', () => {
-    // Being booked is carried by the separate "Booked for" date column; coverage
-    // still reads expired until the course is actually sat. A rule here would
-    // never match, and a tone that can never fire is worse than none.
+  it('distinguishes bookings from earned certificate coverage', () => {
     const out = withDomainCellTones(
-      resultWith([{ key: 'coverage_status', label: 'Coverage', semanticType: 'category' }]),
+      resultWith([
+        { key: 'booking_coverage_status', label: 'Coverage', semanticType: 'category' },
+        { key: 'coverage_status', label: 'Certificate coverage', semanticType: 'category' },
+      ]),
     )
-    const column = out.groups[0]!.columns[0]!
-    expect(Object.keys(column.tones ?? {})).not.toContain('booked')
+    expect(out.groups[0]!.columns[0]!.tones?.booked).toBe('info')
+    expect(out.groups[0]!.columns[1]!.tones?.booked).toBeUndefined()
   })
 
   it('leaves columns it has no opinion about untouched', () => {

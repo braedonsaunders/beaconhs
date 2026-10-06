@@ -163,10 +163,10 @@ export const REPORT_VIEWS_SQL: string[] = [
        ','
      )                                 AS group_id_list,
      p.status                          AS person_status,
-     -- The next class this person is booked onto for this course. Someone who
-     -- is expired-but-booked still reports as expired — they are not covered
-     -- until they sit it — but the missing-training report has to show a seat
-     -- is already reserved, or coordinators chase people who are handled.
+     -- The next class this person is booked onto for this course. Raw
+     -- certificate coverage remains expired or missing until completion.
+     -- The missing-training report derives its booked scheduling status from
+     -- this date without changing qualification or compliance eligibility.
      (SELECT MIN(cl.starts_at)
         FROM training_class_attendees ta
         JOIN training_classes cl

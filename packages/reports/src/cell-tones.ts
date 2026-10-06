@@ -13,11 +13,14 @@ import type { ReportCellTone, ReportRunResult } from '@braedonsaunders/appkit-re
 
 /** Column key → value → tone. Values match case-insensitively. */
 const COLUMN_TONES: Record<string, Record<string, ReportCellTone>> = {
-  // Training coverage — urgency only. Note there is deliberately no `booked`
-  // rule here: being booked is carried by the separate "Booked for" DATE
-  // column, and coverage still reads expired/missing because the person is not
-  // covered until they sit the course. Tones match a cell against its OWN
-  // value by design, so one column cannot be recoloured by another.
+  // Bookings are a scheduling status, not proof of a valid qualification.
+  booking_coverage_status: {
+    booked: 'info',
+    expired: 'critical',
+    missing: 'critical',
+    expiring: 'warning',
+    valid: 'positive',
+  },
   coverage_status: {
     expired: 'critical',
     missing: 'critical',

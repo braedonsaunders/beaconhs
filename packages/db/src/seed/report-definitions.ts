@@ -500,7 +500,7 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
         'department_name',
         'course_code',
         'course_name',
-        'coverage_status',
+        'booking_coverage_status',
         'expires_on',
         // Someone expired but already booked onto a class is handled; without
         // this the report reads as if nobody has done anything about them.
@@ -519,6 +519,7 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
             },
           ],
         },
+        columnLabels: { booking_coverage_status: 'Coverage' },
         groupBy: 'person_name',
         sorts: [{ column: 'person_name', direction: 'asc' }],
       },
