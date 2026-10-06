@@ -41,6 +41,7 @@ describe('My PPE assigned gear', () => {
         size: null,
         status: 'issued',
         inspectionKind: 'annual',
+        canRecordPreUse: true,
         inspectionState: 'current',
         inspectionDueOn: '2027-01-21',
       },
@@ -51,6 +52,7 @@ describe('My PPE assigned gear', () => {
         size: null,
         status: 'issued',
         inspectionKind: null,
+        canRecordPreUse: false,
         inspectionState: 'not_required',
         inspectionDueOn: null,
       },
@@ -60,7 +62,8 @@ describe('My PPE assigned gear', () => {
     expect(html).toContain('Hi Viz Shirts')
     expect(html).toContain('Not required')
     expect(html).toContain('Assigned PPE: 2')
-    expect(html).toContain('kind=annual')
+    expect(html).toContain('kind=pre_use')
+    expect(html).not.toContain('kind=annual')
     expect(html).not.toContain('kind=null')
     expect(html).not.toContain('/ppe/shirt?')
   })
@@ -74,6 +77,7 @@ describe('My PPE assigned gear', () => {
           size: null,
           status: 'out_of_service',
           inspectionKind: 'annual',
+          canRecordPreUse: false,
           inspectionState: 'current',
           inspectionDueOn: '2027-01-21',
         },

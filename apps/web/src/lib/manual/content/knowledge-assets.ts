@@ -975,7 +975,7 @@ Open **PPE** in the left menu. That opens the list at [PPE](/ppe). It starts on 
 2. Find your items — **Assigned to** shows the holder and assignment date. **Inspection** shows **Overdue**, **Due today**, **Due soon**, **Current**, **Never inspected**, or **Not required**.
 3. Tap an item to open it. The **Status & schedule** panel shows **Currently with**, **Last inspection**, and **Next inspection due**.
 
-The **My PPE** dashboard card shows gear assigned to you, including items whose inspection is **Current** or **Not required**. Items marked **Out of service** must not be used. Tap **Inspect** beside an inspectable item to open its pre-use or annual checklist directly.
+The **My PPE** dashboard card shows gear assigned to you, including items whose inspection is **Current** or **Not required**. Items marked **Out of service** must not be used. Tap **Inspect** beside an inspectable item to open its **Pre-use** checklist directly. The inspection badge may show an annual inspection is due; this does not change which checklist the shortcut opens. Only PPE managers can record annual inspections.
 
 ## Review all PPE inspections (managers)
 
@@ -983,12 +983,12 @@ People with **Manage PPE** permission can open **PPE → Inspections**, between 
 
 ## Inspect your PPE
 
-Do a quick pre-use check before you trust your gear, and the full periodic check when it comes due.
+Do a quick pre-use check before you trust your gear. Annual inspections are recorded separately by people with **Manage PPE** permission. On a phone, tapping a record opens its pre-use checklist when available; other items open their detail page.
 
 Items marked **Discarded** or **Expired** are historical records. They cannot be inspected or issued again. You need **Inspect PPE** permission to record an inspection. Ask your administrator to add it to your role if you need to perform checks and the buttons are missing.
 
 1. Open the item and tap the **Inspections** tab.
-2. Tap **Pre-use** for a quick check, or **Annual** for the full periodic inspection.
+2. Tap **Pre-use** for a quick check. People with **Manage PPE** permission can choose **Annual** for the full periodic inspection.
 3. Answer every criterion: **Pass**, **Fail**, or **N/A**.
 4. If a criterion fails, describe what is wrong in **What failed?**.
 5. Add **Photo evidence** wherever it is required. Tap **Take photo or upload** to use the camera or choose pictures from your phone's photo library. You can also add optional photos to another answered criterion.

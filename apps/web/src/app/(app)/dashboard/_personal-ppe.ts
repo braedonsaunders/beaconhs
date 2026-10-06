@@ -4,7 +4,12 @@ import { ppeItems, ppeTypes, ppeTypeInspectionCriteria } from '@beaconhs/db/sche
 import { resolvePpeInspectionDue } from '@/lib/ppe-inspection-due'
 
 /** Assigned gear remains visible even when its inspection is current or not required. */
-export async function loadPersonalPpe(tx: Database, myPersonId: string | null, todayIso: string) {
+export async function loadPersonalPpe(
+  tx: Database,
+  myPersonId: string | null,
+  todayIso: string,
+  canInspect: boolean,
+) {
   return myPersonId
     ? (
         await tx
@@ -71,6 +76,11 @@ export async function loadPersonalPpe(tx: Database, myPersonId: string | null, t
           status:
             row.status === 'out_of_service' ? ('out_of_service' as const) : ('issued' as const),
           inspectionKind: due.kind,
+          canRecordPreUse:
+            canInspect &&
+            row.isInspectable &&
+            Number(row.preUseCriteriaCount) > 0 &&
+            row.status !== 'out_of_service',
           inspectionState: due.state,
           inspectionDueOn: due.dueOn,
         }))

@@ -4,7 +4,7 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import type { Database } from '@beaconhs/db'
-import type { RequestContext } from '@beaconhs/tenant'
+import { can, type RequestContext } from '@beaconhs/tenant'
 import {
   complianceObligations,
   complianceStatus,
@@ -895,7 +895,7 @@ export async function loadDashboardMetrics(
       : []
     const myPersonId = myPerson?.id ?? null
 
-    const myPpe = await loadPersonalPpe(tx, myPersonId, todayIso)
+    const myPpe = await loadPersonalPpe(tx, myPersonId, todayIso, can(ctx, 'ppe.inspect'))
 
     // Equipment checked out to me — open checkouts (returnedAt IS NULL) are the
     // source of truth; oldest checkout first.

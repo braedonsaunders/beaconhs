@@ -256,7 +256,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Inspect an item',
-        body: 'Items that need action show an Inspect link. It opens the due pre-use or annual checklist. Answer each check honestly, describe every failure, and add required photos.',
+        body: 'The Inspect shortcut opens the Pre-use checklist, even when the inspection badge says an annual inspection is due. Only PPE managers can choose Annual on the item’s Inspections tab. Answer each check honestly, describe every failure, and add required photos.',
       },
       {
         title: 'Damaged gear',

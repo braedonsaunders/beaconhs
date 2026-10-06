@@ -26,6 +26,21 @@ function database() {
             4,
           ],
           ['shirt', null, null, 'issued', null, null, null, null, 'Hi Viz Shirts', false, 0, 0],
+          [
+            'annual-due',
+            null,
+            null,
+            'issued',
+            '2026-10-01',
+            '2026-10-10',
+            null,
+            null,
+            'Harness',
+            true,
+            4,
+            4,
+          ],
+          ['unsafe', null, null, 'out_of_service', null, null, null, null, 'Harness', true, 4, 4],
           ['due', null, null, 'issued', null, null, null, null, 'Lanyard', true, 7, 7],
         ],
       }
@@ -37,23 +52,42 @@ function database() {
 describe('personal PPE dashboard data', () => {
   it('keeps current and non-inspectable assigned PPE while prioritizing required inspections', async () => {
     const { tx, queries } = database()
-    const items = await loadPersonalPpe(tx, personId, '2026-10-01')
-    expect(items.map((item) => item.id)).toEqual(['due', 'shirt', 'harness'])
+    const items = await loadPersonalPpe(tx, personId, '2026-10-01', true)
+    expect(items.map((item) => item.id)).toEqual([
+      'annual-due',
+      'unsafe',
+      'due',
+      'shirt',
+      'harness',
+    ])
     expect(items.find((item) => item.id === 'harness')).toMatchObject({
       inspectionState: 'current',
       inspectionDueOn: '2027-01-21',
+      canRecordPreUse: true,
     })
     expect(items.find((item) => item.id === 'shirt')).toMatchObject({
       inspectionState: 'not_required',
       inspectionKind: null,
+      canRecordPreUse: false,
     })
+    expect(items.find((item) => item.id === 'annual-due')).toMatchObject({
+      inspectionKind: 'annual',
+      inspectionState: 'never_inspected',
+      canRecordPreUse: true,
+    })
+    expect(items.find((item) => item.id === 'unsafe')?.canRecordPreUse).toBe(false)
     expect(queries[0]!.text).toContain('"ppe_items"."current_holder_person_id" =')
     expect(queries[0]!.text).toContain('"ppe_items"."deleted_at" is null')
     expect(queries[0]!.values).toEqual([personId, 'issued', 'out_of_service'])
   })
+  it('does not offer inspections without inspection permission', async () => {
+    const { tx } = database()
+    const items = await loadPersonalPpe(tx, personId, '2026-10-01', false)
+    expect(items.every((item) => !item.canRecordPreUse)).toBe(true)
+  })
   it('does not query the register for an unlinked account', async () => {
     const { tx, queries } = database()
-    expect(await loadPersonalPpe(tx, null, '2026-10-01')).toEqual([])
+    expect(await loadPersonalPpe(tx, null, '2026-10-01', true)).toEqual([])
     expect(queries).toEqual([])
   })
 })

@@ -57,7 +57,11 @@ import { AnimatedBar } from './_bar'
 import { QuickActions } from './_quick-actions'
 import type { QuickAction } from './_quick-actions-shared'
 import { checkInEquipment } from '../equipment/_actions'
-import { ppeInspectionStateLabel, type PpeInspectionState } from '@/lib/ppe-inspection-due'
+import {
+  ppeInspectionStateLabel,
+  type PpeInspectionKind,
+  type PpeInspectionState,
+} from '@/lib/ppe-inspection-due'
 
 // =====================================================================
 // Public entry — switch on widget id and render the right card
@@ -1482,16 +1486,16 @@ function MyPpeCard({ items }: { items: DashboardMetrics['myPpe'] }) {
                               <GeneratedValue value="Out of service" />
                             </Badge>
                           ) : (
-                            <PpeInspectionBadge state={p.inspectionState} />
+                            <PpeInspectionBadge state={p.inspectionState} kind={p.inspectionKind} />
                           )}
                         </div>
                         <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
                           <GeneratedValue value={sub} />
                         </div>
                       </div>
-                      {p.inspectionKind && (
+                      {p.canRecordPreUse && (
                         <InspectButton
-                          href={`/ppe/${p.id}?tab=${p.inspectionKind === 'annual' ? 'annual' : 'inspections'}&drawer=record-inspection&kind=${p.inspectionKind}`}
+                          href={`/ppe/${p.id}?tab=inspections&drawer=record-inspection&kind=pre_use`}
                           tone="teal"
                         />
                       )}
@@ -1507,7 +1511,13 @@ function MyPpeCard({ items }: { items: DashboardMetrics['myPpe'] }) {
   )
 }
 
-function PpeInspectionBadge({ state }: { state: PpeInspectionState }) {
+function PpeInspectionBadge({
+  state,
+  kind,
+}: {
+  state: PpeInspectionState
+  kind: PpeInspectionKind | null
+}) {
   const variant =
     state === 'overdue'
       ? 'destructive'
@@ -1516,6 +1526,11 @@ function PpeInspectionBadge({ state }: { state: PpeInspectionState }) {
         : 'secondary'
   return (
     <Badge variant={variant} className="shrink-0">
+      {kind === 'annual' && (
+        <>
+          <GeneratedValue value="Annual" /> ·{' '}
+        </>
+      )}
       <GeneratedValue value={ppeInspectionStateLabel(state)} />
     </Badge>
   )

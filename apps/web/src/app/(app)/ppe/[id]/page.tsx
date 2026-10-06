@@ -289,6 +289,7 @@ async function recordInspection(formData: FormData) {
   const typeId = String(formData.get('typeId') ?? '')
   const kindRaw = String(formData.get('kind') ?? 'pre_use')
   const kind: 'pre_use' | 'annual' = kindRaw === 'annual' ? 'annual' : 'pre_use'
+  if (kind === 'annual') assertCan(ctx, 'ppe.manage')
   const notes = String(formData.get('notes') ?? '').trim() || null
   const supervisorPersonId = String(formData.get('supervisorPersonId') ?? '').trim() || null
   if (!isUuid(itemId) || !isUuid(typeId)) throw new Error('Invalid PPE item')
@@ -963,8 +964,6 @@ export default async function PpeDetailPage({
   //     recertification (configurable on the type), or it already has records.
   const hasPreUse = preUseCriteria.length > 0
   const hasAnnual = annualCriteria.length > 0
-  // Returning to service means passing the fullest check the type defines —
-  // prefer the annual checklist when it exists.
   // Return to service must re-run the check that FAILED — clearing a failed
   // pre-use with an annual proves nothing about why it came out of service.
   // The failing inspection records its own kind, so read it from there rather
@@ -1386,7 +1385,8 @@ export default async function PpeDetailPage({
                   canRecordInspection &&
                   isOutOfService &&
                   canReturnToService &&
-                  returnToServiceKind ? (
+                  returnToServiceKind &&
+                  (returnToServiceKind !== 'annual' || canManage) ? (
                     <Link
                       href={
                         `${basePath}?tab=inspections&drawer=record-inspection&kind=${returnToServiceKind}` as any
@@ -1758,7 +1758,7 @@ export default async function PpeDetailPage({
                       />
                       <GeneratedValue
                         value={
-                          canRecordInspection && hasAnnual ? (
+                          canRecordInspection && canManage && hasAnnual ? (
                             <Link
                               href={
                                 `${basePath}?tab=inspections&drawer=record-inspection&kind=annual` as any
@@ -1796,7 +1796,7 @@ export default async function PpeDetailPage({
                           icon={<ClipboardCheck size={24} />}
                           title={tGenerated('m_128fa3f1eca160')}
                           action={
-                            canRecordInspection && hasInspections ? (
+                            canRecordInspection && (hasPreUse || (canManage && hasAnnual)) ? (
                               <Link
                                 href={
                                   `${basePath}?tab=inspections&drawer=record-inspection&kind=${hasPreUse ? 'pre_use' : 'annual'}` as any
@@ -2424,7 +2424,11 @@ export default async function PpeDetailPage({
        * active tab.
        */}
       <PpeInspectionForm
-        open={canRecordInspection && drawerKey === 'record-inspection'}
+        open={
+          canRecordInspection &&
+          (inspectionKind !== 'annual' || canManage) &&
+          drawerKey === 'record-inspection'
+        }
         closeHref={closeHref}
         title={tGeneratedValue(
           inspectionKind === 'annual'

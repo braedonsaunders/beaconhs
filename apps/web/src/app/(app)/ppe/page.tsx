@@ -335,9 +335,13 @@ export default async function PpePage({
         lastInspectionOn:
           inspection.kind === 'annual' ? item.lastAnnualInspectionOn : item.lastInspectionOn,
         inspectionKind: inspection.kind,
+        canRecordPreUse:
+          can(ctx, 'ppe.inspect') &&
+          type.isInspectable &&
+          Number(preUseCriteriaCount) > 0 &&
+          !['out_of_service', 'discarded', 'expired'].includes(item.status),
         inspectionState: inspection.state,
         inspectionDueOn: inspection.dueOn,
-        inspectionActionable: inspection.actionable,
         statusChangedOn: item.statusChangedAt
           ? new Date(item.statusChangedAt).toISOString().slice(0, 10)
           : null,

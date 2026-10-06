@@ -25,13 +25,19 @@ export type PpeTableRow = {
   assignedOn: string | null
   lastInspectionOn: string | null
   inspectionKind: PpeInspectionKind | null
+  canRecordPreUse: boolean
   inspectionState: PpeInspectionState
   inspectionDueOn: string | null
-  inspectionActionable: boolean
   statusChangedOn: string | null
 }
 
-function InspectionBadge({ state }: { state: PpeInspectionState }) {
+function InspectionBadge({
+  state,
+  kind,
+}: {
+  state: PpeInspectionState
+  kind: PpeInspectionKind | null
+}) {
   const variant =
     state === 'overdue'
       ? 'destructive'
@@ -40,12 +46,21 @@ function InspectionBadge({ state }: { state: PpeInspectionState }) {
         : state === 'current'
           ? 'success'
           : 'secondary'
-  return <Badge variant={variant}>{ppeInspectionStateLabel(state)}</Badge>
+  return (
+    <Badge variant={variant}>
+      {kind === 'annual' && (
+        <>
+          <GeneratedValue value="Annual" /> ·{' '}
+        </>
+      )}
+      <GeneratedValue value={ppeInspectionStateLabel(state)} />
+    </Badge>
+  )
 }
 
 function inspectionHref(row: PpeTableRow): string {
-  if (!row.inspectionActionable || !row.inspectionKind) return `/ppe/${row.id}`
-  return `/ppe/${row.id}?tab=${row.inspectionKind === 'annual' ? 'annual' : 'inspections'}&drawer=record-inspection&kind=${row.inspectionKind}`
+  if (!row.canRecordPreUse) return `/ppe/${row.id}`
+  return `/ppe/${row.id}?tab=inspections&drawer=record-inspection&kind=pre_use`
 }
 
 export function PpeRecordsTable({
@@ -80,7 +95,7 @@ export function PpeRecordsTable({
               }
               person={r.holderName}
               reference={r.serialNumber ?? undefined}
-              status={<InspectionBadge state={r.inspectionState} />}
+              status={<InspectionBadge state={r.inspectionState} kind={r.inspectionKind} />}
               title={tGeneratedValue(r.typeName)}
               meta={
                 [
@@ -165,10 +180,10 @@ export function PpeRecordsTable({
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <InspectionBadge state={r.inspectionState} />
+                        <InspectionBadge state={r.inspectionState} kind={r.inspectionKind} />
                         <GeneratedValue
                           value={
-                            r.inspectionActionable && r.inspectionKind ? (
+                            r.canRecordPreUse ? (
                               <Link
                                 href={inspectionHref(r) as any}
                                 className="text-xs font-semibold text-teal-700 hover:underline dark:text-teal-300"
