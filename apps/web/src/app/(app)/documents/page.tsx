@@ -1,3 +1,4 @@
+import { recordStatusWhere, activeDocumentStatusCount } from '@/lib/active-record-query'
 import { recordSearchWhere } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -29,6 +30,7 @@ export async function generateMetadata() {
 const SORTS = ['title', 'category', 'status', 'next_review_on'] as const
 
 const STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
   { value: 'draft', label: 'Draft' },
   { value: 'published', label: 'Published' },
   { value: 'archived', label: 'Archived' },
@@ -74,7 +76,8 @@ export default async function DocumentsPage({
       if (!canManage) filters.push(eq(documents.status, 'published'))
       const search = recordSearchWhere('documents', params.q)
       if (search) filters.push(search)
-      if (canManage && statusFilter) filters.push(eq(documents.status, statusFilter))
+      const statusWhere = canManage ? recordStatusWhere('documents', statusFilter) : undefined
+      if (statusWhere) filters.push(statusWhere)
       if (categoryFilter) filters.push(eq(documents.categoryId, categoryFilter))
       if (typeFilter) filters.push(eq(documents.typeId, typeFilter))
       const whereClause = and(...filters)
@@ -208,7 +211,13 @@ export default async function DocumentsPage({
                     currentParams={sp}
                     paramKey="status"
                     label={tGenerated('m_0b9da892d6faf0')}
-                    options={STATUS_OPTIONS.map((o) => ({ ...o, count: statusCounts[o.value] }))}
+                    options={STATUS_OPTIONS.map((o) => ({
+                      ...o,
+                      count:
+                        o.value === 'active'
+                          ? activeDocumentStatusCount(statusCounts)
+                          : statusCounts[o.value],
+                    }))}
                   />
                 ) : null
               }

@@ -1,3 +1,4 @@
+import { recordStatusWhere } from '@/lib/active-record-query'
 import { recordSearchWhere } from '@/lib/record-search'
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, isNull, type SQL } from 'drizzle-orm'
@@ -19,7 +20,7 @@ export const dynamic = 'force-dynamic'
 
 const SORTS = ['title', 'category', 'status', 'next_review_on'] as const
 
-const STATUS_VALUES = ['draft', 'published', 'archived', 'under_review'] as const
+const STATUS_VALUES = ['active', 'draft', 'published', 'archived', 'under_review'] as const
 type DocumentStatus = (typeof STATUS_VALUES)[number]
 
 export async function GET(req: NextRequest) {
@@ -52,7 +53,8 @@ export async function GET(req: NextRequest) {
     const filters: SQL<unknown>[] = [isNull(documents.deletedAt)]
     const search = recordSearchWhere('documents', params.q)
     if (search) filters.push(search)
-    if (statusFilter) filters.push(eq(documents.status, statusFilter))
+    const statusWhere = recordStatusWhere('documents', statusFilter)
+    if (statusWhere) filters.push(statusWhere)
     if (categoryFilter) filters.push(eq(documents.categoryId, categoryFilter))
     if (typeFilter) filters.push(eq(documents.typeId, typeFilter))
     const whereClause = and(...filters)

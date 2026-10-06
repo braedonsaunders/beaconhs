@@ -1,3 +1,4 @@
+import { searchableRecordWhere } from '@/lib/active-record-query'
 import { recordSearchWhere } from '@/lib/record-search'
 // Global search across the major entity types reachable from the top-bar
 // search box. Each entity contributes its own SQL with a hard LIMIT 5; we then
@@ -9,7 +10,7 @@ import { recordSearchWhere } from '@/lib/record-search'
 // Nothing here mutates state — purely a GET endpoint.
 
 import { NextResponse } from 'next/server'
-import { and, count, desc, eq, gte, isNull, sql, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, sql, type SQL } from 'drizzle-orm'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { primaryPersonTitleName } from '@beaconhs/db'
 import {
@@ -63,11 +64,6 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json<SearchResponse>({ q: rawQ, groups: [] })
   }
 
-  // "Last year" cutoff applied only to high-volume entities (incidents). The
-  // detail pages still allow searching deeper via the per-entity list.
-  const oneYearAgo = new Date()
-  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
-
   const data = await ctx.db(async (tx) => {
     // Per-user record visibility, mirroring each module's list page: read.all →
     // everything, read.site → the caller's sites, else → only their own records.
@@ -100,6 +96,35 @@ export async function GET(req: Request): Promise<NextResponse> {
       ? documentReadFilter(ctx)
       : sql`false`
 
+    // Reuse each predicate for results and totals so excluded records cannot
+    // inflate a group's count or leak through a different search branch.
+    const incidentWhere = and(
+      searchableRecordWhere('incidents'),
+      incidentVis,
+      recordSearchWhere('incidents', rawQ),
+    )
+    const caWhere = and(
+      searchableRecordWhere('corrective_actions'),
+      caVis,
+      recordSearchWhere('corrective_actions', rawQ),
+    )
+    const peopleWhere = and(searchableRecordWhere('people'), recordSearchWhere('people', rawQ))
+    const equipmentWhere = and(
+      searchableRecordWhere('equipment'),
+      equipmentVis,
+      recordSearchWhere('equipment', rawQ),
+    )
+    const documentWhere = and(
+      searchableRecordWhere('documents'),
+      documentsVis,
+      recordSearchWhere('documents', rawQ),
+    )
+    const hazidWhere = and(
+      searchableRecordWhere('hazid_assessments'),
+      hazidVis,
+      recordSearchWhere('hazid_assessments', rawQ),
+    )
+
     const [
       incidentRows,
       incidentTotal,
@@ -114,15 +139,8 @@ export async function GET(req: Request): Promise<NextResponse> {
       hazidRows,
       hazidTotal,
     ] = await Promise.all([
-      // ---- incidents (reference / title / description, last 1 year) ------
+      // ---- incidents (reference / title / description, all history) ------
       (() => {
-        const where: SQL<unknown>[] = [
-          gte(incidents.occurredAt, oneYearAgo),
-          isNull(incidents.deletedAt),
-        ]
-        if (incidentVis) where.push(incidentVis)
-        const match = recordSearchWhere('incidents', rawQ)
-        if (match) where.push(match)
         return tx
           .select({
             id: incidents.id,
@@ -131,30 +149,16 @@ export async function GET(req: Request): Promise<NextResponse> {
             occurredAt: incidents.occurredAt,
           })
           .from(incidents)
-          .where(and(...where))
+          .where(incidentWhere)
           .orderBy(desc(incidents.occurredAt))
           .limit(PER_GROUP_LIMIT)
       })(),
       (() => {
-        const where: SQL<unknown>[] = [
-          gte(incidents.occurredAt, oneYearAgo),
-          isNull(incidents.deletedAt),
-        ]
-        if (incidentVis) where.push(incidentVis)
-        const match = recordSearchWhere('incidents', rawQ)
-        if (match) where.push(match)
-        return tx
-          .select({ c: count() })
-          .from(incidents)
-          .where(and(...where))
+        return tx.select({ c: count() }).from(incidents).where(incidentWhere)
       })(),
 
       // ---- corrective actions (including descriptions and resolution notes) ------------------------
       (() => {
-        const where: SQL<unknown>[] = [isNull(correctiveActions.deletedAt)]
-        if (caVis) where.push(caVis)
-        const match = recordSearchWhere('corrective_actions', rawQ)
-        if (match) where.push(match)
         return tx
           .select({
             id: correctiveActions.id,
@@ -163,26 +167,16 @@ export async function GET(req: Request): Promise<NextResponse> {
             status: correctiveActions.status,
           })
           .from(correctiveActions)
-          .where(and(...where))
+          .where(caWhere)
           .orderBy(desc(correctiveActions.createdAt))
           .limit(PER_GROUP_LIMIT)
       })(),
       (() => {
-        const where: SQL<unknown>[] = [isNull(correctiveActions.deletedAt)]
-        if (caVis) where.push(caVis)
-        const match = recordSearchWhere('corrective_actions', rawQ)
-        if (match) where.push(match)
-        return tx
-          .select({ c: count() })
-          .from(correctiveActions)
-          .where(and(...where))
+        return tx.select({ c: count() }).from(correctiveActions).where(caWhere)
       })(),
 
       // ---- people (names / employee number / email / primary title) -----------
       (() => {
-        const where: SQL<unknown>[] = [isNull(people.deletedAt)]
-        const match = recordSearchWhere('people', rawQ)
-        if (match) where.push(match)
         return tx
           .select({
             id: people.id,
@@ -192,26 +186,16 @@ export async function GET(req: Request): Promise<NextResponse> {
             jobTitle: primaryPersonTitleName(people.id, people.tenantId),
           })
           .from(people)
-          .where(and(...where))
+          .where(peopleWhere)
           .orderBy(people.lastName, people.firstName)
           .limit(PER_GROUP_LIMIT)
       })(),
       (() => {
-        const where: SQL<unknown>[] = [isNull(people.deletedAt)]
-        const match = recordSearchWhere('people', rawQ)
-        if (match) where.push(match)
-        return tx
-          .select({ c: count() })
-          .from(people)
-          .where(and(...where))
+        return tx.select({ c: count() }).from(people).where(peopleWhere)
       })(),
 
       // ---- equipment_items (identifiers / descriptions / related classifications) -------------
       (() => {
-        const where: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
-        if (equipmentVis) where.push(equipmentVis)
-        const match = recordSearchWhere('equipment', rawQ)
-        if (match) where.push(match)
         return tx
           .select({
             id: equipmentItems.id,
@@ -222,27 +206,16 @@ export async function GET(req: Request): Promise<NextResponse> {
             status: equipmentItems.status,
           })
           .from(equipmentItems)
-          .where(and(...where))
+          .where(equipmentWhere)
           .orderBy(equipmentItems.assetTag)
           .limit(PER_GROUP_LIMIT)
       })(),
       (() => {
-        const where: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
-        if (equipmentVis) where.push(equipmentVis)
-        const match = recordSearchWhere('equipment', rawQ)
-        if (match) where.push(match)
-        return tx
-          .select({ c: count() })
-          .from(equipmentItems)
-          .where(and(...where))
+        return tx.select({ c: count() }).from(equipmentItems).where(equipmentWhere)
       })(),
 
       // ---- documents (title / key / description) -------------------------------------
       (() => {
-        const where: SQL<unknown>[] = [isNull(documents.deletedAt)]
-        if (documentsVis) where.push(documentsVis)
-        const match = recordSearchWhere('documents', rawQ)
-        if (match) where.push(match)
         return tx
           .select({
             id: documents.id,
@@ -252,27 +225,16 @@ export async function GET(req: Request): Promise<NextResponse> {
           })
           .from(documents)
           .leftJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
-          .where(and(...where))
+          .where(documentWhere)
           .orderBy(documents.title)
           .limit(PER_GROUP_LIMIT)
       })(),
       (() => {
-        const where: SQL<unknown>[] = [isNull(documents.deletedAt)]
-        if (documentsVis) where.push(documentsVis)
-        const match = recordSearchWhere('documents', rawQ)
-        if (match) where.push(match)
-        return tx
-          .select({ c: count() })
-          .from(documents)
-          .where(and(...where))
+        return tx.select({ c: count() }).from(documents).where(documentWhere)
       })(),
 
       // ---- hazid_assessments (reference / location / job scope) -------------------------------
       (() => {
-        const where: SQL<unknown>[] = [isNull(hazidAssessments.deletedAt)]
-        if (hazidVis) where.push(hazidVis)
-        const match = recordSearchWhere('hazid_assessments', rawQ)
-        if (match) where.push(match)
         return tx
           .select({
             id: hazidAssessments.id,
@@ -281,19 +243,12 @@ export async function GET(req: Request): Promise<NextResponse> {
             jobScope: hazidAssessments.jobScope,
           })
           .from(hazidAssessments)
-          .where(and(...where))
+          .where(hazidWhere)
           .orderBy(desc(hazidAssessments.occurredAt))
           .limit(PER_GROUP_LIMIT)
       })(),
       (() => {
-        const where: SQL<unknown>[] = [isNull(hazidAssessments.deletedAt)]
-        if (hazidVis) where.push(hazidVis)
-        const match = recordSearchWhere('hazid_assessments', rawQ)
-        if (match) where.push(match)
-        return tx
-          .select({ c: count() })
-          .from(hazidAssessments)
-          .where(and(...where))
+        return tx.select({ c: count() }).from(hazidAssessments).where(hazidWhere)
       })(),
     ])
 

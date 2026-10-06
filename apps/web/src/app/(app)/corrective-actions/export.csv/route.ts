@@ -1,7 +1,8 @@
+import { recordStatusWhere } from '@/lib/active-record-query'
 import { recordSearchWhere } from '@/lib/record-search'
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, isNull, type SQL } from 'drizzle-orm'
-import { correctiveActions, orgUnits } from '@beaconhs/db/schema'
+import { correctiveActionSeverity, correctiveActions, orgUnits } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -43,7 +44,9 @@ export async function GET(req: NextRequest) {
   // Mirror the list page: default to open, `status=all` shows every status.
   const statusRaw = pickString(sp.status) ?? 'open'
   const statusFilter = statusRaw === 'all' ? undefined : statusRaw
-  const sevFilter = pickString(sp.severity)
+  const sevFilter = correctiveActionSeverity.enumValues.find(
+    (value) => value === pickString(sp.severity),
+  )
   const ctx = await requireExportContext()
 
   // Require a read tier and scope rows to it (mirrors the /corrective-actions
@@ -62,8 +65,9 @@ export async function GET(req: NextRequest) {
     if (vis) filters.push(vis)
     const search = recordSearchWhere('corrective_actions', params.q)
     if (search) filters.push(search)
-    if (statusFilter) filters.push(eq(correctiveActions.status, statusFilter as any))
-    if (sevFilter) filters.push(eq(correctiveActions.severity, sevFilter as any))
+    const statusWhere = recordStatusWhere('corrective_actions', statusFilter)
+    if (statusWhere) filters.push(statusWhere)
+    if (sevFilter) filters.push(eq(correctiveActions.severity, sevFilter))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const dirFn = params.dir === 'asc' ? asc : desc

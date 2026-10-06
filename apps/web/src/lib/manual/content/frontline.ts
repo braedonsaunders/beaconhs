@@ -368,7 +368,7 @@ The quick report captures the essentials. Photos, witness statements, and the fu
 - Fixes get assigned as [corrective actions](/help/corrective-actions) with owners and due dates.
 - When the investigation and fixes are done, the incident is closed.
 
-You can open your own reports any time from the [Incidents](/incidents) list to see their status.
+You can open your own reports any time from the [Incidents](/incidents) list to see their status. The top-bar search finds incidents in every status, including closed incidents, with no age limit. Your access permissions still apply.
 
 ## Recording the investigation
 
@@ -441,7 +441,7 @@ Finding a problem only matters if someone fixes it. Corrective actions track eac
 
 ## Where to find it
 
-Open **Corrective Actions** in the left menu, or go to [Corrective actions](/corrective-actions). The list opens on open actions. Each row shows the status and the due date — overdue ones are flagged. Use the search box and the status filter to narrow the list; tap **All statuses** to see closed ones too. Search matches reference, title, description, root cause, action taken, and verification notes, including fields not displayed in the list. The top-bar search and CSV export use the same fields.
+Open **Corrective Actions** in the left menu, or go to [Corrective actions](/corrective-actions). The list opens on open actions. Each row shows the status and the due date — overdue ones are flagged. Use the search box and the status filter to narrow the list; tap **All statuses** to see closed ones too. Search matches reference, title, description, root cause, action taken, and verification notes, including fields not displayed in the list. The top-bar search and CSV export use the same fields. Top-bar search includes actions in every status, including closed and cancelled actions. Its **View all** link opens **All statuses** so those matches stay visible.
 
 ## Completing one assigned to you
 

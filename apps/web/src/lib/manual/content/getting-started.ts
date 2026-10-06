@@ -85,7 +85,7 @@ The **Dashboard** shows your open work at a glance. Tap any card to jump to it.
 
 ## Finding records
 
-Use the search button in the top bar to find incidents, corrective actions, people, equipment, documents, and hazard assessments. Select a result to open it, or **View all** to open that module's filtered list. Global incident search covers the last year; use the Incidents list for older records.
+Use the search button in the top bar to find incidents, corrective actions, people, equipment, documents, and hazard assessments. Select a result to open it, or **View all** to open that module's filtered list. Incidents and corrective actions are searchable in every status, including closed and cancelled records, with no age limit. Global search shows active people, in-service equipment, and documents that are not archived. Your document permissions still apply. **View all** keeps these filters. Use a module's status filter when you need inactive people, retired equipment, or archived documents. Use the **Clear search** button to erase your search.
 
 Search covers useful record information even when it is not shown in the table. For example, find equipment by licence plate or VIN, people by email or full name, documents by document key or description, and hazard assessments by job scope or specific location. Module lists and their CSV exports use the same search fields as global search. Your permissions and the list's status and other filters still apply.
 

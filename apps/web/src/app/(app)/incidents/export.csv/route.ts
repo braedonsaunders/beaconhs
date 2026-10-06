@@ -1,7 +1,8 @@
+import { recordStatusWhere } from '@/lib/active-record-query'
 import { recordSearchWhere } from '@/lib/record-search'
 import type { NextRequest } from 'next/server'
 import { and, asc, desc, eq, isNull, type SQL } from 'drizzle-orm'
-import { incidents, orgUnits } from '@beaconhs/db/schema'
+import { incidentType, incidents, orgUnits } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const typeFilter = pickString(sp.type)
+  const typeFilter = incidentType.enumValues.find((value) => value === pickString(sp.type))
   const statusFilter = pickString(sp.status)
   const ctx = await requireExportContext()
 
@@ -56,8 +57,9 @@ export async function GET(req: NextRequest) {
     if (vis) filters.push(vis)
     const search = recordSearchWhere('incidents', params.q)
     if (search) filters.push(search)
-    if (typeFilter) filters.push(eq(incidents.type, typeFilter as any))
-    if (statusFilter) filters.push(eq(incidents.status, statusFilter as any))
+    if (typeFilter) filters.push(eq(incidents.type, typeFilter))
+    const statusWhere = recordStatusWhere('incidents', statusFilter)
+    if (statusWhere) filters.push(statusWhere)
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const orderBy =

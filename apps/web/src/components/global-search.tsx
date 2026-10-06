@@ -38,22 +38,22 @@ const ENTITY_META: Record<
   corrective_actions: {
     label: 'Corrective Actions',
     icon: ListChecks,
-    viewAllHref: (q) => `/corrective-actions?q=${encodeURIComponent(q)}`,
+    viewAllHref: (q) => `/corrective-actions?q=${encodeURIComponent(q)}&status=all`,
   },
   people: {
     label: 'People',
     icon: Users,
-    viewAllHref: (q) => `/people?q=${encodeURIComponent(q)}`,
+    viewAllHref: (q) => `/people?q=${encodeURIComponent(q)}&status=active`,
   },
   equipment: {
     label: 'Equipment',
     icon: Wrench,
-    viewAllHref: (q) => `/equipment?q=${encodeURIComponent(q)}`,
+    viewAllHref: (q) => `/equipment?q=${encodeURIComponent(q)}&status=in_service`,
   },
   documents: {
     label: 'Documents',
     icon: BookOpen,
-    viewAllHref: (q) => `/documents?q=${encodeURIComponent(q)}`,
+    viewAllHref: (q) => `/documents?q=${encodeURIComponent(q)}&status=active`,
   },
   hazid_assessments: {
     label: 'Hazard Assessments',
@@ -259,7 +259,7 @@ export function GlobalSearch() {
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          className="pr-9 pl-9"
+          className="pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
         />
         <GeneratedValue
           value={

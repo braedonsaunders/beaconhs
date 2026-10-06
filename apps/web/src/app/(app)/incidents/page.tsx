@@ -1,3 +1,4 @@
+import { recordStatusWhere } from '@/lib/active-record-query'
 import { recordSearchWhere } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -6,7 +7,7 @@ import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
 import { and, asc, count, desc, eq, inArray, isNull, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
-import { incidentPeople, incidents, orgUnits, people } from '@beaconhs/db/schema'
+import { incidentType, incidentPeople, incidents, orgUnits, people } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { IncidentsSubNav } from './_sub-nav'
 import { DownloadLink } from '@/components/download-link'
@@ -59,7 +60,7 @@ export default async function IncidentsPage({
     perPage: 25,
     allowedSorts: SORTS,
   })
-  const typeFilter = pickString(sp.type)
+  const typeFilter = incidentType.enumValues.find((value) => value === pickString(sp.type))
   const statusFilter = pickString(sp.status)
 
   const ctx = await requireRequestContext()
@@ -84,8 +85,9 @@ export default async function IncidentsPage({
     if (vis) filters.push(vis)
     const search = recordSearchWhere('incidents', params.q)
     if (search) filters.push(search)
-    if (typeFilter) filters.push(eq(incidents.type, typeFilter as any))
-    if (statusFilter) filters.push(eq(incidents.status, statusFilter as any))
+    if (typeFilter) filters.push(eq(incidents.type, typeFilter))
+    const statusWhere = recordStatusWhere('incidents', statusFilter)
+    if (statusWhere) filters.push(statusWhere)
     const whereClause = and(...filters)
 
     const dirFn = params.dir === 'asc' ? asc : desc
