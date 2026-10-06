@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { createHmac, hkdfSync } from 'node:crypto'
 import { getTableConfig } from 'drizzle-orm/pg-core'
 import { tenantUsers, users } from '@beaconhs/db/schema'
 import {
@@ -32,7 +33,7 @@ describe('invite grants', () => {
     else process.env.BETTER_AUTH_SECRET = originalSecret
   })
 
-  it('binds a short-lived grant to one membership, tenant, user, and invitation', () => {
+  it('binds a seven-day grant to one membership, tenant, user, and invitation', () => {
     const grant = createInviteGrant(input, NOW)
     const verified = verifyInviteGrant(grant, NOW + 1)
     expect(verified.ok).toBe(true)
@@ -45,6 +46,30 @@ describe('invite grants', () => {
       issuedAt: NOW,
       expiresAt: NOW + INVITE_LINK_TTL_SECONDS * 1000,
     })
+  })
+
+  it('extends authentic already emailed 15-minute grants to seven days from issuance', () => {
+    const payload = JSON.parse(
+      Buffer.from(createInviteGrant(input, NOW).split('.')[0]!, 'base64url').toString('utf8'),
+    ) as InviteGrantPayload
+    payload.expiresAt = NOW + 15 * 60 * 1000
+    const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
+    const key = Buffer.from(
+      hkdfSync(
+        'sha256',
+        Buffer.from(process.env.BETTER_AUTH_SECRET!),
+        Buffer.alloc(0),
+        Buffer.from('beaconhs.invite.v1'),
+        32,
+      ),
+    )
+    const grant = `${encoded}.${createHmac('sha256', key).update(encoded).digest('base64url')}`
+    const expiresAt = NOW + 7 * 24 * 60 * 60 * 1000
+    expect(verifyInviteGrant(grant, expiresAt - 1)).toEqual({
+      ok: true,
+      payload: { ...payload, expiresAt },
+    })
+    expect(verifyInviteGrant(grant, expiresAt)).toEqual({ ok: false, reason: 'expired' })
   })
 
   it('rejects tampering, expiry, and future-issued grants', () => {

@@ -175,7 +175,10 @@ export default async function AdminUserDetailPage({
         <GeneratedValue
           value={
             notice ? (
-              <div className="rounded-md border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-300">
+              <div
+                role="status"
+                className="rounded-md border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-300"
+              >
                 <GeneratedValue value={notice} />
               </div>
             ) : null

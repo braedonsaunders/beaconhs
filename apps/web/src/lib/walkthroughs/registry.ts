@@ -304,7 +304,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
         path: '/admin/users',
         target: 'a[href="/admin/users/invite"]',
         title: 'Send an invitation',
-        body: 'Tap Invite user, enter the work email, and choose an initial role. The member gets a one-time link that expires after 15 minutes.',
+        body: 'Tap Invite user, enter the work email, and choose an initial role. The member gets a one-time link that expires after 7 days.',
       },
       {
         title: 'Pending invitations',

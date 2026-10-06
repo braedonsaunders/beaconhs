@@ -1,6 +1,6 @@
 import { and, eq, isNotNull, isNull } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
-import { roleAssignments, tenantUsers, userPermissionOverrides } from '@beaconhs/db/schema'
+import { people, roleAssignments, tenantUsers, userPermissionOverrides } from '@beaconhs/db/schema'
 
 /** Caller holds the membership row lock; preserve the identity referenced by safety history. */
 export async function removeTenantMembership(tx: Database, tenantId: string, membershipId: string) {
@@ -14,10 +14,19 @@ export async function removeTenantMembership(tx: Database, tenantId: string, mem
         isNull(tenantUsers.removedAt),
       ),
     )
-    .returning({ id: tenantUsers.id })
+    .returning({ id: tenantUsers.id, userId: tenantUsers.userId })
   if (!removed) return false
+  await releasePersonLink(tx, tenantId, removed.userId)
   await clearMembershipGrants(tx, tenantId, membershipId)
   return true
+}
+
+async function releasePersonLink(tx: Database, tenantId: string, userId: string) {
+  await tx
+    .update(people)
+    .set({ userId: null, updatedAt: new Date() })
+    .where(and(eq(people.tenantId, tenantId), eq(people.userId, userId)))
+    .returning({ id: people.id })
 }
 
 async function clearMembershipGrants(tx: Database, tenantId: string, membershipId: string) {
@@ -55,6 +64,7 @@ export async function restoreRemovedMembership(
     .limit(1)
     .for('update')
   if (!existing?.removedAt) return null
+  await releasePersonLink(tx, input.tenantId, input.userId)
   await clearMembershipGrants(tx, input.tenantId, existing.id)
   const invitedAt = new Date(
     Math.max(input.invitedAt.getTime(), (existing.invitedAt?.getTime() ?? 0) + 1),

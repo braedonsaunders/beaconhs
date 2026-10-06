@@ -6,7 +6,7 @@ import { Pool } from 'pg'
 import {
   acceptInviteAfterMagicLink,
   inviteGrantFromCallbackURL,
-  INVITE_LINK_TTL_SECONDS,
+  verifyInviteGrant,
 } from './invites'
 import { verifyLegacyOrCurrentPassword } from './legacy-password'
 
@@ -16,6 +16,23 @@ export type AuthEmailContext = {
 }
 
 const authEmailContext = new AsyncLocalStorage<AuthEmailContext>()
+const SIGN_IN_LINK_TTL_SECONDS = 15 * 60
+
+function invitationExpiry(callbackURL: unknown, baseURL: string): Date | null {
+  const context = authEmailContext.getStore()
+  if (!context?.userId) return null
+  const grant = inviteGrantFromCallbackURL(callbackURL, baseURL)
+  if (!grant) return null
+  const verified = verifyInviteGrant(grant)
+  if (
+    !verified.ok ||
+    verified.payload.tenantId !== context.tenantId ||
+    verified.payload.userId !== context.userId
+  ) {
+    return null
+  }
+  return new Date(verified.payload.expiresAt)
+}
 
 /**
  * Attribute an auth email to the tenant action that requested it.
@@ -95,13 +112,26 @@ function createAuth() {
       updateAge: 60 * 60 * 24,
       cookieCache: { enabled: true, maxAge: 60 * 5 },
     },
+    databaseHooks: {
+      verification: {
+        create: {
+          before: async (verification, ctx) => {
+            if (ctx?.path !== '/sign-in/magic-link') return
+            const expiresAt = invitationExpiry(ctx.body?.callbackURL, baseURL)
+            if (expiresAt) return { data: { ...verification, expiresAt } }
+          },
+        },
+      },
+    },
     plugins: [
       magicLink({
         disableSignUp: true,
-        expiresIn: INVITE_LINK_TTL_SECONDS,
+        expiresIn: SIGN_IN_LINK_TTL_SECONDS,
         storeToken: 'hashed',
         sendMagicLink: async ({ email, url, metadata }) => {
-          const invite = metadata?.flow === 'invite'
+          const invite = Boolean(
+            invitationExpiry(new URL(url).searchParams.get('callbackURL'), baseURL),
+          )
           const tenantName =
             typeof metadata?.tenantName === 'string' && metadata.tenantName.trim()
               ? metadata.tenantName.trim()
@@ -110,10 +140,10 @@ function createAuth() {
             ? `You're invited to ${tenantName} in BeaconHS`
             : 'Sign in to BeaconHS'
           const text = invite
-            ? `You've been invited to join ${tenantName} in BeaconHS.\n\nAccept the invitation and sign in:\n\n${url}\n\nThis one-time link expires in 15 minutes. If you weren't expecting this invitation, ignore this email.`
+            ? `You've been invited to join ${tenantName} in BeaconHS.\n\nAccept the invitation and sign in:\n\n${url}\n\nThis one-time link expires in 7 days. If you weren't expecting this invitation, ignore this email.`
             : `Click this link to sign in to BeaconHS:\n\n${url}\n\nThis one-time link expires in 15 minutes. If you didn't request it, ignore this email.`
           const html = invite
-            ? `<p>You've been invited to join <strong>${escapeHtml(tenantName)}</strong> in BeaconHS.</p><p><a href="${escapeHtml(url)}">Accept the invitation and sign in</a></p><p>This one-time link expires in 15 minutes.</p>`
+            ? `<p>You've been invited to join <strong>${escapeHtml(tenantName)}</strong> in BeaconHS.</p><p><a href="${escapeHtml(url)}">Accept the invitation and sign in</a></p><p>This one-time link expires in 7 days.</p>`
             : `<p>Click <a href="${escapeHtml(url)}">here</a> to sign in to BeaconHS.</p><p>This one-time link expires in 15 minutes.</p>`
           await sendAuthEmail({
             to: email,

@@ -13,7 +13,7 @@ export async function generateMetadata() {
 const COPY = {
   expired: {
     title: 'This invitation link has expired',
-    body: 'Invitation links are one-time links and expire after 15 minutes. Ask your administrator to resend the invitation.',
+    body: 'Invitation links are one-time links and expire after 7 days. Ask your administrator to resend the invitation.',
   },
   invalid: {
     title: 'This invitation is not valid',

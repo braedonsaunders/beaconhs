@@ -607,7 +607,7 @@ Reviewers can open [Form transcripts](/apps/transcripts) to find a person and se
 4. Pick an initial role and scope when needed.
 5. Click **Send invite**.
 
-The membership stays **invited** until the person opens **Accept the invitation and sign in** in their email. The one-time link expires after 15 minutes. Signing in another way does not activate it.
+The membership stays **invited** until the person opens **Accept the invitation and sign in** in their email. The one-time link expires after 7 days. Signing in another way does not activate it.
 
 ## Find a member or role
 
@@ -619,7 +619,7 @@ On **Roles**, search by role name or description and use **Type** to show built-
 
 1. Open the invited member from [Users](/admin/users).
 2. Click **Resend invite**.
-3. Tell the person to use the newest email within 15 minutes.
+3. Check the confirmation message that the invitation email was queued. Tell the person to use the newest email within 7 days.
 
 An invitation cannot reactivate a suspended member or a suspended workspace. Each workspace invitation activates only that workspace.
 
@@ -634,7 +634,7 @@ Open the member to manage only this workspace's settings:
 - **Suspend member** blocks this workspace without changing the person's other workspaces.
 - **Reactivate** restores a suspended membership.
 - **Reset password** sends an active member a one-time reset link. Administrators never see or choose the member's password.
-- **Remove from tenant** revokes workspace access and removes its role assignments and permission overrides. The person disappears from the member list. Saved safety records keep their original author and inspector history. Their global account and other workspace memberships remain available. To bring them back, invite them again and assign the roles they now need.
+- **Remove from tenant** revokes workspace access and removes its role assignments and permission overrides. Their linked employee record is released so you can link it to another account. The person disappears from the member list. Saved safety records keep their original author and inspector history. Their global account and other workspace memberships remain available. To bring them back, invite them again and assign the roles they now need.
 
 Pending invitations cannot be marked active by an administrator. The person must prove control of the invited email by using the one-time link.
 

@@ -318,6 +318,9 @@ export async function resendInvite(formData: FormData): Promise<void> {
     summary: `Resent invite to ${invite.row.account.email}`,
   })
   revalidatePath(detailPath(membershipId))
+  backToTab(membershipId, 'overview', {
+    notice: `Invitation email queued for ${invite.row.account.email}. The newest link expires in 7 days.`,
+  })
 }
 
 /** Send the selected active member Better Auth's one-time password-reset link. */
@@ -489,6 +492,8 @@ export async function removeMember(formData: FormData): Promise<void> {
   })
   if ('error' in result && result.error) backToDetail(membershipId, result.error)
   revalidatePath('/admin/users')
+  revalidatePath('/people')
+  revalidatePath('/people/[id]', 'page')
   redirect('/admin/users')
 }
 

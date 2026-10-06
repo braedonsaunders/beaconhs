@@ -9,8 +9,8 @@ const INVITE_HKDF_INFO = 'beaconhs.invite.v1'
 const DEV_SECRET = 'beaconhs-dev-invite-secret'
 const MAX_GRANT_LENGTH = 4096
 
-/** Keep this aligned with the Better Auth magic-link expiry. */
-export const INVITE_LINK_TTL_SECONDS = 15 * 60
+/** Invitations last seven days; ordinary sign-in links use their own shorter limit. */
+export const INVITE_LINK_TTL_SECONDS = 7 * 24 * 60 * 60
 
 type InviteGrantInput = {
   membershipId: string
@@ -100,7 +100,7 @@ function parsePayload(value: unknown): InviteGrantPayload | null {
 }
 
 /**
- * Mint a short-lived, membership-targeted grant for an invitation callback.
+ * Mint a seven-day, membership-targeted grant for an invitation callback.
  * Better Auth's own magic-link token remains the one-time credential; this
  * signed payload binds that verified callback to exactly one pending membership.
  */
@@ -147,10 +147,14 @@ export function verifyInviteGrant(raw: string, now = Date.now()): InviteGrantVer
     return { ok: false, reason: 'invalid' }
   }
   if (!payload) return { ok: false, reason: 'invalid' }
-  if (now < payload.issuedAt - 60_000 || now > payload.expiresAt) {
+  // Apply the invitation lifetime from issuance, including already emailed
+  // grants. Their signature and membership generation remain authoritative;
+  // the separate one-time credential must also be extended to repair a link.
+  const expiresAt = payload.issuedAt + INVITE_LINK_TTL_SECONDS * 1000
+  if (now < payload.issuedAt - 60_000 || now >= expiresAt) {
     return { ok: false, reason: 'expired' }
   }
-  return { ok: true, payload }
+  return { ok: true, payload: { ...payload, expiresAt } }
 }
 
 export function inviteCallbackPath(grant: string): string {

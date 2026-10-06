@@ -11,8 +11,22 @@ const mocks = vi.hoisted(() => {
         }) => Promise<void>
       }
       hooks?: { after?: (ctx: unknown) => Promise<unknown> }
+      databaseHooks?: {
+        verification?: {
+          create?: {
+            before?: (
+              data: { expiresAt: Date },
+              ctx: {
+                path: string
+                body?: { callbackURL?: string; metadata?: Record<string, unknown> }
+              },
+            ) => Promise<{ data: { expiresAt: Date } } | undefined>
+          }
+        }
+      }
     }
     magicLinkOptions?: {
+      expiresIn?: number
       sendMagicLink?: (args: {
         email: string
         url: string
@@ -26,6 +40,8 @@ const mocks = vi.hoisted(() => {
       return instance
     }),
     enqueueEmail: vi.fn(),
+    inviteGrantFromCallbackURL: vi.fn(),
+    verifyInviteGrant: vi.fn(),
     instance,
     magicLink: vi.fn((options) => {
       state.magicLinkOptions = options
@@ -52,8 +68,8 @@ vi.mock('pg', () => ({
 }))
 vi.mock('./invites', () => ({
   acceptInviteAfterMagicLink: vi.fn(),
-  inviteGrantFromCallbackURL: vi.fn(),
-  INVITE_LINK_TTL_SECONDS: 900,
+  inviteGrantFromCallbackURL: mocks.inviteGrantFromCallbackURL,
+  verifyInviteGrant: mocks.verifyInviteGrant,
 }))
 
 const originalEnv = { ...process.env }
@@ -64,6 +80,8 @@ beforeEach(() => {
   process.env = { ...originalEnv }
   mocks.enqueueEmail.mockResolvedValue({ id: 'job-1' })
   mocks.sendVia.mockResolvedValue({ id: 'smtp-1' })
+  mocks.inviteGrantFromCallbackURL.mockReturnValue(null)
+  mocks.verifyInviteGrant.mockReturnValue({ ok: false, reason: 'invalid' })
 })
 
 afterEach(() => {
@@ -98,6 +116,68 @@ describe('lazy auth runtime', () => {
     expect(mocks.magicLink).toHaveBeenCalledTimes(1)
     expect(mocks.nextCookies).toHaveBeenCalledTimes(1)
     expect(mocks.betterAuth).toHaveBeenCalledTimes(1)
+    expect(mocks.state.magicLinkOptions?.expiresIn).toBe(15 * 60)
+  })
+
+  it('extends only server-authorized invitation credentials and emails the seven-day lifetime', async () => {
+    process.env.DATABASE_URL = 'postgresql://app:secret@db.example.test/beaconhs'
+    process.env.BETTER_AUTH_SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    process.env.NODE_ENV = 'production'
+    const { getAuth, withAuthEmailContext } = await import('./server')
+    getAuth()
+    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000
+    mocks.inviteGrantFromCallbackURL.mockReturnValue('signed-grant')
+    mocks.verifyInviteGrant.mockReturnValue({
+      ok: true,
+      payload: { tenantId: 'tenant-1', userId: 'user-1', expiresAt },
+    })
+    const before = mocks.state.options?.databaseHooks?.verification?.create?.before
+    const data = { expiresAt: new Date(Date.now() + 900000) }
+    const request = {
+      path: '/sign-in/magic-link',
+      body: { callbackURL: '/invite/accept?grant=signed-grant' },
+    }
+    await expect(before?.(data, request)).resolves.toBeUndefined()
+    await withAuthEmailContext({ tenantId: 'wrong-tenant', userId: 'user-1' }, async () => {
+      await expect(before?.(data, request)).resolves.toBeUndefined()
+    })
+    await withAuthEmailContext({ tenantId: 'tenant-1', userId: 'user-1' }, async () => {
+      await expect(before?.(data, request)).resolves.toEqual({
+        data: { expiresAt: new Date(expiresAt) },
+      })
+      await expect(before?.(data, { path: '/request-password-reset' })).resolves.toBeUndefined()
+      await mocks.state.magicLinkOptions?.sendMagicLink?.({
+        email: 'operator@example.com',
+        url: 'http://localhost:3000/api/auth/magic-link/verify?token=secret&callbackURL=%2Finvite%2Faccept%3Fgrant%3Dsigned-grant',
+        metadata: { flow: 'invite', tenantName: 'Site team' },
+      })
+    })
+    expect(mocks.enqueueEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: "You're invited to Site team in BeaconHS",
+        text: expect.stringContaining('expires in 7 days'),
+        html: expect.stringContaining('expires in 7 days'),
+      }),
+    )
+  })
+
+  it('keeps public sign-in links short even when invitation metadata is spoofed', async () => {
+    process.env.DATABASE_URL = 'postgresql://app:secret@db.example.test/beaconhs'
+    process.env.BETTER_AUTH_SECRET = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    process.env.NODE_ENV = 'production'
+    const { getAuth } = await import('./server')
+    getAuth()
+    await mocks.state.magicLinkOptions?.sendMagicLink?.({
+      email: 'operator@example.com',
+      url: 'http://localhost:3000/api/auth/magic-link/verify?token=secret',
+      metadata: { flow: 'invite', tenantName: 'Spoofed team' },
+    })
+    expect(mocks.enqueueEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: 'Sign in to BeaconHS',
+        text: expect.stringContaining('expires in 15 minutes'),
+      }),
+    )
   })
 
   it('returns a valid no-op result from the global after hook', async () => {

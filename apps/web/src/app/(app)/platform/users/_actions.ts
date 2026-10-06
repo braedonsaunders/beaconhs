@@ -400,6 +400,8 @@ export async function removeMembership(formData: FormData): Promise<void> {
   if (!result.ok) backToUser(userId, { error: result.error })
   revalidatePath(userPath(userId))
   revalidatePath('/platform/users')
+  revalidatePath('/people')
+  revalidatePath('/people/[id]', 'page')
   backToUser(userId, { notice: result.notice })
 }
 

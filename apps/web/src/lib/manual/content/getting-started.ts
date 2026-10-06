@@ -55,7 +55,7 @@ BeaconHS does not have public sign-up. Your administrator creates your account a
 For your first visit:
 
 1. Open the invitation email.
-2. Tap **Accept the invitation and sign in** within 15 minutes. The link works once.
+2. Tap **Accept the invitation and sign in** within 7 days. The link works once.
 3. If the link expired, ask your administrator to open **Users** and tap **Resend invite**.
 
 After your invitation is accepted:
