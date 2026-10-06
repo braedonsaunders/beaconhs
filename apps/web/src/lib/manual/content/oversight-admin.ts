@@ -46,7 +46,7 @@ Open [People](/people) from the sidebar.
 ## Find a person
 
 1. Open [People](/people).
-2. Type a name, employee number, or job title in the **Search by name, employee #, or job title** box.
+2. Type a name, employee number, email, or job title in the **Search by name, employee #, or job title** box. Full names and formal names match too, even when a field is not displayed. The top-bar search and People CSV export use the same search fields.
 3. Use the **Status** filter to switch between **Active**, **Inactive**, **Terminated**, or **All**. The list shows active people by default.
 4. Click a person to open their page. Tabs like **Overview**, **Compliance**, **Transcript**, and **PPE** show everything about them in one place.
 

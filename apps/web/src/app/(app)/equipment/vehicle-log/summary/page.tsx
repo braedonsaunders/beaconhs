@@ -1,10 +1,11 @@
+import { recordSearchWhere } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { DownloadLink } from '@/components/download-link'
 import { redirect } from 'next/navigation'
-import { and, asc, count, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, eq, sql } from 'drizzle-orm'
 import {
   Button,
   EmptyState,
@@ -95,14 +96,7 @@ export default async function TruckLogSummaryPage({
   const { trucks, rows, monthlyTotals, total } = await ctx.db(async (tx) => {
     const driverWhere = vehicleDriverScopeWhere(ctx, sql`monthly.driver_person_id`) ?? sql`true`
     const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
-    const search: SQL<unknown> | undefined = params.q
-      ? or(
-          ilike(equipmentItems.assetTag, `%${params.q}%`),
-          ilike(equipmentItems.name, `%${params.q}%`),
-          ilike(equipmentCategories.name, `%${params.q}%`),
-          ilike(equipmentTypes.name, `%${params.q}%`),
-        )
-      : undefined
+    const search = recordSearchWhere('equipment', params.q)
     const where = and(vehicleWhere, search)!
     const [totalRow] = await tx
       .select({ c: count() })

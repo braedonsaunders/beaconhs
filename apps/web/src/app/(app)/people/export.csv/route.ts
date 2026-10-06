@@ -1,5 +1,6 @@
+import { recordSearchWhere } from '@/lib/record-search'
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, type SQL, sql } from 'drizzle-orm'
 import { primaryPersonTitleName } from '@beaconhs/db'
 import { departments, people, trades } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
@@ -42,24 +43,19 @@ export async function GET(req: NextRequest) {
     ? (rawStatus as StatusFilter)
     : 'active'
   const departmentFilter = pickString(sp.department) ?? null
+  const personTypeFilter = pickString(sp.personType)
   const ctx = await requireExportContext()
   assertCan(ctx, 'admin.users.manage')
 
   const rows = await ctx.db(async (tx) => {
     const primaryTitleName = primaryPersonTitleName(people.id, people.tenantId)
     const filters: SQL<unknown>[] = [isNull(people.deletedAt)]
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(
-        ilike(people.firstName, term),
-        ilike(people.lastName, term),
-        ilike(people.employeeNo, term),
-        ilike(primaryTitleName, term),
-      )
-      if (cond) filters.push(cond)
-    }
+    const search = recordSearchWhere('people', params.q)
+    if (search) filters.push(search)
     if (statusFilter !== 'all') filters.push(eq(people.status, statusFilter))
     if (departmentFilter) filters.push(eq(people.departmentId, departmentFilter))
+    if (personTypeFilter === 'employee' || personTypeFilter === 'contractor')
+      filters.push(sql`${people.metadata}->>'personType' = ${personTypeFilter}`)
     const whereClause = and(...filters)
 
     const orderBy =

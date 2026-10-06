@@ -166,7 +166,7 @@ describe('production-scale picker contract', () => {
       "lookup === 'training-assessment-people' ||",
     )
     expect(candidates).toContain('personMatch(input)')
-    expect(route).toContain('ilike(primaryPersonTitleName(people.id, people.tenantId), input.term)')
+    expect(route).toContain("recordSearchWhere('people', input.query)")
     expect(candidates).toContain('ilike(people.email, input.term)')
     expect(candidates).toContain('notExists(')
     expect(candidates).toContain('.limit(PICKER_RESULT_LIMIT + 1)')
@@ -193,9 +193,7 @@ describe('production-scale picker contract', () => {
     expect(sharedPersonPicker).toContain(
       'jobTitle: primaryPersonTitleName(people.id, people.tenantId)',
     )
-    expect(sharedPersonPicker).toContain(
-      'ilike(primaryPersonTitleName(people.id, people.tenantId), input.term)',
-    )
+    expect(sharedPersonPicker).toContain("recordSearchWhere('people', input.query)")
     expect(sharedPersonPicker).toContain('[row.employeeNo, row.jobTitle]')
     expect(route.match(/\.select\(PERSON_OPTION_SELECTION\)/g)).toHaveLength(10)
     expect(route.match(/personOptions\(rows\)/g)).toHaveLength(10)

@@ -1,5 +1,6 @@
+import { recordSearchWhere } from '@/lib/record-search'
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, type SQL } from 'drizzle-orm'
 import { documentCategories, documents } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
@@ -49,11 +50,8 @@ export async function GET(req: NextRequest) {
     // Mirror the /documents list page exactly: live rows only, plus the same
     // q/status/category/type filters the Export button forwards.
     const filters: SQL<unknown>[] = [isNull(documents.deletedAt)]
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(ilike(documents.title, term), ilike(documents.description, term))
-      if (cond) filters.push(cond)
-    }
+    const search = recordSearchWhere('documents', params.q)
+    if (search) filters.push(search)
     if (statusFilter) filters.push(eq(documents.status, statusFilter))
     if (categoryFilter) filters.push(eq(documents.categoryId, categoryFilter))
     if (typeFilter) filters.push(eq(documents.typeId, typeFilter))

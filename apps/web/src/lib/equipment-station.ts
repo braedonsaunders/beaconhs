@@ -1,3 +1,4 @@
+import { recordSearchWhere, recordSearchTerm } from './record-search'
 // Equipment Station — shared, context-free core for scan-driven check in/out.
 //
 // Both surfaces call into here so the rules live in exactly one place:
@@ -149,7 +150,7 @@ export async function searchStationCore(
 ): Promise<StationSearchResults> {
   const q = cleanCode(rawQuery)
   if (q.length < 1) return { equipment: [], people: [] }
-  const like = `%${q}%`
+  const like = recordSearchTerm(q)
 
   const equipmentRows = await tx
     .select({
@@ -164,12 +165,7 @@ export async function searchStationCore(
     .from(equipmentItems)
     .leftJoin(equipmentTypes, eq(equipmentTypes.id, equipmentItems.typeId))
     .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
-    .where(
-      and(
-        isNull(equipmentItems.deletedAt),
-        or(ilike(equipmentItems.assetTag, like), ilike(equipmentItems.name, like)),
-      ),
-    )
+    .where(and(isNull(equipmentItems.deletedAt), recordSearchWhere('equipment', q)))
     .orderBy(equipmentItems.assetTag)
     .limit(limit)
 

@@ -1,3 +1,4 @@
+import { recordSearchWhere } from '@/lib/record-search'
 // Global search across the major entity types reachable from the top-bar
 // search box. Each entity contributes its own SQL with a hard LIMIT 5; we then
 // join the counts so the UI can show "View all incidents matching X".
@@ -8,7 +9,7 @@
 // Nothing here mutates state — purely a GET endpoint.
 
 import { NextResponse } from 'next/server'
-import { and, count, desc, eq, gte, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, gte, isNull, sql, type SQL } from 'drizzle-orm'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { primaryPersonTitleName } from '@beaconhs/db'
 import {
@@ -50,12 +51,6 @@ export type SearchResponse = {
 const PER_GROUP_LIMIT = 5
 const MAX_QUERY_LEN = 100
 
-function escapeIlike(q: string): string {
-  // postgres ILIKE treats _ and % as wildcards; escape so the user's typed
-  // value matches as a substring.
-  return q.replace(/[%_\\]/g, (m) => `\\${m}`)
-}
-
 export async function GET(req: Request): Promise<NextResponse> {
   const ctx = await getRequestContext()
   if (!ctx) {
@@ -67,9 +62,6 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (rawQ.length < 2) {
     return NextResponse.json<SearchResponse>({ q: rawQ, groups: [] })
   }
-
-  const escaped = escapeIlike(rawQ)
-  const term = `%${escaped}%`
 
   // "Last year" cutoff applied only to high-volume entities (incidents). The
   // detail pages still allow searching deeper via the per-entity list.
@@ -129,11 +121,7 @@ export async function GET(req: Request): Promise<NextResponse> {
           isNull(incidents.deletedAt),
         ]
         if (incidentVis) where.push(incidentVis)
-        const match = or(
-          ilike(incidents.reference, term),
-          ilike(incidents.title, term),
-          ilike(incidents.description, term),
-        )
+        const match = recordSearchWhere('incidents', rawQ)
         if (match) where.push(match)
         return tx
           .select({
@@ -153,11 +141,7 @@ export async function GET(req: Request): Promise<NextResponse> {
           isNull(incidents.deletedAt),
         ]
         if (incidentVis) where.push(incidentVis)
-        const match = or(
-          ilike(incidents.reference, term),
-          ilike(incidents.title, term),
-          ilike(incidents.description, term),
-        )
+        const match = recordSearchWhere('incidents', rawQ)
         if (match) where.push(match)
         return tx
           .select({ c: count() })
@@ -165,14 +149,11 @@ export async function GET(req: Request): Promise<NextResponse> {
           .where(and(...where))
       })(),
 
-      // ---- corrective actions (reference + title) ------------------------
+      // ---- corrective actions (including descriptions and resolution notes) ------------------------
       (() => {
         const where: SQL<unknown>[] = [isNull(correctiveActions.deletedAt)]
         if (caVis) where.push(caVis)
-        const match = or(
-          ilike(correctiveActions.reference, term),
-          ilike(correctiveActions.title, term),
-        )
+        const match = recordSearchWhere('corrective_actions', rawQ)
         if (match) where.push(match)
         return tx
           .select({
@@ -189,10 +170,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       (() => {
         const where: SQL<unknown>[] = [isNull(correctiveActions.deletedAt)]
         if (caVis) where.push(caVis)
-        const match = or(
-          ilike(correctiveActions.reference, term),
-          ilike(correctiveActions.title, term),
-        )
+        const match = recordSearchWhere('corrective_actions', rawQ)
         if (match) where.push(match)
         return tx
           .select({ c: count() })
@@ -200,18 +178,10 @@ export async function GET(req: Request): Promise<NextResponse> {
           .where(and(...where))
       })(),
 
-      // ---- people (firstName / lastName / employeeNo / email) -----------
+      // ---- people (names / employee number / email / primary title) -----------
       (() => {
         const where: SQL<unknown>[] = [isNull(people.deletedAt)]
-        const match = or(
-          ilike(people.firstName, term),
-          ilike(people.lastName, term),
-          ilike(people.employeeNo, term),
-          ilike(people.email, term),
-          // Match "firstName lastName" so "john smith" finds the row even
-          // though neither column on its own contains the space.
-          ilike(sql<string>`(${people.firstName} || ' ' || ${people.lastName})`, term),
-        )
+        const match = recordSearchWhere('people', rawQ)
         if (match) where.push(match)
         return tx
           .select({
@@ -228,13 +198,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       })(),
       (() => {
         const where: SQL<unknown>[] = [isNull(people.deletedAt)]
-        const match = or(
-          ilike(people.firstName, term),
-          ilike(people.lastName, term),
-          ilike(people.employeeNo, term),
-          ilike(people.email, term),
-          ilike(sql<string>`(${people.firstName} || ' ' || ${people.lastName})`, term),
-        )
+        const match = recordSearchWhere('people', rawQ)
         if (match) where.push(match)
         return tx
           .select({ c: count() })
@@ -242,15 +206,11 @@ export async function GET(req: Request): Promise<NextResponse> {
           .where(and(...where))
       })(),
 
-      // ---- equipment_items (assetTag / serialNumber / name) -------------
+      // ---- equipment_items (identifiers / descriptions / related classifications) -------------
       (() => {
         const where: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
         if (equipmentVis) where.push(equipmentVis)
-        const match = or(
-          ilike(equipmentItems.assetTag, term),
-          ilike(equipmentItems.serialNumber, term),
-          ilike(equipmentItems.name, term),
-        )
+        const match = recordSearchWhere('equipment', rawQ)
         if (match) where.push(match)
         return tx
           .select({
@@ -258,6 +218,7 @@ export async function GET(req: Request): Promise<NextResponse> {
             assetTag: equipmentItems.assetTag,
             name: equipmentItems.name,
             serialNumber: equipmentItems.serialNumber,
+            licensePlate: equipmentItems.licensePlate,
             status: equipmentItems.status,
           })
           .from(equipmentItems)
@@ -268,11 +229,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       (() => {
         const where: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
         if (equipmentVis) where.push(equipmentVis)
-        const match = or(
-          ilike(equipmentItems.assetTag, term),
-          ilike(equipmentItems.serialNumber, term),
-          ilike(equipmentItems.name, term),
-        )
+        const match = recordSearchWhere('equipment', rawQ)
         if (match) where.push(match)
         return tx
           .select({ c: count() })
@@ -280,11 +237,11 @@ export async function GET(req: Request): Promise<NextResponse> {
           .where(and(...where))
       })(),
 
-      // ---- documents (title + key) -------------------------------------
+      // ---- documents (title / key / description) -------------------------------------
       (() => {
         const where: SQL<unknown>[] = [isNull(documents.deletedAt)]
         if (documentsVis) where.push(documentsVis)
-        const match = or(ilike(documents.title, term), ilike(documents.key, term))
+        const match = recordSearchWhere('documents', rawQ)
         if (match) where.push(match)
         return tx
           .select({
@@ -302,7 +259,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       (() => {
         const where: SQL<unknown>[] = [isNull(documents.deletedAt)]
         if (documentsVis) where.push(documentsVis)
-        const match = or(ilike(documents.title, term), ilike(documents.key, term))
+        const match = recordSearchWhere('documents', rawQ)
         if (match) where.push(match)
         return tx
           .select({ c: count() })
@@ -310,11 +267,11 @@ export async function GET(req: Request): Promise<NextResponse> {
           .where(and(...where))
       })(),
 
-      // ---- hazid_assessments (reference) -------------------------------
+      // ---- hazid_assessments (reference / location / job scope) -------------------------------
       (() => {
         const where: SQL<unknown>[] = [isNull(hazidAssessments.deletedAt)]
         if (hazidVis) where.push(hazidVis)
-        const match = ilike(hazidAssessments.reference, term)
+        const match = recordSearchWhere('hazid_assessments', rawQ)
         if (match) where.push(match)
         return tx
           .select({
@@ -331,7 +288,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       (() => {
         const where: SQL<unknown>[] = [isNull(hazidAssessments.deletedAt)]
         if (hazidVis) where.push(hazidVis)
-        const match = ilike(hazidAssessments.reference, term)
+        const match = recordSearchWhere('hazid_assessments', rawQ)
         if (match) where.push(match)
         return tx
           .select({ c: count() })
@@ -405,7 +362,10 @@ export async function GET(req: Request): Promise<NextResponse> {
       items: data.equipmentRows.map((r) => ({
         id: r.id,
         label: `${r.assetTag} — ${r.name}`,
-        sublabel: r.serialNumber ? `S/N ${r.serialNumber}` : r.status,
+        sublabel:
+          [r.licensePlate, r.serialNumber ? `S/N ${r.serialNumber}` : null]
+            .filter(Boolean)
+            .join(' · ') || r.status,
         href: `/equipment/${r.id}`,
       })),
     })

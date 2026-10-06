@@ -1,3 +1,4 @@
+import { recordSearchWhere, recordSearchTerm } from '@/lib/record-search'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
@@ -103,11 +104,10 @@ export default async function EquipmentInspectionsPage({
     filters.push(eq(equipmentInspectionRecords.status, statusFilter as (typeof STATUSES)[number]))
   }
   if (params.q) {
-    const term = `%${params.q}%`
+    const term = recordSearchTerm(params.q)
     const cond = or(
       ilike(equipmentInspectionRecords.reference, term),
-      ilike(equipmentItems.name, term),
-      ilike(equipmentItems.assetTag, term),
+      recordSearchWhere('equipment', params.q),
       ilike(equipmentInspectionRecords.equipmentNameSnapshot, term),
       ilike(equipmentInspectionRecords.serial, term),
       ilike(equipmentInspectionRecords.rentalProvider, term),

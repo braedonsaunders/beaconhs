@@ -1,9 +1,10 @@
+import { recordSearchWhere } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import { BookOpen } from 'lucide-react'
-import { and, asc, count, desc, ilike, isNull, or, eq, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, isNull, eq, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
 import { documentCategories, documentTypes, documents } from '@beaconhs/db/schema'
@@ -71,11 +72,8 @@ export default async function DocumentsPage({
     async (tx) => {
       const filters: SQL<unknown>[] = [isNull(documents.deletedAt)]
       if (!canManage) filters.push(eq(documents.status, 'published'))
-      if (params.q) {
-        const term = `%${params.q}%`
-        const cond = or(ilike(documents.title, term), ilike(documents.description, term))
-        if (cond) filters.push(cond)
-      }
+      const search = recordSearchWhere('documents', params.q)
+      if (search) filters.push(search)
       if (canManage && statusFilter) filters.push(eq(documents.status, statusFilter))
       if (categoryFilter) filters.push(eq(documents.categoryId, categoryFilter))
       if (typeFilter) filters.push(eq(documents.typeId, typeFilter))

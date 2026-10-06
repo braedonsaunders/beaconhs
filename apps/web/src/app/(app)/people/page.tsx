@@ -1,9 +1,10 @@
+import { recordSearchWhere } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Users } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { primaryPersonTitleName } from '@beaconhs/db'
 import { departments, people, trades } from '@beaconhs/db/schema'
@@ -61,16 +62,8 @@ export default async function PeoplePage({
   const { rows, total, statusCounts, allCount } = await ctx.db(async (tx) => {
     const primaryTitleName = primaryPersonTitleName(people.id, people.tenantId)
     const baseFilters: SQL<unknown>[] = [isNull(people.deletedAt)]
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(
-        ilike(people.firstName, term),
-        ilike(people.lastName, term),
-        ilike(people.employeeNo, term),
-        ilike(primaryTitleName, term),
-      )
-      if (cond) baseFilters.push(cond)
-    }
+    const search = recordSearchWhere('people', params.q)
+    if (search) baseFilters.push(search)
     if (departmentFilter) baseFilters.push(eq(people.departmentId, departmentFilter))
     if (personTypeFilter === 'employee' || personTypeFilter === 'contractor')
       baseFilters.push(sql`${people.metadata}->>'personType' = ${personTypeFilter}`)

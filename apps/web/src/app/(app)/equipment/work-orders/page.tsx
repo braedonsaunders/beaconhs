@@ -1,3 +1,4 @@
+import { recordSearchWhere, recordSearchTerm } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { PeopleStatusFilter } from '@/components/people-status-filter'
@@ -125,13 +126,12 @@ export default async function WorkOrdersPage({
     })
     const filters: SQL<unknown>[] = scope ? [scope] : []
     if (params.q) {
-      const term = `%${params.q}%`
+      const term = recordSearchTerm(params.q)
       const cond = or(
         ilike(equipmentWorkOrders.reference, term),
         ilike(equipmentWorkOrders.summary, term),
         ilike(equipmentWorkOrders.description, term),
-        ilike(equipmentItems.assetTag, term),
-        ilike(equipmentItems.name, term),
+        recordSearchWhere('equipment', params.q),
       )
       if (cond) filters.push(cond)
     }

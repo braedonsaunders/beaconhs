@@ -1,5 +1,6 @@
+import { recordSearchWhere } from '@/lib/record-search'
 import type { NextRequest } from 'next/server'
-import { and, asc, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, type SQL } from 'drizzle-orm'
 import { incidents, orgUnits } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
@@ -53,15 +54,8 @@ export async function GET(req: NextRequest) {
       siteCol: incidents.siteOrgUnitId,
     })
     if (vis) filters.push(vis)
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(
-        ilike(incidents.reference, term),
-        ilike(incidents.title, term),
-        ilike(incidents.description, term),
-      )
-      if (cond) filters.push(cond)
-    }
+    const search = recordSearchWhere('incidents', params.q)
+    if (search) filters.push(search)
     if (typeFilter) filters.push(eq(incidents.type, typeFilter as any))
     if (statusFilter) filters.push(eq(incidents.status, statusFilter as any))
     const whereClause = filters.length > 0 ? and(...filters) : undefined

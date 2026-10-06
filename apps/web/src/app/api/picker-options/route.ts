@@ -1,3 +1,4 @@
+import { recordSearchWhere } from '@/lib/record-search'
 import { NextResponse } from 'next/server'
 import { personFilterWhere, tenantUserFilterWhere } from '@/lib/people-filter'
 import {
@@ -79,6 +80,7 @@ const MAX_QUERY_LENGTH = 100
 
 type Option = PickerOptionsResponse['options'][number]
 type PickerQuery = {
+  query: string
   includeInactive: boolean
   term: string
   hasQuery: boolean
@@ -118,11 +120,7 @@ function option(value: string, label: string, hint?: string | null, meta?: Optio
 function personMatch(input: PickerQuery): SQL | undefined {
   if (!input.hasQuery) return undefined
   return or(
-    ilike(people.firstName, input.term),
-    ilike(people.lastName, input.term),
-    ilike(people.employeeNo, input.term),
-    ilike(primaryPersonTitleName(people.id, people.tenantId), input.term),
-    ilike(sql<string>`(${people.firstName} || ' ' || ${people.lastName})`, input.term),
+    recordSearchWhere('people', input.query),
     input.selected ? eq(people.id, input.selected) : undefined,
   )
 }
@@ -415,6 +413,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   try {
     const response = await loadOptions(ctx, lookupParam, {
+      query: rawQuery,
       term,
       // A selected value must participate in the result predicate even before
       // the user types, otherwise an existing value beyond the first page
@@ -1728,8 +1727,7 @@ async function loadOptions(
       const { where } = await resolveVehicleEquipmentWhere(ctx, tx)
       const match = input.hasQuery
         ? or(
-            ilike(equipmentItems.assetTag, input.term),
-            ilike(equipmentItems.name, input.term),
+            recordSearchWhere('equipment', input.query),
             input.selected ? eq(equipmentItems.id, input.selected) : undefined,
           )
         : undefined
@@ -2007,8 +2005,7 @@ async function loadOptions(
       })
       const match = input.hasQuery
         ? or(
-            ilike(equipmentItems.assetTag, input.term),
-            ilike(equipmentItems.name, input.term),
+            recordSearchWhere('equipment', input.query),
             input.selected ? eq(equipmentItems.id, input.selected) : undefined,
           )
         : undefined

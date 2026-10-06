@@ -1,3 +1,4 @@
+import { recordSearchWhere } from '@/lib/record-search'
 import { getGeneratedValueTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -8,21 +9,7 @@ import { getGeneratedTranslations } from '@/i18n/generated.server'
 
 import Link from 'next/link'
 import { ShieldAlert } from 'lucide-react'
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  gte,
-  ilike,
-  inArray,
-  isNull,
-  lte,
-  or,
-  sql,
-  type SQL,
-} from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, isNull, lte, sql, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -124,15 +111,8 @@ export async function AssessmentsListPage({
           : sql`false`,
       )
     }
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(
-        ilike(hazidAssessments.reference, term),
-        ilike(hazidAssessments.locationOnSite, term),
-        ilike(hazidAssessments.jobScope, term),
-      )
-      if (cond) filters.push(cond)
-    }
+    const search = recordSearchWhere('hazid_assessments', params.q)
+    if (search) filters.push(search)
     if (typeFilter) filters.push(eq(hazidAssessments.assessmentTypeId, typeFilter))
     if (statusFilter === 'open') filters.push(eq(hazidAssessments.locked, false))
     if (statusFilter === 'locked') filters.push(eq(hazidAssessments.locked, true))

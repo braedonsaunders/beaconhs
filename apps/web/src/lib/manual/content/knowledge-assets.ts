@@ -409,7 +409,7 @@ Open **Documents** in the left menu. You will see cards for every published docu
 ## Find and read a document
 
 1. Open [Documents](/documents).
-2. Type a word in the search box — it says **Search title or description**. You can also filter by **Category** or **Type**.
+2. Type a word in the search box — it says **Search title or description**. Document keys also match, even when not displayed. You can also filter by **Category** or **Type**.
 3. Tap **Read document** on the document you want.
 4. The published PDF opens full screen. Tap **Download** to save a copy, or **New tab** to open it for printing.
 5. Scroll inside the PDF to read each page. The page counter follows the page taking up most of the view.
@@ -670,12 +670,12 @@ Open **Equipment** in the left menu. That opens the full list at [Equipment](/eq
 ## Look up a unit
 
 1. Open [Equipment](/equipment).
-2. Type in the search box — it says **Search asset tag, name, serial #**.
+2. Type in the search box — it says **Search equipment or licence plate**.
 3. Or filter by **Status** (**In service**, **Out of service**, **In repair**, **Lost**, **Retired**), by **Availability** (**Available for check-out**, **Currently checked out**), by **All departments**, or by **All holders**. Search the holder's name and select the person to show equipment they currently hold.
 4. The list shows the **Asset tag**, **Name**, **Category**, **Type**, **Department**, **Status**, **Site**, and **Holder** for each unit.
 5. Tap a row to open the unit's page.
 
-The list starts with **In service** equipment. Select **All statuses** to see every status. Search also matches department names. Select **Department** in the table header to sort by department. Clear **Holder** to show all holders again. The holder picker only shows people holding equipment you can view. **People** starts on **Active only**. Choose **Include inactive** to search former employees or inactive accounts; changing this choice clears the selected person. Historical records stay in the list. **Export CSV** uses the current filters, including holder, and includes department.
+The list starts with **In service** equipment. Select **All statuses** to see every status. Search matches asset tags, names, serial numbers, licence plates, VINs, make, model, descriptions, notes, and department, category, or type names, including fields not shown in the table. Plates and other equipment identifiers match with or without spaces and hyphens. The top-bar search, equipment pickers, station search, QR-label list, inspection list, work orders, and vehicle-log summary also find equipment by these fields. Select **Department** in the table header to sort by department. Clear **Holder** to show all holders again. The holder picker only shows people holding equipment you can view. **People** starts on **Active only**. Choose **Include inactive** to search former employees or inactive accounts; changing this choice clears the selected person. Historical records stay in the list. **Export CSV** uses the current filters, including holder, and includes department.
 
 ## See who has a unit and where it is
 
@@ -795,7 +795,7 @@ When you take a unit, scan it out under your name. When you bring it back, scan 
 
 ## Where to find it
 
-Open **Equipment** in the left menu, then go to the **Check-in / out station** at [the station page](/equipment/station). It works with a USB scan gun, your phone camera, or by typing a tag.
+Open **Equipment** in the left menu, then go to the **Check-in / out station** at [the station page](/equipment/station). It works with a USB scan gun, your phone camera, or by typing a tag. To search without a scan, type a name, licence plate, VIN, or other equipment detail; select the correct unit from the results.
 
 ## Check a unit out
 
@@ -826,7 +826,7 @@ The **Scan does** setting controls what a scan means: **Toggle** flips each unit
 Each unit's QR page has a **Download label PDF** button — a print-ready tag at your company's label size, made for shipping-label printers.
 
 1. To tag many units at once, open **Equipment** → **Manage** → **Bulk QR labels**.
-2. Search by asset tag or name, or use **Type** to narrow the list.
+2. Search by asset tag, name, licence plate, VIN, or other equipment details, or use **Type** to narrow the list.
 3. Pick equipment from the current page, then tap **Generate sheet**. Use **Next** to work through another page. One PDF opens with one tag per page.
 4. To change what the tag looks like — size, layout, fields — open **Equipment** → **Manage** → **QR label design** and edit it like a document. Tap **Save label design** when done.
 

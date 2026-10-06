@@ -83,6 +83,12 @@ You only see the items your role allows. If a page is missing, ask your supervis
 
 The **Dashboard** shows your open work at a glance. Tap any card to jump to it.
 
+## Finding records
+
+Use the search button in the top bar to find incidents, corrective actions, people, equipment, documents, and hazard assessments. Select a result to open it, or **View all** to open that module's filtered list. Global incident search covers the last year; use the Incidents list for older records.
+
+Search covers useful record information even when it is not shown in the table. For example, find equipment by licence plate or VIN, people by email or full name, documents by document key or description, and hazard assessments by job scope or specific location. Module lists and their CSV exports use the same search fields as global search. Your permissions and the list's status and other filters still apply.
+
 ## Changing what is on your dashboard
 
 Your dashboard is made of tiles (widgets), and you choose which ones you see and where they sit. Changes are yours alone — they do not affect anyone else.

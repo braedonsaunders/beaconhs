@@ -1,3 +1,4 @@
+import { recordSearchWhere, recordSearchTerm } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import {
@@ -23,7 +24,7 @@ import {
   Truck,
   Users,
 } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -251,9 +252,9 @@ async function loadIncidentsForUnits(
     const base = and(inArray(incidents.siteOrgUnitId, orgUnitIds), isNull(incidents.deletedAt), vis)
     const search = params.q
       ? or(
-          ilike(incidents.reference, `%${params.q}%`),
-          ilike(incidents.title, `%${params.q}%`),
-          ilike(incidents.description, `%${params.q}%`),
+          ilike(incidents.reference, recordSearchTerm(params.q)),
+          ilike(incidents.title, recordSearchTerm(params.q)),
+          ilike(incidents.description, recordSearchTerm(params.q)),
         )
       : undefined
     const filtered = and(base, search, status ? eq(incidents.status, status) : undefined)
@@ -299,11 +300,10 @@ async function loadEquipmentForUnits(
     )
     const search = params.q
       ? or(
-          ilike(equipmentItems.name, `%${params.q}%`),
-          ilike(equipmentItems.assetTag, `%${params.q}%`),
-          ilike(equipmentTypes.name, `%${params.q}%`),
-          ilike(people.firstName, `%${params.q}%`),
-          ilike(people.lastName, `%${params.q}%`),
+          recordSearchWhere('equipment', params.q),
+          ilike(equipmentTypes.name, recordSearchTerm(params.q)),
+          ilike(people.firstName, recordSearchTerm(params.q)),
+          ilike(people.lastName, recordSearchTerm(params.q)),
         )
       : undefined
     const filtered = and(base, search, status ? eq(equipmentItems.status, status) : undefined)
@@ -348,10 +348,10 @@ async function loadContactsForUnit(
     const base = eq(customerContacts.orgUnitId, orgUnitId)
     const search = params.q
       ? or(
-          ilike(customerContacts.name, `%${params.q}%`),
-          ilike(customerContacts.role, `%${params.q}%`),
-          ilike(customerContacts.email, `%${params.q}%`),
-          ilike(customerContacts.phone, `%${params.q}%`),
+          ilike(customerContacts.name, recordSearchTerm(params.q)),
+          ilike(customerContacts.role, recordSearchTerm(params.q)),
+          ilike(customerContacts.email, recordSearchTerm(params.q)),
+          ilike(customerContacts.phone, recordSearchTerm(params.q)),
         )
       : undefined
     const filtered = and(base, search)

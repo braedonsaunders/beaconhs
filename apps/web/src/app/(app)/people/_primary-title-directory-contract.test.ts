@@ -11,7 +11,10 @@ describe('people directory primary-title contract', () => {
     const table = source('./_records-table.tsx')
 
     expect(page).toContain('primaryPersonTitleName(people.id, people.tenantId)')
-    expect(page).toContain('ilike(primaryTitleName, term)')
+    expect(page).toContain("recordSearchWhere('people', params.q)")
+    expect(source('../../../lib/record-search.ts')).toContain(
+      'primaryPersonTitleName(people.id, people.tenantId)',
+    )
     expect(page).toContain("params.sort === 'title'")
     expect(page).toContain('primaryTitleName,')
     expect(table).toContain('<SortTh column="title"')
@@ -24,7 +27,7 @@ describe('people directory primary-title contract', () => {
     const manual = source('../../../lib/manual/content/oversight-admin.ts')
 
     expect(csv).toContain('primaryPersonTitleName(people.id, people.tenantId)')
-    expect(csv).toContain('ilike(primaryTitleName, term)')
+    expect(csv).toContain("recordSearchWhere('people', params.q)")
     expect(csv).toContain("params.sort === 'title'")
     expect(csv).toContain("'Primary job title'")
     expect(csv).toContain("r.primaryTitleName ?? ''")

@@ -215,7 +215,7 @@ export default async function EquipmentPage({
           />
           <EquipmentSubNav active="equipment" />
           <TableToolbar>
-            <SearchInput placeholder={tGenerated('m_17a9e63a53bd0d')} />
+            <SearchInput placeholder={tGenerated('m_065ee385b4c0bd')} />
             <FilterChips
               basePath="/equipment"
               currentParams={sp}

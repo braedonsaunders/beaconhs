@@ -1,9 +1,10 @@
+import { recordSearchWhere } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { ListChecks } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { correctiveActions, orgUnits, tenantUsers, users as user } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
@@ -88,15 +89,8 @@ export default async function CorrectiveActionsPage({
     })
     const filters: SQL<unknown>[] = [isNull(correctiveActions.deletedAt)]
     if (vis) filters.push(vis)
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(
-        ilike(correctiveActions.reference, term),
-        ilike(correctiveActions.title, term),
-        ilike(correctiveActions.description, term),
-      )
-      if (cond) filters.push(cond)
-    }
+    const search = recordSearchWhere('corrective_actions', params.q)
+    if (search) filters.push(search)
     if (statusFilter) filters.push(eq(correctiveActions.status, statusFilter as any))
     if (sevFilter) filters.push(eq(correctiveActions.severity, sevFilter as any))
     const whereClause = and(...filters)

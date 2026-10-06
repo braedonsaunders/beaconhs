@@ -1,5 +1,6 @@
+import { recordSearchWhere } from '@/lib/record-search'
 import type { NextRequest } from 'next/server'
-import { and, asc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import { extractRows } from '@beaconhs/db'
 import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
@@ -41,14 +42,7 @@ export async function GET(req: NextRequest) {
 
   const { trucks, rows } = await ctx.db(async (tx) => {
     const { where: vehicleWhere } = await resolveVehicleEquipmentWhere(ctx, tx)
-    const search: SQL<unknown> | undefined = q
-      ? or(
-          ilike(equipmentItems.assetTag, `%${q}%`),
-          ilike(equipmentItems.name, `%${q}%`),
-          ilike(equipmentCategories.name, `%${q}%`),
-          ilike(equipmentTypes.name, `%${q}%`),
-        )
-      : undefined
+    const search = recordSearchWhere('equipment', q)
     const where = and(vehicleWhere, search)!
     const t = await tx
       .select({

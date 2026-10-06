@@ -1,9 +1,10 @@
+import { recordSearchWhere } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Printer } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, type SQL } from 'drizzle-orm'
 import {
   Badge,
   Button,
@@ -69,11 +70,8 @@ export default async function BulkQrPage({
       personCol: equipmentItems.currentHolderPersonId,
     })
     if (scope) filters.push(scope)
-    if (params.q) {
-      const term = `%${params.q}%`
-      const cond = or(ilike(equipmentItems.assetTag, term), ilike(equipmentItems.name, term))
-      if (cond) filters.push(cond)
-    }
+    const search = recordSearchWhere('equipment', params.q)
+    if (search) filters.push(search)
     if (typeFilter) filters.push(eq(equipmentItems.typeId, typeFilter))
     const where = filters.length ? and(...filters) : undefined
     const dirFn = params.dir === 'asc' ? asc : desc

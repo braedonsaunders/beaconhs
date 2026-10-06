@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
+import { recordSearchWhere } from '../record-search'
+import { and, asc, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import {
   departments,
   equipmentCategories,
@@ -38,17 +39,8 @@ export function equipmentRegisterQuery(
   const availabilityFilter = pickString(sp.availability)
   const filters: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
   if (scope) filters.push(scope)
-  if (params.q) {
-    const term = `%${params.q}%`
-    filters.push(
-      or(
-        ilike(equipmentItems.assetTag, term),
-        ilike(equipmentItems.name, term),
-        ilike(equipmentItems.serialNumber, term),
-        ilike(departments.name, term),
-      )!,
-    )
-  }
+  const search = recordSearchWhere('equipment', params.q)
+  if (search) filters.push(search)
   if (statusFilter) {
     const status = EQUIPMENT_STATUSES.find((s) => s === statusFilter)
     filters.push(status ? eq(equipmentItems.status, status) : sql`false`)
