@@ -7,9 +7,10 @@ import sharp from 'sharp'
 import { extractText } from 'unpdf'
 
 const template = MODULE_PDF_TEMPLATE_SEEDS.find((seed) => seed.subjectKey === 'inspections')!
+// Allow the renderer's bounded 120-second cold start to finish before cleanup.
 afterAll(async () => {
   await (await getBrowser()).close()
-})
+}, 180_000)
 
 describe('inspection report layout', () => {
   it('keeps narrative answers readable and places portrait photos in a contact sheet', async () => {

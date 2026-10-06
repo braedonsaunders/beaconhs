@@ -5,9 +5,10 @@ import { renderHtmlDocumentPdf } from '@beaconhs/forms-pdf'
 import { getBrowser } from '../../../../packages/forms-pdf/src/util'
 
 const template = MODULE_PDF_TEMPLATE_SEEDS.find((seed) => seed.key === 'vehicle-log-month-pdf')!
+// Allow the renderer's bounded 120-second cold start to finish before cleanup.
 afterAll(async () => {
   await (await getBrowser()).close()
-})
+}, 180_000)
 
 describe('monthly vehicle-log portrait PDF', () => {
   it.each(['odometer', 'destination'])(

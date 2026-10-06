@@ -10,7 +10,7 @@
     "start": "node scripts/start-standalone.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --no-file-parallelism --passWithNoTests",
     "clean": "rm -rf .next .turbo"
   },
   "dependencies": {

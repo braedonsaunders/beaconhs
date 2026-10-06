@@ -9,9 +9,10 @@ import { buildBlankTrainingAssessmentHtml } from './training-assessment-blank-pd
 
 const reviewDir = process.env.BEACON_TRAINING_PDF_REVIEW_DIR
 
+// Allow the renderer's bounded 120-second cold start to finish before cleanup.
 afterAll(async () => {
   await (await getBrowser()).close()
-})
+}, 180_000)
 
 async function print(html: string, name: string) {
   const pdf = await renderHtmlDocumentPdf({
@@ -96,7 +97,7 @@ describe('training paper forms', () => {
     } finally {
       await page.close()
     }
-  }, 30_000)
+  }, 180_000)
 
   it('prints a multi-page blank assessment with choices and handwriting room', async () => {
     const questions = Array.from({ length: 12 }, (_, index) => ({
@@ -140,5 +141,5 @@ describe('training paper forms', () => {
     expect(result.text).toContain('Question 12:')
     expect(result.text).toContain('Signature:')
     expect(result.totalPages).toBeGreaterThan(1)
-  }, 30_000)
+  }, 180_000)
 })

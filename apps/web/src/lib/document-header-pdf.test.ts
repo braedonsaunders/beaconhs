@@ -5,9 +5,10 @@ import { extractText } from 'unpdf'
 import { getBrowser } from '../../../../packages/forms-pdf/src/util'
 import { documentControlHeaderHtml } from '../../../worker/src/lib/document-control-header'
 
+// Allow the renderer's bounded 120-second cold start to finish before cleanup.
 afterAll(async () => {
   await (await getBrowser()).close()
-})
+}, 180_000)
 describe('editable document PDF header', () => {
   it('prints all saved header details within one page', async () => {
     const html = documentControlHeaderHtml(
@@ -49,5 +50,5 @@ describe('editable document PDF header', () => {
       await mkdir(directory, { recursive: true })
       await writeFile(`${directory}/document-header.pdf`, pdf)
     }
-  }, 30_000)
+  }, 180_000)
 })
