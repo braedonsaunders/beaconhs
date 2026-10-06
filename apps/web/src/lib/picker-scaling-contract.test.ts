@@ -93,7 +93,25 @@ describe('production-scale picker contract', () => {
     expect(skillPage).not.toContain('peopleList')
     expect(skillPage).not.toContain('skillTypesList')
 
+    const certificateFields = source('../app/(app)/training/records/[id]/_fields.tsx')
+    expect(certificateFields).toContain('lookup="training-record-people"')
+    expect(certificateFields).toContain('lookup="training-record-courses"')
+    expect(certificateFields).toContain('initialOption={options.person}')
+    expect(certificateFields).toContain('initialOption={options.course}')
+    const certificatePage = source('../app/(app)/training/records/[id]/page.tsx')
+    expect(certificatePage).not.toContain('peopleList')
+    expect(certificatePage).not.toContain('coursesList')
+
     const pickerRoute = source('../app/api/picker-options/route.ts')
+    const certificatePeople = between(
+      pickerRoute,
+      "if (lookup === 'training-record-people')",
+      "if (lookup === 'training-record-courses')",
+    )
+    expect(certificatePeople).toContain("eq(people.status, 'active')")
+    expect(certificatePeople).toContain('isNull(people.deletedAt)')
+    expect(certificatePeople).toContain('.limit(PICKER_RESULT_LIMIT + 1)')
+
     const injuryTypeBranch = between(
       pickerRoute,
       "if (lookup === 'incident-injury-types')",
@@ -195,8 +213,8 @@ describe('production-scale picker contract', () => {
     )
     expect(sharedPersonPicker).toContain("recordSearchWhere('people', input.query)")
     expect(sharedPersonPicker).toContain('[row.employeeNo, row.jobTitle]')
-    expect(route.match(/\.select\(PERSON_OPTION_SELECTION\)/g)).toHaveLength(10)
-    expect(route.match(/personOptions\(rows\)/g)).toHaveLength(10)
+    expect(route.match(/\.select\(PERSON_OPTION_SELECTION\)/g)).toHaveLength(11)
+    expect(route.match(/personOptions\(rows\)/g)).toHaveLength(11)
   })
 
   it('keeps the public people kiosk PIN-gated, tenant-scoped, and bounded', () => {

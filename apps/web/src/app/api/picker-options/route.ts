@@ -203,6 +203,9 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     return !!moduleConfig && (ctx.isSuperAdmin || can(ctx, moduleConfig.permission))
   }
   switch (lookup) {
+    case 'training-record-people':
+    case 'training-record-courses':
+      return can(ctx, 'training.record.create')
     case 'training-evaluation-people':
       return canManage('training')
     case 'training-course-assessment-types':
@@ -437,6 +440,39 @@ async function loadOptions(
   input: PickerQuery,
 ): Promise<PickerOptionsResponse> {
   return ctx.db(async (tx) => {
+    if (lookup === 'training-record-people') {
+      const rows = await tx
+        .select(PERSON_OPTION_SELECTION)
+        .from(people)
+        .where(and(eq(people.status, 'active'), isNull(people.deletedAt), personMatch(input)))
+        .orderBy(...personOrder(input.selected))
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(personOptions(rows))
+    }
+
+    if (lookup === 'training-record-courses') {
+      const match = input.hasQuery
+        ? or(
+            ilike(trainingCourses.name, input.term),
+            ilike(trainingCourses.code, input.term),
+            input.selected ? eq(trainingCourses.id, input.selected) : undefined,
+          )
+        : undefined
+      const rows = await tx
+        .select({ id: trainingCourses.id, name: trainingCourses.name, code: trainingCourses.code })
+        .from(trainingCourses)
+        .where(and(isNull(trainingCourses.deletedAt), match))
+        .orderBy(
+          ...(input.selected ? [desc(sql`${trainingCourses.id} = ${input.selected}`)] : []),
+          asc(trainingCourses.name),
+          asc(trainingCourses.id),
+        )
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(
+        rows.map((row) => option(row.id, row.code ? `${row.code} · ${row.name}` : row.name)),
+      )
+    }
+
     if (lookup === 'equipment-station-holders' || lookup === 'equipment-station-locations') {
       return loadEquipmentStationPickerOptions(
         tx,

@@ -1,11 +1,10 @@
 import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
-import { Card, CardContent, CardHeader, CardTitle } from '@beaconhs/ui'
-import { LiveField, LivePersonSelect, LiveSelect } from '@/components/live-field'
+import { Card, CardContent, CardHeader, CardTitle, type SelectOption } from '@beaconhs/ui'
+import { LiveField, LiveRemoteSelect, LiveSelect } from '@/components/live-field'
 
 // The certificate "Record details" card — the auto-saving field set for the
-// unified record page. "New certificate" creates the row immediately (default
-// person/course) and lands here, where every field edits inline.
+// unified record page. New certificates start blank; every field edits inline.
 
 type RecordFieldValues = {
   personId: string
@@ -20,8 +19,8 @@ type RecordFieldValues = {
 }
 
 type RecordFieldOptions = {
-  people: { id: string; firstName: string; lastName: string; employeeNo: string | null }[]
-  courses: { id: string; name: string; code: string | null }[]
+  person?: SelectOption
+  course?: SelectOption
 }
 
 const SOURCE_OPTIONS = [
@@ -60,18 +59,14 @@ export function RecordDetailFields({
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1">
-            <LivePersonSelect
+            <LiveRemoteSelect
               id={id}
               field="personId"
               label={tGenerated('m_12e926c9216094')}
               initialValue={initial.personId}
-              options={options.people.map((p) => ({
-                value: p.id,
-                label: `${p.lastName}, ${p.firstName}`,
-                hint: p.employeeNo ?? undefined,
-              }))}
-              placeholder={tGenerated('m_0be39d3a196b5b')}
-              searchPlaceholder={tGenerated('m_06c2338b990aea')}
+              initialOption={options.person}
+              lookup="training-record-people"
+              emptyLabel={tGenerated('m_0be39d3a196b5b')}
               disabled={disabled}
               updateAction={updateAction}
             />
@@ -89,16 +84,14 @@ export function RecordDetailFields({
             />
           </div>
           <div className="space-y-1">
-            <LiveSelect
+            <LiveRemoteSelect
               id={id}
               field="courseId"
               label={tGenerated('m_14fc1e0739b60e')}
               initialValue={initial.courseId}
               emptyLabel={tGenerated('m_14a8ad5a2c909c')}
-              options={options.courses.map((c) => ({
-                value: c.id,
-                label: c.code ? `${c.code} · ${c.name}` : c.name,
-              }))}
+              initialOption={options.course}
+              lookup="training-record-courses"
               disabled={disabled}
               updateAction={updateAction}
             />

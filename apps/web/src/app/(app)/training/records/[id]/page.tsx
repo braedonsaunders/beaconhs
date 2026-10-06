@@ -3,7 +3,7 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { and, asc, count, desc, eq, ilike, isNull, or } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, isNull, or } from 'drizzle-orm'
 import {
   CreditCard,
   Paperclip,
@@ -140,66 +140,41 @@ export default async function TrainingRecordPage({
         )
       : undefined
     const attachmentWhere = and(attachmentBase, attachmentSearch)
-    const [
-      attachmentCountRows,
-      filteredAttachmentCountRows,
-      certAttachments,
-      tenant,
-      peopleList,
-      coursesList,
-    ] = await Promise.all([
-      tx.select({ c: count() }).from(trainingRecordFiles).where(attachmentBase),
-      active === 'attachments'
-        ? tx
-            .select({ c: count() })
-            .from(trainingRecordFiles)
-            .innerJoin(attachments, eq(attachments.id, trainingRecordFiles.attachmentId))
-            .where(attachmentWhere)
-        : Promise.resolve([]),
-      // Pull only the visible page of uploaded scans. Counts remain available
-      // on every tab for the tab badge and overview statistic.
-      active === 'attachments'
-        ? tx
-            .select({ file: trainingRecordFiles, attachment: attachments })
-            .from(trainingRecordFiles)
-            .innerJoin(attachments, eq(attachments.id, trainingRecordFiles.attachmentId))
-            .where(attachmentWhere)
-            .orderBy(desc(trainingRecordFiles.uploadedAt))
-            .limit(attachmentParams.perPage)
-            .offset((attachmentParams.page - 1) * attachmentParams.perPage)
-        : Promise.resolve([]),
-      tx
-        .select({ settings: tenants.settings })
-        .from(tenants)
-        .where(eq(tenants.id, ctx.tenantId))
-        .limit(1)
-        .then(([tenant]) => tenant),
-      // Option lists for the editable person/course selects. The current
-      // holder is added below in case they're no longer "active".
-      tx
-        .select({
-          id: people.id,
-          firstName: people.firstName,
-          lastName: people.lastName,
-          employeeNo: people.employeeNo,
-        })
-        .from(people)
-        .where(eq(people.status, 'active'))
-        .orderBy(asc(people.lastName), asc(people.firstName)),
-      tx
-        .select({ id: trainingCourses.id, name: trainingCourses.name, code: trainingCourses.code })
-        .from(trainingCourses)
-        .where(isNull(trainingCourses.deletedAt))
-        .orderBy(asc(trainingCourses.name)),
-    ])
+    const [attachmentCountRows, filteredAttachmentCountRows, certAttachments, tenant] =
+      await Promise.all([
+        tx.select({ c: count() }).from(trainingRecordFiles).where(attachmentBase),
+        active === 'attachments'
+          ? tx
+              .select({ c: count() })
+              .from(trainingRecordFiles)
+              .innerJoin(attachments, eq(attachments.id, trainingRecordFiles.attachmentId))
+              .where(attachmentWhere)
+          : Promise.resolve([]),
+        // Pull only the visible page of uploaded scans. Counts remain available
+        // on every tab for the tab badge and overview statistic.
+        active === 'attachments'
+          ? tx
+              .select({ file: trainingRecordFiles, attachment: attachments })
+              .from(trainingRecordFiles)
+              .innerJoin(attachments, eq(attachments.id, trainingRecordFiles.attachmentId))
+              .where(attachmentWhere)
+              .orderBy(desc(trainingRecordFiles.uploadedAt))
+              .limit(attachmentParams.perPage)
+              .offset((attachmentParams.page - 1) * attachmentParams.perPage)
+          : Promise.resolve([]),
+        tx
+          .select({ settings: tenants.settings })
+          .from(tenants)
+          .where(eq(tenants.id, ctx.tenantId))
+          .limit(1)
+          .then(([tenant]) => tenant),
+      ])
     return {
       ...row,
       certAttachments,
       attachmentCount: Number(attachmentCountRows[0]?.c ?? 0),
       filteredAttachmentCount: Number(filteredAttachmentCountRows[0]?.c ?? 0),
       tenantSettings: tenant?.settings ?? {},
-      peopleList,
-      coursesList,
     }
   })
 
@@ -228,29 +203,22 @@ export default async function TrainingRecordPage({
     attachmentCount,
     filteredAttachmentCount,
     tenantSettings,
-    peopleList,
-    coursesList,
   } = data
   const isRevoked = record.deletedAt != null
-  // Ensure the current holder + course are selectable even if no longer active /
-  // soft-deleted (the option lists only carry active rows). A blank draft has
-  // neither yet, so there's nothing to inject.
-  const peopleOptions =
-    person && !peopleList.some((p) => p.id === person.id)
-      ? [
-          {
-            id: person.id,
-            firstName: person.firstName,
-            lastName: person.lastName,
-            employeeNo: person.employeeNo,
-          },
-          ...peopleList,
-        ]
-      : peopleList
-  const courseOptions =
-    course && !coursesList.some((c) => c.id === course.id)
-      ? [{ id: course.id, name: course.name, code: course.code }, ...coursesList]
-      : coursesList
+  // Preserve the existing historical link's label without offering deleted
+  // or inactive people as choices for a new certificate.
+  const fieldOptions = {
+    person: person
+      ? {
+          value: person.id,
+          label: `${person.lastName}, ${person.firstName}`,
+          hint: person.employeeNo ?? undefined,
+        }
+      : undefined,
+    course: course
+      ? { value: course.id, label: course.code ? `${course.code} · ${course.name}` : course.name }
+      : undefined,
+  }
   const credentialOutputs = courseCredentialOutputs(course?.metadata, tenantSettings)
   const availablePrintProviders = await getConfiguredDirectPrintProviders(ctx)
   const canDesignCredentials = canDesignTrainingCredentials(ctx)
@@ -421,7 +389,7 @@ export default async function TrainingRecordPage({
                   disabled={!canRecord || isRevoked}
                   personHref={person ? `/people/${person.id}?tab=training` : null}
                   courseHref={course ? `/training/courses/${course.id}` : null}
-                  options={{ people: peopleOptions, courses: courseOptions }}
+                  options={fieldOptions}
                   initial={{
                     personId: record.personId ?? '',
                     courseId: record.courseId ?? '',

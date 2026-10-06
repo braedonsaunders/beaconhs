@@ -47,6 +47,10 @@ Open **Training** in the left menu. You will see tabs for **Certificates**, **Co
 5. At the end of each lesson, tap the button at the bottom — **Mark complete**, **Start quiz**, or **Mark attended**, depending on the lesson type. If the lesson has a minimum time, wait for the time shown before you tap **Mark complete**.
 6. When every required lesson is done, you will see **Course complete**. Tap **Download certificate** to save a copy.
 
+## Certificate people and course choices
+
+The certificate **Person / employee** picker searches active people by name, employee number, email, or job title. Deleted people are not offered for a new certificate. Search courses by name or code. If more matches exist, add more detail. Existing certificates keep their original person and course labels even if they were later removed.
+
 ## Check your certificates and expiry dates
 
 1. Open **Training** in the left menu. It lands on the **Certificates** tab.

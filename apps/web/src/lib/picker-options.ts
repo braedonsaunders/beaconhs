@@ -6,6 +6,8 @@ import type { SelectOption } from '@beaconhs/ui'
  * picker cannot become a generic tenant-directory escape hatch.
  */
 const PICKER_LOOKUPS = [
+  'training-record-people',
+  'training-record-courses',
   'training-evaluation-people',
   'training-assessment-people',
   'training-assessment-types',
