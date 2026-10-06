@@ -348,8 +348,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         key: 'booking_coverage_status',
         label: 'Coverage (including bookings)',
         kind: 'enum',
-        expression:
-          "CASE WHEN coverage_status IN ('missing', 'expired') AND booked_starts_at IS NOT NULL THEN 'booked' ELSE coverage_status END",
+        expression: "CASE WHEN booked_starts_at IS NOT NULL THEN 'booked' ELSE coverage_status END",
       },
       { key: 'booked_starts_at', label: 'Booked for', kind: 'timestamp' },
       {

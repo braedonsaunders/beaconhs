@@ -105,12 +105,26 @@ describe('Beacon AppKit report catalogue', () => {
       expect.objectContaining({ key: 'booking_coverage_status', label: 'Coverage' }),
     )
     expect(compiled.sql).toContain(
-      "CASE WHEN coverage_status IN ('missing', 'expired') AND booked_starts_at IS NOT NULL THEN 'booked' ELSE coverage_status END",
+      "CASE WHEN booked_starts_at IS NOT NULL THEN 'booked' ELSE coverage_status END",
     )
-    expect(missing.query.filters?.rules).toContainEqual({
-      field: 'coverage_status',
-      op: 'in',
-      value: ['missing', 'expired', 'expiring'],
+    expect(missing.query.filters).toEqual({
+      combinator: 'and',
+      rules: [
+        { field: 'person_status', op: 'eq', value: 'active' },
+        {
+          combinator: 'or',
+          rules: [
+            { field: 'booked', op: 'is_true' },
+            {
+              combinator: 'and',
+              rules: [
+                { field: 'is_required', op: 'is_true' },
+                { field: 'coverage_status', op: 'in', value: ['missing', 'expired', 'expiring'] },
+              ],
+            },
+          ],
+        },
+      ],
     })
     for (const key of [
       'training_certificates',

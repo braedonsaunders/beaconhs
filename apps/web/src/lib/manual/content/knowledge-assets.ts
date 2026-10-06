@@ -118,7 +118,7 @@ Choose **Additional fields** on an authority or skill type to search field names
 
 When you edit a worker's held skill, **Person** and **Skill / certification** search the complete active tenant directory and skill catalogue. The currently saved value stays visible while you review an older record, even if that value is no longer active. If the picker says more results exist, add more of the name, employee number, code, or authority to the search.
 
-On **Certificates**, **Skills**, and **Assessments**, the person filter starts on **People: Active only**. Choose **Include inactive** to search former employees. Changing this choice clears the selected person. Historical records stay in the list.
+On **Certificates**, **People: Active only** shows certificates for active employees only. Choose **Include inactive** to see former employees’ certificates. The row counts follow this choice. On **Skills** and **Assessments**, the person filter also starts on **People: Active only**. Changing this choice clears the selected person. Saved records keep their history.
 
 On **Assessments**, search by person, assessment, or course. The person, assessment type, course, status, and date controls narrow the same list; no filter option is hidden after the first few values. Select an assessment title or use **Continue**, **Review**, or **View** to open the record. Completed and cancelled assessments open read-only. Historical imported assessments show their recorded dates without inventing an attempt duration that the old system did not preserve.
 
@@ -293,6 +293,8 @@ A person marked as a no-show cannot pass. A cancelled class is read-only; choose
 Use **Print / PDF** in the class header for a paper session sheet. Times match the timezone used on the class page. The sheet includes the entered **Class location** or selected site and omits the course description. It lists everyone on the roster with a blank **Signature** box beside each name, so the printout doubles as the attendance sheet you pass around on the day. An administrator can widen or remove that column under **Admin** → **PDF templates**.
 
 Once the details and roster are confirmed, choose **Email class** in the header and confirm. Initial emails are always manual. You can opt into **Automatic reminder email** on **Details** after configuring a reminder flow. Class emails use the class times and location and omit the course-description block containing qualified-instructor information.
+
+In **Reports → Training — Missing**, anyone booked into an upcoming class appears as **Booked**, even without an earlier certificate or compliance assignment. **Booked** takes priority over **Expiring**, **Expired**, and **Missing**. A booking is a plan to train; it does not count as a completed qualification. Cancelled or completed classes do not count as upcoming bookings.
 
 ## The class calendar
 

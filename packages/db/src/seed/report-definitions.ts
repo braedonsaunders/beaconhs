@@ -490,7 +490,7 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
   seed(
     'training_missing',
     'Training — Missing',
-    'Required courses that are missing, expired, or expiring. Group by employee or course.',
+    'Required courses that are missing, expired, or expiring, plus everyone booked into an upcoming class. Group by employee or course.',
     'training',
     rows(
       'training_matrix',
@@ -502,8 +502,8 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
         'course_name',
         'booking_coverage_status',
         'expires_on',
-        // Someone expired but already booked onto a class is handled; without
-        // this the report reads as if nobody has done anything about them.
+        // Include upcoming bookings even without an existing certificate or
+        // compliance assignment. Scheduling never grants a qualification.
         'booked_starts_at',
       ],
       {
@@ -511,11 +511,22 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
           combinator: 'and',
           rules: [
             ACTIVE_PEOPLE,
-            { field: 'is_required', op: 'is_true' },
             {
-              field: 'coverage_status',
-              op: 'in',
-              value: ['missing', 'expired', 'expiring'],
+              combinator: 'or',
+              rules: [
+                { field: 'booked', op: 'is_true' },
+                {
+                  combinator: 'and',
+                  rules: [
+                    { field: 'is_required', op: 'is_true' },
+                    {
+                      field: 'coverage_status',
+                      op: 'in',
+                      value: ['missing', 'expired', 'expiring'],
+                    },
+                  ],
+                },
+              ],
             },
           ],
         },

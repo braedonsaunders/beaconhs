@@ -110,7 +110,9 @@ export default async function TrainingRecordsPage({
         prefix: 'training',
         personCol: trainingRecords.personId,
       })
+      const employmentFilter = personFilterWhere(includeInactivePeople(sp))
       const filters: SQL<unknown>[] = [isNull(trainingRecords.deletedAt)]
+      if (employmentFilter) filters.push(employmentFilter)
       if (vis) filters.push(vis)
       if (params.q) {
         const term = `%${params.q}%`
@@ -191,12 +193,14 @@ export default async function TrainingRecordsPage({
       const sources = await tx
         .select({ s: trainingRecords.source, c: count() })
         .from(trainingRecords)
-        .where(and(isNull(trainingRecords.deletedAt), vis))
+        .innerJoin(people, eq(people.id, trainingRecords.personId))
+        .where(and(isNull(trainingRecords.deletedAt), vis, employmentFilter))
         .groupBy(trainingRecords.source)
 
       const [expiredCount] = await tx
         .select({ c: count() })
         .from(trainingRecords)
+        .innerJoin(people, eq(people.id, trainingRecords.personId))
         .where(
           and(
             isNull(trainingRecords.deletedAt),
@@ -204,16 +208,19 @@ export default async function TrainingRecordsPage({
             lte(trainingRecords.expiresOn, today),
             latestTrainingRecordOnly(),
             vis,
+            employmentFilter,
           ),
         )
       const [currentCount] = await tx
         .select({ c: count() })
         .from(trainingRecords)
+        .innerJoin(people, eq(people.id, trainingRecords.personId))
         .where(
           and(
             isNull(trainingRecords.deletedAt),
             or(isNull(trainingRecords.expiresOn), gt(trainingRecords.expiresOn, today)),
             vis,
+            employmentFilter,
           ),
         )
 
@@ -229,13 +236,7 @@ export default async function TrainingRecordsPage({
         })
         .from(trainingRecords)
         .innerJoin(people, eq(people.id, trainingRecords.personId))
-        .where(
-          and(
-            isNull(trainingRecords.deletedAt),
-            vis,
-            personFilterWhere(includeInactivePeople(sp), personFilter),
-          ),
-        )
+        .where(and(isNull(trainingRecords.deletedAt), vis, employmentFilter))
         .orderBy(asc(people.lastName), asc(people.firstName))
       const coursesList = await tx
         .select({ id: trainingCourses.id, name: trainingCourses.name, code: trainingCourses.code })

@@ -240,7 +240,7 @@ Open [Reports](/reports) from the sidebar. It has two tabs: **Reports** and **Sc
 6. Click **Apply and run**. The paper preview and summary now use those exact controls.
 7. Click **Reset to saved report** to return to the report's saved filters and grouping.
 
-Training reports expose employee, course, course type, delivery type, department, employment status, and person-group fields — including those joined from the employee record. This lets the certificate, expired, and missing reports be filtered and grouped without a separate training-only reporting screen. **Training — Missing** defaults to active employees and only includes courses assigned through active compliance requirements. You can change the employment-status filter in the report definition or when you run it.
+Training reports expose employee, course, course type, delivery type, department, employment status, and person-group fields — including those joined from the employee record. This lets the certificate, expired, and missing reports be filtered and grouped without a separate training-only reporting screen. **Training — Missing** defaults to active employees. It includes missing, expired, or expiring courses assigned through active compliance requirements, plus every upcoming class booking even when the course was never previously held or required. **Booked** takes priority over missing, expired, expiring, or current coverage until the class is completed or cancelled. You can change the employment-status filter in the report definition or when you run it.
 
 Coverage is colour-coded: **expired** and **missing** read red, **expiring** amber, **valid** green. The colour is on the text with a heavier weight, not a background, so it still prints on a black-and-white printer and still reads if you cannot separate red from green.
 
@@ -422,7 +422,7 @@ The **Overview** tab shows the big picture: total obligations, subjects tracked,
 5. For a recurring item, choose the **Cadence**. Inspections, journals, and hazard assessments also have **Quantity per period** and **Compliant threshold (%)**. Leave **Cron override (optional)** blank for the standard cadence time. For an inspection or scheduled app, **Due offset (minutes after fire)** moves the deadline later without changing when the next period starts.
 6. Click **Create obligation**.
 
-The system then tracks every person in the audience and creates their tasks automatically.
+The system then tracks every person in the audience and creates their tasks automatically. Imported assignments keep their original audience: groups remain **Group** audiences, divisions become departments, and individual assignments remain specific people. Group and department membership is resolved automatically, so you can maintain the assignment by updating that group or department.
 
 Recurring periods use the compliance scan timezone under **Admin** → **Notifications**. A schedule must fire once in each selected cadence period. The current period stays visible until the next scheduled fire, so an overdue weekly item does not disappear at midnight before the new week actually starts.
 
