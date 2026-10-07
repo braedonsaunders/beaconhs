@@ -251,7 +251,11 @@ export function EditorPane({
           ) : null}
 
           {entry.status === 'draft' && entry.canSubmit ? (
-            <JournalSubmitButton submitting={submitting} onClick={submit} />
+            <JournalSubmitButton
+              submitting={submitting}
+              disabled={!entry.supervisorPersonId}
+              onClick={submit}
+            />
           ) : null}
 
           <div className="relative">

@@ -310,55 +310,71 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
   const submittedAt = new Date()
   // Draft guard: re-submitting (double-click, replayed request) must not reset
   // submittedAt or re-fire flows / integrations / AI for the same submission.
-  const [row] = await ctx.db(async (tx) => {
+  const result = await ctx.db(async (tx) => {
     const rows = await tx
       .update(journalEntries)
       .set({ status: 'submitted', submittedAt, lockedAt: submittedAt })
-      .where(and(where, eq(journalEntries.status, 'draft')))
+      .where(
+        and(
+          where,
+          eq(journalEntries.status, 'draft'),
+          sql`exists (
+            select 1 from ${people}
+            where ${people.id} = ${journalEntries.supervisorPersonId}
+              and ${people.tenantId} = ${journalEntries.tenantId}
+              and ${activePeopleWhere()}
+          )`,
+        ),
+      )
       .returning({ reference: journalEntries.reference })
     const submitted = rows[0]
-    if (submitted) {
-      await recordDomainEvent(tx, {
-        tenantId: ctx.tenantId,
-        eventType: 'journal_entry.submitted',
-        subjectId: id,
-        dedupKey: `journal-entry.submitted:${id}:${submittedAt.toISOString()}`,
-        payload: {
-          integration: journalEntrySubmittedEvent(ctx.tenantId, {
-            id,
-            reference: submitted.reference,
-            status: 'submitted',
-            submittedAt,
-          }),
-          web: moduleFlowCommand(ctx, {
-            subjectId: id,
-            moduleKey: 'journals',
-            event: 'on_submit',
-          }),
-        },
-      })
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'journal_entry',
-        entityId: id,
-        action: 'publish',
-        summary: `Submitted ${submitted.reference}`,
-      })
-      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
-        sourceModule: 'journal',
-        targetRef: {},
-      })
+    if (!submitted) {
+      const [existing] = await tx
+        .select({ status: journalEntries.status })
+        .from(journalEntries)
+        .where(where)
+        .limit(1)
+      return {
+        ok: false as const,
+        error: !existing
+          ? 'Entry not found.'
+          : existing.status !== 'draft'
+            ? 'This entry has already been submitted.'
+            : 'Choose an active supervisor before submitting your journal.',
+      }
     }
-    return rows
+    await recordDomainEvent(tx, {
+      tenantId: ctx.tenantId,
+      eventType: 'journal_entry.submitted',
+      subjectId: id,
+      dedupKey: `journal-entry.submitted:${id}:${submittedAt.toISOString()}`,
+      payload: {
+        integration: journalEntrySubmittedEvent(ctx.tenantId, {
+          id,
+          reference: submitted.reference,
+          status: 'submitted',
+          submittedAt,
+        }),
+        web: moduleFlowCommand(ctx, {
+          subjectId: id,
+          moduleKey: 'journals',
+          event: 'on_submit',
+        }),
+      },
+    })
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'journal_entry',
+      entityId: id,
+      action: 'publish',
+      summary: `Submitted ${submitted.reference}`,
+    })
+    await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+      sourceModule: 'journal',
+      targetRef: {},
+    })
+    return { ok: true as const }
   })
-  if (!row) {
-    const [existing] = await ctx.db((tx) =>
-      tx.select({ id: journalEntries.id }).from(journalEntries).where(where).limit(1),
-    )
-    return {
-      ok: false,
-      error: existing ? 'This entry has already been submitted.' : 'Entry not found.',
-    }
-  }
+  if (!result.ok) return result
   // Background categorisation: when enabled (Admin → AI → Automation), summarise
   // and tag the submitted entry so logs stay organised without the worker doing
   // it. Best-effort — never block a submit on AI.

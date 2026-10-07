@@ -51,7 +51,7 @@ const entry: JournalEntryDetail = {
   status: 'draft',
   definition: 'worker',
   siteOrgUnitId: null,
-  supervisorPersonId: null,
+  supervisorPersonId: 'supervisor',
   personId: 'person',
   createdByTenantUserId: 'member',
   tags: [],
@@ -103,6 +103,14 @@ describe('saved journal submit controls', () => {
     expect(submitButton()).toBeNull()
     await render({ status: 'submitted', locked: true })
     expect(submitButton()).toBeNull()
+  })
+  it('blocks submission when the supervisor is missing', async () => {
+    await render({ supervisorPersonId: null })
+    expect(submitButton()!.disabled).toBe(true)
+    await act(async () => submitButton()!.click())
+    expect(mocks.submit).not.toHaveBeenCalled()
+    await render({ supervisorPersonId: 'supervisor' })
+    expect(submitButton()!.disabled).toBe(false)
   })
   it('drains the last debounced body edit before submitting and locking the draft', async () => {
     await render()

@@ -106,7 +106,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Submit your entry',
-        body: 'When you have finished writing, tap Submit in the header. It waits for your latest words to save. Your journal then shows Submitted and becomes read-only.',
+        body: 'Choose an active Supervisor before submitting. When you have finished writing, tap Submit in the header. It waits for your latest words and supervisor choice to save. Your journal then shows Submitted and becomes read-only.',
       },
       {
         title: 'Finding old entries',

@@ -6,10 +6,11 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 // editable tag chip set. Larger fields, generous spacing.
 
 import { useState } from 'react'
-import { Briefcase, CalendarDays, MapPin, Tag, UserCog } from 'lucide-react'
+import { Briefcase, CalendarDays, MapPin, Tag } from 'lucide-react'
 import { cn, SearchSelect } from '@beaconhs/ui'
 import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { TagEditor } from './_tag-editor'
+import { JournalSupervisorField } from './_supervisor-field'
 import type { JournalDefinition, JournalEntryDetail, TagSuggestion } from './_types'
 
 const FIELD =
@@ -76,20 +77,12 @@ export function MetadataBar({
           />
         </Field>
 
-        <Field label={tGenerated('m_0ccb8e5b917b17')} icon={<UserCog size={13} />}>
-          <RemoteSearchSelect
-            lookup="journal-supervisors"
-            value={entry.supervisorPersonId ?? ''}
-            disabled={!editable}
-            clearable
-            emptyLabel={tGenerated('m_10d1d0d92a9aaa')}
-            placeholder={tGenerated('m_10d1d0d92a9aaa')}
-            searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
-            sheetTitle="Supervisor"
-            ariaLabel="Supervisor"
-            onChange={(v) => onPatch({ supervisorPersonId: v || null })}
-          />
-        </Field>
+        <JournalSupervisorField
+          value={entry.supervisorPersonId}
+          disabled={!editable}
+          requiredForSubmission={entry.status === 'draft'}
+          onChange={(value) => onPatch({ supervisorPersonId: value })}
+        />
       </div>
 
       {/* Tags — collapsed to a compact chip. Tagging is usually automatic in the

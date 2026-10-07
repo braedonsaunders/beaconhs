@@ -5,6 +5,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Button } from '@beaconhs/ui'
 import { unstable_rethrow } from 'next/navigation'
 import { JournalSubmitButton } from './_submit-button'
+import { JournalSupervisorField } from './_supervisor-field'
 import { JournalEditor } from './_editor'
 import { createTodayEntry, submitEntry, updateEntry } from './_actions'
 import { FLUSH_RECORD_SAVES, forgetRecordSave, trackRecordSave } from '@/lib/pending-record-saves'
@@ -27,6 +28,9 @@ export function TodayComposer({
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [hasText, setHasText] = useState(false)
+  const [supervisorPersonId, setSupervisorPersonId] = useState<string | null>(null)
+  const supervisor = useRef<string | null>(null)
+  const persistedSupervisor = useRef<string | null>(null)
   const latest = useRef('')
   const running = useRef<Promise<void> | null>(null)
   const persisted = useRef('')
@@ -62,12 +66,18 @@ export function TodayComposer({
         id.current = created.id
       }
       let saved: string
+      let savedSupervisor: string | null
       do {
         saved = latest.current
-        const result = await updateEntry({ id: id.current, patch: { bodyHtml: saved } })
+        savedSupervisor = supervisor.current
+        const result = await updateEntry({
+          id: id.current,
+          patch: { bodyHtml: saved, supervisorPersonId: savedSupervisor },
+        })
         if (!result.ok) throw new Error(result.error)
-      } while (latest.current !== saved)
+      } while (latest.current !== saved || supervisor.current !== savedSupervisor)
       persisted.current = saved
+      persistedSupervisor.current = savedSupervisor
       if (!submitIntent.current) {
         setOpening(true)
         await onCreated(id.current)
@@ -85,7 +95,13 @@ export function TodayComposer({
   useEffect(() => {
     const flush = () => void saveLatest()
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (!submitIntent.current && !running.current && latest.current === persisted.current) return
+      if (
+        !submitIntent.current &&
+        !running.current &&
+        latest.current === persisted.current &&
+        (!id.current || supervisor.current === persistedSupervisor.current)
+      )
+        return
       event.preventDefault()
       event.returnValue = ''
     }
@@ -94,13 +110,18 @@ export function TodayComposer({
     return () => {
       window.removeEventListener(FLUSH_RECORD_SAVES, flush)
       window.removeEventListener('beforeunload', beforeUnload)
-      if (running.current || latest.current !== persisted.current) flush()
+      if (
+        running.current ||
+        latest.current !== persisted.current ||
+        (id.current && supervisor.current !== persistedSupervisor.current)
+      )
+        flush()
       else forgetRecordSave(saveKey)
     }
   }, [saveKey])
 
   async function submit() {
-    if (submitIntent.current || !hasText || !canSubmit) return
+    if (submitIntent.current || !hasText || !canSubmit || !supervisor.current) return
     submitIntent.current = true
     setSubmitting(true)
     setError(null)
@@ -157,7 +178,7 @@ export function TodayComposer({
             {canSubmit && !submitted ? (
               <JournalSubmitButton
                 submitting={submitting}
-                disabled={!hasText || opening}
+                disabled={!hasText || !supervisorPersonId || opening}
                 onClick={() => void submit()}
               />
             ) : null}
@@ -172,6 +193,18 @@ export function TodayComposer({
             }
           />
         </p>
+        <div className="max-w-sm">
+          <JournalSupervisorField
+            value={supervisorPersonId}
+            disabled={submitting || opening || submitted}
+            requiredForSubmission={!submitted}
+            onChange={(value) => {
+              supervisor.current = value
+              setSupervisorPersonId(value)
+              if (latest.current) void save().catch(() => {})
+            }}
+          />
+        </div>
         {submitted ? (
           <p role="status" className="text-sm text-teal-700 dark:text-teal-300">
             <GeneratedValue value={'Submitted'} />

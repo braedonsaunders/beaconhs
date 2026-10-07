@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   submit: vi.fn(),
   edit: null as null | ((html: string, text: string) => void),
+  pickSupervisor: null as null | ((value: string) => void),
 }))
 vi.mock('./_actions', () => ({
   createTodayEntry: mocks.create,
@@ -18,6 +19,12 @@ vi.mock('./_actions', () => ({
 vi.mock('./_editor', () => ({
   JournalEditor: ({ onChange }: { onChange: typeof mocks.edit }) => {
     mocks.edit = onChange
+    return null
+  },
+}))
+vi.mock('@/components/remote-search-select', () => ({
+  RemoteSearchSelect: ({ onChange }: { onChange: (value: string) => void }) => {
+    mocks.pickSupervisor = onChange
     return null
   },
 }))
@@ -73,7 +80,7 @@ describe('new journal save barrier', () => {
     expect(mocks.create).toHaveBeenCalledOnce()
     expect(mocks.update).toHaveBeenCalledExactlyOnceWith({
       id: 'new-entry',
-      patch: { bodyHtml: '<p>All 10 points</p>' },
+      patch: { bodyHtml: '<p>All 10 points</p>', supervisorPersonId: null },
     })
     expect(open).toHaveBeenCalledExactlyOnceWith('new-entry')
   })
@@ -99,6 +106,9 @@ function submitButton() {
     (button) => button.textContent?.trim() === 'Submit',
   )!
 }
+async function chooseSupervisor(value = 'supervisor') {
+  await act(async () => mocks.pickSupervisor!(value))
+}
 async function clickSubmit() {
   await act(async () => submitButton().click())
 }
@@ -109,6 +119,7 @@ describe('fresh journal submission', () => {
     expect(submitButton().disabled).toBe(true)
   })
   it('saves all text typed during creation before submitting the same entry', async () => {
+    await chooseSupervisor()
     let finish!: (value: { ok: true; id: string }) => void
     mocks.create.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -124,7 +135,7 @@ describe('fresh journal submission', () => {
     await act(async () => finish({ ok: true, id: 'new-entry' }))
     expect(mocks.update).toHaveBeenCalledExactlyOnceWith({
       id: 'new-entry',
-      patch: { bodyHtml: '<p>Final line</p>' },
+      patch: { bodyHtml: '<p>Final line</p>', supervisorPersonId: 'supervisor' },
     })
     expect(mocks.submit).toHaveBeenCalledExactlyOnceWith('new-entry')
     expect(open).toHaveBeenCalledExactlyOnceWith('new-entry')
@@ -134,6 +145,7 @@ describe('fresh journal submission', () => {
     expect(mocks.submit.mock.invocationCallOrder[0]).toBeLessThan(open.mock.invocationCallOrder[0]!)
   })
   it('blocks submission on a failed save and retains visible feedback above the text', async () => {
+    await chooseSupervisor()
     let finish!: (value: { ok: false; error: string }) => void
     mocks.update.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -157,6 +169,7 @@ describe('fresh journal submission', () => {
     expect(open).toHaveBeenCalledOnce()
   })
   it('keeps a draft when the submit action fails and allows retry without a duplicate', async () => {
+    await chooseSupervisor()
     let finish!: (value: { ok: true }) => void
     mocks.update.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -177,6 +190,7 @@ describe('fresh journal submission', () => {
     expect(open).toHaveBeenCalledOnce()
   })
   it('does not re-submit if opening the submitted journal fails', async () => {
+    await chooseSupervisor()
     let finish!: (value: { ok: true }) => void
     mocks.update.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -195,6 +209,42 @@ describe('fresh journal submission', () => {
     await act(async () => retry.click())
     expect(mocks.submit).toHaveBeenCalledOnce()
     expect(open).toHaveBeenCalledTimes(2)
+  })
+  it('keeps saving draft text but blocks Submit until a supervisor is selected', async () => {
+    await act(async () => mocks.edit!('<p>Draft words</p>', 'Draft words'))
+    expect(submitButton().disabled).toBe(true)
+    expect(container.textContent).toContain(
+      'Choose an active supervisor before submitting your journal.',
+    )
+    expect(mocks.update).toHaveBeenCalledWith({
+      id: 'new-entry',
+      patch: { bodyHtml: '<p>Draft words</p>', supervisorPersonId: null },
+    })
+    await clickSubmit()
+    expect(mocks.submit).not.toHaveBeenCalled()
+    await chooseSupervisor()
+    expect(submitButton().disabled).toBe(false)
+  })
+  it('saves the latest supervisor selected during a pending save before submission', async () => {
+    await chooseSupervisor()
+    let finish!: (value: { ok: true }) => void
+    mocks.update.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    await act(async () => mocks.edit!('<p>Journal</p>', 'Journal'))
+    await chooseSupervisor('supervisor-two')
+    await clickSubmit()
+    await act(async () => finish({ ok: true }))
+    expect(mocks.update).toHaveBeenNthCalledWith(2, {
+      id: 'new-entry',
+      patch: { bodyHtml: '<p>Journal</p>', supervisorPersonId: 'supervisor-two' },
+    })
+    expect(mocks.submit).toHaveBeenCalledExactlyOnceWith('new-entry')
+    expect(mocks.update.mock.invocationCallOrder[1]).toBeLessThan(
+      mocks.submit.mock.invocationCallOrder[0]!,
+    )
   })
   it('does not offer submission to accounts without the permission', async () => {
     await act(async () =>

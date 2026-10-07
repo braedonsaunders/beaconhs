@@ -44,7 +44,7 @@ Supervisors can open **Records** beside **Journals**, or tap **Browse**, then **
 2. Resume today’s draft, or start typing in the fresh editor. Older entries stay in **Browse**.
 3. Type what happened. Your words save automatically as you go — there is no save button.
 4. Use the microphone button to dictate by voice instead of typing, if you prefer.
-5. Set the location and people in the bar above the text, if they apply.
+5. Choose an active **Supervisor**. You can save a draft without one, but you must choose one before submitting. Set the location if it applies.
 
 The header changes from **Saving…** to **Saved** after your latest edit is stored. Wait for **Saved** before closing or refreshing the browser. Opening another entry saves your pending changes first. If a save fails, your words stay in the editor. Tap **Not saved — retry** and wait for **Saved** before leaving or submitting the entry.
 
@@ -72,7 +72,7 @@ Tags help people find entries later (for example a tag for concrete pours). Tap 
 
 ## Submitting
 
-1. When your entry is done, tap **Submit** in the header. It is available in the fresh editor as soon as you start writing, and stays above the scrolling text on a phone.
+1. Choose an active **Supervisor**, then tap **Submit** in the header when your entry is done. The fresh editor and saved drafts both offer the supervisor picker. **Submit** becomes available after you have chosen a supervisor, and stays above the scrolling text on a phone.
 2. **Submit** waits for your latest words to save, then marks the entry **Submitted**. Autosave alone keeps an entry as a draft. If saving or submission fails, the error appears above the text; retry before leaving.
 3. Submitted entries become read-only. To correct your own entry, tap **Unlock**, confirm, make your changes, then **Submit** again. Unlocking is permission-checked and recorded in Activity.
 
