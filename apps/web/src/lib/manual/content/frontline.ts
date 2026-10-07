@@ -509,7 +509,7 @@ Open **Equipment** in the left menu, then the **Vehicle log** tab — or go stra
 3. If your company allows both, pick a **Log mode**: **Destination** or **Odometer**.
 4. Use the arrows to change months. **This month** jumps back to today's month.
 
-You now see the month grid — one row per day. **Edit own vehicle log** lets you enter and correct your own driver log without managing equipment. Your login must be linked to your Person record. Foreman / Supervisor roles include this permission. Other drivers’ logs stay read-only unless you have **Manage equipment**. Deleting a whole month requires **Manage equipment**. Your company may install a private extension that adds actions to the month toolbar. These actions are available when you can edit the selected driver’s log. If an extension is unavailable, contact your administrator.
+You now see the month grid — one row per day. **Edit own vehicle log** lets you enter and correct your own driver log without managing equipment. Your login must be linked to your Person record. Foreman / Supervisor roles include this permission. Other drivers’ logs stay read-only unless you have **Manage equipment**. Deleting a whole month requires **Manage equipment**. Your company may install a private extension that adds actions to the month toolbar. These actions are available when you can edit the selected driver’s log. If an extension is unavailable, contact your administrator. When your company offers **Import**, it fills empty days from the selected source. Existing mileage, destinations, notes, and manual corrections are kept. Empty days carried over from the old app can be filled too. Re-importing refreshes unchanged days previously imported from the same source.
 
 ## Logging a day (odometer mode)
 
