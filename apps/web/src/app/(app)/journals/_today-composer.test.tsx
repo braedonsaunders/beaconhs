@@ -61,6 +61,27 @@ afterEach(async () => {
 })
 
 describe('new journal save barrier', () => {
+  it('keeps a text clear made while journal creation is pending', async () => {
+    let finish!: (value: { ok: true; id: string }) => void
+    mocks.create.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
+    await act(async () => mocks.edit!('<p>Remove these words</p>', 'Remove these words'))
+    await act(async () => mocks.edit!('<p></p>', ''))
+    expect(submitButton().disabled).toBe(true)
+    const leaving = flushRecordSaves()
+    await act(async () => {
+      finish({ ok: true, id: 'new-entry' })
+      await leaving
+    })
+    expect(mocks.update).toHaveBeenCalledExactlyOnceWith({
+      id: 'new-entry',
+      patch: { bodyHtml: '<p></p>', supervisorPersonId: null },
+    })
+    expect(open).toHaveBeenCalledExactlyOnceWith('new-entry')
+  })
   it('waits for creation and all text typed during it before allowing navigation', async () => {
     let finish!: (value: { ok: boolean; id: string }) => void
     mocks.create.mockImplementationOnce(

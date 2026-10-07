@@ -237,7 +237,7 @@ export function TodayComposer({
             if (submitIntent.current || submitted) return
             const meaningful = Boolean(text.trim())
             setHasText(meaningful)
-            if (!meaningful && !id.current) return
+            if (!meaningful && !id.current && !running.current) return
             latest.current = html
             void save().catch(() => {})
           }}
