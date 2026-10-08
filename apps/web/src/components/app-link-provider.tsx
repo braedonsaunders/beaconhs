@@ -12,7 +12,8 @@ import {
 
 import Link from 'next/link'
 import { useCallback } from 'react'
-import { UiLinkProvider, UiTextProvider } from '@beaconhs/ui'
+import { UiLinkProvider } from '@beaconhs/ui/link-context'
+import { UiTextProvider } from '@beaconhs/ui/text-context'
 import { generatedMessageKey } from '@/i18n/generated-key'
 
 export function AppLinkProvider({ children }: { children: React.ReactNode }) {

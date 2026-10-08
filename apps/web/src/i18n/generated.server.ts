@@ -19,3 +19,12 @@ export async function getGeneratedValueTranslations() {
     return (messages.Generated?.[key] === undefined ? value : translate(key)) as Value
   }
 }
+
+/** Resolve translated Markdown without ICU interpretation or a browser catalogue. */
+export async function getGeneratedRawValueTranslations() {
+  const messages = (await getMessages()) as { Generated?: Record<string, unknown> }
+  return (value: string): string => {
+    const translated = messages.Generated?.[generatedMessageKey(value)]
+    return typeof translated === 'string' ? translated : value
+  }
+}

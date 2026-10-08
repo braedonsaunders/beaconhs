@@ -1,5 +1,7 @@
 'use client'
 
+import { RichTextEditor } from '@beaconhs/ui/rich-text-editor'
+
 import {
   GeneratedText,
   useGeneratedTranslations,
@@ -43,7 +45,7 @@ import {
   UserCheck,
   Video,
 } from 'lucide-react'
-import { Badge, Button, FileUploader, Input, Label, RichTextEditor, Select } from '@beaconhs/ui'
+import { Badge, Button, FileUploader, Input, Label, Select } from '@beaconhs/ui'
 import type { PracticalCriterion } from '@beaconhs/db/schema'
 import { normalizeDocumentHref } from '@beaconhs/forms-core'
 import { finalizeUpload, requestUpload } from '@/lib/uploads'

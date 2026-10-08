@@ -1,4 +1,8 @@
-import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
+import {
+  getGeneratedValueTranslations,
+  getGeneratedTranslations,
+  getGeneratedRawValueTranslations,
+} from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // A single user-guide article. Permission-aware: unknown slugs and articles
@@ -33,6 +37,7 @@ const ARTICLE_TOURS: Record<string, string> = {
 
 export default async function HelpArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const tGeneratedValue = await getGeneratedValueTranslations()
+  const translateArticle = await getGeneratedRawValueTranslations()
   const ctx = await requireRequestContext()
   const { slug } = await params
   const article = manualArticleForUser(ctx, slug)
@@ -71,7 +76,7 @@ export default async function HelpArticlePage({ params }: { params: Promise<{ sl
             ) : undefined
           }
         />
-        <ManualMarkdown>{article.body}</ManualMarkdown>
+        <ManualMarkdown>{translateArticle(article.body)}</ManualMarkdown>
       </div>
     </PageContainer>
   )

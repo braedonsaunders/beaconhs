@@ -1,5 +1,5 @@
 'use client'
-import { GeneratedValue, useGeneratedRawValueTranslations } from '@/i18n/generated'
+import { GeneratedValue } from '@/i18n/generated'
 
 // Markdown renderer for the built-in user guide (/help). Same sanitized
 // react-markdown + GFM stack as the assistant's ChatMarkdown, tuned for long
@@ -13,9 +13,6 @@ import remarkGfm from 'remark-gfm'
 import { cn } from '@beaconhs/ui'
 
 export function ManualMarkdown({ children, className }: { children: string; className?: string }) {
-  const translateRawValue = useGeneratedRawValueTranslations()
-  const translatedChildren = translateRawValue(children)
-
   return (
     <div
       className={cn(
@@ -49,7 +46,7 @@ export function ManualMarkdown({ children, className }: { children: string; clas
           },
         }}
       >
-        {translatedChildren}
+        {children}
       </Markdown>
     </div>
   )

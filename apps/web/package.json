@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --no-file-parallelism --passWithNoTests",
-    "clean": "rm -rf .next .turbo"
+    "clean": "rm -rf .next .turbo",
+    "i18n:client-messages": "node scripts/generate-client-messages.ts"
   },
   "dependencies": {
     "@beaconhs/ai": "workspace:*",

@@ -1,5 +1,7 @@
 'use client'
 
+import { RichTextEditor } from '@beaconhs/ui/rich-text-editor'
+
 import {
   GeneratedText,
   useGeneratedTranslations,
@@ -9,7 +11,7 @@ import {
 
 import { useRouter } from 'next/navigation'
 import { normalizeDocumentHref } from '@beaconhs/forms-core'
-import { Button, Input, Label, RichTextEditor, Textarea, UrlDrawer } from '@beaconhs/ui'
+import { Button, Input, Label, Textarea, UrlDrawer } from '@beaconhs/ui'
 import { toast } from '@/lib/toast'
 import { MultiPicker } from '../_multipicker'
 import { RiskMatrixField } from '../_risk'

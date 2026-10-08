@@ -7,7 +7,10 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./styles.css": "./src/styles.css"
+    "./styles.css": "./src/styles.css",
+    "./rich-text-editor": "./src/rich-text-editor.tsx",
+    "./link-context": "./src/link-context.tsx",
+    "./text-context": "./src/text-context.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

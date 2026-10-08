@@ -28,18 +28,6 @@ export function useGeneratedValueTranslations() {
   )
 }
 
-/** Resolve exact catalog copy without ICU parsing (for translated Markdown and other rich source). */
-export function useGeneratedRawValueTranslations() {
-  const messages = useMessages() as { Generated?: Record<string, unknown> }
-  return useCallback(
-    (value: string): string => {
-      const translated = messages.Generated?.[generatedMessageKey(value)]
-      return typeof translated === 'string' ? translated : value
-    },
-    [messages.Generated],
-  )
-}
-
 export function GeneratedText({
   id,
   values,

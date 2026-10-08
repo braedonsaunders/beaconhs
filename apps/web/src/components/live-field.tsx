@@ -1,5 +1,7 @@
 'use client'
 
+import { RichTextEditor } from '@beaconhs/ui/rich-text-editor'
+
 import {
   GeneratedText,
   useGeneratedTranslations,
@@ -19,15 +21,7 @@ import {
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { htmlToText, normalizeDocumentHref, sanitizeDocumentHtml } from '@beaconhs/forms-core'
-import {
-  Input,
-  RichTextEditor,
-  SearchSelect,
-  Select,
-  Textarea,
-  cn,
-  type SelectOption,
-} from '@beaconhs/ui'
+import { Input, SearchSelect, Select, Textarea, cn, type SelectOption } from '@beaconhs/ui'
 import { FLUSH_RECORD_SAVES, trackRecordSave, forgetRecordSave } from '@/lib/pending-record-saves'
 import { useLazyRecord } from './lazy-record'
 import { RemoteSearchSelect } from './remote-search-select'

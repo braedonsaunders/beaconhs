@@ -1,5 +1,7 @@
 'use client'
 
+import { RichTextEditor } from '@beaconhs/ui/rich-text-editor'
+
 import {
   GeneratedText,
   useGeneratedTranslations,
@@ -70,7 +72,6 @@ import {
   Drawer,
   Input,
   Label,
-  RichTextEditor,
   SearchSelect,
   Select,
   Textarea,

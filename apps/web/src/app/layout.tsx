@@ -8,6 +8,7 @@ import { AppLinkProvider } from '@/components/app-link-provider'
 import { SplashScreen } from '@/components/brand-splash'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { PRODUCT_NAME } from '@/lib/brand'
+import { getClientMessages } from '@/i18n/client-messages'
 
 export async function generateMetadata(): Promise<Metadata> {
   const tGenerated = await getGeneratedTranslations()
@@ -69,7 +70,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body className="h-full overflow-hidden bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
-        <NextIntlClientProvider locale={locale} messages={messages} timeZone={timeZone}>
+        <NextIntlClientProvider
+          locale={locale}
+          messages={getClientMessages(messages)}
+          timeZone={timeZone}
+        >
           <AppLinkProvider>
             <GeneratedValue value={children} />
           </AppLinkProvider>
