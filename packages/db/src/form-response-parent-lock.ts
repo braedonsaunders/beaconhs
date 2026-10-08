@@ -3,7 +3,7 @@ import type { Database } from './client'
 import { formResponses, hazidAssessments } from './schema'
 
 export const FORM_RESPONSE_PARENT_LOCKED_MESSAGE =
-  'This response belongs to a locked hazard assessment or a signing revision. Start a new assessment revision before making changes.'
+  'This response belongs to a locked hazard assessment. Unlock the assessment before making changes.'
 
 export class FormResponseParentLockedError extends Error {
   override readonly name = 'FormResponseParentLockedError'
@@ -68,7 +68,6 @@ export async function lockFormResponseForMutation(
     const [parent] = await tx
       .select({
         locked: hazidAssessments.locked,
-        signingFrozenAt: hazidAssessments.signingFrozenAt,
       })
       .from(hazidAssessments)
       .where(
@@ -85,7 +84,7 @@ export async function lockFormResponseForMutation(
         'Hazard-assessment response points to a missing parent assessment.',
       )
     }
-    if (parent.locked || parent.signingFrozenAt) throw new FormResponseParentLockedError()
+    if (parent.locked) throw new FormResponseParentLockedError()
   }
 
   const [response] = await tx

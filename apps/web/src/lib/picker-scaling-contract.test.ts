@@ -212,8 +212,15 @@ describe('production-scale picker contract', () => {
     )
     expect(sharedPersonPicker).toContain("recordSearchWhere('people', input.query)")
     expect(sharedPersonPicker).toContain('[row.employeeNo, row.jobTitle]')
-    expect(route.match(/\.select\(PERSON_OPTION_SELECTION\)/g)).toHaveLength(11)
+    expect(route.match(/\.select\(PERSON_OPTION_SELECTION\)/g)).toHaveLength(12)
     expect(route.match(/personOptions\(rows\)/g)).toHaveLength(11)
+    const crewCandidates = between(
+      route,
+      "if (lookup === 'hazard-assessment-crew-candidates')",
+      "lookup === 'journal-supervisors'",
+    )
+    expect(crewCandidates).toContain('.select(PERSON_OPTION_SELECTION)')
+    expect(crewCandidates).toContain('personOptions(persons.slice(0, 20))')
   })
 
   it('keeps the public people kiosk PIN-gated, tenant-scoped, and bounded', () => {

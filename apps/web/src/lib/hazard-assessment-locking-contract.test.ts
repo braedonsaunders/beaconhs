@@ -102,7 +102,7 @@ describe('hazard-assessment transactional locking contract', () => {
       new URL('../app/(app)/hazard-assessments/_signature-form.tsx', import.meta.url),
       'utf8',
     )
-    expect(form).toContain('AddCrewDrawerBody')
+    expect(form).toContain('CrewSearch')
     expect(form).not.toContain('SignaturePad')
     expect(form).not.toContain('captureNow')
     expect(detailPage).toContain('<SigningRoster')

@@ -55,7 +55,7 @@ export function AssessmentHeaderActions({
     return () => window.removeEventListener('hazid-signatures-updated', update)
   }, [id])
   const current =
-    progress.id === id && progress.revision === revision ? progress : { signed, total: crewTotal }
+    progress.id === id && progress.revision >= revision ? progress : { signed, total: crewTotal }
   const lockDisabledReason =
     current.signed === 0
       ? t('Collect crew signatures before submitting')
@@ -69,8 +69,6 @@ export function AssessmentHeaderActions({
       canDelete={canManage}
       canLock={canUpdate}
       canCopy={canUpdate}
-      unlockLabel="Start new revision"
-      unlockMessage="Start a new revision? Previous signatures stay in history. Everyone must review and sign again."
       pdfHref={pdfHref}
       emailHref={emailHref}
       review={canReview ? { href: reviewHref } : null}

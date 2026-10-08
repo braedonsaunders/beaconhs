@@ -86,7 +86,6 @@ describe('form-response parent locking', () => {
   it('rejects a locked or missing Hazard parent before touching the response lock', async () => {
     for (const [parentRows, errorType] of [
       [[{ locked: true }], FormResponseParentLockedError],
-      [[{ locked: false, signingFrozenAt: new Date() }], FormResponseParentLockedError],
       [[], FormResponseParentIntegrityError],
     ] as const) {
       const { tx, terminalQueries } = transactionWithSelectResults(

@@ -89,8 +89,6 @@ async function assertCanSeeAssessment(ctx: HazidCtx, assessmentId: string): Prom
 async function assertAssessmentEditable(ctx: HazidCtx, assessmentId: string): Promise<void> {
   const row = await resolveAssessmentAccess(ctx, assessmentId)
   if (row.locked) throw new Error('This assessment is locked. Unlock it to make changes.')
-  if (row.signingFrozenAt)
-    throw new Error('Signing has started. Start a new revision to change the assessment.')
 }
 
 async function resolveAssessmentAccess(
@@ -189,8 +187,6 @@ async function lockEditableAssessment(
 ): Promise<void> {
   const row = await lockVisibleAssessment(ctx, tx, assessmentId)
   if (row.locked) throw new Error('This assessment is locked. Unlock it to make changes.')
-  if (row.signingFrozenAt)
-    throw new Error('Signing has started. Start a new revision to change the assessment.')
 }
 
 async function latestTemplateVersion(tx: HazidTx, templateId: string) {
@@ -777,15 +773,11 @@ export async function openAssessmentApp(formData: FormData) {
     }
     // Locked assessments are read-only: submitted responses stay viewable, but
     // pre-submit drafts must not be editable and new responses cannot start.
-    if (
-      (lockedAssessment.locked || lockedAssessment.signingFrozenAt) &&
-      existing &&
-      (status === 'draft' || status === 'in_progress')
-    ) {
+    if (lockedAssessment.locked && existing && (status === 'draft' || status === 'in_progress')) {
       throw new Error('Unlock this assessment before editing this app')
     }
     if (!responseId) {
-      if (lockedAssessment.locked || lockedAssessment.signingFrozenAt) {
+      if (lockedAssessment.locked) {
         throw new Error('Unlock this assessment before starting a new app')
       }
       if (
@@ -1068,8 +1060,7 @@ export async function unlockAssessment(formData: FormData) {
   await assertCanSeeAssessment(ctx, id)
   await ctx.db(async (tx) => {
     const assessment = await lockVisibleAssessment(ctx, tx, id)
-    if (!assessment.locked && !assessment.signingFrozenAt)
-      throw new Error('Signing has not started')
+    if (!assessment.locked) throw new Error('This assessment is not locked')
     if (!assessment.signingFrozenAt) {
       const [full] = await tx
         .select()
@@ -1106,7 +1097,7 @@ export async function unlockAssessment(formData: FormData) {
       entityType: 'hazid_assessment',
       entityId: id,
       action: 'update',
-      summary: 'Started a new assessment revision; previous signatures retained in signing history',
+      summary: 'Unlocked assessment; previous signatures retained in Activity',
     })
     await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
       sourceModule: 'hazard_assessment',
@@ -1951,7 +1942,10 @@ export async function deleteSignature(formData: FormData) {
     const parent = await lockVisibleAssessment(ctx, tx, assessmentId)
     if (parent.locked) throw new Error('This assessment is locked')
     const [signature] = await tx
-      .select({ signatureAttachmentId: hazidAssessmentSignatures.signatureAttachmentId })
+      .select({
+        signatureAttachmentId: hazidAssessmentSignatures.signatureAttachmentId,
+        signerName: hazidAssessmentSignatures.signerName,
+      })
       .from(hazidAssessmentSignatures)
       .where(
         and(
@@ -1964,8 +1958,7 @@ export async function deleteSignature(formData: FormData) {
       .limit(1)
       .for('update')
     if (!signature) throw new Error('Signature not found')
-    if (signature.signatureAttachmentId)
-      throw new Error('Start a new revision to change signed crew members')
+    if (signature.signatureAttachmentId) throw new Error('Signed crew members cannot be removed')
     await tx
       .delete(hazidAssessmentSignatures)
       .where(
@@ -1976,10 +1969,12 @@ export async function deleteSignature(formData: FormData) {
         ),
       )
     await recordAuditInTransaction(tx, ctx, {
-      entityType: 'hazid_assessment_signature',
-      entityId: id,
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
       action: 'delete',
-      summary: 'Deleted signature',
+      summary: 'Removed crew member',
+      before: { signer: signature.signerName },
+      metadata: { signatureId: id, revision: parent.signingRevision },
     })
   })
   revalidateAssessment(assessmentId)

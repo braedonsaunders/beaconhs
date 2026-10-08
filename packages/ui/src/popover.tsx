@@ -17,6 +17,7 @@ export function Popover({
   trigger,
   open,
   onOpenChange,
+  matchTriggerWidth = false,
   align = 'end',
   side = 'bottom',
   className,
@@ -25,6 +26,7 @@ export function Popover({
   trigger: React.ReactElement
   open: boolean
   onOpenChange: (open: boolean) => void
+  matchTriggerWidth?: boolean
   align?: 'start' | 'end'
   side?: 'top' | 'bottom'
   className?: string
@@ -102,6 +104,7 @@ export function Popover({
                     className,
                   )}
                   style={{
+                    width: matchTriggerWidth ? rect.width : undefined,
                     top: side === 'bottom' ? rect.top + rect.height + 4 : undefined,
                     bottom: side === 'top' ? window.innerHeight - rect.top + 4 : undefined,
                     left: align === 'start' ? rect.left : undefined,

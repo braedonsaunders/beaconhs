@@ -61,6 +61,15 @@ describe('picker options route policy', () => {
     expect(state.authCalls).toBe(0)
   })
 
+  it.each(['', '&contextId=bad'])(
+    'requires a valid assessment context for crew candidates (%s)',
+    async (context) => {
+      const response = await request(`lookup=hazard-assessment-crew-candidates${context}`)
+      expect(response.status).toBe(400)
+      expect(state.authCalls).toBe(0)
+    },
+  )
+
   it('rejects malformed optional context identifiers before authentication', async () => {
     const response = await request('lookup=equipment-item-inspection-types&contextId=bad')
     expect(response.status).toBe(400)
@@ -120,6 +129,10 @@ describe('picker options route policy', () => {
     ['lookup=report-sites', 'reports.read'],
     ['lookup=report-ppe-types', 'reports.read'],
     ['lookup=journal-supervisors', 'journals.update.own'],
+    [
+      'lookup=hazard-assessment-crew-candidates&contextId=10000000-0000-4000-8000-000000000001',
+      'hazid.update',
+    ],
     ['lookup=safe-distance-operators', 'tools.safe-distance.use'],
     ['lookup=compliance-by-person', 'compliance.read'],
     ['lookup=location-parent-units', 'admin.org.manage'],

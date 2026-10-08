@@ -1,5 +1,13 @@
+import { attachmentUrl } from '@/lib/attachment-url'
 import { and, eq, inArray } from 'drizzle-orm'
-import { people, tenantUsers, users, orgUnits, inspectionRecordCriteria } from '@beaconhs/db/schema'
+import {
+  people,
+  tenantUsers,
+  users,
+  orgUnits,
+  inspectionRecordCriteria,
+  attachments,
+} from '@beaconhs/db/schema'
 import { getGeneratedValueTranslations } from '@/i18n/generated.server'
 import type { RequestContext } from '@beaconhs/tenant'
 import { activityPageForEntity } from '@/lib/audit'
@@ -85,8 +93,32 @@ export async function RecordActivity({
       return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, readable(v)]))
     return value
   }
+  const signatureIds = data.rows.flatMap((row) =>
+    typeof row.after?.signatureAttachmentId === 'string' && isUuid(row.after.signatureAttachmentId)
+      ? [row.after.signatureAttachmentId]
+      : [],
+  )
+  const signatureImages = new Map<string, string>()
+  if (signatureIds.length)
+    await ctx.db(async (tx) => {
+      const rows = await tx
+        .select({ id: attachments.id })
+        .from(attachments)
+        .where(
+          and(
+            eq(attachments.tenantId, ctx.tenantId),
+            eq(attachments.kind, 'signature'),
+            inArray(attachments.id, signatureIds),
+          ),
+        )
+      for (const row of rows) signatureImages.set(row.id, attachmentUrl(row.id))
+    })
   const entries = data.rows.map((row) => ({
     ...row,
+    signatureImage:
+      typeof row.after?.signatureAttachmentId === 'string'
+        ? signatureImages.get(row.after.signatureAttachmentId)
+        : undefined,
     summary:
       typeof row.after?.rowId === 'string' && names.has(row.after.rowId)
         ? `${row.summary ?? row.action} — ${names.get(row.after.rowId)}`

@@ -190,15 +190,14 @@ Supervisors and internal signers must be active people who have not been deleted
 
 ## Crew sign-on
 
-1. In **Signatures**, tap **Add crew**. Select several active people, a **People group**, or a **Crew**. Type visitor or contractor names one per line. Tap **Add crew** to prepare their signature spaces.
-2. Finish the job hazards, controls, PPE, questions, and attached apps before collecting signatures. BeaconHS saves outstanding edits, then freezes the job content for this signing revision.
-3. For one shared phone, tap **Collect on this phone**. Each person reviews the assessment, checks the acknowledgement, signs their own name, and taps **Save & next**. The next person appears without closing and reopening a drawer. Every signature is saved immediately. **Done for now** returns to the assessment; unsigned spaces remain for the next visit.
-4. For their own phones, tap **Request / resend unsigned signatures**. BeaconHS sends each unsigned active crew member with a linked account a personal request. They open it from their notification inbox, email, SMS, or phone push notification, review the frozen assessment, and tap **Save signature**. Requests expire after seven days. Resending renews unsigned requests; signed people are not contacted again.
-5. Keep the assessment open. The signature cards and collected count update automatically while the page is visible. Search the crew or filter **Awaiting signature** and **Signed**. People without linked accounts sign on the shared phone. An inactive person must be removed from the current crew.
+1. In **Signatures**, type a name in **Add crew**. People appear first, followed by matching groups and crews. Tap a result to add its waiting signature box immediately. Keep typing and tapping to add the rest of the crew. For a visitor, type their name and choose **Visitor**.
+2. After reviewing the job together, tap **Sign**, or tap a person's waiting signature box. A drawer shows only their name and signature pad. Draw the signature and tap **Done**. The next person's name appears in the same drawer. **Clear** erases unsaved ink. Every completed signature saves immediately.
+3. Tap **Request** to send personal requests to unsigned active crew members with linked accounts. They open the request from their notification inbox, email, SMS, or phone notification, review the assessment, and tap **Sign**. Requests expire after seven days. Tapping **Request** again renews unsigned requests; signed people are not contacted again.
+4. The signed count and signature boxes update automatically while the page is visible. Use the page buttons for a large crew. People without linked accounts sign in the drawer. Tap the **Remove** icon on an unsigned person's box if they are no longer joining the job.
 
-Installing the PWA does not enable phone notifications by itself. On each device, open **Notifications → Preferences → Enable notifications** and allow them. The signing page also offers that button. The tenant administrator chooses signing channels in **Admin → Notifications → Hazard assessment signing**; personal channel preferences still apply. Email and SMS require a configured provider. These manual requests are delivered immediately, outside automatic digests and quiet hours.
+Installing the PWA does not enable phone notifications by itself. On each device, open **Notifications → Preferences → Enable notifications** and allow them. The request page also offers that button. The tenant administrator chooses signing channels in **Admin → Notifications → Hazard assessment signing**; personal channel preferences still apply. Email and SMS require a configured provider. These manual requests are delivered immediately, outside automatic digests and quiet hours.
 
-If job content changes, tap **Start new revision** and confirm. Previous content and signatures remain in **Signing history**. The crew gets fresh unsigned spaces and must review and sign again. Old requests cannot sign the new revision. You can add crew members during signing without changing the frozen job content, and **Remove** takes an unsigned person off the current roster.
+Edit the assessment normally if the job changes. Earlier signatures stay in **Activity**, and the current crew needs fresh signatures for the changed job. Previous requests cannot sign changed content; tap **Request** again when ready. Adding people to the same job preserves the signatures already collected. Open **Activity** and expand **show changes** to see saved signing details.
 
 ## Attached assessment apps
 
@@ -208,7 +207,7 @@ Some assessment types include an **Assessment apps** section for extra company f
 2. Complete the form in the full-screen panel.
 3. Tap **Submit** to return to the assessment.
 
-Only published apps allowed for the role you are currently using appear. An assessment collecting signatures or already submitted cannot start or continue an unfinished app. Use **View response** to open a completed record.
+Only published apps allowed for the role you are currently using appear. A submitted assessment cannot start or continue an unfinished app. Use **View response** to open a completed record.
 
 An app can depend on one of the assessment questions. It appears as soon as the matching answer is saved and hides again if the answer no longer matches. Previously entered app data is retained if the answer changes.
 
@@ -224,16 +223,16 @@ People with permission to review hazard assessments can record an advisory decis
 
 ## Finishing up
 
-1. When everything is rated and signed, tap **Submit & lock**, then tap **Submit & lock** again in the confirmation. This makes the assessment read-only and runs its submit flows. **Start new revision** asks to confirm before reopening the job content and preparing fresh crew signatures.
+1. When everything is rated and signed, tap **Submit & lock**, then tap **Submit & lock** again in the confirmation. This makes the assessment read-only and runs its submit flows. **Unlock** reopens a submitted assessment for changes and prepares fresh signature spaces. Earlier signatures stay in **Activity**.
    - **Submit & lock** stays greyed out until every person on the current crew has signed. Remove unsigned people who are no longer joining the job before submitting.
 2. Use **Print / PDF** for a paper copy, or **Send email** to share it.
 
-In **Photos**, tap **Take photo or upload** to take a new photo or choose pictures from your phone's photo library. Use the pencil button for a caption or markup, the trash button to remove a photo, and the arrow buttons to change the order. The editor keeps the photo's original shape while you add captions or markup. Large camera photos are optimized automatically when they upload. Start a new revision before making photo changes. Locking it again runs the submit flows for the revised assessment.
+In **Photos**, tap **Take photo or upload** to take a new photo or choose pictures from your phone's photo library. Use the pencil button for a caption or markup, the trash button to remove a photo, and the arrow buttons to change the order. The editor keeps the photo's original shape while you add captions or markup. Large camera photos are optimized automatically when they upload. Unlock a submitted assessment before making photo changes. Locking it again runs the submit flows for the revised assessment.
 
 ## Tips
 
-- Starting a new revision preserves old signatures in **Signing history**. The revised assessment needs fresh signatures. Adding crew members to the same signing revision preserves the signatures already collected.
-- Conditions change. If the job changes, use **Start new revision** and update the assessment, or start a new one.
+- Changing the job keeps earlier signatures in **Activity** and prepares fresh signature spaces. Adding crew members preserves signatures already collected for the same job.
+- Conditions change. If the job changes, update the assessment (use **Unlock** first if submitted), or start a new one.
 - **Completed by** on the record and on the assessment list is the person who filled the assessment in. BeaconHS records it when the assessment is started — there is nothing to type, and it cannot be edited. It is the **Completed by** line on the printed PDF too.
 - **Print blank** on the assessment list prints a paper copy to fill in by hand — for a job where a phone is not practical. Pick the assessment type first: the sheet carries that type's real hazards, PPE and questions, with the **Specific controls**, **Applies**, and answer columns left empty and a ruled sign-on block at the end. Key it into BeaconHS afterwards so the record is the system of record.
 - **Copy assessment** starts a new one pre-filled from an old one — handy for repeat work. On a phone it lives under **More actions**. The button reads **Copying…** while the new assessment is built, then opens it — tap it once and wait.`,

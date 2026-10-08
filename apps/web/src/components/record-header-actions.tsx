@@ -121,8 +121,6 @@ export function RecordHeaderActions({
   lockAction,
   unlockAction,
   lockLabel = 'Submit & lock',
-  unlockLabel,
-  unlockMessage,
   lockDisabledReason = null,
 }: {
   id: string
@@ -141,8 +139,6 @@ export function RecordHeaderActions({
   lockAction: LockAction
   unlockAction: LockAction
   lockLabel?: string
-  unlockLabel?: string
-  unlockMessage?: string
   /**
    * Why this record cannot be submitted yet. The server is authoritative and
    * rejects the submit regardless; showing the reason here stops the button
@@ -171,35 +167,13 @@ export function RecordHeaderActions({
     <form action={changeLock}>
       <input type="hidden" name="id" value={id} />
       <ConfirmedSubmitButton
-        title={
-          locked
-            ? unlockLabel
-              ? tGeneratedValue(unlockLabel)
-              : tGenerated('m_0ada1228bbdfc0')
-            : tGenerated('m_1b0351e1b7075e')
-        }
-        message={
-          locked
-            ? unlockMessage
-              ? tGeneratedValue(unlockMessage)
-              : tGenerated('m_1b9e23f3e26938')
-            : tGenerated('m_06944c5267be24')
-        }
-        confirmLabel={
-          locked
-            ? unlockLabel
-              ? tGeneratedValue(unlockLabel)
-              : tGenerated('m_0ca830c9381fd6')
-            : tGeneratedValue(lockLabel)
-        }
+        title={locked ? tGenerated('m_0ada1228bbdfc0') : tGenerated('m_1b0351e1b7075e')}
+        message={locked ? tGenerated('m_1b9e23f3e26938') : tGenerated('m_06944c5267be24')}
+        confirmLabel={locked ? tGenerated('m_0ca830c9381fd6') : tGeneratedValue(lockLabel)}
         disabledReason={locked ? null : lockDisabledReason}
       >
         {locked ? <Unlock size={14} /> : <Lock size={14} />}
-        {locked ? (
-          <GeneratedValue value={unlockLabel ?? tGenerated('m_0ca830c9381fd6')} />
-        ) : (
-          <GeneratedValue value={lockLabel} />
-        )}
+        {locked ? <GeneratedText id="m_0ca830c9381fd6" /> : <GeneratedValue value={lockLabel} />}
       </ConfirmedSubmitButton>
       {lockError ? (
         <div role="alert" className="mt-2 max-w-sm text-sm text-red-700 dark:text-red-300">

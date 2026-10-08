@@ -67,11 +67,10 @@ import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
 import { canManageSubjectGates } from '@/lib/flows/registry'
 import { canManageModule } from '@/lib/module-admin/guard'
-import { recentActivityForEntity } from '@/lib/audit'
 import { isUuid, pickString } from '@/lib/list-params'
 import { GenericSendEmailDialog } from '@/components/send-email-dialog'
 import { sendHazidEmail } from './_send-email'
-import { ActivityFeed } from '@/components/activity-feed'
+import { RecordActivity } from '@/components/record-activity'
 import { DetailPageLayout } from '@/components/page-layout'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
 import {
@@ -144,7 +143,6 @@ import {
   ReadOnlyField,
 } from '@/components/live-field'
 import { datetimeLocalValue, formatDateTime } from '@/lib/datetime'
-import { AddCrewDrawerBody } from '../_signature-form'
 import { SigningRoster } from '../_signing-roster'
 import { loadHazidSigningRoster } from '@/lib/hazid-signing-roster'
 import { HazidPhotoUploader } from '../_photo-uploader'
@@ -481,7 +479,6 @@ export default async function HazidAssessmentDetailPage({
     canManageModule(ctx, 'hazid') ||
     canDeleteOwnRecord(ctx, 'hazid.delete.own', a.reportedByTenantUserId)
   const canReview = can(ctx, 'hazid.review')
-  const activity = await recentActivityForEntity(ctx, 'hazid_assessment', id, 25)
 
   // Inline app fill: when `?app=<typeAppId>` is present we render the embedded
   // Builder app full-screen over the assessment (no navigating away). Reuses
@@ -632,7 +629,7 @@ export default async function HazidAssessmentDetailPage({
   const requiredEmbeddedDone = requiredEmbeddedApps.filter((item) => item.done).length
 
   const canUpdate = can(ctx, 'hazid.update')
-  const locked = a.locked || !!a.signingFrozenAt || !canUpdate
+  const locked = a.locked || !canUpdate
   const signingRoster = await loadHazidSigningRoster(ctx, id, sp)
   if (!signingRoster) notFound()
   const assessmentStyle = type?.style ?? 'task_based'
@@ -811,10 +808,6 @@ export default async function HazidAssessmentDetailPage({
                     a.locked ? (
                       <Badge variant="success">
                         <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
-                      </Badge>
-                    ) : a.signingFrozenAt ? (
-                      <Badge variant="warning">
-                        <GeneratedValue value="Collecting signatures" />
                       </Badge>
                     ) : (
                       <Badge variant="secondary">
@@ -1548,12 +1541,18 @@ export default async function HazidAssessmentDetailPage({
 
         <section id="section-activity" className="scroll-mt-2">
           <Section
-            title={tGenerated('m_158532c8e94ad5', { value0: activity.length })}
+            title={tGeneratedValue('Activity')}
             defaultOpen={false}
             icon={<History size={20} />}
             tone="slate"
           >
-            <ActivityFeed entries={activity} timeZone={ctx.timezone} locale={ctx.locale} />
+            <RecordActivity
+              ctx={ctx}
+              entityType="hazid_assessment"
+              entityId={id}
+              basePath={`/hazard-assessments/${id}`}
+              searchParams={sp}
+            />
           </Section>
         </section>
       </div>
@@ -1744,15 +1743,6 @@ export default async function HazidAssessmentDetailPage({
             ) : null
           }
         />
-      </UrlDrawer>
-
-      <UrlDrawer
-        open={drawerKey === 'add-crew' && canUpdate && !a.locked}
-        closeHref={tabHref}
-        title={tGeneratedValue('Add crew')}
-        size="md"
-      >
-        <AddCrewDrawerBody assessmentId={id} closeHref={tabHref} />
       </UrlDrawer>
 
       {/* Safety review — visible and actionable only with the dedicated review permission. */}

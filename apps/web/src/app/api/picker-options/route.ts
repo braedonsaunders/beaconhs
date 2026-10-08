@@ -1,3 +1,4 @@
+import { canSeeRecord } from '@/lib/visibility'
 import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import { recordSearchWhere } from '@/lib/record-search'
 import { NextResponse } from 'next/server'
@@ -22,6 +23,9 @@ import {
   correctiveActions,
   complianceObligations,
   crews,
+  hazidAssessments,
+  hazidAssessmentSignatures,
+  personGroupMemberships,
   departments,
   documents,
   equipmentCategories,
@@ -249,9 +253,7 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
         can(ctx, 'journals.update.own') ||
         can(ctx, 'journals.assign')
       )
-    case 'hazard-assessment-signers':
-    case 'hazard-assessment-signing-groups':
-    case 'hazard-assessment-signing-crews':
+    case 'hazard-assessment-crew-candidates':
       return can(ctx, 'hazid.update')
     case 'hazard-assessment-locations':
       return can(ctx, 'hazid.create') || can(ctx, 'hazid.update')
@@ -397,7 +399,8 @@ export async function GET(request: Request): Promise<NextResponse> {
   const contextRequired =
     lookupParam === 'training-evaluation-people' ||
     lookupParam === 'training-course-classes' ||
-    lookupParam === 'training-class-attendee-candidates'
+    lookupParam === 'training-class-attendee-candidates' ||
+    lookupParam === 'hazard-assessment-crew-candidates'
   if (
     (contextRequired && !contextIdParam) ||
     (contextIdParam !== null && !isUuid(contextIdParam))
@@ -1475,30 +1478,69 @@ async function loadOptions(
       )
     }
 
-    if (
-      lookup === 'hazard-assessment-signing-groups' ||
-      lookup === 'hazard-assessment-signing-crews'
-    ) {
-      const table = lookup === 'hazard-assessment-signing-groups' ? personGroups : crews
-      const rows = await tx
-        .select({ id: table.id, name: table.name })
-        .from(table)
+    if (lookup === 'hazard-assessment-crew-candidates') {
+      const [parent] = await tx
+        .select()
+        .from(hazidAssessments)
+        .where(and(eq(hazidAssessments.id, input.contextId!), isNull(hazidAssessments.deletedAt)))
+        .limit(1)
+      if (
+        !parent ||
+        parent.locked ||
+        !(await canSeeRecord(ctx, tx, {
+          prefix: 'hazid',
+          ownerIds: [parent.reportedByTenantUserId],
+          siteId: parent.siteOrgUnitId,
+        }))
+      )
+        return boundPickerOptions([])
+      const notAdded = sql`not exists (select 1 from ${hazidAssessmentSignatures}
+        where ${hazidAssessmentSignatures.tenantId} = ${people.tenantId}
+        and ${hazidAssessmentSignatures.assessmentId} = ${parent.id}
+        and ${hazidAssessmentSignatures.revision} = ${parent.signingRevision}
+        and ${hazidAssessmentSignatures.personId} = ${people.id})`
+      const persons = await tx
+        .select(PERSON_OPTION_SELECTION)
+        .from(people)
+        .where(and(activePeopleWhere(), personMatch(input), notAdded))
+        .orderBy(...personOrder(null))
+        .limit(21)
+      const groups = await tx
+        .select({ id: personGroups.id, name: personGroups.name })
+        .from(personGroups)
         .where(
           and(
-            lookup === 'hazard-assessment-signing-groups'
-              ? isNull(personGroups.deletedAt)
-              : undefined,
-            input.hasQuery
-              ? or(
-                  ilike(table.name, input.term),
-                  input.selected ? eq(table.id, input.selected) : undefined,
-                )
-              : undefined,
+            isNull(personGroups.deletedAt),
+            input.query ? ilike(personGroups.name, input.term) : undefined,
+            sql`exists (select 1 from ${personGroupMemberships} join ${people}
+            on ${people.id} = ${personGroupMemberships.personId} and ${people.tenantId} = ${personGroupMemberships.tenantId}
+            where ${personGroupMemberships.groupId} = ${personGroups.id}
+            and ${people.status} = 'active' and ${people.deletedAt} is null and ${notAdded})`,
           ),
         )
-        .orderBy(asc(table.name), asc(table.id))
-        .limit(PICKER_RESULT_LIMIT + 1)
-      return boundPickerOptions(rows.map((row) => option(row.id, row.name)))
+        .orderBy(asc(personGroups.name), asc(personGroups.id))
+        .limit(6)
+      const teams = await tx
+        .select({ id: crews.id, name: crews.name })
+        .from(crews)
+        .where(
+          and(
+            input.query ? ilike(crews.name, input.term) : undefined,
+            sql`exists (select 1 from ${people} where ${people.crewId} = ${crews.id}
+            and ${people.tenantId} = ${crews.tenantId} and ${people.status} = 'active'
+            and ${people.deletedAt} is null and ${notAdded})`,
+          ),
+        )
+        .orderBy(asc(crews.name), asc(crews.id))
+        .limit(6)
+      return {
+        options: [
+          ...personOptions(persons.slice(0, 20)).map((p) => ({ ...p, value: `person:${p.value}` })),
+          ...groups.slice(0, 5).map((r) => option(`group:${r.id}`, r.name, 'Group')),
+          ...teams.slice(0, 5).map((r) => option(`crew:${r.id}`, r.name, 'Crew')),
+        ],
+        hasMore: persons.length > 20 || groups.length > 5 || teams.length > 5,
+      }
     }
 
     if (
@@ -1507,8 +1549,7 @@ async function loadOptions(
       lookup === 'compliance-by-person' ||
       lookup === 'incident-people' ||
       lookup === 'inspection-people' ||
-      lookup === 'document-signoff-people' ||
-      lookup === 'hazard-assessment-signers'
+      lookup === 'document-signoff-people'
     ) {
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)

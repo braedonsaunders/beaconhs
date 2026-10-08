@@ -153,7 +153,7 @@ describe('immediate compliance evidence lifecycle', () => {
     expect(capture).toContain('await recordAuditInTransaction(tx, ctx')
     expect(remove).toContain('await lockVisibleAssessment(ctx, tx, assessmentId)')
     expect(remove).toContain('if (signature.signatureAttachmentId)')
-    expect(remove).toContain('Start a new revision to change signed crew members')
+    expect(remove).toContain('Signed crew members cannot be removed')
     expect(remove).toContain('await recordAuditInTransaction(tx, ctx')
     expect(remove).not.toContain('.delete(attachments)')
   })

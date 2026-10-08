@@ -1,3 +1,4 @@
+import { RawImage } from './raw-image'
 import { GeneratedValue } from '@/i18n/generated'
 import { Activity, Check, Pencil, Plus, Signature, Trash2 } from 'lucide-react'
 import { DEFAULT_LOCALE, type AppLocale } from '@beaconhs/i18n'
@@ -5,6 +6,7 @@ import { DEFAULT_LOCALE, type AppLocale } from '@beaconhs/i18n'
 type ActivityEntry = {
   id: string
   action: string
+  signatureImage?: string
   summary?: string | null
   actor?: string | null
   occurredAt: Date | string
@@ -103,7 +105,16 @@ export function ActivityFeed({
                                       →{' '}
                                     </>
                                   ) : null}
-                                  {displayValue(value, timeZone, locale)}
+                                  {key === 'signatureAttachmentId' && e.signatureImage ? (
+                                    <RawImage
+                                      optimizationReason="authenticated"
+                                      src={e.signatureImage}
+                                      alt={copy.signature}
+                                      className="h-16 max-w-full object-contain dark:rounded dark:bg-white"
+                                    />
+                                  ) : (
+                                    displayValue(value, timeZone, locale)
+                                  )}
                                 </dd>
                               </div>
                             ))}
@@ -139,17 +150,27 @@ function formatRel(d: Date | string, timeZone: string, locale: AppLocale): strin
   return date.toLocaleDateString(locale, { timeZone })
 }
 
-const COPY: Record<AppLocale, { empty: string; by: string; showChanges: string }> = {
-  en: { empty: 'No activity recorded yet.', by: 'by', showChanges: 'show changes' },
+const COPY: Record<
+  AppLocale,
+  { empty: string; by: string; showChanges: string; signature: string }
+> = {
+  en: {
+    empty: 'No activity recorded yet.',
+    by: 'by',
+    showChanges: 'show changes',
+    signature: 'Signature',
+  },
   fr: {
     empty: 'Aucune activité enregistrée.',
     by: 'par',
     showChanges: 'afficher les modifications',
+    signature: 'Signature',
   },
   es: {
     empty: 'Aún no hay actividad registrada.',
     by: 'por',
     showChanges: 'mostrar cambios',
+    signature: 'Firma',
   },
 }
 

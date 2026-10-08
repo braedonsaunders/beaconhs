@@ -8,7 +8,7 @@ import { isUuid } from '@/lib/list-params'
 import { PageContainer } from '@/components/page-layout'
 import { GeneratedValue } from '@/i18n/generated'
 import { SigningReview } from '../../_signing-review'
-import { SigningPad, SigningWorkspaceSwitch } from '../../_signing-pad'
+import { SignatureRequest, SigningWorkspaceSwitch } from '../../_signature-request'
 import { PushToggle } from '@/app/(app)/notifications/preferences/_push-toggle'
 
 export const dynamic = 'force-dynamic'
@@ -70,14 +70,13 @@ export default async function OwnSignaturePage({
               </p>
             ) : result.assessment.locked ? (
               <p>
-                <GeneratedValue value="This assessment is already submitted. Ask the supervisor to start a new revision." />
+                <GeneratedValue value="This assessment is already submitted. Ask the supervisor to unlock it." />
               </p>
             ) : (
-              <SigningPad
-                own
-                assessmentId={result.assessment.id}
+              <SignatureRequest
+                signatureId={signatureId}
                 revision={result.signature.revision}
-                signers={[{ id: signatureId, name: result.signature.signerName ?? 'Crew member' }]}
+                name={result.signature.signerName ?? 'Crew member'}
                 review={<SigningReview snapshot={result.round.snapshot} />}
               />
             )}

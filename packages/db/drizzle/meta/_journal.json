@@ -421,6 +421,13 @@
       "when": 1791413256880,
       "tag": "0060_hazard_assessment_signing",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1791413256881,
+      "tag": "0061_hazard_signing_inline",
+      "breakpoints": true
     }
   ]
 }

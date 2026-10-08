@@ -173,12 +173,26 @@ async function performAddSigningCrew(input: {
   return result
 }
 
-async function performStartSigningCollection(assessmentId: string) {
+async function performStartSigningCollection(assessmentId: string, preferredSignatureId?: string) {
   const ctx = await signingContext()
   assertCan(ctx, 'hazid.update')
   if (!isUuid(assessmentId)) throw new HazidSigningError('Assessment not found')
-  await ctx.db(async (tx) => {
+  const result = await ctx.db(async (tx) => {
     const parent = await lockHazidForSigning(ctx, tx, assessmentId)
+    if (preferredSignatureId && !isUuid(preferredSignatureId))
+      throw new HazidSigningError('Signature not found')
+    const [preferred] = preferredSignatureId
+      ? await tx
+          .select()
+          .from(hazidAssessmentSignatures)
+          .where(
+            and(
+              eq(hazidAssessmentSignatures.assessmentId, assessmentId),
+              eq(hazidAssessmentSignatures.id, preferredSignatureId),
+            ),
+          )
+          .limit(1)
+      : []
     const [crew] = await tx
       .select({ id: hazidAssessmentSignatures.id })
       .from(hazidAssessmentSignatures)
@@ -198,8 +212,43 @@ async function performStartSigningCollection(assessmentId: string) {
         action: 'update',
         summary: `Started signing revision ${parent.signingRevision}`,
       })
+    const rows = await tx
+      .select({
+        id: hazidAssessmentSignatures.id,
+        name: hazidAssessmentSignatures.signerName,
+        personId: hazidAssessmentSignatures.personId,
+        person: people,
+      })
+      .from(hazidAssessmentSignatures)
+      .leftJoin(people, eq(people.id, hazidAssessmentSignatures.personId))
+      .where(
+        and(
+          eq(hazidAssessmentSignatures.assessmentId, assessmentId),
+          eq(hazidAssessmentSignatures.revision, parent.signingRevision),
+          isNull(hazidAssessmentSignatures.signatureAttachmentId),
+        ),
+      )
+      .orderBy(hazidAssessmentSignatures.createdAt, hazidAssessmentSignatures.id)
+      .limit(MAX_SIGNING_CREW)
+    if (preferred)
+      rows.sort(
+        (a, b) =>
+          Number(
+            b.personId ? b.personId === preferred.personId : b.name === preferred.externalName,
+          ) -
+          Number(
+            a.personId ? a.personId === preferred.personId : a.name === preferred.externalName,
+          ),
+      )
+    return {
+      revision: parent.signingRevision,
+      signers: rows
+        .filter((r) => !r.personId || (r.person?.status === 'active' && !r.person.deletedAt))
+        .map((r) => ({ id: r.id, name: r.name ?? 'Crew member' })),
+    }
   })
   refresh(assessmentId)
+  return result
 }
 
 async function captureSignature(
@@ -217,7 +266,7 @@ async function captureSignature(
     typeof ink !== 'string' ||
     !ink ||
     ink.length > 1_500_000 ||
-    reviewed !== true
+    (own && reviewed !== true)
   )
     throw new HazidSigningError('Review the assessment and capture a signature')
   const assessmentId = await ctx.db(async (tx) => {
@@ -242,7 +291,10 @@ async function captureSignature(
         'The assessment changed. Open the current signing revision before signing.',
       )
     const [slot] = await tx
-      .select({ personId: hazidAssessmentSignatures.personId })
+      .select({
+        personId: hazidAssessmentSignatures.personId,
+        name: hazidAssessmentSignatures.signerName,
+      })
       .from(hazidAssessmentSignatures)
       .where(
         and(
@@ -283,11 +335,17 @@ async function captureSignature(
       occurrenceKey: updated.id,
     })
     await recordAuditInTransaction(tx, ctx, {
-      entityType: 'hazid_assessment_signature',
-      entityId: updated.id,
+      entityType: 'hazid_assessment',
+      entityId: assessmentId,
       action: 'sign',
-      summary: `Signed assessment revision ${revision}${own ? ' on own device' : ' on shared device'}`,
-      metadata: { revision, reviewed: true, method: own ? 'own_device' : 'shared_device' },
+      summary: `${slot.name ?? 'Crew member'} signed`,
+      after: { signer: slot.name, signatureAttachmentId: attachmentId },
+      metadata: {
+        signatureId: updated.id,
+        revision,
+        review: own ? 'individual' : 'group',
+        method: own ? 'own_device' : 'shared_device',
+      },
     })
   })
   refresh(assessmentId)
@@ -420,19 +478,14 @@ async function signingResult<T>(run: () => Promise<T>): Promise<SigningResult<T>
 export async function addSigningCrew(input: Parameters<typeof performAddSigningCrew>[0]) {
   return signingResult(() => performAddSigningCrew(input))
 }
-export async function startSigningCollection(assessmentId: string) {
-  return signingResult(() => performStartSigningCollection(assessmentId))
+export async function startSigningCollection(assessmentId: string, preferredSignatureId?: string) {
+  return signingResult(() => performStartSigningCollection(assessmentId, preferredSignatureId))
 }
 export async function requestCrewSignatures(assessmentId: string) {
   return signingResult(() => performRequestCrewSignatures(assessmentId))
 }
-export async function signCrewMember(
-  signatureId: string,
-  revision: number,
-  ink: string,
-  reviewed: boolean,
-) {
-  return signingResult(() => captureSignature(signatureId, revision, ink, reviewed, false))
+export async function signCrewMember(signatureId: string, revision: number, ink: string) {
+  return signingResult(() => captureSignature(signatureId, revision, ink, false, false))
 }
 export async function signOwnAssessment(
   signatureId: string,

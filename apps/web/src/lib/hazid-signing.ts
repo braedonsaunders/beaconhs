@@ -182,13 +182,6 @@ export async function freezeHazidSigning(
         isNull(hazidAssessmentSignatures.signerName),
       ),
     )
-  await setHazidAppsLocked(tx, {
-    tenantId: ctx.tenantId,
-    assessmentId: assessment.id,
-    locked: true,
-    lockedAt: now,
-    lockedByTenantUserId: ctx.membership?.id ?? null,
-  })
   const transactionCtx: SigningContext = { ...ctx, db: (run) => run(tx) }
   const values = await createHazidFlowAdapter(transactionCtx, assessment.id, true).loadValues()
   // Crew slots can change without changing the reviewed job content.
@@ -261,64 +254,7 @@ export async function reviseHazidSigning(
   assessmentId: string,
   revision: number,
 ) {
-  const old = await tx
-    .select()
-    .from(hazidAssessmentSignatures)
-    .where(
-      and(
-        eq(hazidAssessmentSignatures.tenantId, ctx.tenantId),
-        eq(hazidAssessmentSignatures.assessmentId, assessmentId),
-        eq(hazidAssessmentSignatures.revision, revision),
-      ),
-    )
-  await tx
-    .update(hazidSigningRounds)
-    .set({ endedAt: new Date() })
-    .where(
-      and(
-        eq(hazidSigningRounds.tenantId, ctx.tenantId),
-        eq(hazidSigningRounds.assessmentId, assessmentId),
-        eq(hazidSigningRounds.revision, revision),
-      ),
-    )
-  const activeIds = old.flatMap((row) => (row.personId ? [row.personId] : []))
-  const active = activeIds.length
-    ? await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(
-          and(
-            eq(people.tenantId, ctx.tenantId),
-            inArray(people.id, activeIds),
-            activePeopleWhere(),
-          ),
-        )
-    : []
-  const allowed = new Set(active.map((row) => row.id))
-  const next = old
-    .filter((row) => !row.personId || allowed.has(row.personId))
-    .map((row) => ({
-      tenantId: ctx.tenantId,
-      assessmentId,
-      revision: revision + 1,
-      signatureType: row.signatureType,
-      personId: row.personId,
-      externalName: row.externalName,
-      signerName: row.signerName,
-      csEntrant: row.csEntrant,
-      csAttendant: row.csAttendant,
-      csRescue: row.csRescue,
-    }))
-  if (next.length) await tx.insert(hazidAssessmentSignatures).values(next)
-  await tx
-    .update(hazidAssessments)
-    .set({
-      signingRevision: revision + 1,
-      signingFrozenAt: null,
-      reviewStatus: 'pending',
-      reviewedAt: null,
-      reviewedByTenantUserId: null,
-      reviewNote: null,
-    })
-    .where(and(eq(hazidAssessments.tenantId, ctx.tenantId), eq(hazidAssessments.id, assessmentId)))
+  await tx.execute(
+    sql`select advance_hazid_signing_revision(${ctx.tenantId}::uuid, ${assessmentId}::uuid, ${revision})`,
+  )
 }

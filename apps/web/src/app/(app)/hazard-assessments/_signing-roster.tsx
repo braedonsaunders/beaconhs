@@ -1,19 +1,21 @@
 'use client'
 
-import Link from 'next/link'
-import { unwrapSigningResult } from '@/lib/hazid-signing-result'
-import { useEffect, useState, useTransition } from 'react'
-import { unstable_rethrow, useRouter, useSearchParams } from 'next/navigation'
-import { Badge, Button, Select } from '@beaconhs/ui'
+import { useEffect, useRef, useState, useTransition } from 'react'
+import { unstable_rethrow, useSearchParams } from 'next/navigation'
+import { Badge, Button } from '@beaconhs/ui'
+import { X, LoaderCircle } from 'lucide-react'
 import { GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
-import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { RawImage } from '@/components/raw-image'
 import { flushRecordSaves } from '@/lib/pending-record-saves'
 import { toast } from '@/lib/toast'
 import type { SigningRosterData } from '@/lib/hazid-signing-roster'
-import { requestCrewSignatures, startSigningCollection } from './_signing-actions'
-import { deleteSignature, unlockAssessment } from './_actions'
+import type { PickerOption } from '@/lib/picker-options'
+import { unwrapSigningResult } from '@/lib/hazid-signing-result'
+import { addSigningCrew, requestCrewSignatures, startSigningCollection } from './_signing-actions'
+import { deleteSignature } from './_actions'
+import { CrewSearch } from './_signature-form'
+import { CrewSignatureDrawer } from './_crew-signature-drawer'
 
 export function SigningRoster({
   assessmentId,
@@ -25,58 +27,75 @@ export function SigningRoster({
   canUpdate: boolean
 }) {
   const t = useGeneratedValueTranslations()
-  const router = useRouter(),
-    search = useSearchParams()
-  const query = search.toString()
+  const search = useSearchParams()
+  const query = new URLSearchParams({ crewPage: search.get('crewPage') ?? '1' }).toString()
   const [live, setLive] = useState({ query, initial, data: initial })
   const data = live.query === query && live.initial === initial ? live.data : initial
   const [pending, start] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const [adding, setAdding] = useState<PickerOption[]>([])
+  const addingValues = useRef(new Set<string>())
+  const generation = useRef(0)
+  const [drawer, setDrawer] = useState<{
+    revision: number
+    signers: { id: string; name: string }[]
+    ready: boolean
+  } | null>(null)
+  async function refresh(signal?: AbortSignal) {
+    const request = ++generation.current
+    const response = await fetch(`/api/hazard-assessments/${assessmentId}/signatures?${query}`, {
+      cache: 'no-store',
+      signal,
+    })
+    if (!response.ok)
+      throw new Error('Could not refresh signatures. Your saved signatures are safe. Try again.')
+    const next = (await response.json()) as SigningRosterData
+    if (signal?.aborted || request !== generation.current) return
+    setLive({ query, initial, data: next })
+    window.dispatchEvent(
+      new CustomEvent('hazid-signatures-updated', {
+        detail: {
+          assessmentId,
+          signed: next.signed,
+          total: next.crewTotal,
+          revision: next.revision,
+        },
+      }),
+    )
+  }
+  const refreshRef = useRef(refresh)
+  useEffect(() => {
+    refreshRef.current = refresh
+  })
   useEffect(() => {
     const controller = new AbortController()
-    let stopped = false,
-      timer: ReturnType<typeof setTimeout>
-    async function refresh() {
+    const requests = generation
+    let timer: ReturnType<typeof setTimeout>
+    async function poll() {
       if (!document.hidden) {
         try {
-          const response = await fetch(
-            `/api/hazard-assessments/${assessmentId}/signatures?${query}`,
-            { cache: 'no-store', signal: controller.signal },
-          )
-          if (!response.ok)
-            throw new Error(
-              'Could not refresh signatures. Your saved signatures are safe. Try again.',
-            )
-          const next = (await response.json()) as SigningRosterData
-          if (!stopped) {
-            setLive({ query, initial, data: next })
-            setError(null)
-            window.dispatchEvent(
-              new CustomEvent('hazid-signatures-updated', {
-                detail: {
-                  assessmentId,
-                  signed: next.signed,
-                  total: next.crewTotal,
-                  revision: next.revision,
-                },
-              }),
-            )
-          }
+          await refreshRef.current(controller.signal)
         } catch (err) {
-          if (!stopped)
+          if (!controller.signal.aborted)
             setError(err instanceof Error ? err.message : 'Could not refresh signatures')
         }
       }
-      if (!stopped) timer = setTimeout(refresh, 4000)
+      if (!controller.signal.aborted) timer = setTimeout(poll, 4000)
     }
-    void refresh()
+    void poll()
     return () => {
-      stopped = true
       controller.abort()
       clearTimeout(timer)
+      requests.current++
     }
   }, [assessmentId, query, initial])
+  async function sync() {
+    try {
+      await refreshRef.current()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not refresh signatures')
+    }
+  }
   function run(action: () => Promise<void>) {
     setError(null)
     start(async () => {
@@ -88,197 +107,182 @@ export function SigningRoster({
       }
     })
   }
-  function collect(signerId?: string) {
+  function add(option: PickerOption) {
+    if (addingValues.current.has(option.value)) return
+    addingValues.current.add(option.value)
+    setAdding((rows) => [...rows, option])
+    setError(null)
+    const colon = option.value.indexOf(':')
+    const kind = option.value.slice(0, colon),
+      id = option.value.slice(colon + 1)
+    void (async () => {
+      try {
+        unwrapSigningResult(
+          await addSigningCrew({
+            assessmentId,
+            personIds: kind === 'person' ? [id] : [],
+            groupId: kind === 'group' ? id : undefined,
+            crewId: kind === 'crew' ? id : undefined,
+            externalNames: kind === 'external' ? [id] : [],
+          }),
+        )
+        await sync()
+      } catch (err) {
+        unstable_rethrow(err)
+        setError(err instanceof Error ? err.message : 'Could not add the crew')
+      } finally {
+        addingValues.current.delete(option.value)
+        setAdding((rows) => rows.filter((row) => row.value !== option.value))
+      }
+    })()
+  }
+  function sign(signerId?: string) {
+    const signers = data.rows
+      .filter((r) => !r.signedAt && r.active)
+      .map((r) => ({ id: r.id, name: r.name }))
+    if (signerId) signers.sort((a, b) => Number(b.id === signerId) - Number(a.id === signerId))
+    setDrawer({ revision: data.revision, signers, ready: false })
     run(async () => {
-      await flushRecordSaves()
-      unwrapSigningResult(await startSigningCollection(assessmentId))
-      router.push(
-        `/hazard-assessments/${assessmentId}/collect${signerId ? `?signer=${signerId}` : ''}` as any,
-      )
+      try {
+        await flushRecordSaves()
+        const result = unwrapSigningResult(await startSigningCollection(assessmentId, signerId))
+        if (!result.signers.length) throw new Error('No active crew members are waiting to sign')
+        if (signerId)
+          result.signers.sort((a, b) => Number(b.id === signerId) - Number(a.id === signerId))
+        setDrawer({ ...result, ready: true })
+      } catch (err) {
+        setDrawer(null)
+        throw err
+      }
     })
   }
   function request() {
     run(async () => {
       await flushRecordSaves()
       const result = unwrapSigningResult(await requestCrewSignatures(assessmentId))
-      const copy = `${result.requested} ${t('signature requests queued.')}${result.skipped ? ` ${result.skipped} ${t('crew members were skipped; use this phone for anyone without an account.')}` : ''}${result.withoutPush ? ` ${result.withoutPush} ${t('people have not enabled push on a device. Their request is in the notification inbox; email and SMS follow tenant settings.')}` : ''}`
-      setMessage(copy)
-      toast.success(t('Signature requests queued'))
+      toast.success(`${result.requested} ${t('signature requests queued.')}`)
+      if (result.skipped || result.withoutPush)
+        toast.info(
+          t('People without an account sign here. Phone notifications require permission.'),
+        )
+      await sync()
     })
   }
-  const params = Object.fromEntries(search)
   return (
     <div className="space-y-3" data-walkthrough="hazid-signing">
       <p role="status" aria-live="polite" className="font-medium">
-        <GeneratedValue value="Signed" /> {data.signed}/{data.crewTotal} ·{' '}
-        <GeneratedValue value="Revision" /> {data.revision}
+        <GeneratedValue value="Signed" /> {data.signed}/{data.crewTotal}
       </p>
       {canUpdate && !data.locked ? (
-        <div className="flex flex-wrap gap-2">
-          <Link href={`/hazard-assessments/${assessmentId}?drawer=add-crew` as any}>
-            <Button size="sm" variant="outline" disabled={pending}>
-              <GeneratedValue value="Add crew" />
-            </Button>
-          </Link>
-          <Button
-            size="sm"
-            onClick={() => collect()}
-            disabled={pending || data.crewTotal === data.signed}
-          >
-            <GeneratedValue value="Collect on this phone" />
-          </Button>
-          <Button size="sm" onClick={request} disabled={pending || data.crewTotal === data.signed}>
-            <GeneratedValue value="Request / resend unsigned signatures" />
-          </Button>
-          {data.frozen ? (
+        <>
+          <CrewSearch
+            assessmentId={assessmentId}
+            onAdd={add}
+            pendingValues={adding.map((o) => o.value)}
+          />
+          <div className="grid grid-cols-2 gap-2">
             <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                run(async () => {
-                  if (
-                    !window.confirm(
-                      t(
-                        'Start a new revision? Previous signatures stay in history. Everyone must review and sign again.',
-                      ),
-                    )
-                  )
-                    return
-                  const fd = new FormData()
-                  fd.set('id', assessmentId)
-                  await unlockAssessment(fd)
-                })
-              }
-              disabled={pending}
+              className="h-11 w-full min-w-0"
+              onClick={() => sign()}
+              disabled={pending || !!adding.length || data.crewTotal === data.signed}
             >
-              <GeneratedValue value="Start new revision" />
+              <GeneratedValue value="Sign" />
             </Button>
-          ) : null}
-        </div>
-      ) : null}
-      {data.frozen ? (
-        <p className="text-sm text-slate-500">
-          <GeneratedValue value="Signing has started. The job content is frozen until you start a new revision." />
-        </p>
-      ) : null}
-      <Link
-        href={`/hazard-assessments/${assessmentId}/signing-history` as any}
-        className="text-sm text-teal-700 underline dark:text-teal-300"
-      >
-        <GeneratedValue value="Signing history" />
-      </Link>
-      {message ? (
-        <p
-          role="status"
-          className="rounded border border-teal-300 bg-teal-50 p-3 text-sm dark:bg-teal-950"
-        >
-          <GeneratedValue value={message} />
-        </p>
+            <Button
+              className="h-11 w-full min-w-0"
+              variant="outline"
+              onClick={request}
+              disabled={pending || !!adding.length || data.crewTotal === data.signed}
+            >
+              <GeneratedValue value="Request" />
+            </Button>
+          </div>
+        </>
       ) : null}
       {error ? (
         <p role="alert" className="text-sm text-red-600">
           <GeneratedValue value={error} />
         </p>
       ) : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput paramKey="crewQ" pageParamKey="crewPage" placeholder={t('Search crew…')} />
-        <Select
-          value={search.get('crewStatus') ?? ''}
-          aria-label={t('Signature status')}
-          onChange={(e) => {
-            const next = new URLSearchParams(search)
-            if (e.target.value) next.set('crewStatus', e.target.value)
-            else next.delete('crewStatus')
-            next.delete('crewPage')
-            router.replace(`/hazard-assessments/${assessmentId}?${next}` as any, { scroll: false })
-          }}
-        >
-          <option value="">{t('All signatures')}</option>
-          <option value="awaiting">{t('Awaiting signature')}</option>
-          <option value="signed">{t('Signed')}</option>
-        </Select>
-      </div>
-      {!data.rows.length ? (
-        <p className="text-sm text-slate-500">
-          <GeneratedValue value="No crew members match. Add the crew to prepare their signature spaces." />
-        </p>
-      ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {data.rows.map((row) => (
-            <li key={row.id} className="space-y-2 rounded-lg border p-3 dark:border-slate-700">
-              <p className="font-medium">{row.name}</p>
-              <Badge variant={row.signedAt ? 'success' : 'outline'}>
+      <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {adding.map((option) => (
+          <li key={option.value} className="space-y-2 rounded-lg border p-3 dark:border-slate-700">
+            <p className="flex items-center justify-between font-medium">
+              {option.label}
+              <LoaderCircle size={14} className="animate-spin" aria-label={t('Saving…')} />
+            </p>
+            <Badge variant="outline">
+              <GeneratedValue value="Awaiting signature" />
+            </Badge>
+          </li>
+        ))}
+        {data.rows.map((row) => (
+          <li
+            key={row.id}
+            className="relative space-y-2 rounded-lg border p-3 dark:border-slate-700"
+          >
+            <p className="pr-8 font-medium">{row.name}</p>
+            {canUpdate && !data.locked && !row.signedAt ? (
+              <Button
+                className="absolute top-1 right-1 h-9 w-9 p-0"
+                variant="ghost"
+                disabled={pending}
+                aria-label={t('Remove')}
+                onClick={() =>
+                  run(async () => {
+                    const fd = new FormData()
+                    fd.set('id', row.id)
+                    fd.set('assessmentId', assessmentId)
+                    await deleteSignature(fd)
+                    await sync()
+                  })
+                }
+              >
+                <X size={16} />
+              </Button>
+            ) : null}
+            {row.image ? (
+              <RawImage
+                optimizationReason="authenticated"
+                src={row.image}
+                alt={t('Signature')}
+                className="h-16 max-w-full object-contain dark:rounded dark:bg-white"
+              />
+            ) : canUpdate && !data.locked ? (
+              <button
+                type="button"
+                disabled={pending || !row.active || !!adding.length}
+                onClick={() => sign(row.id)}
+                className="flex h-20 w-full items-center justify-center rounded border border-dashed border-slate-300 text-sm text-slate-500 dark:border-slate-600"
+              >
                 <GeneratedValue
-                  value={
-                    row.signedAt
-                      ? 'Signed'
-                      : row.expiresAt && new Date(row.expiresAt) <= new Date()
-                        ? 'Request expired'
-                        : row.requestedAt
-                          ? 'Requested · awaiting signature'
-                          : 'Awaiting signature'
-                  }
+                  value={row.active ? 'Awaiting signature' : 'Person inactive — remove from crew'}
                 />
+              </button>
+            ) : (
+              <Badge variant="outline">
+                <GeneratedValue value="Awaiting signature" />
               </Badge>
-              {row.image ? (
-                <RawImage
-                  optimizationReason="authenticated"
-                  src={row.image}
-                  alt={t('Signature')}
-                  className="h-16 max-w-full object-contain dark:rounded dark:bg-white"
-                />
-              ) : null}
-              {!row.signedAt ? (
-                <p className="text-xs text-slate-500">
-                  <GeneratedValue
-                    value={
-                      !row.active
-                        ? 'Person inactive — remove from crew'
-                        : row.remoteAvailable
-                          ? 'Can sign on own phone'
-                          : 'Collect on this phone — no linked account'
-                    }
-                  />
-                </p>
-              ) : null}
-              {canUpdate && !data.locked && !row.signedAt ? (
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => collect(row.id)}
-                    disabled={pending || !row.active}
-                  >
-                    <GeneratedValue value="Sign" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={pending}
-                    onClick={() =>
-                      run(async () => {
-                        const fd = new FormData()
-                        fd.set('id', row.id)
-                        fd.set('assessmentId', assessmentId)
-                        await deleteSignature(fd)
-                      })
-                    }
-                  >
-                    <GeneratedValue value="Remove" />
-                  </Button>
-                </div>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
+            )}
+          </li>
+        ))}
+      </ul>
+      {!data.rows.length && !adding.length ? (
+        <p className="text-sm text-slate-500">
+          <GeneratedValue value="Add crew to prepare their signature spaces." />
+        </p>
+      ) : null}
       <Pagination
         basePath={`/hazard-assessments/${assessmentId}`}
-        currentParams={params}
+        currentParams={Object.fromEntries(search)}
         total={data.total}
         page={data.page}
         perPage={data.perPage}
         pageParamKey="crewPage"
       />
+      {drawer ? (
+        <CrewSignatureDrawer {...drawer} onSaved={sync} onClose={() => setDrawer(null)} />
+      ) : null}
     </div>
   )
 }

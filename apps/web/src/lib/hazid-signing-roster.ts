@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { and, asc, count, eq, ilike, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, desc, count, eq, isNull, sql } from 'drizzle-orm'
 import { activeTenantUsersWhere } from '@beaconhs/db'
 import {
   hazidAssessments,
@@ -29,7 +29,6 @@ export type SigningRosterData = {
   crewTotal: number
   signed: number
   revision: number
-  frozen: boolean
   locked: boolean
   page: number
   perPage: number
@@ -40,11 +39,11 @@ export async function loadHazidSigningRoster(
   assessmentId: string,
   params: Record<string, string | string[] | undefined>,
 ): Promise<SigningRosterData | null> {
-  const list = parsePrefixedListParams(params, 'crew', {
+  const list = parsePrefixedListParams({ crewPage: params.crewPage }, 'crew', {
     sort: 'name',
     dir: 'asc',
     allowedSorts: ['name'],
-    perPage: 12,
+    perPage: 25,
   })
   return ctx.db(async (tx) => {
     const [parent] = await tx
@@ -73,16 +72,7 @@ export async function loadHazidSigningRoster(
       eq(hazidAssessmentSignatures.assessmentId, parent.id),
       eq(hazidAssessmentSignatures.revision, parent.signingRevision),
     )
-    const status = params.crewStatus
-    const filtered = and(
-      base,
-      list.q ? ilike(name, `%${list.q.replace(/[\\%_]/g, '\\$&')}%`) : undefined,
-      status === 'signed'
-        ? isNotNull(hazidAssessmentSignatures.signatureAttachmentId)
-        : status === 'awaiting'
-          ? isNull(hazidAssessmentSignatures.signatureAttachmentId)
-          : undefined,
-    )
+    const filtered = base
     const [counts] = await tx
       .select({
         crewTotal: count(),
@@ -114,7 +104,7 @@ export async function loadHazidSigningRoster(
         ),
       )
       .where(filtered)
-      .orderBy(asc(name), asc(hazidAssessmentSignatures.id))
+      .orderBy(desc(hazidAssessmentSignatures.createdAt), desc(hazidAssessmentSignatures.id))
       .limit(list.perPage)
       .offset((list.page - 1) * list.perPage)
     return {
@@ -132,7 +122,6 @@ export async function loadHazidSigningRoster(
       crewTotal: counts?.crewTotal ?? 0,
       signed: counts?.signed ?? 0,
       revision: parent.signingRevision,
-      frozen: !!parent.signingFrozenAt,
       locked: parent.locked,
       page: list.page,
       perPage: list.perPage,
