@@ -34,14 +34,14 @@ A journal entry protects you and your crew. If a question comes up months later,
 
 ## Where to find it
 
-Open **Journals** in the left menu. The page opens on today’s entry. If none exists, a fresh editor opens automatically; start typing to save it. On a desktop your past entries sit in a list on the left. On a phone, tap **Browse** to see them.
+Open **Journals** in the left menu. Today’s entry opens directly in the full editor. If none exists, BeaconHS creates a draft automatically and opens the same editor. **Date**, **Log type**, **Location**, and **Supervisor** are available immediately. On a desktop your past entries sit in a list on the left. On a phone, tap **Browse** to see them.
 
 Supervisors can open **Records** beside **Journals**, or tap **Browse**, then **Records**, on a phone. This follows their assigned reading scope. **Manage** is only for journal administrators; on a phone it is **Browse** → **Manage journals**. The Manage hub contains tags and automations. The standard **Foreman / Supervisor** role can edit its own journals and read its assigned scope; it does not administer journals.
 
 ## Writing today's entry
 
 1. Open [Journals](/journals).
-2. Resume today’s draft, or start typing in the fresh editor. Older entries stay in **Browse**.
+2. Resume today’s entry or use the draft created automatically for you. There is no separate creation form. Older entries stay in **Browse**.
 3. Type what happened. Your words save automatically as you go — there is no save button.
 4. Use the microphone button to dictate by voice instead of typing, if you prefer.
 5. Choose an active **Supervisor**. You can save a draft without one, but you must choose one before submitting. Set the location if it applies.
@@ -72,7 +72,7 @@ Tags help people find entries later (for example a tag for concrete pours). Tap 
 
 ## Submitting
 
-1. Choose an active **Supervisor**, then tap **Submit** in the header when your entry is done. The fresh editor and saved drafts both offer the supervisor picker. **Submit** becomes available after you have chosen a supervisor, and stays above the scrolling text on a phone.
+1. Choose an active **Supervisor** in the full editor, then tap **Submit** in the header when your entry is done. You can write and save a draft before choosing a supervisor. **Submit** becomes available after you have chosen a supervisor, and stays above the scrolling text on a phone.
 2. **Submit** waits for your latest words to save, then marks the entry **Submitted**. Autosave alone keeps an entry as a draft. If saving or submission fails, the error appears above the text; retry before leaving.
 3. Submitted entries become read-only. To correct your own entry, tap **Unlock**, confirm, make your changes, then **Submit** again. Unlocking is permission-checked and recorded in Activity.
 

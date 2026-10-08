@@ -27,6 +27,8 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["DEPLOYMENT_VERSION", "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY"],
+      "passThroughEnv": ["NODE_OPTIONS"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "dev": {

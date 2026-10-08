@@ -129,25 +129,20 @@ function validDate(value: string): boolean {
 const NO_AUTHOR_IDENTITY =
   'Your account is not linked to a person or membership in this tenant, so it cannot own a journal.'
 
-export async function createTodayEntry(): Promise<ActionOk<{ id: string }> | ActionErr> {
-  const ctx = await requireRequestContext()
-  if (!canCreateJournal(ctx)) return { ok: false, error: 'You cannot create journal entries.' }
-  const id = await getOrCreateEntryForDate(ctx)
-  if (!id) return { ok: false, error: NO_AUTHOR_IDENTITY }
-  revalidatePath('/journals')
-  return { ok: true, id }
-}
-
 export async function createEntryForDate(
-  dateISO: string,
-): Promise<ActionOk<{ id: string }> | ActionErr> {
+  dateISO?: string,
+): Promise<ActionOk<{ entry: JournalEntryDetail }> | ActionErr> {
   const ctx = await requireRequestContext()
   if (!canCreateJournal(ctx)) return { ok: false, error: 'You cannot create journal entries.' }
-  if (!validDate(dateISO)) return { ok: false, error: 'Choose a valid journal date.' }
+  if (dateISO !== undefined && (typeof dateISO !== 'string' || !validDate(dateISO))) {
+    return { ok: false, error: 'Choose a valid journal date.' }
+  }
   const id = await getOrCreateEntryForDate(ctx, dateISO)
   if (!id) return { ok: false, error: NO_AUTHOR_IDENTITY }
+  const entry = await getEntry(ctx, id)
+  if (!entry) return { ok: false, error: 'Could not open your journal.' }
   revalidatePath('/journals')
-  return { ok: true, id }
+  return { ok: true, entry }
 }
 
 export async function unlockEntry(id: string): Promise<ActionOk | ActionErr> {

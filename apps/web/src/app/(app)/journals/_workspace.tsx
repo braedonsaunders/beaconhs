@@ -8,16 +8,15 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // desktop the tree sits beside the editor; on mobile the tree is a slide-over
 // drawer and the editor is full-screen.
 
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useEffectEvent, useRef, useState, useTransition } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { NotebookPen, Plus, Sparkles } from 'lucide-react'
+import { Button, Skeleton } from '@beaconhs/ui'
+import { unstable_rethrow } from 'next/navigation'
 import { toast } from 'sonner'
 import { SidebarTree } from './_sidebar-tree'
-import { TodayComposer } from './_today-composer'
 import { EditorPane } from './_editor-pane'
 import {
   createEntryForDate,
-  createTodayEntry,
   fetchAuthorTree,
   fetchAuthorWorkspaceData,
   fetchEntry,
@@ -51,9 +50,21 @@ export function JournalWorkspace({
   const [treeOpen, setTreeOpen] = useState(false)
   const [treeLoading, setTreeLoading] = useState(false)
   const [treeLoadingMore, setTreeLoadingMore] = useState(false)
-  const [, startNav] = useTransition()
+  const [opening, startNav] = useTransition()
+  const [openError, setOpenError] = useState<string | null>(null)
+  const openingRequest = useRef(false)
+  const entryRequestId = useRef(0)
+  const lastDate = useRef<string | undefined>(undefined)
+  const autoOpened = useRef(false)
   const filtersKey = JSON.stringify(filters)
   const treeRequestId = useRef(0)
+
+  const openInitialJournal = useEffectEvent(() => newEntry())
+  useEffect(() => {
+    if (autoOpened.current) return
+    autoOpened.current = true
+    if (!initialEntry && !authorEntryId && data.canCreate) openInitialJournal()
+  }, [initialEntry, authorEntryId, data.canCreate])
 
   const setUrl = useCallback(
     (id: string | null) => {
@@ -110,14 +121,22 @@ export function JournalWorkspace({
 
   async function selectEntry(id: string) {
     setTreeOpen(false)
+    const requestId = ++entryRequestId.current
     if (id === entry?.id) return
     if (!(await saveBeforeLeaving())) return
-    const detail = await fetchEntry(id)
-    if (detail) {
+    try {
+      const detail = await fetchEntry(id)
+      if (requestId !== entryRequestId.current) return
+      if (!detail) throw new Error(tGenerated('m_0065fba0031114'))
       setEntry(detail)
       setUrl(id)
-    } else {
-      toast.error(tGenerated('m_0065fba0031114'))
+      setOpenError(null)
+    } catch (error) {
+      unstable_rethrow(error)
+      if (requestId !== entryRequestId.current) return
+      const message = error instanceof Error ? error.message : 'Could not open your journal.'
+      setOpenError(message)
+      toast.error(tGeneratedValue(message))
     }
   }
 
@@ -171,38 +190,49 @@ export function JournalWorkspace({
   }, [])
 
   function newEntry() {
-    if (authorEntryId) return // author flyout is review/edit only — no create-as-other
-    startNav(async () => {
-      if (!(await saveBeforeLeaving())) return
-      const r = await createTodayEntry()
-      if (!r.ok) {
-        toast.error(tGeneratedValue(r.error))
-        return
-      }
-      await openCreated(r.id)
-    })
+    openDate()
   }
 
   function pickDate(dateISO: string) {
-    if (authorEntryId) return
-    startNav(async () => {
-      if (!(await saveBeforeLeaving())) return
-      const r = await createEntryForDate(dateISO)
-      if (!r.ok) {
-        toast.error(tGeneratedValue(r.error))
-        return
-      }
-      await openCreated(r.id)
-    })
+    openDate(dateISO)
   }
 
-  async function openCreated(id: string) {
-    const detail = await fetchEntry(id)
-    if (!detail) throw new Error('Could not open your journal.')
-    setEntry(detail)
-    setUrl(id)
-    setTreeOpen(false)
-    void reloadSidebar()
+  function openDate(dateISO?: string) {
+    if (authorEntryId || !data.canCreate || openingRequest.current) return
+    openingRequest.current = true
+    lastDate.current = dateISO
+    const requestId = ++entryRequestId.current
+    setOpenError(null)
+    startNav(async () => {
+      try {
+        if (!(await saveBeforeLeaving())) {
+          if (requestId === entryRequestId.current) setOpenError('Could not save your journal.')
+          return
+        }
+        if (requestId !== entryRequestId.current) return
+        const result = await createEntryForDate(dateISO)
+        if (requestId !== entryRequestId.current) return
+        if (!result.ok) throw new Error(result.error)
+        setEntry(result.entry)
+        setUrl(result.entry.id)
+        setTreeOpen(false)
+        void reloadSidebar().catch((error: unknown) => {
+          toast.error(
+            tGeneratedValue(
+              error instanceof Error ? error.message : 'Could not open your journal.',
+            ),
+          )
+        })
+      } catch (error) {
+        unstable_rethrow(error)
+        if (requestId !== entryRequestId.current) return
+        const message = error instanceof Error ? error.message : 'Could not open your journal.'
+        setOpenError(message)
+        if (entry) toast.error(tGeneratedValue(message))
+      } finally {
+        openingRequest.current = false
+      }
+    })
   }
 
   async function onMutated() {
@@ -232,9 +262,11 @@ export function JournalWorkspace({
   }
 
   function onDeleted() {
+    ++entryRequestId.current
     setEntry(null)
     setUrl(null)
-    void reloadSidebar()
+    if (data.canCreate && !authorEntryId) newEntry()
+    else void reloadSidebar()
   }
 
   function onLocalPatch(patch: Partial<JournalEntryDetail>) {
@@ -315,17 +347,11 @@ export function JournalWorkspace({
                   onLocalPatch={onLocalPatch}
                   onBrowse={() => setTreeOpen(true)}
                 />
-              ) : !authorEntryId ? (
-                <TodayComposer
-                  aiEnabled={data.aiEnabled}
-                  canSubmit={data.canSubmit}
-                  onCreated={openCreated}
-                  onBrowse={() => setTreeOpen(true)}
-                />
               ) : (
-                <EmptyEditor
-                  aiEnabled={data.aiEnabled}
-                  onNew={newEntry}
+                <JournalPlaceholder
+                  loading={!authorEntryId && data.canCreate && (opening || !openError)}
+                  error={openError}
+                  onRetry={() => openDate(lastDate.current)}
                   onBrowse={() => setTreeOpen(true)}
                 />
               )
@@ -337,55 +363,48 @@ export function JournalWorkspace({
   )
 }
 
-function EmptyEditor({
-  aiEnabled,
-  onNew,
+function JournalPlaceholder({
+  loading,
+  error,
+  onRetry,
   onBrowse,
 }: {
-  aiEnabled: boolean
-  onNew: () => void
+  loading: boolean
+  error: string | null
+  onRetry: () => void
   onBrowse: () => void
 }) {
+  if (loading) {
+    return (
+      <div aria-busy="true" className="h-full space-y-5 bg-white p-4 sm:p-6 dark:bg-slate-900">
+        <Skeleton className="h-11 w-full" />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {Array.from({ length: 4 }, (_, index) => (
+            <Skeleton key={index} className="h-12" />
+          ))}
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
   return (
     <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-      <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-teal-50 text-teal-600 dark:bg-teal-500/15 dark:text-teal-400">
-        <NotebookPen size={30} />
-      </div>
-      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-        <GeneratedText id="m_12f6be73518266" />
-      </h2>
-      <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">
-        <GeneratedText id="m_0ae4eeb19b1bad" />
-        <GeneratedValue value={aiEnabled ? <GeneratedText id="m_1003c0990a5a33" /> : '.'} />
+      <p
+        role={error ? 'alert' : undefined}
+        className="max-w-sm text-sm text-slate-500 dark:text-slate-400"
+      >
+        <GeneratedValue value={error ?? 'Choose a journal from Browse.'} />
       </p>
-      <div className="mt-5 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onNew}
-          // Guided-tour anchor (lib/walkthroughs 'daily-journal').
-          data-walkthrough="journals-new"
-          className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal-800"
-        >
-          <Plus size={16} /> <GeneratedText id="m_0036397741744c" />
-        </button>
-        <button
-          type="button"
-          onClick={onBrowse}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 lg:hidden dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          <NotebookPen size={16} /> <GeneratedText id="m_12c9bcb4cba5b7" />
-        </button>
+      <div className="mt-4 flex items-center gap-2">
+        {error ? (
+          <Button type="button" onClick={onRetry}>
+            <GeneratedValue value="Retry opening journal" />
+          </Button>
+        ) : null}
+        <Button type="button" variant="outline" onClick={onBrowse} className="lg:hidden">
+          <GeneratedText id="m_12c9bcb4cba5b7" />
+        </Button>
       </div>
-      <GeneratedValue
-        value={
-          aiEnabled ? (
-            <div className="mt-3 inline-flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-              <Sparkles size={12} className="text-teal-500" />{' '}
-              <GeneratedText id="m_1cd0c39d0e9e4d" />
-            </div>
-          ) : null
-        }
-      />
     </div>
   )
 }

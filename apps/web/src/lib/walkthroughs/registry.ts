@@ -98,7 +98,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       {
         path: '/journals',
         title: 'Start an entry',
-        body: 'Today’s draft opens automatically. If there is no entry yet, start typing in the fresh editor. Submitted journals are read-only until you unlock them.',
+        body: 'Today’s journal opens in the full editor. If there is no entry yet, a draft is created automatically. Date, Log type, Location and Supervisor are available immediately. Submitted journals are read-only until you unlock them.',
       },
       {
         title: 'Write it down',

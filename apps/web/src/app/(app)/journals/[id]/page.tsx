@@ -2,7 +2,7 @@ import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { GeneratedValue } from '@/i18n/generated'
 import { notFound } from 'next/navigation'
 import { requireRequestContext } from '@/lib/auth'
-import { getEntry, getWorkspaceData, listEntries } from '../_data'
+import { getEntry, getWorkspaceData } from '../_data'
 import { isUuid } from '@/lib/list-params'
 import { JournalWorkspace } from '../_workspace'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
@@ -32,12 +32,10 @@ export default async function JournalEntryPage({ params }: { params: Promise<{ i
       canManageSubjectGates(ctx, 'module', 'journals'),
     ),
   ])
-  const initialEntry =
-    deepEntry ??
-    (await listEntries(ctx, {}, { limit: 1 }).then((r) => (r[0] ? getEntry(ctx, r[0].id) : null)))
+  if (!deepEntry) notFound()
 
   const workspace = (
-    <JournalWorkspace initialData={data} initialEntry={initialEntry} initialGroupBy={groupBy} />
+    <JournalWorkspace initialData={data} initialEntry={deepEntry} initialGroupBy={groupBy} />
   )
   if (pendingGates.length === 0) return workspace
   return (

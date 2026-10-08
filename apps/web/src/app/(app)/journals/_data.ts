@@ -43,7 +43,8 @@ import {
   snippetOf,
   todayISO,
 } from './_lib'
-import { canMutateJournalEntry, journalMutationScope } from './_mutation-policy'
+import { canCreateJournal, canMutateJournalEntry } from './_mutation-policy'
+import { recordAuditInTransaction } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
 import { CSV_EXPORT_QUERY_LIMIT } from '@/lib/csv'
 import type {
@@ -675,7 +676,7 @@ export async function getWorkspaceData(
     canReadAll: journalCanReadAll(ctx),
     canBrowseAll: journalCanBrowseAll(ctx),
     canManage: ctx.isSuperAdmin || can(ctx, 'journals.assign'),
-    canSubmit: journalMutationScope(ctx, 'submit') !== 'none',
+    canCreate: canCreateJournal(ctx),
     aiEnabled: (await getTenantAiConfig(ctx)) !== null,
   }
 }
@@ -728,6 +729,15 @@ export async function getOrCreateEntryForDate(
         status: 'draft',
       })
       .returning({ id: journalEntries.id })
+    if (created) {
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'journal_entry',
+        entityId: created.id,
+        action: 'create',
+        summary: 'Created journal draft',
+        after: { reference, entryDate: today, personId: authorPersonId, status: 'draft' },
+      })
+    }
     return created?.id ?? null
   })
 }

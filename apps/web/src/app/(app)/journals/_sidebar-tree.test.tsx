@@ -21,7 +21,7 @@ function render(canBrowseAll: boolean, canManage: boolean) {
     canReadAll: false,
     canBrowseAll,
     canManage,
-    canSubmit: true,
+    canCreate: true,
     aiEnabled: false,
   }
   return renderToStaticMarkup(

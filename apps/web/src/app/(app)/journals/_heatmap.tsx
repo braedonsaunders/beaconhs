@@ -20,7 +20,13 @@ function intensity(count: number): string {
   return 'bg-teal-700 hover:bg-teal-800'
 }
 
-export function Heatmap({ data, onPick }: { data: HeatmapCell[]; onPick: (date: string) => void }) {
+export function Heatmap({
+  data,
+  onPick,
+}: {
+  data: HeatmapCell[]
+  onPick?: (date: string) => void
+}) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const { columns, monthTicks } = useMemo(() => {
     const counts = new Map(data.map((d) => [d.date, d.count]))
@@ -84,7 +90,8 @@ export function Heatmap({ data, onPick }: { data: HeatmapCell[]; onPick: (date: 
                         title={tGeneratedValue(
                           `${cell.date} · ${cell.count} ${cell.count === 1 ? 'entry' : 'entries'}`,
                         )}
-                        onClick={() => onPick(cell.date)}
+                        disabled={!onPick}
+                        onClick={() => onPick?.(cell.date)}
                         className={`h-[10px] w-[10px] rounded-[2px] ring-1 ring-black/[0.03] transition-colors ring-inset dark:ring-white/[0.04] ${intensity(cell.count)}`}
                       />
                     ),
