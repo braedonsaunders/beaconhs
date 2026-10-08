@@ -21,6 +21,7 @@ import {
   resolveConversationAccess,
 } from '@/lib/ai-conversations'
 import { recordAudit } from '@/lib/audit'
+import { appVersion } from '@/lib/app-version'
 import { feedbackFiledAuditEvent } from '@/lib/feedback-audit'
 import { feedbackDenyList, getPlatformFeedbackRuntime } from '@/lib/feedback-config'
 import { feedbackGithubRequest } from '@/lib/feedback-github'
@@ -107,7 +108,7 @@ export async function POST(req: Request): Promise<Response> {
   const context: FeedbackContext = {
     pathname: request.includePage ? request.pathname : '/',
     pageTitle: request.includePage ? request.pageTitle : undefined,
-    appVersion: process.env.DEPLOYMENT_VERSION || 'dev',
+    appVersion: appVersion(),
     locale: ctx.locale,
   }
   const denyList = await feedbackDenyList(ctx, sessionUser?.email)
