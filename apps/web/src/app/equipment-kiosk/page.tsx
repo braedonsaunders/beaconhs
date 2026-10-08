@@ -11,6 +11,7 @@ import { resolveLocalePreferences } from '@beaconhs/i18n'
 import { EquipmentKioskClient } from './kiosk-client'
 import { resolveActiveTenant } from '@/lib/active-tenant'
 import { getMessagesForLocale } from '@/i18n/messages'
+import { getClientMessages } from '@/i18n/client-messages'
 
 export const dynamic = 'force-dynamic'
 export async function generateMetadata() {
@@ -72,7 +73,11 @@ export default async function EquipmentKioskPage({
   })
   const messages = getMessagesForLocale(locale)
   return (
-    <NextIntlClientProvider locale={locale} messages={messages} timeZone="America/Toronto">
+    <NextIntlClientProvider
+      locale={locale}
+      messages={getClientMessages(messages)}
+      timeZone="America/Toronto"
+    >
       <EquipmentKioskClient tenantId={tenant.id} tenantName={tenant.name} />
     </NextIntlClientProvider>
   )
