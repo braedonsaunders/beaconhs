@@ -1,89 +1,50 @@
 'use client'
 
-import {
-  useGeneratedTranslations,
-  GeneratedValue,
-  useGeneratedValueTranslations,
-} from '@/i18n/generated'
-
-import { useEffect, useState, useTransition } from 'react'
+import { useGeneratedTranslations, useGeneratedValueTranslations } from '@/i18n/generated'
+import { useMemo } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Search, X } from 'lucide-react'
-import { Input } from '@beaconhs/ui'
+import { ListNavProvider, SearchInput as AppkitSearchInput } from '@braedonsaunders/appkit-ui'
 
+/** Localized Next.js bridge for the shared, race-safe URL list search. */
 export function SearchInput({
   placeholder = 'Search…',
   paramKey = 'q',
   pageParamKey = 'page',
+  searchLabel = 'Search',
+  className,
 }: {
   placeholder?: string
   paramKey?: string
   /** Pagination param to reset when the search changes (sub-tables use prefixed params). */
   pageParamKey?: string
+  searchLabel?: string
+  className?: string
 }) {
-  const tGeneratedValue = useGeneratedValueTranslations()
+  const translate = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const pathname = usePathname()
   const router = useRouter()
-  const search = useSearchParams()
-  const urlValue = search.get(paramKey) ?? ''
-  const [edit, setEdit] = useState({ source: urlValue, value: urlValue })
-  const value = edit.source === urlValue ? edit.value : urlValue
-  const [, startTransition] = useTransition()
-
-  useEffect(() => {
-    const handle = setTimeout(() => {
-      // No-op when the input already matches the URL (mount, external URL
-      // change) — navigating anyway would strip the page param and reset
-      // deep-linked/refreshed pagination back to page 1.
-      if (value === (search.get(paramKey) ?? '')) return
-      const next = new URLSearchParams(search.toString())
-      if (value) next.set(paramKey, value)
-      else next.delete(paramKey)
-      // Reset to page 1 when search changes
-      next.delete(pageParamKey)
-      const qs = next.toString()
-      // Wrap the navigation in a transition so the App Router keeps the current
-      // page (and this input's focus) mounted while the new RSC streams in,
-      // instead of swapping in loading.tsx — otherwise the field loses focus on
-      // every keystroke and you have to click back in. `scroll: false` keeps the
-      // list from jumping to the top while filtering.
-      startTransition(() => {
-        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
-      })
-    }, 250)
-    return () => clearTimeout(handle)
-  }, [pageParamKey, paramKey, pathname, router, search, startTransition, value])
+  const search = useSearchParams().toString()
+  const nav = useMemo(
+    () => ({
+      pathname,
+      search,
+      replace: (href: string) => router.replace(href, { scroll: false }),
+      push: (href: string) => router.push(href, { scroll: false }),
+    }),
+    [pathname, router, search],
+  )
 
   return (
-    <div className="relative w-full sm:w-72">
-      <Search
-        className="pointer-events-none absolute top-2 left-2.5 text-slate-400 dark:text-slate-500"
-        size={16}
+    <ListNavProvider value={nav}>
+      <AppkitSearchInput
+        placeholder={translate(placeholder)}
+        searchLabel={translate(searchLabel)}
+        className={className}
+        clearLabel={tGenerated('m_0465aaf099e62c')}
+        paramKey={paramKey}
+        pageParamKey={pageParamKey}
       />
-      <Input
-        type="search"
-        placeholder={tGeneratedValue(placeholder)}
-        value={value}
-        onChange={(e) => setEdit({ source: urlValue, value: e.target.value })}
-        // Hide the browser's native search clear (×) — we render our own below,
-        // so the native one would show a duplicate clear button.
-        className="h-8 pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
-      />
-      <GeneratedValue
-        value={
-          value ? (
-            <button
-              type="button"
-              aria-label={tGenerated('m_0465aaf099e62c')}
-              onClick={() => setEdit({ source: urlValue, value: '' })}
-              className="absolute top-2 right-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-500"
-            >
-              <X size={16} />
-            </button>
-          ) : null
-        }
-      />
-    </div>
+    </ListNavProvider>
   )
 }

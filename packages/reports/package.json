@@ -20,9 +20,9 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@braedonsaunders/appkit-reports": "^1.2.0",
-    "@braedonsaunders/appkit-ui": "^0.2.1",
     "@beaconhs/db": "workspace:*",
+    "@braedonsaunders/appkit-reports": "^2.0.1",
+    "@braedonsaunders/appkit-ui": "^0.3.0",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.24.0",
     "react": "19.2.7"

@@ -204,7 +204,6 @@ export async function SmsLogListView({
             <TextParamFilter
               paramKey="recipient"
               label={tGenerated('m_105e441033d31d')}
-              type="tel"
               placeholder="+15551234567"
               className="h-8 w-48"
             />

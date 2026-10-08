@@ -39,6 +39,7 @@
     "@beaconhs/tenant": "workspace:*",
     "@beaconhs/ui": "workspace:*",
     "@braedonsaunders/appkit-feedback": "workspace:*",
+    "@braedonsaunders/appkit-ui": "^0.3.0",
     "@excalidraw/excalidraw": "^0.18.1",
     "@grapesjs/react": "^2.0.0",
     "@napi-rs/canvas": "^1.0.2",

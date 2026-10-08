@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import '@beaconhs/ui/styles.css';
+@import '@braedonsaunders/appkit-ui/styles.css';
 @config '../../tailwind.config.ts';
 
 /* Class-based dark mode: `dark:` variants respond to a `.dark` class on <html>
