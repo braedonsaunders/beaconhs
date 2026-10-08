@@ -1,5 +1,6 @@
 @layer base {
   :root {
+    color-scheme: light;
     --color-bg: 255 255 255;
     --color-fg: 17 24 39;
     --color-muted: 107 114 128;
@@ -13,12 +14,20 @@
   }
 
   .dark {
+    color-scheme: dark;
     --color-bg: 17 24 39;
     --color-fg: 243 244 246;
     --color-muted: 156 163 175;
     --color-border: 55 65 81;
     --color-primary: 20 184 166;
     --color-primary-fg: 17 24 39;
+  }
+
+  /* Native date/time controls need the theme background as well as the
+     browser colour scheme. Shared Input utilities can still override this. */
+  input:is([type='date'], [type='datetime-local'], [type='time'], [type='month'], [type='week']) {
+    background-color: rgb(var(--color-bg));
+    color: rgb(var(--color-fg));
   }
 
   html,

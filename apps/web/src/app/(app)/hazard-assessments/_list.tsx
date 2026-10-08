@@ -14,6 +14,7 @@ import {
   Badge,
   Button,
   EmptyState,
+  Input,
   PageHeader,
   Table,
   TableBody,
@@ -341,22 +342,22 @@ export async function AssessmentsListPage({
                       <input key={key} type="hidden" name={key} value={String(value)} />
                     ))}
                 />
-                <label className="flex items-center gap-1 text-slate-500">
+                <label className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                   <GeneratedText id="m_154c9d7a784dda" />
-                  <input
+                  <Input
                     type="date"
                     name="dateFrom"
                     defaultValue={dateFromRaw ?? ''}
-                    className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700"
+                    className="h-8 w-auto px-2 text-xs sm:text-xs"
                   />
                 </label>
-                <label className="flex items-center gap-1 text-slate-500">
+                <label className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
                   <GeneratedText id="m_02d4f83ff8f11c" />
-                  <input
+                  <Input
                     type="date"
                     name="dateTo"
                     defaultValue={dateToRaw ?? ''}
-                    className="h-8 rounded-md border border-slate-300 px-2 text-xs dark:border-slate-700"
+                    className="h-8 w-auto px-2 text-xs sm:text-xs"
                   />
                 </label>
                 <button

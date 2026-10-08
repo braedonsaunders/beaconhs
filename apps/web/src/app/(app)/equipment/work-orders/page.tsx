@@ -298,7 +298,7 @@ export default async function WorkOrdersPage({
                   type="date"
                   name="openedFrom"
                   defaultValue={openedFromRaw ?? ''}
-                  className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:[color-scheme:dark]"
+                  className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                 />
               </label>
               <span className="text-slate-400 dark:text-slate-500">
@@ -308,7 +308,7 @@ export default async function WorkOrdersPage({
                 type="date"
                 name="openedTo"
                 defaultValue={openedToRaw ?? ''}
-                className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:[color-scheme:dark]"
+                className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
               />
               <button
                 type="submit"
