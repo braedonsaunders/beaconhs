@@ -673,6 +673,14 @@ Look up any unit to see its department, status, which site it is at, who is hold
 
 Open **Equipment** in the left menu. That opens the full list at [Equipment](/equipment).
 
+## Add equipment
+
+1. Open [Equipment](/equipment) and choose **Add equipment** at the top right.
+2. Enter the **Name** and leave the field. The new draft opens in the full equipment editor.
+3. Complete the asset tag, category, type, department, and other details. Each field saves when you leave it. Editing a detail clears the **Draft** badge.
+
+**Add equipment** requires **Manage equipment** permission. Viewing equipment or performing inspections does not grant permission to add it. If the button is missing, ask your administrator to check your role and any permission overrides under **Admin** → **Users** or **Roles & permissions**. A Foreman / Supervisor role by itself does not include this permission.
+
 ## Look up a unit
 
 1. Open [Equipment](/equipment).

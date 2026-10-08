@@ -1,5 +1,6 @@
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { Card, CardContent, PageHeader } from '@beaconhs/ui'
+import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 import { LazyRecordProvider } from '@/components/lazy-record'
@@ -14,7 +15,8 @@ export const dynamic = 'force-dynamic'
 
 export default async function NewEquipmentPage() {
   const tGenerated = await getGeneratedTranslations()
-  await requireRequestContext()
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.manage')
 
   return (
     <PageContainer>
