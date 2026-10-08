@@ -169,7 +169,7 @@ export function SigningRoster({
     })
   }
   return (
-    <div className="space-y-3" data-walkthrough="hazid-signing">
+    <div className="flex flex-col gap-3" data-walkthrough="hazid-signing">
       <p role="status" aria-live="polite" className="font-medium">
         <GeneratedValue value="Signed" /> {data.signed}/{data.crewTotal}
       </p>
