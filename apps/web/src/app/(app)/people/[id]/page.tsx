@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { DownloadLink } from '@/components/download-link'
 import { revalidatePath } from 'next/cache'
-import { and, asc, desc, eq, isNull, ne } from 'drizzle-orm'
+import { and, asc, desc, eq, getTableColumns, isNull, ne, sql } from 'drizzle-orm'
 import {
   Award,
   BadgeCheck,
@@ -101,6 +101,7 @@ import { setPersonGroups } from '../_actions/groups'
 import { setPersonTitles, setPrimaryPersonTitle } from '../_actions/titles'
 import { deletePersonFile } from '../_actions/files'
 import { PersonFilesDrawers } from './_files-drawers'
+import { canAccessPersonPrivateDetails } from '../_lib/person-access'
 import { DeletePersonButton } from './_delete-person-button'
 
 export const dynamic = 'force-dynamic'
@@ -261,14 +262,36 @@ export default async function PersonDetailPage({
   if (!isUuid(id)) notFound()
 
   const sp = await searchParams
-  const active: Tab = pickActiveTab(sp, TABS, 'overview')
-
   const ctx = await requireRequestContext()
   const canEdit = canManageModule(ctx, 'people')
+  const canReadPrivate = canAccessPersonPrivateDetails(ctx, id)
+  const visibleTabs = canReadPrivate
+    ? TABS
+    : TABS.filter((tab) => !['documents', 'incidents', 'activity'].includes(tab))
+  const active: Tab = pickActiveTab(sp, visibleTabs, 'overview')
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
       .select({
-        person: people,
+        person: {
+          ...getTableColumns(people),
+          dateOfBirth: canReadPrivate ? people.dateOfBirth : sql<string | null>`null`,
+          hireDate: canReadPrivate ? people.hireDate : sql<string | null>`null`,
+          terminationDate: canReadPrivate ? people.terminationDate : sql<string | null>`null`,
+          externalEmployeeId: canReadPrivate ? people.externalEmployeeId : sql<string | null>`null`,
+          emergencyContactName: canReadPrivate
+            ? people.emergencyContactName
+            : sql<string | null>`null`,
+          emergencyContactPhone: canReadPrivate
+            ? people.emergencyContactPhone
+            : sql<string | null>`null`,
+          notes: canReadPrivate ? people.notes : sql<string | null>`null`,
+          signatureAttachmentId: canReadPrivate
+            ? people.signatureAttachmentId
+            : sql<string | null>`null`,
+          metadata: canReadPrivate
+            ? people.metadata
+            : sql<typeof people.$inferSelect.metadata>`'{}'::jsonb`,
+        },
         department: departments,
         trade: trades,
         crew: crews,
@@ -351,30 +374,34 @@ export default async function PersonDetailPage({
           ),
         )
         .orderBy(desc(trainingSkillAssignments.grantedOn)),
-      tx
-        .select({ link: incidentPeople, incident: incidents })
-        .from(incidentPeople)
-        .innerJoin(incidents, eq(incidents.id, incidentPeople.incidentId))
-        .where(
-          and(
-            eq(incidentPeople.personId, id),
-            isNull(incidents.deletedAt),
-            ...(involvementVis ? [involvementVis] : []),
-          ),
-        )
-        .orderBy(desc(incidents.occurredAt)),
-      tx
-        .select({ injury: incidentInjuries, incident: incidents })
-        .from(incidentInjuries)
-        .innerJoin(incidents, eq(incidents.id, incidentInjuries.incidentId))
-        .where(
-          and(
-            eq(incidentInjuries.personId, id),
-            isNull(incidents.deletedAt),
-            ...(injuryVis ? [injuryVis] : []),
-          ),
-        )
-        .orderBy(desc(incidents.occurredAt)),
+      canReadPrivate
+        ? tx
+            .select({ link: incidentPeople, incident: incidents })
+            .from(incidentPeople)
+            .innerJoin(incidents, eq(incidents.id, incidentPeople.incidentId))
+            .where(
+              and(
+                eq(incidentPeople.personId, id),
+                isNull(incidents.deletedAt),
+                ...(involvementVis ? [involvementVis] : []),
+              ),
+            )
+            .orderBy(desc(incidents.occurredAt))
+        : Promise.resolve([]),
+      canReadPrivate
+        ? tx
+            .select({ injury: incidentInjuries, incident: incidents })
+            .from(incidentInjuries)
+            .innerJoin(incidents, eq(incidents.id, incidentInjuries.incidentId))
+            .where(
+              and(
+                eq(incidentInjuries.personId, id),
+                isNull(incidents.deletedAt),
+                ...(injuryVis ? [injuryVis] : []),
+              ),
+            )
+            .orderBy(desc(incidents.occurredAt))
+        : Promise.resolve([]),
       tx
         .select({ item: ppeItems, type: ppeTypes })
         .from(ppeItems)
@@ -388,12 +415,14 @@ export default async function PersonDetailPage({
         .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
         .where(eq(ppeIssues.personId, id))
         .orderBy(desc(ppeIssues.occurredAt)),
-      tx
-        .select({ ack: documentAcknowledgments, doc: documents })
-        .from(documentAcknowledgments)
-        .innerJoin(documents, eq(documents.id, documentAcknowledgments.documentId))
-        .where(eq(documentAcknowledgments.personId, id))
-        .orderBy(desc(documentAcknowledgments.acknowledgedAt)),
+      canReadPrivate
+        ? tx
+            .select({ ack: documentAcknowledgments, doc: documents })
+            .from(documentAcknowledgments)
+            .innerJoin(documents, eq(documents.id, documentAcknowledgments.documentId))
+            .where(eq(documentAcknowledgments.personId, id))
+            .orderBy(desc(documentAcknowledgments.acknowledgedAt))
+        : Promise.resolve([]),
       // Groups this person belongs to
       tx
         .select({ membership: personGroupMemberships, group: personGroups })
@@ -416,12 +445,14 @@ export default async function PersonDetailPage({
         .orderBy(asc(personTitles.name)),
       // Personal files (resumes, certs, ID copies) joined to their underlying
       // attachment row so we can render a download link inline.
-      tx
-        .select({ file: personFiles, attachment: attachments })
-        .from(personFiles)
-        .leftJoin(attachments, eq(attachments.id, personFiles.attachmentId))
-        .where(eq(personFiles.personId, id))
-        .orderBy(desc(personFiles.uploadedAt)),
+      canReadPrivate
+        ? tx
+            .select({ file: personFiles, attachment: attachments })
+            .from(personFiles)
+            .leftJoin(attachments, eq(attachments.id, personFiles.attachmentId))
+            .where(eq(personFiles.personId, id))
+            .orderBy(desc(personFiles.uploadedAt))
+        : Promise.resolve([]),
       // Manager for the side-panel "reports to" row + a quick org-chart link.
       row.person.managerPersonId
         ? tx
@@ -453,24 +484,25 @@ export default async function PersonDetailPage({
         .from(people)
         .where(and(ne(people.id, id), activePeopleWhere()))
         .orderBy(asc(people.lastName), asc(people.firstName)),
-      getPersonSyncOrigin(tx, id),
+      canReadPrivate ? getPersonSyncOrigin(tx, id) : Promise.resolve(null),
     ])
 
     // Read-only view of the login account this person is linked to (managed from
     // Admin → Users). membershipId lets an admin jump straight to that page.
-    const linkedAccount = row.person.userId
-      ? ((
-          await tx
-            .select({
-              membershipId: tenantUsers.id,
-              email: users.email,
-            })
-            .from(tenantUsers)
-            .innerJoin(users, eq(users.id, tenantUsers.userId))
-            .where(eq(tenantUsers.userId, row.person.userId))
-            .limit(1)
-        )[0] ?? null)
-      : null
+    const linkedAccount =
+      canReadPrivate && row.person.userId
+        ? ((
+            await tx
+              .select({
+                membershipId: tenantUsers.id,
+                email: users.email,
+              })
+              .from(tenantUsers)
+              .innerJoin(users, eq(users.id, tenantUsers.userId))
+              .where(eq(tenantUsers.userId, row.person.userId))
+              .limit(1)
+          )[0] ?? null)
+        : null
 
     return {
       ...row,
@@ -533,7 +565,7 @@ export default async function PersonDetailPage({
   // Files and the saved signature are manage-or-self: a person may maintain
   // their own; everyone else needs the module permission (the server actions
   // re-assert this).
-  const isSelf = person.userId != null && person.userId === ctx.userId
+  const isSelf = ctx.personId === id
   const canEditFiles = canEdit || isSelf
   // A field's input is read-only when the viewer lacks edit permission, OR the
   // person is synced and this is a sync-owned field.
@@ -624,7 +656,10 @@ export default async function PersonDetailPage({
     (a, b) => new Date(b.incident.occurredAt).getTime() - new Date(a.incident.occurredAt).getTime(),
   )
 
-  const activity = active === 'activity' ? await recentActivityForEntity(ctx, 'person', id, 50) : []
+  const activity =
+    canReadPrivate && active === 'activity'
+      ? await recentActivityForEntity(ctx, 'person', id, 50)
+      : []
   const badgePreview = canEdit ? await renderPersonBadgePreview(ctx, id) : null
 
   const basePath = `/people/${id}`
@@ -637,9 +672,11 @@ export default async function PersonDetailPage({
           back={{ href: '/people', label: 'Back to people' }}
           title={tGeneratedValue(`${person.firstName} ${person.lastName}`)}
           badge={
-            <Badge variant={person.status === 'active' ? 'success' : 'secondary'}>
-              <GeneratedValue value={person.status} />
-            </Badge>
+            canReadPrivate ? (
+              <Badge variant={person.status === 'active' ? 'success' : 'secondary'}>
+                <GeneratedValue value={person.status} />
+              </Badge>
+            ) : undefined
           }
           actions={
             canEdit ? (
@@ -712,9 +749,11 @@ export default async function PersonDetailPage({
                 <SidebarRow label={tGenerated('m_13fc63a82a07d0')}>
                   <GeneratedValue value={crew?.name ?? '—'} />
                 </SidebarRow>
-                <SidebarRow label={tGenerated('m_1bd874d72669b8')}>
-                  <GeneratedValue value={person.hireDate ?? '—'} />
-                </SidebarRow>
+                {canReadPrivate ? (
+                  <SidebarRow label={tGenerated('m_1bd874d72669b8')}>
+                    <GeneratedValue value={person.hireDate ?? '—'} />
+                  </SidebarRow>
+                ) : null}
                 <SidebarRow label={tGenerated('m_10b68359e74254')}>
                   <GeneratedValue
                     value={
@@ -732,29 +771,31 @@ export default async function PersonDetailPage({
                     }
                   />
                 </SidebarRow>
-                <SidebarRow label={tGenerated('m_0c147e34519f36')}>
-                  <GeneratedValue
-                    value={
-                      linkedAccount ? (
-                        can(ctx, 'admin.users.manage') ? (
-                          <Link
-                            href={`/admin/users/${linkedAccount.membershipId}`}
-                            className="text-teal-700 hover:underline"
-                            title={tGeneratedValue(linkedAccount.email)}
-                          >
-                            <GeneratedValue value={linkedAccount.email} />
-                          </Link>
+                {canReadPrivate ? (
+                  <SidebarRow label={tGenerated('m_0c147e34519f36')}>
+                    <GeneratedValue
+                      value={
+                        linkedAccount ? (
+                          can(ctx, 'admin.users.manage') ? (
+                            <Link
+                              href={`/admin/users/${linkedAccount.membershipId}`}
+                              className="text-teal-700 hover:underline"
+                              title={tGeneratedValue(linkedAccount.email)}
+                            >
+                              <GeneratedValue value={linkedAccount.email} />
+                            </Link>
+                          ) : (
+                            <span title={tGeneratedValue(linkedAccount.email)}>
+                              <GeneratedValue value={linkedAccount.email} />
+                            </span>
+                          )
                         ) : (
-                          <span title={tGeneratedValue(linkedAccount.email)}>
-                            <GeneratedValue value={linkedAccount.email} />
-                          </span>
+                          <GeneratedText id="m_061e6df5204794" />
                         )
-                      ) : (
-                        <GeneratedText id="m_061e6df5204794" />
-                      )
-                    }
-                  />
-                </SidebarRow>
+                      }
+                    />
+                  </SidebarRow>
+                ) : null}
                 <GeneratedValue
                   value={
                     person.email ? (
@@ -802,7 +843,7 @@ export default async function PersonDetailPage({
             />
             <GeneratedValue
               value={
-                person.emergencyContactName || person.emergencyContactPhone ? (
+                canReadPrivate && (person.emergencyContactName || person.emergencyContactPhone) ? (
                   <Card className="border-red-200">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm text-red-800">
@@ -859,7 +900,7 @@ export default async function PersonDetailPage({
                   count: allIncidents.length,
                 },
                 { key: 'activity', label: 'Activity' },
-              ]}
+              ].filter((tab) => visibleTabs.includes(tab.key as Tab))}
             />
 
             <GeneratedValue
@@ -925,15 +966,17 @@ export default async function PersonDetailPage({
                           disabled={fieldDisabled('formalName')}
                           updateAction={updatePersonField}
                         />
-                        <LiveField
-                          id={person.id}
-                          field="dateOfBirth"
-                          label={tGenerated('m_1c4bc57e4c9de9')}
-                          type="date"
-                          initialValue={person.dateOfBirth}
-                          disabled={fieldDisabled('dateOfBirth')}
-                          updateAction={updatePersonField}
-                        />
+                        {canReadPrivate ? (
+                          <LiveField
+                            id={person.id}
+                            field="dateOfBirth"
+                            label={tGenerated('m_1c4bc57e4c9de9')}
+                            type="date"
+                            initialValue={person.dateOfBirth}
+                            disabled={fieldDisabled('dateOfBirth')}
+                            updateAction={updatePersonField}
+                          />
+                        ) : null}
                         <LiveField
                           id={person.id}
                           field="employeeNo"
@@ -961,141 +1004,145 @@ export default async function PersonDetailPage({
                       </div>
                     </Section>
 
-                    <Section
-                      title={tGenerated('m_04a447b0e8003b')}
-                      subtitle={tGenerated('m_1d7da8d570e8f4')}
-                    >
-                      <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                        <LiveSelect
-                          id={person.id}
-                          field="primaryTitleId"
-                          label={tGenerated('m_1a4bbe2908d1a5')}
-                          initialValue={primaryTitle?.id ?? null}
-                          allowEmpty={personTitleRows.length === 0}
-                          options={allTitles.map((title) => ({
-                            value: title.id,
-                            label: title.name,
-                          }))}
-                          disabled={!canEdit || titlesManagedBySync}
-                          updateAction={setPrimaryPersonTitle}
-                        />
-                        <LiveSelect
-                          id={person.id}
-                          field="status"
-                          label={tGenerated('m_0b9da892d6faf0')}
-                          initialValue={person.status}
-                          allowEmpty={false}
-                          options={[
-                            { value: 'active', label: 'Active' },
-                            { value: 'inactive', label: 'Inactive' },
-                            { value: 'terminated', label: 'Terminated' },
-                          ]}
-                          disabled={fieldDisabled('status')}
-                          updateAction={updatePersonField}
-                        />
-                        <LiveField
-                          id={person.id}
-                          field="hireDate"
-                          label={tGenerated('m_1bd874d72669b8')}
-                          type="date"
-                          initialValue={person.hireDate}
-                          disabled={fieldDisabled('hireDate')}
-                          updateAction={updatePersonField}
-                        />
-                        <LiveField
-                          id={person.id}
-                          field="terminationDate"
-                          label={tGenerated('m_0cc426c0b81f98')}
-                          type="date"
-                          initialValue={person.terminationDate}
-                          disabled={fieldDisabled('terminationDate')}
-                          updateAction={updatePersonField}
-                        />
-                        <LiveSelect
-                          id={person.id}
-                          field="departmentId"
-                          label={tGenerated('m_1af68228b8305a')}
-                          initialValue={person.departmentId}
-                          options={deptOptions.map((d) => ({ value: d.id, label: d.name }))}
-                          disabled={fieldDisabled('departmentId')}
-                          updateAction={updatePersonField}
-                        />
-                        <LiveSelect
-                          id={person.id}
-                          field="tradeId"
-                          label={tGenerated('m_1f1e634a4380dc')}
-                          initialValue={person.tradeId}
-                          options={tradeOptions.map((t) => ({ value: t.id, label: t.name }))}
-                          disabled={fieldDisabled('tradeId')}
-                          updateAction={updatePersonField}
-                        />
-                        <LiveSelect
-                          id={person.id}
-                          field="crewId"
-                          label={tGenerated('m_13fc63a82a07d0')}
-                          initialValue={person.crewId}
-                          options={crewOptions.map((c) => ({ value: c.id, label: c.name }))}
-                          disabled={fieldDisabled('crewId')}
-                          updateAction={updatePersonField}
-                        />
-                        <LiveField
-                          id={person.id}
-                          field="externalEmployeeId"
-                          label={tGenerated('m_0ed5613d0cf4ad')}
-                          placeholder={tGenerated('m_0dedb96e55d57e')}
-                          initialValue={person.externalEmployeeId}
-                          disabled={fieldDisabled('externalEmployeeId')}
-                          updateAction={updatePersonField}
-                        />
-                        <LivePersonSelect
-                          id={person.id}
-                          field="managerPersonId"
-                          label={tGenerated('m_10b68359e74254')}
-                          initialValue={person.managerPersonId}
-                          initialOption={
-                            managerRow
-                              ? {
-                                  value: managerRow.id,
-                                  label: `${managerRow.lastName}, ${managerRow.firstName}`,
-                                }
-                              : undefined
-                          }
-                          options={managerOptions.map((m) => ({
-                            value: m.id,
-                            label: `${m.lastName}, ${m.firstName}`,
-                            hint: m.employeeNo ?? undefined,
-                          }))}
-                          sheetTitle="Select manager"
-                          placeholder={tGenerated('m_0b842b664b4f3b')}
-                          disabled={fieldDisabled('managerPersonId')}
-                          updateAction={updatePersonField}
-                        />
-                      </div>
-                    </Section>
+                    {canReadPrivate ? (
+                      <Section
+                        title={tGenerated('m_04a447b0e8003b')}
+                        subtitle={tGenerated('m_1d7da8d570e8f4')}
+                      >
+                        <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                          <LiveSelect
+                            id={person.id}
+                            field="primaryTitleId"
+                            label={tGenerated('m_1a4bbe2908d1a5')}
+                            initialValue={primaryTitle?.id ?? null}
+                            allowEmpty={personTitleRows.length === 0}
+                            options={allTitles.map((title) => ({
+                              value: title.id,
+                              label: title.name,
+                            }))}
+                            disabled={!canEdit || titlesManagedBySync}
+                            updateAction={setPrimaryPersonTitle}
+                          />
+                          <LiveSelect
+                            id={person.id}
+                            field="status"
+                            label={tGenerated('m_0b9da892d6faf0')}
+                            initialValue={person.status}
+                            allowEmpty={false}
+                            options={[
+                              { value: 'active', label: 'Active' },
+                              { value: 'inactive', label: 'Inactive' },
+                              { value: 'terminated', label: 'Terminated' },
+                            ]}
+                            disabled={fieldDisabled('status')}
+                            updateAction={updatePersonField}
+                          />
+                          <LiveField
+                            id={person.id}
+                            field="hireDate"
+                            label={tGenerated('m_1bd874d72669b8')}
+                            type="date"
+                            initialValue={person.hireDate}
+                            disabled={fieldDisabled('hireDate')}
+                            updateAction={updatePersonField}
+                          />
+                          <LiveField
+                            id={person.id}
+                            field="terminationDate"
+                            label={tGenerated('m_0cc426c0b81f98')}
+                            type="date"
+                            initialValue={person.terminationDate}
+                            disabled={fieldDisabled('terminationDate')}
+                            updateAction={updatePersonField}
+                          />
+                          <LiveSelect
+                            id={person.id}
+                            field="departmentId"
+                            label={tGenerated('m_1af68228b8305a')}
+                            initialValue={person.departmentId}
+                            options={deptOptions.map((d) => ({ value: d.id, label: d.name }))}
+                            disabled={fieldDisabled('departmentId')}
+                            updateAction={updatePersonField}
+                          />
+                          <LiveSelect
+                            id={person.id}
+                            field="tradeId"
+                            label={tGenerated('m_1f1e634a4380dc')}
+                            initialValue={person.tradeId}
+                            options={tradeOptions.map((t) => ({ value: t.id, label: t.name }))}
+                            disabled={fieldDisabled('tradeId')}
+                            updateAction={updatePersonField}
+                          />
+                          <LiveSelect
+                            id={person.id}
+                            field="crewId"
+                            label={tGenerated('m_13fc63a82a07d0')}
+                            initialValue={person.crewId}
+                            options={crewOptions.map((c) => ({ value: c.id, label: c.name }))}
+                            disabled={fieldDisabled('crewId')}
+                            updateAction={updatePersonField}
+                          />
+                          <LiveField
+                            id={person.id}
+                            field="externalEmployeeId"
+                            label={tGenerated('m_0ed5613d0cf4ad')}
+                            placeholder={tGenerated('m_0dedb96e55d57e')}
+                            initialValue={person.externalEmployeeId}
+                            disabled={fieldDisabled('externalEmployeeId')}
+                            updateAction={updatePersonField}
+                          />
+                          <LivePersonSelect
+                            id={person.id}
+                            field="managerPersonId"
+                            label={tGenerated('m_10b68359e74254')}
+                            initialValue={person.managerPersonId}
+                            initialOption={
+                              managerRow
+                                ? {
+                                    value: managerRow.id,
+                                    label: `${managerRow.lastName}, ${managerRow.firstName}`,
+                                  }
+                                : undefined
+                            }
+                            options={managerOptions.map((m) => ({
+                              value: m.id,
+                              label: `${m.lastName}, ${m.firstName}`,
+                              hint: m.employeeNo ?? undefined,
+                            }))}
+                            sheetTitle="Select manager"
+                            placeholder={tGenerated('m_0b842b664b4f3b')}
+                            disabled={fieldDisabled('managerPersonId')}
+                            updateAction={updatePersonField}
+                          />
+                        </div>
+                      </Section>
+                    ) : null}
 
-                    <Section
-                      title={tGenerated('m_1c4b8371cb1596')}
-                      subtitle={tGenerated('m_08fe783cc4fa92')}
-                    >
-                      <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-                        <LiveField
-                          id={person.id}
-                          field="emergencyContactName"
-                          label={tGenerated('m_102c76e353ed6c')}
-                          initialValue={person.emergencyContactName}
-                          disabled={fieldDisabled('emergencyContactName')}
-                          updateAction={updatePersonField}
-                        />
-                        <LiveField
-                          id={person.id}
-                          field="emergencyContactPhone"
-                          label={tGenerated('m_039e8d745aa6a6')}
-                          initialValue={person.emergencyContactPhone}
-                          disabled={fieldDisabled('emergencyContactPhone')}
-                          updateAction={updatePersonField}
-                        />
-                      </div>
-                    </Section>
+                    {canReadPrivate ? (
+                      <Section
+                        title={tGenerated('m_1c4b8371cb1596')}
+                        subtitle={tGenerated('m_08fe783cc4fa92')}
+                      >
+                        <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                          <LiveField
+                            id={person.id}
+                            field="emergencyContactName"
+                            label={tGenerated('m_102c76e353ed6c')}
+                            initialValue={person.emergencyContactName}
+                            disabled={fieldDisabled('emergencyContactName')}
+                            updateAction={updatePersonField}
+                          />
+                          <LiveField
+                            id={person.id}
+                            field="emergencyContactPhone"
+                            label={tGenerated('m_039e8d745aa6a6')}
+                            initialValue={person.emergencyContactPhone}
+                            disabled={fieldDisabled('emergencyContactPhone')}
+                            updateAction={updatePersonField}
+                          />
+                        </div>
+                      </Section>
+                    ) : null}
 
                     <Section
                       title={tGenerated('m_115785120a1462')}
@@ -1129,29 +1176,33 @@ export default async function PersonDetailPage({
                       </div>
                     </Section>
 
-                    <Section
-                      title={tGenerated('m_0b8dadcb78cd08')}
-                      subtitle={tGenerated('m_1fb45a84c0088e')}
-                    >
-                      <LiveRichText
-                        id={person.id}
-                        field="notes"
-                        label={tGenerated('m_0b8dadcb78cd08')}
-                        initialValue={person.notes}
-                        placeholder={tGenerated('m_022870b5381457')}
-                        disabled={fieldDisabled('notes')}
-                        updateAction={updatePersonField}
-                      />
-                    </Section>
+                    {canReadPrivate ? (
+                      <Section
+                        title={tGenerated('m_0b8dadcb78cd08')}
+                        subtitle={tGenerated('m_1fb45a84c0088e')}
+                      >
+                        <LiveRichText
+                          id={person.id}
+                          field="notes"
+                          label={tGenerated('m_0b8dadcb78cd08')}
+                          initialValue={person.notes}
+                          placeholder={tGenerated('m_022870b5381457')}
+                          disabled={fieldDisabled('notes')}
+                          updateAction={updatePersonField}
+                        />
+                      </Section>
+                    ) : null}
 
-                    <CustomFieldsSection
-                      ctx={ctx}
-                      entityKind="person"
-                      recordId={person.id}
-                      subtypeId={null}
-                      metadata={person.metadata}
-                      locked={!canEdit}
-                    />
+                    {canReadPrivate ? (
+                      <CustomFieldsSection
+                        ctx={ctx}
+                        entityKind="person"
+                        recordId={person.id}
+                        subtypeId={null}
+                        metadata={person.metadata}
+                        locked={!canEdit}
+                      />
+                    ) : null}
                   </div>
                 ) : null
               }
@@ -1165,9 +1216,9 @@ export default async function PersonDetailPage({
                     trainingValid={transcript.filter((t) => t.status === 'ok').length}
                     trainingExpiring={expiringCount}
                     trainingExpired={expiredCount}
-                    documentsAcked={ackedDocs.length}
+                    documentsAcked={canReadPrivate ? ackedDocs.length : undefined}
                     ppeCount={ppeAssigned.length}
-                    incidentsCount={allIncidents.length}
+                    incidentsCount={canReadPrivate ? allIncidents.length : undefined}
                   />
                 ) : null
               }
@@ -1954,9 +2005,9 @@ function ComplianceTab({
   trainingValid: number
   trainingExpiring: number
   trainingExpired: number
-  documentsAcked: number
+  documentsAcked?: number
   ppeCount: number
-  incidentsCount: number
+  incidentsCount?: number
 }) {
   const tGenerated = useGeneratedTranslations()
   const trainingPct = trainingTotal === 0 ? null : Math.round((trainingValid / trainingTotal) * 100)
@@ -1982,17 +2033,19 @@ function ComplianceTab({
           `${trainingExpired} expired`,
         ]}
       />
-      <BigStatCard
-        icon={<ShieldCheck size={20} />}
-        title={tGenerated('m_014da4244c7d2c')}
-        primary={`${documentsAcked}`}
-        accent="neutral"
-        detail={[
-          documentsAcked === 0
-            ? 'No documents acknowledged'
-            : `${documentsAcked} document${documentsAcked === 1 ? '' : 's'} signed`,
-        ]}
-      />
+      {documentsAcked !== undefined ? (
+        <BigStatCard
+          icon={<ShieldCheck size={20} />}
+          title={tGenerated('m_014da4244c7d2c')}
+          primary={`${documentsAcked}`}
+          accent="neutral"
+          detail={[
+            documentsAcked === 0
+              ? 'No documents acknowledged'
+              : `${documentsAcked} document${documentsAcked === 1 ? '' : 's'} signed`,
+          ]}
+        />
+      ) : null}
       <BigStatCard
         icon={<HardHat size={20} />}
         title={tGenerated('m_0c7fac0190c234')}
@@ -2015,17 +2068,19 @@ function ComplianceTab({
             : `${overdueCount} expired training record${overdueCount === 1 ? '' : 's'}`,
         ]}
       />
-      <BigStatCard
-        icon={<HardHat size={20} />}
-        title={tGenerated('m_080a08e25fba42')}
-        primary={`${incidentsCount}`}
-        accent={incidentsCount === 0 ? 'success' : 'neutral'}
-        detail={[
-          incidentsCount === 0
-            ? 'Not involved in any incidents.'
-            : `${incidentsCount} incident${incidentsCount === 1 ? '' : 's'} on record`,
-        ]}
-      />
+      {incidentsCount !== undefined ? (
+        <BigStatCard
+          icon={<HardHat size={20} />}
+          title={tGenerated('m_080a08e25fba42')}
+          primary={`${incidentsCount}`}
+          accent={incidentsCount === 0 ? 'success' : 'neutral'}
+          detail={[
+            incidentsCount === 0
+              ? 'Not involved in any incidents.'
+              : `${incidentsCount} incident${incidentsCount === 1 ? '' : 's'} on record`,
+          ]}
+        />
+      ) : null}
     </div>
   )
 }

@@ -14,12 +14,16 @@ function isOwnPersonRecord(ctx: Ctx, personId: string): boolean {
   return ctx.personId != null && ctx.personId === personId
 }
 
+/** Private profile sections and person files use the same manage-or-self rule. */
+export function canAccessPersonPrivateDetails(ctx: Ctx, personId: string): boolean {
+  return canManageModule(ctx, 'people') || isOwnPersonRecord(ctx, personId)
+}
+
 /**
  * Throw unless the caller manages the people module OR the target person is
  * their own linked record. Use at the top of manage-or-self server actions.
  */
 export function assertCanActOnPerson(ctx: Ctx, personId: string): void {
-  if (canManageModule(ctx, 'people')) return
-  if (isOwnPersonRecord(ctx, personId)) return
+  if (canAccessPersonPrivateDetails(ctx, personId)) return
   throw new Error('Forbidden: admin.org.manage permission required')
 }

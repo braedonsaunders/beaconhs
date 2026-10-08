@@ -48,7 +48,9 @@ Open [People](/people) from the sidebar.
 1. Open [People](/people).
 2. Type a name, employee number, email, or job title in the **Search by name, employee #, or job title** box. Full names and formal names match too, even when a field is not displayed. The top-bar search and People CSV export use the same search fields.
 3. Use the **Status** filter to switch between **Active**, **Inactive**, **Terminated**, or **All**. The list shows active people by default.
-4. Click a person to open their page. Tabs like **Overview**, **Compliance**, **Transcript**, and **PPE** show everything about them in one place.
+4. Click a person to open their page. Tabs like **Overview**, **Compliance**, **Transcript**, and **PPE** show their directory and safety details.
+
+Other employees cannot see your **Documents & files**, **Incidents**, **Employment**, **Notes**, emergency contacts, date of birth, custom fields, or **Activity** on your profile. Private document and incident totals are also hidden. You and People managers can see those sections on your own profile. Private file links require that same access.
 
 ## Add a person
 

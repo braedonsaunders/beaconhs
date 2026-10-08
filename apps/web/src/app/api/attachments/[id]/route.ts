@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { attachments } from '@beaconhs/db/schema'
+import { attachments, personFiles } from '@beaconhs/db/schema'
 import { presignGet } from '@beaconhs/storage'
 import { validateAttachmentCapability } from '../../../../lib/attachment-url'
 import { getRequestContext } from '../../../../lib/auth'
+import { canAccessPersonPrivateDetails } from '@/app/(app)/people/_lib/person-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,17 @@ export async function GET(
       .from(attachments)
       .where(eq(attachments.id, parsedId.data))
       .limit(1)
-    return row ?? null
+    if (!row) return null
+    const owners = await tx
+      .select({ personId: personFiles.personId })
+      .from(personFiles)
+      .where(eq(personFiles.attachmentId, parsedId.data))
+    if (
+      owners.length > 0 &&
+      !owners.some((owner) => canAccessPersonPrivateDetails(ctx, owner.personId))
+    )
+      return null
+    return row
   })
   if (!attachment) return new NextResponse('Not found', { status: 404 })
 
