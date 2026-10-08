@@ -693,6 +693,7 @@ async function evalHazardAssessment(
         eq(hazidAssessmentSignatures.tenantId, tid),
         inArray(hazidAssessmentSignatures.personId, ids),
         isNotNull(hazidAssessmentSignatures.signedAt),
+        eq(hazidAssessmentSignatures.revision, hazidAssessments.signingRevision),
         eq(hazidAssessments.locked, true),
         gte(hazidAssessments.occurredAt, window.evidenceStartAt),
         lt(hazidAssessments.occurredAt, window.periodEndAt),

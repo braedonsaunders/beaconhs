@@ -414,6 +414,13 @@
       "when": 1791311333752,
       "tag": "0059_training_missing_include_bookings",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1791413256880,
+      "tag": "0060_hazard_assessment_signing",
+      "breakpoints": true
     }
   ]
 }

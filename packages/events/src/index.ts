@@ -14,11 +14,19 @@
 
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
-import { db as defaultDb, withSuperAdmin, type Database } from '@beaconhs/db'
+import {
+  activePeopleWhere,
+  activeTenantUsersWhere,
+  db as defaultDb,
+  withSuperAdmin,
+  type Database,
+} from '@beaconhs/db'
 import { enqueueEmail, enqueueNotification } from '@beaconhs/jobs'
 import { isNotificationCategoryEnabled, resolveNotificationAudienceUserIds } from './recipients'
 import { complianceRollupEmailHtml, maintenanceRollupEmailHtml } from './email-html'
 import {
+  hazidAssessments,
+  hazidAssessmentSignatures,
   complianceDispatches,
   complianceObligations,
   correctiveActions,
@@ -151,6 +159,73 @@ export async function deliverDomainNotification(
 ): Promise<void> {
   const ctx = workerEventCtx(tenantId)
   switch (event.kind) {
+    case 'hazid_signature_requested': {
+      const [target] = await ctx.db((tx) =>
+        tx
+          .select({
+            userId: people.userId,
+            reference: hazidAssessments.reference,
+            location: hazidAssessments.locationOnSite,
+            expiresAt: hazidAssessmentSignatures.requestExpiresAt,
+          })
+          .from(hazidAssessmentSignatures)
+          .innerJoin(
+            hazidAssessments,
+            and(
+              eq(hazidAssessments.tenantId, hazidAssessmentSignatures.tenantId),
+              eq(hazidAssessments.id, hazidAssessmentSignatures.assessmentId),
+              eq(hazidAssessments.signingRevision, hazidAssessmentSignatures.revision),
+            ),
+          )
+          .innerJoin(
+            people,
+            and(
+              eq(people.tenantId, hazidAssessmentSignatures.tenantId),
+              eq(people.id, hazidAssessmentSignatures.personId),
+            ),
+          )
+          .innerJoin(
+            tenantUsers,
+            and(eq(tenantUsers.tenantId, people.tenantId), eq(tenantUsers.userId, people.userId)),
+          )
+          .where(
+            and(
+              eq(hazidAssessmentSignatures.tenantId, tenantId),
+              eq(hazidAssessmentSignatures.id, event.signatureId),
+              eq(hazidAssessmentSignatures.assessmentId, event.assessmentId),
+              eq(hazidAssessmentSignatures.requestId, event.requestId),
+              isNull(hazidAssessmentSignatures.signatureAttachmentId),
+              eq(hazidAssessments.locked, false),
+              isNull(hazidAssessments.deletedAt),
+              activePeopleWhere(),
+              activeTenantUsersWhere(),
+            ),
+          )
+          .limit(1),
+      )
+      if (!target?.userId || !target.expiresAt || target.expiresAt <= new Date()) return
+      await enqueueNotification(
+        {
+          tenantId,
+          userIds: [target.userId],
+          category: 'hazid_signing',
+          type: 'hazid.signature_requested',
+          title: `Review and sign: ${target.reference}`,
+          body: `Review the job hazards and sign your crew space.${target.location ? ` Location: ${target.location}.` : ''}`,
+          linkPath: `/hazard-assessments/sign/${event.signatureId}?tenantId=${tenantId}`,
+          data: {
+            assessmentId: event.assessmentId,
+            signatureId: event.signatureId,
+            requestId: event.requestId,
+          },
+          channels: ['in_app', 'push', 'email'],
+          delivery: 'immediate',
+        },
+        { jobId: stableJobId('hazid-signature-request', event.requestId) },
+      )
+      return
+    }
+
     case 'incident_reported': {
       const incident = await ctx.db(async (tx) => {
         const [row] = await tx

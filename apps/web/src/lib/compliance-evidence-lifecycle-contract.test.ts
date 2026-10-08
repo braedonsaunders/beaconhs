@@ -133,22 +133,28 @@ describe('immediate compliance evidence lifecycle', () => {
     expect(hazardSignatureMigration).toContain('hazid_assessments_invalidate_signatures')
   })
 
-  it('keeps hazard signature metadata and private storage deletion in one transaction', () => {
-    const add = between(
-      hazardActions,
-      'export async function addSignature',
-      'export async function deleteSignature',
+  it('captures signatures atomically and retains signed evidence when removing roster slots', () => {
+    const signing = source('../app/(app)/hazard-assessments/_signing-actions.ts')
+    const capture = between(
+      signing,
+      'async function captureSignature',
+      'async function performRequestCrewSignatures',
     )
     const remove = between(
       hazardActions,
       'export async function deleteSignature',
       '// ------------------------------------------------------------------\n// Photos',
     )
-
-    for (const mutation of [add, remove]) {
-      expect(mutation).toContain('await lockEditableAssessment(ctx, tx, assessmentId)')
-      expect(mutation).toContain('await recordAuditInTransaction(tx, ctx')
-    }
-    expect(remove).toContain('.delete(attachments)')
+    expect(capture).toContain(
+      'await withStoredSignatureAttachment(ctx, ink, async (tx, attachmentId)',
+    )
+    expect(capture).toContain('await lockHazidForSigning(')
+    expect(capture).toContain('isNull(hazidAssessmentSignatures.signatureAttachmentId)')
+    expect(capture).toContain('await recordAuditInTransaction(tx, ctx')
+    expect(remove).toContain('await lockVisibleAssessment(ctx, tx, assessmentId)')
+    expect(remove).toContain('if (signature.signatureAttachmentId)')
+    expect(remove).toContain('Start a new revision to change signed crew members')
+    expect(remove).toContain('await recordAuditInTransaction(tx, ctx')
+    expect(remove).not.toContain('.delete(attachments)')
   })
 })

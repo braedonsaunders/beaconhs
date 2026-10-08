@@ -407,7 +407,7 @@ export function NotificationSettingsForm({
         roleKeys: c.defaultRoles,
         userIds: [],
         groupIds: [],
-        channels: ['in_app', 'email'],
+        channels: c.defaultChannels ?? ['in_app', 'email'],
         escalation: [],
       }
     }
@@ -771,43 +771,50 @@ export function NotificationSettingsForm({
                 value={
                   cfg.enabled ? (
                     <div className="space-y-4 border-t border-slate-100 px-4 py-4 dark:border-slate-800">
-                      <div className="space-y-1.5">
-                        <Label>
-                          <GeneratedText id="m_0574d0e16628ff" />
-                        </Label>
-                        <RoleChips
-                          roles={roles}
-                          value={cfg.roleKeys}
-                          onChange={(v) => patch(cat.key, { roleKeys: v })}
-                        />
-                      </div>
+                      {!cat.directRecipients ? (
+                        <>
+                          <div className="space-y-1.5">
+                            <Label>
+                              <GeneratedText id="m_0574d0e16628ff" />
+                            </Label>
+                            <RoleChips
+                              roles={roles}
+                              value={cfg.roleKeys}
+                              onChange={(v) => patch(cat.key, { roleKeys: v })}
+                            />
+                          </div>
 
-                      <div className="space-y-1.5">
-                        <Label>
-                          <GeneratedText id="m_167a9e18d14401" />
-                        </Label>
-                        <PeoplePicker
-                          options={members}
-                          value={cfg.userIds}
-                          onChange={(v) => patch(cat.key, { userIds: v })}
-                        />
-                      </div>
+                          <div className="space-y-1.5">
+                            <Label>
+                              <GeneratedText id="m_167a9e18d14401" />
+                            </Label>
+                            <PeoplePicker
+                              options={members}
+                              value={cfg.userIds}
+                              onChange={(v) => patch(cat.key, { userIds: v })}
+                            />
+                          </div>
 
-                      <div className="space-y-1.5">
-                        <Label>
-                          <GeneratedText id="m_086aa4f81b9be9" />
-                        </Label>
-                        <PeoplePicker
-                          options={groups}
-                          value={cfg.groupIds}
-                          onChange={(v) => patch(cat.key, { groupIds: v })}
-                          placeholder={tGenerated('m_059b16f0ac25bf')}
-                          searchPlaceholder={tGenerated('m_15c4d2ca7e95f7')}
-                          sheetTitle="Select People groups"
-                          emptyHint="No People groups yet — create one from People → Groups."
-                        />
-                      </div>
-
+                          <div className="space-y-1.5">
+                            <Label>
+                              <GeneratedText id="m_086aa4f81b9be9" />
+                            </Label>
+                            <PeoplePicker
+                              options={groups}
+                              value={cfg.groupIds}
+                              onChange={(v) => patch(cat.key, { groupIds: v })}
+                              placeholder={tGenerated('m_059b16f0ac25bf')}
+                              searchPlaceholder={tGenerated('m_15c4d2ca7e95f7')}
+                              sheetTitle="Select People groups"
+                              emptyHint="No People groups yet — create one from People → Groups."
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-sm text-slate-500">
+                          <GeneratedValue value="Recipients are the unsigned crew members selected on the assessment." />
+                        </p>
+                      )}
                       <div className="space-y-1.5">
                         <Label>
                           <GeneratedText id="m_010d889813e53e" />
@@ -819,20 +826,21 @@ export function NotificationSettingsForm({
                         />
                       </div>
 
-                      <div className="space-y-1.5">
-                        <Label>
-                          <GeneratedText id="m_1b8f85dba7b244" />
-                        </Label>
-                        <EscalationEditor
-                          roles={roles}
-                          value={cfg.escalation}
-                          onChange={(v) => patch(cat.key, { escalation: v })}
-                        />
-                      </div>
-
+                      {!cat.directRecipients ? (
+                        <div className="space-y-1.5">
+                          <Label>
+                            <GeneratedText id="m_1b8f85dba7b244" />
+                          </Label>
+                          <EscalationEditor
+                            roles={roles}
+                            value={cfg.escalation}
+                            onChange={(v) => patch(cat.key, { escalation: v })}
+                          />
+                        </div>
+                      ) : null}
                       <GeneratedValue
                         value={
-                          noRecipients ? (
+                          !cat.directRecipients && noRecipients ? (
                             <p className="text-xs text-amber-600 dark:text-amber-400">
                               <GeneratedText id="m_0bd3978b6f56a2" />
                             </p>

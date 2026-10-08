@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation'
 import { Card, CardContent } from '@beaconhs/ui'
 import { Logo } from '@/components/brand-logo'
 import { getRequestContext, getSignedInAccessSummary } from '@/lib/auth'
+import { authEntryPath, authReturnPath } from '@/lib/auth-return-path'
+import { pickString } from '@/lib/list-params'
 import { SignOutButton } from './sign-out-button'
 
 export const dynamic = 'force-dynamic'
@@ -13,12 +15,17 @@ export async function generateMetadata() {
   return { title: tGenerated('m_0ad6384c56063e') }
 }
 
-export default async function AuthContinuePage() {
+export default async function AuthContinuePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const returnTo = authReturnPath(pickString((await searchParams).next))
   const ctx = await getRequestContext()
-  if (ctx) redirect('/dashboard')
+  if (ctx) redirect((returnTo ?? '/dashboard') as any)
 
   const access = await getSignedInAccessSummary()
-  if (!access) redirect('/login')
+  if (!access) redirect(authEntryPath(false, returnTo) as any)
 
   const pending = access.memberships.filter(
     (m) => m.membershipStatus === 'invited' && m.tenantStatus === 'active',

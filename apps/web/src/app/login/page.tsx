@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation'
 import { Alert, AlertDescription } from '@beaconhs/ui'
 import { Logo } from '@/components/brand-logo'
 import { getCurrentUserId } from '@/lib/auth'
+import { authContinuationPath } from '@/lib/auth-return-path'
+import { pickString } from '@/lib/list-params'
 import { LoginForm } from './login-form'
 
 export async function generateMetadata() {
@@ -17,9 +19,10 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const userId = await getCurrentUserId()
-  if (userId) redirect('/auth/continue')
   const sp = await searchParams
+  const continueHref = authContinuationPath(pickString(sp.next))
+  const userId = await getCurrentUserId()
+  if (userId) redirect(continueHref as any)
   const justReset = sp.reset === '1'
   return (
     <main className="grid min-h-screen place-items-center px-4">
@@ -44,7 +47,7 @@ export default async function LoginPage({
             ) : null
           }
         />
-        <LoginForm />
+        <LoginForm continueHref={continueHref} />
         <p className="text-center text-xs text-slate-500">
           <GeneratedText id="m_03c06c8469b155" />
         </p>

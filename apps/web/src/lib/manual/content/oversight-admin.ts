@@ -733,6 +733,8 @@ Open a PDF template to get three tabs. **Design** is the drag-and-drop page buil
 
 On **Notifications → Rules**, each delivery channel shows whether its provider is **Ready**, **Not set up**, or **Disabled by platform policy**. Disabled means a platform kill switch is active; it does not mean the saved credential is missing. Turn a category **Off** to stop every automatic in-app, email, push, and text alert in that category, including alerts already waiting in a queue. The **Compliance detection schedule** has an **Automatic detection** switch: turn it **Off** to pause scheduled overdue and expiring detection for the whole workspace without losing the configured schedule.
 
+For crew signing, open **Admin → Notifications → Hazard assessment signing**. Enable the category and choose **Email**, **Push**, or **SMS** alongside **In-app**. Requests go only to the unsigned crew members selected on the assessment; role, group, and escalation audiences do not apply. This does not send anything automatically when an assessment is created. Workers allow push on each installed PWA device from **Notifications → Preferences**. SMS and email need a configured provider.
+
 ## Set workspace languages
 
 1. Open **Admin**, then **Tenant settings**.
@@ -827,7 +829,7 @@ When the override is off, the tenant uses the platform default provider. Clickin
 
 ## Configure the platform SMS provider
 
-Platform super-admins set the default provider used for critical text-message notifications.
+Platform super-admins set the default provider used for critical text-message notifications and manually requested signing messages.
 
 1. Open **Platform**, then click **Platform SMS**.
 2. Choose the **Policy**. **Tenants choose their own (recommended)** lets a tenant override the default. **Force the platform default for all tenants** sends every tenant's SMS through this provider. **Disable all SMS (kill switch)** stops all SMS immediately.

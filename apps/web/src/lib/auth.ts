@@ -1,6 +1,7 @@
 import { cache } from 'react'
 import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { authEntryPath } from './auth-return-path'
 import { getAuth } from '@beaconhs/auth'
 import { db, withSuperAdmin, type Database } from '@beaconhs/db'
 import { resolveLocalePreferences } from '@beaconhs/i18n'
@@ -390,7 +391,13 @@ async function resolveImpersonation(
 
 export async function requireRequestContext(): Promise<RequestContext> {
   const ctx = await getRequestContext()
-  if (!ctx) redirect((await getSessionUser()) ? '/auth/continue' : '/login')
+  if (!ctx)
+    redirect(
+      authEntryPath(
+        Boolean(await getSessionUser()),
+        (await headers()).get('x-beacon-return-path'),
+      ) as any,
+    )
   return ctx
 }
 

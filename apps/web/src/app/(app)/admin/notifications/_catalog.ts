@@ -11,6 +11,8 @@ export type NotificationCategory = {
   label: string
   description: string
   defaultRoles: string[]
+  defaultChannels?: string[]
+  directRecipients?: boolean
 }
 
 const DEFAULT_AUDIENCE = ['safety_manager', 'tenant_admin']
@@ -21,6 +23,15 @@ const defaults = (): string[] => [...DEFAULT_AUDIENCE]
 // monitored app) and module-specific alerts route through Flows, where the
 // audience is per-app and dynamic, so they don't belong in this fixed list.
 export const NOTIFICATION_CATEGORIES: NotificationCategory[] = [
+  {
+    key: 'hazid_signing',
+    label: 'Hazard assessment signing',
+    description:
+      'Manual signature requests sent only to the selected crew members. Each person reviews and signs their own space.',
+    defaultRoles: [],
+    defaultChannels: ['in_app', 'push', 'email'],
+    directRecipients: true,
+  },
   {
     key: 'incident',
     label: 'Incidents',

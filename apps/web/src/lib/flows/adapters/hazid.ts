@@ -27,6 +27,7 @@ import { buildRecordSummaryPdfJob } from '../pdf-summary'
 import { spawnCorrectiveActionForSubject } from '../spawn'
 import { fmtDateTime, personName, yesBlank, yesNo } from '../format'
 import type { FlowSubjectAdapter } from '../types'
+import { attachmentUrl } from '@/lib/attachment-url'
 import { photoDocumentUrl } from '@/lib/photo-document-url'
 
 function riskScore(l: number | null, s: number | null): number | string {
@@ -36,6 +37,7 @@ function riskScore(l: number | null, s: number | null): number | string {
 export function createHazidFlowAdapter(
   ctx: RequestContext,
   assessmentId: string,
+  forSigning = false,
 ): FlowSubjectAdapter {
   return {
     subjectType: 'module',
@@ -164,11 +166,17 @@ export function createHazidFlowAdapter(
               attachments,
               eq(attachments.id, hazidAssessmentSignatures.signatureAttachmentId),
             )
-            .where(eq(hazidAssessmentSignatures.assessmentId, assessmentId)),
+            .where(
+              and(
+                eq(hazidAssessmentSignatures.assessmentId, assessmentId),
+                eq(hazidAssessmentSignatures.revision, a.signingRevision),
+              ),
+            ),
         ),
         ctx.db((tx) =>
           tx
             .select({
+              id: attachments.id,
               caption: hazidAssessmentPhotos.caption,
               r2Key: attachments.r2Key,
               annotations: attachments.annotations,
@@ -279,6 +287,7 @@ export function createHazidFlowAdapter(
         signatures: await Promise.all(
           signatures.map(async (s) => ({
             name:
+              s.row.signerName ||
               personName({ firstName: s.pFirst, lastName: s.pLast, formalName: s.pFormal }) ||
               s.row.externalName ||
               'Unknown',
@@ -289,13 +298,17 @@ export function createHazidFlowAdapter(
             signed_at: fmtDateTime(s.row.signedAt),
             attachment_id: s.row.signatureAttachmentId ?? null,
             image: s.signatureKey
-              ? await presignGet({ key: s.signatureKey, expiresInSeconds: 900 })
+              ? forSigning && s.row.signatureAttachmentId
+                ? attachmentUrl(s.row.signatureAttachmentId)
+                : await presignGet({ key: s.signatureKey, expiresInSeconds: 900 })
               : '',
           })),
         ),
         photos: await Promise.all(
           photos.map(async (p) => {
-            const url = await presignGet({ key: p.r2Key, expiresInSeconds: 900 })
+            const url = forSigning
+              ? attachmentUrl(p.id)
+              : await presignGet({ key: p.r2Key, expiresInSeconds: 900 })
             return {
               url: photoDocumentUrl({
                 url,

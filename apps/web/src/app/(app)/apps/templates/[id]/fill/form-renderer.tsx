@@ -406,10 +406,13 @@ export function FormRenderer({
   const steps = schema.workflow.steps
   const totalSteps = steps.length
   const step = steps[stepIndex]!
-  const stepSections = useMemo(() => sectionsByStep.get(step.key) ?? [], [sectionsByStep, step.key])
+  const stepSections = useMemo(
+    () => (readOnly ? schema.sections : (sectionsByStep.get(step.key) ?? [])),
+    [readOnly, schema.sections, sectionsByStep, step.key],
+  )
   // Tabs apply to single-step apps (multi-step wizards keep their own nav). We
   // filter only the RENDERED sections — validation still spans every tab.
-  const tabbed = appTabs.length >= 2 && totalSteps === 1
+  const tabbed = !readOnly && appTabs.length >= 2 && totalSteps === 1
   const renderedSections = tabbed
     ? stepSections.filter((s) => (s.tabId ?? appTabs[0]!.id) === activeTabId)
     : stepSections
@@ -462,6 +465,7 @@ export function FormRenderer({
   // Apply default values on first render of a step. Tracked via a ref so we
   // don't re-apply when the user clears the field intentionally.
   useEffect(() => {
+    if (readOnly) return
     const handle = window.setTimeout(() => {
       setValues((current) => {
         let mutated: Record<string, unknown> | null = null
@@ -491,7 +495,7 @@ export function FormRenderer({
       })
     }, 0)
     return () => window.clearTimeout(handle)
-  }, [evalCtx, step.key, stepSections])
+  }, [evalCtx, readOnly, step.key, stepSections])
 
   // --- Autosave -------------------------------------------------------------
   //
@@ -997,7 +1001,7 @@ export function FormRenderer({
     // the app authored 2+ tabs, render a tab bar and show only the active
     // tab's sections. Sections with no `tabId` belong to the first tab —
     // mirrors the wizard filter exactly.
-    const inlineTabbed = appTabs.length >= 2
+    const inlineTabbed = !readOnly && appTabs.length >= 2
     const inlineSections = inlineTabbed
       ? schema.sections.filter((s) => (s.tabId ?? appTabs[0]!.id) === activeTabId)
       : schema.sections
@@ -2088,6 +2092,18 @@ function FieldInput({
 }) {
   const tGenerated = useGeneratedTranslations()
   const locale = useLocale()
+  const readOnly = useContext(FillReadOnlyContext)
+  if (
+    readOnly &&
+    ['customer_picker', 'project_picker', 'site_picker', 'area_picker'].includes(field.type)
+  ) {
+    const name = evalCtx.entities?.[field.id]?.name
+    return (
+      <span>
+        {typeof name === 'string' ? name : typeof value === 'string' && value ? value : '—'}
+      </span>
+    )
+  }
   // Formula fields are render-only: recompute the value on every render via
   // the evaluator and pass through to the display input. When the formula
   // resolves to null (e.g. an `entity_attr` whose picker is empty) we show

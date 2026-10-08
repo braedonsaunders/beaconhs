@@ -69,6 +69,7 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
             and(
               eq(notifications.tenantId, t.id),
               isNull(notifications.readAt),
+              sql`coalesce(${notifications.data}->>'delivery', '') <> 'immediate'`,
               sql`${notifications.occurredAt} >= ${windowStart}`,
               lte(notifications.occurredAt, windowEnd),
               afterUserId ? gt(notifications.userId, afterUserId) : undefined,
@@ -96,6 +97,7 @@ export async function scanDigests(scheduledFor: Date = new Date()): Promise<Dige
               eq(notifications.tenantId, t.id),
               inArray(notifications.userId, recipientIds),
               isNull(notifications.readAt),
+              sql`coalesce(${notifications.data}->>'delivery', '') <> 'immediate'`,
               sql`${notifications.occurredAt} >= ${windowStart}`,
               lte(notifications.occurredAt, windowEnd),
             ),

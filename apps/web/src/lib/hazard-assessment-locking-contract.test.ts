@@ -44,7 +44,6 @@ const editableMutations = [
   between('export async function answerQuestion', 'export async function updateQuestion'),
   between('export async function updateQuestion', 'export async function deleteQuestion'),
   between('export async function deleteQuestion', 'export async function moveQuestion'),
-  between('export async function deleteSignature', '// Photos'),
   between('export async function attachPhotos', 'export async function deletePhoto'),
   between('export async function deletePhoto', '// Library CRUD'),
 ]
@@ -57,7 +56,7 @@ describe('hazard-assessment transactional locking contract', () => {
     )
     const lockEditable = between(
       'async function lockEditableAssessment',
-      'async function setLinkedAssessmentAppsLocked',
+      'async function latestTemplateVersion',
     )
 
     expect(lockVisible).toContain('eq(hazidAssessments.tenantId, ctx.tenantId)')
@@ -77,56 +76,37 @@ describe('hazard-assessment transactional locking contract', () => {
     }
   })
 
-  it('locks and audits signature storage in its attachment transaction', () => {
-    const addSignature = between(
-      'export async function addSignature',
-      'export async function signSignature',
-    )
-
-    expect(addSignature).toContain('await withStoredSignatureAttachment(')
-    expect(addSignature).toContain('await lockEditableAssessment(ctx, tx, assessmentId)')
-    expect(addSignature).toContain('await recordAuditInTransaction(tx, ctx')
-    expect(addSignature).not.toContain('await recordAudit(ctx')
-  })
-
-  it('captures ink onto unsigned signer rows without replacing existing signatures', () => {
-    const detailPage = readFileSync(
-      new URL('../app/(app)/hazard-assessments/[id]/page.tsx', import.meta.url),
+  it('captures ink in the storage transaction and binds it to the reviewed revision', () => {
+    const signing = readFileSync(
+      new URL('../app/(app)/hazard-assessments/_signing-actions.ts', import.meta.url),
       'utf8',
     )
-    const signatureForm = readFileSync(
+    const parent = readFileSync(new URL('./hazid-signing.ts', import.meta.url), 'utf8')
+    expect(signing).toContain('await withStoredSignatureAttachment(')
+    expect(signing).toContain('await lockHazidForSigning(')
+    expect(signing).toContain('parent.signingRevision !== revision')
+    expect(signing).toContain('isNull(hazidAssessmentSignatures.signatureAttachmentId)')
+    expect(signing).toContain("event: 'on_sign'")
+    expect(signing).toContain('await recordAuditInTransaction(tx, ctx')
+    expect(parent).toContain('eq(people.userId, ctx.userId)')
+    expect(parent).toContain('activePeopleWhere()')
+    expect(parent).toContain('activeTenantUsersWhere()')
+    expect(parent).toContain(
+      'eq(hazidAssessments.signingRevision, hazidAssessmentSignatures.revision)',
+    )
+    expect(parent).toContain('row.signature.requestExpiresAt <= new Date()')
+  })
+
+  it('replaces per-person drawers with bulk crew preparation and continuous collection', () => {
+    const form = readFileSync(
       new URL('../app/(app)/hazard-assessments/_signature-form.tsx', import.meta.url),
       'utf8',
     )
-    const addSignature = between(
-      'export async function addSignature',
-      'export async function signSignature',
-    )
-    const signSignature = between(
-      'export async function signSignature',
-      'export async function deleteSignature',
-    )
-
-    // Server: same storage saga + transactional parent lock as addSignature,
-    // guarded UPDATE so a concurrent sign fails closed instead of orphaning ink.
-    expect(signSignature).toContain("assertCan(ctx, 'hazid.update')")
-    expect(signSignature).toContain('await assertAssessmentEditable(ctx, assessmentId)')
-    expect(signSignature).toContain('await withStoredSignatureAttachment(')
-    expect(signSignature).toContain('await lockEditableAssessment(ctx, tx, assessmentId)')
-    expect(signSignature).toContain('isNull(hazidAssessmentSignatures.signatureAttachmentId)')
-    expect(signSignature).toContain("event: 'on_sign'")
-    expect(signSignature).toContain('await recordAuditInTransaction(tx, ctx')
-    expect(signSignature).not.toContain('await recordAudit(ctx')
-
-    // Add drawer: ink optional (signer-first add), save label follows the mode.
-    expect(signatureForm).toContain('export function SignSignatureDrawerBody')
-    expect(addSignature).not.toContain('if (!signature) {')
-
-    // Detail page: per-row Sign entry points only for unsigned rows on
-    // unlocked assessments; the sign drawer never opens for signed rows.
-    expect(detailPage).toContain("drawerHref('sign-signature'")
-    expect(detailPage).toContain('signSignatureRow')
-    expect(detailPage).toContain('!signSignatureRow.row.signatureAttachmentId')
+    expect(form).toContain('AddCrewDrawerBody')
+    expect(form).not.toContain('SignaturePad')
+    expect(form).not.toContain('captureNow')
+    expect(detailPage).toContain('<SigningRoster')
+    expect(detailPage).not.toContain('sign-signature')
   })
 
   it('locks the parent in the same transaction for every reorder', () => {
@@ -140,10 +120,7 @@ describe('hazard-assessment transactional locking contract', () => {
   })
 
   it('propagates assessment locking to already-open embedded app responses', () => {
-    const appLock = between(
-      'async function setLinkedAssessmentAppsLocked',
-      'async function latestTemplateVersion',
-    )
+    const appLock = readFileSync(new URL('./hazid-signing.ts', import.meta.url), 'utf8')
     const lock = between(
       'export async function lockAssessment',
       'export async function unlockAssessment',

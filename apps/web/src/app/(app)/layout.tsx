@@ -8,7 +8,7 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { notifications, tenants } from '@beaconhs/db/schema'
 import { can, DEFAULT_REGULATORY_TERMINOLOGY } from '@beaconhs/tenant'
 import {
-  getRequestContext,
+  requireRequestContext,
   getSessionUser,
   listAccessibleTenants,
   listActiveTenantRoles,
@@ -35,11 +35,7 @@ import { RegulatoryTerminologyProvider } from '@/components/regulatory-terminolo
 export const dynamic = 'force-dynamic'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const ctx = await getRequestContext()
-  if (!ctx) {
-    const sessionUser = await getSessionUser()
-    redirect(sessionUser ? '/auth/continue' : '/login')
-  }
+  const ctx = await requireRequestContext()
   const [shellT, commonT] = await Promise.all([getTranslations('Shell'), getTranslations('Common')])
 
   const defaultCollapsed = (await cookies()).get('sidebar_collapsed')?.value === '1'

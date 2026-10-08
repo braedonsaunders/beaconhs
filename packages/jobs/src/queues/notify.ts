@@ -20,6 +20,7 @@ export type NotifyJobData = {
   body?: string
   linkPath?: string
   data?: Record<string, unknown>
+  delivery?: 'immediate'
   isCritical?: boolean
   // Channel hints (still subject to user preferences)
   channels?: ('in_app' | 'email' | 'push' | 'sms')[]
@@ -53,6 +54,8 @@ export function normalizeNotifyJobData(data: NotifyJobData): NotifyJobData {
   assertOptionalString(data.body, 'Notification body', 20_000)
   assertRelativeAppPath(data.linkPath, 'Notification linkPath')
   assertJsonBytes(data.data ?? {}, 'Notification data', 64 * 1_024)
+  if (data.delivery !== undefined && data.delivery !== 'immediate')
+    throw new Error('Notification delivery mode is invalid.')
   if (data.channels) {
     if (
       data.channels.length === 0 ||

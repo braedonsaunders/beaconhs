@@ -4,7 +4,6 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
-import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm'
 import {
@@ -90,7 +89,6 @@ import {
   addHazardSet,
   addPPE,
   addQuestion,
-  addSignature,
   addTask,
   answerPPE,
   answerQuestion,
@@ -100,7 +98,6 @@ import {
   deleteHazard,
   deletePPE,
   deleteQuestion,
-  deleteSignature,
   deleteTask,
   lockAssessment,
   moveHazard,
@@ -110,7 +107,6 @@ import {
   unlockAssessment,
   openAssessmentApp,
   reviewAssessment,
-  signSignature,
   removePhoto,
   reorderPhotos,
   updateHazard,
@@ -148,7 +144,9 @@ import {
   ReadOnlyField,
 } from '@/components/live-field'
 import { datetimeLocalValue, formatDateTime } from '@/lib/datetime'
-import { AddSignatureDrawerBody, SignSignatureDrawerBody } from '../_signature-form'
+import { AddCrewDrawerBody } from '../_signature-form'
+import { SigningRoster } from '../_signing-roster'
+import { loadHazidSigningRoster } from '@/lib/hazid-signing-roster'
 import { HazidPhotoUploader } from '../_photo-uploader'
 import { RiskScoreBadge } from '../_risk'
 
@@ -240,7 +238,6 @@ export default async function HazidAssessmentDetailPage({
   const editHazardId = pickString(sp.hazardId) ?? ''
   const editPPEId = pickString(sp.ppeId) ?? ''
   const editQuestionId = pickString(sp.questionId) ?? ''
-  const signSignatureId = pickString(sp.signatureId) ?? ''
 
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -290,7 +287,12 @@ export default async function HazidAssessmentDetailPage({
       .select({ row: hazidAssessmentSignatures, person: people })
       .from(hazidAssessmentSignatures)
       .leftJoin(people, eq(people.id, hazidAssessmentSignatures.personId))
-      .where(eq(hazidAssessmentSignatures.assessmentId, id))
+      .where(
+        and(
+          eq(hazidAssessmentSignatures.assessmentId, id),
+          eq(hazidAssessmentSignatures.revision, row.a.signingRevision),
+        ),
+      )
       .orderBy(asc(hazidAssessmentSignatures.createdAt))
     const photos = await tx
       .select({ link: hazidAssessmentPhotos, attachment: attachments })
@@ -629,7 +631,10 @@ export default async function HazidAssessmentDetailPage({
   const requiredEmbeddedApps = embeddedApps.filter((item) => item.app.required)
   const requiredEmbeddedDone = requiredEmbeddedApps.filter((item) => item.done).length
 
-  const locked = a.locked
+  const canUpdate = can(ctx, 'hazid.update')
+  const locked = a.locked || !!a.signingFrozenAt || !canUpdate
+  const signingRoster = await loadHazidSigningRoster(ctx, id, sp)
+  if (!signingRoster) notFound()
   const assessmentStyle = type?.style ?? 'task_based'
   const showPPE = type?.hasPPE ?? true
   const showQ = type?.hasQuestions ?? true
@@ -789,11 +794,6 @@ export default async function HazidAssessmentDetailPage({
   const editQuestionRow = editQuestionId
     ? questions.find((q) => q.id === editQuestionId)
     : undefined
-  // Row targeted by the per-signer "Sign" drawer — resolved up front like the
-  // edit drawers; the drawer's `open=` predicate stays false when it misses.
-  const signSignatureRow = signSignatureId
-    ? signatures.find((s) => s.row.id === signSignatureId)
-    : undefined
   return (
     <DetailPageLayout
       header={
@@ -808,9 +808,13 @@ export default async function HazidAssessmentDetailPage({
               <div className="flex items-center gap-2">
                 <GeneratedValue
                   value={
-                    locked ? (
+                    a.locked ? (
                       <Badge variant="success">
                         <Lock size={10} /> <GeneratedText id="m_0e259fa0babc2d" />
+                      </Badge>
+                    ) : a.signingFrozenAt ? (
+                      <Badge variant="warning">
+                        <GeneratedValue value="Collecting signatures" />
                       </Badge>
                     ) : (
                       <Badge variant="secondary">
@@ -835,7 +839,11 @@ export default async function HazidAssessmentDetailPage({
             actions={
               <AssessmentHeaderActions
                 id={id}
-                locked={locked}
+                locked={a.locked}
+                canUpdate={canUpdate}
+                revision={a.signingRevision}
+                signed={signedCount}
+                crewTotal={signatures.length}
                 canManage={canManage}
                 canReview={canReview}
                 pdfHref={`/hazard-assessments/${id}/pdf`}
@@ -845,7 +853,6 @@ export default async function HazidAssessmentDetailPage({
                 copyAction={copyAssessment}
                 // Mirrors the server-side gate in lockAssessment: a hazard
                 // assessment nobody signed must not become a submitted record.
-                lockDisabledReason={signedCount === 0 ? tGenerated('m_0e21f7c54c71b2') : null}
                 lockAction={lockAssessment}
                 unlockAction={unlockAssessment}
               />
@@ -857,7 +864,7 @@ export default async function HazidAssessmentDetailPage({
         <>
           <GeneratedValue
             value={
-              locked ? (
+              a.locked ? (
                 <Alert variant="warning">
                   <AlertTitle>
                     <GeneratedText id="m_17b55a364cc0d2" />
@@ -1535,184 +1542,7 @@ export default async function HazidAssessmentDetailPage({
             icon={<PenLine size={20} />}
             tone="emerald"
           >
-            <div className="space-y-3">
-              <GeneratedValue
-                value={
-                  locked ? null : (
-                    <div className="flex items-center justify-end">
-                      <Link href={drawerHref('add-signature') as any}>
-                        <Button type="button" size="sm">
-                          <Plus size={12} /> <GeneratedText id="m_173c1ae83a1c73" />
-                        </Button>
-                      </Link>
-                    </div>
-                  )
-                }
-              />
-              <GeneratedValue
-                value={
-                  signatures.length === 0 ? (
-                    <p className="text-sm text-slate-500">
-                      <GeneratedText id="m_120e5b08a8be3b" />
-                    </p>
-                  ) : (
-                    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      <GeneratedValue
-                        value={signatures.map((s) => (
-                          <li
-                            key={s.row.id}
-                            className="flex flex-col rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-                          >
-                            <div className="flex items-start justify-between gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
-                              <div className="min-w-0">
-                                <div className="truncate font-medium text-slate-900 dark:text-slate-100">
-                                  <GeneratedValue
-                                    value={
-                                      s.person
-                                        ? `${s.person.firstName} ${s.person.lastName}`
-                                        : (s.row.externalName ?? (
-                                            <GeneratedText id="m_0514b7f2fb419d" />
-                                          ))
-                                    }
-                                  />
-                                </div>
-                                <div className="mt-1 flex flex-wrap items-center gap-1">
-                                  <Badge
-                                    variant={
-                                      s.row.signatureType === 'internal' ? 'secondary' : 'outline'
-                                    }
-                                  >
-                                    <GeneratedValue
-                                      value={
-                                        s.row.signatureType === 'internal' ? (
-                                          <GeneratedText id="m_0d191facfeeb70" />
-                                        ) : (
-                                          <GeneratedText id="m_0899166c3156c0" />
-                                        )
-                                      }
-                                    />
-                                  </Badge>
-                                  <GeneratedValue
-                                    value={
-                                      s.row.csEntrant ? (
-                                        <Badge variant="warning">
-                                          <GeneratedText id="m_022b05599a1a05" />
-                                        </Badge>
-                                      ) : null
-                                    }
-                                  />
-                                  <GeneratedValue
-                                    value={
-                                      s.row.csAttendant ? (
-                                        <Badge variant="warning">
-                                          <GeneratedText id="m_0d8bbd3094ef27" />
-                                        </Badge>
-                                      ) : null
-                                    }
-                                  />
-                                  <GeneratedValue
-                                    value={
-                                      s.row.csRescue ? (
-                                        <Badge variant="destructive">
-                                          <GeneratedText id="m_1bac787ac2b6fc" />
-                                        </Badge>
-                                      ) : null
-                                    }
-                                  />
-                                </div>
-                              </div>
-                              <GeneratedValue
-                                value={
-                                  !locked ? (
-                                    <div className="flex shrink-0 items-center gap-1">
-                                      <GeneratedValue
-                                        value={
-                                          s.row.signatureAttachmentId ? null : (
-                                            <Link
-                                              href={
-                                                drawerHref('sign-signature', {
-                                                  signatureId: s.row.id,
-                                                }) as any
-                                              }
-                                            >
-                                              <Button type="button" size="sm">
-                                                <GeneratedText id="m_18b6a957bf05e0" />
-                                              </Button>
-                                            </Link>
-                                          )
-                                        }
-                                      />
-                                      <form action={deleteSignature}>
-                                        <input type="hidden" name="id" value={s.row.id} />
-                                        <input type="hidden" name="assessmentId" value={id} />
-                                        <Button type="submit" size="sm" variant="ghost">
-                                          <GeneratedText id="m_11773f3c3f7558" />
-                                        </Button>
-                                      </form>
-                                    </div>
-                                  ) : null
-                                }
-                              />
-                            </div>
-                            <div className="flex flex-1 items-center justify-center px-3 py-2">
-                              <GeneratedValue
-                                value={
-                                  s.row.signatureAttachmentId ? (
-                                    <Image
-                                      src={attachmentUrl(s.row.signatureAttachmentId)}
-                                      alt={tGenerated('m_0c0bc02db58371')}
-                                      width={320}
-                                      height={64}
-                                      unoptimized
-                                      className="h-16 w-auto max-w-full object-contain"
-                                    />
-                                  ) : locked ? (
-                                    <span className="text-xs text-red-600">
-                                      <GeneratedText id="m_17f941df9401b5" />
-                                    </span>
-                                  ) : (
-                                    <Link
-                                      href={
-                                        drawerHref('sign-signature', {
-                                          signatureId: s.row.id,
-                                        }) as any
-                                      }
-                                      className="text-xs font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300"
-                                    >
-                                      <GeneratedText id="m_0fac35edf41e7d" />
-                                    </Link>
-                                  )
-                                }
-                              />
-                            </div>
-                            <div className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500 dark:border-slate-800">
-                              <GeneratedValue
-                                value={
-                                  s.row.signedAt ? (
-                                    <GeneratedText
-                                      id="m_06fc9c8c2b8b14"
-                                      values={{
-                                        value0: formatDateTime(
-                                          s.row.signedAt,
-                                          ctx.timezone,
-                                          ctx.locale,
-                                        ),
-                                      }}
-                                    />
-                                  ) : (
-                                    <GeneratedText id="m_1386967e45366b" />
-                                  )
-                                }
-                              />
-                            </div>
-                          </li>
-                        ))}
-                      />
-                    </ul>
-                  )
-                }
-              />
-            </div>
+            <SigningRoster assessmentId={id} initial={signingRoster} canUpdate={canUpdate} />
           </Section>
         </section>
 
@@ -1916,50 +1746,13 @@ export default async function HazidAssessmentDetailPage({
         />
       </UrlDrawer>
 
-      {/* Signatures */}
       <UrlDrawer
-        open={drawerKey === 'add-signature'}
+        open={drawerKey === 'add-crew' && canUpdate && !a.locked}
         closeHref={tabHref}
-        title={tGenerated('m_173c1ae83a1c73')}
+        title={tGeneratedValue('Add crew')}
         size="md"
       >
-        <AddSignatureDrawerBody
-          assessmentId={id}
-          people={peopleList}
-          showCSRoles={false}
-          closeHref={tabHref}
-          addAction={addSignature}
-        />
-      </UrlDrawer>
-
-      {/* Per-signer ink capture — unsigned rows only, editable assessments only. */}
-      <UrlDrawer
-        open={
-          drawerKey === 'sign-signature' &&
-          !locked &&
-          !!signSignatureRow &&
-          !signSignatureRow.row.signatureAttachmentId
-        }
-        closeHref={tabHref}
-        title={tGenerated('m_0c0bc02db58371')}
-        size="md"
-      >
-        <GeneratedValue
-          value={
-            signSignatureRow && !signSignatureRow.row.signatureAttachmentId ? (
-              <SignSignatureDrawerBody
-                signatureId={signSignatureRow.row.id}
-                signerLabel={
-                  signSignatureRow.person
-                    ? `${signSignatureRow.person.firstName} ${signSignatureRow.person.lastName}`
-                    : (signSignatureRow.row.externalName ?? tGenerated('m_03029599bbfa85'))
-                }
-                closeHref={tabHref}
-                signAction={signSignature}
-              />
-            ) : null
-          }
-        />
+        <AddCrewDrawerBody assessmentId={id} closeHref={tabHref} />
       </UrlDrawer>
 
       {/* Safety review — visible and actionable only with the dedicated review permission. */}

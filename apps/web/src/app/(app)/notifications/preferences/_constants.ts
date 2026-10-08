@@ -10,6 +10,7 @@
 // dispatcher, so we render the defaults checked when no row exists.
 
 export const NOTIFICATION_CATEGORIES = [
+  'hazid_signing',
   'incident',
   'ca',
   'compliance',
@@ -22,6 +23,10 @@ export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
 
 export const CATEGORY_LABELS: Record<NotificationCategory, { title: string; description: string }> =
   {
+    hazid_signing: {
+      title: 'Hazard assessment signing',
+      description: 'Requests to review and sign your own crew space.',
+    },
     incident: {
       title: 'Incidents',
       description: 'New incidents reported, status changes, investigations.',

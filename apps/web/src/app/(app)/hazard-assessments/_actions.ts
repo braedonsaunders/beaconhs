@@ -41,7 +41,11 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
 import { canManageModule, assertCanManageModule } from '@/lib/module-admin/guard'
-import { withStoredSignatureAttachment } from '@/lib/signature-storage'
+import {
+  freezeHazidSigning,
+  reviseHazidSigning,
+  setHazidAppsLocked as setLinkedAssessmentAppsLocked,
+} from '@/lib/hazid-signing'
 import { canSeeRecord } from '@/lib/visibility'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
@@ -85,18 +89,27 @@ async function assertCanSeeAssessment(ctx: HazidCtx, assessmentId: string): Prom
 async function assertAssessmentEditable(ctx: HazidCtx, assessmentId: string): Promise<void> {
   const row = await resolveAssessmentAccess(ctx, assessmentId)
   if (row.locked) throw new Error('This assessment is locked. Unlock it to make changes.')
+  if (row.signingFrozenAt)
+    throw new Error('Signing has started. Start a new revision to change the assessment.')
 }
 
 async function resolveAssessmentAccess(
   ctx: HazidCtx,
   assessmentId: string,
-): Promise<{ locked: boolean; reportedByTenantUserId: string | null }> {
+): Promise<{
+  locked: boolean
+  signingFrozenAt: Date | null
+  signingRevision: number
+  reportedByTenantUserId: string | null
+}> {
   const row = await ctx.db(async (tx) => {
     const [found] = await tx
       .select({
         reportedByTenantUserId: hazidAssessments.reportedByTenantUserId,
         siteOrgUnitId: hazidAssessments.siteOrgUnitId,
         locked: hazidAssessments.locked,
+        signingFrozenAt: hazidAssessments.signingFrozenAt,
+        signingRevision: hazidAssessments.signingRevision,
       })
       .from(hazidAssessments)
       .where(and(eq(hazidAssessments.id, assessmentId), isNull(hazidAssessments.deletedAt)))
@@ -110,7 +123,12 @@ async function resolveAssessmentAccess(
     return visible ? found : null
   })
   if (!row) throw new Error('Assessment not found')
-  return { locked: row.locked, reportedByTenantUserId: row.reportedByTenantUserId }
+  return {
+    locked: row.locked,
+    signingFrozenAt: row.signingFrozenAt,
+    signingRevision: row.signingRevision,
+    reportedByTenantUserId: row.reportedByTenantUserId,
+  }
 }
 
 const PATHS = (id: string) => [`/hazard-assessments/${id}`, '/hazard-assessments']
@@ -125,12 +143,19 @@ async function lockVisibleAssessment(
   ctx: HazidCtx,
   tx: HazidTx,
   assessmentId: string,
-): Promise<{ locked: boolean; reportedByTenantUserId: string | null }> {
+): Promise<{
+  locked: boolean
+  signingFrozenAt: Date | null
+  signingRevision: number
+  reportedByTenantUserId: string | null
+}> {
   const [row] = await tx
     .select({
       reportedByTenantUserId: hazidAssessments.reportedByTenantUserId,
       siteOrgUnitId: hazidAssessments.siteOrgUnitId,
       locked: hazidAssessments.locked,
+      signingFrozenAt: hazidAssessments.signingFrozenAt,
+      signingRevision: hazidAssessments.signingRevision,
     })
     .from(hazidAssessments)
     .where(
@@ -149,7 +174,12 @@ async function lockVisibleAssessment(
     siteId: row.siteOrgUnitId,
   })
   if (!visible) throw new Error('Assessment not found')
-  return { locked: row.locked, reportedByTenantUserId: row.reportedByTenantUserId }
+  return {
+    locked: row.locked,
+    signingFrozenAt: row.signingFrozenAt,
+    signingRevision: row.signingRevision,
+    reportedByTenantUserId: row.reportedByTenantUserId,
+  }
 }
 
 async function lockEditableAssessment(
@@ -159,57 +189,8 @@ async function lockEditableAssessment(
 ): Promise<void> {
   const row = await lockVisibleAssessment(ctx, tx, assessmentId)
   if (row.locked) throw new Error('This assessment is locked. Unlock it to make changes.')
-}
-
-async function setLinkedAssessmentAppsLocked(
-  tx: HazidTx,
-  args: {
-    tenantId: string
-    assessmentId: string
-    locked: boolean
-    lockedAt: Date | null
-    lockedByTenantUserId: string | null
-  },
-): Promise<void> {
-  // Embedded Builder responses are assessment content. Lock their rows in a
-  // stable order before changing them so an already-open filler cannot alter
-  // the signed assessment through the generic form-response write paths.
-  const rows = await tx
-    .select({ id: formResponses.id })
-    .from(hazidAssessmentAppResponses)
-    .innerJoin(
-      formResponses,
-      and(
-        eq(formResponses.tenantId, hazidAssessmentAppResponses.tenantId),
-        eq(formResponses.templateId, hazidAssessmentAppResponses.templateId),
-        eq(formResponses.id, hazidAssessmentAppResponses.responseId),
-      ),
-    )
-    .where(
-      and(
-        eq(hazidAssessmentAppResponses.tenantId, args.tenantId),
-        eq(hazidAssessmentAppResponses.assessmentId, args.assessmentId),
-        isNull(formResponses.deletedAt),
-      ),
-    )
-    .orderBy(asc(formResponses.id))
-    .for('update', { of: formResponses })
-  const responseIds = rows.map((row: { id: string }) => row.id)
-  if (responseIds.length === 0) return
-  await tx
-    .update(formResponses)
-    .set({
-      locked: args.locked,
-      lockedAt: args.lockedAt,
-      lockedByTenantUserId: args.lockedByTenantUserId,
-    })
-    .where(
-      and(
-        eq(formResponses.tenantId, args.tenantId),
-        inArray(formResponses.id, responseIds),
-        isNull(formResponses.deletedAt),
-      ),
-    )
+  if (row.signingFrozenAt)
+    throw new Error('Signing has started. Start a new revision to change the assessment.')
 }
 
 async function latestTemplateVersion(tx: HazidTx, templateId: string) {
@@ -796,11 +777,15 @@ export async function openAssessmentApp(formData: FormData) {
     }
     // Locked assessments are read-only: submitted responses stay viewable, but
     // pre-submit drafts must not be editable and new responses cannot start.
-    if (lockedAssessment.locked && existing && (status === 'draft' || status === 'in_progress')) {
+    if (
+      (lockedAssessment.locked || lockedAssessment.signingFrozenAt) &&
+      existing &&
+      (status === 'draft' || status === 'in_progress')
+    ) {
       throw new Error('Unlock this assessment before editing this app')
     }
     if (!responseId) {
-      if (lockedAssessment.locked) {
+      if (lockedAssessment.locked || lockedAssessment.signingFrozenAt) {
         throw new Error('Unlock this assessment before starting a new app')
       }
       if (
@@ -973,6 +958,7 @@ export async function lockAssessment(formData: FormData) {
       .where(
         and(
           eq(hazidAssessmentSignatures.assessmentId, id),
+          eq(hazidAssessmentSignatures.revision, assessment.signingRevision),
           isNotNull(hazidAssessmentSignatures.signatureAttachmentId),
         ),
       )
@@ -980,6 +966,29 @@ export async function lockAssessment(formData: FormData) {
       throw new Error(
         'This assessment has no signatures yet. Collect at least one before you submit and lock it.',
       )
+    }
+    const [awaiting] = await tx
+      .select({ c: count() })
+      .from(hazidAssessmentSignatures)
+      .where(
+        and(
+          eq(hazidAssessmentSignatures.assessmentId, id),
+          eq(hazidAssessmentSignatures.revision, assessment.signingRevision),
+          isNull(hazidAssessmentSignatures.signatureAttachmentId),
+        ),
+      )
+    if ((awaiting?.c ?? 0) > 0)
+      throw new Error(
+        'Collect every crew signature or remove unsigned crew members before submitting.',
+      )
+    if (!assessment.signingFrozenAt) {
+      const [full] = await tx
+        .select()
+        .from(hazidAssessments)
+        .where(eq(hazidAssessments.id, id))
+        .limit(1)
+      if (!full) throw new Error('Assessment not found')
+      await freezeHazidSigning(ctx, tx, full)
     }
     const lockedAt = new Date()
     const lockedByTenantUserId = ctx.membership?.id ?? null
@@ -1059,7 +1068,18 @@ export async function unlockAssessment(formData: FormData) {
   await assertCanSeeAssessment(ctx, id)
   await ctx.db(async (tx) => {
     const assessment = await lockVisibleAssessment(ctx, tx, id)
-    if (!assessment.locked) throw new Error('This assessment is not locked')
+    if (!assessment.locked && !assessment.signingFrozenAt)
+      throw new Error('Signing has not started')
+    if (!assessment.signingFrozenAt) {
+      const [full] = await tx
+        .select()
+        .from(hazidAssessments)
+        .where(eq(hazidAssessments.id, id))
+        .limit(1)
+      if (!full) throw new Error('Assessment not found')
+      await freezeHazidSigning(ctx, tx, full)
+    }
+    await reviseHazidSigning(ctx, tx, id, assessment.signingRevision)
     await tx
       .update(hazidAssessments)
       .set({
@@ -1086,7 +1106,7 @@ export async function unlockAssessment(formData: FormData) {
       entityType: 'hazid_assessment',
       entityId: id,
       action: 'update',
-      summary: 'Unlocked',
+      summary: 'Started a new assessment revision; previous signatures retained in signing history',
     })
     await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
       sourceModule: 'hazard_assessment',
@@ -1921,159 +1941,15 @@ export async function moveQuestion(formData: FormData) {
 // ------------------------------------------------------------------
 // Signatures
 // ------------------------------------------------------------------
-export async function addSignature(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
-  const assessmentId = String(formData.get('assessmentId') ?? '')
-  const signatureType = String(formData.get('signatureType') ?? 'internal') as
-    'internal' | 'external'
-  // Only keep the identity field that matches the signer type so a stale value
-  // from the other mode can never be stored (and displayed) alongside it.
-  const personId =
-    signatureType === 'internal' ? String(formData.get('personId') ?? '').trim() || null : null
-  const externalName =
-    signatureType === 'external' ? String(formData.get('externalName') ?? '').trim() || null : null
-  const signatureDataUrl = String(formData.get('signatureDataUrl') ?? '').trim() || null
-  const csEntrant = formData.get('csEntrant') === 'on' || formData.get('csEntrant') === 'true'
-  const csAttendant = formData.get('csAttendant') === 'on' || formData.get('csAttendant') === 'true'
-  const csRescue = formData.get('csRescue') === 'on' || formData.get('csRescue') === 'true'
-  if (!assessmentId) throw new Error('Missing assessmentId')
-  if (signatureType === 'internal' && !personId)
-    throw new Error('Internal signer requires a person')
-  if (signatureType === 'external' && !externalName)
-    throw new Error('External signer requires a name')
-  await assertAssessmentEditable(ctx, assessmentId)
-
-  const row = await withStoredSignatureAttachment(
-    ctx,
-    signatureDataUrl,
-    async (tx, attachmentId) => {
-      await lockEditableAssessment(ctx, tx, assessmentId)
-      if (personId) {
-        if (!isUuid(personId)) throw new Error('Choose an active signer')
-        const [signer] = await tx
-          .select({ id: people.id })
-          .from(people)
-          .where(and(eq(people.id, personId), activePeopleWhere()))
-          .limit(1)
-        if (!signer) throw new Error('Choose an active signer')
-      }
-      const [created] = await tx
-        .insert(hazidAssessmentSignatures)
-        .values({
-          tenantId: ctx.tenantId,
-          assessmentId,
-          signatureType,
-          personId,
-          externalName,
-          signatureAttachmentId: attachmentId,
-          csEntrant,
-          csAttendant,
-          csRescue,
-          signedAt: attachmentId ? new Date() : null,
-        })
-        .returning()
-      if (created?.signatureAttachmentId) {
-        await recordModuleFlowEvent(tx, ctx, {
-          subjectId: assessmentId,
-          moduleKey: 'hazid',
-          event: 'on_sign',
-          occurrenceKey: created.id,
-        })
-      }
-      if (!created) throw new Error('Signature could not be added')
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'hazid_assessment_signature',
-        entityId: created.id,
-        action: 'sign',
-        summary: `Added ${signatureType} ${attachmentId ? 'signature' : 'signer'}`,
-      })
-      return created
-    },
-  )
-  void row
-  revalidateAssessment(assessmentId)
-}
-
-// Capture ink onto an existing unsigned signer row (crew added up front, then
-// signed one by one — e.g. passing a phone around). The signer identity is
-// fixed at add time; this only attaches the signature image and stamps
-// signedAt. Re-signing an already-signed row is rejected — delete and re-add
-// instead — so an existing signature attachment is never orphaned.
-export async function signSignature(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
-  const id = String(formData.get('id') ?? '')
-  const signatureDataUrl = String(formData.get('signatureDataUrl') ?? '').trim() || null
-  if (!id) throw new Error('Missing id')
-  if (!signatureDataUrl) throw new Error('Capture a signature')
-  // Resolve the parent for the visibility + lock guards. The already-signed
-  // check lives on the guarded UPDATE below so two concurrent sign attempts
-  // cannot both attach ink to the same row.
-  const assessmentId = await ctx.db(async (tx) => {
-    const [found] = await tx
-      .select({ assessmentId: hazidAssessmentSignatures.assessmentId })
-      .from(hazidAssessmentSignatures)
-      .where(
-        and(
-          eq(hazidAssessmentSignatures.tenantId, ctx.tenantId),
-          eq(hazidAssessmentSignatures.id, id),
-        ),
-      )
-      .limit(1)
-    if (!found) throw new Error('Signature not found')
-    return found.assessmentId
-  })
-  await assertAssessmentEditable(ctx, assessmentId)
-
-  const row = await withStoredSignatureAttachment(
-    ctx,
-    signatureDataUrl,
-    async (tx, attachmentId) => {
-      if (!attachmentId) throw new Error('Capture a signature')
-      await lockEditableAssessment(ctx, tx, assessmentId)
-      // Guard on signatureAttachmentId IS NULL so a concurrent sign on the
-      // same row fails closed instead of replacing (and orphaning) ink.
-      const [updated] = await tx
-        .update(hazidAssessmentSignatures)
-        .set({ signatureAttachmentId: attachmentId, signedAt: new Date() })
-        .where(
-          and(
-            eq(hazidAssessmentSignatures.tenantId, ctx.tenantId),
-            eq(hazidAssessmentSignatures.id, id),
-            eq(hazidAssessmentSignatures.assessmentId, assessmentId),
-            isNull(hazidAssessmentSignatures.signatureAttachmentId),
-          ),
-        )
-        .returning()
-      if (!updated) throw new Error('This signer has already signed')
-      await recordModuleFlowEvent(tx, ctx, {
-        subjectId: assessmentId,
-        moduleKey: 'hazid',
-        event: 'on_sign',
-        occurrenceKey: updated.id,
-      })
-      await recordAuditInTransaction(tx, ctx, {
-        entityType: 'hazid_assessment_signature',
-        entityId: updated.id,
-        action: 'sign',
-        summary: 'Captured signature',
-      })
-      return updated
-    },
-  )
-  void row
-  revalidateAssessment(assessmentId)
-}
-
 export async function deleteSignature(formData: FormData) {
   const ctx = await ctxWithTenant()
   assertCan(ctx, 'hazid.update')
   const id = String(formData.get('id') ?? '')
   const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertAssessmentEditable(ctx, assessmentId)
+  await assertCanSeeAssessment(ctx, assessmentId)
   await ctx.db(async (tx) => {
-    await lockEditableAssessment(ctx, tx, assessmentId)
+    const parent = await lockVisibleAssessment(ctx, tx, assessmentId)
+    if (parent.locked) throw new Error('This assessment is locked')
     const [signature] = await tx
       .select({ signatureAttachmentId: hazidAssessmentSignatures.signatureAttachmentId })
       .from(hazidAssessmentSignatures)
@@ -2082,30 +1958,23 @@ export async function deleteSignature(formData: FormData) {
           eq(hazidAssessmentSignatures.tenantId, ctx.tenantId),
           eq(hazidAssessmentSignatures.id, id),
           eq(hazidAssessmentSignatures.assessmentId, assessmentId),
+          eq(hazidAssessmentSignatures.revision, parent.signingRevision),
         ),
       )
       .limit(1)
       .for('update')
     if (!signature) throw new Error('Signature not found')
+    if (signature.signatureAttachmentId)
+      throw new Error('Start a new revision to change signed crew members')
     await tx
       .delete(hazidAssessmentSignatures)
       .where(
         and(
           eq(hazidAssessmentSignatures.id, id),
           eq(hazidAssessmentSignatures.assessmentId, assessmentId),
+          eq(hazidAssessmentSignatures.revision, parent.signingRevision),
         ),
       )
-    if (signature.signatureAttachmentId) {
-      await tx
-        .delete(attachments)
-        .where(
-          and(
-            eq(attachments.tenantId, ctx.tenantId),
-            eq(attachments.id, signature.signatureAttachmentId),
-            eq(attachments.kind, 'signature'),
-          ),
-        )
-    }
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'hazid_assessment_signature',
       entityId: id,

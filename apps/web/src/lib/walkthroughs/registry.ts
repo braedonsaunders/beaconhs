@@ -143,11 +143,11 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'PPE and sign-on',
-        body: 'Select the PPE the job needs. Then every crew member signs on. Their signature means they read and understood it.',
+        body: 'Select the PPE the job needs. Use Add crew to prepare several signature spaces. Collect on this phone opens one signing screen with Save & next. Request / resend unsigned signatures sends personal requests through the tenant’s selected channels.',
       },
       {
         title: 'Submit it',
-        body: 'When everything is filled in, tap Submit & lock and confirm. Your submit flows run, your supervisor can see it right away, and you can unlock it if conditions change. Locking the revised assessment runs its submit flows again.',
+        body: 'When everything is filled in, tap Submit & lock and confirm. Your submit flows run, your supervisor can see it right away, and you can use Start new revision if conditions change. Previous signatures stay in Signing history; the crew reviews and signs again. Locking the revised assessment runs its submit flows again.',
       },
     ],
   },

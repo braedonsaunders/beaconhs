@@ -80,7 +80,12 @@ export async function sendHazidEmail(
       .select({ row: hazidAssessmentSignatures, person: people })
       .from(hazidAssessmentSignatures)
       .leftJoin(people, eq(people.id, hazidAssessmentSignatures.personId))
-      .where(eq(hazidAssessmentSignatures.assessmentId, assessmentId))
+      .where(
+        and(
+          eq(hazidAssessmentSignatures.assessmentId, assessmentId),
+          eq(hazidAssessmentSignatures.revision, row.a.signingRevision),
+        ),
+      )
 
     return { ...row, tasks, taskHazards, hazards, ppe, signatures }
   })

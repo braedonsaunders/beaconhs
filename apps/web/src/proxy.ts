@@ -12,6 +12,7 @@ export function proxy(request: NextRequest) {
   })
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
+  requestHeaders.set('x-beacon-return-path', request.nextUrl.pathname + request.nextUrl.search)
   requestHeaders.set('Content-Security-Policy', policy)
 
   const response = NextResponse.next({ request: { headers: requestHeaders } })

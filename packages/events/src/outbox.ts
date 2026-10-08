@@ -73,9 +73,11 @@ export function assertDomainEventIdentity(input: RecordDomainEventInput): void {
     throw new Error('Integration event identity does not match its domain event')
   }
   const notificationSubjectId = input.payload.notification
-    ? 'incidentId' in input.payload.notification
-      ? input.payload.notification.incidentId
-      : input.payload.notification.caId
+    ? 'assessmentId' in input.payload.notification
+      ? input.payload.notification.assessmentId
+      : 'incidentId' in input.payload.notification
+        ? input.payload.notification.incidentId
+        : input.payload.notification.caId
     : null
   if (notificationSubjectId && notificationSubjectId !== input.subjectId) {
     throw new Error('Notification event identity does not match its domain event')

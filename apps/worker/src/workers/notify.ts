@@ -1,8 +1,10 @@
 import type { Job } from 'bullmq'
 import { createHash } from 'node:crypto'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
-import { db, withTenant } from '@beaconhs/db'
+import { activePeopleWhere, db, withTenant } from '@beaconhs/db'
 import {
+  hazidAssessments,
+  hazidAssessmentSignatures,
   notificationPreferences,
   notifications,
   people,
@@ -50,6 +52,48 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
   const critical = d.isCritical ?? false
   const requestedUserIds = d.userIds
   const plan = await withTenant(db, d.tenantId, async (tx) => {
+    if (d.type === 'hazid.signature_requested') {
+      if (typeof d.data?.signatureId !== 'string' || typeof d.data?.requestId !== 'string')
+        throw new Error('Signature notification requires a request identity')
+      const [request] = await tx
+        .select({ userId: people.userId, expiresAt: hazidAssessmentSignatures.requestExpiresAt })
+        .from(hazidAssessmentSignatures)
+        .innerJoin(
+          hazidAssessments,
+          and(
+            eq(hazidAssessments.tenantId, hazidAssessmentSignatures.tenantId),
+            eq(hazidAssessments.id, hazidAssessmentSignatures.assessmentId),
+            eq(hazidAssessments.signingRevision, hazidAssessmentSignatures.revision),
+          ),
+        )
+        .innerJoin(
+          people,
+          and(
+            eq(people.tenantId, hazidAssessmentSignatures.tenantId),
+            eq(people.id, hazidAssessmentSignatures.personId),
+          ),
+        )
+        .where(
+          and(
+            eq(hazidAssessmentSignatures.id, d.data.signatureId),
+            eq(hazidAssessmentSignatures.requestId, d.data.requestId),
+            eq(hazidAssessmentSignatures.tenantId, d.tenantId),
+            isNull(hazidAssessmentSignatures.signatureAttachmentId),
+            eq(hazidAssessments.locked, false),
+            isNull(hazidAssessments.deletedAt),
+            activePeopleWhere(),
+          ),
+        )
+        .limit(1)
+      if (
+        !request?.userId ||
+        requestedUserIds.length !== 1 ||
+        requestedUserIds[0] !== request.userId ||
+        !request.expiresAt ||
+        request.expiresAt <= new Date()
+      )
+        return { disabled: true as const }
+    }
     const [catCfg] = await tx
       .select({
         enabled: tenantNotificationSettings.enabled,
@@ -78,10 +122,14 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
     const quietHours = policy?.quietHours ?? null
     const quietNow = inQuietHours(quietHours, now.getUTCHours())
     const digestOn = (policy?.digestMode ?? 'off') !== 'off'
-    const emailAllowed = allowed.includes('email') && (critical || !digestOn)
+    const emailAllowed =
+      allowed.includes('email') && (critical || d.delivery === 'immediate' || !digestOn)
     const emailDelayMs =
-      !critical && quietNow && quietHours ? msUntilQuietHoursEnd(quietHours, now) : 0
-    const pushAllowed = allowed.includes('push') && (critical || !quietNow)
+      !critical && d.delivery !== 'immediate' && quietNow && quietHours
+        ? msUntilQuietHoursEnd(quietHours, now)
+        : 0
+    const pushAllowed =
+      allowed.includes('push') && (critical || d.delivery === 'immediate' || !quietNow)
     const smsAllowed = allowed.includes('sms')
 
     const targets =
@@ -129,7 +177,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
             title: d.title,
             body: d.body,
             linkPath: d.linkPath,
-            data: d.data ?? {},
+            data: { ...d.data, ...(d.delivery ? { delivery: d.delivery } : {}) },
             isCritical: d.isCritical ?? false,
             sourceJobId,
           })),
@@ -230,7 +278,10 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
     }
   }
 
-  const smsDelivery = critical && plan.smsAllowed ? await resolveSmsDelivery(d.tenantId) : null
+  const smsDelivery =
+    (critical || d.delivery === 'immediate') && plan.smsAllowed
+      ? await resolveSmsDelivery(d.tenantId)
+      : null
   if (smsDelivery?.kind === 'suppressed') {
     const [existing] = await withTenant(db, d.tenantId, (tx) =>
       tx
@@ -260,7 +311,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
   let smsFailureCount = 0
   if (smsDelivery && plan.targets.length > 0) {
     const via = smsDelivery.kind === 'transport' ? smsDelivery.transport.provider : 'unconfigured'
-    const text = (d.body ? `${d.title}\n${d.body}` : d.title).slice(0, 1500)
+    const text = `${(d.body ? `${d.title}\n${d.body}` : d.title).slice(0, 1000)}${d.linkPath ? `\n${baseUrl}${d.linkPath}` : ''}`
     const [phoneRows, priorRows] = await Promise.all([
       withTenant(db, d.tenantId, (tx) =>
         tx
@@ -273,7 +324,7 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
                 people.userId,
                 plan.targets.map((target) => target.id),
               ),
-              isNull(people.deletedAt),
+              activePeopleWhere(),
             ),
           ),
       ),

@@ -63,6 +63,7 @@ describe('generic form-response parent-lock contract', () => {
       'app/(app)/hazard-assessments/_actions.ts',
       'lib/api/builder-apps.ts',
       'lib/forms/form-response-lifecycle.ts',
+      'lib/hazid-signing.ts',
     ])
     expect(runtimeResponseWriters(new URL('../../../../worker/src/', import.meta.url))).toEqual([
       'workers/pdf.ts',
@@ -158,6 +159,30 @@ describe('generic form-response parent-lock contract', () => {
     )
     expect(scheduledWorker.indexOf('await lockFormResponseForMutation')).toBeLessThan(
       scheduledWorker.indexOf('.insert(formResponseCheckins)'),
+    )
+  })
+
+  it('locks linked apps through the owning assessment signing transaction', () => {
+    const signing = source('../hazid-signing.ts')
+    const lock = between(
+      signing,
+      'export async function setHazidAppsLocked',
+      'export async function freezeHazidSigning',
+    )
+    expect(lock).toContain(".for('update', { of: formResponses })")
+    expect(lock.indexOf(".for('update', { of: formResponses })")).toBeLessThan(
+      lock.indexOf('.update(formResponses)'),
+    )
+    expect(lock).toContain('eq(hazidAssessmentAppResponses.tenantId, args.tenantId)')
+    expect(hazardOwner).toContain('setHazidAppsLocked as setLinkedAssessmentAppsLocked')
+    const actions = source('../../app/(app)/hazard-assessments/_signing-actions.ts')
+    const start = between(
+      actions,
+      'async function performStartSigningCollection',
+      'async function captureSignature',
+    )
+    expect(start.indexOf('await lockHazidForSigning(')).toBeLessThan(
+      start.indexOf('await freezeHazidSigning('),
     )
   })
 

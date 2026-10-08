@@ -249,6 +249,10 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
         can(ctx, 'journals.update.own') ||
         can(ctx, 'journals.assign')
       )
+    case 'hazard-assessment-signers':
+    case 'hazard-assessment-signing-groups':
+    case 'hazard-assessment-signing-crews':
+      return can(ctx, 'hazid.update')
     case 'hazard-assessment-locations':
       return can(ctx, 'hazid.create') || can(ctx, 'hazid.update')
     case 'form-response-locations':
@@ -1472,12 +1476,39 @@ async function loadOptions(
     }
 
     if (
+      lookup === 'hazard-assessment-signing-groups' ||
+      lookup === 'hazard-assessment-signing-crews'
+    ) {
+      const table = lookup === 'hazard-assessment-signing-groups' ? personGroups : crews
+      const rows = await tx
+        .select({ id: table.id, name: table.name })
+        .from(table)
+        .where(
+          and(
+            lookup === 'hazard-assessment-signing-groups'
+              ? isNull(personGroups.deletedAt)
+              : undefined,
+            input.hasQuery
+              ? or(
+                  ilike(table.name, input.term),
+                  input.selected ? eq(table.id, input.selected) : undefined,
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(asc(table.name), asc(table.id))
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(rows.map((row) => option(row.id, row.name)))
+    }
+
+    if (
       lookup === 'journal-supervisors' ||
       lookup === 'safe-distance-operators' ||
       lookup === 'compliance-by-person' ||
       lookup === 'incident-people' ||
       lookup === 'inspection-people' ||
-      lookup === 'document-signoff-people'
+      lookup === 'document-signoff-people' ||
+      lookup === 'hazard-assessment-signers'
     ) {
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)

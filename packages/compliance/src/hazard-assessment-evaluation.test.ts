@@ -12,6 +12,9 @@ describe('hazard-assessment compliance evidence', () => {
     const evaluator = source.slice(start, end)
 
     expect(evaluator).toContain('isNotNull(hazidAssessmentSignatures.signedAt)')
+    expect(evaluator).toContain(
+      'eq(hazidAssessmentSignatures.revision, hazidAssessments.signingRevision)',
+    )
     expect(evaluator.match(/eq\(hazidAssessments\.locked, true\)/gu)).toHaveLength(2)
   })
 })

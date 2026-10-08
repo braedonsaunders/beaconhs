@@ -15,6 +15,7 @@
 // Mirrors the legacy HAZIDJSA* table family.
 
 import { relations } from 'drizzle-orm'
+import type { FormSchemaV1, EntityAttrsByField } from '@beaconhs/forms-core'
 import {
   boolean,
   foreignKey,
@@ -87,6 +88,8 @@ export const hazidAssessments = pgTable(
     // other app, so they carry no columns on this table.
 
     // -------------------- Lock state -----------------------------------------
+    signingRevision: integer('signing_revision').default(1).notNull(),
+    signingFrozenAt: timestamp('signing_frozen_at', { withTimezone: true }),
     inProgress: boolean('in_progress').default(true).notNull(),
     locked: boolean('locked').default(false).notNull(),
     lockedAt: timestamp('locked_at', { withTimezone: true }),
@@ -231,6 +234,11 @@ export const hazidAssessmentSignatures = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
     assessmentId: uuid('assessment_id').notNull(),
+    revision: integer('revision').default(1).notNull(),
+    signerName: text('signer_name'),
+    requestedAt: timestamp('requested_at', { withTimezone: true }),
+    requestId: uuid('request_id'),
+    requestExpiresAt: timestamp('request_expires_at', { withTimezone: true }),
     signatureType: hazidSignatureType('signature_type').notNull(),
     // Internal signers: link to person directory
     personId: uuid('person_id'),
@@ -256,6 +264,47 @@ export const hazidAssessmentSignatures = pgTable(
     tenantIdx: index('hazid_assessment_signatures_tenant_idx').on(t.tenantId),
     assessmentFk: foreignKey({
       name: 'hazid_assessment_signatures_tenant_assessment_fk',
+      columns: [t.tenantId, t.assessmentId],
+      foreignColumns: [hazidAssessments.tenantId, hazidAssessments.id],
+    }).onDelete('cascade'),
+  }),
+)
+
+export type HazidSigningSnapshot = {
+  values: Record<string, unknown>
+  apps: {
+    templateId: string
+    name: string
+    version: number
+    schema: FormSchemaV1
+    values: Record<string, unknown>
+    entities: EntityAttrsByField
+    people: { id: string; firstName: string; lastName: string }[]
+  }[]
+}
+
+/** Immutable content reviewed by the crew, retained across revisions. */
+export const hazidSigningRounds = pgTable(
+  'hazid_signing_rounds',
+  {
+    id: id(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    assessmentId: uuid('assessment_id').notNull(),
+    revision: integer('revision').notNull(),
+    snapshot: jsonb('snapshot').$type<HazidSigningSnapshot>().notNull(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => ({
+    revisionUx: uniqueIndex('hazid_signing_rounds_revision_ux').on(
+      t.tenantId,
+      t.assessmentId,
+      t.revision,
+    ),
+    assessmentFk: foreignKey({
+      name: 'hazid_signing_rounds_tenant_assessment_fk',
       columns: [t.tenantId, t.assessmentId],
       foreignColumns: [hazidAssessments.tenantId, hazidAssessments.id],
     }).onDelete('cascade'),

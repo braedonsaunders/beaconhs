@@ -162,11 +162,16 @@ export async function saveNotificationConfiguration(
 
   await ctx.db(async (tx) => {
     for (const item of items) {
-      const roleKeys = uniq(item.roleKeys).filter((key) => allowed.roleKeys.has(key))
-      const userIds = uniq(item.userIds).filter((id) => allowed.userIds.has(id))
-      const groupIds = uniq(item.groupIds ?? []).filter((id) => allowed.groupIds.has(id))
+      const direct = NOTIFICATION_CATEGORIES.find(
+        (category) => category.key === item.category,
+      )?.directRecipients
+      const roleKeys = uniq(direct ? [] : item.roleKeys).filter((key) => allowed.roleKeys.has(key))
+      const userIds = uniq(direct ? [] : item.userIds).filter((id) => allowed.userIds.has(id))
+      const groupIds = uniq(direct ? [] : (item.groupIds ?? [])).filter((id) =>
+        allowed.groupIds.has(id),
+      )
       const channels = item.channels.filter((c) => VALID_CHANNELS.includes(c))
-      const escalation = cleanEscalation(item.escalation, allowed.roleKeys)
+      const escalation = cleanEscalation(direct ? [] : item.escalation, allowed.roleKeys)
       await tx
         .insert(tenantNotificationSettings)
         .values({

@@ -224,6 +224,8 @@ Your wallet holds your certificates and skill cards — like the paper tickets i
 
 Tap the bell icon in the top bar, or open [Notifications](/notifications). A number on the bell shows how many are unread.
 
+Signature requests open a personal **Review and sign** page. If you need to sign in first, BeaconHS returns to that request after login. Review the frozen job hazards and sign your own name.
+
 ## Reading and clearing notifications
 
 1. Open your [Inbox](/notifications).

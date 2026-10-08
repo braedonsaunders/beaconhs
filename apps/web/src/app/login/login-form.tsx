@@ -12,7 +12,7 @@ import { Alert, AlertDescription, Button, Input, Label } from '@beaconhs/ui'
 
 type Mode = 'password' | 'magic'
 
-export function LoginForm() {
+export function LoginForm({ continueHref = '/auth/continue' }: { continueHref?: string }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
   const router = useRouter()
@@ -35,9 +35,9 @@ export function LoginForm() {
             setError(tGeneratedValue(result.error.message ?? tGenerated('m_123c64572b4068')))
             return
           }
-          router.replace('/auth/continue')
+          router.replace(continueHref as any)
         } else {
-          const result = await signIn.magicLink({ email, callbackURL: '/auth/continue' })
+          const result = await signIn.magicLink({ email, callbackURL: continueHref })
           if ('error' in result && result.error) {
             setError(tGeneratedValue(result.error.message ?? tGenerated('m_18431d16dad9e6')))
             return

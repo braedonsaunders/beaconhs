@@ -22,6 +22,12 @@ export type DomainIntegrationEvent = {
 }
 
 export type DomainNotificationEvent =
+  | {
+      kind: 'hazid_signature_requested'
+      assessmentId: string
+      signatureId: string
+      requestId: string
+    }
   | { kind: 'incident_reported'; incidentId: string }
   | {
       kind: 'incident_status_changed'

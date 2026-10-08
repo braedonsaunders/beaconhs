@@ -237,6 +237,7 @@ export const TENANT_SCOPED_TABLES = [
   'hazid_assessment_tasks',
   'hazid_assessment_hazards',
   'hazid_assessment_signatures',
+  'hazid_signing_rounds',
   'hazid_assessment_ppe',
   'hazid_assessment_questions',
   'hazid_assessment_photos',
