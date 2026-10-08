@@ -50,6 +50,51 @@ describe('training class print and flow values', () => {
       expect(job.fields.some((field) => field.label === 'Course Description')).toBe(false)
   })
 
+  it('keeps cancelled bookings out of the emailed table, count and recipients', async () => {
+    const ctx = context(null, null, '2026-10-30T11:30:00Z', '2026-10-30T16:00:00Z')
+    vi.mocked(ctx.db)
+      .mockReset()
+      .mockResolvedValueOnce([
+        {
+          c: {
+            title: 'First aid',
+            startsAt: new Date('2026-10-30T11:30:00Z'),
+            endsAt: new Date('2026-10-30T16:00:00Z'),
+            cancelledAt: null,
+            completedAt: null,
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          firstName: 'Matt',
+          lastName: 'Wood',
+          status: 'registered',
+          personEmail: 'matt@example.com',
+        },
+        {
+          firstName: 'Zack',
+          lastName: 'Mann',
+          status: 'registered',
+          personEmail: null,
+          userEmail: 'zack@example.com',
+        },
+        {
+          firstName: 'Cancelled',
+          lastName: 'Person',
+          status: 'cancelled',
+          personEmail: 'cancelled@example.com',
+        },
+      ])
+    const values = await createTrainingClassFlowAdapter(ctx, 'class').loadValues()
+    expect(values.attendee_count).toBe(2)
+    expect(values.attendee_emails).toBe('matt@example.com, zack@example.com')
+    expect(values.attendees).toEqual([
+      { name: 'Matt Wood', email: 'matt@example.com', status: 'Registered' },
+      { name: 'Zack Mann', email: 'zack@example.com', status: 'Registered' },
+    ])
+  })
+
   it('falls back to the saved site and observes winter offsets', async () => {
     const adapter = createTrainingClassFlowAdapter(
       context(null, 'Bring PPE', '2026-12-01T13:30:00Z', '2026-12-01T19:00:00Z'),

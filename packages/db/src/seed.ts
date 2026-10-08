@@ -95,6 +95,7 @@ import { seedLiftPlanTemplate } from './seed/lift-plan-template'
 import { seedFormPdfTemplates, seedPdfTemplates } from './seed/pdf-templates'
 import { BEACON_REPORT_SEEDS } from './seed/report-definitions'
 import { seedToolboxTemplate } from './seed/toolbox-template'
+import { seedTrainingClassBookingEmail } from './seed/training-class-email'
 
 async function main() {
   const { db, sql: pg } = createSuperClient()
@@ -1361,6 +1362,7 @@ async function main() {
     //     pinned forms in the sidebar rather than native modules) ---------
     await seedLiftPlanTemplate(tx, tenant.id)
     await seedToolboxTemplate(tx, tenant.id)
+    await seedTrainingClassBookingEmail(tx, tenant.id)
 
     // --- Inspection records (5 sample records against the seeded types) -
     await seedInspectionRecords(tx, tenant.id)

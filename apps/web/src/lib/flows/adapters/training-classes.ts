@@ -133,7 +133,7 @@ export function createTrainingClassFlowAdapter(
         site_org_unit_id: c.siteOrgUnitId ?? null,
         instructor_tenant_user_id: c.instructorTenantUserId ?? null,
         // Collections.
-        attendees: roster.map((a) => ({
+        attendees: active.map((a) => ({
           name: personName({
             firstName: a.firstName,
             lastName: a.lastName,

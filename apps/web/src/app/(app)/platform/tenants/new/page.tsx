@@ -10,6 +10,7 @@ import { db, withSuperAdmin } from '@beaconhs/db'
 import { auditLog, tenants } from '@beaconhs/db/schema'
 import { LOCALE_OPTIONS, normalizeLocalePolicy } from '@beaconhs/i18n'
 import { seedLiftPlanTemplate } from '@beaconhs/db/seed/lift-plan-template'
+import { seedTrainingClassBookingEmail } from '@beaconhs/db/seed/training-class-email'
 import { requireRequestContext } from '@/lib/auth'
 import { PageContainer } from '@/components/page-layout'
 
@@ -87,6 +88,7 @@ async function createTenant(formData: FormData): Promise<void> {
       // inside the same transaction so a seeder failure rolls back the
       // tenant create — we never want a half-provisioned tenant.
       await seedLiftPlanTemplate(tx, created.id)
+      await seedTrainingClassBookingEmail(tx, created.id)
     }
   })
 

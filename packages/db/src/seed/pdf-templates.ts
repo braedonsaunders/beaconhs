@@ -16,7 +16,7 @@
 
 import { sql } from 'drizzle-orm'
 import { generateFormPdfTemplate, type FormSchemaV1 } from '@beaconhs/forms-core'
-import { expandRepeatMarkers } from './expand-repeat-markers'
+import { expandRepeatMarkers } from '@beaconhs/email-render'
 
 // --- design language (slate letterhead document) -----------------------------
 

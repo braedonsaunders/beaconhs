@@ -582,6 +582,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@beaconhs/email-render':
+        specifier: workspace:*
+        version: link:../email-render
       '@beaconhs/forms-core':
         specifier: workspace:*
         version: link:../forms-core

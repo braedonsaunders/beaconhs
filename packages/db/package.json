@@ -13,7 +13,8 @@
     "./canonical-templates": "./src/canonical-templates.ts",
     "./seed/lift-plan-template": "./src/seed/lift-plan-template.ts",
     "./seed/pdf-templates": "./src/seed/pdf-templates.ts",
-    "./seed/report-definitions": "./src/seed/report-definitions.ts"
+    "./seed/report-definitions": "./src/seed/report-definitions.ts",
+    "./seed/training-class-email": "./src/seed/training-class-email.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
@@ -31,7 +32,8 @@
     "@beaconhs/forms-core": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9",
-    "tsx": "^4.23.1"
+    "tsx": "^4.23.1",
+    "@beaconhs/email-render": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

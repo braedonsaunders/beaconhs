@@ -31,6 +31,7 @@ const config: KnipConfig = {
     'packages/db': {
       entry: [
         'src/scripts/reseed-lift-plan.ts',
+        'src/scripts/install-training-class-email.ts',
         'src/scripts/import-legacy-passwords.ts',
         'src/scripts/backfill-document-book-pins.ts',
       ],
