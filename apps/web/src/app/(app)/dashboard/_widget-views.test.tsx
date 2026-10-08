@@ -22,11 +22,11 @@ vi.mock('@/i18n/generated', async () => {
 })
 import { WidgetCard } from './_widget-views'
 
-function render(items: DashboardMetrics['myPpe']) {
+function render(items: DashboardMetrics['myPpe'], myPersonId: string | null = null) {
   return renderToStaticMarkup(
     <WidgetCard
       widgetId="personal-my-ppe"
-      data={{ myPpe: items } as DashboardMetrics}
+      data={{ myPpe: items, myPersonId } as DashboardMetrics}
       todayIso="2026-10-01"
     />,
   )
@@ -100,5 +100,8 @@ describe('My PPE assigned gear', () => {
       ]),
     ).toContain('Out of service')
     expect(render([])).toContain('No assigned PPE needs inspection.')
+    const personId = '10000000-0000-4000-8000-000000000001'
+    expect(render([], personId)).toContain(`href="/ppe?holder=${personId}"`)
+    expect(render([])).toContain('href="/ppe"')
   })
 })

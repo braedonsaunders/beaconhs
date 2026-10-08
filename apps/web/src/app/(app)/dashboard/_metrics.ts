@@ -143,6 +143,7 @@ export type DashboardMetrics = {
 
   // Personal — "my" widgets, scoped to the logged-in user's person record.
   // Empty / zeroed when the account isn't linked to a person (`linked: false`).
+  myPersonId: string | null
   myPpe: Awaited<ReturnType<typeof loadPersonalPpe>>
   myEquipment: Array<{
     id: string
@@ -882,16 +883,8 @@ export async function loadDashboardMetrics(
     }))
 
     // --- Personal "my" widgets -------------------------------------------
-    // Resolve the logged-in user's person record once; all three personal
-    // widgets key off it. Unlinked users (no person row) get empty states.
-    const [myPerson] = ctx.userId
-      ? await tx
-          .select({ id: people.id })
-          .from(people)
-          .where(and(eq(people.userId, ctx.userId), isNull(people.deletedAt)))
-          .limit(1)
-      : []
-    const myPersonId = myPerson?.id ?? null
+    // Use the request's canonical person link for every personal widget.
+    const myPersonId = ctx.personId
 
     const myPpe = await loadPersonalPpe(tx, myPersonId, todayIso, can(ctx, 'ppe.inspect'))
 
@@ -1123,6 +1116,7 @@ export async function loadDashboardMetrics(
       topOverdueCAs,
       expiringTraining30d,
 
+      myPersonId,
       myPpe,
       myEquipment,
       myCompliance,

@@ -318,7 +318,7 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
 
     // Personal
     case 'personal-my-ppe':
-      return <MyPpeCard items={data.myPpe} />
+      return <MyPpeCard items={data.myPpe} personId={data.myPersonId} />
     case 'personal-my-equipment':
       return <MyEquipmentCard items={data.myEquipment} todayIso={todayIso} />
     case 'personal-my-compliance':
@@ -1434,14 +1434,20 @@ function inspectDueBadge(dueIso: string | null, todayIso: string) {
   return null
 }
 
-function MyPpeCard({ items }: { items: DashboardMetrics['myPpe'] }) {
+function MyPpeCard({
+  items,
+  personId,
+}: {
+  items: DashboardMetrics['myPpe']
+  personId: string | null
+}) {
   const tGenerated = useGeneratedTranslations()
   return (
     <CardShell
       title={tGenerated('m_1dc869deae5302')}
       caption={tGenerated('m_0d1771967df0ec', { value0: items.length })}
       icon={HardHat}
-      href="/ppe"
+      href={personId ? `/ppe?holder=${encodeURIComponent(personId)}` : '/ppe'}
       accent="teal"
     >
       <GeneratedValue
