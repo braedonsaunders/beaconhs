@@ -96,9 +96,11 @@ export function BookBuilder({
   const tGenerated = useGeneratedTranslations()
   const tGeneratedValue = useGeneratedValueTranslations()
   const router = useRouter()
-  const [, startTransition] = React.useTransition()
+  const [pending, startTransition] = React.useTransition()
   const [rail, setRail] = React.useState<RailView>('build')
   const [adding, setAdding] = React.useState(false)
+  const [orderPending, setOrderPending] = React.useState(false)
+  const orderRevision = React.useRef(0)
   // A heading arrives named "Untitled chapter". Focusing its title the moment
   // it lands makes naming it one keystroke instead of a hunt down the page.
   const [focusItemId, setFocusItemId] = React.useState<string | null>(null)
@@ -106,7 +108,7 @@ export function BookBuilder({
   // is read-only until it is unpublished.
   const locked = published
 
-  const seed = entries.map((entry) => `${entry.itemId}:${entry.title}`).join('|')
+  const seed = JSON.stringify(entries)
   const [items, setItems] = useReseededState(seed, entries)
   const tree = React.useMemo(() => buildBookTree(items), [items])
   const numbering = React.useMemo(() => documentNumbering(items), [items])
@@ -129,9 +131,25 @@ export function BookBuilder({
     [router, tGeneratedValue],
   )
 
-  const persistOrder = useDebouncedCallback((orderedIds: string[]) => {
-    run(() => reorderBookItemsAction(bookId, orderedIds), tGenerated('m_052d39fb27327f'))
+  const persistOrderDebounced = useDebouncedCallback((orderedIds: string[], revision: number) => {
+    run(async () => {
+      try {
+        await reorderBookItemsAction(bookId, orderedIds)
+      } catch (error) {
+        if (orderRevision.current === revision) setItems(entries)
+        throw error
+      } finally {
+        if (orderRevision.current === revision) setOrderPending(false)
+      }
+    }, tGenerated('m_052d39fb27327f'))
   })
+  const persistOrder = React.useCallback(
+    (orderedIds: string[]) => {
+      setOrderPending(true)
+      persistOrderDebounced(orderedIds, ++orderRevision.current)
+    },
+    [persistOrderDebounced],
+  )
 
   const applyOrder = React.useCallback(
     (next: BookEntry[]) => {
@@ -207,7 +225,15 @@ export function BookBuilder({
 
   function togglePublished() {
     run(async () => {
-      await (published ? unpublishBookAction(bookId) : publishBookAction(bookId))
+      if (published) {
+        await unpublishBookAction(bookId)
+      } else {
+        const result = await publishBookAction(bookId)
+        if (!result.ok) {
+          toast.error(tGeneratedValue(result.error))
+          return
+        }
+      }
       router.refresh()
     }, tGenerated('m_16c73b6230c543'))
   }
@@ -321,6 +347,7 @@ export function BookBuilder({
                     size="sm"
                     variant={published ? 'outline' : 'default'}
                     onClick={togglePublished}
+                    disabled={pending || orderPending}
                   >
                     <GeneratedValue
                       value={

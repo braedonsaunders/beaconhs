@@ -1,5 +1,9 @@
 export const MAX_DOCUMENT_BOOK_ITEMS = 200
 
+export class DocumentBookPublicationError extends Error {
+  override name = 'DocumentBookPublicationError'
+}
+
 type DocumentBookSnapshotMode = 'publish' | 'published-render' | 'draft-render'
 
 export type DocumentBookSnapshotItem = {
@@ -60,17 +64,21 @@ export function resolveDocumentBookItems(input: {
 }): ResolvedDocumentBookItem[] {
   const { mode, items, versions, attachments } = input
   if (items.length > MAX_DOCUMENT_BOOK_ITEMS) {
-    throw new Error(`Document books may contain at most ${MAX_DOCUMENT_BOOK_ITEMS} documents.`)
+    throw new DocumentBookPublicationError(
+      `Document books may contain at most ${MAX_DOCUMENT_BOOK_ITEMS} documents.`,
+    )
   }
   if (mode !== 'draft-render' && items.length === 0) {
-    throw new Error('Add at least one published document before publishing this book.')
+    throw new DocumentBookPublicationError(
+      'Add at least one published document before publishing this book.',
+    )
   }
 
   const unavailableDocument = items.find(
     (item) => item.documentDeletedAt !== null || item.documentStatus !== 'published',
   )
   if (unavailableDocument) {
-    throw new Error(
+    throw new DocumentBookPublicationError(
       `"${itemLabel(unavailableDocument)}" is not a live published document. Remove it or publish it before publishing the book.`,
     )
   }
@@ -80,14 +88,18 @@ export function resolveDocumentBookItems(input: {
 
   return items.map((item) => {
     if (mode === 'published-render' && !item.pinnedVersionId) {
-      throw new Error(`Published book item ${item.documentKey} has no pinned document version.`)
+      throw new DocumentBookPublicationError(
+        `Published book item ${item.documentKey} has no pinned document version.`,
+      )
     }
     const version = versionByDocument.get(item.documentId)
     if (!version) {
-      throw new Error(`"${itemLabel(item)}" has no published version.`)
+      throw new DocumentBookPublicationError(`"${itemLabel(item)}" has no published version.`)
     }
     if (mode === 'published-render' && version.id !== item.pinnedVersionId) {
-      throw new Error(`Published book item ${item.documentKey} does not match its pinned version.`)
+      throw new DocumentBookPublicationError(
+        `Published book item ${item.documentKey} does not match its pinned version.`,
+      )
     }
 
     const attachmentId = version.pdfAttachmentId ?? version.contentAttachmentId
@@ -98,7 +110,7 @@ export function resolveDocumentBookItems(input: {
       attachment.contentType !== 'application/pdf' ||
       attachment.sizeBytes <= 0
     ) {
-      throw new Error(
+      throw new DocumentBookPublicationError(
         `Published version ${version.version} for document ${item.documentKey} has no valid PDF attachment.`,
       )
     }

@@ -16,8 +16,8 @@ import {
 //   native darkTheme param is unusable: its mere presence forces dark mode
 //   and clobbers ui_defaults, and COOL's per-browser saved theme would win
 //   over it anyway.
-// - Shows the animated BeaconHS lighthouse splash over the frame until
-//   Collabora reports Document_Loaded (its own spinner never shows).
+// - Shows the BeaconHS lighthouse while the frame initializes, then reveals
+//   Collabora’s loading progress. Only Document_Loaded permits publishing.
 // - Speaks Collabora's postMessage API (Host_PostmessageReady handshake) and
 //   exposes an imperative handle for host features like the document AI
 //   panel's insert-at-cursor.
@@ -66,6 +66,7 @@ export const CollaboraEmbed = forwardRef<
   const tGenerated = useGeneratedTranslations()
   const [session, setSession] = useState<CollaboraSession | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [frameVisible, setFrameVisible] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const formRef = useRef<HTMLFormElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -130,8 +131,12 @@ export const CollaboraEmbed = forwardRef<
 
   useEffect(() => {
     let cancelled = false
+    let brandingAbort: AbortController | null = null
     setSession(null)
     setLoaded(false)
+    setFrameVisible(false)
+    loadedRef.current = false
+    modifiedRef.current = null
     fetchSessionRef
       .current()
       .then(async (s) => {
@@ -150,7 +155,15 @@ export const CollaboraEmbed = forwardRef<
           // deployment, before the frame requests it.
           if (url.origin === window.location.origin) {
             const brandingUrl = url.pathname.replace(/\/[^/]*$/, '/branding.js')
-            await fetch(brandingUrl, { cache: 'reload' }).catch(() => {})
+            brandingAbort = new AbortController()
+            const timeout = setTimeout(() => brandingAbort?.abort(), 2_000)
+            try {
+              await fetch(brandingUrl, { cache: 'reload', signal: brandingAbort.signal })
+            } catch {
+              // Branding must never prevent the editor from opening.
+            } finally {
+              clearTimeout(timeout)
+            }
           }
           if (cancelled) return
         }
@@ -161,6 +174,7 @@ export const CollaboraEmbed = forwardRef<
       })
     return () => {
       cancelled = true
+      brandingAbort?.abort()
     }
   }, [frameName, attempt])
 
@@ -168,10 +182,9 @@ export const CollaboraEmbed = forwardRef<
     if (session?.ok) formRef.current?.submit()
   }, [session])
 
-  // Collabora postMessage channel: acknowledge readiness once the document is
-  // loaded, and drop the splash. Fallback timer in case the channel is
-  // unavailable (misconfigured PostMessageOrigin) so the frame never stays
-  // covered forever.
+  // Acknowledge the channel as soon as its listener is ready. Frame readiness
+  // reveals the editor UI; only Document_Loaded permits saving and publishing.
+  // If messages are unavailable, reveal Collabora's own loading/error screen.
   useEffect(() => {
     if (!session?.ok) return
     const onMessage = (e: MessageEvent) => {
@@ -199,6 +212,22 @@ export const CollaboraEmbed = forwardRef<
       } catch {
         return
       }
+      if (msg?.MessageId === 'App_LoadingStatus') {
+        const status = msg.Values?.Status
+        if (status === 'Initialized' || status === 'Frame_Ready' || status === 'Document_Loaded') {
+          editorWindow.postMessage(
+            JSON.stringify({
+              MessageId: 'Host_PostmessageReady',
+              SendTime: Date.now(),
+              Values: {},
+            }),
+            originRef.current,
+          )
+        }
+        if (status === 'Frame_Ready' || status === 'Failed' || status === 'Document_Loaded') {
+          setFrameVisible(true)
+        }
+      }
       if (msg?.MessageId === 'Doc_ModifiedStatus') {
         const modified = msg.Values?.Modified
         modifiedRef.current = modified === true || modified === 'true'
@@ -219,10 +248,6 @@ export const CollaboraEmbed = forwardRef<
           )
         }
         loadedRef.current = true
-        iframeRef.current?.contentWindow?.postMessage(
-          JSON.stringify({ MessageId: 'Host_PostmessageReady', SendTime: Date.now(), Values: {} }),
-          originRef.current,
-        )
         setLoaded(true)
       }
       if (msg?.MessageId === 'Action_Save_Resp' && saveRequestRef.current) {
@@ -248,7 +273,7 @@ export const CollaboraEmbed = forwardRef<
       }
     }
     window.addEventListener('message', onMessage)
-    const fallback = setTimeout(() => setLoaded(true), 45_000)
+    const fallback = setTimeout(() => setFrameVisible(true), 15_000)
     return () => {
       window.removeEventListener('message', onMessage)
       clearTimeout(fallback)
@@ -314,9 +339,9 @@ export const CollaboraEmbed = forwardRef<
   useImperativeHandle(
     ref,
     () => ({
-      isLoaded: () => loaded,
+      isLoaded: () => loadedRef.current,
       save: () => {
-        if (!loaded || !originRef.current || !iframeRef.current?.contentWindow) {
+        if (!loadedRef.current || !originRef.current || !iframeRef.current?.contentWindow) {
           return Promise.reject(new Error('Wait for the document editor to finish loading.'))
         }
         if (saveRequestRef.current) {
@@ -479,7 +504,7 @@ export const CollaboraEmbed = forwardRef<
       />
       <GeneratedValue
         value={
-          !loaded ? (
+          !loaded && !frameVisible ? (
             <div className="absolute inset-0 z-10 grid place-items-center bg-white dark:bg-slate-950">
               <div className="flex flex-col items-center gap-3">
                 <LogoMark draw animated className="h-16 w-16" />

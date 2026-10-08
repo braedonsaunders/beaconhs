@@ -525,7 +525,7 @@ Imported Word files must be .docx files and 100 MB or smaller.
 
 ## Edit the draft
 
-1. Open the document's **Write** tab. The Word editor opens in Editing mode with its ribbon visible. Use the Editing dropdown at the top right to switch to Viewing mode when you only want to read.
+1. Open the document's **Write** tab. The Word editor opens in Editing mode with its ribbon visible. Use the Editing dropdown at the top right to switch to Viewing mode when you only want to read. The loading screen clears when the editor is ready to show its own progress. Publishing still waits until the document has finished loading and saving.
 2. Page size, headers, footers, images, tables — set them in the editor, exactly like Word.
 3. Use the editor's **Review** menu for track changes and comments while a document is being reviewed.
 4. **Download DOCX** saves the working file; **Replace** swaps in a different Word file.
@@ -619,8 +619,8 @@ A document book combines approved documents into one controlled PDF.
 
 1. Open [Document books](/documents/books) and click **New book**.
 2. Add published documents from the **Build** panel on the left. Draft, archived, and deleted documents are not available in the picker.
-3. Add chapters and sections to structure a long manual, and drag everything into the required order. Set how it prints in the **Print** panel and fill in the **Settings** panel, then click **Publish book**.
-4. BeaconHS checks that every document has a valid published PDF and pins the book to those exact version numbers.
+3. Add chapters and sections to structure a long manual, and drag everything into the required order. **Publish book** is unavailable while the order is saving. If saving fails, the previous order returns and the error is shown. Set how it prints in the **Print** panel and fill in the **Settings** panel, then click **Publish book**.
+4. BeaconHS checks that every document has a valid published PDF and pins the book to those exact version numbers. If a document is still Draft or its PDF is unavailable, the message names the problem. The book stays Draft. Publish or remove that document, then try **Publish book** again. The version labels update when publication succeeds.
 5. A published book's contents, order, and settings are locked. Click **Unpublish** before making changes, then click **Publish book** again when the revised book is ready.
 
 A document cannot be unpublished, archived, or deleted while it belongs to a published book. Unpublish the book first. A document also cannot be unpublished, archived, or deleted while an active compliance obligation requires it. Pause or delete the obligation first. These checks prevent an approved book or live requirement from silently losing its document.

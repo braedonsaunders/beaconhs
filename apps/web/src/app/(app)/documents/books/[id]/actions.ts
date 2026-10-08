@@ -11,7 +11,7 @@ import {
   pdfTemplates,
   type DocumentBookPrintSettings,
 } from '@beaconhs/db/schema'
-import { MAX_DOCUMENT_BOOK_ITEMS } from '@beaconhs/db'
+import { DocumentBookPublicationError, MAX_DOCUMENT_BOOK_ITEMS } from '@beaconhs/db'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
@@ -311,13 +311,21 @@ export async function addDocumentsToBookAction(
   revalidatePath(`/documents/books/${bookId}`)
 }
 
-export async function publishBookAction(bookId: string): Promise<void> {
+export async function publishBookAction(
+  bookId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'documents.manage')
   if (!isUuid(bookId)) throw new Error('Document book not found.')
-  await ctx.db((tx) => publishDocumentBook(tx, ctx, bookId))
+  try {
+    await ctx.db((tx) => publishDocumentBook(tx, ctx, bookId))
+  } catch (error) {
+    if (error instanceof DocumentBookPublicationError) return { ok: false, error: error.message }
+    throw error
+  }
   revalidatePath(`/documents/books/${bookId}`)
   revalidatePath('/documents/books')
+  return { ok: true }
 }
 
 export async function unpublishBookAction(bookId: string): Promise<void> {
