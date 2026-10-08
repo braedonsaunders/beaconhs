@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm'
 import {
+  UiBackLink,
   Alert,
   AlertDescription,
   AlertTitle,
@@ -791,8 +792,80 @@ export default async function HazidAssessmentDetailPage({
   const editQuestionRow = editQuestionId
     ? questions.find((q) => q.id === editQuestionId)
     : undefined
+  const assessmentActions = (
+    <AssessmentHeaderActions
+      id={id}
+      locked={a.locked}
+      canUpdate={canUpdate}
+      revision={a.signingRevision}
+      signed={signedCount}
+      crewTotal={signatures.length}
+      canManage={canManage}
+      canReview={canReview}
+      pdfHref={`/hazard-assessments/${id}/pdf`}
+      emailHref={`/hazard-assessments/${id}?send=1`}
+      reviewHref={drawerHref('safety-review')}
+      deleteHref={drawerHref('confirm-delete')}
+      copyAction={copyAssessment}
+      // Mirrors the server-side gate in lockAssessment: a hazard
+      // assessment nobody signed must not become a submitted record.
+      lockAction={lockAssessment}
+      unlockAction={unlockAssessment}
+    />
+  )
   return (
     <DetailPageLayout
+      mobileHeader={
+        <div className="flex min-h-11 items-center gap-2" data-mobile-record-header>
+          <UiBackLink
+            href="/hazard-assessments"
+            label={tGeneratedValue('Back to assessments')}
+            iconOnly
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl text-teal-700 hover:bg-slate-100 dark:text-teal-300 dark:hover:bg-slate-800"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold" title={a.reference}>
+              <GeneratedValue value={a.reference} />
+            </p>
+            <p
+              className={
+                a.locked
+                  ? 'flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-300'
+                  : 'flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400'
+              }
+            >
+              {a.locked ? <Lock size={11} className="shrink-0" /> : null}
+              <span className="truncate">
+                <GeneratedText id={a.locked ? 'm_0e259fa0babc2d' : 'm_1a03b06872ffd9'} />
+              </span>
+            </p>
+          </div>
+          <div className="shrink-0 [&_button]:min-h-11">{assessmentActions}</div>
+        </div>
+      }
+      mobileDetails={
+        <div className="space-y-1">
+          <h1 className="text-lg font-semibold">
+            <GeneratedValue value={type?.name ?? tGenerated('m_171ca9d60eef14')} />
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            <GeneratedValue
+              value={`${a.reference} · ${formatDateTime(a.occurredAt, ctx.timezone, ctx.locale)}`}
+            />
+          </p>
+          {a.locked ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              <GeneratedText id="m_110a9e28d94199" />{' '}
+              <GeneratedValue
+                value={a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone, ctx.locale) : '—'}
+              />
+            </p>
+          ) : null}
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            <GeneratedText id="m_09dfacfcb5fc80" /> <GeneratedValue value={a.reviewStatus} />
+          </p>
+        </div>
+      }
       header={
         <>
           <DetailHeader
@@ -829,27 +902,7 @@ export default async function HazidAssessmentDetailPage({
                 </Badge>
               </div>
             }
-            actions={
-              <AssessmentHeaderActions
-                id={id}
-                locked={a.locked}
-                canUpdate={canUpdate}
-                revision={a.signingRevision}
-                signed={signedCount}
-                crewTotal={signatures.length}
-                canManage={canManage}
-                canReview={canReview}
-                pdfHref={`/hazard-assessments/${id}/pdf`}
-                emailHref={`/hazard-assessments/${id}?send=1`}
-                reviewHref={drawerHref('safety-review')}
-                deleteHref={drawerHref('confirm-delete')}
-                copyAction={copyAssessment}
-                // Mirrors the server-side gate in lockAssessment: a hazard
-                // assessment nobody signed must not become a submitted record.
-                lockAction={lockAssessment}
-                unlockAction={unlockAssessment}
-              />
-            }
+            actions={assessmentActions}
           />
         </>
       }
@@ -858,7 +911,7 @@ export default async function HazidAssessmentDetailPage({
           <GeneratedValue
             value={
               a.locked ? (
-                <Alert variant="warning">
+                <Alert variant="warning" className="hidden sm:block">
                   <AlertTitle>
                     <GeneratedText id="m_17b55a364cc0d2" />
                   </AlertTitle>
@@ -868,8 +921,8 @@ export default async function HazidAssessmentDetailPage({
                       value={
                         a.lockedAt ? formatDateTime(a.lockedAt, ctx.timezone, ctx.locale) : '—'
                       }
-                    />
-                    <GeneratedText id="m_15daaad329f55e" />
+                    />{' '}
+                    <GeneratedValue value="Job content is locked. Crew can still be added and signed. Unlock to change the job; signatures clear only when content changes." />
                   </AlertDescription>
                 </Alert>
               ) : null

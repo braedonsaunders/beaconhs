@@ -77,6 +77,8 @@ export function ListPageLayout({
  */
 export function DetailPageLayout({
   header,
+  mobileHeader,
+  mobileDetails,
   alerts,
   subtabs,
   children,
@@ -84,6 +86,10 @@ export function DetailPageLayout({
   fullBleed = false,
 }: {
   header: React.ReactNode
+  /** Compact phone header; the desktop header and action behavior stay intact. */
+  mobileHeader?: React.ReactNode
+  /** Phone-only title/metadata that scroll with the record instead of occupying the fixed rail. */
+  mobileDetails?: React.ReactNode
   alerts?: React.ReactNode
   subtabs?: React.ReactNode
   children: React.ReactNode
@@ -102,12 +108,24 @@ export function DetailPageLayout({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <FadeInHeader className="mx-auto max-w-screen-2xl px-3 pt-3 sm:px-6 sm:pt-5">
-          <GeneratedValue value={header} />
+        <FadeInHeader
+          className={cn(
+            'mx-auto max-w-screen-2xl px-3 sm:px-6 sm:pt-5',
+            mobileHeader ? 'pt-1' : 'pt-3',
+          )}
+        >
+          {mobileHeader ? <div className="sm:hidden">{mobileHeader}</div> : null}
+          {mobileHeader ? (
+            <div className="hidden sm:block">
+              <GeneratedValue value={header} />
+            </div>
+          ) : (
+            <GeneratedValue value={header} />
+          )}
           <GeneratedValue
             value={
               alerts ? (
-                <div className="mt-2.5 space-y-2 sm:mt-3">
+                <div className={cn('mt-2.5 space-y-2 sm:mt-3', mobileHeader && 'hidden sm:block')}>
                   <GeneratedValue value={alerts} />
                 </div>
               ) : null
@@ -116,7 +134,7 @@ export function DetailPageLayout({
           <GeneratedValue
             value={
               subtabs ? (
-                <div className="mt-2.5 sm:mt-4">
+                <div className={mobileHeader ? 'mt-1 sm:mt-4' : 'mt-2.5 sm:mt-4'}>
                   <GeneratedValue value={subtabs} />
                 </div>
               ) : null
@@ -131,6 +149,12 @@ export function DetailPageLayout({
             className,
           )}
         >
+          {mobileHeader ? (
+            <div className="sm:hidden">
+              {mobileDetails ? <div className="mb-3">{mobileDetails}</div> : null}
+              {alerts}
+            </div>
+          ) : null}
           <GeneratedValue value={children} />
         </FadeInBody>
       </div>

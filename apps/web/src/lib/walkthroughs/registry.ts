@@ -147,7 +147,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'Submit it',
-        body: 'When everything is filled in and the crew has signed, tap Submit & lock and confirm. Use Unlock if the job changes after submitting. Earlier signatures stay in Activity, and the changed job needs fresh signatures.',
+        body: 'When everything is filled in and the crew has signed, tap Submit & lock (Submit on a phone) and confirm. Use Unlock if the job changes after submitting. Earlier signatures stay in Activity, and the changed job needs fresh signatures.',
       },
     ],
   },

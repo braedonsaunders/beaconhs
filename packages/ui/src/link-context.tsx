@@ -43,7 +43,7 @@ export function UiLink({
 // DetailHeader/PageHeader gains this behaviour with no per-page change.
 
 /** The `back` fallback plus styling; the impl upgrades `href`/`label` at render. */
-export type BackLinkProps = { href: string; label: string; className?: string }
+export type BackLinkProps = { href: string; label: string; className?: string; iconOnly?: boolean }
 export type BackLinkLike = ComponentType<BackLinkProps>
 
 const UiBackLinkContext = createContext<BackLinkLike | null>(null)
@@ -64,12 +64,13 @@ export function UiBackLinkProvider({
  * `← label` anchor to `href`. Safe to use in server components (it's a client
  * component that reads context at render time).
  */
-export function UiBackLink({ href, label, className }: BackLinkProps) {
+export function UiBackLink({ href, label, className, iconOnly = false }: BackLinkProps) {
   const Impl = useContext(UiBackLinkContext)
-  if (Impl) return <Impl href={href} label={label} className={className} />
+  if (Impl) return <Impl href={href} label={label} className={className} iconOnly={iconOnly} />
   return (
     <UiLink href={href} className={className}>
-      ← {label}
+      <span aria-hidden={iconOnly || undefined}>←</span>{' '}
+      <span className={iconOnly ? 'sr-only' : undefined}>{label}</span>
     </UiLink>
   )
 }

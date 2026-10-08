@@ -153,6 +153,8 @@ Walking through the hazards as a crew catches problems while they are still chea
 
 Open **Hazard Assessments** in the left menu, or go to [Hazard assessments](/hazard-assessments).
 
+On a phone, the assessment number, **In progress** or **Locked** status, action buttons, and section tabs stay at the top. Tap a section tab to jump to that part of the assessment. The assessment title, dates, and safety review status scroll with the page; scroll to the top of the content to see them. **Submit** opens the **Submit & lock** confirmation. **Unlock** and **More actions** remain at the top of a locked assessment.
+
 Use **All locations** to search the complete set of locations used by assessments you are allowed to open. On **My hazard assessments**, it searches only locations used by assessments you started. If the picker says more results exist, add more of the location name or code.
 
 ## Who can see which assessments

@@ -77,6 +77,7 @@ export function AssessmentHeaderActions({
       lockAction={lockAction}
       unlockAction={unlockAction}
       lockDisabledReason={lockDisabledReason}
+      mobileLockLabel="Submit"
     />
   )
 }

@@ -16,7 +16,7 @@ import { UiBackLinkProvider, UiLink, type BackLinkProps } from '@beaconhs/ui'
 import { backLabel, sanitizeFrom } from '@/lib/back-nav'
 import { NavHistoryTracker, useNavBack } from './nav-history'
 
-export function SmartBackLink({ href, label, className }: BackLinkProps) {
+export function SmartBackLink({ href, label, className, iconOnly = false }: BackLinkProps) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const navBack = useNavBack(pathname)
@@ -33,7 +33,10 @@ export function SmartBackLink({ href, label, className }: BackLinkProps) {
 
   return (
     <UiLink href={target.href} className={className}>
-      ← <GeneratedValue value={target.label} />
+      <span aria-hidden={iconOnly || undefined}>←</span>{' '}
+      <span className={iconOnly ? 'sr-only' : undefined}>
+        <GeneratedValue value={target.label} />
+      </span>
     </UiLink>
   )
 }

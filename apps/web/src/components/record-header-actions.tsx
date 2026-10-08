@@ -121,6 +121,7 @@ export function RecordHeaderActions({
   lockAction,
   unlockAction,
   lockLabel = 'Submit & lock',
+  mobileLockLabel = lockLabel,
   lockDisabledReason = null,
 }: {
   id: string
@@ -139,6 +140,8 @@ export function RecordHeaderActions({
   lockAction: LockAction
   unlockAction: LockAction
   lockLabel?: string
+  /** Short phone label; confirmation still describes the complete action. */
+  mobileLockLabel?: string
   /**
    * Why this record cannot be submitted yet. The server is authoritative and
    * rejects the submit regardless; showing the reason here stops the button
@@ -173,7 +176,20 @@ export function RecordHeaderActions({
         disabledReason={locked ? null : lockDisabledReason}
       >
         {locked ? <Unlock size={14} /> : <Lock size={14} />}
-        {locked ? <GeneratedText id="m_0ca830c9381fd6" /> : <GeneratedValue value={lockLabel} />}
+        {locked ? (
+          <GeneratedText id="m_0ca830c9381fd6" />
+        ) : mobileLockLabel === lockLabel ? (
+          <GeneratedValue value={lockLabel} />
+        ) : (
+          <>
+            <span className="sm:hidden">
+              <GeneratedValue value={mobileLockLabel} />
+            </span>
+            <span className="hidden sm:inline">
+              <GeneratedValue value={lockLabel} />
+            </span>
+          </>
+        )}
       </ConfirmedSubmitButton>
       {lockError ? (
         <div role="alert" className="mt-2 max-w-sm text-sm text-red-700 dark:text-red-300">
