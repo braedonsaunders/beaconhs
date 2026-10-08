@@ -344,7 +344,7 @@ export const REPORT_VIEWS_SQL: string[] = [
    FROM equipment_items e
    LEFT JOIN equipment_types t ON t.id = e.type_id AND t.tenant_id = e.tenant_id
    LEFT JOIN equipment_categories type_category
-     ON type_category.id = t.category_id AND type_category.tenant_id = t.tenant_id
+     ON type_category.id = e.category_id AND type_category.tenant_id = e.tenant_id
    LEFT JOIN org_units site ON site.id = e.current_site_org_unit_id AND site.tenant_id = e.tenant_id
    LEFT JOIN people holder ON holder.id = e.current_holder_person_id AND holder.tenant_id = e.tenant_id
    LEFT JOIN LATERAL (

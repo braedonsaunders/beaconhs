@@ -15,14 +15,16 @@ describe('reporting view cutover', () => {
     expect(appendedColumnsAt).toBeGreaterThan(installedTailAt)
   })
 
-  it('reads equipment type categories through the canonical catalog relation', () => {
+  it('reads equipment categories from each asset rather than its type', () => {
     const fleet = REPORT_VIEWS_SQL.find((statement) =>
       statement.includes('CREATE OR REPLACE VIEW report_equipment_fleet'),
     )
     expect(fleet).toBeDefined()
     expect(fleet).toContain('type_category.name                   AS type_category')
     expect(fleet).toContain('LEFT JOIN equipment_categories type_category')
-    expect(fleet).toContain('type_category.id = t.category_id')
+    expect(fleet).toContain('type_category.id = e.category_id')
+    expect(fleet).toContain('type_category.tenant_id = e.tenant_id')
+    expect(fleet).not.toContain('type_category.id = t.category_id')
     expect(fleet).not.toContain('t.category                           AS type_category')
   })
 

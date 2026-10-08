@@ -41,14 +41,14 @@ export async function GET(
     }
     try {
       const parsed: unknown = JSON.parse(filtersParam)
-      assertBoundedReportFilters(parsed)
-      filters = parsed as ReportRuleGroup
+      if (parsed !== null) assertBoundedReportFilters(parsed)
+      filters = parsed as ReportRuleGroup | null
     } catch {
       return NextResponse.json({ error: 'Report filters are invalid.' }, { status: 400 })
     }
   }
   const groupByParam = request.nextUrl.searchParams.get('groupBy')
-  const groupBy = groupByParam?.trim() || undefined
+  const groupBy = groupByParam === null ? undefined : groupByParam.trim() || null
   if (groupBy && groupBy.length > 128) {
     return NextResponse.json({ error: 'Report grouping is invalid.' }, { status: 400 })
   }

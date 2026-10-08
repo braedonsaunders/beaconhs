@@ -236,8 +236,8 @@ Open [Reports](/reports) from the sidebar. It has two tabs: **Reports** and **Sc
 
 1. Use **Search reports…** or **Category** to narrow the list.
 2. Click the report name or **Open**.
-3. The report opens with a **Run filters and grouping** panel on the left and the paper preview on the right.
-4. Add one or more filters. Every filter uses a field from that report's data source. Fields that draw from a list — people, courses, sites, statuses — show a searchable picker; free-form fields let you type values.
+3. The report opens with **Run filters and grouping** above the full-width paper preview.
+4. Add one or more filters. The field, operator, and value stay on one row, including on a phone. Every filter uses a field from that report's data source. Fields that draw from a list — people, courses, sites, statuses — show a searchable picker; free-form fields let you type values.
 5. Under **Group results by**, choose the field that should create the printed sections. For training reports, choose **Person** or **Course**.
 6. Click **Apply and run**. The paper preview and summary now use those exact controls.
 7. Click **Reset to saved report** to return to the report's saved filters and grouping.
