@@ -222,6 +222,13 @@ const STATIC_GROUPS: Group[] = [
         permission: 'admin.audit.read',
       },
       {
+        href: '/admin/assistant-log',
+        icon: <Sparkles size={18} />,
+        title: 'Assistant log',
+        desc: 'Assistant usage by user, date & response outcome',
+        permission: 'admin.audit.read',
+      },
+      {
         href: '/admin/email-log',
         icon: <Mail size={18} />,
         title: 'Email log',

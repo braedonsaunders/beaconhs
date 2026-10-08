@@ -869,6 +869,7 @@ On a sync run, use the record-decision search and the **Action** and **Entity** 
 
 - **Audit log** — every change captured, with who did it and what changed.
 - **Email log** and **SMS log** — every message the system sent.
+- **Assistant log** — saved assistant usage by user, date, and response outcome. Conversation contents stay private.
 
 ## Modules
 
@@ -938,5 +939,25 @@ This keeps admin-only tours away from field workers, and field tours away from o
 
 - After changing roles or auto-start, run **Preview** once to make sure the tour still makes sense for that audience.
 - If a page changed a lot, preview its tour — a step that points at something that moved will confuse people more than no tour at all.`,
+  },
+  {
+    slug: 'assistant-log',
+    title: 'Assistant log',
+    group: 'Administration',
+    iconKey: 'sparkles',
+    summary: 'See who has used the assistant and whether responses completed.',
+    keywords: ['assistant', 'AI', 'usage', 'activity', 'questions', 'responses', 'failed'],
+    requiredPermission: 'admin.audit.read',
+    body: `The Assistant log shows saved assistant conversations in your workspace. It does not show private questions or answers. AI writing tools and the issue reporter are separate from the assistant and are not counted here.
+
+## Find assistant usage
+
+1. Open [Admin](/admin), then choose **Assistant log** under **Activity**.
+2. Search by name or choose **User**. Use **From** and **To** to filter by the conversation's **Last used** date, in your account time zone.
+3. Use **Response outcome** to find conversations with **Failed**, **Stopped**, or **Awaiting response** turns.
+
+Each row is one conversation. **Questions** counts saved user messages. **Responses** counts saved assistant replies, including stopped or failed replies. **Failed** and **Stopped** count replies with those recorded outcomes. **Awaiting response** means there are more saved questions than replies; it can include a turn that was interrupted before a reply was saved.
+
+The totals follow your current filters and include all matching pages. Use the page controls below the table to see more conversations. Deleted conversations are not included. Only administrators with audit-log access can open this log.`,
   },
 ]
