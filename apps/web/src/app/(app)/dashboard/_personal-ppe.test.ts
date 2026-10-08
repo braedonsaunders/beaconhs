@@ -18,30 +18,17 @@ function database() {
             'issued',
             '2026-01-21',
             '2027-01-21',
-            '2026-01-21',
-            '2027-01-21',
             'Harness',
             true,
             4,
             4,
           ],
-          ['shirt', null, null, 'issued', null, null, null, null, 'Hi Viz Shirts', false, 0, 0],
-          [
-            'annual-due',
-            null,
-            null,
-            'issued',
-            '2026-10-01',
-            '2026-10-10',
-            null,
-            null,
-            'Harness',
-            true,
-            4,
-            4,
-          ],
-          ['unsafe', null, null, 'out_of_service', null, null, null, null, 'Harness', true, 4, 4],
-          ['due', null, null, 'issued', null, null, null, null, 'Lanyard', true, 7, 7],
+          ['shirt', null, null, 'issued', null, null, 'Hi Viz Shirts', false, 0, 0],
+          ['annual-due', null, null, 'issued', null, null, 'Harness', true, 4, 4],
+          ['unsafe', null, null, 'out_of_service', null, null, 'Harness', true, 4, 4],
+          ['due', null, null, 'issued', null, null, 'Lanyard', true, 7, 7],
+          ['pre-use-only', null, null, 'issued', null, null, 'Gloves', true, 3, 0],
+          ['no-checklist', null, null, 'issued', null, null, 'Hat', true, 0, 0],
         ],
       }
     },
@@ -50,32 +37,32 @@ function database() {
 }
 
 describe('personal PPE dashboard data', () => {
-  it('keeps current and non-inspectable assigned PPE while prioritizing required inspections', async () => {
+  it('keeps inspectable gear and prioritizes annual warnings independently of pre-use checks', async () => {
     const { tx, queries } = database()
     const items = await loadPersonalPpe(tx, personId, '2026-10-01', true)
     expect(items.map((item) => item.id)).toEqual([
       'annual-due',
       'unsafe',
       'due',
-      'shirt',
+      'pre-use-only',
       'harness',
     ])
     expect(items.find((item) => item.id === 'harness')).toMatchObject({
-      inspectionState: 'current',
-      inspectionDueOn: '2027-01-21',
+      annualInspectionState: 'current',
+      annualInspectionDueOn: '2027-01-21',
       canRecordPreUse: true,
     })
-    expect(items.find((item) => item.id === 'shirt')).toMatchObject({
-      inspectionState: 'not_required',
-      inspectionKind: null,
-      canRecordPreUse: false,
+    expect(items.find((item) => item.id === 'pre-use-only')).toMatchObject({
+      annualInspectionState: 'not_required',
+      annualInspectionDueOn: null,
+      canRecordPreUse: true,
     })
     expect(items.find((item) => item.id === 'annual-due')).toMatchObject({
-      inspectionKind: 'annual',
-      inspectionState: 'never_inspected',
+      annualInspectionState: 'never_inspected',
       canRecordPreUse: true,
     })
     expect(items.find((item) => item.id === 'unsafe')?.canRecordPreUse).toBe(false)
+    expect(items.some((item) => item.id === 'shirt' || item.id === 'no-checklist')).toBe(false)
     expect(queries[0]!.text).toContain('"ppe_items"."current_holder_person_id" =')
     expect(queries[0]!.text).toContain('"ppe_items"."deleted_at" is null')
     expect(queries[0]!.values).toEqual([personId, 'issued', 'out_of_service'])

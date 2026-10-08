@@ -981,7 +981,7 @@ Open **PPE** in the left menu. That opens the list at [PPE](/ppe). It starts on 
 2. Find your items — **Assigned to** shows the holder and assignment date. **Inspection** shows **Overdue**, **Due today**, **Due soon**, **Current**, **Never inspected**, or **Not required**.
 3. Tap an item to open it. The **Status & schedule** panel shows **Currently with**, **Last inspection**, and **Next inspection due**.
 
-The **My PPE** dashboard card shows gear assigned to you, including items whose inspection is **Current** or **Not required**. Items marked **Out of service** must not be used. Tap **Inspect** beside an inspectable item to open its **Pre-use** checklist directly. The inspection badge may show an annual inspection is due; this does not change which checklist the shortcut opens. Only PPE managers can record annual inspections.
+The **My PPE** dashboard card shows assigned gear with an inspection checklist. Gear that needs no inspection is hidden from this card; open **View all** to find it in the PPE register. Full item names and serial numbers wrap onto extra lines on a phone. Annual inspection warnings appear below the item details when an annual check is missing, due, or coming due. Current annual inspections and pre-use checks do not have a status badge here. Items marked **Out of service** must not be used. Tap **Inspect** beside an item with a pre-use checklist to open that checklist directly. The annual warning does not change which checklist the shortcut opens. Only PPE managers can record annual inspections.
 
 ## Review all PPE inspections (managers)
 

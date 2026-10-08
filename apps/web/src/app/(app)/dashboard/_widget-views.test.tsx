@@ -32,7 +32,7 @@ function render(items: DashboardMetrics['myPpe']) {
   )
 }
 describe('My PPE assigned gear', () => {
-  it('shows current gear and non-inspectable clothing with accurate actions', () => {
+  it('offers pre-use inspections without pills for current annuals or pre-use-only gear', () => {
     const html = render([
       {
         id: 'harness',
@@ -40,32 +40,49 @@ describe('My PPE assigned gear', () => {
         serialNumber: '106164646-104',
         size: null,
         status: 'issued',
-        inspectionKind: 'annual',
         canRecordPreUse: true,
-        inspectionState: 'current',
-        inspectionDueOn: '2027-01-21',
+        annualInspectionState: 'current',
+        annualInspectionDueOn: '2027-01-21',
       },
       {
-        id: 'shirt',
-        typeName: 'Hi Viz Shirts',
+        id: 'gloves',
+        typeName: 'Protective gloves',
         serialNumber: null,
         size: null,
         status: 'issued',
-        inspectionKind: null,
-        canRecordPreUse: false,
-        inspectionState: 'not_required',
-        inspectionDueOn: null,
+        canRecordPreUse: true,
+        annualInspectionState: 'not_required',
+        annualInspectionDueOn: null,
       },
     ])
     expect(html).toContain('Harness')
-    expect(html).toContain('Current')
-    expect(html).toContain('Hi Viz Shirts')
-    expect(html).toContain('Not required')
+    expect(html).not.toContain('Current')
+    expect(html).toContain('Protective gloves')
+    expect(html).not.toContain('Not required')
+    expect(html).not.toContain('Annual')
     expect(html).toContain('Assigned PPE: 2')
     expect(html).toContain('kind=pre_use')
     expect(html).not.toContain('kind=annual')
     expect(html).not.toContain('kind=null')
-    expect(html).not.toContain('/ppe/shirt?')
+    expect(html).toContain('/ppe/gloves?')
+  })
+  it('shows annual warnings beside a pre-use-only inspection shortcut', () => {
+    const html = render([
+      {
+        id: 'annual-due',
+        typeName: 'Harness',
+        serialNumber: '106164646-104',
+        size: null,
+        status: 'issued',
+        canRecordPreUse: true,
+        annualInspectionState: 'never_inspected',
+        annualInspectionDueOn: null,
+      },
+    ])
+    expect(html).toContain('Annual')
+    expect(html).toContain('Never inspected')
+    expect(html).toContain('kind=pre_use')
+    expect(html).not.toContain('kind=annual')
   })
   it('warns about held out-of-service gear and gives an assignment empty state', () => {
     expect(
@@ -76,13 +93,12 @@ describe('My PPE assigned gear', () => {
           serialNumber: null,
           size: null,
           status: 'out_of_service',
-          inspectionKind: 'annual',
           canRecordPreUse: false,
-          inspectionState: 'current',
-          inspectionDueOn: '2027-01-21',
+          annualInspectionState: 'current',
+          annualInspectionDueOn: '2027-01-21',
         },
       ]),
     ).toContain('Out of service')
-    expect(render([])).toContain('No PPE assigned to you.')
+    expect(render([])).toContain('No assigned PPE needs inspection.')
   })
 })

@@ -57,11 +57,7 @@ import { AnimatedBar } from './_bar'
 import { QuickActions } from './_quick-actions'
 import type { QuickAction } from './_quick-actions-shared'
 import { checkInEquipment } from '../equipment/_actions'
-import {
-  ppeInspectionStateLabel,
-  type PpeInspectionKind,
-  type PpeInspectionState,
-} from '@/lib/ppe-inspection-due'
+import { ppeInspectionStateLabel, type PpeInspectionState } from '@/lib/ppe-inspection-due'
 
 // =====================================================================
 // Public entry — switch on widget id and render the right card
@@ -1452,44 +1448,42 @@ function MyPpeCard({ items }: { items: DashboardMetrics['myPpe'] }) {
         value={
           items.length === 0 ? (
             <EmptyRow>
-              <GeneratedValue value="No PPE assigned to you." />
+              <GeneratedValue value="No assigned PPE needs inspection." />
             </EmptyRow>
           ) : (
             <ul className="space-y-0.5 px-2 pb-2">
               <GeneratedValue
                 value={items.map((p, idx) => {
                   const sub =
-                    [p.serialNumber, p.size, p.inspectionDueOn ? `Due ${p.inspectionDueOn}` : null]
+                    [
+                      p.serialNumber,
+                      p.size,
+                      p.annualInspectionDueOn ? `Due ${p.annualInspectionDueOn}` : null,
+                    ]
                       .filter(Boolean)
                       .join(' · ') || '—'
+                  const showAnnualWarning =
+                    p.annualInspectionState !== 'current' &&
+                    p.annualInspectionState !== 'not_required'
                   return (
                     <motion.li
                       key={p.id}
                       initial={{ opacity: 0, x: -6 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.06 + idx * 0.04, duration: 0.3 }}
-                      className="group flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                      className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1.5 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
                     >
                       <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100 ring-inset dark:bg-teal-950/50 dark:text-teal-300 dark:ring-teal-900/40">
                         <HardHat size={15} />
                       </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/ppe/${p.id}` as any}
-                            className="truncate text-sm font-medium text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300"
-                          >
-                            <GeneratedValue value={p.typeName} />
-                          </Link>
-                          {p.status === 'out_of_service' ? (
-                            <Badge variant="destructive">
-                              <GeneratedValue value="Out of service" />
-                            </Badge>
-                          ) : (
-                            <PpeInspectionBadge state={p.inspectionState} kind={p.inspectionKind} />
-                          )}
-                        </div>
-                        <div className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/ppe/${p.id}` as any}
+                          className="block text-sm font-medium [overflow-wrap:anywhere] text-slate-900 group-hover:text-teal-700 dark:text-slate-100 dark:group-hover:text-teal-300"
+                        >
+                          <GeneratedValue value={p.typeName} />
+                        </Link>
+                        <div className="mt-0.5 text-[11px] [overflow-wrap:anywhere] text-slate-500 dark:text-slate-400">
                           <GeneratedValue value={sub} />
                         </div>
                       </div>
@@ -1498,6 +1492,17 @@ function MyPpeCard({ items }: { items: DashboardMetrics['myPpe'] }) {
                           href={`/ppe/${p.id}?tab=inspections&drawer=record-inspection&kind=pre_use`}
                           tone="teal"
                         />
+                      )}
+                      {(p.status === 'out_of_service' || showAnnualWarning) && (
+                        <div className="col-span-2 col-start-2 min-w-0">
+                          {p.status === 'out_of_service' ? (
+                            <Badge variant="destructive">
+                              <GeneratedValue value="Out of service" />
+                            </Badge>
+                          ) : (
+                            <AnnualPpeInspectionBadge state={p.annualInspectionState} />
+                          )}
+                        </div>
                       )}
                     </motion.li>
                   )
@@ -1511,13 +1516,7 @@ function MyPpeCard({ items }: { items: DashboardMetrics['myPpe'] }) {
   )
 }
 
-function PpeInspectionBadge({
-  state,
-  kind,
-}: {
-  state: PpeInspectionState
-  kind: PpeInspectionKind | null
-}) {
+function AnnualPpeInspectionBadge({ state }: { state: PpeInspectionState }) {
   const variant =
     state === 'overdue'
       ? 'destructive'
@@ -1526,12 +1525,7 @@ function PpeInspectionBadge({
         : 'secondary'
   return (
     <Badge variant={variant} className="shrink-0">
-      {kind === 'annual' && (
-        <>
-          <GeneratedValue value="Annual" /> ·{' '}
-        </>
-      )}
-      <GeneratedValue value={ppeInspectionStateLabel(state)} />
+      <GeneratedValue value="Annual" /> · <GeneratedValue value={ppeInspectionStateLabel(state)} />
     </Badge>
   )
 }

@@ -3,7 +3,7 @@ import type { Database } from '@beaconhs/db'
 import { ppeItems, ppeTypes, ppeTypeInspectionCriteria } from '@beaconhs/db/schema'
 import { resolvePpeInspectionDue } from '@/lib/ppe-inspection-due'
 
-/** Assigned gear remains visible even when its inspection is current or not required. */
+/** Inspectable assigned gear with annual warnings independent of its pre-use checklist. */
 export async function loadPersonalPpe(
   tx: Database,
   myPersonId: string | null,
@@ -18,8 +18,6 @@ export async function loadPersonalPpe(
             serialNumber: ppeItems.serialNumber,
             size: ppeItems.size,
             status: ppeItems.status,
-            lastInspectionOn: ppeItems.lastInspectionOn,
-            nextInspectionDue: ppeItems.nextInspectionDue,
             lastAnnualInspectionOn: ppeItems.lastAnnualInspectionOn,
             nextAnnualInspectionDue: ppeItems.nextAnnualInspectionDue,
             typeName: ppeTypes.name,
@@ -44,15 +42,20 @@ export async function loadPersonalPpe(
           )
           .orderBy(asc(ppeTypes.name), asc(ppeItems.serialNumber))
       )
+        .filter(
+          (r) =>
+            r.isInspectable &&
+            (Number(r.preUseCriteriaCount) > 0 || Number(r.annualCriteriaCount) > 0),
+        )
         .map((r) => ({
           row: r,
           due: resolvePpeInspectionDue({
             todayIso,
             isInspectable: r.isInspectable,
-            preUseCriteriaCount: Number(r.preUseCriteriaCount),
+            preUseCriteriaCount: 0,
             annualCriteriaCount: Number(r.annualCriteriaCount),
-            lastInspectionOn: r.lastInspectionOn ? String(r.lastInspectionOn) : null,
-            nextInspectionDue: r.nextInspectionDue ? String(r.nextInspectionDue) : null,
+            lastInspectionOn: null,
+            nextInspectionDue: null,
             lastAnnualInspectionOn: r.lastAnnualInspectionOn
               ? String(r.lastAnnualInspectionOn)
               : null,
@@ -75,14 +78,10 @@ export async function loadPersonalPpe(
           size: row.size,
           status:
             row.status === 'out_of_service' ? ('out_of_service' as const) : ('issued' as const),
-          inspectionKind: due.kind,
           canRecordPreUse:
-            canInspect &&
-            row.isInspectable &&
-            Number(row.preUseCriteriaCount) > 0 &&
-            row.status !== 'out_of_service',
-          inspectionState: due.state,
-          inspectionDueOn: due.dueOn,
+            canInspect && Number(row.preUseCriteriaCount) > 0 && row.status !== 'out_of_service',
+          annualInspectionState: due.state,
+          annualInspectionDueOn: due.dueOn,
         }))
     : []
 }
