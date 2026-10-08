@@ -93,11 +93,14 @@ export async function RecordActivity({
       return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, readable(v)]))
     return value
   }
-  const signatureIds = data.rows.flatMap((row) =>
-    typeof row.after?.signatureAttachmentId === 'string' && isUuid(row.after.signatureAttachmentId)
-      ? [row.after.signatureAttachmentId]
-      : [],
-  )
+  function signatureAttachment(row: (typeof data.rows)[number]): string | undefined {
+    const id = row.after?.signatureAttachmentId ?? row.before?.signatureAttachmentId
+    return typeof id === 'string' && isUuid(id) ? id : undefined
+  }
+  const signatureIds = data.rows.flatMap((row) => {
+    const id = signatureAttachment(row)
+    return id ? [id] : []
+  })
   const signatureImages = new Map<string, string>()
   if (signatureIds.length)
     await ctx.db(async (tx) => {
@@ -115,10 +118,7 @@ export async function RecordActivity({
     })
   const entries = data.rows.map((row) => ({
     ...row,
-    signatureImage:
-      typeof row.after?.signatureAttachmentId === 'string'
-        ? signatureImages.get(row.after.signatureAttachmentId)
-        : undefined,
+    signatureImage: signatureImages.get(signatureAttachment(row) ?? ''),
     summary:
       typeof row.after?.rowId === 'string' && names.has(row.after.rowId)
         ? `${row.summary ?? row.action} — ${names.get(row.after.rowId)}`

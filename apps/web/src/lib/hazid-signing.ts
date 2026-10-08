@@ -56,7 +56,6 @@ export async function lockHazidForSigning(
   ) {
     throw new HazidSigningError('Assessment not found')
   }
-  if (assessment.locked) throw new HazidSigningError('This assessment is locked')
   return assessment
 }
 
@@ -245,16 +244,4 @@ export async function freezeHazidSigning(
     .update(hazidAssessments)
     .set({ signingFrozenAt: now })
     .where(and(eq(hazidAssessments.tenantId, ctx.tenantId), eq(hazidAssessments.id, assessment.id)))
-}
-
-/** Preserve previous ink and snapshot; clone crew identities into a fresh revision. */
-export async function reviseHazidSigning(
-  ctx: SigningContext,
-  tx: Database,
-  assessmentId: string,
-  revision: number,
-) {
-  await tx.execute(
-    sql`select advance_hazid_signing_revision(${ctx.tenantId}::uuid, ${assessmentId}::uuid, ${revision})`,
-  )
 }

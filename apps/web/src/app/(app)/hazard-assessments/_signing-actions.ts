@@ -5,6 +5,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { unstable_rethrow } from 'next/navigation'
 import { assertCan } from '@beaconhs/tenant'
+import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import {
   hazidAssessmentSignatures,
@@ -332,7 +333,7 @@ async function captureSignature(
       subjectId: assessmentId,
       moduleKey: 'hazid',
       event: 'on_sign',
-      occurrenceKey: updated.id,
+      occurrenceKey: `${updated.id}:${attachmentId}`,
     })
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'hazid_assessment',
@@ -347,6 +348,11 @@ async function captureSignature(
         method: own ? 'own_device' : 'shared_device',
       },
     })
+    if (parent.locked)
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'hazard_assessment',
+        targetRef: {},
+      })
   })
   refresh(assessmentId)
 }
@@ -461,6 +467,81 @@ async function performRequestCrewSignatures(assessmentId: string) {
   return result
 }
 
+async function performChangeSignature(
+  input: { assessmentId: string; signatureId: string; revision: number; signedAt: string | null },
+  remove: boolean,
+) {
+  const ctx = await signingContext()
+  assertCan(ctx, 'hazid.update')
+  if (
+    !isUuid(input.assessmentId) ||
+    !isUuid(input.signatureId) ||
+    !Number.isInteger(input.revision) ||
+    input.revision < 1 ||
+    (input.signedAt !== null &&
+      (typeof input.signedAt !== 'string' || !Number.isFinite(Date.parse(input.signedAt))))
+  )
+    throw new HazidSigningError('Choose a valid signature')
+  await ctx.db(async (tx) => {
+    const parent = await lockHazidForSigning(ctx, tx, input.assessmentId)
+    if (parent.signingRevision !== input.revision)
+      throw new HazidSigningError('The assessment changed. Refresh the crew before continuing.')
+    const predicate = and(
+      eq(hazidAssessmentSignatures.tenantId, ctx.tenantId),
+      eq(hazidAssessmentSignatures.id, input.signatureId),
+      eq(hazidAssessmentSignatures.assessmentId, input.assessmentId),
+      eq(hazidAssessmentSignatures.revision, input.revision),
+    )
+    const [signature] = await tx
+      .select({
+        signerName: hazidAssessmentSignatures.signerName,
+        signatureAttachmentId: hazidAssessmentSignatures.signatureAttachmentId,
+        signedAt: hazidAssessmentSignatures.signedAt,
+      })
+      .from(hazidAssessmentSignatures)
+      .where(predicate)
+      .for('update')
+      .limit(1)
+    if (!signature) throw new HazidSigningError('Signature not found')
+    if ((signature.signedAt?.toISOString() ?? null) !== input.signedAt)
+      throw new HazidSigningError('The signature changed. Refresh the crew before continuing.')
+    if (remove) {
+      await tx.delete(hazidAssessmentSignatures).where(predicate)
+    } else {
+      if (!signature.signatureAttachmentId)
+        throw new HazidSigningError('This signature is already clear')
+      await tx
+        .update(hazidAssessmentSignatures)
+        .set({
+          signatureAttachmentId: null,
+          signedAt: null,
+          requestId: null,
+          requestedAt: null,
+          requestExpiresAt: null,
+        })
+        .where(predicate)
+    }
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'hazid_assessment',
+      entityId: input.assessmentId,
+      action: remove ? 'delete' : 'update',
+      summary: remove ? 'Removed crew member' : 'Cleared crew signature',
+      before: {
+        signer: signature.signerName,
+        signatureAttachmentId: signature.signatureAttachmentId,
+        signedAt: signature.signedAt?.toISOString() ?? null,
+      },
+      metadata: { signatureId: input.signatureId, revision: input.revision },
+    })
+    if (parent.locked)
+      await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
+        sourceModule: 'hazard_assessment',
+        targetRef: {},
+      })
+  })
+  refresh(input.assessmentId)
+}
+
 async function signingResult<T>(run: () => Promise<T>): Promise<SigningResult<T>> {
   try {
     return { ok: true, data: await run() }
@@ -494,4 +575,11 @@ export async function signOwnAssessment(
   reviewed: boolean,
 ) {
   return signingResult(() => captureSignature(signatureId, revision, ink, reviewed, true))
+}
+
+export async function clearCrewSignature(input: Parameters<typeof performChangeSignature>[0]) {
+  return signingResult(() => performChangeSignature(input, false))
+}
+export async function removeSigningCrew(input: Parameters<typeof performChangeSignature>[0]) {
+  return signingResult(() => performChangeSignature(input, true))
 }

@@ -193,11 +193,11 @@ Supervisors and internal signers must be active people who have not been deleted
 1. In **Signatures**, type a name in **Add crew**. People appear first, followed by matching groups and crews. Tap a result to add its waiting signature box immediately. Keep typing and tapping to add the rest of the crew. For a visitor, type their name and choose **Visitor**.
 2. After reviewing the job together, tap **Sign**, or tap a person's waiting signature box. A drawer shows only their name and signature pad. Draw the signature and tap **Done**. The next person's name appears in the same drawer. **Clear** erases unsaved ink. Every completed signature saves immediately.
 3. Tap **Request** to send personal requests to unsigned active crew members with linked accounts. They open the request from their notification inbox, email, SMS, or phone notification, review the assessment, and tap **Sign**. Requests expire after seven days. Tapping **Request** again renews unsigned requests; signed people are not contacted again.
-4. The signed count and signature boxes update automatically while the page is visible. Use the page buttons for a large crew. People without linked accounts sign in the drawer. Tap the **Remove** icon on an unsigned person's box if they are no longer joining the job.
+4. The signed count and signature boxes update automatically while the page is visible. Use the page buttons for a large crew. People without linked accounts sign in the drawer. Saved signatures cannot be edited. Tap **Clear** on a signed person's box to erase their signature so they can sign again. Tap the **Remove** icon to remove a crew member and their signature. These actions keep the other crew signatures and record the change in **Activity**.
 
 Installing the PWA does not enable phone notifications by itself. On each device, open **Notifications → Preferences → Enable notifications** and allow them. The request page also offers that button. The tenant administrator chooses signing channels in **Admin → Notifications → Hazard assessment signing**; personal channel preferences still apply. Email and SMS require a configured provider. These manual requests are delivered immediately, outside automatic digests and quiet hours.
 
-Edit the assessment normally if the job changes. Earlier signatures stay in **Activity**, and the current crew needs fresh signatures for the changed job. Previous requests cannot sign changed content; tap **Request** again when ready. Adding people to the same job preserves the signatures already collected. Open **Activity** and expand **show changes** to see saved signing details.
+Edit the assessment normally if the job changes. Earlier signatures stay in **Activity**, and the current crew needs fresh signatures for the changed job. Previous requests cannot sign changed content; tap **Request** again when ready. Adding people to the same job preserves the signatures already collected. **Add crew**, **Sign**, **Request**, **Clear**, and **Remove** also work after **Submit & lock**. The job content stays locked. Clearing a signature withdraws its previous personal request; tap **Request** to send a new one. Open **Activity** and expand **show changes** to see saved signing details.
 
 ## Attached assessment apps
 
@@ -223,7 +223,7 @@ People with permission to review hazard assessments can record an advisory decis
 
 ## Finishing up
 
-1. When everything is rated and signed, tap **Submit & lock**, then tap **Submit & lock** again in the confirmation. This makes the assessment read-only and runs its submit flows. **Unlock** reopens a submitted assessment for changes and prepares fresh signature spaces. Earlier signatures stay in **Activity**.
+1. When everything is rated and signed, tap **Submit & lock**, then tap **Submit & lock** again in the confirmation. This locks the job content and runs its submit flows. You can still add crew and collect signatures. **Unlock** reopens the job content without clearing signatures. Changing the content after unlocking prepares fresh signature spaces; earlier signatures stay in **Activity**.
    - **Submit & lock** stays greyed out until every person on the current crew has signed. Remove unsigned people who are no longer joining the job before submitting.
 2. Use **Print / PDF** for a paper copy, or **Send email** to share it.
 

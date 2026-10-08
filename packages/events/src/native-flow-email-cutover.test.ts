@@ -27,3 +27,16 @@ describe('native module Flow email cutover', () => {
     expect(branch).not.toContain('domain-email')
   })
 })
+
+it('delivers late signing requests for locked JSAs while retaining request and revision guards', () => {
+  const signing = caseSource('hazid_signature_requested', 'incident_reported')
+  expect(signing).not.toContain('eq(hazidAssessments.locked, false)')
+  expect(signing).toContain('eq(hazidAssessmentSignatures.requestId, event.requestId)')
+  expect(signing).toContain(
+    'eq(hazidAssessments.signingRevision, hazidAssessmentSignatures.revision)',
+  )
+  expect(signing).toContain('isNull(hazidAssessmentSignatures.signatureAttachmentId)')
+  expect(signing).toContain('target.expiresAt <= new Date()')
+  expect(signing).toContain('activePeopleWhere()')
+  expect(signing).toContain('activeTenantUsersWhere()')
+})

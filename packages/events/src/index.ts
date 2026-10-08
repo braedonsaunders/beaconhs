@@ -195,7 +195,6 @@ export async function deliverDomainNotification(
               eq(hazidAssessmentSignatures.assessmentId, event.assessmentId),
               eq(hazidAssessmentSignatures.requestId, event.requestId),
               isNull(hazidAssessmentSignatures.signatureAttachmentId),
-              eq(hazidAssessments.locked, false),
               isNull(hazidAssessments.deletedAt),
               activePeopleWhere(),
               activeTenantUsersWhere(),

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Job } from 'bullmq'
 import type { NotifyJobData } from '@beaconhs/jobs'
+import { eq } from 'drizzle-orm'
 
 const mocks = vi.hoisted(() => ({
   enqueueEmail: vi.fn(),
@@ -27,7 +28,7 @@ vi.mock('@beaconhs/db', () => ({
   ) => run({ select: mocks.select, insert: mocks.insert }),
 }))
 vi.mock('@beaconhs/db/schema', () => ({
-  hazidAssessments: {},
+  hazidAssessments: { locked: 'hazid_assessments.locked' },
   hazidAssessmentSignatures: {},
   notificationPreferences: {},
   notifications: {},
@@ -140,7 +141,7 @@ describe('manual signature notification delivery', () => {
     expect(mocks.enqueueEmail).not.toHaveBeenCalled()
     expect(mocks.enqueuePush).not.toHaveBeenCalled()
   })
-  it('sends immediate email and push despite digest/quiet hours, with durable retry identities', async () => {
+  it('sends locked-JSA requests immediately despite digest/quiet hours, with durable retry identities', async () => {
     const hour = new Date().getUTCHours()
     const plan = () =>
       queries(
@@ -156,6 +157,7 @@ describe('manual signature notification delivery', () => {
     await processNotification(signingJob())
     plan()
     await processNotification(signingJob())
+    expect(eq).not.toHaveBeenCalledWith('hazid_assessments.locked', false)
     expect(mocks.enqueueEmail).toHaveBeenCalledTimes(2)
     const [email, options] = mocks.enqueueEmail.mock.calls[0]!
     expect(email.text).toContain('https://app.example.com/hazard-assessments/sign/')

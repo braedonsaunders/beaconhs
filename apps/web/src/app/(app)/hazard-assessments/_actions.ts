@@ -43,7 +43,6 @@ import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
 import { canManageModule, assertCanManageModule } from '@/lib/module-admin/guard'
 import {
   freezeHazidSigning,
-  reviseHazidSigning,
   setHazidAppsLocked as setLinkedAssessmentAppsLocked,
 } from '@/lib/hazid-signing'
 import { canSeeRecord } from '@/lib/visibility'
@@ -1070,7 +1069,6 @@ export async function unlockAssessment(formData: FormData) {
       if (!full) throw new Error('Assessment not found')
       await freezeHazidSigning(ctx, tx, full)
     }
-    await reviseHazidSigning(ctx, tx, id, assessment.signingRevision)
     await tx
       .update(hazidAssessments)
       .set({
@@ -1097,7 +1095,7 @@ export async function unlockAssessment(formData: FormData) {
       entityType: 'hazid_assessment',
       entityId: id,
       action: 'update',
-      summary: 'Unlocked assessment; previous signatures retained in Activity',
+      summary: 'Unlocked assessment; signatures retained until job content changes',
     })
     await materializeEvidenceTargetObligations(tx, ctx.tenantId, {
       sourceModule: 'hazard_assessment',
@@ -1926,57 +1924,6 @@ export async function moveQuestion(formData: FormData) {
     direction as 'up' | 'down',
     'Reordered questions',
   )
-  revalidateAssessment(assessmentId)
-}
-
-// ------------------------------------------------------------------
-// Signatures
-// ------------------------------------------------------------------
-export async function deleteSignature(formData: FormData) {
-  const ctx = await ctxWithTenant()
-  assertCan(ctx, 'hazid.update')
-  const id = String(formData.get('id') ?? '')
-  const assessmentId = String(formData.get('assessmentId') ?? '')
-  await assertCanSeeAssessment(ctx, assessmentId)
-  await ctx.db(async (tx) => {
-    const parent = await lockVisibleAssessment(ctx, tx, assessmentId)
-    if (parent.locked) throw new Error('This assessment is locked')
-    const [signature] = await tx
-      .select({
-        signatureAttachmentId: hazidAssessmentSignatures.signatureAttachmentId,
-        signerName: hazidAssessmentSignatures.signerName,
-      })
-      .from(hazidAssessmentSignatures)
-      .where(
-        and(
-          eq(hazidAssessmentSignatures.tenantId, ctx.tenantId),
-          eq(hazidAssessmentSignatures.id, id),
-          eq(hazidAssessmentSignatures.assessmentId, assessmentId),
-          eq(hazidAssessmentSignatures.revision, parent.signingRevision),
-        ),
-      )
-      .limit(1)
-      .for('update')
-    if (!signature) throw new Error('Signature not found')
-    if (signature.signatureAttachmentId) throw new Error('Signed crew members cannot be removed')
-    await tx
-      .delete(hazidAssessmentSignatures)
-      .where(
-        and(
-          eq(hazidAssessmentSignatures.id, id),
-          eq(hazidAssessmentSignatures.assessmentId, assessmentId),
-          eq(hazidAssessmentSignatures.revision, parent.signingRevision),
-        ),
-      )
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'hazid_assessment',
-      entityId: assessmentId,
-      action: 'delete',
-      summary: 'Removed crew member',
-      before: { signer: signature.signerName },
-      metadata: { signatureId: id, revision: parent.signingRevision },
-    })
-  })
   revalidateAssessment(assessmentId)
 }
 

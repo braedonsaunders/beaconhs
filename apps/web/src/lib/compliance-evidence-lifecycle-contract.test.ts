@@ -129,6 +129,7 @@ describe('immediate compliance evidence lifecycle', () => {
     }
     expect(unlock).not.toContain('.delete(attachments)')
     expect(unlock).not.toContain('signatureAttachmentId: null')
+    expect(unlock).not.toContain('reviseHazidSigning')
     expect(hazardSignatureMigration).toContain('DELETE FROM "attachments" AS attachment')
     expect(hazardSignatureMigration).toContain('hazid_assessments_invalidate_signatures')
   })
@@ -141,9 +142,9 @@ describe('immediate compliance evidence lifecycle', () => {
       'async function performRequestCrewSignatures',
     )
     const remove = between(
-      hazardActions,
-      'export async function deleteSignature',
-      '// ------------------------------------------------------------------\n// Photos',
+      signing,
+      'async function performChangeSignature',
+      'async function signingResult<T>',
     )
     expect(capture).toContain(
       'await withStoredSignatureAttachment(ctx, ink, async (tx, attachmentId)',
@@ -151,9 +152,12 @@ describe('immediate compliance evidence lifecycle', () => {
     expect(capture).toContain('await lockHazidForSigning(')
     expect(capture).toContain('isNull(hazidAssessmentSignatures.signatureAttachmentId)')
     expect(capture).toContain('await recordAuditInTransaction(tx, ctx')
-    expect(remove).toContain('await lockVisibleAssessment(ctx, tx, assessmentId)')
-    expect(remove).toContain('if (signature.signatureAttachmentId)')
-    expect(remove).toContain('Signed crew members cannot be removed')
+    expect(remove).toContain('await lockHazidForSigning(ctx, tx, input.assessmentId)')
+    expect(remove).toContain('signatureAttachmentId: signature.signatureAttachmentId')
+    expect(remove).toContain('parent.signingRevision !== input.revision')
+    expect(remove).toContain('requestId: null')
+    expect(remove).toContain('await materializeEvidenceTargetObligations(tx')
+    expect(capture).toContain('await materializeEvidenceTargetObligations(tx')
     expect(remove).toContain('await recordAuditInTransaction(tx, ctx')
     expect(remove).not.toContain('.delete(attachments)')
   })

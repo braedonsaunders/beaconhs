@@ -9,14 +9,19 @@ const mocks = vi.hoisted(() => ({
   collect: vi.fn(),
   ink: null as null | ((value: string | null) => void),
   sign: vi.fn(),
+  clear: vi.fn(),
+  remove: vi.fn(),
+  confirm: vi.fn(),
 }))
 vi.mock('./_signing-actions', () => ({
   addSigningCrew: mocks.add,
   requestCrewSignatures: mocks.request,
   startSigningCollection: mocks.collect,
   signCrewMember: mocks.sign,
+  clearCrewSignature: mocks.clear,
+  removeSigningCrew: mocks.remove,
 }))
-vi.mock('./_actions', () => ({ deleteSignature: vi.fn() }))
+vi.mock('@/lib/confirm', () => ({ confirmDialog: mocks.confirm }))
 vi.mock('@/lib/pending-record-saves', () => ({ flushRecordSaves: async () => {} }))
 vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), info: vi.fn() } }))
 vi.mock('next/navigation', () => ({
@@ -24,7 +29,9 @@ vi.mock('next/navigation', () => ({
   unstable_rethrow: vi.fn(),
 }))
 vi.mock('@/components/pagination', () => ({ Pagination: () => null }))
-vi.mock('@/components/raw-image', () => ({ RawImage: () => null }))
+vi.mock('@/components/raw-image', () => ({
+  RawImage: ({ alt }: { alt: string }) => <span role="img" aria-label={alt} />,
+}))
 vi.mock('@/components/signature-pad', () => ({
   SignaturePad: ({ onChange }: { onChange: typeof mocks.ink }) => {
     mocks.ink = onChange
@@ -137,10 +144,26 @@ beforeEach(() => {
   })
   mocks.collect.mockImplementation(async () => ({
     ok: true,
-    data: { revision: 1, signers: roster.rows.map((r) => ({ id: r.id, name: r.name })) },
+    data: {
+      revision: 1,
+      signers: roster.rows.filter((r) => !r.signedAt).map((r) => ({ id: r.id, name: r.name })),
+    },
   }))
   mocks.request.mockResolvedValue({ ok: true, data: { requested: 20, skipped: 0, withoutPush: 0 } })
   mocks.sign.mockResolvedValue({ ok: true })
+  mocks.confirm.mockResolvedValue(true)
+  mocks.clear.mockImplementation(async ({ signatureId }: { signatureId: string }) => {
+    const row = roster.rows.find((r) => r.id === signatureId)!
+    row.image = row.signedAt = null
+    roster.signed--
+    return { ok: true }
+  })
+  mocks.remove.mockImplementation(async ({ signatureId }: { signatureId: string }) => {
+    roster.rows = roster.rows.filter((r) => r.id !== signatureId)
+    roster.total = roster.crewTotal = roster.rows.length
+    roster.signed = roster.rows.filter((r) => r.signedAt).length
+    return { ok: true }
+  })
 })
 afterEach(async () => {
   await act(async () => root.unmount())
@@ -148,13 +171,13 @@ afterEach(async () => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
 })
-async function render() {
+async function render(canUpdate = true) {
   await act(async () =>
     root.render(
       <SigningRoster
         assessmentId="10000000-0000-4000-8000-000000000001"
         initial={structuredClone(roster)}
-        canUpdate
+        canUpdate={canUpdate}
       />,
     ),
   )
@@ -227,4 +250,68 @@ it('shows a waiting box before the add finishes, then removes it on failure with
   await act(async () => finish({ ok: false, error: 'Could not add person' }))
   expect(container.querySelector('[role=alert]')!.textContent).toBe('Could not add person')
   expect(container.textContent).not.toContain('Worker 01Awaiting signature')
+})
+
+it('adds crew and allows Sign and Request while the job content is locked', async () => {
+  roster.locked = true
+  await render()
+  await search(persons[0]!.label)
+  await act(async () => button(persons[0]!.label).click())
+  await act(async () => button('Request').click())
+  expect(mocks.request).toHaveBeenCalledTimes(1)
+  await act(async () => button('Sign').click())
+  expect(container.querySelector('[data-signature-pad]')).not.toBeNull()
+  expect(mocks.collect).toHaveBeenCalledTimes(1)
+})
+async function signedCrew() {
+  await mocks.add({ personIds: [persons[0]!.value.slice(7), persons[1]!.value.slice(7)] })
+  for (const row of roster.rows) {
+    row.image = '/signature.png'
+    row.signedAt = '2026-10-08T12:00:00.000Z'
+  }
+  roster.signed = 2
+  roster.locked = true
+}
+it('keeps saved ink read-only and clears only the selected signer before allowing new ink', async () => {
+  await signedCrew()
+  await render()
+  expect(button('Sign').disabled).toBe(true)
+  expect(container.querySelector('[data-signature-pad]')).toBeNull()
+  await act(async () => button('Clear').click())
+  expect(mocks.clear).toHaveBeenCalledExactlyOnceWith({
+    assessmentId: '10000000-0000-4000-8000-000000000001',
+    signatureId: persons[0]!.value.slice(7),
+    revision: 1,
+    signedAt: '2026-10-08T12:00:00.000Z',
+  })
+  expect(roster.rows[1]!.signedAt).not.toBeNull()
+  expect(container.textContent).toContain('Signed 1/2')
+  await act(async () => button('Awaiting signature').click())
+  expect(container.querySelector('[data-signature-pad]')).not.toBeNull()
+})
+it('removes a signed crew slot after confirmation without clearing the other signatures', async () => {
+  await signedCrew()
+  await render()
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="Remove"]')!.click(),
+  )
+  expect(mocks.confirm).toHaveBeenCalledTimes(1)
+  expect(mocks.remove).toHaveBeenCalledWith(
+    expect.objectContaining({
+      signatureId: persons[0]!.value.slice(7),
+      revision: 1,
+      signedAt: '2026-10-08T12:00:00.000Z',
+    }),
+  )
+  expect(roster.rows).toHaveLength(1)
+  expect(roster.rows[0]!.signedAt).not.toBeNull()
+})
+it('does not expose signature mutations to readers', async () => {
+  await signedCrew()
+  await render(false)
+  expect(container.querySelector('input')).toBeNull()
+  expect(container.querySelector('button[aria-label="Remove"]')).toBeNull()
+  expect(button('Clear')).toBeUndefined()
+  expect(button('Sign')).toBeUndefined()
+  expect(button('Request')).toBeUndefined()
 })

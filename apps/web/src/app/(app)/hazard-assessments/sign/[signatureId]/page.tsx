@@ -68,10 +68,6 @@ export default async function OwnSignaturePage({
               <p role="status">
                 <GeneratedValue value="Your signature is saved" />
               </p>
-            ) : result.assessment.locked ? (
-              <p>
-                <GeneratedValue value="This assessment is already submitted. Ask the supervisor to unlock it." />
-              </p>
             ) : (
               <SignatureRequest
                 signatureId={signatureId}

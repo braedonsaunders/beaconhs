@@ -12,8 +12,14 @@ import { toast } from '@/lib/toast'
 import type { SigningRosterData } from '@/lib/hazid-signing-roster'
 import type { PickerOption } from '@/lib/picker-options'
 import { unwrapSigningResult } from '@/lib/hazid-signing-result'
-import { addSigningCrew, requestCrewSignatures, startSigningCollection } from './_signing-actions'
-import { deleteSignature } from './_actions'
+import {
+  addSigningCrew,
+  requestCrewSignatures,
+  startSigningCollection,
+  clearCrewSignature,
+  removeSigningCrew,
+} from './_signing-actions'
+import { confirmDialog } from '@/lib/confirm'
 import { CrewSearch } from './_signature-form'
 import { CrewSignatureDrawer } from './_crew-signature-drawer'
 
@@ -173,7 +179,7 @@ export function SigningRoster({
       <p role="status" aria-live="polite" className="font-medium">
         <GeneratedValue value="Signed" /> {data.signed}/{data.crewTotal}
       </p>
-      {canUpdate && !data.locked ? (
+      {canUpdate ? (
         <>
           <CrewSearch
             assessmentId={assessmentId}
@@ -222,7 +228,7 @@ export function SigningRoster({
             className="relative space-y-2 rounded-lg border p-3 dark:border-slate-700"
           >
             <p className="pr-8 font-medium">{row.name}</p>
-            {canUpdate && !data.locked && !row.signedAt ? (
+            {canUpdate ? (
               <Button
                 className="absolute top-1 right-1 h-9 w-9 p-0"
                 variant="ghost"
@@ -230,10 +236,19 @@ export function SigningRoster({
                 aria-label={t('Remove')}
                 onClick={() =>
                   run(async () => {
-                    const fd = new FormData()
-                    fd.set('id', row.id)
-                    fd.set('assessmentId', assessmentId)
-                    await deleteSignature(fd)
+                    if (
+                      row.signedAt &&
+                      !(await confirmDialog(t('Remove this crew member and their signature?')))
+                    )
+                      return
+                    unwrapSigningResult(
+                      await removeSigningCrew({
+                        assessmentId,
+                        signatureId: row.id,
+                        revision: data.revision,
+                        signedAt: row.signedAt,
+                      }),
+                    )
                     await sync()
                   })
                 }
@@ -248,7 +263,11 @@ export function SigningRoster({
                 alt={t('Signature')}
                 className="h-16 max-w-full object-contain dark:rounded dark:bg-white"
               />
-            ) : canUpdate && !data.locked ? (
+            ) : row.signedAt ? (
+              <Badge variant="outline">
+                <GeneratedValue value="Signed" />
+              </Badge>
+            ) : canUpdate ? (
               <button
                 type="button"
                 disabled={pending || !row.active || !!adding.length}
@@ -264,6 +283,34 @@ export function SigningRoster({
                 <GeneratedValue value="Awaiting signature" />
               </Badge>
             )}
+            {canUpdate && row.signedAt ? (
+              <Button
+                variant="ghost"
+                className="h-9 px-2"
+                disabled={pending}
+                onClick={() =>
+                  run(async () => {
+                    if (
+                      !(await confirmDialog(
+                        t('Clear this signature? The crew member will need to sign again.'),
+                      ))
+                    )
+                      return
+                    unwrapSigningResult(
+                      await clearCrewSignature({
+                        assessmentId,
+                        signatureId: row.id,
+                        revision: data.revision,
+                        signedAt: row.signedAt,
+                      }),
+                    )
+                    await sync()
+                  })
+                }
+              >
+                <GeneratedValue value="Clear" />
+              </Button>
+            ) : null}
           </li>
         ))}
       </ul>

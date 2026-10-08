@@ -79,7 +79,6 @@ export async function processNotification(job: Job<NotifyJobData>): Promise<void
             eq(hazidAssessmentSignatures.requestId, d.data.requestId),
             eq(hazidAssessmentSignatures.tenantId, d.tenantId),
             isNull(hazidAssessmentSignatures.signatureAttachmentId),
-            eq(hazidAssessments.locked, false),
             isNull(hazidAssessments.deletedAt),
             activePeopleWhere(),
           ),

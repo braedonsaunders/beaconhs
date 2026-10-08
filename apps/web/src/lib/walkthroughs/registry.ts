@@ -143,7 +143,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       },
       {
         title: 'PPE and sign-on',
-        body: 'Select the PPE the job needs. Type in Add crew and tap a person, group or crew to add signature spaces immediately. Sign opens a signature-only drawer; Done saves and moves to the next person. Request sends personal signing requests.',
+        body: 'Select the PPE the job needs. Type in Add crew and tap a person, group or crew to add signature spaces immediately. Sign opens a signature-only drawer; Done saves and moves to the next person. Request sends personal signing requests. Crew and signing remain available after Submit & lock. Saved signatures can only be cleared or removed.',
       },
       {
         title: 'Submit it',

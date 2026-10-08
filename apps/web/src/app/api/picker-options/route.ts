@@ -1486,7 +1486,6 @@ async function loadOptions(
         .limit(1)
       if (
         !parent ||
-        parent.locked ||
         !(await canSeeRecord(ctx, tx, {
           prefix: 'hazid',
           ownerIds: [parent.reportedByTenantUserId],

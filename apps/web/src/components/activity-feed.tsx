@@ -51,6 +51,8 @@ export function ActivityFeed({
             icon: Activity,
             tone: 'bg-slate-100 text-slate-600',
           }
+          const changes =
+            e.after ?? Object.fromEntries(Object.keys(e.before ?? {}).map((key) => [key, null]))
           const Icon = meta.icon
           return (
             <li key={e.id} className="relative">
@@ -79,13 +81,13 @@ export function ActivityFeed({
                 />
                 <GeneratedValue
                   value={
-                    e.after && Object.keys(e.after).length > 0 ? (
+                    Object.keys(changes).length > 0 ? (
                       <details className="mt-2 text-xs text-slate-600 dark:text-slate-300">
                         <summary className="cursor-pointer text-slate-500 select-none hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
                           <GeneratedValue value={copy.showChanges} />
                         </summary>
                         <dl className="mt-2 space-y-2">
-                          {Object.entries(e.after)
+                          {Object.entries(changes)
                             .filter(
                               ([key, value]) =>
                                 !['id', 'rowId'].includes(key) &&
@@ -100,17 +102,24 @@ export function ActivityFeed({
                                   {e.before && key in e.before ? (
                                     <>
                                       <span className="text-slate-500">
-                                        {displayValue(e.before[key], timeZone, locale)}
+                                        {key === 'signatureAttachmentId' &&
+                                        !value &&
+                                        e.signatureImage ? (
+                                          <SignatureEvidenceImage
+                                            src={e.signatureImage}
+                                            alt={copy.signature}
+                                          />
+                                        ) : (
+                                          displayValue(e.before[key], timeZone, locale)
+                                        )}
                                       </span>{' '}
                                       →{' '}
                                     </>
                                   ) : null}
-                                  {key === 'signatureAttachmentId' && e.signatureImage ? (
-                                    <RawImage
-                                      optimizationReason="authenticated"
+                                  {key === 'signatureAttachmentId' && value && e.signatureImage ? (
+                                    <SignatureEvidenceImage
                                       src={e.signatureImage}
                                       alt={copy.signature}
-                                      className="h-16 max-w-full object-contain dark:rounded dark:bg-white"
                                     />
                                   ) : (
                                     displayValue(value, timeZone, locale)
@@ -129,6 +138,17 @@ export function ActivityFeed({
         })}
       />
     </ol>
+  )
+}
+
+function SignatureEvidenceImage({ src, alt }: { src: string; alt: string }) {
+  return (
+    <RawImage
+      optimizationReason="authenticated"
+      src={src}
+      alt={alt}
+      className="h-16 max-w-full object-contain dark:rounded dark:bg-white"
+    />
   )
 }
 

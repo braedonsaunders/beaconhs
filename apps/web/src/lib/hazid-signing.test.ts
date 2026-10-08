@@ -7,7 +7,8 @@ vi.mock('server-only', () => ({}))
 vi.mock('./flows/adapters/hazid', () => ({ createHazidFlowAdapter: vi.fn() }))
 vi.mock('@/app/(app)/apps/_lib/entity-loader', () => ({ loadEntitiesForPickers: vi.fn() }))
 vi.mock('./visibility', () => ({ canSeeRecord: vi.fn() }))
-import { requireOwnHazidSignature } from './hazid-signing'
+import { canSeeRecord } from './visibility'
+import { lockHazidForSigning, requireOwnHazidSignature } from './hazid-signing'
 
 const ctx = { tenantId: 'tenant-123', userId: 'user-456', permissions: new Set() } as SigningContext
 function query(result: unknown[]) {
@@ -19,6 +20,7 @@ function query(result: unknown[]) {
       condition = where
       return chain
     },
+    for: () => chain,
     limit: async () => result,
   }
   const tx = { select: () => chain } as unknown as Database
@@ -63,4 +65,20 @@ describe('personal signing access', () => {
     const signed = row({ signedAt: new Date(), requestExpiresAt: new Date(0) })
     await expect(requireOwnHazidSignature(ctx, query([signed]).tx, 'id')).resolves.toBe(signed)
   })
+})
+
+it('locks and authorizes a submitted assessment without blocking crew changes', async () => {
+  const parent = {
+    id: 'assessment-1',
+    locked: true,
+    reportedByTenantUserId: 'owner',
+    siteOrgUnitId: null,
+  }
+  vi.mocked(canSeeRecord).mockResolvedValue(true)
+  const q = query([parent])
+  await expect(lockHazidForSigning(ctx, q.tx, parent.id)).resolves.toBe(parent)
+  expect(q.sql().params).toContain(ctx.tenantId)
+  expect(q.sql().sql).toContain('"hazid_assessments"."deleted_at" is null')
+  vi.mocked(canSeeRecord).mockResolvedValue(false)
+  await expect(lockHazidForSigning(ctx, q.tx, parent.id)).rejects.toThrow('not found')
 })
