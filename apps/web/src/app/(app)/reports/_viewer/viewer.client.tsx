@@ -127,10 +127,10 @@ export function BeaconReportViewer({
         }
       />
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {entity ? (
-          <section aria-labelledby="report-run-controls">
-            <div className="border-border bg-surface space-y-3 rounded-lg border p-3 sm:p-4">
+          <section aria-labelledby="report-run-controls" className="min-w-0 lg:col-span-1">
+            <div className="border-border bg-surface space-y-3 rounded-lg border p-3 sm:p-4 lg:sticky lg:top-0">
               <h2
                 id="report-run-controls"
                 className="flex items-center gap-2 text-sm font-semibold"
@@ -138,47 +138,45 @@ export function BeaconReportViewer({
                 <Filter size={15} />
                 <GeneratedText id="m_128cb01c068b95" />
               </h2>
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="min-w-0 flex-1 space-y-1 sm:max-w-sm">
-                  <label htmlFor="report-runtime-group" className="text-sm font-medium">
-                    <GeneratedText id="m_1063fd45cc34b2" />
-                  </label>
-                  <Select
-                    id="report-runtime-group"
-                    value={groupBy}
-                    onChange={(event) => setGroupBy(event.target.value)}
-                  >
-                    <option value="">
-                      <GeneratedText id="m_023e5c19efd4cc" />
-                    </option>
-                    {entity.columns
-                      .filter((column) => !column.hidden)
-                      .map((column) => (
-                        <option key={column.key} value={column.key}>
-                          {column.label}
-                        </option>
-                      ))}
-                  </Select>
-                  <p className="text-fg-muted text-xs">
-                    <GeneratedText id="m_176a68ad690d1e" />
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" onClick={run} disabled={pending}>
-                    {pending ? tGenerated('m_1f2c7907712729') : tGenerated('m_1df37ea02bdc43')}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={reset} disabled={pending}>
-                    <RotateCcw size={14} />
-                    <GeneratedText id="m_1f8b8825b90200" />
-                  </Button>
-                </div>
+              <div className="space-y-1">
+                <label htmlFor="report-runtime-group" className="text-sm font-medium">
+                  <GeneratedText id="m_1063fd45cc34b2" />
+                </label>
+                <Select
+                  id="report-runtime-group"
+                  value={groupBy}
+                  onChange={(event) => setGroupBy(event.target.value)}
+                >
+                  <option value="">
+                    <GeneratedText id="m_023e5c19efd4cc" />
+                  </option>
+                  {entity.columns
+                    .filter((column) => !column.hidden)
+                    .map((column) => (
+                      <option key={column.key} value={column.key}>
+                        {column.label}
+                      </option>
+                    ))}
+                </Select>
+                <p className="text-fg-muted text-xs">
+                  <GeneratedText id="m_176a68ad690d1e" />
+                </p>
               </div>
               <ReportFilterTree entity={entity} group={filters} onChange={setFilters} />
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={run} disabled={pending}>
+                  {pending ? tGenerated('m_1f2c7907712729') : tGenerated('m_1df37ea02bdc43')}
+                </Button>
+                <Button type="button" variant="outline" onClick={reset} disabled={pending}>
+                  <RotateCcw size={14} />
+                  <GeneratedText id="m_1f8b8825b90200" />
+                </Button>
+              </div>
             </div>
           </section>
         ) : null}
 
-        <div className="min-w-0">
+        <div className={entity ? 'min-w-0 lg:col-span-2' : 'min-w-0 lg:col-span-3'}>
           {error ? (
             <div
               role="alert"
