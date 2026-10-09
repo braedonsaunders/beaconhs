@@ -14,7 +14,10 @@ vi.mock('@/i18n/generated', async () => {
 })
 vi.mock('@/lib/picker-options', () => import('./picker-options'))
 vi.mock('@/lib/list-params', () => import('./list-params'))
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn() }) }))
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+  unstable_rethrow: () => {},
+}))
 vi.mock('@/components/remote-search-select', () => import('../components/remote-search-select'))
 vi.mock('@/components/file-upload', () => ({ FileUpload: () => null }))
 vi.mock('@/components/inspection-status-pill', () => ({ InspectionStatusPill: () => null }))

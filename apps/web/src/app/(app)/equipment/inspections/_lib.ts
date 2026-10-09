@@ -2,7 +2,7 @@
 // criteria materialisation, result computation, and work-order spawning on a
 // failed inspection (the legacy "fail = WO" rule).
 
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import type { Database } from '@beaconhs/db'
 import type { RequestContext } from '@beaconhs/tenant'
@@ -123,6 +123,7 @@ export async function materialiseEquipmentCriteriaInTx(
   tenantId: string,
   recordId: string,
   typeId: string,
+  allowNA: boolean,
 ): Promise<number> {
   const rows = await tx
     .select({
@@ -156,7 +157,12 @@ export async function materialiseEquipmentCriteriaInTx(
       criterionId: r.criterion.id,
       questionTextSnapshot: r.criterion.question,
       groupLabelSnapshot: r.groupLabel ?? null,
-      kind: r.criterion.kind,
+      kind:
+        r.criterion.kind === 'pass_fail' || r.criterion.kind === 'pass_fail_na'
+          ? allowNA
+            ? ('pass_fail_na' as const)
+            : ('pass_fail' as const)
+          : r.criterion.kind,
       isRequired: r.criterion.isRequired,
       // Carry the template's severity as the default a fail inherits.
       severity: r.criterion.severity,
@@ -399,6 +405,8 @@ export async function finaliseEquipmentInspection(
       }
     }
 
+    await syncInspectionHoursInTx(tx, ctx, record)
+
     const occurredOn = record.occurredAt.toISOString().slice(0, 10)
     const nextDueOn = nextDueFromInterval(
       record.intervalValue,
@@ -433,47 +441,7 @@ export async function finaliseEquipmentInspection(
     // cadences drive overdue tracking, the maintenance cockpit, and compliance
     // signals). Each schedule advances by its OWN interval, from this
     // inspection's date.
-    if (item && record.isPreUse) {
-      await tx
-        .update(equipmentItems)
-        .set({ lastPreUseInspectionAt: record.occurredAt })
-        .where(
-          and(
-            eq(equipmentItems.tenantId, ctx.tenantId),
-            eq(equipmentItems.id, item.id),
-            isNull(equipmentItems.deletedAt),
-          ),
-        )
-    }
-    if (item && record.inspectionTypeId) {
-      const schedules = await tx
-        .select()
-        .from(equipmentInspectionSchedules)
-        .where(
-          and(
-            eq(equipmentInspectionSchedules.tenantId, ctx.tenantId),
-            eq(equipmentInspectionSchedules.equipmentItemId, item.id),
-            eq(equipmentInspectionSchedules.inspectionTypeId, record.inspectionTypeId),
-            eq(equipmentInspectionSchedules.isActive, true),
-          ),
-        )
-      for (const s of schedules) {
-        await tx
-          .update(equipmentInspectionSchedules)
-          .set({
-            lastCompletedOn: occurredOn,
-            nextDueOn: addInterval(record.occurredAt, s.intervalValue, s.intervalUnit),
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(equipmentInspectionSchedules.tenantId, ctx.tenantId),
-              eq(equipmentInspectionSchedules.id, s.id),
-              eq(equipmentInspectionSchedules.equipmentItemId, item.id),
-            ),
-          )
-      }
-    }
+    if (item) await reconcileEquipmentInspectionDatesInTx(tx, ctx.tenantId, item.id)
 
     await recordModuleFlowEvent(tx, ctx, {
       subjectId: recordId,
@@ -495,4 +463,98 @@ export async function finaliseEquipmentInspection(
 
     return { ok: true, result, failed: fails.length, workOrdersSpawned: spawned }
   })
+}
+/** Backdated checks retain their own reading without replacing a newer meter. */
+export async function syncInspectionHoursInTx(
+  tx: EquipmentInspectionTx,
+  ctx: RequestContext,
+  record: typeof equipmentInspectionRecords.$inferSelect,
+  hours: string | null = record.hours,
+  occurredAt = record.occurredAt,
+): Promise<void> {
+  if (!record.equipmentItemId || hours === null) return
+  const [item] = await tx
+    .select()
+    .from(equipmentItems)
+    .where(and(eq(equipmentItems.id, record.equipmentItemId), isNull(equipmentItems.deletedAt)))
+    .for('update')
+    .limit(1)
+  if (!item || (item.metersUpdatedAt && item.metersUpdatedAt > occurredAt)) return
+  if (item.currentHours === hours && item.metersUpdatedAt?.getTime() === occurredAt.getTime())
+    return
+  await tx
+    .update(equipmentItems)
+    .set({ currentHours: hours, metersUpdatedAt: occurredAt })
+    .where(eq(equipmentItems.id, item.id))
+  await recordAuditInTransaction(tx, ctx, {
+    entityType: 'equipment',
+    entityId: item.id,
+    action: 'update',
+    summary: 'Updated hour meter from inspection',
+    before: { currentHours: item.currentHours, metersUpdatedAt: item.metersUpdatedAt },
+    after: { currentHours: hours, metersUpdatedAt: occurredAt },
+    metadata: { inspectionId: record.id },
+  })
+}
+
+/** Reconcile the latest retained completed check after submit, reopen, delete or restore. */
+export async function reconcileEquipmentInspectionDatesInTx(
+  tx: EquipmentInspectionTx,
+  tenantId: string,
+  itemId: string,
+): Promise<void> {
+  const [item] = await tx
+    .select({ id: equipmentItems.id })
+    .from(equipmentItems)
+    .where(and(eq(equipmentItems.tenantId, tenantId), eq(equipmentItems.id, itemId)))
+    .limit(1)
+    .for('update')
+  if (!item) return
+  const completed = and(
+    eq(equipmentInspectionRecords.tenantId, tenantId),
+    eq(equipmentInspectionRecords.equipmentItemId, itemId),
+    isNull(equipmentInspectionRecords.deletedAt),
+    inArray(equipmentInspectionRecords.status, ['submitted', 'closed']),
+  )
+  const [preUse] = await tx
+    .select({ occurredAt: equipmentInspectionRecords.occurredAt })
+    .from(equipmentInspectionRecords)
+    .where(and(completed, eq(equipmentInspectionRecords.isPreUse, true)))
+    .orderBy(desc(equipmentInspectionRecords.occurredAt))
+    .limit(1)
+  await tx
+    .update(equipmentItems)
+    .set({ lastPreUseInspectionAt: preUse?.occurredAt ?? null })
+    .where(eq(equipmentItems.id, itemId))
+  const schedules = await tx
+    .select()
+    .from(equipmentInspectionSchedules)
+    .where(
+      and(
+        eq(equipmentInspectionSchedules.tenantId, tenantId),
+        eq(equipmentInspectionSchedules.equipmentItemId, itemId),
+        eq(equipmentInspectionSchedules.isActive, true),
+      ),
+    )
+  for (const schedule of schedules) {
+    if (!schedule.inspectionTypeId) continue
+    const [latest] = await tx
+      .select({ occurredAt: equipmentInspectionRecords.occurredAt })
+      .from(equipmentInspectionRecords)
+      .where(
+        and(completed, eq(equipmentInspectionRecords.inspectionTypeId, schedule.inspectionTypeId)),
+      )
+      .orderBy(desc(equipmentInspectionRecords.occurredAt))
+      .limit(1)
+    const lastCompletedOn = latest?.occurredAt.toISOString().slice(0, 10) ?? null
+    // Removing the only check makes its due date overdue again; a manually
+    // scheduled item with no recorded completion keeps its original due date.
+    const nextDueOn = latest
+      ? addInterval(latest.occurredAt, schedule.intervalValue, schedule.intervalUnit)
+      : (schedule.lastCompletedOn ?? schedule.nextDueOn)
+    await tx
+      .update(equipmentInspectionSchedules)
+      .set({ lastCompletedOn, nextDueOn, updatedAt: new Date() })
+      .where(eq(equipmentInspectionSchedules.id, schedule.id))
+  }
 }

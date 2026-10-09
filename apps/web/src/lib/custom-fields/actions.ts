@@ -387,6 +387,8 @@ export async function updateCustomFieldValueAction(formData: FormData): Promise<
   const raw = formData.get('value')
   const value = typeof raw === 'string' ? raw : ''
   if (!isUuid(id) || !isValidCustomFieldKey(key)) throw new Error('Invalid id/key')
+  if (kind === 'equipment' && key === 'condition' && value !== '' && !/^[1-5]$/.test(value))
+    throw new Error('Choose a condition from 1 to 5 stars.')
 
   await ctx.db(async (tx) => {
     // The definition is the contract. A shared row lock allows concurrent

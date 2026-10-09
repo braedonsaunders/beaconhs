@@ -13,7 +13,8 @@ import {
   tenants,
 } from '@beaconhs/db/schema'
 import { primaryPersonTitleName } from '@beaconhs/db'
-import { assertCan } from '@beaconhs/tenant'
+import { can } from '@beaconhs/tenant'
+import { redirect } from 'next/navigation'
 import { requireRequestContext } from '@/lib/auth'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { ListPageLayout } from '@/components/page-layout'
@@ -34,7 +35,7 @@ export default async function StationPage({
 }) {
   const tGenerated = await getGeneratedTranslations()
   const ctx = await requireRequestContext()
-  assertCan(ctx, 'equipment.manage')
+  if (!can(ctx, 'equipment.manage')) redirect('/equipment')
   const sp = await searchParams
   const initialScanCode = typeof sp.code === 'string' ? sp.code : null
   // The settings page is gated by the module-admin permission, not

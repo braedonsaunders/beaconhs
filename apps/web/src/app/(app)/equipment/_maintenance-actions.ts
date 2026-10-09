@@ -89,11 +89,16 @@ export async function saveEquipmentSchedule(input: {
     if (!item) return null
     if (inspectionTypeId) {
       const [type] = await tx
-        .select({ id: equipmentInspectionTypes.id })
+        .select({
+          id: equipmentInspectionTypes.id,
+          isActive: equipmentInspectionTypes.isActive,
+          appliesToTypeId: equipmentInspectionTypes.appliesToTypeId,
+        })
         .from(equipmentInspectionTypes)
         .where(eq(equipmentInspectionTypes.id, inspectionTypeId))
         .limit(1)
-      if (!type) return null
+      if (!type || !type.isActive || (type.appliesToTypeId && type.appliesToTypeId !== item.typeId))
+        throw new Error('Choose an active inspection type that applies to this equipment.')
     }
     if (input.isActive) {
       const existing = await tx

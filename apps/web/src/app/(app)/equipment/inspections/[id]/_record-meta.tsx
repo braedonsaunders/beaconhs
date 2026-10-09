@@ -1,62 +1,8 @@
 'use client'
 
-import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
-
-// Record-level live fields (occurred-at, hours, notes) — autosave on change/blur,
-// no Save button, matching the criterion fill cards.
-
-import { useRef, useState, useTransition } from 'react'
-import { Input, Label, Textarea, cn } from '@beaconhs/ui'
-import { setRecordHours, setRecordNotes, setRecordOccurredAt } from '../_actions'
-
-type SaveState = 'idle' | 'saving' | 'saved' | 'error'
-
-function useField(action: (fd: FormData) => Promise<void>, recordId: string) {
-  const [state, setState] = useState<SaveState>('idle')
-  const [, start] = useTransition()
-  function save(value: string) {
-    setState('saving')
-    start(async () => {
-      try {
-        const fd = new FormData()
-        fd.set('recordId', recordId)
-        fd.set('value', value)
-        await action(fd)
-        setState('saved')
-        setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 1500)
-      } catch {
-        setState('error')
-      }
-    })
-  }
-  return { state, save }
-}
-
-function Dot({ state }: { state: SaveState }) {
-  if (state === 'idle') return null
-  return (
-    <span
-      className={cn(
-        'ml-2 text-[11px] font-medium',
-        state === 'saving' && 'text-slate-400',
-        state === 'saved' && 'text-emerald-600',
-        state === 'error' && 'text-red-600',
-      )}
-    >
-      <GeneratedValue
-        value={
-          state === 'saving' ? (
-            <GeneratedText id="m_106811f2aac664" />
-          ) : state === 'saved' ? (
-            <GeneratedText id="m_0a3bcf685192f1" />
-          ) : (
-            <GeneratedText id="m_060f1ed88b3989" />
-          )
-        }
-      />
-    </span>
-  )
-}
+import { useGeneratedTranslations } from '@/i18n/generated'
+import { LiveDateTime, LiveField, LiveRemoteSelect } from '@/components/live-field'
+import { updateEquipmentInspectionMeta } from '../_actions'
 
 export function RecordMeta({
   recordId,
@@ -65,92 +11,67 @@ export function RecordMeta({
   hours,
   notes,
   locked,
+  site,
 }: {
   recordId: string
-  /** datetime-local input value, already formatted in the viewer's timezone. */
   occurredAt: string
-  /** Human-readable timestamp in the viewer's timezone, for the locked view. */
   occurredAtDisplay: string
   hours: string
   notes: string
   locked: boolean
+  site?: { value: string; label: string }
 }) {
   const tGenerated = useGeneratedTranslations()
-  const occurred = useField(setRecordOccurredAt, recordId)
-  const hrs = useField(setRecordHours, recordId)
-  const note = useField(setRecordNotes, recordId)
-  const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [noteVal, setNoteVal] = useState(notes)
-
-  if (locked) {
-    return (
-      <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-3 text-sm sm:grid-cols-3 dark:border-slate-800">
-        <div>
-          <div className="text-xs text-slate-500">
-            <GeneratedText id="m_16b944034f43b6" />
-          </div>
-          <div className="text-slate-800 dark:text-slate-200">
-            <GeneratedValue value={occurredAtDisplay || '—'} />
-          </div>
-        </div>
-        <div>
-          <div className="text-xs text-slate-500">
-            <GeneratedText id="m_080c848fd3c5e4" />
-          </div>
-          <div className="text-slate-800 dark:text-slate-200">
-            <GeneratedValue value={hours || '—'} />
-          </div>
-        </div>
-        <div className="sm:col-span-3">
-          <div className="text-xs text-slate-500">
-            <GeneratedText id="m_0b8dadcb78cd08" />
-          </div>
-          <div className="whitespace-pre-wrap text-slate-800 dark:text-slate-200">
-            <GeneratedValue value={notes || '—'} />
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   return (
-    <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-2 dark:border-slate-800">
-      <div className="space-y-1">
-        <Label className="text-xs">
-          <GeneratedText id="m_16b944034f43b6" /> <Dot state={occurred.state} />
-        </Label>
-        <Input
-          type="datetime-local"
-          defaultValue={occurredAt}
-          onBlur={(e) => occurred.save(e.target.value)}
+    <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-3 dark:border-slate-800">
+      {locked ? (
+        <LiveField
+          id={recordId}
+          field="occurredAt"
+          label={tGenerated('m_16b944034f43b6')}
+          initialValue={occurredAtDisplay}
+          disabled
+          updateAction={updateEquipmentInspectionMeta}
         />
-      </div>
-      <div className="space-y-1">
-        <Label className="text-xs">
-          <GeneratedText id="m_08a3b41b1849a6" /> <Dot state={hrs.state} />
-        </Label>
-        <Input
-          type="number"
-          step="0.1"
-          defaultValue={hours}
-          placeholder="0"
-          onBlur={(e) => hrs.save(e.target.value)}
+      ) : (
+        <LiveDateTime
+          id={recordId}
+          field="occurredAt"
+          label={tGenerated('m_16b944034f43b6')}
+          initialValue={occurredAt}
+          updateAction={updateEquipmentInspectionMeta}
         />
-      </div>
-      <div className="space-y-1 sm:col-span-2">
-        <Label className="text-xs">
-          <GeneratedText id="m_0b8dadcb78cd08" /> <Dot state={note.state} />
-        </Label>
-        <Textarea
+      )}
+      <LiveRemoteSelect
+        id={recordId}
+        field="siteOrgUnitId"
+        label={tGenerated('m_096619f6fb1aae')}
+        initialValue={site?.value ?? ''}
+        initialOption={site}
+        lookup="equipment-inspection-sites"
+        disabled={locked}
+        updateAction={updateEquipmentInspectionMeta}
+      />
+      <LiveField
+        id={recordId}
+        field="hours"
+        label={tGenerated('m_08a3b41b1849a6')}
+        type="number"
+        initialValue={hours}
+        disabled={locked}
+        updateAction={updateEquipmentInspectionMeta}
+      />
+      <div className="sm:col-span-3">
+        <LiveField
+          id={recordId}
+          field="notes"
+          label={tGenerated('m_0b8dadcb78cd08')}
+          multiline
           rows={2}
-          value={noteVal}
-          placeholder={tGenerated('m_1e0941b8765445')}
-          onChange={(e) => {
-            setNoteVal(e.target.value)
-            if (noteTimer.current) clearTimeout(noteTimer.current)
-            noteTimer.current = setTimeout(() => note.save(e.target.value), 1000)
-          }}
-          onBlur={() => note.save(noteVal)}
+          initialValue={notes}
+          disabled={locked}
+          updateAction={updateEquipmentInspectionMeta}
         />
       </div>
     </div>

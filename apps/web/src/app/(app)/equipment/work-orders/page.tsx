@@ -1,3 +1,6 @@
+import { RecordTableRow } from '@/components/record-table-row'
+import { WorkOrderDrawer } from './[id]/_panel'
+import { canManageModule } from '@/lib/module-admin/guard'
 import { recordSearchWhere, recordSearchTerm } from '@/lib/record-search'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -29,7 +32,7 @@ import {
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { parseListParams, pickString } from '@/lib/list-params'
+import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { formatDate } from '@/lib/datetime'
 import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
@@ -111,6 +114,9 @@ export default async function WorkOrdersPage({
   const openedFromRaw = pickString(sp.openedFrom)
   const openedToRaw = pickString(sp.openedTo)
   const ctx = await requireRequestContext()
+  const includeDeleted = canManageModule(ctx, 'equipment') && pickString(sp.deleted) === '1'
+  const workOrderId = pickString(sp.workOrderId)
+  const closeHref = mergeHref('/equipment/work-orders', sp, { workOrderId: undefined })
 
   const { rows, total, statusCounts, priorityCounts } = await ctx.db(async (tx) => {
     // Read-tier scope: all → every WO; site → WOs on assets at the caller's
@@ -124,7 +130,10 @@ export default async function WorkOrdersPage({
       siteCol: equipmentItems.currentSiteOrgUnitId,
       personCol: equipmentWorkOrders.reportedByPersonId,
     })
-    const filters: SQL<unknown>[] = scope ? [scope] : []
+    const filters: SQL<unknown>[] = [
+      ...(scope ? [scope] : []),
+      ...(includeDeleted ? [] : [isNull(equipmentWorkOrders.deletedAt)]),
+    ]
     if (params.q) {
       const term = recordSearchTerm(params.q)
       const cond = or(
@@ -242,13 +251,13 @@ export default async function WorkOrdersPage({
       .select({ s: equipmentWorkOrders.status, c: count() })
       .from(equipmentWorkOrders)
       .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
-      .where(scope)
+      .where(and(scope, includeDeleted ? undefined : isNull(equipmentWorkOrders.deletedAt)))
       .groupBy(equipmentWorkOrders.status)
     const ps = await tx
       .select({ p: equipmentWorkOrders.priority, c: count() })
       .from(equipmentWorkOrders)
       .leftJoin(equipmentItems, eq(equipmentItems.id, equipmentWorkOrders.itemId))
-      .where(scope)
+      .where(and(scope, includeDeleted ? undefined : isNull(equipmentWorkOrders.deletedAt)))
       .groupBy(equipmentWorkOrders.priority)
 
     return {
@@ -368,6 +377,18 @@ export default async function WorkOrdersPage({
               allLabel="All equipment types"
               searchPlaceholder={tGenerated('m_1c552a0e7a59f2')}
             />
+            {canManageModule(ctx, 'equipment') ? (
+              <FilterChips
+                basePath="/equipment/work-orders"
+                currentParams={sp}
+                paramKey="deleted"
+                label={tGenerated('m_14fd485e580165')}
+                options={[
+                  { value: '', label: 'Active records' },
+                  { value: '1', label: 'Include deleted' },
+                ]}
+              />
+            ) : null}
           </TableToolbar>
         </>
       }
@@ -469,10 +490,17 @@ export default async function WorkOrdersPage({
                               ? 'warning'
                               : 'success'
                       return (
-                        <TableRow key={wo.id}>
+                        <RecordTableRow
+                          key={wo.id}
+                          href={mergeHref('/equipment/work-orders', sp, { workOrderId: wo.id })}
+                        >
                           <TableCell className="font-mono text-xs">
                             <Link
-                              href={`/equipment/work-orders/${wo.id}` as any}
+                              href={
+                                mergeHref('/equipment/work-orders', sp, {
+                                  workOrderId: wo.id,
+                                }) as any
+                              }
                               className="hover:underline"
                             >
                               <GeneratedValue value={wo.reference} />
@@ -480,7 +508,11 @@ export default async function WorkOrdersPage({
                           </TableCell>
                           <TableCell>
                             <Link
-                              href={`/equipment/work-orders/${wo.id}` as any}
+                              href={
+                                mergeHref('/equipment/work-orders', sp, {
+                                  workOrderId: wo.id,
+                                }) as any
+                              }
                               className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                             >
                               <GeneratedValue value={htmlToSnippet(wo.summary)} />
@@ -558,7 +590,7 @@ export default async function WorkOrdersPage({
                               value={wo.cost ? `$${Number(wo.cost).toLocaleString()}` : '—'}
                             />
                           </TableCell>
-                        </TableRow>
+                        </RecordTableRow>
                       )
                     })}
                   />
@@ -575,6 +607,13 @@ export default async function WorkOrdersPage({
           )
         }
       />
+      {workOrderId && isUuid(workOrderId) ? (
+        <WorkOrderDrawer
+          params={Promise.resolve({ id: workOrderId })}
+          searchParams={Promise.resolve({})}
+          closeHref={closeHref}
+        />
+      ) : null}
     </ListPageLayout>
   )
 }

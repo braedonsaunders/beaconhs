@@ -93,7 +93,7 @@ export default async function EquipmentPage({
         siteCol: equipmentItems.currentSiteOrgUnitId,
         personCol: equipmentItems.currentHolderPersonId,
       })
-      const { where: whereClause, orderBy } = equipmentRegisterQuery(sp, vis)
+      const { where: whereClause, orderBy } = equipmentRegisterQuery(sp, vis, canManageEquipment)
 
       const [tot] = await tx
         .select({ c: count() })
@@ -253,6 +253,18 @@ export default async function EquipmentPage({
               searchPlaceholder={tGeneratedValue('Search holders…')}
               ariaLabel={tGeneratedValue('Filter by holder')}
             />
+            {canManageEquipment ? (
+              <FilterChips
+                basePath="/equipment"
+                currentParams={sp}
+                paramKey="deleted"
+                label={tGenerated('m_14fd485e580165')}
+                options={[
+                  { value: '', label: 'Active records' },
+                  { value: '1', label: 'Include deleted' },
+                ]}
+              />
+            ) : null}
           </TableToolbar>
         </>
       }

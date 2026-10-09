@@ -27,6 +27,7 @@ const SORTS = [
 export function equipmentRegisterQuery(
   sp: Record<string, string | string[] | undefined>,
   scope?: SQL<unknown>,
+  allowDeleted = false,
 ) {
   const params = parseListParams(sp, {
     sort: 'asset_tag',
@@ -37,7 +38,8 @@ export function equipmentRegisterQuery(
   const statusRaw = pickString(sp.status) ?? 'in_service'
   const statusFilter = statusRaw === 'all' ? undefined : statusRaw
   const availabilityFilter = pickString(sp.availability)
-  const filters: SQL<unknown>[] = [isNull(equipmentItems.deletedAt)]
+  const filters: SQL<unknown>[] =
+    allowDeleted && pickString(sp.deleted) === '1' ? [] : [isNull(equipmentItems.deletedAt)]
   if (scope) filters.push(scope)
   const search = recordSearchWhere('equipment', params.q)
   if (search) filters.push(search)

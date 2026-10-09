@@ -23,7 +23,6 @@ import { useEffect, useRef, useState, useTransition } from 'react'
 import { htmlToText, normalizeDocumentHref, sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { Input, SearchSelect, Select, Textarea, cn, type SelectOption } from '@beaconhs/ui'
 import { FLUSH_RECORD_SAVES, trackRecordSave, forgetRecordSave } from '@/lib/pending-record-saves'
-import { useLazyRecord } from './lazy-record'
 import { RemoteSearchSelect } from './remote-search-select'
 import { toast } from '@/lib/toast'
 import type { PickerLookup } from '@/lib/picker-options'
@@ -42,14 +41,11 @@ export function useAutoSave({
   prepare,
   updateAction,
   onSaved,
-  onSettled,
 }: {
   prepare: (value: string) => FormData | null | Promise<FormData | null>
   updateAction: (formData: FormData) => Promise<void>
   /** Called after each successful write with the value that was persisted. */
   onSaved?: (value: string) => void
-  /** Called once the queue settles on a successful save (no follow-up pending). */
-  onSettled?: () => void
 }) {
   const [state, setState] = useState<SaveState>('idle')
   const [, start] = useTransition()
@@ -83,7 +79,6 @@ export function useAutoSave({
         )
         setState('saved')
         setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000)
-        onSettled?.()
       } catch {
         setState('error')
       } finally {
@@ -103,39 +98,28 @@ export function useAutoSave({
   }
 }
 
-/** Record-field flavour: id + field + value FormData, with lazy-record support. */
+/** Save a field on an existing record, including immediately created drafts. */
 function useFieldAutoSave({
   id,
   field,
   updateAction,
   onSaved,
 }: {
-  // Absent on a lazy "new record" page — the id is created on first save via
-  // the LazyRecordProvider context.
-  id?: string
+  id: string
   field: string
   updateAction: (formData: FormData) => Promise<void>
   onSaved?: (value: string) => void
 }) {
-  const lazy = useLazyRecord()
   return useAutoSave({
-    prepare: async (value) => {
-      // Existing record: use the given id. New record: create the draft row
-      // on the first save (once), then write against it.
-      const rid = id ?? (lazy ? await lazy.ensureId() : null)
-      if (!rid) return null
+    prepare: (value) => {
       const fd = new FormData()
-      fd.set('id', rid)
+      fd.set('id', id)
       fd.set('field', field)
       fd.set('value', value)
       return fd
     },
     updateAction,
     onSaved,
-    // Lazy record: hand off to the real record URL after the first save.
-    onSettled: () => {
-      if (!id && lazy) lazy.notifySaved()
-    },
   })
 }
 
@@ -233,7 +217,7 @@ export function LiveField({
   disabled,
   updateAction,
 }: {
-  id?: string
+  id: string
   field: string
   label: string
   initialValue: string | null
@@ -340,7 +324,7 @@ export function LiveSelect({
   disabled,
   updateAction,
 }: {
-  id?: string
+  id: string
   field: string
   label: string
   initialValue: string | null
@@ -409,7 +393,7 @@ export function LiveRemoteSelect({
   disabled,
   updateAction,
 }: {
-  id?: string
+  id: string
   field: string
   label: string
   initialValue: string | null
@@ -479,7 +463,7 @@ export function LivePersonSelect({
   disabled,
   updateAction,
 }: {
-  id?: string
+  id: string
   field: string
   label: string
   initialValue: string | null
@@ -547,7 +531,7 @@ export function LiveDateTime({
   disabled,
   updateAction,
 }: {
-  id?: string
+  id: string
   field: string
   label: string
   /** datetime-local formatted string, e.g. 2026-06-11T14:30 */
@@ -640,7 +624,7 @@ export function LiveToggle({
   disabled,
   updateAction,
 }: {
-  id?: string
+  id: string
   field: string
   label: string
   initialValue: boolean
@@ -750,7 +734,7 @@ export function LiveSeverityRating({
   disabled,
   updateAction,
 }: {
-  id?: string
+  id: string
   field: string
   label: string
   initialValue: number | null
@@ -842,7 +826,7 @@ export function LiveRichText({
   disabled,
   updateAction,
 }: {
-  id?: string
+  id: string
   field: string
   label: string
   initialValue: string | null

@@ -29,12 +29,20 @@ import {
   normalizeInspectionNumberAnswer,
   normalizeInspectionTextAnswer,
 } from '@/lib/inspection-response-config'
+import {
+  requireEnumInput,
+  requireUuidInput,
+  optionalUuidInput,
+  optionalNumberInput,
+} from '@/lib/mutation-input'
 import { isUuid } from '@/lib/list-params'
 import { sanitizeFrom } from '@/lib/back-nav'
 import { parsePhotoEdits } from '@/lib/photo-edits'
 import { canSeeRecord } from '@/lib/visibility'
 import {
   finaliseEquipmentInspection,
+  reconcileEquipmentInspectionDatesInTx,
+  syncInspectionHoursInTx,
   lockVisibleEquipmentInspectionForMutation,
   materialiseEquipmentCriteriaInTx,
   nextEquipmentInspectionReferenceInTx,
@@ -47,6 +55,7 @@ function revalidateRecord(id: string) {
   revalidatePath(`/equipment/inspections/${id}`)
   revalidatePath('/equipment/inspections')
   revalidatePath('/equipment/maintenance')
+  revalidatePath('/equipment/[id]', 'page')
 }
 
 async function criterionForMutationInTx(
@@ -270,7 +279,7 @@ export async function startEquipmentInspection(formData: FormData) {
         isPreUse: type.isPreUse,
         allowPassAll: type.allowPassAll,
         failsSpawnWorkOrders: targetMode === 'registered' && type.failsSpawnWorkOrders,
-        siteOrgUnitId: (item?.currentSiteOrgUnitId ?? siteOrgUnitIdRaw) || null,
+        siteOrgUnitId: siteOrgUnitIdRaw || item?.currentSiteOrgUnitId || null,
         inspectorTenantUserId: ctx.membership?.id ?? null,
         serial: (item?.serialNumber ?? rentalSerial) || null,
         foremanPersonIds: [],
@@ -283,6 +292,7 @@ export async function startEquipmentInspection(formData: FormData) {
       ctx.tenantId,
       created.id,
       typeId,
+      type.allowNA,
     )
     if (materialised === 0) {
       throw new Error('This inspection type has no checklist items')
@@ -930,7 +940,7 @@ export async function passAllEquipmentInspection(formData: FormData) {
 
 // --- record-level live fields ----------------------------------------------
 
-export async function setRecordNotes(formData: FormData) {
+async function setRecordNotes(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.inspect')
   const recordId = String(formData.get('recordId') ?? '')
@@ -962,12 +972,16 @@ export async function setRecordNotes(formData: FormData) {
   if (changed) revalidateRecord(recordId)
 }
 
-export async function setRecordHours(formData: FormData) {
+async function setRecordHours(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.inspect')
   const recordId = String(formData.get('recordId') ?? '')
-  const value = normalizeInspectionNumberAnswer(formData.get('value'))
-  if (value?.startsWith('-')) throw new Error('Hours reading cannot be negative')
+  const parsed = optionalNumberInput(formData.get('value'), 'Hours reading', {
+    min: 0,
+    max: 999999999.9,
+    maxScale: 1,
+  })
+  const value = parsed === null ? null : parsed.toFixed(1)
   const changed = await withLockedRecordMutation(ctx, recordId, async (tx, record) => {
     if (record.hours === value) return false
     const [updated] = await tx
@@ -990,12 +1004,13 @@ export async function setRecordHours(formData: FormData) {
       before: { hours: record.hours },
       after: { hours: value },
     })
+    await syncInspectionHoursInTx(tx, ctx, record, value)
     return true
   })
   if (changed) revalidateRecord(recordId)
 }
 
-export async function setRecordOccurredAt(formData: FormData) {
+async function setRecordOccurredAt(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.inspect')
   const recordId = String(formData.get('recordId') ?? '')
@@ -1024,6 +1039,7 @@ export async function setRecordOccurredAt(formData: FormData) {
       before: { occurredAt: record.occurredAt },
       after: { occurredAt },
     })
+    await syncInspectionHoursInTx(tx, ctx, record, record.hours, occurredAt)
     return true
   })
   if (changed) revalidateRecord(recordId)
@@ -1101,6 +1117,8 @@ export async function reopenEquipmentInspection(formData: FormData) {
         locked: equipmentInspectionRecords.locked,
       })
     if (!updated) throw new Error('Equipment inspection changed before it could be reopened')
+    if (record.equipmentItemId)
+      await reconcileEquipmentInspectionDatesInTx(tx, ctx.tenantId, record.equipmentItemId)
     if (item) await materializeEquipmentTypeEvidence(tx, ctx.tenantId, [item.typeId])
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'equipment_inspection_record',
@@ -1121,4 +1139,49 @@ export async function reopenEquipmentInspection(formData: FormData) {
     return true
   })
   if (reopened) revalidateRecord(recordId)
+}
+
+async function setRecordSite(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCan(ctx, 'equipment.inspect')
+  const id = requireUuidInput(formData.get('recordId'), 'Inspection')
+  const value = optionalUuidInput(formData.get('value'), 'Location')
+  const changed = await withLockedRecordMutation(ctx, id, async (tx, record) => {
+    if (value === record.siteOrgUnitId) return false
+    if (value) {
+      const [site] = await tx
+        .select({ id: orgUnits.id })
+        .from(orgUnits)
+        .where(and(eq(orgUnits.id, value), isNull(orgUnits.deletedAt)))
+        .limit(1)
+      if (!site) throw new Error('Location not found.')
+    }
+    await tx
+      .update(equipmentInspectionRecords)
+      .set({ siteOrgUnitId: value })
+      .where(eq(equipmentInspectionRecords.id, id))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'equipment_inspection_record',
+      entityId: id,
+      action: 'update',
+      summary: 'Updated inspection location',
+      before: { siteOrgUnitId: record.siteOrgUnitId },
+      after: { siteOrgUnitId: value },
+    })
+    return true
+  })
+  if (changed) revalidateRecord(id)
+}
+
+export async function updateEquipmentInspectionMeta(formData: FormData): Promise<void> {
+  formData.set('recordId', requireUuidInput(formData.get('id'), 'Inspection'))
+  const field = requireEnumInput(
+    formData.get('field'),
+    ['occurredAt', 'siteOrgUnitId', 'hours', 'notes'] as const,
+    'Field',
+  )
+  if (field === 'occurredAt') return setRecordOccurredAt(formData)
+  if (field === 'siteOrgUnitId') return setRecordSite(formData)
+  if (field === 'hours') return setRecordHours(formData)
+  return setRecordNotes(formData)
 }

@@ -79,6 +79,7 @@ export async function updateEquipmentInspectionType(input: {
   intervalUnit: string | null
   isPreUse: boolean
   appliesToTypeId: string | null
+  allowNA: boolean
   allowPassAll: boolean
   failsSpawnWorkOrders: boolean
   isActive: boolean
@@ -94,6 +95,7 @@ export async function updateEquipmentInspectionType(input: {
         description: input.description?.trim() || null,
         ...parseIntervalInput(input),
         appliesToTypeId: input.appliesToTypeId || null,
+        allowNA: input.allowNA,
         allowPassAll: input.allowPassAll,
         failsSpawnWorkOrders: input.failsSpawnWorkOrders,
         isActive: input.isActive,
@@ -116,6 +118,7 @@ export async function createEquipmentInspectionType(input: {
   intervalUnit: string | null
   isPreUse: boolean
   appliesToTypeId: string | null
+  allowNA: boolean
   allowPassAll: boolean
   failsSpawnWorkOrders: boolean
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
@@ -131,6 +134,7 @@ export async function createEquipmentInspectionType(input: {
         description: input.description?.trim() || null,
         ...parseIntervalInput(input),
         appliesToTypeId: input.appliesToTypeId || null,
+        allowNA: input.allowNA,
         allowPassAll: input.allowPassAll,
         failsSpawnWorkOrders: input.failsSpawnWorkOrders,
       })

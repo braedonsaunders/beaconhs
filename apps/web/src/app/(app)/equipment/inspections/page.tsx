@@ -1,3 +1,5 @@
+import { canManageModule } from '@/lib/module-admin/guard'
+import { FilterChips } from '@/components/filter-bar'
 import { recordSearchWhere, recordSearchTerm } from '@/lib/record-search'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
@@ -84,6 +86,7 @@ export default async function EquipmentInspectionsPage({
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.read.self')
   const canInspect = can(ctx, 'equipment.inspect')
+  const includeDeleted = canManageModule(ctx, 'equipment') && pickString(sp.deleted) === '1'
   const rawStatus = pickString(sp.status) ?? ''
   const statusFilter = STATUSES.includes(rawStatus as (typeof STATUSES)[number]) ? rawStatus : ''
 
@@ -98,7 +101,7 @@ export default async function EquipmentInspectionsPage({
   const orderBy = params.dir === 'asc' ? asc(sortCol[params.sort]) : desc(sortCol[params.sort])
   const filters: SQL<unknown>[] = [
     eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
-    isNull(equipmentInspectionRecords.deletedAt),
+    ...(includeDeleted ? [] : [isNull(equipmentInspectionRecords.deletedAt)]),
   ]
   if (statusFilter) {
     filters.push(eq(equipmentInspectionRecords.status, statusFilter as (typeof STATUSES)[number]))
@@ -280,6 +283,18 @@ export default async function EquipmentInspectionsPage({
                 })}
               />
             </div>
+            {canManageModule(ctx, 'equipment') ? (
+              <FilterChips
+                basePath={BASE}
+                currentParams={sp}
+                paramKey="deleted"
+                label={tGenerated('m_14fd485e580165')}
+                options={[
+                  { value: '', label: 'Active records' },
+                  { value: '1', label: 'Include deleted' },
+                ]}
+              />
+            ) : null}
           </TableToolbar>
         </>
       }

@@ -1,5 +1,7 @@
 'use client'
 
+import { flushRecordSaves } from '@/lib/pending-record-saves'
+
 import { GeneratedText } from '@/i18n/generated'
 
 // Start a named inspection in one tap.
@@ -9,6 +11,8 @@ import { GeneratedText } from '@/i18n/generated'
 // create action and the inspection opens in a flyout over the page they were
 // already on.
 
+import { unstable_rethrow } from 'next/navigation'
+import { toast } from '@/lib/toast'
 import { useTransition } from 'react'
 import { ClipboardCheck, Loader2 } from 'lucide-react'
 import { Button, cn } from '@beaconhs/ui'
@@ -39,7 +43,15 @@ export function StartInspectionButton({
     fd.set('typeId', typeId)
     fd.set('returnTo', returnTo)
     start(async () => {
-      await startEquipmentInspection(fd)
+      try {
+        await flushRecordSaves()
+        await startEquipmentInspection(fd)
+      } catch (error) {
+        unstable_rethrow(error)
+        toast.error(
+          error instanceof Error ? error.message : 'Could not start inspection. Try again.',
+        )
+      }
     })
   }
 

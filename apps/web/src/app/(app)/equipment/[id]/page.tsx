@@ -1,3 +1,4 @@
+import { setEquipmentDeleted } from '../_lifecycle-actions'
 import { transferLocation } from './_custody-actions'
 import { activePeopleWhere } from '@beaconhs/db'
 import { CompleteSchedule } from '../_complete-schedule'
@@ -33,7 +34,7 @@ import {
 } from 'lucide-react'
 import { NewWorkOrderDrawer } from './_work-order-drawer'
 import { EquipmentLogKindFields } from './_log-fields'
-import { EquipmentLogRow } from './_log-row'
+import { RecordTableRow } from '@/components/record-table-row'
 import { saveLogEntry, deleteLogEntry } from './_log-actions'
 import { ConfirmButton } from '@/components/confirm-button'
 import { FilterChips } from '@/components/filter-bar'
@@ -167,7 +168,7 @@ type Tab = (typeof TABS)[number]
 // crew runs every shift; the rest were three tables stacked on one screen.
 // Pre-use is not a tab: it is a schedule like any other, so it lives as the
 // first row of the schedules table rather than a parallel place to look.
-const INSPECTION_TABS = ['schedules', 'reminders', 'history'] as const
+const INSPECTION_TABS = ['schedules', 'oil', 'reminders', 'history'] as const
 type InspectionTab = (typeof INSPECTION_TABS)[number]
 
 // Sub-tables share one page; each gets prefixed search/pagination params
@@ -760,7 +761,12 @@ export default async function EquipmentDetailPage({
       .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
       .leftJoin(user, eq(user.id, equipmentItems.missingReportedBy))
       .leftJoin(attachments, eq(attachments.id, equipmentItems.photoAttachmentId))
-      .where(and(eq(equipmentItems.id, id), isNull(equipmentItems.deletedAt)))
+      .where(
+        and(
+          eq(equipmentItems.id, id),
+          can(ctx, 'equipment.manage') ? undefined : isNull(equipmentItems.deletedAt),
+        ),
+      )
       .limit(1)
     if (!row) return null
 
@@ -777,6 +783,7 @@ export default async function EquipmentDetailPage({
     // Per-table filters: item scope + optional ilike search.
     const woWhere = and(
       eq(equipmentWorkOrders.itemId, id),
+      isNull(equipmentWorkOrders.deletedAt),
       woP.q
         ? or(
             ilike(equipmentWorkOrders.reference, `%${woP.q}%`),
@@ -926,6 +933,7 @@ export default async function EquipmentDetailPage({
         .where(
           and(
             eq(equipmentWorkOrders.itemId, id),
+            isNull(equipmentWorkOrders.deletedAt),
             sql`${equipmentWorkOrders.status} NOT IN ('closed', 'cancelled')`,
           ),
         )
@@ -1154,17 +1162,19 @@ export default async function EquipmentDetailPage({
     item.typeId != null &&
     selectedPreUseType.appliesToTypeId !== item.typeId
 
-  const canManageEquipment = can(ctx, 'equipment.manage')
-  const canCreateWorkOrder = can(ctx, 'equipment.workorder.create')
-  const locked = !canManageEquipment
+  const canAdminEquipment = can(ctx, 'equipment.manage')
+  const canManageEquipment = canAdminEquipment && !item.deletedAt
+  const canCreateWorkOrder = can(ctx, 'equipment.workorder.create') && !item.deletedAt
+  const locked = !canManageEquipment || Boolean(item.deletedAt)
   const canCheckIn = Boolean(
     openCheckout &&
     (canManageEquipment ||
       (ctx.personId !== null && openCheckout.co.holderPersonId === ctx.personId)),
   )
-  const canTransferCustody = canManageEquipment && !openCheckout
+  const canTransferCustody = canManageEquipment && !item.deletedAt && !openCheckout
   const canCheckOut =
     canManageEquipment &&
+    !item.deletedAt &&
     !openCheckout &&
     item.status === 'in_service' &&
     !item.isMissing &&
@@ -1331,6 +1341,24 @@ export default async function EquipmentDetailPage({
           }
           actions={
             <>
+              {canAdminEquipment ? (
+                <form action={setEquipmentDeleted}>
+                  <input type="hidden" name="id" value={id} />
+                  <input type="hidden" name="restore" value={item.deletedAt ? '1' : '0'} />
+                  <ConfirmButton
+                    variant={item.deletedAt ? 'outline' : 'destructive'}
+                    message={
+                      item.deletedAt
+                        ? tGenerated('m_0b4b2da7d40e48')
+                        : tGenerated('m_057301e9d56688')
+                    }
+                  >
+                    {item.deletedAt
+                      ? tGenerated('m_19500e41842c99')
+                      : tGenerated('m_11773f3c3f7558')}
+                  </ConfirmButton>
+                </form>
+              ) : null}
               <GeneratedValue
                 value={
                   canCreateWorkOrder ? (
@@ -1562,20 +1590,6 @@ export default async function EquipmentDetailPage({
              * server-rendered swap triggers an AnimatePresence cycle so the
              * outgoing panel fades while the incoming one slides in.
              */}
-            {active === 'overview' || active === 'inspections' ? (
-              <OilChangeCard
-                key={`${item.updatedAt}`}
-                itemId={id}
-                enabled={item.requiresOilChange}
-                interval={item.oilChangeIntervalMonths}
-                last={item.lastOilChangeOn}
-                next={item.nextOilChangeDue}
-                hours={
-                  typeof item.metadata.lastOilHours === 'number' ? item.metadata.lastOilHours : null
-                }
-                canEdit={canManageEquipment}
-              />
-            ) : null}
             <TabContent tabKey={active}>
               <GeneratedValue
                 value={
@@ -1867,7 +1881,10 @@ export default async function EquipmentDetailPage({
                                   <TableBody>
                                     <GeneratedValue
                                       value={workOrders.map((w) => (
-                                        <TableRow key={w.id}>
+                                        <RecordTableRow
+                                          key={w.id}
+                                          href={`/equipment/work-orders/${w.id}`}
+                                        >
                                           <TableCell className="font-mono text-xs">
                                             <GeneratedValue value={w.reference} />
                                           </TableCell>
@@ -1909,7 +1926,7 @@ export default async function EquipmentDetailPage({
                                               }
                                             />
                                           </TableCell>
-                                        </TableRow>
+                                        </RecordTableRow>
                                       ))}
                                     />
                                   </TableBody>
@@ -2459,10 +2476,27 @@ export default async function EquipmentDetailPage({
                             label: 'Schedules',
                             count: scheduleStats.active + (item.preUseInspectionTypeId ? 1 : 0),
                           },
+                          { key: 'oil', label: 'Oil changes' },
                           { key: 'reminders', label: 'Reminders', count: openReminderCount },
                           { key: 'history', label: 'History', count: inspectionsTotal },
                         ]}
                       />
+                      {itab === 'oil' ? (
+                        <OilChangeCard
+                          key={`${item.updatedAt}`}
+                          itemId={id}
+                          enabled={item.requiresOilChange}
+                          interval={item.oilChangeIntervalMonths}
+                          last={item.lastOilChangeOn}
+                          next={item.nextOilChangeDue}
+                          hours={
+                            typeof item.metadata.lastOilHours === 'number'
+                              ? item.metadata.lastOilHours
+                              : null
+                          }
+                          canEdit={canManageEquipment}
+                        />
+                      ) : null}
                       {/*
                        * Pre-use is the check a crew actually runs every shift,
                        * so it leads the tab in its own section rather than
@@ -3105,22 +3139,28 @@ export default async function EquipmentDetailPage({
                           ) : null}
                         </CardHeader>
                         <CardContent className="space-y-3">
-                          <SearchInput
-                            paramKey="log_q"
-                            pageParamKey="log_p"
-                            placeholder={tGenerated('m_08b5ce52d99191')}
-                          />
-                          <FilterChips
-                            basePath={basePath}
-                            currentParams={sp}
-                            paramKey="log_kind"
-                            pageParamKey="log_p"
-                            label={tGenerated('m_1e578efe1574cd')}
-                            options={EQUIPMENT_LOG_KINDS.map((value) => ({
-                              value,
-                              label: value[0]!.toUpperCase() + value.slice(1),
-                            }))}
-                          />
+                          <div className="flex items-center gap-3">
+                            <div className="min-w-0 flex-1">
+                              <SearchInput
+                                paramKey="log_q"
+                                pageParamKey="log_p"
+                                placeholder={tGenerated('m_08b5ce52d99191')}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <FilterChips
+                                basePath={basePath}
+                                currentParams={sp}
+                                paramKey="log_kind"
+                                pageParamKey="log_p"
+                                label={tGenerated('m_1e578efe1574cd')}
+                                options={EQUIPMENT_LOG_KINDS.map((value) => ({
+                                  value,
+                                  label: value[0]!.toUpperCase() + value.slice(1),
+                                }))}
+                              />
+                            </div>
+                          </div>
                           <GeneratedValue
                             value={
                               logEntries.length === 0 ? (
@@ -3165,7 +3205,7 @@ export default async function EquipmentDetailPage({
                                   <TableBody>
                                     <GeneratedValue
                                       value={logEntries.map(({ log, person }) => (
-                                        <EquipmentLogRow
+                                        <RecordTableRow
                                           key={log.id}
                                           href={
                                             canManageEquipment
@@ -3225,7 +3265,7 @@ export default async function EquipmentDetailPage({
                                           <TableCell className="text-right font-mono tabular-nums">
                                             <GeneratedValue value={log.amount ?? '—'} />
                                           </TableCell>
-                                        </EquipmentLogRow>
+                                        </RecordTableRow>
                                       ))}
                                     />
                                   </TableBody>

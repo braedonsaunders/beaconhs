@@ -5,7 +5,7 @@ import type { Route } from 'next'
 import { useRouter } from 'next/navigation'
 import { TableRow } from '@beaconhs/ui'
 
-export function EquipmentLogRow({ href, children }: { href?: string; children: ReactNode }) {
+export function RecordTableRow({ href, children }: { href?: string; children: ReactNode }) {
   const router = useRouter()
   return (
     <TableRow

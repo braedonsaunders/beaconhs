@@ -262,7 +262,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         key: 'station',
         label: 'Check in / out',
         href: '/equipment/station',
-        permission: 'equipment.read.self',
+        permission: 'equipment.manage',
       },
       {
         key: 'work-orders',

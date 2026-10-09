@@ -1,5 +1,7 @@
 'use client'
 
+import { flushRecordSaves } from '@/lib/pending-record-saves'
+
 import {
   GeneratedText,
   useGeneratedTranslations,
@@ -15,6 +17,7 @@ import {
 // are searched remotely per item. Unregistered rental gear is pre-use only —
 // we do not own its certification programme.
 
+import { unstable_rethrow } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Alert, AlertDescription, Button, Input, Label } from '@beaconhs/ui'
@@ -70,9 +73,13 @@ export function NewEquipmentInspectionDrawer({
     if (returnTo) fd.set('returnTo', returnTo)
     start(async () => {
       try {
+        await flushRecordSaves()
         await startEquipmentInspection(fd)
-      } catch {
-        setError('Could not start the inspection. Your entries are kept. Please try again.')
+      } catch (error) {
+        unstable_rethrow(error)
+        setError(
+          tGenerated('m_0598e8bbe9e9ea') + (error instanceof Error ? ` ${error.message}` : ''),
+        )
       }
     })
   }
@@ -169,24 +176,23 @@ export function NewEquipmentInspectionDrawer({
               maxLength={200}
             />
           </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>
-              <GeneratedText id="m_055f11420b2da4" />
-            </Label>
-            {/* Same Locations list journals and hazard assessments use, so a
-                rental can be booked against the customer it works for. */}
-            <RemoteSearchSelect
-              lookup="equipment-inspection-sites"
-              value={siteOrgUnitId}
-              onChange={setSiteOrgUnitId}
-              placeholder={tGenerated('m_0616639a1daeee')}
-              searchPlaceholder={tGenerated('m_1931aa93098220')}
-              sheetTitle="Location"
-              ariaLabel="Location"
-            />
-          </div>
         </div>
       )}
+
+      <div className="space-y-1.5">
+        <Label>
+          <GeneratedText id="m_055f11420b2da4" />
+        </Label>
+        <RemoteSearchSelect
+          lookup="equipment-inspection-sites"
+          value={siteOrgUnitId}
+          onChange={setSiteOrgUnitId}
+          placeholder={tGenerated('m_0616639a1daeee')}
+          searchPlaceholder={tGenerated('m_1931aa93098220')}
+          sheetTitle="Location"
+          ariaLabel="Location"
+        />
+      </div>
 
       <div className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
         <Label>

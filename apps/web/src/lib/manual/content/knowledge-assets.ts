@@ -686,7 +686,7 @@ Open **Equipment** in the left menu. That opens the full list at [Equipment](/eq
 ## Add equipment
 
 1. Open [Equipment](/equipment) and choose **Add equipment** at the top right.
-2. Enter the **Name** and leave the field. The new draft opens in the full equipment editor.
+2. The new draft opens immediately in the full equipment editor. Enter its name and details; fields save as you go.
 3. Complete the asset tag, category, type, department, and other details. Each field saves when you leave it. Editing a detail clears the **Draft** badge.
 
 **Add equipment** requires **Manage equipment** permission. Viewing equipment or performing inspections does not grant permission to add it. If the button is missing, ask your administrator to check your role and any permission overrides under **Admin** → **Users** or **Roles & permissions**. A Foreman / Supervisor role by itself does not include this permission.
@@ -904,7 +904,7 @@ Before you run a unit — or on its service schedule — you walk through a chec
 
 ## Where to find it
 
-Open **Equipment** in the left menu, then go to [Equipment Checks](/equipment/inspections). You can also start a check straight from a unit's page: open the unit and tap the **Equipment Checks** tab. That tab is split into **Schedules**, **Reminders**, and **History**. **Schedules** lists every check the unit is set up for, with the pre-use check first, and each row has a **Start** link that opens that check right there.
+Open **Equipment** in the left menu, then go to [Equipment Checks](/equipment/inspections). You can also start a check straight from a unit's page: open the unit and tap the **Equipment Checks** tab. That tab is split into **Schedules**, **Reminders**, **History**, and **Oil changes**. Oil changes are recorded here, alongside other checks. **Schedules** lists every check the unit is set up for, with the pre-use check first, and each row has a **Start** link that opens that check right there.
 
 Walking a site instead of checking a unit? Those live separately — see [Site inspections](/help/inspections).
 
@@ -913,11 +913,11 @@ Walking a site instead of checking a unit? Those live separately — see [Site i
 1. Open [Equipment Checks](/equipment/inspections) and tap **New inspection**. A panel opens — there is no separate page to fill in first.
 2. Choose **Registered unit** to search the fleet, or **Rental / unregistered** for a unit that is not in the equipment register.
 3. For a registered unit, pick the **Equipment item**. The **Inspection** list then shows only what is set up on that unit — its pre-use checklist and its schedules. If what you expect is missing, the unit needs it set up on the **Schedules** sub-tab first.
-4. For a rental, enter the equipment name, serial or asset identifier, and provider, then choose the **Location** — the customer, project, site, or area the unit is working at. Rentals can only take pre-use inspections; their periodic certification belongs to the rental company.
+4. For a rental, enter the equipment name, serial or asset identifier, and provider, then choose the **Location** — the customer, project, site, or area the unit is working at. Registered-unit checks also have a **Location** field. Rentals can only take pre-use inspections; their periodic certification belongs to the rental company.
 5. Search the **Inspection** list and select the check you need. Search covers the full eligible list, including checks beyond the first page. If more results exist, narrow your search. Then tap **Start inspection**. If starting fails, the panel keeps your entries and shows an error so you can retry.
 
 Starting from a unit's own page is quicker still: on the **Inspections** tab, tap **Start** on the schedule row you need. The check is already known, so nothing is asked twice and the inspection opens over the unit's page.
-6. Go through each required item and tap **Pass**, **Fail**, or **N/A**. An item marked **Optional** may be left blank.
+6. Check **Performed**, **Location**, and **Hours / meter reading**. The reading updates the unit's real hour meter; a backdated inspection does not replace a newer reading. Go through each required item and tap **Pass**, **Fail**, or **N/A**. **N/A** is available only when the inspection type allows it. An item marked **Optional** may be left blank.
 7. Your answers save as you go — watch for **Saved** at the top. You can stop and come back later; the inspection stays **In progress**.
 
 ## Record a failed item
@@ -942,6 +942,16 @@ Imported or inspection-level evidence appears under **Record photos**. Reopen th
 ## Reopen an inspection
 
 If you have permission to perform equipment inspections, open a submitted or closed inspection and tap **Reopen**. The inspection returns to **In progress**, clears its old submission and closure stamps, and recalculates its result when you submit it again.
+
+## Manage inspections and work orders
+
+Managers can **Delete** an inspection and use **Include deleted** to find and **Restore** it. Deleting, restoring or reopening recalculates the unit's inspection schedule. History is retained.
+
+Select a work-order row to open its full drawer. Edit details and work notes, change its status, **Mark complete**, or **Reopen** a closed order. Managers can **Delete** and **Restore** work orders. Equipment records also have **Delete** and **Restore**; check a unit in before deleting it.
+
+On an equipment record, **Condition** uses one to five stars. In **Log entries**, **Kind** sits beside search.
+
+In the inspection type builder, open **Settings → Behaviour** and set **Allow N/A**. This applies to new inspections; existing inspections keep their original checklist.
 
 ## Automatic emails and alerts (managers)
 

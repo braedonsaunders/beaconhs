@@ -57,7 +57,7 @@ import {
 } from '../_actions'
 
 type Kind = 'pass_fail' | 'pass_fail_na' | 'text' | 'numeric' | 'photo'
-const KINDS: Kind[] = ['pass_fail', 'pass_fail_na', 'text', 'numeric', 'photo']
+const KINDS: Kind[] = ['pass_fail', 'text', 'numeric', 'photo']
 const KIND_LABELS: Record<Kind, string> = {
   pass_fail: 'Pass / Fail',
   pass_fail_na: 'Pass / Fail / N/A',
@@ -74,6 +74,7 @@ type BuilderType = {
   intervalUnit: EquipmentIntervalUnit | null
   isPreUse: boolean
   appliesToTypeId: string | null
+  allowNA: boolean
   allowPassAll: boolean
   failsSpawnWorkOrders: boolean
   isActive: boolean
@@ -361,7 +362,10 @@ function CriterionEditorDrawer({
             <Label>
               <GeneratedText id="m_15eb6eb85b34f2" />
             </Label>
-            <Select value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+            <Select
+              value={kind === 'pass_fail_na' ? 'pass_fail' : kind}
+              onChange={(e) => setKind(e.target.value as Kind)}
+            >
               {KINDS.map((k) => (
                 <option key={k} value={k}>
                   {KIND_LABELS[k]}
@@ -454,6 +458,7 @@ function SettingsPanel({
     intervalUnit: type.intervalUnit,
   })
   const [appliesToTypeId, setAppliesToTypeId] = React.useState(type.appliesToTypeId ?? '')
+  const [allowNA, setAllowNA] = React.useState(type.allowNA)
   const [allowPassAll, setAllowPassAll] = React.useState(type.allowPassAll)
   const [failsSpawnWorkOrders, setFailsSpawnWorkOrders] = React.useState(type.failsSpawnWorkOrders)
   const [isActive, setIsActive] = React.useState(type.isActive)
@@ -473,6 +478,7 @@ function SettingsPanel({
         intervalUnit: interval.intervalUnit,
         isPreUse: interval.isPreUse,
         appliesToTypeId: appliesToTypeId || null,
+        allowNA,
         allowPassAll,
         failsSpawnWorkOrders,
         isActive,
@@ -518,6 +524,11 @@ function SettingsPanel({
         <legend className="px-1 text-xs font-medium text-slate-500">
           <GeneratedText id="m_0da99b13b19b75" />
         </legend>
+        <BuilderCheckboxRow
+          label={tGenerated('m_13c00b2f8a0901')}
+          checked={allowNA}
+          onChange={setAllowNA}
+        />
         <BuilderCheckboxRow
           label={tGenerated('m_1def60bb7c277d')}
           checked={allowPassAll}

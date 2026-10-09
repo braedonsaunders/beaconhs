@@ -1,6 +1,11 @@
 'use client'
 
-import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/i18n/generated'
+import {
+  useGeneratedTranslations,
+  GeneratedText,
+  GeneratedValue,
+  useGeneratedValueTranslations,
+} from '@/i18n/generated'
 
 // Always-editable, auto-saving input for a single custom field — the
 // custom-field counterpart of <LiveField>. Saves through the generic
@@ -8,6 +13,7 @@ import { GeneratedText, GeneratedValue, useGeneratedValueTranslations } from '@/
 // right control per field type; a status dot mirrors the rest of the app.
 
 import { useEffect, useRef, useState } from 'react'
+import { Star } from 'lucide-react'
 import { Input, Select, Textarea, cn } from '@beaconhs/ui'
 import {
   CUSTOM_FIELD_LIMITS,
@@ -75,16 +81,25 @@ export function CustomFieldInput({
         </label>
         <SaveDot state={state} onRetry={retry} />
       </div>
-      <Control
-        def={def}
-        meta={meta}
-        disabled={disabled}
-        initialValue={initialValue}
-        setState={setState}
-        persist={save}
-        baseline={baseline}
-        hasPending={hasPending}
-      />
+      {entityKind === 'equipment' && def.key === 'condition' ? (
+        <ConditionRating
+          initialValue={initialValue}
+          disabled={disabled}
+          persist={save}
+          hasPending={hasPending}
+        />
+      ) : (
+        <Control
+          def={def}
+          meta={meta}
+          disabled={disabled}
+          initialValue={initialValue}
+          setState={setState}
+          persist={save}
+          baseline={baseline}
+          hasPending={hasPending}
+        />
+      )}
       <GeneratedValue
         value={
           def.helpText ? (
@@ -410,4 +425,51 @@ function TextLikeControl({
     )
   }
   return input
+}
+
+function ConditionRating({
+  initialValue,
+  disabled,
+  persist,
+  hasPending,
+}: {
+  initialValue: unknown
+  disabled?: boolean
+  persist: (value: string) => void
+  hasPending: () => boolean
+}) {
+  const tGenerated = useGeneratedTranslations()
+
+  const [value, setValue] = useState(Number(initialValue))
+  useEffect(() => {
+    if (!hasPending()) setValue(Number(initialValue))
+  }, [initialValue, hasPending])
+  const rating = Number.isInteger(value) && value >= 1 && value <= 5 ? value : 0
+  return (
+    <div
+      role="group"
+      aria-label={tGenerated('m_1d38624f70b9c4')}
+      className="flex items-center gap-1"
+    >
+      {[1, 2, 3, 4, 5].map((stars) => (
+        <button
+          key={stars}
+          type="button"
+          disabled={disabled}
+          aria-label={tGenerated('m_142c6ad32d860b', { value0: stars })}
+          aria-pressed={rating === stars}
+          className="rounded p-1.5 text-amber-500 focus-visible:outline focus-visible:outline-2 disabled:cursor-default"
+          onClick={() => {
+            setValue(stars)
+            persist(String(stars))
+          }}
+        >
+          <Star size={24} fill={stars <= rating ? 'currentColor' : 'none'} />
+        </button>
+      ))}
+      <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
+        {rating ? `${rating}/5` : tGenerated('m_13e61f4185333d')}
+      </span>
+    </div>
+  )
 }

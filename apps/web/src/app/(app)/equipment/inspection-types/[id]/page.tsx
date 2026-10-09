@@ -109,7 +109,7 @@ export default async function EquipmentInspectionTypeDetailPage({
             </div>
           }
           actions={
-            <Link href={`/equipment/inspections/new?typeId=${id}`}>
+            <Link className="inline-flex pb-4" href={`/equipment/inspections/new?typeId=${id}`}>
               <Button variant="outline">
                 <ClipboardCheck size={14} /> <GeneratedText id="m_050ae31d3122aa" />
               </Button>
@@ -128,6 +128,7 @@ export default async function EquipmentInspectionTypeDetailPage({
           intervalUnit: type.intervalUnit,
           isPreUse: type.isPreUse,
           appliesToTypeId: type.appliesToTypeId,
+          allowNA: type.allowNA,
           allowPassAll: type.allowPassAll,
           failsSpawnWorkOrders: type.failsSpawnWorkOrders,
           isActive: type.isActive,

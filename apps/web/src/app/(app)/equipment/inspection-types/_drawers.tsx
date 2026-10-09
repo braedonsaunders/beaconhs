@@ -41,6 +41,7 @@ export function NewTypeDrawer({
     intervalUnit: null,
   })
   const [description, setDescription] = useState('')
+  const [allowNA, setAllowNA] = useState(false)
   const [allowPassAll, setAllowPassAll] = useState(true)
   const [failsSpawnWorkOrders, setFailsSpawnWorkOrders] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -61,6 +62,7 @@ export function NewTypeDrawer({
         intervalUnit: interval.intervalUnit,
         isPreUse: interval.isPreUse,
         appliesToTypeId: appliesToTypeId || null,
+        allowNA,
         allowPassAll,
         failsSpawnWorkOrders,
       })
@@ -149,6 +151,14 @@ export function NewTypeDrawer({
           />
         </div>
         <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={allowNA}
+              onChange={(event) => setAllowNA(event.target.checked)}
+            />
+            <GeneratedText id="m_13c00b2f8a0901" />
+          </label>
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input
               type="checkbox"

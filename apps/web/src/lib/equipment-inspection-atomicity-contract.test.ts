@@ -88,7 +88,16 @@ describe('equipment inspection atomicity contract', () => {
     expect(submit).toContain('record.failsSpawnWorkOrders')
     expect(submit).toContain('record.intervalValue')
     expect(submit).toContain('record.intervalUnit')
-    expect(submit).toContain('record.isPreUse')
+    expect(submit).toContain('reconcileEquipmentInspectionDatesInTx(tx, ctx.tenantId, item.id)')
+    const reconcile = library.slice(
+      library.indexOf('export async function reconcileEquipmentInspectionDatesInTx'),
+    )
+    expect(reconcile).toContain('eq(equipmentInspectionRecords.isPreUse, true)')
+    expect(reconcile).toContain(
+      "inArray(equipmentInspectionRecords.status, ['submitted', 'closed'])",
+    )
+    expect(reconcile).toContain('isNull(equipmentInspectionRecords.deletedAt)')
+    expect(reconcile).not.toContain('.from(equipmentInspectionTypes)')
     expect(submit).not.toContain('.from(equipmentInspectionTypes)')
     expect(submit).toContain("nextReference(tx, ctx.tenantId, 'work_order'")
     expect(submit).toContain('recordModuleFlowEvent(tx, ctx,')

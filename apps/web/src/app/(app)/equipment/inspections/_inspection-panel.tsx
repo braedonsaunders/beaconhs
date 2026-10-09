@@ -1,3 +1,6 @@
+import { canManageModule } from '@/lib/module-admin/guard'
+import { setEquipmentInspectionDeleted } from '../_lifecycle-actions'
+import { ConfirmButton } from '@/components/confirm-button'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -14,6 +17,7 @@ import {
   equipmentInspectionRecords,
   equipmentInspectionTypes,
   equipmentItems,
+  orgUnits,
   tenantUsers,
   users as user,
 } from '@beaconhs/db/schema'
@@ -89,6 +93,7 @@ export async function EquipmentInspectionDrawer({
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.read.self')
   const canInspect = can(ctx, 'equipment.inspect')
+  const canManage = canManageModule(ctx, 'equipment')
 
   const data = await ctx.db(async (tx) => {
     const [row] = await tx
@@ -125,7 +130,7 @@ export async function EquipmentInspectionDrawer({
         and(
           eq(equipmentInspectionRecords.tenantId, ctx.tenantId),
           eq(equipmentInspectionRecords.id, id),
-          isNull(equipmentInspectionRecords.deletedAt),
+          canManage ? undefined : isNull(equipmentInspectionRecords.deletedAt),
         ),
       )
       .limit(1)
@@ -213,7 +218,14 @@ export async function EquipmentInspectionDrawer({
         asc(equipmentInspectionRecordAttachments.createdAt),
         asc(equipmentInspectionRecordAttachments.id),
       )
-    return { ...row, criteria, photoMap, recordPhotos }
+    const [site] = row.record.siteOrgUnitId
+      ? await tx
+          .select({ value: orgUnits.id, label: orgUnits.name })
+          .from(orgUnits)
+          .where(eq(orgUnits.id, row.record.siteOrgUnitId))
+          .limit(1)
+      : []
+    return { ...row, criteria, photoMap, recordPhotos, site }
   })
 
   if (!data) {
@@ -227,7 +239,7 @@ export async function EquipmentInspectionDrawer({
   }
   const { record, type, item, inspectorName, criteria, photoMap, recordPhotos } = data
   const finalized = record.status === 'submitted' || record.status === 'closed'
-  const editable = canInspect && !record.locked && !finalized
+  const editable = !record.deletedAt && canInspect && !record.locked && !finalized
 
   // Counts for the summary line
   const total = criteria.length
@@ -299,7 +311,25 @@ export async function EquipmentInspectionDrawer({
         // under it without the list appearing to end early.
         <div className="flex w-full items-center justify-between gap-3">
           <InspectionStatusPill status={progress} answered={answered} total={total} />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {canManage ? (
+              <form action={setEquipmentInspectionDeleted}>
+                <input type="hidden" name="recordId" value={record.id} />
+                <input type="hidden" name="restore" value={record.deletedAt ? '1' : '0'} />
+                <ConfirmButton
+                  variant={record.deletedAt ? 'outline' : 'destructive'}
+                  message={
+                    record.deletedAt
+                      ? tGenerated('m_1690e5c18e011e')
+                      : tGenerated('m_1efe21aa2caf3d')
+                  }
+                >
+                  {record.deletedAt
+                    ? tGenerated('m_19500e41842c99')
+                    : tGenerated('m_11773f3c3f7558')}
+                </ConfirmButton>
+              </form>
+            ) : null}
             <DownloadLink href={`/equipment/inspections/${record.id}/pdf`}>
               <Button variant="outline">
                 <FileText size={14} /> <GeneratedText id="m_016088be0b1e51" />
@@ -307,7 +337,7 @@ export async function EquipmentInspectionDrawer({
             </DownloadLink>
             <GeneratedValue
               value={
-                finalized && canInspect ? (
+                finalized && canInspect && !record.deletedAt ? (
                   <form action={reopenEquipmentInspection}>
                     <input type="hidden" name="recordId" value={record.id} />
                     <Button type="submit" variant="outline">
@@ -450,6 +480,7 @@ export async function EquipmentInspectionDrawer({
 
         <RecordMeta
           recordId={record.id}
+          site={data.site}
           occurredAt={
             record.occurredAt ? datetimeLocalValue(new Date(record.occurredAt), ctx.timezone) : ''
           }
