@@ -611,7 +611,9 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
             value={
               compliance.length > 0 ? (
                 <div className="space-y-1.5">
-                  <SectionHeading>Compliance</SectionHeading>
+                  <SectionHeading>
+                    <GeneratedText id="m_096d47f60747b3" />
+                  </SectionHeading>
                   <RecordLinkTable
                     noun="obligation"
                     rows={compliance.map((r) => ({
@@ -648,7 +650,9 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
             value={
               drafts.length > 0 ? (
                 <div className="space-y-1.5">
-                  <SectionHeading>In progress</SectionHeading>
+                  <SectionHeading>
+                    <GeneratedText id="m_1a03b06872ffd9" />
+                  </SectionHeading>
                   <RecordLinkTable
                     noun="draft"
                     rows={drafts.map((r) => ({
