@@ -359,9 +359,10 @@ After that you can sign in either way — password or magic link.
 
 Instead of digging through lists, you can just ask. For example:
 
+- "What's on my plate?"
+- "Which documents do I still need to read?"
 - "Show my overdue corrective actions."
-- "How many incidents were reported at the yard this month?"
-- "How do I add my signature?"
+- "How do I add equipment?"
 
 The Assistant can also read this user guide, so it can walk you through app tasks step by step.
 
@@ -408,6 +409,15 @@ Nothing is saved until you confirm.
 ## What it can and cannot see
 
 The Assistant only sees what you are allowed to see. It follows the same permissions as your login. If you cannot open a record yourself, the Assistant cannot read it for you either.
+
+When you ask what is on your plate, it checks the same work as Workspace:
+
+- **Compliance** — obligations still owed to you, including documents to acknowledge, forms, training assignments, and inspections.
+- **In progress** — drafts and unfinished entries, including forms.
+- **Tasks** — open corrective actions assigned to you.
+- **Training** — courses that are expired or expiring in the next 90 days.
+
+If your role can open the Compliance hub, you can also ask about another person, or who is outstanding across the company. Otherwise it stays on your own records. It cannot delete drafts for you.
 
 ## Tips
 

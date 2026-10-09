@@ -77,6 +77,12 @@ function incidentStatusVariant(s: string): BadgeVariant {
   if (s === 'reopened') return 'destructive'
   return 'secondary'
 }
+function complianceStatusVariant(s: string): BadgeVariant {
+  if (s === 'overdue' || s === 'expiring') return 'destructive'
+  if (s === 'pending' || s === 'in_progress') return 'warning'
+  if (s === 'completed') return 'success'
+  return 'secondary'
+}
 function caStatusVariant(s: string): BadgeVariant {
   if (s === 'closed') return 'success'
   if (s === 'cancelled') return 'outline'
@@ -537,16 +543,136 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
       )
     }
 
+    case 'find_compliance_gaps':
+    case 'find_person_compliance': {
+      const items = Array.isArray(data.items) ? (data.items as AnyRow[]) : []
+      if (items.length === 0) return null
+      const showPerson = name === 'find_compliance_gaps'
+      return (
+        <RecordLinkTable
+          noun="obligation"
+          data={data}
+          rows={items.map((r) => ({
+            id: `${str(r.obligationId)}:${str(r.personId)}:${str(r.dueOn)}`,
+            href: str(r.href) || '/compliance/mine',
+            cells: {
+              title: str(r.title) || 'Obligation',
+              person: str(r.person) || '—',
+              kind: str(r.kindLabel) || humanize(r.kind),
+              status: r.status ? (
+                <Badge variant={complianceStatusVariant(str(r.status))}>
+                  <GeneratedValue value={humanize(r.status)} />
+                </Badge>
+              ) : null,
+              dueOn: r.dueOn ? fmtDate(r.dueOn) : '—',
+            },
+          }))}
+          columns={[
+            {
+              key: 'title',
+              label: 'Obligation',
+              primary: true,
+              className: 'w-full max-w-0 truncate',
+            },
+            ...(showPerson
+              ? [{ key: 'person', label: 'Person', className: 'whitespace-nowrap' } as Column]
+              : []),
+            { key: 'kind', label: 'Kind', className: 'whitespace-nowrap' },
+            { key: 'status', label: 'Status', className: 'whitespace-nowrap' },
+            { key: 'dueOn', label: 'Due', className: 'whitespace-nowrap' },
+          ]}
+        />
+      )
+    }
+
     case 'list_my_open_items': {
       const cas = Array.isArray(data.openCorrectiveActions)
         ? (data.openCorrectiveActions as AnyRow[])
         : []
-      const training = Array.isArray(data.trainingExpiringSoon)
-        ? (data.trainingExpiringSoon as AnyRow[])
+      const compliance = Array.isArray((data.compliance as AnyRow | undefined)?.items)
+        ? (data.compliance as { items: AnyRow[] }).items
         : []
-      if (cas.length === 0 && training.length === 0) return null
+      const drafts = Array.isArray(data.inProgress) ? (data.inProgress as AnyRow[]) : []
+      const training = Array.isArray(data.trainingAttention)
+        ? (data.trainingAttention as AnyRow[])
+        : Array.isArray(data.trainingExpiringSoon)
+          ? (data.trainingExpiringSoon as AnyRow[])
+          : []
+      if (
+        cas.length === 0 &&
+        training.length === 0 &&
+        compliance.length === 0 &&
+        drafts.length === 0
+      )
+        return null
       return (
         <div className="space-y-3">
+          <GeneratedValue
+            value={
+              compliance.length > 0 ? (
+                <div className="space-y-1.5">
+                  <SectionHeading>Compliance</SectionHeading>
+                  <RecordLinkTable
+                    noun="obligation"
+                    rows={compliance.map((r) => ({
+                      id: str(r.obligationId),
+                      href: str(r.href) || '/compliance/mine',
+                      cells: {
+                        title: str(r.title) || 'Obligation',
+                        kind: str(r.kindLabel) || humanize(r.kind),
+                        status: r.status ? (
+                          <Badge variant={complianceStatusVariant(str(r.status))}>
+                            <GeneratedValue value={humanize(r.status)} />
+                          </Badge>
+                        ) : null,
+                        dueOn: r.dueOn ? fmtDate(r.dueOn) : '—',
+                      },
+                    }))}
+                    columns={[
+                      {
+                        key: 'title',
+                        label: 'Obligation',
+                        primary: true,
+                        className: 'w-full max-w-0 truncate',
+                      },
+                      { key: 'kind', label: 'Kind', className: 'whitespace-nowrap' },
+                      { key: 'status', label: 'Status', className: 'whitespace-nowrap' },
+                      { key: 'dueOn', label: 'Due', className: 'whitespace-nowrap' },
+                    ]}
+                  />
+                </div>
+              ) : null
+            }
+          />
+          <GeneratedValue
+            value={
+              drafts.length > 0 ? (
+                <div className="space-y-1.5">
+                  <SectionHeading>In progress</SectionHeading>
+                  <RecordLinkTable
+                    noun="draft"
+                    rows={drafts.map((r) => ({
+                      id: str(r.id),
+                      href: str(r.href) || '/my/in-progress',
+                      cells: {
+                        title: str(r.title) || 'Draft',
+                        kind: humanize(r.kind),
+                      },
+                    }))}
+                    columns={[
+                      {
+                        key: 'title',
+                        label: 'Draft',
+                        primary: true,
+                        className: 'w-full max-w-0 truncate',
+                      },
+                      { key: 'kind', label: 'Kind', className: 'whitespace-nowrap' },
+                    ]}
+                  />
+                </div>
+              ) : null
+            }
+          />
           <GeneratedValue
             value={
               cas.length > 0 ? (
@@ -595,6 +721,7 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
                       href: HREF.trainingRecord(str(r.id)),
                       cells: {
                         course: str(r.course) || 'Training record',
+                        state: r.state ? humanize(r.state) : '—',
                         expiresOn: r.expiresOn ? fmtDate(r.expiresOn) : '—',
                       },
                     }))}
@@ -605,6 +732,7 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
                         primary: true,
                         className: 'w-full max-w-0 truncate',
                       },
+                      { key: 'state', label: 'State', className: 'whitespace-nowrap' },
                       { key: 'expiresOn', label: 'Expires', className: 'whitespace-nowrap' },
                     ]}
                   />

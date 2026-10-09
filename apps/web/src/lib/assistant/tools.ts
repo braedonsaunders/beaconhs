@@ -27,6 +27,16 @@ import { latestTrainingRecordOnly } from '@/lib/training-latest'
 import { moduleScopeWhere, recordVisibilityWhere } from '@/lib/visibility'
 import { documentReadFilter } from './doc-access'
 import { getDocumentPdfBytes, getDocumentText } from './document-content'
+import {
+  canReadCompanyCompliance,
+  findCompliancePeople,
+  isObligationKind,
+  loadMyPlate,
+  loadPersonCompliance,
+  searchComplianceGaps,
+  selfPersonId,
+} from './plate'
+import { OBLIGATION_KINDS } from '@/app/(app)/compliance/obligations/_meta'
 import { truncateText, type AssistantToolDef, type ToolImage, type ToolResult } from './types'
 
 // ---- helpers ---------------------------------------------------------------
@@ -631,7 +641,13 @@ const findPeople: AssistantToolDef = {
   category: 'read',
   gate: {
     mode: 'anyOf',
-    perms: ['training.read.all', 'incidents.read.site', 'ca.read.site', 'admin.users.manage'],
+    perms: [
+      'training.read.all',
+      'incidents.read.site',
+      'ca.read.site',
+      'admin.users.manage',
+      'compliance.read',
+    ],
   },
   inputSchema: z.object({
     query: z.string().min(1).max(100),
@@ -683,7 +699,7 @@ const findPeople: AssistantToolDef = {
 const findTrainingRecords: AssistantToolDef = {
   name: 'find_training_records',
   description:
-    'List training records the user may see, optionally for one person or expiring within N days. Expiry queries only count the latest record per person and course (retraining supersedes older records). Includes course name and expiry. Read-only.',
+    'List training records the user may see: completed courses and certificate expiry. training.read.all sees every employee; training.read.self sees only their own. There is no crew or group slice. Expiry queries only count the latest record per person and course. This is the training register, not the list of obligations still owed — use list_my_open_items or find_person_compliance for assigned work. Read-only.',
   category: 'read',
   gate: { mode: 'anyOf', perms: ['training.read.all', 'training.read.self'] },
   inputSchema: z.object({
@@ -757,77 +773,126 @@ const findTrainingRecords: AssistantToolDef = {
 const listMyOpenItems: AssistantToolDef = {
   name: 'list_my_open_items',
   description:
-    "Summarize what's on the current user's plate right now: their open corrective actions and their own training that's expiring soon. Read-only.",
+    'Everything currently on the signed-in user\'s own plate. Call this first for "what\'s on my plate", "what do I owe", "documents I need to read or acknowledge", "my compliance", "my drafts", or "delete my in-progress". Returns outstanding compliance obligations (documents, forms, training assignments, inspections, PPE, equipment checks, and every other obligation kind), unfinished drafts including form drafts, open corrective actions, and training that is expired or expiring within 90 days. Each training item has state expired or expiring — use that, do not recompute dates. This is only the signed-in user, even if they can see other people. Read-only. It cannot delete drafts.',
   category: 'read',
   gate: { mode: 'public' },
   inputSchema: z.object({
     unused: z.string().optional().describe('Unused. Leave empty.'),
   }),
   execute: async (_args, ctx): Promise<ToolResult> => {
-    return ctx.db(async (tx) => {
-      const membershipId = ctx.membership?.id ?? null
-      const [me] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(eq(people.userId, ctx.userId))
-        .limit(1)
-      const myPersonId = me?.id ?? null
+    const data = await loadMyPlate(ctx)
+    return { ok: true, data }
+  },
+}
 
-      const myCas = membershipId
-        ? await tx
-            .select({
-              id: correctiveActions.id,
-              reference: correctiveActions.reference,
-              title: correctiveActions.title,
-              status: correctiveActions.status,
-              dueOn: correctiveActions.dueOn,
-            })
-            .from(correctiveActions)
-            .where(
-              and(
-                isNull(correctiveActions.deletedAt),
-                eq(correctiveActions.ownerTenantUserId, membershipId),
-                inArray(correctiveActions.status, ['open', 'in_progress', 'pending_verification']),
-              ),
-            )
-            .orderBy(correctiveActions.dueOn)
-            .limit(25)
-        : []
+const findPersonCompliance: AssistantToolDef = {
+  name: 'find_person_compliance',
+  description:
+    "List one person's compliance obligations: documents to acknowledge, assigned forms, training, inspections, and every other obligation kind. Omit personId and query to read the signed-in user, including completed items when outstandingOnly is false. Looking up anyone else requires the Compliance hub permission (compliance.read); pass personId or a name query. A query that matches several people returns the matches instead of guessing. Read-only.",
+  category: 'read',
+  gate: { mode: 'public' },
+  inputSchema: z.object({
+    personId: z.string().uuid().optional(),
+    query: z.string().min(1).max(100).optional().describe('Name, employee number, or email.'),
+    outstandingOnly: z
+      .boolean()
+      .optional()
+      .describe('Default true. False includes completed items.'),
+    kind: z.enum(OBLIGATION_KINDS).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  execute: async (raw, ctx): Promise<ToolResult> => {
+    const a = raw as {
+      personId?: string
+      query?: string
+      outstandingOnly?: boolean
+      kind?: (typeof OBLIGATION_KINDS)[number]
+      limit?: number
+    }
+    const limit = Math.min(a.limit ?? 40, 50)
+    const outstandingOnly = a.outstandingOnly !== false
+    const kind = a.kind && isObligationKind(a.kind) ? a.kind : undefined
+    const selfId = await selfPersonId(ctx)
 
-      const horizon = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10)
-      const expiringTraining = myPersonId
-        ? await tx
-            .select({
-              id: trainingRecords.id,
-              course: trainingCourses.name,
-              expiresOn: trainingRecords.expiresOn,
-            })
-            .from(trainingRecords)
-            .leftJoin(trainingCourses, eq(trainingCourses.id, trainingRecords.courseId))
-            .where(
-              and(
-                isNull(trainingRecords.deletedAt),
-                eq(trainingRecords.personId, myPersonId),
-                lt(trainingRecords.expiresOn, horizon),
-                latestTrainingRecordOnly(),
-              ),
-            )
-            .orderBy(trainingRecords.expiresOn)
-            .limit(25)
-        : []
+    if (a.query && !a.personId) {
+      if (!canReadCompanyCompliance(ctx)) {
+        return { ok: false, error: 'forbidden' }
+      }
+      const matches = await findCompliancePeople(ctx, a.query, 8)
+      if (matches.length === 0) {
+        return { ok: true, data: { matches: [], note: 'No active person matched that name.' } }
+      }
+      if (matches.length > 1) {
+        return {
+          ok: true,
+          data: {
+            matches,
+            note: 'Several people matched. Call again with the chosen personId.',
+          },
+        }
+      }
+      const only = matches[0]
+      if (!only)
+        return { ok: true, data: { matches: [], note: 'No active person matched that name.' } }
+      const data = await loadPersonCompliance(ctx, only.id, {
+        outstandingOnly,
+        kind,
+        limit,
+        forSelf: only.id === selfId,
+      })
+      return { ok: true, data: { ...data, person: only.name } }
+    }
 
+    const personId = a.personId ?? selfId
+    if (!personId) {
       return {
         ok: true,
         data: {
-          openCorrectiveActions: myCas,
-          trainingExpiringSoon: expiringTraining,
-          note:
-            myPersonId === null
-              ? 'No linked person profile, so personal training could not be resolved.'
-              : undefined,
+          items: [],
+          note: 'No linked person profile, so compliance obligations could not be resolved.',
         },
       }
+    }
+    if (personId !== selfId && !canReadCompanyCompliance(ctx)) {
+      return { ok: false, error: 'forbidden' }
+    }
+    const data = await loadPersonCompliance(ctx, personId, {
+      outstandingOnly,
+      kind,
+      limit,
+      forSelf: personId === selfId,
     })
+    return { ok: true, data }
+  },
+}
+
+const findComplianceGaps: AssistantToolDef = {
+  name: 'find_compliance_gaps',
+  description:
+    'Company-wide outstanding compliance: obligations that are overdue, expiring, pending, or in progress, across employees. Optional name or title search, and an optional obligation kind. This matches the Compliance hub: the whole company, not a single crew. Only available to someone who can open that hub. Read-only.',
+  category: 'read',
+  gate: { mode: 'anyOf', perms: ['compliance.read'] },
+  inputSchema: z.object({
+    query: z
+      .string()
+      .max(100)
+      .optional()
+      .describe('Obligation title, person name, or employee number.'),
+    kind: z.enum(OBLIGATION_KINDS).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  execute: async (raw, ctx): Promise<ToolResult> => {
+    const a = raw as {
+      query?: string
+      kind?: (typeof OBLIGATION_KINDS)[number]
+      limit?: number
+    }
+    const data = await searchComplianceGaps(ctx, {
+      query: a.query,
+      kind: a.kind && isObligationKind(a.kind) ? a.kind : undefined,
+      limit: Math.min(a.limit ?? 40, 50),
+    })
+    return { ok: true, data }
   },
 }
 
@@ -909,6 +974,8 @@ export const READ_TOOLS: AssistantToolDef[] = [
   findPeople,
   findTrainingRecords,
   listMyOpenItems,
+  findPersonCompliance,
+  findComplianceGaps,
   searchUserGuide,
   readUserGuide,
 ]

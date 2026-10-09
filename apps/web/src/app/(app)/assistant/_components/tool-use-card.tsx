@@ -39,6 +39,8 @@ const META: Record<string, { label: string; icon: LucideIcon }> = {
   find_people: { label: 'Looked up people', icon: Users },
   find_training_records: { label: 'Searched training records', icon: Search },
   list_my_open_items: { label: 'Checked your open items', icon: ListChecks },
+  find_person_compliance: { label: 'Checked compliance', icon: ShieldCheck },
+  find_compliance_gaps: { label: 'Searched outstanding compliance', icon: Search },
   search_user_guide: { label: 'Searched the user guide', icon: Search },
   read_user_guide: { label: 'Read a user-guide article', icon: FileText },
   draft_corrective_action: { label: 'Drafted a corrective action', icon: Sparkles },

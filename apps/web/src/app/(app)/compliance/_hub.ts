@@ -9,6 +9,7 @@ import {
   complianceObligations,
   complianceStatus,
 } from '@beaconhs/db/schema'
+import type { Database } from '@beaconhs/db'
 import type { requireRequestContext } from '@/lib/auth'
 import { type ObligationKind, kindLabel } from './obligations/_meta'
 
@@ -148,34 +149,36 @@ export type PersonStatusRow = {
 }
 
 /** Everything one person owes, across every obligation kind. */
-export async function personCompliance(ctx: Ctx, personId: string): Promise<PersonStatusRow[]> {
-  const rows = await ctx.db((tx) =>
-    tx
-      .select({
-        kind: complianceObligations.sourceModule,
-        obligationId: complianceObligations.id,
-        title: complianceObligations.title,
-        status: complianceStatus.status,
-        dueOn: complianceStatus.dueOn,
-        completedOn: complianceStatus.completedOn,
-        periodStart: complianceStatus.periodStart,
-        periodEnd: complianceStatus.periodEnd,
-        count: complianceStatus.count,
-        expected: complianceStatus.expected,
-        percent: complianceStatus.percent,
-        targetRef: complianceObligations.targetRef,
-        subjectRef: complianceStatus.subjectRef,
-      })
-      .from(complianceStatus)
-      .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
-      .where(
-        and(
-          eq(complianceStatus.tenantId, ctx.tenantId),
-          eq(complianceStatus.personId, personId),
-          ...liveFilter(),
-        ),
+export async function queryPersonCompliance(
+  tx: Database,
+  tenantId: string,
+  personId: string,
+): Promise<PersonStatusRow[]> {
+  const rows = await tx
+    .select({
+      kind: complianceObligations.sourceModule,
+      obligationId: complianceObligations.id,
+      title: complianceObligations.title,
+      status: complianceStatus.status,
+      dueOn: complianceStatus.dueOn,
+      completedOn: complianceStatus.completedOn,
+      periodStart: complianceStatus.periodStart,
+      periodEnd: complianceStatus.periodEnd,
+      count: complianceStatus.count,
+      expected: complianceStatus.expected,
+      percent: complianceStatus.percent,
+      targetRef: complianceObligations.targetRef,
+      subjectRef: complianceStatus.subjectRef,
+    })
+    .from(complianceStatus)
+    .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
+    .where(
+      and(
+        eq(complianceStatus.tenantId, tenantId),
+        eq(complianceStatus.personId, personId),
+        ...liveFilter(),
       ),
-  )
+    )
   const rank = (s: string) =>
     s === 'overdue' || s === 'expiring' ? 0 : s === 'pending' ? 1 : s === 'in_progress' ? 2 : 3
   return rows
@@ -195,6 +198,11 @@ export async function personCompliance(ctx: Ctx, personId: string): Promise<Pers
       subjectRef: r.subjectRef,
     }))
     .sort((a, b) => rank(a.status) - rank(b.status) || a.title.localeCompare(b.title))
+}
+
+/** Everything one person owes, across every obligation kind. */
+export async function personCompliance(ctx: Ctx, personId: string): Promise<PersonStatusRow[]> {
+  return ctx.db((tx) => queryPersonCompliance(tx, ctx.tenantId, personId))
 }
 
 export type AgingBucket = '0_7' | '7_30' | '30_plus' | 'no_date'
