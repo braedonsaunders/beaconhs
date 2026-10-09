@@ -1,3 +1,6 @@
+import { eq } from 'drizzle-orm'
+import { tenants, trainingSkillAuthorities } from '@beaconhs/db/schema'
+import { cwbRosterResult, isCwbRoster } from './cwb-roster'
 import { executeParameterizedRows, type Database } from '@beaconhs/db'
 import { withDomainCellTones } from './cell-tones'
 import {
@@ -55,7 +58,26 @@ export async function runBeaconReport(
   const compiled = compileCustomReport({ ...query, filters }, tenantId, catalog, options)
   const startedAt = performance.now()
   const rows = await executeParameterizedRows(tx, compiled.sql, compiled.params)
-  return withDomainCellTones(customReportResult(compiled, [...rows], performance.now() - startedAt))
+  let result = customReportResult(compiled, [...rows], performance.now() - startedAt)
+  if (isCwbRoster(query)) {
+    const [tenant] = await tx
+      .select({ name: tenants.name, settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1)
+    const [authority] = await tx
+      .select({ accountNumber: trainingSkillAuthorities.accountNumber })
+      .from(trainingSkillAuthorities)
+      .where(eq(trainingSkillAuthorities.code, 'CWB'))
+      .limit(1)
+    const settings = tenant?.settings ?? {}
+    result = cwbRosterResult(result, {
+      name: typeof settings.companyName === 'string' ? settings.companyName : (tenant?.name ?? ''),
+      address: typeof settings.companyAddress === 'string' ? settings.companyAddress : '',
+      accountNumber: authority?.accountNumber ?? '',
+    })
+  }
+  return withDomainCellTones(result)
 }
 
 function mergeFilters(

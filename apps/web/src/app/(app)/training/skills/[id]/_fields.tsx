@@ -1,7 +1,7 @@
 import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, type SelectOption } from '@beaconhs/ui'
-import { LiveField, LiveRemoteSelect } from '@/components/live-field'
+import { LiveField, LiveRemoteSelect, LiveSelect } from '@/components/live-field'
 
 // The skill "Skill details" card — the auto-saving field set for the unified
 // assignment page. "New skill" creates the row immediately (default
@@ -13,6 +13,7 @@ type SkillFieldValues = {
   grantedOn: string
   expiresOn: string | null
   notes: string | null
+  status: string
 }
 
 type SkillFieldInitialOptions = {
@@ -44,39 +45,53 @@ export function SkillDetailFields({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-1">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="min-w-0 space-y-1">
+            <LiveRemoteSelect
+              id={id}
+              field="personId"
+              label={tGenerated('m_12e926c9216094')}
+              initialValue={initial.personId}
+              initialOption={initialOptions.person}
+              lookup="training-skill-assignment-people"
+              emptyLabel={tGenerated('m_0be39d3a196b5b')}
+              disabled={disabled}
+              updateAction={updateAction}
+            />
+            <GeneratedValue
+              value={
+                personHref ? (
+                  <Link
+                    href={personHref as never}
+                    className="text-xs text-teal-700 hover:underline dark:text-teal-400"
+                  >
+                    <GeneratedText id="m_158274742d32f3" />
+                  </Link>
+                ) : null
+              }
+            />
+          </div>
           <LiveRemoteSelect
             id={id}
-            field="personId"
-            label={tGenerated('m_12e926c9216094')}
-            initialValue={initial.personId}
-            initialOption={initialOptions.person}
-            lookup="training-skill-assignment-people"
-            emptyLabel={tGenerated('m_0be39d3a196b5b')}
+            field="skillTypeId"
+            label={tGenerated('m_0f4481ed349502')}
+            initialValue={initial.skillTypeId}
+            initialOption={initialOptions.skillType}
+            lookup="training-skill-assignment-types"
+            emptyLabel={tGenerated('m_1ac86a66a34aae')}
             disabled={disabled}
             updateAction={updateAction}
           />
-          <GeneratedValue
-            value={
-              personHref ? (
-                <Link
-                  href={personHref as never}
-                  className="text-xs text-teal-700 hover:underline dark:text-teal-400"
-                >
-                  <GeneratedText id="m_158274742d32f3" />
-                </Link>
-              ) : null
-            }
-          />
         </div>
-        <LiveRemoteSelect
+        <LiveSelect
           id={id}
-          field="skillTypeId"
-          label={tGenerated('m_0f4481ed349502')}
-          initialValue={initial.skillTypeId}
-          initialOption={initialOptions.skillType}
-          lookup="training-skill-assignment-types"
-          emptyLabel={tGenerated('m_1ac86a66a34aae')}
+          field="status"
+          label={tGenerated('m_0b9da892d6faf0')}
+          initialValue={initial.status}
+          options={['draft', 'expired', 'complete', 'tested', 'recommended', 'failed'].map(
+            (value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) }),
+          )}
+          allowEmpty={false}
           disabled={disabled}
           updateAction={updateAction}
         />

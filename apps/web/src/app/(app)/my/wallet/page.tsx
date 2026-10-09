@@ -2,7 +2,7 @@ import { GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 // "My wallet" — an Apple-Wallet-style view of the signed-in user's credentials.
 //
-// Every training record and granted skill is rendered through the SAME design
+// Training records and opted-in skill cards use the SAME design
 // system that produces the printed CR80 cards: the tenant's configured *wallet*
 // credential design document (resolveCredentialOutput → format 'wallet'), drawn
 // to HTML by `renderDesignDocumentHtml`. The front/back artboards on screen are
@@ -43,7 +43,12 @@ import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
 import { TableToolbar } from '@/components/table-toolbar'
 import { parseListParams, pickString } from '@/lib/list-params'
-import { resolveCourseCredentialOutput, resolveCredentialOutput } from '@/lib/credential-designs'
+import {
+  resolveCourseCredentialOutput,
+  resolveCredentialOutput,
+  resolveSkillCredentialOutput,
+  normalizeCredentialOutputs,
+} from '@/lib/credential-designs'
 import { WorkspaceNoIdentity } from '../_no-identity'
 import { WalletStack, type WalletCard, type WalletDesign } from './_wallet-stack'
 
@@ -130,6 +135,15 @@ export default async function MyWalletPage({
       .where(eq(tenants.id, ctx.tenantId!))
       .limit(1)
 
+    const walletIds = normalizeCredentialOutputs(tenant?.settings)
+      .filter((output) => output.enabled && output.format === 'wallet')
+      .map((output) => output.id)
+    const skillWalletEnabled = walletIds.length
+      ? sql`exists (select 1 from jsonb_array_elements_text(${trainingSkillTypes.credentialOutputIds}) chosen(id) where chosen.id in (${sql.join(
+          walletIds.map((id) => sql`${id}`),
+          sql`, `,
+        )}))`
+      : sql`false`
     const credentialSet = sql`
       select 'training'::text as kind,
         ${trainingRecords.id}::text as id,
@@ -172,6 +186,9 @@ export default async function MyWalletPage({
         on ${trainingSkillAuthorities.id} = ${trainingSkillTypes.authorityId}
       where ${trainingSkillAssignments.personId} = ${person.id}
         and ${trainingSkillAssignments.deletedAt} is null
+        and ${trainingSkillAssignments.status} = 'complete'
+        and ${trainingSkillAssignments.id} in (select id from report_skill_assignments)
+        and ${skillWalletEnabled}
     `
     const filters: SQL[] = []
     if (listParams.q) {
@@ -230,6 +247,7 @@ export default async function MyWalletPage({
               id: trainingSkillAssignments.id,
               grantedOn: trainingSkillAssignments.grantedOn,
               expiresOn: trainingSkillAssignments.expiresOn,
+              outputIds: trainingSkillTypes.credentialOutputIds,
               skillName: trainingSkillTypes.name,
               skillCode: trainingSkillTypes.code,
               authorityName: trainingSkillAuthorities.name,
@@ -337,7 +355,7 @@ export default async function MyWalletPage({
     skillCerts,
     photoUrl,
   } = data
-  // Tenant-default wallet design — used for skills and as the fallback. Training
+  // Tenant-default wallet dimensions. Training
   // records resolve their own design from the course's pinned selection below.
   const defaultOutput = resolveCredentialOutput(tenant?.settings, { format: 'wallet' })
   const defaultDocument = defaultOutput.document ?? createWalletDesignDocument(defaultOutput)
@@ -418,7 +436,12 @@ export default async function MyWalletPage({
     skills.map(async (s) => {
       const token = tokenByAssignment.get(s.id)
       const qrDataUrl = await qrFor(token)
-      const faces = await renderCard(defaultDocument, {
+      const output = resolveSkillCredentialOutput(s.outputIds, tenant?.settings, {
+        format: 'wallet',
+      })
+      if (!output) throw new Error('The selected skill wallet design is no longer available.')
+      const document = output.document ?? createWalletDesignDocument(output)
+      const faces = await renderCard(document, {
         tenantName,
         tenantLogoUrl,
         recipientFullName,
@@ -438,7 +461,7 @@ export default async function MyWalletPage({
         kind: 'skill' as const,
         title: s.skillName,
         status: statusFor(s.expiresOn, todayStr),
-        pdfHref: `/training/skills/${s.id}/certificate?output=${defaultOutput.id}`,
+        pdfHref: `/training/skills/${s.id}/certificate?output=${output.id}`,
         verifyHref: token ? `/verify/${token}` : null,
         ...faces,
       }

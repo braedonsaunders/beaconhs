@@ -16,7 +16,7 @@ import {
   credentialOutputPdfFormat,
   directPrintProvider,
   resolveCourseCredentialOutput,
-  resolveCredentialOutput,
+  resolveSkillCredentialOutput,
   type CredentialOutputRequest,
   type DirectPrintProvider,
 } from '@beaconhs/design-studio'
@@ -170,7 +170,13 @@ async function prepareSkillCredential(
       .limit(1)
     return row ?? null
   })
-  if (!data) return null
+  if (
+    !data ||
+    data.assignment.status !== 'complete' ||
+    data.assignment.deletedAt ||
+    data.cert.revokedAt
+  )
+    return null
 
   const { cert, assignment, skillType, authority, person, tenant } = data
   const [photoUrl, tenantLogoUrl] = await Promise.all([
@@ -180,7 +186,12 @@ async function prepareSkillCredential(
   const verifyUrl = `${appBaseUrl()}/verify/${cert.verifyToken}`
   const qrDataUrl = await makeVerifyQr(verifyUrl)
   const fullName = `${person.firstName} ${person.lastName}`
-  const output = resolveCredentialOutput(tenant.settings, request)
+  const output = resolveSkillCredentialOutput(
+    skillType.credentialOutputIds,
+    tenant.settings,
+    request,
+  )
+  if (!output) return null
   const pdfFormat = credentialOutputPdfFormat(output)
   const skillPart = safeName(skillType.code || skillType.name, 'skill')
   const personPart = safeName(person.lastName, 'person')

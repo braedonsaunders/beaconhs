@@ -1118,7 +1118,16 @@ async function loadOptions(
           trainingSkillAuthorities,
           eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
         )
-        .where(match)
+        .where(
+          and(
+            match,
+            isNull(trainingSkillTypes.deletedAt),
+            or(
+              eq(trainingSkillTypes.isActive, true),
+              input.selected ? eq(trainingSkillTypes.id, input.selected) : undefined,
+            ),
+          ),
+        )
         .orderBy(
           ...(input.selected ? [desc(sql`${trainingSkillTypes.id} = ${input.selected}`)] : []),
           asc(trainingSkillAuthorities.name),
@@ -1965,6 +1974,7 @@ async function loadOptions(
             .select({
               preUseTypeId: equipmentItems.preUseInspectionTypeId,
               ownership: equipmentItems.ownership,
+              typeId: equipmentItems.typeId,
             })
             .from(equipmentItems)
             .where(
@@ -2006,6 +2016,10 @@ async function loadOptions(
             eq(equipmentInspectionTypes.tenantId, ctx.tenantId),
             inArray(equipmentInspectionTypes.id, ids),
             eq(equipmentInspectionTypes.isActive, true),
+            or(
+              isNull(equipmentInspectionTypes.appliesToTypeId),
+              item.typeId ? eq(equipmentInspectionTypes.appliesToTypeId, item.typeId) : undefined,
+            ),
             // Rented gear is only ever checked before use; its periodic
             // certification belongs to the rental company.
             item.ownership === 'rented' ? eq(equipmentInspectionTypes.isPreUse, true) : undefined,

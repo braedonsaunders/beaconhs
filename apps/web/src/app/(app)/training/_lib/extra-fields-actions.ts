@@ -5,7 +5,7 @@
 // policy still validates every remotely callable input before opening a
 // transaction so callers receive useful errors instead of database failures.
 
-import { and, eq, type SQL } from 'drizzle-orm'
+import { and, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import type { Database } from '@beaconhs/db'
 import {
@@ -14,6 +14,7 @@ import {
   trainingSkillAuthorities,
   trainingSkillTypes,
 } from '@beaconhs/db/schema'
+import { requireUuidInput, optionalTextInput } from '@/lib/mutation-input'
 import { requireRequestContext } from '@/lib/auth'
 import { assertCanManageModule } from '@/lib/module-admin/guard'
 import { recordAuditInTransaction } from '@/lib/audit'
@@ -131,6 +132,11 @@ export async function addExtraField(input: {
     return { ok: false, error: error instanceof Error ? error.message : 'Invalid field.' }
   }
 
+  if (parsed.ownerType === 'skill')
+    return {
+      ok: false,
+      error: 'Define additional fields on the skill type, then fill them on the employee ticket.',
+    }
   const result = await ctx.db(async (tx) => {
     if (!(await ownerExists(tx, ctx.tenantId, parsed.ownerType, parsed.ownerId))) {
       return { ok: false as const, error: 'The training record no longer exists.' }
@@ -142,6 +148,7 @@ export async function addExtraField(input: {
         ...ownerValues(parsed.ownerType, parsed.ownerId),
         fieldKey: parsed.fieldKey,
         fieldValue: parsed.fieldValue,
+        valueMode: parsed.ownerType === 'skill_type' && parsed.fieldValue ? 'type' : 'record',
       })
       .onConflictDoNothing()
       .returning({ id: trainingExtraFields.id })
@@ -210,4 +217,70 @@ export async function deleteExtraField(input: {
   })
   if (result.ok) revalidatePath(ownerPath(parsed.ownerType, parsed.ownerId))
   return result
+}
+
+export async function updateSkillExtraField(formData: FormData): Promise<void> {
+  const ctx = await requireRequestContext()
+  assertCanManageModule(ctx, 'training')
+  const id = requireUuidInput(formData.get('id'), 'Skill assignment')
+  const definitionId = requireUuidInput(formData.get('field'), 'Additional field')
+  const value = optionalTextInput(formData.get('value'), 'Additional field', 500)
+  await ctx.db(async (tx) => {
+    const [assignment] = await tx
+      .select()
+      .from(trainingSkillAssignments)
+      .where(and(eq(trainingSkillAssignments.id, id), isNull(trainingSkillAssignments.deletedAt)))
+      .for('update')
+      .limit(1)
+    if (!assignment?.skillTypeId)
+      throw new Error('Choose a skill type before entering additional fields.')
+    const [type] = await tx
+      .select()
+      .from(trainingSkillTypes)
+      .where(eq(trainingSkillTypes.id, assignment.skillTypeId))
+      .limit(1)
+    if (!type) throw new Error('Skill type not found.')
+    const [definition] = await tx
+      .select()
+      .from(trainingExtraFields)
+      .where(eq(trainingExtraFields.id, definitionId))
+      .limit(1)
+    if (
+      !definition ||
+      definition.valueMode !== 'record' ||
+      (definition.skillTypeId !== type.id && definition.authorityId !== type.authorityId)
+    )
+      throw new Error('This field is not an employee input on the selected skill type.')
+    const [before] = await tx
+      .select()
+      .from(trainingExtraFields)
+      .where(
+        and(
+          eq(trainingExtraFields.skillAssignmentId, id),
+          sql`lower(${trainingExtraFields.fieldKey}) = ${definition.fieldKey.toLowerCase()}`,
+        ),
+      )
+      .limit(1)
+    if (before)
+      await tx
+        .update(trainingExtraFields)
+        .set({ fieldValue: value })
+        .where(eq(trainingExtraFields.id, before.id))
+    else
+      await tx.insert(trainingExtraFields).values({
+        tenantId: ctx.tenantId,
+        skillAssignmentId: id,
+        fieldKey: definition.fieldKey,
+        fieldValue: value,
+      })
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_skill',
+      entityId: id,
+      action: 'update',
+      summary: `Updated ${definition.fieldKey}`,
+      before: { value: before?.fieldValue ?? null },
+      after: { value },
+    })
+  })
+  revalidatePath(`/training/skills/${id}`)
 }

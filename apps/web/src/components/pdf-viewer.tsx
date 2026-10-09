@@ -10,7 +10,7 @@ import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, Minus, Plus } from 'lucide-react'
 import { cn } from '@beaconhs/ui'
-import type { PDFDocumentProxy } from 'pdfjs-dist'
+import type { PDFDocumentProxy, PDFDocumentLoadingTask, RenderTask } from 'pdfjs-dist'
 
 const ZOOMS = [0.75, 1, 1.25, 1.5, 2]
 
@@ -34,6 +34,7 @@ function PdfPage({
 }) {
   const holderRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [renderError, setRenderError] = useState(false)
   const [shouldRender, setShouldRender] = useState(false)
   const [aspect, setAspect] = useState(11 / 8.5) // letter portrait until measured
 
@@ -58,6 +59,8 @@ function PdfPage({
   useEffect(() => {
     if (!shouldRender || width <= 0) return
     let cancelled = false
+    let task: RenderTask | undefined
+    setRenderError(false)
     void (async () => {
       const page = await doc.getPage(pageNumber)
       if (cancelled) return
@@ -74,10 +77,18 @@ function PdfPage({
       canvas.style.height = `${width * (base.height / base.width)}px`
       const ctx = canvas.getContext('2d')
       if (!ctx) return
-      await page.render({ canvasContext: ctx, viewport }).promise
-    })()
+      task = page.render({ canvasContext: ctx, viewport })
+      try {
+        await task.promise
+      } catch {
+        if (!cancelled) setRenderError(true)
+      }
+    })().catch(() => {
+      if (!cancelled) setRenderError(true)
+    })
     return () => {
       cancelled = true
+      task?.cancel()
     }
   }, [shouldRender, width, doc, pageNumber])
 
@@ -88,12 +99,25 @@ function PdfPage({
       className="mx-auto bg-white shadow-md ring-1 ring-slate-900/10 dark:ring-white/10"
       style={{ width, height: shouldRender ? undefined : width * aspect }}
     >
+      {renderError ? (
+        <p role="status" className="p-4 text-xs text-slate-600">
+          <GeneratedText id="m_0a54816ad70979" />
+        </p>
+      ) : null}
       <canvas ref={canvasRef} className="block" />
     </div>
   )
 }
 
-export function PdfViewer({ url, className }: { url: string; className?: string }) {
+export function PdfViewer({
+  url,
+  className,
+  thumbnail = false,
+}: {
+  url: string
+  className?: string
+  thumbnail?: boolean
+}) {
   const tGenerated = useGeneratedTranslations()
   const [resource, setResource] = useState<{
     url: string
@@ -108,10 +132,13 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
 
   useEffect(() => {
     let cancelled = false
+    let loading: PDFDocumentLoadingTask | undefined
     void (async () => {
       try {
         const pdfjs = await loadPdfjs()
-        const loaded = await pdfjs.getDocument({ url }).promise
+        if (cancelled) return
+        loading = pdfjs.getDocument({ url })
+        const loaded = await loading.promise
         if (!cancelled) {
           setResource({ url, doc: loaded, error: null })
           setCurrentPage(1)
@@ -128,6 +155,7 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
     })()
     return () => {
       cancelled = true
+      void loading?.destroy()
     }
   }, [url])
 
@@ -138,12 +166,13 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const measure = () => setBaseWidth(Math.max(280, Math.min(el.clientWidth - 48, 900)))
+    const measure = () =>
+      setBaseWidth(Math.max(80, Math.min(el.clientWidth - (thumbnail ? 0 : 48), 900)))
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [thumbnail])
 
   const updateCurrentPage = useCallback(() => {
     const viewport = scrollRef.current
@@ -176,49 +205,54 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
 
   return (
     <div className={cn('flex min-h-0 flex-col', className)}>
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-        <span className="tabular-nums">
-          <GeneratedValue
-            value={
-              doc ? (
-                <GeneratedText
-                  id="m_082902b0a0cd79"
-                  values={{ value0: currentPage, value1: doc.numPages }}
-                />
-              ) : (
-                <GeneratedText id="m_0e65697ec32c03" />
-              )
-            }
-          />
-        </span>
-        <div className="ml-auto flex items-center gap-1">
-          <button
-            type="button"
-            aria-label={tGenerated('m_00a262469a10eb')}
-            className="grid h-6 w-6 place-items-center rounded hover:bg-slate-100 dark:hover:bg-slate-800"
-            onClick={() => setZoom((z) => ZOOMS[Math.max(0, ZOOMS.indexOf(z) - 1)] ?? z)}
-          >
-            <Minus size={12} />
-          </button>
-          <span className="w-10 text-center tabular-nums">
-            <GeneratedValue value={Math.round(zoom * 100)} />%
+      {!thumbnail ? (
+        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          <span className="tabular-nums">
+            <GeneratedValue
+              value={
+                doc ? (
+                  <GeneratedText
+                    id="m_082902b0a0cd79"
+                    values={{ value0: currentPage, value1: doc.numPages }}
+                  />
+                ) : (
+                  <GeneratedText id="m_0e65697ec32c03" />
+                )
+              }
+            />
           </span>
-          <button
-            type="button"
-            aria-label={tGenerated('m_12713157ff4ed0')}
-            className="grid h-6 w-6 place-items-center rounded hover:bg-slate-100 dark:hover:bg-slate-800"
-            onClick={() =>
-              setZoom((z) => ZOOMS[Math.min(ZOOMS.length - 1, ZOOMS.indexOf(z) + 1)] ?? z)
-            }
-          >
-            <Plus size={12} />
-          </button>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              aria-label={tGenerated('m_00a262469a10eb')}
+              className="grid h-6 w-6 place-items-center rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={() => setZoom((z) => ZOOMS[Math.max(0, ZOOMS.indexOf(z) - 1)] ?? z)}
+            >
+              <Minus size={12} />
+            </button>
+            <span className="w-10 text-center tabular-nums">
+              <GeneratedValue value={Math.round(zoom * 100)} />%
+            </span>
+            <button
+              type="button"
+              aria-label={tGenerated('m_12713157ff4ed0')}
+              className="grid h-6 w-6 place-items-center rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={() =>
+                setZoom((z) => ZOOMS[Math.min(ZOOMS.length - 1, ZOOMS.indexOf(z) + 1)] ?? z)
+              }
+            >
+              <Plus size={12} />
+            </button>
+          </div>
         </div>
-      </div>
+      ) : null}
       <div
         ref={scrollRef}
         onScroll={updateCurrentPage}
-        className="app-scroll min-h-0 flex-1 overflow-auto bg-slate-100 dark:bg-slate-950"
+        className={cn(
+          'app-scroll min-h-0 flex-1 bg-slate-100 dark:bg-slate-950',
+          thumbnail ? 'overflow-hidden' : 'overflow-auto',
+        )}
       >
         <GeneratedValue
           value={
@@ -231,9 +265,9 @@ export function PdfViewer({ url, className }: { url: string; className?: string 
                 <Loader2 size={20} className="animate-spin text-slate-400" />
               </div>
             ) : (
-              <div ref={pagesRef} className="space-y-4 px-6 py-6">
+              <div ref={pagesRef} className={thumbnail ? '' : 'space-y-4 px-6 py-6'}>
                 <GeneratedValue
-                  value={Array.from({ length: doc.numPages }, (_, i) => (
+                  value={Array.from({ length: thumbnail ? 1 : doc.numPages }, (_, i) => (
                     <PdfPage key={i + 1} doc={doc} pageNumber={i + 1} width={width} />
                   ))}
                 />

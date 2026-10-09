@@ -44,12 +44,10 @@ describe('training additional-field production contract', () => {
       expect(detail).toContain("label: 'Additional fields', count: extras.total")
     }
 
-    for (const prefix of ['skillExtra', 'typeExtra', 'authorityExtra']) {
-      expect(assignment).toContain(`parsePrefixedListParams(sp, '${prefix}'`)
-      expect(assignment).toContain(`queryParamKey=\"${prefix}Q\"`)
-      expect(assignment).toContain(`pageParamKey=\"${prefix}Page\"`)
-    }
-    expect(assignment).toContain("queryParamKey: 'skillExtraQ'")
-    expect(assignment).toContain("pageParamKey: 'skillExtraPage'")
+    expect(assignment).toContain("parsePrefixedListParams(sp, 'skillExtra'")
+    expect(assignment).toContain('loadSkillInputPage(')
+    expect(assignment).not.toContain('addExtraField')
+    expect(assignment).toContain('paramKey="skillExtraQ"')
+    expect(assignment).toContain('pageParamKey="skillExtraPage"')
   })
 })

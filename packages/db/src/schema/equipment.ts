@@ -335,6 +335,7 @@ export const equipmentWorkOrders = pgTable(
     assignedToTenantUserId: uuid('assigned_to_tenant_user_id'),
     openedAt: timestamp('opened_at', { withTimezone: true }).defaultNow().notNull(),
     closedAt: timestamp('closed_at', { withTimezone: true }),
+    ...softDelete,
     ...timestamps,
   },
   (t) => ({

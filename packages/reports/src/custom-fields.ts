@@ -184,6 +184,7 @@ export async function loadBeaconReportCatalog(
     tx
       .select({ value: trainingSkillTypes.id, label: trainingSkillTypes.name })
       .from(trainingSkillTypes)
+      .where(and(isNull(trainingSkillTypes.deletedAt), eq(trainingSkillTypes.isActive, true)))
       .orderBy(asc(trainingSkillTypes.name)),
     tx
       .select({ value: trainingSkillAuthorities.id, label: trainingSkillAuthorities.name })
@@ -320,6 +321,21 @@ export async function loadBeaconReportCatalog(
     ['training_records.course_name', courseNameOptions],
     ['training_records.course_code', courseCodeOptions],
     ['skill_assignments.employee_no', employeeNumberOptions],
+    ['skill_assignments.person_name', personNameOptions],
+    ['skill_coverage.person_name', personNameOptions],
+    ['skill_coverage.employee_no', employeeNumberOptions],
+    [
+      'skill_coverage.skill_name',
+      skillTypeRows.map((row) => ({ value: row.label, label: row.label })),
+    ],
+    [
+      'skill_coverage.authority',
+      authorityRows.map((row) => ({ value: row.label, label: row.label })),
+    ],
+    [
+      'skill_assignments.cwb_standard',
+      ['W47.1', 'W47.2', 'W186'].map((value) => ({ value, label: value })),
+    ],
     [
       'skill_assignments.last_name',
       personRows.map((row) => ({ value: row.lastName, label: row.lastName })),
@@ -386,7 +402,25 @@ export async function loadBeaconReportCatalog(
     ],
     [
       'skill_assignments.status',
-      ['expired', 'expiring', 'valid', 'no_expiry'].map((value) => ({
+      ['expired', 'expiring', 'valid', 'draft', 'complete', 'tested', 'recommended', 'failed'].map(
+        (value) => ({
+          value,
+          label: prettifyEnumLabel(value),
+        }),
+      ),
+    ],
+    [
+      'skill_coverage.coverage_status',
+      ['valid', 'expiring', 'expired', 'missing'].map((value) => ({
+        value,
+        label: prettifyEnumLabel(value),
+      })),
+    ],
+    ['skill_coverage.person_status', enumOptionsByColumn.get('people.status') ?? []],
+    ['skill_assignments.person_status', enumOptionsByColumn.get('people.status') ?? []],
+    [
+      'skill_assignments.outcome',
+      ['draft', 'complete', 'tested', 'recommended', 'failed', 'expired'].map((value) => ({
         value,
         label: prettifyEnumLabel(value),
       })),

@@ -5,6 +5,8 @@ export {
   courseCredentialOutputIds,
   courseCredentialOutputs,
   enabledCredentialOutputs,
+  skillCredentialOutputs,
+  resolveSkillCredentialOutput,
   normalizeCredentialOutputs,
   resolveCourseCredentialOutput,
   resolveCredentialOutput,

@@ -1,3 +1,4 @@
+import { FilterChips } from '@/components/filter-bar'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import {
@@ -17,11 +18,9 @@ import { notFound } from 'next/navigation'
 import { desc, eq } from 'drizzle-orm'
 import {
   CreditCard,
-  FileImage,
   FileText,
   Paperclip,
   RotateCcw,
-  Settings,
   ShieldAlert,
   ShieldCheck,
   ShieldOff,
@@ -45,7 +44,6 @@ import {
   attachments,
   people,
   tenants,
-  trainingExtraFields,
   trainingSkillAssignmentFiles,
   trainingSkillAssignments,
   trainingSkillAuthorities,
@@ -58,24 +56,25 @@ import { formatDate } from '@/lib/datetime'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { canSeeRecord } from '@/lib/visibility'
 import { recentActivityForEntity } from '@/lib/audit'
-import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '@/lib/list-params'
+import { isUuid, parsePrefixedListParams, pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'
 import { CredentialOutputsCard } from '@/components/credential-outputs-card'
 import { Pagination } from '@/components/pagination'
-import { RawImage } from '@/components/raw-image'
+import { FilePreview } from '@/components/file-preview'
 import { SearchInput } from '@/components/search-input'
 import { StatTile, type StatTone } from '@/components/stat-tile'
 import { TableToolbar } from '@/components/table-toolbar'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { enabledCredentialOutputs } from '@/lib/credential-designs'
+import { skillCredentialOutputs } from '@/lib/credential-designs'
 import { canDesignTrainingCredentials } from '@/lib/training-credential-access'
 import { getConfiguredDirectPrintProviders } from '@/lib/direct-printing'
-import { ExtraFieldsSection } from '../../_components/extra-fields-section'
-import { addExtraField, deleteExtraField } from '../../_lib/extra-fields-actions'
-import { loadTrainingExtraFieldPage } from '../../_lib/extra-field-query'
+import { LiveField } from '@/components/live-field'
+import { updateSkillExtraField } from '../../_lib/extra-fields-actions'
+import { loadSkillInputPage } from '../../_lib/extra-field-query'
 import {
   deleteSkillAssignmentFile,
+  setSkillPrimaryFile,
   renewSkillAssignment,
   revokeSkillAssignment,
   updateSkillAssignmentField,
@@ -117,18 +116,13 @@ export default async function SkillAssignmentPage({
     perPage: 25,
     allowedSorts: EXTRA_SORTS,
   })
-  const typeExtraListParams = parsePrefixedListParams(sp, 'typeExtra', {
-    sort: 'order',
-    dir: 'asc',
-    perPage: 25,
-    allowedSorts: EXTRA_SORTS,
+  const fileParams = parsePrefixedListParams(sp, 'file', {
+    sort: 'uploaded',
+    dir: 'desc',
+    perPage: 12,
+    allowedSorts: ['uploaded'] as const,
   })
-  const authorityExtraListParams = parsePrefixedListParams(sp, 'authorityExtra', {
-    sort: 'order',
-    dir: 'asc',
-    perPage: 25,
-    allowedSorts: EXTRA_SORTS,
-  })
+  const fileKind = pickString(sp.fileKind)
   const ctx = await requireRequestContext()
   const canManage = canManageModule(ctx, 'training')
 
@@ -164,26 +158,14 @@ export default async function SkillAssignmentPage({
     )
       return null
 
-    const [skillExtras, typeExtras, authorityExtras, files, tenant] = await Promise.all([
-      loadTrainingExtraFieldPage(
+    const [skillExtras, files, tenant] = await Promise.all([
+      loadSkillInputPage(
         tx,
-        eq(trainingExtraFields.skillAssignmentId, id),
+        id,
+        row.type?.id ?? null,
+        row.authority?.id ?? null,
         skillExtraListParams,
       ),
-      row.type
-        ? loadTrainingExtraFieldPage(
-            tx,
-            eq(trainingExtraFields.skillTypeId, row.type.id),
-            typeExtraListParams,
-          )
-        : Promise.resolve({ rows: [], total: 0, filteredTotal: 0 }),
-      row.authority
-        ? loadTrainingExtraFieldPage(
-            tx,
-            eq(trainingExtraFields.authorityId, row.authority.id),
-            authorityExtraListParams,
-          )
-        : Promise.resolve({ rows: [], total: 0, filteredTotal: 0 }),
       tx
         .select({ file: trainingSkillAssignmentFiles, attachment: attachments })
         .from(trainingSkillAssignmentFiles)
@@ -201,33 +183,52 @@ export default async function SkillAssignmentPage({
     return {
       ...row,
       skillExtras,
-      typeExtras,
-      authorityExtras,
       files,
       tenantSettings: tenant?.settings ?? {},
     }
   })
 
   if (!data) notFound()
-  const { assignment, type, authority, person, skillExtras, typeExtras, authorityExtras, files } =
-    data
+  const { assignment, type, authority, person, skillExtras, files } = data
 
   const isRevoked = assignment.deletedAt != null
   const canDesignCredentials = canDesignTrainingCredentials(ctx)
-  const credentialOutputs = enabledCredentialOutputs(data.tenantSettings)
+  const credentialOutputs = skillCredentialOutputs(
+    type?.credentialOutputIds ?? [],
+    data.tenantSettings,
+  )
   const availablePrintProviders = await getConfiguredDirectPrintProviders(ctx)
 
   const today = new Date()
   const exp = assignment.expiresOn ? new Date(assignment.expiresOn) : null
   const daysLeft = exp ? Math.round((exp.getTime() - today.getTime()) / 86_400_000) : null
   const status: 'ok' | 'expiring' | 'expired' | 'no_expiry' =
-    daysLeft === null ? 'no_expiry' : daysLeft < 0 ? 'expired' : daysLeft <= 90 ? 'expiring' : 'ok'
+    assignment.status === 'expired'
+      ? 'expired'
+      : daysLeft === null
+        ? 'no_expiry'
+        : daysLeft < 0
+          ? 'expired'
+          : daysLeft <= 90
+            ? 'expiring'
+            : 'ok'
   const statusMeta = STATUS_META[status]
 
   const drawer = pickString(sp.drawer)
   const basePath = `/training/skills/${id}`
+  const matchedFiles = files.filter(
+    ({ file, attachment }) =>
+      (!fileKind || file.kind === fileKind) &&
+      (!fileParams.q ||
+        `${attachment?.filename ?? ''} ${file.label ?? ''}`
+          .toLowerCase()
+          .includes(fileParams.q.toLowerCase())),
+  )
+  const visibleFiles = matchedFiles.slice(
+    (fileParams.page - 1) * fileParams.perPage,
+    fileParams.page * fileParams.perPage,
+  )
   const filesCloseHref = `${basePath}?tab=files`
-  const extraFieldDrawerCloseHref = mergeHref(basePath, sp, { drawer: undefined })
 
   const activity =
     active === 'activity' ? await recentActivityForEntity(ctx, 'training_skill', id, 50) : []
@@ -245,10 +246,18 @@ export default async function SkillAssignmentPage({
           )}
           badge={
             <div className="flex items-center gap-2">
-              <Badge variant={statusMeta.badge}>
+              <Badge
+                variant={
+                  assignment.status === 'complete' || assignment.status === 'expired'
+                    ? statusMeta.badge
+                    : 'secondary'
+                }
+              >
                 <GeneratedValue
                   value={
-                    status === 'expired' ? (
+                    assignment.status !== 'complete' ? (
+                      <GeneratedValue value={assignment.status} />
+                    ) : status === 'expired' ? (
                       <GeneratedText
                         id="m_1b2d538989a8a4"
                         values={{ value0: Math.abs(daysLeft!) }}
@@ -342,7 +351,11 @@ export default async function SkillAssignmentPage({
                     tone={statusMeta.tone}
                     label={tGenerated('m_0b9da892d6faf0')}
                     dense
-                    value={statusMeta.value(daysLeft)}
+                    value={
+                      assignment.status === 'complete'
+                        ? statusMeta.value(daysLeft)
+                        : assignment.status
+                    }
                     hint={tGeneratedValue(
                       assignment.expiresOn
                         ? tGenerated('m_045cc1172f9f83', { value0: assignment.expiresOn })
@@ -393,101 +406,54 @@ export default async function SkillAssignmentPage({
                     skillTypeId: assignment.skillTypeId ?? '',
                     grantedOn: assignment.grantedOn,
                     expiresOn: assignment.expiresOn ?? '',
+                    status: assignment.status,
                     notes: assignment.notes ?? '',
                   }}
                   updateAction={updateSkillAssignmentField}
                 />
 
-                {/* Catalogue fields inherited from the skill type + its authority */}
-                <GeneratedValue
-                  value={
-                    type && (typeExtras.total > 0 || typeExtraListParams.q) ? (
-                      <ReadOnlyFields
-                        title={tGenerated('m_0d7594d7cd5b27')}
-                        subtitle={tGenerated('m_18750d1d1e6bde', { value0: type.name })}
-                        rows={typeExtras.rows}
-                        total={typeExtras.total}
-                        filteredTotal={typeExtras.filteredTotal}
-                        query={typeExtraListParams.q}
-                        page={typeExtraListParams.page}
-                        perPage={typeExtraListParams.perPage}
-                        basePath={basePath}
-                        currentParams={sp}
-                        queryParamKey="typeExtraQ"
-                        pageParamKey="typeExtraPage"
-                        manageHref={
-                          canManage ? `/training/skills/types/${type.id}?tab=extras` : null
-                        }
-                      />
-                    ) : null
-                  }
-                />
-                <GeneratedValue
-                  value={
-                    authority && (authorityExtras.total > 0 || authorityExtraListParams.q) ? (
-                      <ReadOnlyFields
-                        title={tGenerated('m_07068d1801442d')}
-                        subtitle={tGenerated('m_0cfb35e2098b6c', { value0: authority.name })}
-                        rows={authorityExtras.rows}
-                        total={authorityExtras.total}
-                        filteredTotal={authorityExtras.filteredTotal}
-                        query={authorityExtraListParams.q}
-                        page={authorityExtraListParams.page}
-                        perPage={authorityExtraListParams.perPage}
-                        basePath={basePath}
-                        currentParams={sp}
-                        queryParamKey="authorityExtraQ"
-                        pageParamKey="authorityExtraPage"
-                        manageHref={
-                          canManage ? `/training/authorities/${authority.id}?tab=extras` : null
-                        }
-                      />
-                    ) : null
-                  }
-                />
-
-                {/* Per-assignment custom fields — editable by managers */}
-                <GeneratedValue
-                  value={
-                    canManage ? (
-                      <ExtraFieldsSection
-                        ownerType="skill"
-                        ownerId={id}
-                        rows={skillExtras.rows}
-                        list={{
-                          basePath,
-                          currentParams: sp,
-                          total: skillExtras.total,
-                          filteredTotal: skillExtras.filteredTotal,
-                          query: skillExtraListParams.q,
-                          page: skillExtraListParams.page,
-                          perPage: skillExtraListParams.perPage,
-                          queryParamKey: 'skillExtraQ',
-                          pageParamKey: 'skillExtraPage',
-                        }}
-                        drawerOpen={drawer === 'add-extra-field'}
-                        drawerCloseHref={extraFieldDrawerCloseHref}
-                        addHref={mergeHref(basePath, sp, { drawer: 'add-extra-field' })}
-                        addAction={addExtraField}
-                        deleteAction={deleteExtraField}
-                      />
-                    ) : skillExtras.total > 0 || skillExtraListParams.q ? (
-                      <ReadOnlyFields
-                        title={tGenerated('m_108d0bb6ce6c90')}
-                        rows={skillExtras.rows}
-                        total={skillExtras.total}
-                        filteredTotal={skillExtras.filteredTotal}
-                        query={skillExtraListParams.q}
-                        page={skillExtraListParams.page}
-                        perPage={skillExtraListParams.perPage}
-                        basePath={basePath}
-                        currentParams={sp}
-                        queryParamKey="skillExtraQ"
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      <GeneratedText id="m_108d0bb6ce6c90" />
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <TableToolbar className="mb-3">
+                      <SearchInput
+                        paramKey="skillExtraQ"
                         pageParamKey="skillExtraPage"
+                        placeholder={tGenerated('m_0395d8cd5ec2f6')}
                       />
-                    ) : null
-                  }
-                />
+                    </TableToolbar>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {skillExtras.rows.map((field) => (
+                        <LiveField
+                          key={`${assignment.skillTypeId}:${field.id}`}
+                          id={id}
+                          field={field.id}
+                          label={field.field_key}
+                          initialValue={field.field_value}
+                          disabled={!canManage || isRevoked || !field.editable}
+                          updateAction={updateSkillExtraField}
+                        />
+                      ))}
+                    </div>
+                    {skillExtras.total === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        <GeneratedText id="m_19e976df1c6be7" />
+                      </p>
+                    ) : null}
+                    <Pagination
+                      basePath={basePath}
+                      currentParams={sp}
+                      total={skillExtras.total}
+                      page={skillExtraListParams.page}
+                      perPage={skillExtraListParams.perPage}
+                      pageParamKey="skillExtraPage"
+                    />
+                  </CardContent>
+                </Card>
               </>
             ) : null
           }
@@ -531,9 +497,29 @@ export default async function SkillAssignmentPage({
                   </div>
                 </CardHeader>
                 <CardContent>
+                  <TableToolbar>
+                    <SearchInput
+                      paramKey="fileQ"
+                      pageParamKey="filePage"
+                      placeholder={tGenerated('m_1f5c890597604d')}
+                    />
+                    <FilterChips
+                      basePath={basePath}
+                      currentParams={sp}
+                      paramKey="fileKind"
+                      label={tGenerated('m_1e578efe1574cd')}
+                      clearParams={['filePage']}
+                      options={[
+                        { value: 'certificate', label: 'Certificate' },
+                        { value: 'evidence', label: 'Supporting evidence' },
+                        { value: 'photo', label: 'Photo' },
+                        { value: 'other', label: 'Other' },
+                      ]}
+                    />
+                  </TableToolbar>
                   <GeneratedValue
                     value={
-                      files.length === 0 ? (
+                      matchedFiles.length === 0 ? (
                         <EmptyState
                           icon={<Paperclip size={24} />}
                           title={tGenerated('m_1192d4035da0ad')}
@@ -542,7 +528,7 @@ export default async function SkillAssignmentPage({
                       ) : (
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                           <GeneratedValue
-                            value={files.map(({ file, attachment }) => (
+                            value={visibleFiles.map(({ file, attachment }) => (
                               <FileCard
                                 key={file.id}
                                 assignmentId={id}
@@ -557,6 +543,14 @@ export default async function SkillAssignmentPage({
                         </div>
                       )
                     }
+                  />
+                  <Pagination
+                    basePath={basePath}
+                    currentParams={sp}
+                    total={matchedFiles.length}
+                    page={fileParams.page}
+                    perPage={fileParams.perPage}
+                    pageParamKey="filePage"
                   />
                 </CardContent>
               </Card>
@@ -659,7 +653,6 @@ function FileCard({
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const tGenerated = useGeneratedTranslations()
-  const isImage = attachment?.contentType.startsWith('image/') ?? false
   const href = attachment ? attachmentUrl(attachment.id) : null
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -669,22 +662,9 @@ function FileCard({
         rel="noopener noreferrer"
         className={href ? '' : 'pointer-events-none'}
       >
-        <div className="grid h-28 place-items-center overflow-hidden bg-slate-50 dark:bg-slate-950/40">
-          <GeneratedValue
-            value={
-              isImage && href ? (
-                <RawImage
-                  src={href}
-                  alt={tGeneratedValue(file.label)}
-                  optimizationReason="authenticated"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <FileGlyph contentType={attachment?.contentType ?? ''} />
-              )
-            }
-          />
-        </div>
+        {href && attachment ? (
+          <FilePreview url={href} contentType={attachment.contentType} label={file.label} />
+        ) : null}
       </a>
       <div className="flex flex-1 flex-col p-3">
         <div className="flex items-start justify-between gap-2">
@@ -731,6 +711,15 @@ function FileCard({
             }
           />
         </div>
+        {canManage && attachment ? (
+          <form action={setSkillPrimaryFile} className="mt-2">
+            <input type="hidden" name="id" value={file.id} />
+            <input type="hidden" name="assignmentId" value={assignmentId} />
+            <Button variant="outline" size="sm" type="submit">
+              <GeneratedText id="m_115047e16b9618" />
+            </Button>
+          </form>
+        ) : null}
         <div className="mt-auto pt-2 text-[11px] text-slate-400 dark:text-slate-500">
           <GeneratedValue value={formatDate(new Date(file.uploadedAt), timeZone, locale)} />
           <GeneratedValue
@@ -750,159 +739,6 @@ function FileCard({
         </div>
       </div>
     </div>
-  )
-}
-
-function FileGlyph({ contentType }: { contentType: string }) {
-  const isImg = contentType.startsWith('image/')
-  const isPdf = contentType === 'application/pdf'
-  return (
-    <span
-      className={
-        isPdf
-          ? 'text-rose-400 dark:text-rose-500'
-          : isImg
-            ? 'text-sky-400 dark:text-sky-500'
-            : 'text-slate-300 dark:text-slate-600'
-      }
-    >
-      <GeneratedValue
-        value={
-          isImg ? (
-            <FileImage size={40} strokeWidth={1.5} />
-          ) : (
-            <FileText size={40} strokeWidth={1.5} />
-          )
-        }
-      />
-    </span>
-  )
-}
-
-// ---------- read-only field list (catalogue / non-manager extras) ----------
-
-function ReadOnlyFields({
-  title,
-  subtitle,
-  rows,
-  total,
-  filteredTotal,
-  query,
-  page,
-  perPage,
-  basePath,
-  currentParams,
-  queryParamKey,
-  pageParamKey,
-  manageHref,
-}: {
-  title: string
-  subtitle?: string
-  rows: { id: string; fieldKey: string; fieldValue: string | null }[]
-  total: number
-  filteredTotal: number
-  query?: string
-  page: number
-  perPage: number
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
-  queryParamKey: string
-  pageParamKey: string
-  manageHref?: string | null
-}) {
-  const tGeneratedValue = useGeneratedValueTranslations()
-  const tGenerated = useGeneratedTranslations()
-  const countLabel =
-    filteredTotal === total
-      ? total.toLocaleString()
-      : `${filteredTotal.toLocaleString()} of ${total.toLocaleString()}`
-  const isOutOfRange = filteredTotal > 0 && rows.length === 0
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <CardTitle>
-              <GeneratedValue value={title} /> (<GeneratedValue value={countLabel} />)
-            </CardTitle>
-            <GeneratedValue
-              value={
-                subtitle ? (
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    <GeneratedValue value={subtitle} />
-                  </p>
-                ) : null
-              }
-            />
-          </div>
-          <GeneratedValue
-            value={
-              manageHref ? (
-                <Link href={manageHref}>
-                  <Button variant="outline" size="sm">
-                    <Settings size={14} /> <GeneratedText id="m_11d42075a22139" />
-                  </Button>
-                </Link>
-              ) : null
-            }
-          />
-        </div>
-      </CardHeader>
-      <CardContent>
-        <TableToolbar className="mb-3">
-          <SearchInput
-            placeholder={tGenerated('m_133107cb3fa0f2')}
-            paramKey={queryParamKey}
-            pageParamKey={pageParamKey}
-          />
-        </TableToolbar>
-        <GeneratedValue
-          value={
-            rows.length === 0 ? (
-              <EmptyState
-                icon={<Settings size={24} />}
-                title={tGeneratedValue(
-                  isOutOfRange ? tGenerated('m_1809de9b332366') : tGenerated('m_03f12d3fa3ac0a'),
-                )}
-                description={tGeneratedValue(
-                  isOutOfRange
-                    ? tGenerated('m_0020f3aabbf2d3')
-                    : query
-                      ? tGenerated('m_19cceddbc95efe')
-                      : tGenerated('m_17c387030ba4a6'),
-                )}
-              />
-            ) : (
-              <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
-                <GeneratedValue
-                  value={rows.map((r) => (
-                    <div key={r.id} className="flex flex-col gap-0.5">
-                      <dt className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                        <GeneratedValue value={r.fieldKey} />
-                      </dt>
-                      <dd className="break-words text-slate-900 dark:text-slate-100">
-                        <GeneratedValue
-                          value={r.fieldValue && r.fieldValue.length > 0 ? r.fieldValue : '—'}
-                        />
-                      </dd>
-                    </div>
-                  ))}
-                />
-              </dl>
-            )
-          }
-        />
-        <Pagination
-          basePath={basePath}
-          currentParams={currentParams}
-          total={filteredTotal}
-          page={page}
-          perPage={perPage}
-          pageParamKey={pageParamKey}
-        />
-      </CardContent>
-    </Card>
   )
 }
 

@@ -33,6 +33,12 @@ const COLUMN_TONES: Record<string, Record<string, ReportCellTone>> = {
     revoked: 'critical',
     expiring: 'warning',
     active: 'positive',
+    valid: 'positive',
+    complete: 'positive',
+    failed: 'critical',
+    tested: 'info',
+    recommended: 'warning',
+    draft: 'muted',
     granted: 'positive',
   },
   // Inspection and checklist outcomes.

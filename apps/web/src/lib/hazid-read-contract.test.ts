@@ -36,14 +36,15 @@ async function scopeResult(permissions: string[]): Promise<string> {
   return 'restricted'
 }
 
-describe('hazid.read.others visibility contract', () => {
-  it('is an opt-in catalogue permission held by no seeded built-in role', () => {
-    expect(PERMISSION_CATALOGUE).toContain('hazid.read.others')
+describe('hazid.read.all visibility contract', () => {
+  it('uses a single tenant-wide read permission', () => {
+    expect(PERMISSION_CATALOGUE).toContain('hazid.read.all')
+    expect(PERMISSION_CATALOGUE).not.toContain('hazid.read.others')
     // tenant_admin inherits the full catalogue by reference, so it always
     // holds every key. The off-by-default contract applies to the seeded
     // non-admin roles.
-    for (const key of ['worker', 'foreman', 'safety_manager'] as const) {
-      expect(BUILTIN_ROLES[key]?.permissions).not.toContain('hazid.read.others')
+    for (const key of ['worker', 'foreman'] as const) {
+      expect(BUILTIN_ROLES[key]?.permissions).not.toContain('hazid.read.all')
     }
   })
 
@@ -54,15 +55,15 @@ describe('hazid.read.others visibility contract', () => {
     expect(await scopeResult(['hazid.read.self'])).toBe('restricted')
   })
 
-  it('grants a self-tier holder of hazid.read.others tenant-wide view', async () => {
-    const ctx = context(['hazid.read.self', 'hazid.read.others'])
+  it('grants a self-tier holder of hazid.read.all tenant-wide view', async () => {
+    const ctx = context(['hazid.read.self', 'hazid.read.all'])
     expect(await canSeeRecord(ctx, tx, other)).toBe(true)
     expect(await canSeeRecord(ctx, tx, mine)).toBe(true)
-    expect(await scopeResult(['hazid.read.self', 'hazid.read.others'])).toBe('all')
+    expect(await scopeResult(['hazid.read.self', 'hazid.read.all'])).toBe('all')
   })
 
-  it('does not widen other modules for a hazid.read.others holder', async () => {
-    const ctx = context(['hazid.read.self', 'hazid.read.others', 'incidents.read.self'])
+  it('does not widen other modules for a hazid.read.all holder', async () => {
+    const ctx = context(['hazid.read.self', 'hazid.read.all', 'incidents.read.self'])
     expect(
       await canSeeRecord(ctx, tx, {
         prefix: 'incidents',
@@ -79,6 +80,6 @@ describe('hazid.read.others visibility contract', () => {
       new URL('../app/(app)/hazard-assessments/[id]/page.tsx', import.meta.url),
       'utf8',
     )
-    expect(page).toContain("!can(ctx, 'hazid.read.others')")
+    expect(page).toContain("!can(ctx, 'hazid.read.all')")
   })
 })

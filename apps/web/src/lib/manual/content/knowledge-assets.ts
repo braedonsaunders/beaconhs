@@ -108,13 +108,23 @@ To send one reminder, choose **Automatic reminder email** on **Details**: **1 da
 
 For a CR80 design, open **Print** and choose **cardPresso Web Print Server**, **Zebra Browser Print**, **Evolis SDK**, or **HID FARGO SDK**. A tenant administrator connects that provider under **Admin → Direct printing**. Each issued wallet card then shows the matching direct-print button beside **Open PDF**. BeaconHS renders the saved front and back at 300 DPI, sends them only to that workspace's configured provider, confirms the accepted job, and records it in the audit log. cardPresso requires a .card file with the configured full-card front and back image items. Zebra, Evolis, and HID FARGO use the workspace's secured HTTPS print bridge.
 
-The same wallet-card templates render both BeaconHS course completions and externally issued skill or certification records. External qualifications appear in **My Workspace → Wallet** with their issuing authority and verification link.
+Course completions use their configured card designs. Skill types generate only the designs selected on that type; no selection means no generated card or certificate. Uploaded skill credentials remain available through **View**. Only current **Complete** skill tickets with a selected wallet design appear in **My Workspace → Wallet**.
 
 ## Review skill authorities and holders (managers)
 
-Open **Training** → **Authorities** and choose an authority. On **Skill types**, search by name, code, or description and use **Next** or **Prev** to move through the list. Open a skill type and choose **Holders** to search people or filter the list by **Valid**, **Expiring**, **Expired**, or **No expiry**.
+Open **Training** → **Skill types** to create or open a type. Managers can edit its name, code, validity and description, turn **Active** off, or **Delete** it. Move active compliance obligations before retiring a type. Existing ticket history is retained.
 
-Choose **Additional fields** on an authority or skill type to search field names and values. Use **Next** or **Prev** when the result has more than one page. A worker's skill page keeps its skill, skill-type, and authority field searches separate, so filtering one section does not change the others.
+On the type, select which **Cards and certificates to generate**. Set **View opens** to **Uploaded credential** to make the main Skills list open the attached PDF or image. Choose **Generated credential** to open a selected design instead. Use **Use as credential** on a ticket's Files tab to choose the uploaded file.
+
+**Holders** shows one current ticket per employee and puts valid qualifications first. Search, filter, and use **Next** or **Prev** to move through all results. **People → Skills** follows the same rule: an older expired ticket is hidden when a replacement exists. Select the title or **View** there to open the employee's skill record.
+
+Define **Additional fields** once on the authority or skill type. Blank definitions become ready-to-fill inputs on each employee's ticket. A filled type value is fixed for that type, such as CWB Standard or Process. Employees' saved answers stay on their own records. There is no **Add field** button on an employee's skill record.
+
+On each ticket, **Person** and **Skill / certification** share one row. Select **Status**: **Complete**, **Expired**, **Tested**, **Recommended**, or **Failed**. **Draft** is for unfinished entries. Only **Complete** tickets count as qualifications; their expiry determines whether they are valid, expiring or expired. **Files** shows PDF and image previews. Search and paginate to find an attachment; training certificates use the same previews.
+
+In **Insights**, open **Training — Skills Matrix** for employee-by-skill coverage. **Reports → Skills — Missing** shows required skills that are missing, expired or expiring. Skill reports use one current ticket per employee and skill, and do not mix course certificates into skill obligations. Green means valid, orange means expiring, red means missing or expired. Group by skill, employee, department or people group.
+
+**Skills — CWB (Welding)** follows the CWB Form 108E roster: one current Complete ticket per employee and type, grouped by Standard, with company code, employee count, month, year, Type, Process, Position, Level, Expiry, Authority, Shop/Field/Layoff and the supervisor signature line. Managers can edit the authority's **Account number**. PDF, preview and scheduled deliveries use the same report.
 
 When you edit a worker's held skill, **Person** and **Skill / certification** search the complete active tenant directory and skill catalogue. The currently saved value stays visible while you review an older record, even if that value is no longer active. If the picker says more results exist, add more of the name, employee number, code, or authority to the search.
 

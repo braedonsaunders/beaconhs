@@ -85,6 +85,17 @@ export type AnalyticsEntity = Omit<ReportEntity, 'columns'> & {
 /** Authored annotations keyed by entity → column key. Sparse on purpose: only
  *  the columns whose meaning isn't obvious from `kind` need an entry. */
 export const SEMANTIC_OVERLAY: Partial<Record<string, Record<string, SemanticOverlayEntry>>> = {
+  skill_coverage: {
+    coverage_status: {
+      semanticType: 'category',
+      enumOptions: [
+        { value: 'valid', label: 'Valid' },
+        { value: 'expiring', label: 'Expiring' },
+        { value: 'expired', label: 'Expired' },
+        { value: 'missing', label: 'Missing' },
+      ],
+    },
+  },
   training_matrix: {
     coverage_status: {
       semanticType: 'category',

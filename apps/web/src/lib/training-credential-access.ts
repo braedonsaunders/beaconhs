@@ -1,5 +1,11 @@
+import { skillCredentialOutputs } from '@/lib/credential-designs'
 import { eq } from 'drizzle-orm'
-import { trainingRecords, trainingSkillAssignments } from '@beaconhs/db/schema'
+import {
+  tenants,
+  trainingRecords,
+  trainingSkillAssignments,
+  trainingSkillTypes,
+} from '@beaconhs/db/schema'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { canManageModule } from '@/lib/module-admin/guard'
 import { canSeeRecord } from '@/lib/visibility'
@@ -62,6 +68,8 @@ export async function skillCertificateForAssignment(
       .select({
         personId: trainingSkillAssignments.personId,
         deletedAt: trainingSkillAssignments.deletedAt,
+        status: trainingSkillAssignments.status,
+        skillTypeId: trainingSkillAssignments.skillTypeId,
       })
       .from(trainingSkillAssignments)
       .where(eq(trainingSkillAssignments.id, assignmentId))
@@ -77,6 +85,25 @@ export async function skillCertificateForAssignment(
         status: 409,
       }
     }
+    if (assignment.status !== 'complete')
+      return { error: 'Only complete skill tickets can generate a credential.', status: 409 }
+    if (!assignment.skillTypeId) return { error: 'This ticket has no skill type.', status: 409 }
+    const [type] = await tx
+      .select({ outputIds: trainingSkillTypes.credentialOutputIds })
+      .from(trainingSkillTypes)
+      .where(eq(trainingSkillTypes.id, assignment.skillTypeId))
+      .limit(1)
+    const [tenant] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenantId))
+      .limit(1)
+    if (!type || !skillCredentialOutputs(type.outputIds, tenant?.settings).length)
+      return {
+        error:
+          'No credential designs are enabled for this skill type. Open its uploaded credential instead.',
+        status: 409,
+      }
     const certificate = await issueTrainingSkillCertificate(tx, {
       tenantId: ctx.tenantId!,
       skillAssignmentId: assignmentId,

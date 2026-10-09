@@ -18,13 +18,14 @@ import {
   count,
   desc,
   eq,
-  gt,
+  gte,
   ilike,
   isNotNull,
   isNull,
   lte,
   or,
   type SQL,
+  sql,
 } from 'drizzle-orm'
 import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import {
@@ -61,6 +62,10 @@ const STATUS_OPTIONS = [
   { value: 'valid', label: 'Valid' },
   { value: 'expiring', label: 'Expiring (90d)' },
   { value: 'expired', label: 'Expired' },
+  ...['complete', 'tested', 'recommended', 'failed', 'draft'].map((value) => ({
+    value,
+    label: value.charAt(0).toUpperCase() + value.slice(1),
+  })),
 ]
 
 export default async function SkillsPage({
@@ -95,9 +100,8 @@ export default async function SkillsPage({
   )
     notFound()
   const now = new Date()
-  const nowMs = now.getTime()
   const today = now.toISOString().slice(0, 10)
-  const in90 = new Date(nowMs + 90 * 86_400_000).toISOString().slice(0, 10)
+  const in90 = new Date(now.getTime() + 90 * 86_400_000).toISOString().slice(0, 10)
 
   const { rows, total, authorities, peopleList, skillTypesList } = await ctx.db(async (tx) => {
     // read.self → only the viewer's own skills; managers/read.all → everyone.
@@ -107,7 +111,12 @@ export default async function SkillsPage({
           prefix: 'training',
           personCol: trainingSkillAssignments.personId,
         })
-    const filters: SQL<unknown>[] = [isNull(trainingSkillAssignments.deletedAt)]
+    const filters: SQL<unknown>[] = [
+      isNull(trainingSkillAssignments.deletedAt),
+      sql`${trainingSkillAssignments.id} in (select id from report_skill_assignments)`,
+    ]
+    const peopleWhere = personFilterWhere(includeInactivePeople(sp), personFilter)
+    if (peopleWhere) filters.push(peopleWhere)
     if (vis) filters.push(vis)
     if (params.q) {
       const term = `%${params.q}%`
@@ -128,19 +137,29 @@ export default async function SkillsPage({
     // navigates to an explicit `all` sentinel to show every skill.
     const effectiveStatus = statusFilter ?? 'valid'
     if (effectiveStatus === 'expired') {
-      filters.push(isNotNull(trainingSkillAssignments.expiresOn))
-      filters.push(lte(trainingSkillAssignments.expiresOn, today))
+      filters.push(
+        sql`(${trainingSkillAssignments.status} = 'expired' OR (${trainingSkillAssignments.status} = 'complete' AND ${trainingSkillAssignments.expiresOn} < ${today}))`,
+      )
     } else if (effectiveStatus === 'expiring') {
+      filters.push(eq(trainingSkillAssignments.status, 'complete'))
       filters.push(isNotNull(trainingSkillAssignments.expiresOn))
-      filters.push(gt(trainingSkillAssignments.expiresOn, today))
+      filters.push(gte(trainingSkillAssignments.expiresOn, today))
       filters.push(lte(trainingSkillAssignments.expiresOn, in90))
     } else if (effectiveStatus === 'valid') {
+      filters.push(eq(trainingSkillAssignments.status, 'complete'))
       const c = or(
         isNull(trainingSkillAssignments.expiresOn),
-        gt(trainingSkillAssignments.expiresOn, today),
+        gte(trainingSkillAssignments.expiresOn, today),
       )
       if (c) filters.push(c)
     }
+    if (['complete', 'tested', 'recommended', 'failed', 'draft'].includes(effectiveStatus))
+      filters.push(
+        eq(
+          trainingSkillAssignments.status,
+          effectiveStatus as typeof trainingSkillAssignments.$inferSelect.status,
+        ),
+      )
     const whereClause = filters.length ? and(...filters) : undefined
 
     const orderBy =
@@ -417,7 +436,9 @@ export default async function SkillsPage({
                       value={rows.map(({ assignment, type, authority, person }) => {
                         const exp = assignment.expiresOn
                         const days = exp
-                          ? Math.round((new Date(exp).getTime() - nowMs) / 86_400_000)
+                          ? Math.round(
+                              (new Date(exp).getTime() - new Date(today).getTime()) / 86_400_000,
+                            )
                           : null
                         return (
                           <TableRow key={assignment.id}>
@@ -477,7 +498,18 @@ export default async function SkillsPage({
                             <TableCell>
                               <GeneratedValue
                                 value={
-                                  days === null ? (
+                                  assignment.status !== 'complete' ? (
+                                    <Badge
+                                      variant={
+                                        assignment.status === 'expired' ||
+                                        assignment.status === 'failed'
+                                          ? 'destructive'
+                                          : 'secondary'
+                                      }
+                                    >
+                                      {assignment.status}
+                                    </Badge>
+                                  ) : days === null ? (
                                     <Badge variant="secondary">
                                       <GeneratedText id="m_1bbc44c1ce26a7" />
                                     </Badge>
@@ -501,7 +533,7 @@ export default async function SkillsPage({
                             <TableCell className="text-right">
                               <div className="flex justify-end">
                                 <Button asChild variant="ghost" size="sm">
-                                  <Link href={`/training/skills/${assignment.id}?tab=outputs`}>
+                                  <Link href={`/training/skills/${assignment.id}/view`}>
                                     <FileText size={15} /> <GeneratedText id="m_1c586ede56112d" />
                                   </Link>
                                 </Button>

@@ -179,6 +179,14 @@ const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
     ...MATRIX,
   },
 
+  {
+    id: 'training-skills-matrix',
+    label: 'Training — Skills Matrix',
+    description: 'Active employees by skill, with current qualification coverage.',
+    category: 'compliance',
+    ...MATRIX,
+  },
+
   // Operations
   {
     id: 'kpi-monitored-sessions-active',
@@ -244,6 +252,68 @@ export const BUILTIN_QUERIES: Record<
   string,
   { query: BhqlQuery; vizType: string; vizSettings?: Record<string, unknown> }
 > = {
+  'training-skills-matrix': {
+    vizType: 'pivot',
+    query: {
+      version: 'bhql/1',
+      display: 'pivot',
+      pivot: {
+        rows: [{ breakout: 'person_name' }],
+        columns: [{ breakout: 'skill_name' }],
+        values: [{ measure: 'coverage_status' }],
+      },
+      stages: [
+        {
+          source: 'skill_coverage',
+          filter: {
+            combinator: 'and',
+            rules: [{ field: 'person_status', op: 'eq', value: 'active' }],
+          },
+          breakouts: [
+            { alias: 'person_name', field: 'person_name' },
+            { alias: 'skill_name', field: 'skill_name' },
+          ],
+          aggregations: [
+            {
+              kind: 'expr',
+              alias: 'coverage_status',
+              expr: {
+                ex: 'agg',
+                fn: 'min',
+                arg: {
+                  ex: 'case',
+                  branches: [
+                    {
+                      when: {
+                        ex: 'logic',
+                        op: 'and',
+                        args: [
+                          {
+                            ex: 'compare',
+                            op: '=',
+                            left: { ex: 'field', field: 'coverage_status' },
+                            right: { ex: 'lit', value: 'missing' },
+                          },
+                          {
+                            ex: 'compare',
+                            op: '=',
+                            left: { ex: 'field', field: 'is_required' },
+                            right: { ex: 'lit', value: false },
+                          },
+                        ],
+                      },
+                      then: { ex: 'lit', value: null },
+                    },
+                  ],
+                  else: { ex: 'field', field: 'coverage_status' },
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  },
   'training-certificate-matrix': {
     vizType: 'pivot',
     query: {

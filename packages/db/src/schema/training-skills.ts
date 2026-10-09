@@ -11,10 +11,12 @@
 import { relations, sql } from 'drizzle-orm'
 import {
   check,
+  boolean,
   date,
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -35,6 +37,7 @@ export const trainingSkillAuthorities = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     code: text('code'),
+    accountNumber: text('account_number'),
     jurisdiction: text('jurisdiction'), // 'Ontario' | 'Federal' | 'Internal' | …
     notes: text('notes'),
     ...timestamps,
@@ -58,9 +61,21 @@ export const trainingSkillTypes = pgTable(
     code: text('code'),
     validForMonths: integer('valid_for_months'), // null = no expiry
     description: text('description'),
+    isActive: boolean('is_active').default(true).notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    credentialOutputIds: jsonb('credential_output_ids').$type<string[]>().default([]).notNull(),
+    viewSource: text('view_source').$type<'evidence' | 'generated'>().default('evidence').notNull(),
     ...timestamps,
   },
   (t) => ({
+    viewSourceCheck: check(
+      'training_skill_types_view_source_ck',
+      sql`${t.viewSource} IN ('evidence','generated')`,
+    ),
+    outputsCheck: check(
+      'training_skill_types_outputs_ck',
+      sql`jsonb_typeof(${t.credentialOutputIds}) = 'array'`,
+    ),
     tenantIdx: index('training_skill_types_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('training_skill_types_tenant_id_id_ux').on(t.tenantId, t.id),
     authorityIdx: index('training_skill_types_authority_idx').on(t.tenantId, t.authorityId),
@@ -89,6 +104,10 @@ export const trainingSkillAssignments = pgTable(
     grantedByTenantUserId: uuid('granted_by_tenant_user_id'),
     evidenceAttachmentId: uuid('evidence_attachment_id'),
     notes: text('notes'),
+    status: text('status')
+      .$type<'draft' | 'expired' | 'complete' | 'tested' | 'recommended' | 'failed'>()
+      .default('draft')
+      .notNull(),
     ...timestamps,
     // Soft-delete so a skill is revoked (not hard-deleted) — same audit-safe
     // lifecycle as training_records certificates.
@@ -98,6 +117,10 @@ export const trainingSkillAssignments = pgTable(
     evidenceAttachmentIdRefIdx: index(
       'training_skill_assignments_evidence_attachment_id_ref_idx',
     ).on(t.tenantId, t.evidenceAttachmentId),
+    statusCheck: check(
+      'training_skill_assignments_status_ck',
+      sql`${t.status} IN ('draft','expired','complete','tested','recommended','failed')`,
+    ),
     tenantIdx: index('training_skill_assignments_tenant_idx').on(t.tenantId),
     tenantIdIdUx: uniqueIndex('training_skill_assignments_tenant_id_id_ux').on(t.tenantId, t.id),
     personIdx: index('training_skill_assignments_person_idx').on(t.tenantId, t.personId),

@@ -91,10 +91,15 @@ export const trainingExtraFields = pgTable(
     authorityId: uuid('authority_id'),
     fieldKey: text('field_key').notNull(),
     fieldValue: text('field_value'),
+    valueMode: text('value_mode').$type<'record' | 'type'>().default('record').notNull(),
     sortOrder: integer('sort_order').default(0).notNull(),
     ...timestamps,
   },
   (t) => ({
+    valueModeCheck: check(
+      'training_extra_fields_value_mode_ck',
+      sql`${t.valueMode} IN ('record','type')`,
+    ),
     tenantIdx: index('training_extra_fields_tenant_idx').on(t.tenantId),
     skillAssignmentIdx: index('training_extra_fields_skill_assignment_idx').on(
       t.tenantId,

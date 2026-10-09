@@ -537,31 +537,6 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
     ),
   ),
   seed(
-    'skills_matrix',
-    'Skills — Matrix',
-    'Externally issued skills and certifications grouped by issuing authority.',
-    'training',
-    rows(
-      'skill_assignments',
-      [
-        'employee_no',
-        'last_name',
-        'first_name',
-        'trade',
-        'authority',
-        'certification_code',
-        'certification_name',
-        'granted_on',
-        'expires_on',
-        'status',
-      ],
-      {
-        groupBy: 'authority',
-        sorts: [{ column: 'last_name', direction: 'asc' }],
-      },
-    ),
-  ),
-  seed(
     'skills_expired_upcoming',
     'Skills — Expired & Upcoming',
     'Expired skills and skills expiring within 90 days.',
@@ -593,17 +568,30 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
     'Skills — Missing & Expired',
     'Missing or overdue externally issued skill obligations.',
     'training',
-    rows('compliance_status', ['person_name', 'obligation_title', 'status', 'due_on', 'percent'], {
-      filters: {
-        combinator: 'and',
-        rules: [
-          { field: 'source_module', op: 'eq', value: 'cert_requirement' },
-          { field: 'status', op: 'in', value: ['pending', 'overdue'] },
-        ],
+    rows(
+      'skill_coverage',
+      [
+        'employee_no',
+        'person_name',
+        'department_name',
+        'skill_name',
+        'authority',
+        'coverage_status',
+        'expires_on',
+      ],
+      {
+        filters: {
+          combinator: 'and',
+          rules: [
+            ACTIVE_PEOPLE,
+            { field: 'is_required', op: 'is_true' },
+            { field: 'coverage_status', op: 'in', value: ['missing', 'expired', 'expiring'] },
+          ],
+        },
+        groupBy: 'skill_name',
+        sorts: [{ column: 'person_name', direction: 'asc' }],
       },
-      groupBy: 'person_name',
-      sorts: [{ column: 'due_on', direction: 'asc' }],
-    }),
+    ),
   ),
   seed(
     'skills_cwb',
@@ -613,31 +601,31 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
     rows(
       'skill_assignments',
       [
-        'employee_no',
-        'last_name',
-        'first_name',
-        'trade',
-        'authority',
-        'certification_code',
-        'certification_name',
-        'cwb_standard',
+        'person_name',
         'cwb_type',
         'cwb_process',
         'cwb_position',
         'cwb_level',
-        'granted_on',
         'expires_on',
-        'status',
+        'authority_code',
+        'shop_field_layoff',
       ],
       {
         filters: {
           combinator: 'and',
-          rules: [{ field: 'authority', op: 'contains', value: 'CWB' }],
+          rules: [
+            { field: 'authority_code', op: 'eq', value: 'CWB' },
+            { field: 'outcome', op: 'eq', value: 'complete' },
+          ],
         },
-        groupBy: 'certification_name',
-        sorts: [{ column: 'last_name', direction: 'asc' }],
+        groupBy: 'cwb_standard',
+        sorts: [
+          { column: 'last_name', direction: 'asc' },
+          { column: 'first_name', direction: 'asc' },
+        ],
       },
     ),
+    { density: 'compact', showSummary: true },
   ),
   seed(
     'corrective_actions_list',

@@ -2,14 +2,15 @@
 // tenant's default wallet design rendered with the skill's data, same as the
 // holder's own /my/wallet. Access is keyed entirely off the badge token.
 
-import { and, desc, eq, isNull } from 'drizzle-orm'
-import { notFound } from 'next/navigation'
+import { and, desc, eq, isNull, sql, or, ilike } from 'drizzle-orm'
+import { notFound, redirect } from 'next/navigation'
 import { db, withSuperAdmin } from '@beaconhs/db'
 import {
   attachments,
   people,
   tenants,
   trainingSkillAssignments,
+  trainingSkillAssignmentFiles,
   trainingSkillAuthorities,
   trainingSkillCertificates,
   trainingSkillTypes,
@@ -17,7 +18,7 @@ import {
 import { createWalletDesignDocument, renderDesignDocumentHtml } from '@beaconhs/design-studio'
 import { presignGet, resolveTenantLogoUrl } from '@beaconhs/storage'
 import { appBaseUrl } from '@/lib/app-base-url'
-import { resolveCredentialOutput } from '@/lib/credential-designs'
+import { resolveSkillCredentialOutput } from '@/lib/credential-designs'
 import { activeTenantPredicate } from '@/lib/active-tenant'
 import { isUuid } from '@/lib/list-params'
 import { EXPIRING_DAYS, isoDaysFromNow, standingFor, todayIsoDate } from '../../_format'
@@ -52,6 +53,8 @@ export default async function VerifyPersonSkillPage({
     const [skill] = await tx
       .select({
         assignment: trainingSkillAssignments,
+        outputIds: trainingSkillTypes.credentialOutputIds,
+        viewSource: trainingSkillTypes.viewSource,
         skillName: trainingSkillTypes.name,
         skillCode: trainingSkillTypes.code,
         authorityName: trainingSkillAuthorities.name,
@@ -70,6 +73,9 @@ export default async function VerifyPersonSkillPage({
           eq(trainingSkillAssignments.id, assignmentId),
           eq(trainingSkillAssignments.personId, row.person.id),
           isNull(trainingSkillAssignments.deletedAt),
+          eq(trainingSkillAssignments.tenantId, row.tenant.id),
+          eq(trainingSkillAssignments.status, 'complete'),
+          sql`${trainingSkillAssignments.id} in (select id from report_skill_assignments where tenant_id = ${row.tenant.id})`,
         ),
       )
       .limit(1)
@@ -87,16 +93,47 @@ export default async function VerifyPersonSkillPage({
       .orderBy(desc(trainingSkillCertificates.createdAt))
       .limit(1)
 
-    return { ...row, ...skill, certToken: cert?.verifyToken ?? null }
+    const [file] = await tx
+      .select({ key: attachments.r2Key })
+      .from(trainingSkillAssignmentFiles)
+      .innerJoin(attachments, eq(attachments.id, trainingSkillAssignmentFiles.attachmentId))
+      .where(
+        and(
+          eq(trainingSkillAssignmentFiles.skillAssignmentId, assignmentId),
+          eq(attachments.tenantId, row.tenant.id),
+          or(
+            eq(attachments.contentType, 'application/pdf'),
+            ilike(attachments.contentType, 'image/%'),
+          ),
+        ),
+      )
+      .orderBy(
+        sql`case when ${attachments.id} = ${skill.assignment.evidenceAttachmentId} then 0 else 1 end`,
+        desc(trainingSkillAssignmentFiles.uploadedAt),
+      )
+      .limit(1)
+    return {
+      ...row,
+      ...skill,
+      evidenceKey: file?.key ?? null,
+      certToken: cert?.verifyToken ?? null,
+    }
   })
 
   if (!data) return <PublicCardNotFound backHref={backHref} />
 
+  const output = resolveSkillCredentialOutput(data.outputIds, data.tenant.settings, {
+    format: 'wallet',
+  })
+  if (data.viewSource === 'evidence' || !output) {
+    if (data.evidenceKey)
+      redirect(await presignGet({ key: data.evidenceKey, expiresInSeconds: 300 }))
+    return <PublicCardNotFound backHref={backHref} />
+  }
   const base = appBaseUrl()
   const verifyUrl = data.certToken ? `${base}/verify/${data.certToken}` : `${base}${backHref}`
   const qrDataUrl = await verifyQrDataUrl(verifyUrl)
 
-  const output = resolveCredentialOutput(data.tenant.settings, { format: 'wallet' })
   const document = output.document ?? createWalletDesignDocument(output)
   const cardData = {
     tenantName: data.tenant.name,

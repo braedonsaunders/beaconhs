@@ -196,6 +196,28 @@ export type CredentialOutputRequest = {
   format?: 'cert' | 'wallet'
 }
 
+/** Skills explicitly opt into designs; an empty selection means no generation. */
+export function skillCredentialOutputs(
+  ids: readonly string[],
+  settings: unknown,
+): CredentialOutput[] {
+  return normalizeCredentialOutputs(settings).filter(
+    (output) => output.enabled && ids.includes(output.id),
+  )
+}
+
+export function resolveSkillCredentialOutput(
+  ids: readonly string[],
+  settings: unknown,
+  request: CredentialOutputRequest = {},
+): CredentialOutput | null {
+  const outputs = skillCredentialOutputs(ids, settings)
+  if (request.outputId) return outputs.find((output) => output.id === request.outputId) ?? null
+  if (request.format)
+    return outputs.find((output) => credentialOutputPdfFormat(output) === request.format) ?? null
+  return outputs[0] ?? null
+}
+
 export function credentialOutputPdfFormat(output: CredentialOutput): 'cert' | 'wallet' {
   return output.format === 'wallet' ? 'wallet' : 'cert'
 }

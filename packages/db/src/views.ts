@@ -32,7 +32,9 @@ export const REPORT_VIEWS_SQL: string[] = [
      a.granted_on,
      a.expires_on,
      CASE
-       WHEN a.expires_on IS NULL THEN 'no_expiry'
+       WHEN a.status = 'expired' THEN 'expired'
+       WHEN a.status <> 'complete' THEN a.status
+       WHEN a.expires_on IS NULL THEN 'valid'
        WHEN a.expires_on < CURRENT_DATE THEN 'expired'
        WHEN a.expires_on <= CURRENT_DATE + 90 THEN 'expiring'
        ELSE 'valid'
@@ -47,10 +49,10 @@ export const REPORT_VIEWS_SQL: string[] = [
        ORDER BY ef.sort_order, ef.id
        LIMIT 1) AS cwb_standard,
      (SELECT ef.field_value FROM training_extra_fields ef
-       WHERE ef.tenant_id = a.tenant_id AND ef.skill_assignment_id = a.id
+       WHERE ef.tenant_id = a.tenant_id AND ef.skill_type_id = t.id
          AND lower(ef.field_key) = 'type' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_type,
      (SELECT ef.field_value FROM training_extra_fields ef
-       WHERE ef.tenant_id = a.tenant_id AND ef.skill_assignment_id = a.id
+       WHERE ef.tenant_id = a.tenant_id AND ef.skill_type_id = t.id
          AND lower(ef.field_key) = 'process' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_process,
      (SELECT ef.field_value FROM training_extra_fields ef
        WHERE ef.tenant_id = a.tenant_id AND ef.skill_assignment_id = a.id
@@ -81,13 +83,47 @@ export const REPORT_VIEWS_SQL: string[] = [
        ','
      ) AS group_id_list
      ,(SELECT d.name FROM departments d WHERE d.id = p.department_id) AS department_name
-   FROM training_skill_assignments a
+     ,a.status AS outcome
+     ,au.code AS authority_code
+     ,p.status AS person_status
+     ,(p.first_name || ' ' || p.last_name) AS person_name
+     ,CASE WHEN p.status <> 'active' THEN 'L' WHEN EXISTS (SELECT 1 FROM departments d WHERE d.id = p.department_id AND (lower(d.code) = 's' OR lower(d.name) = 'shop')) THEN 'S' ELSE 'F' END AS shop_field_layoff
+   FROM (
+     SELECT DISTINCT ON (tenant_id, person_id, skill_type_id) *
+     FROM training_skill_assignments
+     WHERE deleted_at IS NULL AND person_id IS NOT NULL AND skill_type_id IS NOT NULL
+     ORDER BY tenant_id, person_id, skill_type_id,
+       CASE status WHEN 'complete' THEN 0 WHEN 'expired' THEN 1 ELSE 2 END,
+       CASE WHEN status = 'complete' THEN coalesce(expires_on, DATE '9999-12-31') END DESC NULLS LAST,
+       granted_on DESC, created_at DESC, id DESC
+   ) a
    JOIN training_skill_types t ON t.id = a.skill_type_id
    JOIN training_skill_authorities au ON au.id = t.authority_id
    JOIN people p ON p.id = a.person_id
    LEFT JOIN trades tr ON tr.id = p.trade_id
    WHERE a.deleted_at IS NULL
-     AND p.deleted_at IS NULL`,
+     AND p.deleted_at IS NULL AND t.deleted_at IS NULL`,
+
+  `CREATE OR REPLACE VIEW report_skill_coverage AS
+   SELECT (p.id::text || ':' || t.id::text) AS id, p.tenant_id, p.id AS person_id,
+     p.employee_no, (p.last_name || ', ' || p.first_name) AS person_name,
+     p.status AS person_status, p.department_id,
+     (SELECT d.name FROM departments d WHERE d.id = p.department_id) AS department_name,
+     array_to_string(ARRAY(SELECT gm.group_id::text FROM person_group_memberships gm
+       WHERE gm.tenant_id = p.tenant_id AND gm.person_id = p.id ORDER BY gm.group_id), ',') AS group_id_list,
+     t.id AS skill_type_id, t.name AS skill_name, t.code AS skill_code,
+     t.authority_id, au.name AS authority,
+     a.id AS assignment_id, a.granted_on, a.expires_on,
+     CASE WHEN a.status IN ('valid','expiring','expired') THEN a.status ELSE 'missing' END AS coverage_status,
+     EXISTS (SELECT 1 FROM compliance_status cs JOIN compliance_obligations co
+       ON co.id = cs.obligation_id AND co.tenant_id = cs.tenant_id
+       WHERE cs.tenant_id = p.tenant_id AND cs.person_id = p.id
+         AND co.source_module = 'cert_requirement' AND co.target_ref->>'skillTypeId' = t.id::text
+         AND co.status = 'active' AND co.deleted_at IS NULL) AS is_required
+   FROM people p JOIN training_skill_types t ON t.tenant_id = p.tenant_id
+   JOIN training_skill_authorities au ON au.id = t.authority_id AND au.tenant_id = t.tenant_id
+   LEFT JOIN report_skill_assignments a ON a.person_id = p.id AND a.skill_type_id = t.id AND a.tenant_id = p.tenant_id
+   WHERE p.deleted_at IS NULL AND t.deleted_at IS NULL AND t.is_active`,
 
   // Person × course training coverage. The cross product of people and
   // courses (so "never trained" cells exist) LEFT JOINed to each person's

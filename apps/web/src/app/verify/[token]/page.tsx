@@ -105,7 +105,10 @@ async function resolveToken(token: string): Promise<Resolved | null> {
         // A skill is revoked by soft-deleting its assignment (see
         // training_skill_assignments), so honour deletedAt like the course
         // branch honours the record's — not just the certificate row's revokedAt.
-        revoked: skill.cert.revokedAt !== null || skill.assignment.deletedAt !== null,
+        revoked:
+          skill.cert.revokedAt !== null ||
+          skill.assignment.deletedAt !== null ||
+          skill.assignment.status !== 'complete',
       }
     }
 

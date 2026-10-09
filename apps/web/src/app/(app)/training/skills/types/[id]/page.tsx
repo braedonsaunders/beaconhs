@@ -1,3 +1,4 @@
+import { skillStanding } from '@beaconhs/compliance'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -36,6 +37,7 @@ import {
 } from '@beaconhs/ui'
 import {
   people,
+  tenants,
   trainingExtraFields,
   trainingSkillAssignments,
   trainingSkillAuthorities,
@@ -50,7 +52,11 @@ import {
   pickString,
 } from '@/lib/list-params'
 import { DetailPageLayout } from '@/components/page-layout'
-import { DetailGrid } from '@/components/detail-grid'
+import { SkillTypeFields } from './_fields'
+import { deleteSkillType } from '../_actions'
+import { ConfirmButton } from '@/components/confirm-button'
+import { enabledCredentialOutputs } from '@/lib/credential-designs'
+import { activePeopleWhere } from '@beaconhs/db'
 import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
@@ -100,14 +106,31 @@ export default async function SkillTypeDetailPage({
     allowedSorts: EXTRA_SORTS,
   })
   const statusParam = pickString(sp.status)
-  const statusFilter = ['valid', 'expiring', 'expired', 'no_expiry'].includes(statusParam ?? '')
-    ? (statusParam as 'valid' | 'expiring' | 'expired' | 'no_expiry')
+  const statusFilter = [
+    'valid',
+    'expiring',
+    'expired',
+    'no_expiry',
+    'tested',
+    'recommended',
+    'failed',
+    'draft',
+  ].includes(statusParam ?? '')
+    ? (statusParam as
+        | 'valid'
+        | 'expiring'
+        | 'expired'
+        | 'no_expiry'
+        | 'tested'
+        | 'recommended'
+        | 'failed'
+        | 'draft')
     : undefined
   const now = new Date()
   const todayIso = now.toISOString().slice(0, 10)
-  const in30 = new Date(now)
-  in30.setDate(in30.getDate() + 30)
-  const in30Iso = in30.toISOString().slice(0, 10)
+  const in90 = new Date(now)
+  in90.setDate(in90.getDate() + 90)
+  const in90Iso = in90.toISOString().slice(0, 10)
 
   const ctx = await requireModuleManage('training')
   const data = await ctx.db(async (tx) => {
@@ -118,7 +141,7 @@ export default async function SkillTypeDetailPage({
         trainingSkillAuthorities,
         eq(trainingSkillAuthorities.id, trainingSkillTypes.authorityId),
       )
-      .where(eq(trainingSkillTypes.id, id))
+      .where(and(eq(trainingSkillTypes.id, id), isNull(trainingSkillTypes.deletedAt)))
       .limit(1)
     if (!row) return null
     const search: SQL<unknown> | undefined = listParams.q
@@ -130,29 +153,50 @@ export default async function SkillTypeDetailPage({
       : undefined
     const status =
       statusFilter === 'expired'
-        ? lt(trainingSkillAssignments.expiresOn, todayIso)
+        ? or(
+            eq(trainingSkillAssignments.status, 'expired'),
+            and(
+              eq(trainingSkillAssignments.status, 'complete'),
+              lt(trainingSkillAssignments.expiresOn, todayIso),
+            ),
+          )
         : statusFilter === 'expiring'
           ? and(
+              eq(trainingSkillAssignments.status, 'complete'),
               gte(trainingSkillAssignments.expiresOn, todayIso),
-              lte(trainingSkillAssignments.expiresOn, in30Iso),
+              lte(trainingSkillAssignments.expiresOn, in90Iso),
             )
           : statusFilter === 'valid'
-            ? gt(trainingSkillAssignments.expiresOn, in30Iso)
+            ? and(
+                eq(trainingSkillAssignments.status, 'complete'),
+                gt(trainingSkillAssignments.expiresOn, in90Iso),
+              )
             : statusFilter === 'no_expiry'
-              ? isNull(trainingSkillAssignments.expiresOn)
-              : undefined
+              ? and(
+                  eq(trainingSkillAssignments.status, 'complete'),
+                  isNull(trainingSkillAssignments.expiresOn),
+                )
+              : statusFilter
+                ? eq(
+                    trainingSkillAssignments.status,
+                    statusFilter as 'tested' | 'recommended' | 'failed' | 'draft',
+                  )
+                : undefined
     const baseWhere = and(
       eq(trainingSkillAssignments.skillTypeId, id),
       isNull(trainingSkillAssignments.deletedAt),
+      activePeopleWhere(),
+      sql`${trainingSkillAssignments.id} IN (SELECT id FROM report_skill_assignments)`,
     )
     const where = and(baseWhere, search, status)
     const [holderSummary] = await tx
       .select({
         total: count(),
-        expired: sql<string>`count(*) filter (where ${trainingSkillAssignments.expiresOn} < ${todayIso})`,
-        expiring: sql<string>`count(*) filter (where ${trainingSkillAssignments.expiresOn} >= ${todayIso} and ${trainingSkillAssignments.expiresOn} <= ${in30Iso})`,
+        expired: sql<string>`count(*) filter (where ${trainingSkillAssignments.status} = 'expired' or (${trainingSkillAssignments.status} = 'complete' and ${trainingSkillAssignments.expiresOn} < ${todayIso}))`,
+        expiring: sql<string>`count(*) filter (where ${trainingSkillAssignments.status} = 'complete' and ${trainingSkillAssignments.expiresOn} >= ${todayIso} and ${trainingSkillAssignments.expiresOn} <= ${in90Iso})`,
       })
       .from(trainingSkillAssignments)
+      .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
       .where(baseWhere)
     const [filteredCount] = await tx
       .select({ c: count() })
@@ -164,7 +208,10 @@ export default async function SkillTypeDetailPage({
       .from(trainingSkillAssignments)
       .innerJoin(people, eq(people.id, trainingSkillAssignments.personId))
       .where(where)
-      .orderBy(asc(trainingSkillAssignments.expiresOn))
+      .orderBy(
+        sql`CASE WHEN ${trainingSkillAssignments.status} = 'complete' AND (${trainingSkillAssignments.expiresOn} IS NULL OR ${trainingSkillAssignments.expiresOn} >= ${todayIso}) THEN 0 ELSE 1 END`,
+        asc(trainingSkillAssignments.expiresOn),
+      )
       .limit(listParams.perPage)
       .offset((listParams.page - 1) * listParams.perPage)
     const extras = await loadTrainingExtraFieldPage(
@@ -172,7 +219,13 @@ export default async function SkillTypeDetailPage({
       eq(trainingExtraFields.skillTypeId, id),
       extraListParams,
     )
+    const [tenant] = await tx
+      .select({ settings: tenants.settings })
+      .from(tenants)
+      .where(eq(tenants.id, ctx.tenantId))
+      .limit(1)
     return {
+      outputs: enabledCredentialOutputs(tenant?.settings),
       ...row,
       holders,
       holderCount: Number(holderSummary?.total ?? 0),
@@ -198,18 +251,14 @@ export default async function SkillTypeDetailPage({
   const basePath = `/training/skills/types/${id}`
   const closeHref = mergeHref(basePath, sp, { drawer: undefined })
 
-  const today = now
   const holdersWithStatus = holders.map((h) => {
-    const exp = h.assignment.expiresOn ? new Date(h.assignment.expiresOn) : null
-    const daysLeft = exp ? Math.round((exp.getTime() - today.getTime()) / 86_400_000) : null
-    const status: 'valid' | 'expiring' | 'expired' | 'no_expiry' =
-      daysLeft === null
-        ? 'no_expiry'
-        : daysLeft < 0
-          ? 'expired'
-          : daysLeft <= 30
-            ? 'expiring'
-            : 'valid'
+    const daysLeft = h.assignment.expiresOn
+      ? Math.round(
+          (new Date(h.assignment.expiresOn).getTime() - new Date(todayIso).getTime()) / 86_400_000,
+        )
+      : null
+    const standing = skillStanding(h.assignment, todayIso)
+    const status = standing === 'valid' && !h.assignment.expiresOn ? 'no_expiry' : standing
     return { ...h, daysLeft, status }
   })
 
@@ -257,64 +306,13 @@ export default async function SkillTypeDetailPage({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <DetailGrid
-                  rows={[
-                    { label: 'Name', value: type.name },
-                    {
-                      label: 'Authority',
-                      value: (
-                        <Link
-                          href={`/training/authorities/${authority.id}`}
-                          className="text-teal-700 hover:underline dark:text-teal-400"
-                        >
-                          <GeneratedValue value={authority.name} />
-                        </Link>
-                      ),
-                    },
-                    { label: 'Code', value: type.code ?? '—' },
-                    {
-                      label: 'Valid for',
-                      value: type.validForMonths ? `${type.validForMonths} months` : 'No expiry',
-                    },
-                    { label: 'Holders', value: holderCount },
-                    {
-                      label: 'Expiring (30d)',
-                      value:
-                        expiringCount > 0 ? (
-                          <Badge variant="warning">
-                            <GeneratedValue value={expiringCount} />
-                          </Badge>
-                        ) : (
-                          '0'
-                        ),
-                    },
-                    {
-                      label: 'Expired',
-                      value:
-                        expiredCount > 0 ? (
-                          <Badge variant="destructive">
-                            <GeneratedValue value={expiredCount} />
-                          </Badge>
-                        ) : (
-                          '0'
-                        ),
-                    },
-                  ]}
-                />
-                <GeneratedValue
-                  value={
-                    type.description ? (
-                      <div className="mt-4">
-                        <div className="text-xs tracking-wide text-slate-500 uppercase dark:text-slate-400">
-                          <GeneratedText id="m_14d923495cf14c" />
-                        </div>
-                        <p className="mt-1 text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-300">
-                          <GeneratedValue value={type.description} />
-                        </p>
-                      </div>
-                    ) : null
-                  }
-                />
+                <SkillTypeFields type={type} outputs={data.outputs} />
+                <form action={deleteSkillType} className="mt-6">
+                  <input type="hidden" name="id" value={id} />
+                  <ConfirmButton variant="destructive" message={tGenerated('m_14c2bcbba0cca1')}>
+                    <GeneratedText id="m_17f7f669e3ac1d" />
+                  </ConfirmButton>
+                </form>
               </CardContent>
             </Card>
           ) : null
@@ -431,7 +429,9 @@ export default async function SkillTypeDetailPage({
                                 <TableCell>
                                   <GeneratedValue
                                     value={
-                                      h.status === 'expired' ? (
+                                      h.status === 'missing' ? (
+                                        <Badge variant="secondary">{h.assignment.status}</Badge>
+                                      ) : h.status === 'expired' ? (
                                         <Badge variant="destructive">
                                           <GeneratedText id="m_13f7150c94b182" />{' '}
                                           {Math.abs(h.daysLeft!)}

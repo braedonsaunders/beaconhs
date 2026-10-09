@@ -3,9 +3,12 @@ import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { Award } from 'lucide-react'
-import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import {
   EmptyState,
+  Button,
+  Input,
+  Select,
   PageHeader,
   Table,
   TableBody,
@@ -27,6 +30,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { createSkillType } from './_actions'
 import { TrainingSubNav } from '../../_components/training-sub-nav'
 
 export async function generateMetadata() {
@@ -54,12 +58,14 @@ export default async function TrainingSkillsPage({
   const ctx = await requireModuleManage('training')
 
   const { rows, total, authorities } = await ctx.db(async (tx) => {
-    const filters: SQL<unknown>[] = []
+    const filters: SQL<unknown>[] = [isNull(trainingSkillTypes.deletedAt)]
     if (params.q) {
       const term = `%${params.q}%`
       const cond = or(ilike(trainingSkillTypes.name, term), ilike(trainingSkillTypes.code, term))
       if (cond) filters.push(cond)
     }
+    const state = pickString(sp.active)
+    if (state === '1' || state === '0') filters.push(eq(trainingSkillTypes.isActive, state === '1'))
     if (authorityFilter) filters.push(eq(trainingSkillTypes.authorityId, authorityFilter))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
@@ -95,7 +101,11 @@ export default async function TrainingSkillsPage({
       )
       .leftJoin(
         trainingSkillAssignments,
-        eq(trainingSkillAssignments.skillTypeId, trainingSkillTypes.id),
+        and(
+          eq(trainingSkillAssignments.skillTypeId, trainingSkillTypes.id),
+          isNull(trainingSkillAssignments.deletedAt),
+          sql`${trainingSkillAssignments.id} IN (SELECT id FROM report_skill_assignments WHERE person_status = 'active')`,
+        ),
       )
       .where(whereClause)
       .groupBy(trainingSkillTypes.id, trainingSkillAuthorities.id)
@@ -130,6 +140,31 @@ export default async function TrainingSkillsPage({
             }
           />
           <TrainingSubNav active="skill-types" />
+          <details className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <summary className="cursor-pointer text-sm font-medium">
+              <GeneratedText id="m_0af680c2c0e3dd" />
+            </summary>
+            <form action={createSkillType} className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="min-w-48 flex-1 text-sm">
+                <GeneratedText id="m_02b18d5c7f6f2d" />
+                <Input name="name" required maxLength={200} />
+              </label>
+              <label className="min-w-48 flex-1 text-sm">
+                <GeneratedText id="m_012397255c5bd0" />
+                <Select name="authorityId" required>
+                  <option value="">Choose authority</option>
+                  {authorities.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <Button type="submit">
+                <GeneratedText id="m_017309f0f9f564" />
+              </Button>
+            </form>
+          </details>
           <TableToolbar>
             <SearchInput placeholder={tGenerated('m_19fafa6e6f6775')} />
             <GeneratedValue
@@ -144,6 +179,16 @@ export default async function TrainingSkillsPage({
                   />
                 ) : null
               }
+            />
+            <FilterChips
+              basePath="/training/skills/types"
+              currentParams={sp}
+              paramKey="active"
+              label={tGenerated('m_18f842f77b3c8b')}
+              options={[
+                { value: '1', label: 'Active' },
+                { value: '0', label: 'Inactive' },
+              ]}
             />
           </TableToolbar>
         </>
@@ -197,6 +242,11 @@ export default async function TrainingSkillsPage({
                             className="font-medium text-slate-900 hover:underline dark:text-slate-100"
                           >
                             <GeneratedValue value={type.name} />
+                            {!type.isActive ? (
+                              <span className="ml-2 text-xs text-slate-500">
+                                <GeneratedText id="m_0f47ea07c99dba" />
+                              </span>
+                            ) : null}
                           </Link>
                         </TableCell>
                         <TableCell className="text-slate-600 dark:text-slate-400">

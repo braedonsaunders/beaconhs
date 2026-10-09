@@ -4,7 +4,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 // Mobile-first: the common reader is a supervisor scanning a card at the gate.
 // Every row opens the rendered wallet card for that credential.
 
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { db, primaryPersonTitleName, withSuperAdmin } from '@beaconhs/db'
 import {
   attachments,
@@ -102,6 +102,9 @@ async function resolveToken(token: string): Promise<Resolved | null> {
         and(
           eq(trainingSkillAssignments.personId, row.person.id),
           isNull(trainingSkillAssignments.deletedAt),
+          eq(trainingSkillAssignments.tenantId, row.tenant.id),
+          eq(trainingSkillAssignments.status, 'complete'),
+          sql`${trainingSkillAssignments.id} in (select id from report_skill_assignments where tenant_id = ${row.tenant.id})`,
         ),
       )
       .orderBy(asc(trainingSkillTypes.name))

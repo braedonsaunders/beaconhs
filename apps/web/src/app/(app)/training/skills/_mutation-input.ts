@@ -10,12 +10,15 @@ import {
 const SKILL_FILE_KINDS = ['certificate', 'evidence', 'photo', 'other'] as const
 type SkillFileKind = (typeof SKILL_FILE_KINDS)[number]
 
+const SKILL_STATUSES = ['draft', 'expired', 'complete', 'tested', 'recommended', 'failed'] as const
+
 export type SkillAssignmentFieldUpdate =
   | { field: 'personId'; value: string }
   | { field: 'skillTypeId'; value: string }
   | { field: 'grantedOn'; value: string }
   | { field: 'expiresOn'; value: string | null }
   | { field: 'notes'; value: string | null }
+  | { field: 'status'; value: (typeof SKILL_STATUSES)[number] }
 
 const MAX_SKILL_NOTES_LENGTH = 10_000
 const MAX_FILE_LABEL_LENGTH = 300
@@ -41,6 +44,8 @@ export function parseSkillAssignmentFieldUpdate(
       return { field, value: requiredDateInput(value, 'Granted date') }
     case 'expiresOn':
       return { field, value: optionalDateInput(value, 'Expiry date') }
+    case 'status':
+      return { field, value: requireEnumInput(value, SKILL_STATUSES, 'Status') }
     case 'notes':
       return {
         field,

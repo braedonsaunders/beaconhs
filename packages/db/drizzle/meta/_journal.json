@@ -428,6 +428,27 @@
       "when": 1791413256881,
       "tag": "0061_hazard_signing_inline",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1791558590530,
+      "tag": "0062_skill_ticket_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1791558590531,
+      "tag": "0063_equipment_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1791558590532,
+      "tag": "0064_skill_reports",
+      "breakpoints": true
     }
   ]
 }

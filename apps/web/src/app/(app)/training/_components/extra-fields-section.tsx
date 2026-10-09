@@ -339,7 +339,7 @@ function AddExtraFieldDrawer({
             id="fieldValue"
             value={fieldValue}
             onChange={(e) => setFieldValue(e.currentTarget.value)}
-            placeholder={tGenerated('m_171e5b15012339')}
+            placeholder={tGenerated('m_081e4e4618ccfa')}
             maxLength={TRAINING_EXTRA_FIELD_VALUE_MAX}
           />
         </div>

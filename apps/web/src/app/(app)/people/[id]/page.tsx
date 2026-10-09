@@ -1,3 +1,6 @@
+import { TableToolbar } from '@/components/table-toolbar'
+import { FilterChips } from '@/components/filter-bar'
+import { currentSkillTickets, skillStanding } from '@beaconhs/compliance'
 import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
@@ -618,24 +621,46 @@ export default async function PersonDetailPage({
     transcriptPage * TRANSCRIPT_PER_PAGE,
   )
 
-  const skillsWithStatus = skills
+  const currentSkills = currentSkillTickets(skills.map((s) => ({ ...s.assignment, row: s })))
     .map((s) => {
-      const exp = s.assignment.expiresOn ? new Date(s.assignment.expiresOn) : null
-      const daysLeft = exp ? Math.round((exp.getTime() - today.getTime()) / 86_400_000) : null
-      const status: 'ok' | 'expiring' | 'expired' | 'no_expiry' =
-        daysLeft === null
-          ? 'no_expiry'
-          : daysLeft < 0
-            ? 'expired'
-            : daysLeft <= 30
-              ? 'expiring'
-              : 'ok'
-      return { ...s, daysLeft, status }
+      const standing = skillStanding(s, today.toISOString().slice(0, 10), 30)
+      const daysLeft = s.expiresOn
+        ? Math.ceil(
+            (new Date(s.expiresOn).getTime() -
+              new Date(today.toISOString().slice(0, 10)).getTime()) /
+              86400000,
+          )
+        : null
+      return {
+        ...s.row,
+        daysLeft,
+        status:
+          standing === 'valid'
+            ? s.expiresOn
+              ? ('ok' as const)
+              : ('no_expiry' as const)
+            : standing,
+      }
     })
     .sort((a, b) => {
-      const rank = { expired: 0, expiring: 1, ok: 2, no_expiry: 3 } as const
-      return rank[a.status] - rank[b.status]
+      const rank = { ok: 0, no_expiry: 0, expiring: 1, expired: 2, missing: 3 }
+      return rank[a.status] - rank[b.status] || a.skillType.name.localeCompare(b.skillType.name)
     })
+  const skillQuery = (pickString(sp.skillQ) ?? '').trim().toLowerCase()
+  const skillFilter = pickString(sp.skillStatus)
+  const filteredSkills = currentSkills.filter(
+    (s) =>
+      (!skillQuery ||
+        `${s.skillType.name} ${s.skillType.code ?? ''} ${s.authority?.name ?? ''}`
+          .toLowerCase()
+          .includes(skillQuery)) &&
+      (!skillFilter ||
+        (skillFilter === 'valid'
+          ? ['ok', 'no_expiry'].includes(s.status)
+          : s.status === skillFilter)),
+  )
+  const skillPage = Math.max(1, Number(pickString(sp.skillPage) ?? '1') || 1)
+  const skillsWithStatus = filteredSkills.slice((skillPage - 1) * 10, skillPage * 10)
 
   const expiredCount = transcript.filter((t) => t.status === 'expired').length
   const expiringCount = transcript.filter((t) => t.status === 'expiring').length
@@ -887,7 +912,7 @@ export default async function PersonDetailPage({
                   label: 'Transcript',
                   count: transcript.length,
                 },
-                { key: 'skills', label: 'Skills', count: skills.length },
+                { key: 'skills', label: 'Skills', count: currentSkills.length },
                 { key: 'ppe', label: 'PPE', count: ppeAssigned.length },
                 {
                   key: 'documents',
@@ -1434,6 +1459,25 @@ export default async function PersonDetailPage({
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
+                      <TableToolbar className="mb-3">
+                        <SearchInput
+                          paramKey="skillQ"
+                          pageParamKey="skillPage"
+                          placeholder={tGenerated('m_03c7ed9e23235a')}
+                        />
+                        <FilterChips
+                          basePath={basePath}
+                          currentParams={sp}
+                          paramKey="skillStatus"
+                          label={tGenerated('m_0b9da892d6faf0')}
+                          options={[
+                            { value: 'valid', label: 'Valid' },
+                            { value: 'expiring', label: 'Expiring' },
+                            { value: 'expired', label: 'Expired' },
+                            { value: 'missing', label: 'Not complete' },
+                          ]}
+                        />
+                      </TableToolbar>
                       <GeneratedValue
                         value={
                           skillsWithStatus.length === 0 ? (
@@ -1468,7 +1512,12 @@ export default async function PersonDetailPage({
                                   value={skillsWithStatus.map((row) => (
                                     <TableRow key={row.assignment.id}>
                                       <TableCell className="font-medium">
-                                        <GeneratedValue value={row.skillType.name} />
+                                        <Link
+                                          href={`/training/skills/${row.assignment.id}`}
+                                          className="hover:underline"
+                                        >
+                                          <GeneratedValue value={row.skillType.name} />
+                                        </Link>
                                         <GeneratedValue
                                           value={
                                             row.skillType.code ? (
@@ -1502,13 +1551,14 @@ export default async function PersonDetailPage({
                                                 {row.daysLeft}
                                                 <GeneratedText id="m_0a3d63460246cf" />
                                               </Badge>
-                                            ) : row.status === 'ok' ? (
+                                            ) : row.status === 'ok' ||
+                                              row.status === 'no_expiry' ? (
                                               <Badge variant="success">
                                                 <GeneratedText id="m_1e418d0475450c" />
                                               </Badge>
                                             ) : (
                                               <Badge variant="secondary">
-                                                <GeneratedText id="m_1bbc44c1ce26a7" />
+                                                <GeneratedValue value={row.assignment.status} />
                                               </Badge>
                                             )
                                           }
@@ -1521,6 +1571,14 @@ export default async function PersonDetailPage({
                             </Table>
                           )
                         }
+                      />
+                      <Pagination
+                        basePath={basePath}
+                        currentParams={sp}
+                        pageParamKey="skillPage"
+                        total={filteredSkills.length}
+                        page={skillPage}
+                        perPage={10}
                       />
                     </CardContent>
                   </Card>

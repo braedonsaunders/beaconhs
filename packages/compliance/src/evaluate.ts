@@ -342,6 +342,7 @@ async function evalTraining(
         and(
           eq(trainingSkillAssignments.tenantId, tid),
           eq(trainingSkillAssignments.skillTypeId, ref.skillTypeId),
+          eq(trainingSkillAssignments.status, 'complete'),
           inArray(trainingSkillAssignments.personId, ids),
           isNull(trainingSkillAssignments.deletedAt),
         ),

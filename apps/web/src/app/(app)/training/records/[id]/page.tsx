@@ -1,3 +1,4 @@
+import { FilePreview } from '@/components/file-preview'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -494,6 +495,18 @@ export default async function TrainingRecordPage({
                                 value={certAttachments.map(({ file, attachment: a }) => (
                                   <TableRow key={file.id}>
                                     <TableCell className="font-medium">
+                                      <a
+                                        href={attachmentUrl(a.id)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                      >
+                                        <FilePreview
+                                          url={attachmentUrl(a.id)}
+                                          contentType={a.contentType}
+                                          label={file.label}
+                                          className="mb-2 h-32 w-44"
+                                        />
+                                      </a>
                                       <div>
                                         <GeneratedValue value={file.label} />
                                       </div>

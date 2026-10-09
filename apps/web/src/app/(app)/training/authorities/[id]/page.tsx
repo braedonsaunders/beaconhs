@@ -1,10 +1,14 @@
+import { createSkillType } from '../../skills/types/_actions'
+import { LiveField } from '@/components/live-field'
+import { optionalTextInput, requireUuidInput } from '@/lib/mutation-input'
+import { recordAuditInTransaction } from '@/lib/audit'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, count, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { Award, ListChecks } from 'lucide-react'
 import {
   Badge,
@@ -34,7 +38,7 @@ import {
 import { requireRequestContext } from '@/lib/auth'
 import { formatDateTime } from '@/lib/datetime'
 import { assertCanManageModule, requireModuleManage } from '@/lib/module-admin/guard'
-import { recentActivityForEntity, recordAudit } from '@/lib/audit'
+import { recentActivityForEntity } from '@/lib/audit'
 import {
   isUuid,
   mergeHref,
@@ -60,36 +64,34 @@ type Tab = (typeof TABS)[number]
 const SORTS = ['name'] as const
 const EXTRA_SORTS = ['order'] as const
 
-async function addSkillType(formData: FormData) {
+async function updateAuthorityAccount(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
   assertCanManageModule(ctx, 'training')
-  const authorityId = String(formData.get('authorityId') ?? '')
-  const name = String(formData.get('name') ?? '').trim()
-  if (!name) return
-  const code = String(formData.get('code') ?? '').trim() || null
-  const validForMonthsRaw = String(formData.get('validForMonths') ?? '').trim()
-  const validForMonths = validForMonthsRaw ? Number(validForMonthsRaw) : null
-  const description = String(formData.get('description') ?? '').trim() || null
-
-  await ctx.db((tx) =>
-    tx.insert(trainingSkillTypes).values({
-      tenantId: ctx.tenantId,
-      authorityId,
-      name,
-      code,
-      validForMonths,
-      description,
-    }),
-  )
-  await recordAudit(ctx, {
-    entityType: 'training_skill_authority',
-    entityId: authorityId,
-    action: 'update',
-    summary: `Added skill type "${name}"`,
+  const id = requireUuidInput(formData.get('id'), 'Authority')
+  const value = optionalTextInput(formData.get('value'), 'Company / account number', 200)
+  await ctx.db(async (tx) => {
+    const [before] = await tx
+      .select({ accountNumber: trainingSkillAuthorities.accountNumber })
+      .from(trainingSkillAuthorities)
+      .where(eq(trainingSkillAuthorities.id, id))
+      .limit(1)
+      .for('update')
+    if (!before) throw new Error('Authority not found.')
+    await tx
+      .update(trainingSkillAuthorities)
+      .set({ accountNumber: value })
+      .where(eq(trainingSkillAuthorities.id, id))
+    await recordAuditInTransaction(tx, ctx, {
+      entityType: 'training_skill_authority',
+      entityId: id,
+      action: 'update',
+      summary: 'Updated company / account number',
+      before,
+      after: { accountNumber: value },
+    })
   })
-  revalidatePath(`/training/authorities/${authorityId}`)
-  revalidatePath('/training/skills')
+  revalidatePath(`/training/authorities/${id}`)
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -140,12 +142,16 @@ export default async function AuthorityDetailPage({
           ilike(trainingSkillTypes.description, `%${listParams.q}%`),
         )
       : undefined
-    const typeWhere = and(eq(trainingSkillTypes.authorityId, id), search)
+    const typeWhere = and(
+      isNull(trainingSkillTypes.deletedAt),
+      eq(trainingSkillTypes.authorityId, id),
+      search,
+    )
     const [[allTypeCount], [filteredTypeCount]] = await Promise.all([
       tx
         .select({ c: count() })
         .from(trainingSkillTypes)
-        .where(eq(trainingSkillTypes.authorityId, id)),
+        .where(and(eq(trainingSkillTypes.authorityId, id), isNull(trainingSkillTypes.deletedAt))),
       tx.select({ c: count() }).from(trainingSkillTypes).where(typeWhere),
     ])
     const skillTypes = await tx
@@ -156,7 +162,11 @@ export default async function AuthorityDetailPage({
       .from(trainingSkillTypes)
       .leftJoin(
         trainingSkillAssignments,
-        eq(trainingSkillAssignments.skillTypeId, trainingSkillTypes.id),
+        and(
+          eq(trainingSkillAssignments.skillTypeId, trainingSkillTypes.id),
+          isNull(trainingSkillAssignments.deletedAt),
+          sql`${trainingSkillAssignments.id} IN (SELECT id FROM report_skill_assignments WHERE person_status = 'active')`,
+        ),
       )
       .where(typeWhere)
       .groupBy(trainingSkillTypes.id)
@@ -230,6 +240,13 @@ export default async function AuthorityDetailPage({
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                <LiveField
+                  id={id}
+                  field="accountNumber"
+                  label={tGenerated('m_0b86c16128cd06')}
+                  initialValue={authority.accountNumber}
+                  updateAction={updateAuthorityAccount}
+                />
                 <DetailGrid
                   rows={[
                     { label: 'Name', value: authority.name },
@@ -384,7 +401,7 @@ export default async function AuthorityDetailPage({
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <form action={addSkillType} className="space-y-3">
+                  <form action={createSkillType} className="space-y-3">
                     <input type="hidden" name="authorityId" value={id} />
                     <div className="grid gap-3 sm:grid-cols-3">
                       <div className="space-y-1.5 sm:col-span-2">

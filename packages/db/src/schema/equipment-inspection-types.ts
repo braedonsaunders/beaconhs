@@ -63,6 +63,7 @@ export const equipmentInspectionTypes = pgTable(
     // When true, the "pass all" shortcut button is available in the runtime
     // form. Defaults true to match legacy behaviour.
     allowPassAll: boolean('allow_pass_all').default(true).notNull(),
+    allowNA: boolean('allow_na').default(false).notNull(),
     // When true, a failed criterion auto-creates a work order against the
     // equipment item being inspected.
     failsSpawnWorkOrders: boolean('fails_spawn_work_orders').default(true).notNull(),
