@@ -161,7 +161,7 @@ Use **All locations** to search the complete set of locations used by assessment
 
 Most people see only the assessments they started. Foremen see their site's assessments.
 
-If your company wants you to read other people's assessments — for example to copy a good one for repeat work — an administrator can add the **View others' hazard assessments** permission to your role, or just to you under **Permissions** on your member page. It lets you open, list, email, and copy from anyone's assessment. It does not let you change other people's assessments. Editing still needs the edit permission, and copying still needs the create permission.
+If your company wants you to read other people's assessments — for example to copy a good one for repeat work — an administrator can add the **View all hazard assessments** permission to your role, or just to you under **Permissions** on your member page. It lets you open, list, email, and copy from anyone's assessment. It does not let you change other people's assessments. Editing still needs the edit permission, and copying still needs the create permission.
 
 ## Starting a new assessment
 
@@ -205,9 +205,11 @@ Edit the assessment normally if the job changes. Earlier signatures stay in **Ac
 
 Some assessment types include an **Assessment apps** section for extra company forms.
 
-1. Tap **Start** or **Continue** beside the app.
+1. Tap **Start** or **Continue** beside the app. It opens over the assessment. Dropdowns open above the form; tap an option to select it.
 2. Complete the form in the full-screen panel.
 3. Tap **Submit** to return to the assessment.
+
+Draft answers save automatically. Reopen with **Continue** to keep filling out the saved draft. If saving fails, retry before leaving.
 
 Only published apps allowed for the role you are currently using appear. A submitted assessment cannot start or continue an unfinished app. Use **View response** to open a completed record.
 

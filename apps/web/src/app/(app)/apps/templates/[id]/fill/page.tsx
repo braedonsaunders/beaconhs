@@ -1,3 +1,4 @@
+import { responseInitialState } from '@/app/(app)/apps/_lib/response-initial-state'
 import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound, redirect } from 'next/navigation'
@@ -241,27 +242,9 @@ export default async function FillTemplatePage({
 
   // Hydrate the renderer: drafts from draftData; submitted/closed from the
   // final `data` (repeating-section rows live at data[sectionId]).
-  let initialValues: Record<string, unknown> = {}
-  let initialRows: Record<string, Array<Record<string, unknown>>> = {}
-  let initialStepIndex = 0
-  if (response) {
-    if (isDraftState && response.draftData) {
-      initialValues = response.draftData.values ?? {}
-      initialRows = response.draftData.rows ?? {}
-      initialStepIndex = response.draftStepIndex ?? 0
-    } else {
-      initialValues = response.data ?? {}
-      initialRows = {}
-      for (const sec of data.version.schema.sections) {
-        const rows = response.data?.[sec.id]
-        if (sec.repeating && Array.isArray(rows)) {
-          initialRows[sec.id] = rows as Array<Record<string, unknown>>
-        }
-      }
-    }
-  }
+  const { initialValues, initialRows, initialStepIndex, initialDraftRevision, isResumed } =
+    responseInitialState(data.version.schema, response)
   const initialResponseId = response?.id ?? null
-  const resumeOk = isDraftState && !!response?.draftData
 
   // Resolve picker-bound entity attributes. We pass the resumed values map
   // (or {}) so any picker selections in the draft rehydrate with their
@@ -293,8 +276,8 @@ export default async function FillTemplatePage({
       initialValues={initialValues}
       initialRows={initialRows}
       initialStepIndex={initialStepIndex}
-      initialDraftRevision={response?.draftData?.saveRevision ?? 0}
-      isResumed={resumeOk}
+      initialDraftRevision={initialDraftRevision}
+      isResumed={isResumed}
       returnTo={returnTo}
       readOnly={readOnly}
       responseStatus={response?.status ?? null}

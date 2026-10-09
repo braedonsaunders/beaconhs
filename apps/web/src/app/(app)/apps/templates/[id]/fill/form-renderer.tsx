@@ -539,66 +539,78 @@ export function FormRenderer({
       stepIndex: number
     }): Promise<boolean> => {
       const clientSequence = latestRef.current.editSequence
-      const clientSessionId = getOrCreateDraftSessionId(draftSessionIdRef)
+      try {
+        const clientSessionId = getOrCreateDraftSessionId(draftSessionIdRef)
 
-      // Lazily create a draft row on the first save. Concurrent saves share
-      // and await the same request, then each submits its ordered snapshot.
-      let id = latestRef.current.responseId
-      if (!id) {
-        const creation =
-          creatingRef.current ?? createDraftResponse({ templateId, complianceObligationId })
-        creatingRef.current = creation
-        try {
-          const res = await creation
-          if (!res.ok) {
+        // Lazily create a draft row on the first save. Concurrent saves share
+        // and await the same request, then each submits its ordered snapshot.
+        let id = latestRef.current.responseId
+        if (!id) {
+          const creation =
+            creatingRef.current ?? createDraftResponse({ templateId, complianceObligationId })
+          creatingRef.current = creation
+          try {
+            const res = await creation
+            if (!res.ok) {
+              setSaveStatus('error')
+              setSaveError(res.error)
+              return false
+            }
+            id = res.responseId
+            setResponseId(id)
+            latestRef.current.responseId = id
+          } finally {
+            if (creatingRef.current === creation) creatingRef.current = null
+          }
+        }
+        setSaveStatus('pending')
+        setSaveError(null)
+        const res = await saveFormResponseDraft({
+          responseId: id,
+          values: args.values,
+          rows: args.rows,
+          stepIndex: args.stepIndex,
+          clientSessionId,
+          clientSequence,
+          baseRevision: draftRevisionRef.current,
+        })
+        if (!res.ok) {
+          if (clientSequence >= acknowledgedSequenceRef.current) {
             setSaveStatus('error')
             setSaveError(res.error)
-            return false
           }
-          id = res.responseId
-          setResponseId(id)
-          latestRef.current.responseId = id
-        } finally {
-          if (creatingRef.current === creation) creatingRef.current = null
+          return false
         }
-      }
-      setSaveStatus('pending')
-      setSaveError(null)
-      const res = await saveFormResponseDraft({
-        responseId: id,
-        values: args.values,
-        rows: args.rows,
-        stepIndex: args.stepIndex,
-        clientSessionId,
-        clientSequence,
-        baseRevision: draftRevisionRef.current,
-      })
-      if (!res.ok) {
+        draftRevisionRef.current = Math.max(draftRevisionRef.current, res.revision)
+        if (res.sequence >= acknowledgedSequenceRef.current) {
+          acknowledgedSequenceRef.current = res.sequence
+          setLastSavedAt(new Date(res.savedAt))
+          if (latestRef.current.editSequence > res.sequence) {
+            setSaveStatus('pending')
+          } else {
+            // Clear dirty only when the acknowledged payload includes every
+            // local edit. An older response completing later must not erase a
+            // newer unsaved change.
+            setSaveStatus('saved')
+            setDraftEditState((current) =>
+              current.sequence <= res.sequence && current.dirty
+                ? { ...current, dirty: false }
+                : current,
+            )
+          }
+        }
+        return true
+      } catch (error) {
         if (clientSequence >= acknowledgedSequenceRef.current) {
           setSaveStatus('error')
-          setSaveError(res.error)
+          setSaveError(
+            error instanceof Error
+              ? error.message
+              : 'Could not save. Check your connection and retry.',
+          )
         }
         return false
       }
-      draftRevisionRef.current = Math.max(draftRevisionRef.current, res.revision)
-      if (res.sequence >= acknowledgedSequenceRef.current) {
-        acknowledgedSequenceRef.current = res.sequence
-        setLastSavedAt(new Date(res.savedAt))
-        if (latestRef.current.editSequence > res.sequence) {
-          setSaveStatus('pending')
-        } else {
-          // Clear dirty only when the acknowledged payload includes every
-          // local edit. An older response completing later must not erase a
-          // newer unsaved change.
-          setSaveStatus('saved')
-          setDraftEditState((current) =>
-            current.sequence <= res.sequence && current.dirty
-              ? { ...current, dirty: false }
-              : current,
-          )
-        }
-      }
-      return true
     },
     [complianceObligationId, templateId],
   )

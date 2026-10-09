@@ -1,3 +1,4 @@
+import { responseInitialState } from '@/app/(app)/apps/_lib/response-initial-state'
 import { activePeopleWhere } from '@beaconhs/db'
 import { canDeleteOwnRecord } from '@/lib/record-delete-policy'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
@@ -158,12 +159,7 @@ export const dynamic = 'force-dynamic'
 async function sendEmailAction(formData: FormData) {
   'use server'
   const ctx = await requireRequestContext()
-  if (
-    !can(ctx, 'hazid.read.all') &&
-    !can(ctx, 'hazid.read.site') &&
-    !can(ctx, 'hazid.read.self') &&
-    !can(ctx, 'hazid.read.others')
-  ) {
+  if (!can(ctx, 'hazid.read.all') && !can(ctx, 'hazid.read.site') && !can(ctx, 'hazid.read.self')) {
     throw new Error('Not authorized')
   }
   const id = String(formData.get('id') ?? '')
@@ -497,6 +493,7 @@ export default async function HazidAssessmentDetailPage({
     initialValues: Record<string, unknown>
     initialRows: Record<string, Array<Record<string, unknown>>>
     initialStepIndex: number
+    initialDraftRevision: number
     resumeOk: boolean
   } | null = null
   if (appParam) {
@@ -544,12 +541,8 @@ export default async function HazidAssessmentDetailPage({
       })
       if (loaded) {
         const resp = response
-        const resumeOk =
-          (resp.status === 'draft' || resp.status === 'in_progress') && resp.draftData !== null
-        const draft = resp.draftData
-        const initialValues = resumeOk ? (draft?.values ?? {}) : {}
-        const initialRows = resumeOk ? (draft?.rows ?? {}) : {}
-        const initialStepIndex = resumeOk ? (resp.draftStepIndex ?? 0) : 0
+        const { initialValues, initialRows, initialStepIndex, initialDraftRevision, isResumed } =
+          responseInitialState(loaded.version.schema, resp)
         const entitiesByField = await loadEntitiesForPickers(
           ctx,
           loaded.version.schema,
@@ -573,7 +566,8 @@ export default async function HazidAssessmentDetailPage({
           initialValues,
           initialRows,
           initialStepIndex,
-          resumeOk,
+          initialDraftRevision,
+          resumeOk: isResumed,
         }
       }
     }
@@ -1614,7 +1608,7 @@ export default async function HazidAssessmentDetailPage({
       <GeneratedValue
         value={
           appFill ? (
-            <div className="fixed inset-0 z-[60] bg-white dark:bg-slate-950">
+            <div className="fixed inset-0 z-40 overflow-y-auto bg-white dark:bg-slate-950">
               <FormRenderer
                 templateId={appFill.templateId}
                 templateName={appFill.templateName}
@@ -1629,6 +1623,7 @@ export default async function HazidAssessmentDetailPage({
                 initialValues={appFill.initialValues}
                 initialRows={appFill.initialRows}
                 initialStepIndex={appFill.initialStepIndex}
+                initialDraftRevision={appFill.initialDraftRevision}
                 isResumed={appFill.resumeOk}
                 returnTo={`/hazard-assessments/${id}#section-apps`}
               />
