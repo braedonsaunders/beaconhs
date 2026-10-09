@@ -6,7 +6,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Wrench } from 'lucide-react'
-import { and, asc, count, eq, isNull } from 'drizzle-orm'
+import { and, asc, count, eq, isNull, sql } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import {
   departments,
@@ -21,6 +21,7 @@ import { DownloadLink } from '@/components/download-link'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
 import { buildExportHref } from '@/lib/list-params'
+import { equipmentIsCheckedOutSql } from '@/lib/equipment-custody'
 import { equipmentRegisterQuery } from '@/lib/equipment/register-query'
 import { SearchInput } from '@/components/search-input'
 import { RemoteSearchFilter } from '@/components/remote-search-select'
@@ -137,17 +138,19 @@ export default async function EquipmentPage({
         .where(and(isNull(equipmentItems.deletedAt), vis))
         .groupBy(equipmentItems.status)
       const av = await tx
-        .select({ a: equipmentItems.isAvailableForCheckout, c: count() })
+        .select({
+          available: sql<number>`count(*) FILTER (WHERE ${equipmentItems.isAvailableForCheckout})`,
+          checkedOut: sql<number>`count(*) FILTER (WHERE ${equipmentIsCheckedOutSql})`,
+        })
         .from(equipmentItems)
         .where(and(isNull(equipmentItems.deletedAt), vis))
-        .groupBy(equipmentItems.isAvailableForCheckout)
       return {
         rows: data,
         total: Number(tot?.c ?? 0),
         statusCounts: Object.fromEntries(ss.map((x) => [x.s, Number(x.c)])),
         availabilityCounts: {
-          available: Number(av.find((x) => x.a === true)?.c ?? 0),
-          checked_out: Number(av.find((x) => x.a === false)?.c ?? 0),
+          available: Number(av[0]?.available ?? 0),
+          checked_out: Number(av[0]?.checkedOut ?? 0),
         } as Record<string, number>,
         allTypes,
         allCats,

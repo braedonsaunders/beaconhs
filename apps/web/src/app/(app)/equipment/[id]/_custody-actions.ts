@@ -23,7 +23,7 @@ export async function transferLocation(formData: FormData) {
   const ctx = await requireRequestContext()
   assertCan(ctx, 'equipment.manage')
   const id = requireUuidInput(formData.get('id'), 'Equipment item')
-  const siteOrgUnitId = optionalUuidInput(formData.get('siteOrgUnitId'), 'Site')
+  const siteOrgUnitId = optionalUuidInput(formData.get('siteOrgUnitId'), 'Location')
   const holderPersonId = optionalUuidInput(formData.get('holderPersonId'), 'Holder')
   const note = optionalTextInput(formData.get('note'), 'Transfer note', 2_000)
 
@@ -34,15 +34,9 @@ export async function transferLocation(formData: FormData) {
       const [site] = await tx
         .select({ id: orgUnits.id })
         .from(orgUnits)
-        .where(
-          and(
-            eq(orgUnits.id, siteOrgUnitId),
-            eq(orgUnits.level, 'site'),
-            isNull(orgUnits.deletedAt),
-          ),
-        )
+        .where(and(eq(orgUnits.id, siteOrgUnitId), isNull(orgUnits.deletedAt)))
         .limit(1)
-      if (!site) throw new Error('Select an active site')
+      if (!site) throw new Error('Select an active location')
     }
     if (holderPersonId && holderPersonId !== item.currentHolderPersonId) {
       const [person] = await tx

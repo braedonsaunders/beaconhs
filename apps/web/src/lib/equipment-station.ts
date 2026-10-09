@@ -9,7 +9,7 @@ import { recordSearchWhere, recordSearchTerm } from './record-search'
 // Every function takes a `Database` handle (a tenant-scoped transaction) so the
 // caller owns RLS scoping + auditing. Nothing here touches RequestContext.
 
-import { and, desc, eq, ilike, isNull, or } from 'drizzle-orm'
+import { and, eq, ilike, isNull, or } from 'drizzle-orm'
 import { primaryPersonTitleName, type Database } from '@beaconhs/db'
 import {
   equipmentCheckouts,
@@ -20,7 +20,11 @@ import {
   people,
 } from '@beaconhs/db/schema'
 import { isUuid } from './list-params'
-import { refreshEquipmentAvailability } from './equipment-custody'
+import {
+  equipmentIsCheckedOutSql,
+  checkInEquipmentInTx,
+  EquipmentCustodyError,
+} from './equipment-custody'
 
 const RETURN_CONDITIONS = ['good', 'fair', 'damaged', 'unusable'] as const
 type ReturnCondition = (typeof RETURN_CONDITIONS)[number]
@@ -141,8 +145,8 @@ function cleanCode(raw: string): string {
 /**
  * Typeahead for the station field: surface matching assets + people as the
  * operator types (so they don't need an exact scan). Equipment is matched on
- * the shared equipment identifiers and details; people on name / employee number. "out" uses the cached
- * availability flag so it lines up with the equipment register's filter.
+ * the shared equipment identifiers and details; people on name / employee number. Physical custody uses the same
+ * predicate as the equipment detail page and register.
  */
 export async function searchStationCore(
   tx: Database,
@@ -158,7 +162,7 @@ export async function searchStationCore(
       id: equipmentItems.id,
       assetTag: equipmentItems.assetTag,
       name: equipmentItems.name,
-      available: equipmentItems.isAvailableForCheckout,
+      isOut: equipmentIsCheckedOutSql,
       typeName: equipmentTypes.name,
       holderFirst: people.firstName,
       holderLast: people.lastName,
@@ -198,7 +202,7 @@ export async function searchStationCore(
       assetTag: r.assetTag,
       name: r.name,
       typeName: r.typeName,
-      isOut: !r.available,
+      isOut: r.isOut,
       holderName:
         r.holderFirst || r.holderLast
           ? `${r.holderFirst ?? ''} ${r.holderLast ?? ''}`.trim()
@@ -242,9 +246,9 @@ async function locationName(
 /**
  * Perform a station scan: toggle (default) or a forced direction.
  *
- * Truth source for state = the checkout ledger (an open `equipment_checkouts`
- * row means the asset is out). Check-in snaps the asset back to the tenant's
- * home location (`homeOrgUnitId`) so nobody picks it each time.
+ * Custody state is shared with the detail page and register: an open checkout,
+ * a holder, or an off-base location means out. Check-in returns it to the
+ * configured home location.
  *
  * Returns a structured result the caller turns into UI feedback + an audit row.
  * It never throws on the expected "not found / wrong state" paths.
@@ -253,7 +257,6 @@ export async function stationScanCore(
   tx: Database,
   args: StationScanInput & {
     tenantId: string
-    homeOrgUnitId: string | null
     actorTenantUserId: string | null
     requireHolderOnCheckout: boolean
   },
@@ -267,7 +270,7 @@ export async function stationScanCore(
       assetTag: equipmentItems.assetTag,
       name: equipmentItems.name,
       status: equipmentItems.status,
-      available: equipmentItems.isAvailableForCheckout,
+      isOut: equipmentIsCheckedOutSql,
       isMissing: equipmentItems.isMissing,
     })
     .from(equipmentItems)
@@ -303,19 +306,7 @@ export async function stationScanCore(
     return { ok: false, error: `No equipment or badge matches “${code}”` }
   }
 
-  const [open] = await tx
-    .select({ id: equipmentCheckouts.id })
-    .from(equipmentCheckouts)
-    .where(
-      and(eq(equipmentCheckouts.equipmentItemId, item.id), isNull(equipmentCheckouts.returnedAt)),
-    )
-    .orderBy(desc(equipmentCheckouts.checkedOutAt))
-    .limit(1)
-  // An asset is "out" if it has an open checkout OR the cached availability flag
-  // says it isn't available — the exact predicate the equipment register's
-  // "Currently checked out" filter uses (covers items assigned/transferred
-  // directly, without a checkout ledger row).
-  const isOut = Boolean(open) || !item.available
+  const isOut = item.isOut
 
   // Resolve the action: toggle inverts current state; explicit forces it.
   const action: 'checked_out' | 'checked_in' =
@@ -384,6 +375,7 @@ export async function stationScanCore(
       siteOrgUnitId: destinationOrgUnitId,
       holderPersonId,
       recordedByTenantUserId: args.actorTenantUserId,
+      movementKind: 'check_out',
       note: 'Checked out at station',
     })
     return {
@@ -402,51 +394,22 @@ export async function stationScanCore(
   if (!isOut) {
     return { ok: false, error: `${item.assetTag} is already checked in` }
   }
-  const homeOrgUnitId = args.homeOrgUnitId
-  if (!homeOrgUnitId) {
-    return { ok: false, error: 'Set a default check-in location before checking equipment in' }
-  }
-  const homeName = await locationName(tx, homeOrgUnitId)
-  if (!homeName) {
-    return {
-      ok: false,
-      error: 'Set a valid default check-in location before checking equipment in',
-    }
-  }
-  const condition: ReturnCondition = args.condition ?? 'good'
-  const now = new Date()
-  if (open) {
-    await tx
-      .update(equipmentCheckouts)
-      .set({
-        returnedAt: now,
-        returnedCondition: condition,
-        returnedNotes: args.returnedNotes ?? null,
-        checkedInByTenantUserId: args.actorTenantUserId,
-      })
-      .where(and(eq(equipmentCheckouts.id, open.id), isNull(equipmentCheckouts.returnedAt)))
-  }
-  await tx
-    .update(equipmentItems)
-    .set({
-      currentHolderPersonId: null,
-      currentSiteOrgUnitId: homeOrgUnitId,
-      lastSeenSiteOrgUnitId: homeOrgUnitId,
-      lastSeenAt: now,
-      isMissing: false,
-      missingFoundAt: item.isMissing ? now : undefined,
+  let result
+  try {
+    result = await checkInEquipmentInTx(tx, {
+      tenantId: args.tenantId,
+      itemId: item.id,
+      actorTenantUserId: args.actorTenantUserId,
+      actorPersonId: null,
+      canManage: true,
+      condition: args.condition ?? 'good',
+      notes: args.returnedNotes ?? null,
     })
-    .where(eq(equipmentItems.id, item.id))
-  await refreshEquipmentAvailability(tx, [item.id])
-  await tx.insert(equipmentLocationHistory).values({
-    tenantId: args.tenantId,
-    itemId: item.id,
-    siteOrgUnitId: homeOrgUnitId,
-    holderPersonId: null,
-    recordedByTenantUserId: args.actorTenantUserId,
-    recordedAt: now,
-    note: `Checked in (${condition}) at station${args.returnedNotes ? ` — ${args.returnedNotes}` : ''}`,
-  })
+  } catch (error) {
+    if (error instanceof EquipmentCustodyError) return { ok: false, error: error.message }
+    throw error
+  }
+  if (!result) return { ok: false, error: `${item.assetTag} is already checked in` }
   return {
     ok: true,
     action: 'checked_in',
@@ -454,7 +417,7 @@ export async function stationScanCore(
     assetTag: item.assetTag,
     itemName: item.name,
     holderName: null,
-    locationName: homeName,
-    checkoutId: open?.id ?? null,
+    locationName: result.locationName,
+    checkoutId: result.checkoutId,
   }
 }

@@ -1,5 +1,6 @@
 'use server'
 
+import { refreshAllEquipmentAvailability } from '@/lib/equipment-custody'
 import { revalidatePath } from 'next/cache'
 import { and, eq, isNull } from 'drizzle-orm'
 import { equipmentStationSettings, orgUnits } from '@beaconhs/db/schema'
@@ -100,6 +101,7 @@ export async function saveStationSettings(input: unknown): Promise<Result> {
           target: equipmentStationSettings.tenantId,
           set: { ...values, updatedAt: new Date() },
         })
+      await refreshAllEquipmentAvailability(tx)
       await recordAuditInTransaction(tx, ctx, {
         entityType: 'equipment_station_settings',
         action: 'update',
@@ -128,6 +130,7 @@ export async function saveStationSettings(input: unknown): Promise<Result> {
     return persistenceError('save station settings', error)
   }
 
+  revalidatePath('/equipment')
   revalidatePath('/equipment/station')
   revalidatePath('/equipment/station/settings')
   return { ok: true }
@@ -165,6 +168,7 @@ export async function setStationBaseLocation(input: unknown): Promise<Result> {
         .update(orgUnits)
         .set({ isEquipmentBase: parsed.isBase })
         .where(and(eq(orgUnits.tenantId, ctx.tenantId), eq(orgUnits.id, parsed.id)))
+      await refreshAllEquipmentAvailability(tx)
       await recordAuditInTransaction(tx, ctx, {
         entityType: 'org_unit',
         entityId: parsed.id,
@@ -180,6 +184,7 @@ export async function setStationBaseLocation(input: unknown): Promise<Result> {
     return persistenceError('update the base location', error)
   }
 
+  revalidatePath('/equipment')
   revalidatePath('/equipment/station')
   revalidatePath('/equipment/station/settings')
   return { ok: true }

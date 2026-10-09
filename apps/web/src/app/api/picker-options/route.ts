@@ -320,7 +320,6 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'vehicle-drivers':
       return canAny('equipment.manage', 'equipment.vehicle-log.update.own')
     case 'equipment-custody-holders':
-    case 'equipment-custody-sites':
     case 'equipment-station-holders':
     case 'equipment-station-locations':
     case 'equipment-reminder-assignees':
@@ -2197,27 +2196,6 @@ async function loadOptions(
         .orderBy(...personOrder(input.selected))
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(personOptions(rows))
-    }
-
-    if (lookup === 'equipment-custody-sites') {
-      const match = input.hasQuery
-        ? or(
-            ilike(orgUnits.name, input.term),
-            ilike(orgUnits.code, input.term),
-            input.selected ? eq(orgUnits.id, input.selected) : undefined,
-          )
-        : undefined
-      const rows = await tx
-        .select({ id: orgUnits.id, name: orgUnits.name, code: orgUnits.code })
-        .from(orgUnits)
-        .where(and(eq(orgUnits.level, 'site'), isNull(orgUnits.deletedAt), match))
-        .orderBy(
-          ...(input.selected ? [desc(sql`${orgUnits.id} = ${input.selected}`)] : []),
-          asc(orgUnits.name),
-          asc(orgUnits.id),
-        )
-        .limit(PICKER_RESULT_LIMIT + 1)
-      return boundPickerOptions(rows.map((row) => option(row.id, row.name, row.code)))
     }
 
     if (lookup === 'equipment-work-order-assignees') {

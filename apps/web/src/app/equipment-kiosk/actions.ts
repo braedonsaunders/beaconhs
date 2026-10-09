@@ -34,7 +34,6 @@ import type { PickerOptionsResponse } from '@/lib/picker-options'
 
 type Settings = {
   pin: string | null
-  homeOrgUnitId: string | null
   requireHolder: boolean
 } | null
 
@@ -56,7 +55,6 @@ async function loadSettings(
   const [row] = await tx
     .select({
       pin: equipmentStationSettings.stationPin,
-      homeOrgUnitId: equipmentStationSettings.defaultCheckInOrgUnitId,
       requireHolder: equipmentStationSettings.requireHolderOnCheckout,
     })
     .from(equipmentStationSettings)
@@ -274,7 +272,6 @@ export async function performKioskScan(
     const result = await stationScanCore(tx, {
       ...parsed,
       tenantId: input.tenantId,
-      homeOrgUnitId: settings.homeOrgUnitId,
       actorTenantUserId: null,
       requireHolderOnCheckout: settings.requireHolder,
     })
@@ -283,8 +280,8 @@ export async function performKioskScan(
       await tx.insert(auditLog).values({
         tenantId: input.tenantId,
         actorUserId: null,
-        entityType: 'equipment_checkout',
-        entityId: result.checkoutId,
+        entityType: result.checkoutId ? 'equipment_checkout' : 'equipment',
+        entityId: result.checkoutId ?? result.itemId,
         action: result.action === 'checked_out' ? 'create' : 'update',
         summary: `Kiosk ${result.action === 'checked_out' ? 'check-out' : 'check-in'}: ${result.assetTag}`,
         after: {

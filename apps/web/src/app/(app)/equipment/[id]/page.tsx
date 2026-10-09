@@ -109,6 +109,7 @@ import { ActivityFeed } from '@/components/activity-feed'
 import { PageContainer } from '@/components/page-layout'
 import { DownloadLink } from '@/components/download-link'
 import { RemoteSelectField } from '@/components/remote-search-select'
+import { SearchFilter } from '@/components/search-filter'
 import { SearchInput } from '@/components/search-input'
 import { readCustomFieldValues } from '@beaconhs/forms-core'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
@@ -146,8 +147,8 @@ import {
 } from '../_maintenance-drawers'
 import { createEquipmentWorkOrder } from '../work-orders/_lib'
 import {
+  equipmentIsCheckedOutSql,
   lockEquipmentCustodyRows,
-  openEquipmentCheckoutItemIds,
   refreshEquipmentAvailability,
 } from '@/lib/equipment-custody'
 
@@ -394,19 +395,11 @@ async function checkOutFromItem(formData: FormData) {
       throw new Error(`Cannot check out: item is ${item.status.replace(/_/g, ' ')}`)
     }
     if (item.isMissing) throw new Error('Report this item found before checking it out')
-    if (item.currentHolderPersonId) {
-      throw new Error('Clear the current holder with a custody transfer before checking it out')
-    }
+    if (item.isCheckedOut) throw new Error('Check this item in before checking it out again')
     const [destination] = await tx
       .select({ id: orgUnits.id })
       .from(orgUnits)
-      .where(
-        and(
-          eq(orgUnits.id, destinationOrgUnitId),
-          eq(orgUnits.level, 'site'),
-          isNull(orgUnits.deletedAt),
-        ),
-      )
+      .where(and(eq(orgUnits.id, destinationOrgUnitId), isNull(orgUnits.deletedAt)))
       .limit(1)
     if (!destination) throw new Error('Select an active check-out destination')
     if (holderPersonId) {
@@ -417,8 +410,6 @@ async function checkOutFromItem(formData: FormData) {
         .limit(1)
       if (!person) throw new Error('Select an active holder')
     }
-    const openIds = await openEquipmentCheckoutItemIds(tx, [itemId])
-    if (openIds.has(itemId)) throw new Error('This item is already checked out')
 
     const now = new Date()
     const [row] = await tx
@@ -451,7 +442,8 @@ async function checkOutFromItem(formData: FormData) {
       holderPersonId,
       recordedByTenantUserId: ctx.membership?.id,
       recordedAt: now,
-      note: `Checked out${notes ? ` — ${notes}` : ''}`,
+      movementKind: 'check_out',
+      note: notes,
     })
     return row?.id
   })
@@ -469,15 +461,15 @@ async function checkOutFromItem(formData: FormData) {
   redirect(`/equipment/${itemId}?tab=location`)
 }
 
-// Delegates to the shared checkInEquipment action, which verifies the checkout
-// is still open, validates the condition, writes the location-history row,
-// audits, and derives availability from the item's status.
+// Returns issued or imported equipment through the same custody operation as
+// the station, validating ownership and recording one audited movement.
 async function checkInFromItem(formData: FormData) {
   'use server'
-  const checkoutId = requireUuidInput(formData.get('checkoutId'), 'Check-out')
   const itemId = requireUuidInput(formData.get('itemId'), 'Equipment item')
   const fd = new FormData()
-  fd.set('id', checkoutId)
+  fd.set('itemId', itemId)
+  const checkoutId = optionalUuidInput(formData.get('checkoutId'), 'Check-out')
+  if (checkoutId) fd.set('id', checkoutId)
   fd.set(
     'returnedCondition',
     requireEnumInput(
@@ -726,8 +718,8 @@ export default async function EquipmentDetailPage({
 
   // Per-table search + pagination state (URL-driven, prefixed per table).
   const woP = subParams(sp, 'wo')
-  const coP = subParams(sp, 'co')
   const lhP = subParams(sp, 'lh')
+  const movementFilter = pickString(sp.lh_kind)
   const insP = subParams(sp, 'ins')
   const schP = subParams(sp, 'sch')
   const remP = subParams(sp, 'rem')
@@ -739,6 +731,7 @@ export default async function EquipmentDetailPage({
     const [row] = await tx
       .select({
         item: equipmentItems,
+        isCheckedOut: equipmentIsCheckedOutSql,
         type: equipmentTypes,
         category: equipmentCategories,
         department: departments,
@@ -792,20 +785,16 @@ export default async function EquipmentDetailPage({
           )
         : undefined,
     )
-    const coWhere = and(
-      eq(equipmentCheckouts.equipmentItemId, id),
-      coP.q
-        ? or(
-            ilike(people.firstName, `%${coP.q}%`),
-            ilike(people.lastName, `%${coP.q}%`),
-            ilike(orgUnits.name, `%${coP.q}%`),
-            ilike(equipmentCheckouts.notes, `%${coP.q}%`),
-            ilike(equipmentCheckouts.returnedNotes, `%${coP.q}%`),
-          )
-        : undefined,
-    )
     const lhWhere = and(
       eq(equipmentLocationHistory.itemId, id),
+      movementFilter
+        ? ['check_in', 'check_out', 'transfer'].includes(movementFilter)
+          ? eq(
+              equipmentLocationHistory.movementKind,
+              movementFilter as 'check_in' | 'check_out' | 'transfer',
+            )
+          : sql`false`
+        : undefined,
       lhP.q
         ? or(
             ilike(orgUnits.name, `%${lhP.q}%`),
@@ -888,8 +877,6 @@ export default async function EquipmentDetailPage({
       inspectionsTotal,
       logRows,
       logTotal,
-      checkoutRows,
-      checkoutsTotal,
       openCheckoutRow,
       schedules,
       schedulesTotal,
@@ -905,7 +892,7 @@ export default async function EquipmentDetailPage({
         .leftJoin(orgUnits, eq(orgUnits.id, equipmentLocationHistory.siteOrgUnitId))
         .leftJoin(people, eq(people.id, equipmentLocationHistory.holderPersonId))
         .where(lhWhere)
-        .orderBy(desc(equipmentLocationHistory.recordedAt))
+        .orderBy(desc(equipmentLocationHistory.recordedAt), desc(equipmentLocationHistory.id))
         .limit(SUB_PER_PAGE)
         .offset(lhP.offset),
       tx
@@ -990,23 +977,6 @@ export default async function EquipmentDetailPage({
         .select({ c: count() })
         .from(equipmentLogEntries)
         .where(logWhere)
-        .then((r) => Number(r[0]?.c ?? 0)),
-      // Per-item check-out history.
-      tx
-        .select({ co: equipmentCheckouts, holder: people, dest: orgUnits })
-        .from(equipmentCheckouts)
-        .leftJoin(people, eq(people.id, equipmentCheckouts.holderPersonId))
-        .leftJoin(orgUnits, eq(orgUnits.id, equipmentCheckouts.destinationOrgUnitId))
-        .where(coWhere)
-        .orderBy(desc(equipmentCheckouts.checkedOutAt))
-        .limit(SUB_PER_PAGE)
-        .offset(coP.offset),
-      tx
-        .select({ c: count() })
-        .from(equipmentCheckouts)
-        .leftJoin(people, eq(people.id, equipmentCheckouts.holderPersonId))
-        .leftJoin(orgUnits, eq(orgUnits.id, equipmentCheckouts.destinationOrgUnitId))
-        .where(coWhere)
         .then((r) => Number(r[0]?.c ?? 0)),
       // The open checkout (if any) — independent of the paginated history.
       tx
@@ -1106,8 +1076,6 @@ export default async function EquipmentDetailPage({
       inspectionsTotal,
       logEntries: logRows,
       logTotal,
-      checkouts: checkoutRows,
-      checkoutsTotal,
       openCheckout: openCheckoutRow,
       schedules,
       schedulesTotal,
@@ -1122,6 +1090,7 @@ export default async function EquipmentDetailPage({
   if (!data) notFound()
   const {
     item,
+    isCheckedOut,
     type,
     category,
     department,
@@ -1140,8 +1109,6 @@ export default async function EquipmentDetailPage({
     inspectionsTotal,
     logEntries,
     logTotal,
-    checkouts,
-    checkoutsTotal,
     openCheckout,
     schedules,
     schedulesTotal,
@@ -1166,19 +1133,14 @@ export default async function EquipmentDetailPage({
   const canManageEquipment = canAdminEquipment && !item.deletedAt
   const canCreateWorkOrder = can(ctx, 'equipment.workorder.create') && !item.deletedAt
   const locked = !canManageEquipment || Boolean(item.deletedAt)
-  const canCheckIn = Boolean(
-    openCheckout &&
-    (canManageEquipment ||
-      (ctx.personId !== null && openCheckout.co.holderPersonId === ctx.personId)),
-  )
-  const canTransferCustody = canManageEquipment && !item.deletedAt && !openCheckout
-  const canCheckOut =
-    canManageEquipment &&
+  const canCheckIn =
     !item.deletedAt &&
-    !openCheckout &&
-    item.status === 'in_service' &&
-    !item.isMissing &&
-    item.currentHolderPersonId === null
+    isCheckedOut &&
+    (canManageEquipment ||
+      (ctx.personId !== null &&
+        (openCheckout?.co.holderPersonId ?? item.currentHolderPersonId) === ctx.personId))
+  const canTransferCustody = canManageEquipment && !openCheckout
+  const canCheckOut = canManageEquipment && !isCheckedOut && item.isAvailableForCheckout
 
   // Category-driven field groups + tenant custom fields. Custom fields that
   // target an enabled native group render inside it; the rest render in their
@@ -1572,7 +1534,7 @@ export default async function EquipmentDetailPage({
               variant="pills"
               tabs={[
                 { key: 'overview', label: 'Overview' },
-                { key: 'location', label: 'Location & custody', count: checkoutsTotal },
+                { key: 'location', label: 'Location & custody', count: historyTotal },
                 {
                   key: 'inspections',
                   label: 'Equipment Checks',
@@ -1972,7 +1934,7 @@ export default async function EquipmentDetailPage({
                             />
                             <GeneratedValue
                               value={
-                                openCheckout && canCheckIn ? (
+                                canCheckIn ? (
                                   <Link href={`${basePath}?tab=location&drawer=check-in` as Route}>
                                     <Button size="sm">
                                       <LogIn size={14} /> <GeneratedText id="m_1aa025f1523915" />
@@ -2043,173 +2005,39 @@ export default async function EquipmentDetailPage({
                       <Card>
                         <CardHeader>
                           <CardTitle>
-                            <GeneratedText id="m_1b20b841eb4427" />
-                            <GeneratedValue value={checkoutsTotal} />)
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <SearchInput
-                            paramKey="co_q"
-                            pageParamKey="co_p"
-                            placeholder={tGenerated('m_12acd2b790c54e')}
-                          />
-                          <GeneratedValue
-                            value={
-                              checkouts.length === 0 ? (
-                                <EmptyState
-                                  icon={<LogOut size={24} />}
-                                  title={tGenerated('m_112af856555113')}
-                                  description={tGenerated('m_1ce7d627818433')}
-                                  action={
-                                    canCheckOut ? (
-                                      <Link
-                                        href={`${basePath}?tab=location&drawer=check-out` as Route}
-                                      >
-                                        <Button size="sm" variant="outline">
-                                          <LogOut size={14} />{' '}
-                                          <GeneratedText id="m_0a8918b3f9c991" />
-                                        </Button>
-                                      </Link>
-                                    ) : undefined
-                                  }
-                                />
-                              ) : (
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>
-                                        <GeneratedText id="m_0c7e58476facb9" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_0354efc998fbe0" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_03aac7736c44b9" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_177b0d9a8ef383" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_0db63ebe793932" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_0c33471afd0f99" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_0b8dadcb78cd08" />
-                                      </TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    <GeneratedValue
-                                      value={checkouts.map(({ co, holder, dest }) => (
-                                        <TableRow key={co.id}>
-                                          <TableCell>
-                                            <GeneratedValue
-                                              value={
-                                                holder
-                                                  ? `${holder.firstName} ${holder.lastName}`
-                                                  : '—'
-                                              }
-                                            />
-                                          </TableCell>
-                                          <TableCell className="text-slate-600 dark:text-slate-300">
-                                            <GeneratedValue value={dest?.name ?? '—'} />
-                                          </TableCell>
-                                          <TableCell className="text-slate-600 dark:text-slate-300">
-                                            <GeneratedValue
-                                              value={formatDate(
-                                                new Date(co.checkedOutAt),
-                                                ctx.timezone,
-                                                ctx.locale,
-                                              )}
-                                            />
-                                          </TableCell>
-                                          <TableCell className="text-slate-600 dark:text-slate-300">
-                                            <GeneratedValue value={co.expectedReturnOn ?? '—'} />
-                                          </TableCell>
-                                          <TableCell className="text-slate-600 dark:text-slate-300">
-                                            <GeneratedValue
-                                              value={
-                                                co.returnedAt
-                                                  ? formatDate(
-                                                      new Date(co.returnedAt),
-                                                      ctx.timezone,
-                                                      ctx.locale,
-                                                    )
-                                                  : '—'
-                                              }
-                                            />
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue
-                                              value={
-                                                co.returnedCondition ? (
-                                                  <Badge
-                                                    variant={
-                                                      co.returnedCondition === 'damaged' ||
-                                                      co.returnedCondition === 'unusable'
-                                                        ? 'destructive'
-                                                        : co.returnedCondition === 'fair'
-                                                          ? 'warning'
-                                                          : 'success'
-                                                    }
-                                                  >
-                                                    {co.returnedCondition}
-                                                  </Badge>
-                                                ) : co.returnedAt ? (
-                                                  '—'
-                                                ) : (
-                                                  <Badge variant="warning">
-                                                    <GeneratedText id="m_1c07d7f20091c3" />
-                                                  </Badge>
-                                                )
-                                              }
-                                            />
-                                          </TableCell>
-                                          <TableCell className="max-w-xs truncate text-xs text-slate-600 dark:text-slate-300">
-                                            <GeneratedValue
-                                              value={co.returnedNotes ?? co.notes ?? '—'}
-                                            />
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
-                                    />
-                                  </TableBody>
-                                </Table>
-                              )
-                            }
-                          />
-                          <SubPagination
-                            basePath={basePath}
-                            sp={sp}
-                            prefix="co"
-                            total={checkoutsTotal}
-                            page={coP.page}
-                          />
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>
                             <GeneratedText id="m_10e91cc30d2743" />
                             <GeneratedValue value={historyTotal} />)
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                          <SearchInput
-                            paramKey="lh_q"
-                            pageParamKey="lh_p"
-                            placeholder={tGenerated('m_0f68bc19b64344')}
-                          />
+                          <div className="flex items-center gap-2">
+                            <div className="min-w-0 flex-1">
+                              <SearchInput
+                                paramKey="lh_q"
+                                pageParamKey="lh_p"
+                                placeholder={tGenerated('m_0f68bc19b64344')}
+                              />
+                            </div>
+                            <SearchFilter
+                              basePath={basePath}
+                              currentParams={sp}
+                              paramKey="lh_kind"
+                              pageParamKey="lh_p"
+                              options={[
+                                { value: 'check_in', label: 'In' },
+                                { value: 'check_out', label: 'Out' },
+                                { value: 'transfer', label: 'Moved' },
+                              ]}
+                              placeholder={tGenerated('m_00896a07ebfbd6')}
+                            />
+                          </div>
                           <GeneratedValue
                             value={
                               history.length === 0 ? (
                                 <p className="text-sm text-slate-500 dark:text-slate-400">
                                   <GeneratedValue
                                     value={
-                                      lhP.q ? (
+                                      lhP.q || sp.lh_kind ? (
                                         <GeneratedText id="m_0df9a3c13764d8" />
                                       ) : (
                                         <GeneratedText id="m_0700918f8ecf46" />
@@ -2222,6 +2050,9 @@ export default async function EquipmentDetailPage({
                                   <TableHeader>
                                     <TableRow>
                                       <TableHead>
+                                        <GeneratedText id="m_102c6fce820610" />
+                                      </TableHead>
+                                      <TableHead>
                                         <GeneratedText id="m_13cc128f69897c" />
                                       </TableHead>
                                       <TableHead>
@@ -2229,6 +2060,9 @@ export default async function EquipmentDetailPage({
                                       </TableHead>
                                       <TableHead>
                                         <GeneratedText id="m_1dd437d2b4ab7f" />
+                                      </TableHead>
+                                      <TableHead>
+                                        <GeneratedText id="m_0c33471afd0f99" />
                                       </TableHead>
                                       <TableHead>
                                         <GeneratedText id="m_16d241f76641bb" />
@@ -2239,6 +2073,27 @@ export default async function EquipmentDetailPage({
                                     <GeneratedValue
                                       value={history.map((row) => (
                                         <TableRow key={row.history.id}>
+                                          <TableCell>
+                                            <Badge
+                                              variant={
+                                                row.history.movementKind === 'check_in'
+                                                  ? 'success'
+                                                  : row.history.movementKind === 'check_out'
+                                                    ? 'warning'
+                                                    : 'default'
+                                              }
+                                            >
+                                              <GeneratedValue
+                                                value={
+                                                  row.history.movementKind === 'check_in'
+                                                    ? 'In'
+                                                    : row.history.movementKind === 'check_out'
+                                                      ? 'Out'
+                                                      : 'Moved'
+                                                }
+                                              />
+                                            </Badge>
+                                          </TableCell>
                                           <TableCell>
                                             <GeneratedValue
                                               value={formatDateTime(
@@ -2256,6 +2111,22 @@ export default async function EquipmentDetailPage({
                                               value={
                                                 row.holder
                                                   ? `${row.holder.firstName} ${row.holder.lastName}`
+                                                  : '—'
+                                              }
+                                            />
+                                          </TableCell>
+                                          <TableCell>
+                                            <GeneratedValue
+                                              value={
+                                                row.history.condition
+                                                  ? (
+                                                      {
+                                                        good: 'Good',
+                                                        fair: 'Fair',
+                                                        damaged: 'Damaged',
+                                                        unusable: 'Unusable',
+                                                      } as const
+                                                    )[row.history.condition]
                                                   : '—'
                                               }
                                             />
@@ -3514,10 +3385,10 @@ export default async function EquipmentDetailPage({
             <RemoteSelectField
               name="destinationOrgUnitId"
               defaultValue=""
-              lookup="equipment-custody-sites"
+              lookup="equipment-station-locations"
               placeholder={tGenerated('m_015c668f21e7b9')}
               searchPlaceholder={tGenerated('m_04cdbf878b38f3')}
-              sheetTitle="Select destination site"
+              sheetTitle="Select destination"
               clearable={false}
             />
           </Field>
@@ -3553,11 +3424,11 @@ export default async function EquipmentDetailPage({
           className="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
           <input type="hidden" name="id" value={id} />
-          <Field label={tGenerated('m_1f9931fa4d3517')}>
+          <Field label={tGenerated('m_0290ddd55d8e8a')}>
             <RemoteSelectField
               name="siteOrgUnitId"
               defaultValue={item.currentSiteOrgUnitId ?? ''}
-              lookup="equipment-custody-sites"
+              lookup="equipment-station-locations"
               initialOption={
                 site
                   ? { value: site.id, label: site.name, hint: site.code ?? undefined }
@@ -3565,7 +3436,7 @@ export default async function EquipmentDetailPage({
               }
               placeholder={tGenerated('m_015c668f21e7b9')}
               searchPlaceholder={tGenerated('m_04cdbf878b38f3')}
-              sheetTitle="Select site"
+              sheetTitle="Select location"
               clearable
               emptyLabel={tGenerated('m_1ba9b3d94af564')}
             />
@@ -3646,11 +3517,11 @@ export default async function EquipmentDetailPage({
                   ? `${openCheckout.holder.firstName} ${openCheckout.holder.lastName}`
                   : 'the current holder',
               })
-            : tGenerated('m_081877c9aa7632'),
+            : 'Return this equipment to the default check-in location.',
         )}
         size="md"
         footer={
-          openCheckout ? (
+          canCheckIn ? (
             <Button type="submit" form="equipment-check-in-form">
               <LogIn size={14} /> <GeneratedText id="m_1aa025f1523915" />
             </Button>
@@ -3659,14 +3530,14 @@ export default async function EquipmentDetailPage({
       >
         <GeneratedValue
           value={
-            openCheckout ? (
+            canCheckIn ? (
               <form
                 id="equipment-check-in-form"
                 action={checkInFromItem}
                 className="grid grid-cols-1 gap-3 sm:grid-cols-2"
               >
                 <input type="hidden" name="itemId" value={id} />
-                <input type="hidden" name="checkoutId" value={openCheckout.co.id} />
+                <input type="hidden" name="checkoutId" value={openCheckout?.co.id ?? ''} />
                 <Field label={tGenerated('m_0299a9c737cc7e')}>
                   <Select name="returnedCondition" defaultValue="good">
                     <option value="good">{'Good'}</option>
@@ -3789,7 +3660,7 @@ export default async function EquipmentDetailPage({
 }
 
 // Prev/next pager for the detail page's sub-tables. Mirrors the shared
-// <Pagination> but with a per-table page param (wo_p, co_p, …) merged into the
+// <Pagination> but with a per-table page param (wo_p, lh_p, …) merged into the
 // current URL so the active tab and sibling tables' state are preserved.
 function SubPagination({
   basePath,

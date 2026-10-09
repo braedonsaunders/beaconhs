@@ -87,12 +87,19 @@ describe('direct equipment custody transfers', () => {
     )
     expect(mocks.redirect).toHaveBeenCalledWith(`/equipment/${id}?tab=location`)
   })
-  it('still rejects a newly selected location that is not an active site', async () => {
+  it('still rejects a newly selected location that is not an active location', async () => {
     selections.push([])
-    await expect(transferLocation(form(site))).rejects.toThrow('Select an active site')
+    await expect(transferLocation(form(site))).rejects.toThrow('Select an active location')
     expect(update).not.toHaveBeenCalled()
     expect(mocks.audit).not.toHaveBeenCalled()
-    expect(new PgDialect().sqlToQuery(conditions[0]!).params).toEqual([site, 'site'])
+    expect(new PgDialect().sqlToQuery(conditions[0]!).params).toEqual([site])
+  })
+  it('accepts active customer and project locations without a site-level restriction', async () => {
+    selections.push([{ id: site }], [{ id: person }])
+    await transferLocation(form(site))
+    expect(new PgDialect().sqlToQuery(conditions[0]!).params).toEqual([site])
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ currentSiteOrgUnitId: site }))
+    expect(mocks.refresh).toHaveBeenCalledWith(tx, [id])
   })
   it('still rejects a newly selected inactive person', async () => {
     selections.push([])

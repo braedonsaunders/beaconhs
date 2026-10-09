@@ -671,7 +671,7 @@ A document cannot be unpublished, archived, or deleted while it belongs to a pub
 
 ## Oil changes and inspection schedules
 
-Open the unit’s **Overview** or **Inspections** tab, then **Oil changes**. For applicable units, enter **Last oil change**, **Interval (months)**, and **Engine hours at oil change**, then choose **Save oil change**. A new date adds a maintenance log entry and recalculates the next due date. Use a maintenance log entry for any expense or receipt as well.
+Open the unit’s **Equipment Checks** tab, then **Oil changes**. For applicable units, enter **Last oil change**, **Interval (months)**, and **Engine hours at oil change**, then choose **Save oil change**. A new date adds a maintenance log entry and recalculates the next due date. Use a maintenance log entry for any expense or receipt as well.
 
 In **Inspections**, schedules with a checklist have **Start**. Schedules for outside inspections have **Record completion**: enter the completion date and certificate reference or notes. Saving advances the next due date and adds history. Inspection names and intervals are configured by your company.
 
@@ -705,20 +705,20 @@ The list starts with **In service** equipment. The top-bar search also shows onl
 
 1. Open the unit, then tap the **Location & custody** tab.
 2. **Current site** and **Current holder** show where it is and who has it right now.
-3. **Check-out history** shows every past hand-off — who took it, when it went out, and when it came back.
+3. **Location history** shows **In**, **Out**, and **Moved** entries together, with date, location, holder, condition, and notes. Search or filter by movement, then use **Prev** and **Next** to browse older entries. Imported location observations appear as **Moved**.
 
 To check a unit in or out yourself, use the station. See [Equipment check-in / check-out](/help/equipment-station).
 
 ## Record a custody change (managers)
 
 1. Open the unit and select **Location & custody**.
-2. Select **Transfer** to change its site or holder. Add a note, then select **Record transfer**. When changing only the holder, you can leave the current location as it is, including an imported customer location. New site selections must be active sites, and new holders must be active people. The movement is added to **Location history**, and the drawer closes after saving.
+2. Select **Transfer** to change its site or holder. Add a note, then select **Record transfer**. When changing only the holder, you can leave the current location as it is, including an imported customer location. New locations can be active customers, projects, sites, or areas. New holders must be active people. The movement is added to **Location history**, and the drawer closes after saving.
 3. Select **Check out** to issue an available unit. A **Destination site** is required; the person and expected return date are optional.
-4. Select **Check in** to close the open check-out. The unit returns to the default check-in location configured for the station.
+4. Select **Check in** to return equipment that has an open check-out, a holder, or a location away from base. This also works for imported equipment without a check-out record. Choose its condition and add a note. The unit returns to the default check-in location configured for the station and its holder is cleared. A worker can return equipment issued to them; managers can return any unit they manage.
 
-An open check-out must be checked in before you can use **Transfer** or a bulk site/holder change. This keeps the current custody and check-out history in agreement.
+An open check-out must be checked in before you can use **Transfer** or a bulk site/holder change. Every check-in, check-out, and transfer appears in the same **Location history** table. Equipment at a base or the default check-in location, without a holder or open check-out, is checked in. Repair, missing, and retired statuses prevent check-out but do not by themselves mean a unit is checked out.
 
-To update several visible units, select their checkboxes and choose **Transfer to site** or **Assign to holder** in the bulk bar. Search the site or holder field, choose the exact match, then select **Apply**. The search reads the complete current directory in small pages, so a site or person is not hidden just because the workspace is large.
+To update several visible units, select their checkboxes and choose **Transfer to location** or **Assign to holder** in the bulk bar. Search the location or holder field, choose the exact match, then select **Apply**. The search reads the complete current directory in small pages, so a site or person is not hidden just because the workspace is large.
 
 ## Check service and maintenance records
 

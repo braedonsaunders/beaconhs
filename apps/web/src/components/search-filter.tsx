@@ -15,6 +15,7 @@ export function SearchFilter({
   basePath,
   currentParams,
   paramKey,
+  pageParamKey = 'page',
   options,
   placeholder,
   allLabel,
@@ -25,6 +26,7 @@ export function SearchFilter({
   basePath: string
   currentParams: Record<string, string | string[] | undefined>
   paramKey: string
+  pageParamKey?: string
   options: SelectOption[]
   placeholder: string
   /** Label for the "clear filter" option. Defaults to the placeholder. */
@@ -44,7 +46,7 @@ export function SearchFilter({
         router.push(
           mergeHref(basePath, currentParams, {
             [paramKey]: next || undefined,
-            page: 1,
+            [pageParamKey]: 1,
           }) as never,
         )
       }

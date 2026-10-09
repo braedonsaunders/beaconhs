@@ -1,9 +1,10 @@
 // Equipment / asset register. QR-tagged items, location history, work orders.
 // Inspections are form_responses pinned to equipment_id (sourceEntityType='equipment').
 
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   boolean,
+  check,
   date,
   doublePrecision,
   foreignKey,
@@ -268,9 +269,22 @@ export const equipmentLocationHistory = pgTable(
     geoLng: doublePrecision('geo_lng'),
     recordedByTenantUserId: uuid('recorded_by_tenant_user_id'),
     recordedAt: timestamp('recorded_at', { withTimezone: true }).defaultNow().notNull(),
+    movementKind: text('movement_kind')
+      .$type<'check_in' | 'check_out' | 'transfer'>()
+      .default('transfer')
+      .notNull(),
+    condition: text('condition').$type<'good' | 'fair' | 'damaged' | 'unusable'>(),
     note: text('note'),
   },
   (t) => ({
+    movementKindCheck: check(
+      'equipment_location_history_movement_kind_ck',
+      sql`${t.movementKind} IN ('check_in', 'check_out', 'transfer')`,
+    ),
+    conditionCheck: check(
+      'equipment_location_history_condition_ck',
+      sql`${t.condition} IN ('good','fair','damaged','unusable')`,
+    ),
     itemIdx: index('equipment_location_history_item_idx').on(t.tenantId, t.itemId, t.recordedAt),
     tenantIdx: index('equipment_location_history_tenant_idx').on(t.tenantId),
     siteIdx: index('equipment_location_history_site_idx').on(t.tenantId, t.siteOrgUnitId),

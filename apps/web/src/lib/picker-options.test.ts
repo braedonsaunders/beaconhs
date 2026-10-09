@@ -9,7 +9,7 @@ import {
 describe('picker options contract', () => {
   it('accepts only exact purpose-scoped lookup names', () => {
     expect(isPickerLookup('vehicle-drivers')).toBe(true)
-    expect(isPickerLookup('equipment-custody-sites')).toBe(true)
+    expect(isPickerLookup('equipment-station-locations')).toBe(true)
     expect(isPickerLookup('equipment-work-order-assignees')).toBe(true)
     expect(isPickerLookup('equipment-work-order-items')).toBe(true)
     expect(isPickerLookup('equipment-reminder-items')).toBe(true)

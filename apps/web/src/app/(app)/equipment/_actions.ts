@@ -5,7 +5,7 @@ import { activePeopleWhere } from '@beaconhs/db'
 // Bulk-action server actions for /equipment.
 //
 // Four actions surface in the floating bulk-action bar:
-//   - bulkTransferEquipmentToSite  pick orgUnit (level=site), update currentSiteOrgUnitId
+//   - bulkTransferEquipmentToSite  pick an active location, update currentSiteOrgUnitId
 //   - bulkAssignEquipmentToHolder  pick a person, update currentHolderPersonId
 //   - bulkSetEquipmentStatus       change status enum on N rows
 //   - bulkExportEquipmentCsv       emit CSV for just the checked rows
@@ -20,7 +20,6 @@ import {
   equipmentCheckouts,
   equipmentItems,
   equipmentLocationHistory,
-  equipmentStationSettings,
   equipmentTypes,
   orgUnits,
   people,
@@ -29,13 +28,14 @@ import { assertCan, can } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireExportContext, requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { recordAudit } from '@/lib/audit'
+import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
+import { optionalTextInput, optionalUuidInput, requireEnumInput } from '@/lib/mutation-input'
 import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
 import { csvRow } from '@/lib/csv'
 import { isBulkActionId, newBulkActionBatchId, parseBulkActionIds } from '@/lib/bulk-actions'
 import {
   lockEquipmentCustodyRows,
-  lockOpenEquipmentCheckout,
+  checkInEquipmentInTx,
   openCheckoutConflictMessage,
   openEquipmentCheckoutItemIds,
   refreshEquipmentAvailability,
@@ -63,7 +63,7 @@ export async function bulkTransferEquipmentToSite(args: {
     plural: 'equipment items',
   })
   if (!parsedIds.ok) return parsedIds
-  if (!isBulkActionId(args?.siteOrgUnitId)) return { ok: false, error: 'Pick a site.' }
+  if (!isBulkActionId(args?.siteOrgUnitId)) return { ok: false, error: 'Pick a location.' }
   const ids = parsedIds.ids
   const batchId = newBulkActionBatchId()
 
@@ -75,8 +75,7 @@ export async function bulkTransferEquipmentToSite(args: {
       .from(orgUnits)
       .where(and(eq(orgUnits.id, args.siteOrgUnitId), isNull(orgUnits.deletedAt)))
       .limit(1)
-    if (!s) return { ok: false as const, error: 'Site not found.' }
-    if (s.level !== 'site') return { ok: false as const, error: 'Org-unit is not a site.' }
+    if (!s) return { ok: false as const, error: 'Location not found.' }
 
     const rows = await lockEquipmentCustodyRows(tx, ids)
     const editableRows = rows.filter(({ deletedAt }) => deletedAt === null)
@@ -448,9 +447,9 @@ export async function bulkExportEquipmentCsv(args: {
 }
 
 // ---------- Check-in (sign in) ----------------------------------------------
-// Shared by the /equipment/station page, the item-detail check-in drawer, and
+// Shared by the item-detail check-in drawer, the checkout list, and
 // the dashboard "My equipment" widget's one-tap check-in. Returns the item to
-// base: closes the open checkout, clears the holder, and flips the item back to
+// base: closes any open checkout, clears the holder, and flips the item back to
 // available (when it's still in service). Condition defaults to "good" when the
 // caller doesn't supply one (the dashboard one-tap case).
 //
@@ -459,101 +458,59 @@ export async function bulkExportEquipmentCsv(args: {
 // the dashboard widget's entire audience.
 
 const RETURN_CONDITIONS = ['good', 'fair', 'damaged', 'unusable'] as const
-type ReturnCondition = (typeof RETURN_CONDITIONS)[number]
 
 export async function checkInEquipment(formData: FormData) {
   const ctx = await requireRequestContext()
   const canManage = ctx.isSuperAdmin || can(ctx, 'equipment.manage')
-  const id = String(formData.get('id') ?? '').trim()
-  const rawCondition = String(formData.get('returnedCondition') ?? 'good').trim()
-  if (!(RETURN_CONDITIONS as readonly string[]).includes(rawCondition)) {
-    throw new Error('Invalid return condition')
-  }
-  const condition = rawCondition as ReturnCondition
-  const returnedNotes = String(formData.get('returnedNotes') ?? '').trim() || null
-  if (!id) return
-  if (returnedNotes && returnedNotes.length > 2_000) {
-    throw new Error('Return notes must be 2,000 characters or less')
-  }
-
+  const checkoutId = optionalUuidInput(formData.get('id'), 'Check-out')
+  const requestedItemId = optionalUuidInput(formData.get('itemId'), 'Equipment item')
+  if (!checkoutId && !requestedItemId) throw new Error('Select equipment to check in')
+  const condition = requireEnumInput(
+    formData.get('returnedCondition') ?? 'good',
+    RETURN_CONDITIONS,
+    'Return condition',
+  )
+  const notes = optionalTextInput(formData.get('returnedNotes'), 'Return notes', 2000)
   const checkedIn = await ctx.db(async (tx) => {
-    // Read only enough to discover the item, then acquire locks in the global
-    // equipment-row -> checkout-row order used by every custody writer.
-    const [candidate] = await tx
-      .select({ itemId: equipmentCheckouts.equipmentItemId })
-      .from(equipmentCheckouts)
-      .where(eq(equipmentCheckouts.id, id))
-      .limit(1)
-    if (!candidate) return null
-    const [item] = await lockEquipmentCustodyRows(tx, [candidate.itemId])
-    if (!item || item.deletedAt) return null
-    const co = await lockOpenEquipmentCheckout(tx, id)
-    // Already returned (or unknown) — nothing to do; keeps the action idempotent.
-    if (!co || co.equipmentItemId !== item.id) return null
-    if (!canManage) {
-      // RequestContext owns the canonical login -> person mapping.
-      if (!ctx.personId || co.holderPersonId !== ctx.personId) {
-        throw new Error('Forbidden: you can only check in equipment issued to you')
-      }
+    let itemId = requestedItemId
+    if (checkoutId) {
+      const [candidate] = await tx
+        .select({ itemId: equipmentCheckouts.equipmentItemId })
+        .from(equipmentCheckouts)
+        .where(eq(equipmentCheckouts.id, checkoutId))
+        .limit(1)
+      if (!candidate) throw new Error('Check-out not found')
+      if (itemId && itemId !== candidate.itemId)
+        throw new Error('Check-out does not belong to this equipment')
+      itemId = candidate.itemId
     }
-    const [settings] = await tx
-      .select({ homeOrgUnitId: equipmentStationSettings.defaultCheckInOrgUnitId })
-      .from(equipmentStationSettings)
-      .where(eq(equipmentStationSettings.tenantId, ctx.tenantId))
-      .limit(1)
-    const returnSiteOrgUnitId = settings?.homeOrgUnitId ?? null
-    if (!returnSiteOrgUnitId) {
-      throw new Error('Set a default check-in location before checking equipment in')
-    }
-    const [home] = await tx
-      .select({ id: orgUnits.id })
-      .from(orgUnits)
-      .where(and(eq(orgUnits.id, returnSiteOrgUnitId), isNull(orgUnits.deletedAt)))
-      .limit(1)
-    if (!home) throw new Error('The configured default check-in location is unavailable')
-    const now = new Date()
-    await tx
-      .update(equipmentCheckouts)
-      .set({
-        returnedAt: now,
-        returnedCondition: condition,
-        returnedNotes,
-        checkedInByTenantUserId: ctx.membership?.id,
-      })
-      .where(eq(equipmentCheckouts.id, id))
-    await tx
-      .update(equipmentItems)
-      .set({
-        currentHolderPersonId: null,
-        currentSiteOrgUnitId: returnSiteOrgUnitId,
-        lastSeenSiteOrgUnitId: returnSiteOrgUnitId,
-        lastSeenAt: now,
-        isMissing: false,
-        missingFoundAt: item.isMissing ? now : undefined,
-      })
-      .where(eq(equipmentItems.id, co.equipmentItemId))
-    await refreshEquipmentAvailability(tx, [co.equipmentItemId])
-    await tx.insert(equipmentLocationHistory).values({
+    if (!itemId) throw new Error('Equipment item not found')
+    const result = await checkInEquipmentInTx(tx, {
       tenantId: ctx.tenantId,
-      itemId: co.equipmentItemId,
-      siteOrgUnitId: returnSiteOrgUnitId,
-      holderPersonId: null,
-      recordedByTenantUserId: ctx.membership?.id,
-      recordedAt: now,
-      note: `Checked in (${condition})${returnedNotes ? ` — ${returnedNotes}` : ''}`,
+      itemId,
+      expectedCheckoutId: checkoutId ?? undefined,
+      actorTenantUserId: ctx.membership?.id ?? null,
+      actorPersonId: ctx.personId,
+      canManage,
+      condition,
+      notes,
     })
-    return { itemId: co.equipmentItemId, returnSiteOrgUnitId }
+    if (result)
+      await recordAuditInTransaction(tx, ctx, {
+        entityType: 'equipment',
+        entityId: result.itemId,
+        action: 'update',
+        summary: 'Checked equipment in',
+        before: result.before,
+        after: {
+          condition,
+          returnedNotes: notes,
+          returnSiteOrgUnitId: result.returnSiteOrgUnitId,
+          checkoutId: result.checkoutId,
+        },
+      })
+    return result
   })
-
-  if (checkedIn) {
-    await recordAudit(ctx, {
-      entityType: 'equipment_checkout',
-      entityId: id,
-      action: 'update',
-      summary: 'Checked equipment in',
-      after: { condition, returnedNotes, returnSiteOrgUnitId: checkedIn.returnSiteOrgUnitId },
-    })
-  }
   revalidateEquipmentCustody()
   if (checkedIn) revalidatePath(`/equipment/${checkedIn.itemId}`)
 }

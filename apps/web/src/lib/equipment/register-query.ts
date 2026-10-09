@@ -1,3 +1,4 @@
+import { equipmentIsCheckedOutSql } from '../equipment-custody'
 import { recordSearchWhere } from '../record-search'
 import { and, asc, desc, eq, isNull, sql, type SQL } from 'drizzle-orm'
 import {
@@ -48,7 +49,11 @@ export function equipmentRegisterQuery(
     filters.push(status ? eq(equipmentItems.status, status) : sql`false`)
   }
   if (availabilityFilter === 'available' || availabilityFilter === 'checked_out') {
-    filters.push(eq(equipmentItems.isAvailableForCheckout, availabilityFilter === 'available'))
+    filters.push(
+      availabilityFilter === 'checked_out'
+        ? equipmentIsCheckedOutSql
+        : eq(equipmentItems.isAvailableForCheckout, true),
+    )
   }
   for (const [key, column] of [
     ['type', equipmentItems.typeId],

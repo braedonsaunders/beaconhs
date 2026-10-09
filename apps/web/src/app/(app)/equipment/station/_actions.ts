@@ -34,7 +34,6 @@ export async function performStationScan(input: StationScanInput): Promise<Stati
   const result = await ctx.db(async (tx) => {
     const [settings] = await tx
       .select({
-        homeOrgUnitId: equipmentStationSettings.defaultCheckInOrgUnitId,
         requireHolder: equipmentStationSettings.requireHolderOnCheckout,
       })
       .from(equipmentStationSettings)
@@ -43,14 +42,13 @@ export async function performStationScan(input: StationScanInput): Promise<Stati
     const scan = await stationScanCore(tx, {
       ...parsed,
       tenantId: ctx.tenantId,
-      homeOrgUnitId: settings?.homeOrgUnitId ?? null,
       actorTenantUserId: ctx.membership?.id ?? null,
       requireHolderOnCheckout: settings?.requireHolder ?? false,
     })
     if (scan.ok && (scan.action === 'checked_out' || scan.action === 'checked_in')) {
       await recordAuditInTransaction(tx, ctx, {
-        entityType: 'equipment_checkout',
-        entityId: scan.checkoutId ?? undefined,
+        entityType: scan.checkoutId ? 'equipment_checkout' : 'equipment',
+        entityId: scan.checkoutId ?? scan.itemId,
         action: scan.action === 'checked_out' ? 'create' : 'update',
         summary: `Station ${scan.action === 'checked_out' ? 'check-out' : 'check-in'}: ${scan.assetTag}`,
         after: {
@@ -65,6 +63,8 @@ export async function performStationScan(input: StationScanInput): Promise<Stati
   })
 
   if (result.ok && (result.action === 'checked_out' || result.action === 'checked_in')) {
+    revalidatePath('/equipment')
+    revalidatePath('/dashboard')
     revalidatePath('/equipment/station')
     revalidatePath(`/equipment/${result.itemId}`)
   }

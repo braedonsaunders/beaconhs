@@ -169,7 +169,7 @@ export function BulkEquipmentBar({
           className="h-8 min-w-[11rem]"
           disabled={pending}
         >
-          {canManage ? <option value="site">{'Transfer to site'}</option> : null}
+          {canManage ? <option value="site">{'Transfer to location'}</option> : null}
           {canManage ? <option value="holder">{'Assign to holder'}</option> : null}
           {canManage ? <option value="status">{'Set status'}</option> : null}
           {canExport ? <option value="export">{'Export selected to CSV'}</option> : null}
@@ -181,13 +181,13 @@ export function BulkEquipmentBar({
               <div className="flex items-center gap-2">
                 <MapPin size={14} className="text-slate-500" />
                 <RemoteSearchSelect
-                  lookup="equipment-custody-sites"
+                  lookup="equipment-station-locations"
                   value={siteId}
                   onChange={setSiteId}
-                  placeholder={tGenerated('m_172c80e95eae4d')}
-                  searchPlaceholder={tGenerated('m_1931aa93098220')}
-                  sheetTitle="Transfer to site"
-                  ariaLabel="Transfer to site"
+                  placeholder={tGeneratedValue('Select location…')}
+                  searchPlaceholder={tGeneratedValue('Search locations…')}
+                  sheetTitle="Transfer to location"
+                  ariaLabel="Transfer to location"
                   className="min-w-[12rem]"
                   triggerClassName="h-8"
                   disabled={pending}

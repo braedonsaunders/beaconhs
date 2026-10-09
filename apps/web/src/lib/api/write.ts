@@ -1556,6 +1556,16 @@ async function createEquipment(ctx: RequestContext, raw: unknown): Promise<Write
         metadata: b.metadata,
       })
       .returning()
+    if (created) {
+      await refreshEquipmentAvailability(tx, [created.id])
+      const [availability] = await tx
+        .select({ value: equipmentItems.isAvailableForCheckout })
+        .from(equipmentItems)
+        .where(eq(equipmentItems.id, created.id))
+        .limit(1)
+      if (!availability) throw ApiError.invalid('Equipment item not found')
+      created.isAvailableForCheckout = availability.value
+    }
     if (created && custodyRecordedAt) {
       await tx.insert(equipmentLocationHistory).values({
         tenantId: ctx.tenantId,

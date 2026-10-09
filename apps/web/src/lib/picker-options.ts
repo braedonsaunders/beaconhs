@@ -70,7 +70,6 @@ const PICKER_LOOKUPS = [
   'vehicle-customers',
   'vehicle-drivers',
   'equipment-custody-holders',
-  'equipment-custody-sites',
   'equipment-station-holders',
   'equipment-station-locations',
   'equipment-reminder-assignees',
