@@ -12,6 +12,7 @@ export const OBLIGATION_KINDS = [
   'document',
   'training',
   'cert_requirement',
+  'skill_requirement',
   'form',
   'journal',
   'hazard_assessment',
@@ -28,6 +29,7 @@ type TargetKind =
   | 'document'
   | 'trainingItem'
   | 'cert'
+  | 'skillType'
   | 'formTemplate'
   | 'journalName'
   | 'equipmentType'
@@ -73,9 +75,9 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     subjectKind: 'per_person',
     audience: true,
     audienceTypes: PERSON_AUD,
-    recurrence: { oneTime: true },
+    recurrence: { oneTime: true, recurring: true, remind: true, dueOffset: true },
     target: 'document',
-    hint: 'These people must acknowledge this document.',
+    hint: 'These people acknowledge the current published version once, or again on a cadence.',
   },
   training: {
     label: 'Training / assessment',
@@ -91,9 +93,18 @@ export const KIND_META: Record<ObligationKind, KindMeta> = {
     subjectKind: 'per_person',
     audience: true,
     audienceTypes: PERSON_AUD,
-    recurrence: {},
+    recurrence: { remind: true },
     target: 'cert',
     hint: 'These people must hold a currently-valid certification for this course.',
+  },
+  skill_requirement: {
+    label: 'Skill requirement',
+    subjectKind: 'per_person',
+    audience: true,
+    audienceTypes: PERSON_AUD,
+    recurrence: { remind: true },
+    target: 'skillType',
+    hint: 'These people must keep a currently-valid ticket for this skill type.',
   },
   form: {
     label: 'App (scheduled)',

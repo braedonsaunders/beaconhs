@@ -61,9 +61,12 @@ describe('document acknowledgment relational integrity', () => {
     })
   })
 
-  it('allows only one acknowledgment per person and immutable version', () => {
+  it('retains repeated version acknowledgments but disallows duplicate signers in a session', () => {
     expect(
-      indexColumns(documentAcknowledgments, 'document_acks_tenant_doc_version_person_ux'),
+      indexColumns(documentAcknowledgments, 'document_acks_tenant_doc_version_person_idx'),
     ).toEqual(['tenant_id', 'document_id', 'version_id', 'person_id'])
+    expect(indexColumns(documentAcknowledgments, 'document_acks_tenant_session_person_ux')).toEqual(
+      ['tenant_id', 'session_id', 'person_id'],
+    )
   })
 })

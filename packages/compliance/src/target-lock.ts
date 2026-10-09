@@ -72,11 +72,13 @@ export function planComplianceTargetLock(
       return target('course', ref.courseId, 'course')
     }
     case 'cert_requirement':
-      if (ref.skillTypeId && ref.courseId)
-        throw new ComplianceTargetError('Certification target is ambiguous')
-      return ref.skillTypeId
-        ? target('skill_type', ref.skillTypeId, 'skill type')
-        : target('course', ref.courseId, 'course')
+      if (ref.skillTypeId || ref.assessmentTypeId)
+        throw new ComplianceTargetError('Certification requirements must target a course')
+      return target('course', ref.courseId, 'course')
+    case 'skill_requirement':
+      if (ref.courseId || ref.assessmentTypeId)
+        throw new ComplianceTargetError('Skill requirements must target a skill type')
+      return target('skill_type', ref.skillTypeId, 'skill type')
     case 'form':
       return target('form_template', ref.formTemplateId, 'app')
     case 'equipment_inspection':

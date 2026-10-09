@@ -277,7 +277,12 @@ export const documentAcknowledgments = pgTable(
     tenantIdx: index('document_acks_tenant_idx').on(t.tenantId),
     versionIdx: index('document_acks_version_idx').on(t.tenantId, t.versionId),
     personIdx: index('document_acks_person_idx').on(t.tenantId, t.personId),
-    documentVersionPersonUx: uniqueIndex('document_acks_tenant_doc_version_person_ux').on(
+    sessionPersonUx: uniqueIndex('document_acks_tenant_session_person_ux').on(
+      t.tenantId,
+      t.sessionId,
+      t.personId,
+    ),
+    documentVersionPersonIdx: index('document_acks_tenant_doc_version_person_idx').on(
       t.tenantId,
       t.documentId,
       t.versionId,

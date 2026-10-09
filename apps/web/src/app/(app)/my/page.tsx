@@ -265,7 +265,9 @@ export default async function MyLandingPage() {
   ).length
   const trainingAssigned = complianceRows.filter(
     (row) =>
-      (row.kind === 'training' || row.kind === 'cert_requirement') &&
+      (row.kind === 'training' ||
+        row.kind === 'cert_requirement' ||
+        row.kind === 'skill_requirement') &&
       (row.status === 'pending' ||
         row.status === 'in_progress' ||
         row.status === 'overdue' ||

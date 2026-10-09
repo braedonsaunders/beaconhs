@@ -124,7 +124,7 @@ export const REPORT_VIEWS_SQL: string[] = [
      EXISTS (SELECT 1 FROM compliance_status cs JOIN compliance_obligations co
        ON co.id = cs.obligation_id AND co.tenant_id = cs.tenant_id
        WHERE cs.tenant_id = p.tenant_id AND cs.person_id = p.id
-         AND co.source_module = 'cert_requirement' AND co.target_ref->>'skillTypeId' = t.id::text
+         AND co.source_module = 'skill_requirement' AND co.target_ref->>'skillTypeId' = t.id::text
          AND co.status = 'active' AND co.deleted_at IS NULL) AS is_required,
      ${skillAdditionalFields('p.tenant_id', 't.id', 'au.id', 'a.id')} AS additional_fields
    FROM people p JOIN training_skill_types t ON t.tenant_id = p.tenant_id

@@ -57,9 +57,9 @@ export function resolveComplianceLink(
           prefetch: true,
         }
       }
-      return ref.skillTypeId
-        ? { href: '/my/wallet', prefetch: true }
-        : { href: '/my/training', prefetch: true }
+      return { href: '/my/training', prefetch: true }
+    case 'skill_requirement':
+      return { href: '/my/wallet', prefetch: true }
     case 'inspection':
       // `new?typeId=` starts a draft + redirects — never prefetch it.
       return ref.inspectionTypeId
@@ -87,6 +87,8 @@ export function complianceActionLabel(kind: string): string {
     case 'training':
     case 'cert_requirement':
       return 'Go to training'
+    case 'skill_requirement':
+      return 'View skill ticket'
     case 'inspection':
       return 'Start inspection'
     case 'hazard_assessment':

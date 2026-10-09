@@ -33,6 +33,7 @@ export type SignalStatus = 'overdue' | 'expired' | 'due_soon' | 'open'
 
 export type SignalModule =
   | 'training'
+  | 'skills'
   | 'monitored_session'
   | 'documents'
   | 'equipment'
@@ -42,6 +43,7 @@ export type SignalModule =
 
 export const SIGNAL_MODULE_LABELS: Record<SignalModule, string> = {
   training: 'Training',
+  skills: 'Skills',
   monitored_session: 'Monitored sessions',
   documents: 'Documents',
   equipment: 'Equipment',
@@ -168,6 +170,16 @@ export async function listDueSignals(
               and (tr_newer.completed_on, tr_newer.created_at, tr_newer.id)
                 > (${trainingRecords.completedOn}, ${trainingRecords.createdAt}, ${trainingRecords.id})
           ))
+
+        union all
+        select 'skills', 'Skill ticket expiry', certification_name,
+          person_name, person_id::text, expires_on::date,
+          case when outcome = 'expired' or expires_on < ${today}::date then 'expired' else 'due_soon' end,
+          '/training/skills/' || id::text, id::text
+        from report_skill_assignments
+        where tenant_id = ${tid} and person_status = 'active'
+          and outcome in ('complete', 'expired') and expires_on is not null
+          and expires_on <= ${horizonIso}::date
 
         union all
         select 'monitored_session', 'Check-in', 'Monitored session check-in', null, null,

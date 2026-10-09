@@ -65,11 +65,11 @@ export type ObligationFormInitial = {
 function defaultRecurrence(kind: ObligationKind): RecurrenceValue {
   const f = KIND_META[kind].recurrence
   return {
-    kind: f.recurring ? 'frequency' : 'one_time',
+    kind: kind === 'document' ? 'one_time' : f.recurring ? 'frequency' : 'one_time',
     frequency: 'week',
     quantity: 1,
     compliantPercentage: 100,
-    remindBeforeDays: 7,
+    remindBeforeDays: kind === 'cert_requirement' || kind === 'skill_requirement' ? 30 : 7,
   }
 }
 
@@ -111,9 +111,6 @@ export function ObligationForm({
   )
   const [courseId, setCourseId] = useState(ref.courseId ?? '')
   const [assessmentTypeId, setAssessmentTypeId] = useState(ref.assessmentTypeId ?? '')
-  const [certItemKind, setCertItemKind] = useState<'course' | 'skill'>(
-    ref.skillTypeId ? 'skill' : 'course',
-  )
   const [skillTypeId, setSkillTypeId] = useState(ref.skillTypeId ?? '')
   const [formTemplateId, setFormTemplateId] = useState(ref.formTemplateId ?? '')
   const [equipmentTypeId, setEquipmentTypeId] = useState(ref.equipmentTypeId ?? '')
@@ -158,13 +155,14 @@ export function ObligationForm({
       documentId: kind === 'document' ? documentId : undefined,
       trainingItemKind: kind === 'training' ? trainingItemKind : undefined,
       courseId:
-        kind === 'training' || (kind === 'cert_requirement' && certItemKind === 'course')
+        kind === 'cert_requirement' || (kind === 'training' && trainingItemKind === 'course')
           ? courseId
           : undefined,
-      assessmentTypeId: kind === 'training' ? assessmentTypeId : undefined,
-      certItemKind: kind === 'cert_requirement' ? certItemKind : undefined,
-      skillTypeId:
-        kind === 'cert_requirement' && certItemKind === 'skill' ? skillTypeId : undefined,
+      assessmentTypeId:
+        kind === 'training' && trainingItemKind === 'assessment_type'
+          ? assessmentTypeId
+          : undefined,
+      skillTypeId: kind === 'skill_requirement' ? skillTypeId : undefined,
       formTemplateId: kind === 'form' ? formTemplateId : undefined,
       equipmentTypeId: kind === 'equipment_inspection' ? equipmentTypeId : undefined,
       ppeTypeId: kind === 'ppe_inspection' ? ppeTypeId : undefined,
@@ -296,39 +294,13 @@ export function ObligationForm({
                 <GeneratedValue
                   value={
                     meta.target === 'cert' ? (
-                      <div className="space-y-3">
-                        <Select
-                          value={certItemKind}
-                          onChange={(e) => setCertItemKind(e.target.value as 'course' | 'skill')}
-                        >
-                          <option value="course">{'Certification (course)'}</option>
-                          <option value="skill">{'Skill type'}</option>
-                        </Select>
-                        <GeneratedValue
-                          value={
-                            certItemKind === 'course' ? (
-                              <TargetSelect
-                                lookup="compliance-obligation-courses"
-                                value={courseId}
-                                onChange={setCourseId}
-                                placeholder={tGenerated('m_1c702dc1690d62')}
-                                options={targets.courses.map((c) => ({ id: c.id, label: c.label }))}
-                              />
-                            ) : (
-                              <TargetSelect
-                                lookup="compliance-obligation-skill-types"
-                                value={skillTypeId}
-                                onChange={setSkillTypeId}
-                                placeholder={tGenerated('m_0517043c1615d8')}
-                                options={targets.skillTypes.map((s) => ({
-                                  id: s.id,
-                                  label: s.name,
-                                }))}
-                              />
-                            )
-                          }
-                        />
-                      </div>
+                      <TargetSelect
+                        lookup="compliance-obligation-courses"
+                        value={courseId}
+                        onChange={setCourseId}
+                        placeholder={tGenerated('m_1c702dc1690d62')}
+                        options={targets.courses.map((c) => ({ id: c.id, label: c.label }))}
+                      />
                     ) : null
                   }
                 />
@@ -341,6 +313,19 @@ export function ObligationForm({
                         onChange={setFormTemplateId}
                         placeholder={tGenerated('m_0e039a5f33b261')}
                         options={targets.formTemplates.map((t) => ({ id: t.id, label: t.name }))}
+                      />
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    meta.target === 'skillType' ? (
+                      <TargetSelect
+                        lookup="compliance-obligation-skill-types"
+                        value={skillTypeId}
+                        onChange={setSkillTypeId}
+                        placeholder={tGenerated('m_0517043c1615d8')}
+                        options={targets.skillTypes.map((s) => ({ id: s.id, label: s.name }))}
                       />
                     ) : null
                   }

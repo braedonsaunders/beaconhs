@@ -600,7 +600,13 @@ export async function loadDashboardMetrics(
       .select({ status: complianceStatus.status, c: count() })
       .from(complianceStatus)
       .innerJoin(complianceObligations, eq(complianceObligations.id, complianceStatus.obligationId))
-      .where(inArray(complianceObligations.sourceModule, ['training', 'cert_requirement']))
+      .where(
+        inArray(complianceObligations.sourceModule, [
+          'training',
+          'cert_requirement',
+          'skill_requirement',
+        ]),
+      )
       .groupBy(complianceStatus.status)
     const trainingTotal = tcRows.reduce((acc, r) => acc + Number(r.c), 0)
     const trainingCompleted = tcRows

@@ -85,16 +85,12 @@ function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; err
         },
       }
     }
-    case 'cert_requirement': {
-      // Satisfied either by a valid training record for a course, or by a valid
-      // skill grant of a skill type (the ETL fold-in authors the latter too).
-      if ((input.certItemKind ?? 'course') === 'skill') {
-        if (!input.skillTypeId) return { ref: {}, error: 'Pick the skill type' }
-        return { ref: { skillTypeId: input.skillTypeId } }
-      }
-      if (!input.courseId) return { ref: {}, error: 'Pick the certification (course)' }
-      return { ref: { trainingItemKind: 'course', courseId: input.courseId } }
-    }
+    case 'cert_requirement':
+      if (!input.courseId) return { ref: {}, error: 'Pick a course' }
+      return { ref: { courseId: input.courseId, trainingItemKind: 'course' } }
+    case 'skill_requirement':
+      if (!input.skillTypeId) return { ref: {}, error: 'Pick a skill type' }
+      return { ref: { skillTypeId: input.skillTypeId } }
     case 'form':
       if (!input.formTemplateId) return { ref: {}, error: 'Pick an app / form template' }
       return { ref: { formTemplateId: input.formTemplateId } }
@@ -116,8 +112,13 @@ function buildTargetRef(input: ObligationInput): { ref: ComplianceTargetRef; err
 
 function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRecurrence {
   const cronFor = () => r.cron?.trim() || frequencyToCron(r.frequency ?? 'week')
-  if (kind === 'cert_requirement' || kind === 'equipment_inspection' || kind === 'ppe_inspection')
-    return { kind: 'expiry', remindBeforeDays: 30 }
+  if (
+    kind === 'cert_requirement' ||
+    kind === 'skill_requirement' ||
+    kind === 'equipment_inspection' ||
+    kind === 'ppe_inspection'
+  )
+    return { kind: 'expiry', remindBeforeDays: r.remindBeforeDays ?? 30 }
   if (kind === 'job_title_signoff') return { kind: 'one_time' }
   if (kind === 'form')
     return {
@@ -126,8 +127,7 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
       cron: cronFor(),
       dueOffsetMinutes: r.dueOffsetMinutes,
     }
-  if (kind === 'document') return { kind: 'one_time', dueOn: r.dueOn }
-  if (kind === 'training')
+  if (kind === 'training' || kind === 'document')
     return r.kind === 'one_time'
       ? { kind: 'one_time', dueOn: r.dueOn, remindBeforeDays: r.remindBeforeDays ?? 7 }
       : {
@@ -135,6 +135,7 @@ function buildRecurrence(kind: ObligationKind, r: RecurrenceValue): ComplianceRe
           frequency: r.frequency ?? 'week',
           cron: cronFor(),
           remindBeforeDays: r.remindBeforeDays ?? 7,
+          dueOffsetMinutes: r.dueOffsetMinutes,
         }
   // Inspection / journal / hazard assessment → frequency.
   return {

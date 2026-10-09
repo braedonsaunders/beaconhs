@@ -7,6 +7,7 @@
 
 export * from './audience'
 export * from './audience-targets'
+export * from './document-acknowledgment'
 export * from './evidence'
 export * from './evaluate'
 export * from './identity'

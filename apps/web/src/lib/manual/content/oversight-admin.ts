@@ -411,18 +411,23 @@ An obligation is a rule like "everyone in the Field department completes fall pr
 
 ## Where to find it
 
-Open [Compliance](/compliance) from the sidebar. The tabs are **Overview**, **Obligations**, **By person**, **Aging**, **Due & expiring**, and **Mine**.
+Open [Compliance](/compliance) from the sidebar. The tabs are **Overview**, **Obligations**, **By person**, **Aging**, **Due & expiring**, and **Mine**. Use the **Skills** module filter in **Due & expiring** to review current skill tickets nearing expiry. Replaced tickets do not appear.
 
 The **Overview** tab shows the big picture: total obligations, subjects tracked, overdue and expiring counts, and overall compliance. Search the obligation list and use the **Kind** chips to show only training, documents, inspections, or another kind. The four score cards stay company-wide.
 
 ## Create an obligation
 
 1. Open the **Obligations** tab and click **New obligation**. The creation flyout opens without leaving the list.
-2. Pick the **Kind**. Common kinds include **Training / assessment**, **Document acknowledgement**, **App (scheduled)** for a form people must fill on a cadence, **Certification requirement**, and **Inspection**.
+2. Pick the **Kind**. Common kinds include **Training / assessment**, **Document acknowledgement**, **App (scheduled)** for a form people must fill on a cadence, **Certification requirement**, **Skill requirement**, and **Inspection**.
 3. Fill in the title and what to require for that kind — for example, which course or which document.
 4. Pick the audience: specific people, a role, a department, a **Group**, a **Crew**, a site, or everyone.
 5. For a recurring item, choose the **Cadence**. Inspections, journals, and hazard assessments also have **Quantity per period** and **Compliant threshold (%)**. Leave **Cron override (optional)** blank for the standard cadence time. For an inspection or scheduled app, **Due offset (minutes after fire)** moves the deadline later without changing when the next period starts.
-6. Click **Create obligation**.
+6. For a **Certification requirement**, pick a course. For a **Skill requirement**, pick a skill type. Set **Remind before (days)** for the expiry warning.
+7. Click **Create obligation**.
+
+Certificate and skill requirements stay active after completion. The engine uses the strongest valid replacement ticket, warns as it nears expiry, and marks the requirement **Overdue** after expiry. Failed, incomplete, and deleted skill tickets do not satisfy a requirement. A renewal restores compliance.
+
+For a **Document acknowledgement**, choose **One-time (single due date)** or **Recurring (cadence)**. Choose **Yearly** to require a fresh acknowledgment each year. Only an acknowledgment of the current published version within the current period counts. Earlier signatures stay in the history. Republishing also requires a fresh acknowledgment.
 
 The system then tracks every person in the audience and creates their tasks automatically. Imported assignments keep their original audience: groups remain **Group** audiences, divisions become departments, and individual assignments remain specific people. Group and department membership is resolved automatically, so you can maintain the assignment by updating that group or department.
 

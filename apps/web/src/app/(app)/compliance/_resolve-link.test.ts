@@ -79,7 +79,7 @@ describe('compliance completion links', () => {
 
   it('opens skill requirements in the learner wallet', () => {
     expect(
-      resolveComplianceLink('cert_requirement', {
+      resolveComplianceLink('skill_requirement', {
         skillTypeId: '70000000-0000-4000-8000-000000000007',
       }),
     ).toEqual({ href: '/my/wallet', prefetch: true })

@@ -441,6 +441,8 @@ Some documents need your sign-off. This is the digital version of signing the sh
 3. Tap **Signature (optional)** if you want to add a handwritten signature, then tap **Acknowledge**.
 4. You will see **You've acknowledged this** with the date and time it was recorded. Done — no paper needed.
 
+Your company can require another acknowledgment on a recurring cadence, such as yearly. When the next period begins, **Acknowledge** becomes available again, even if the document has not changed. Your earlier signature stays in the acknowledgment history.
+
 You only see your own sign-off on this page. Other people's signatures stay with the people who manage documents.
 
 If a supervisor is running a group sign-off at a toolbox talk, they will pass you the tablet to sign your name on their screen instead.

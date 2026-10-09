@@ -42,6 +42,7 @@ export const complianceSourceModule = pgEnum('compliance_source_module', [
   'form', // scheduled App
   'journal',
   'cert_requirement', // audience must hold a valid certification (course)
+  'skill_requirement', // audience must hold a valid skill ticket
   'equipment_inspection', // equipment of a type stays within its inspection cadence
   'ppe_inspection', // PPE of a type stays within its inspection/expiry cadence
   'job_title_signoff', // people with a title acknowledge a task
@@ -107,7 +108,7 @@ export type ComplianceTargetRef = {
   courseId?: string
   assessmentTypeId?: string
   trainingItemKind?: 'course' | 'assessment_type'
-  skillTypeId?: string // cert_requirement satisfied by a valid training_skill_assignment grant
+  skillTypeId?: string // skill_requirement satisfied by a valid training_skill_assignment
   formTemplateId?: string
   equipmentTypeId?: string
   ppeTypeId?: string

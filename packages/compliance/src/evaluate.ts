@@ -54,11 +54,11 @@ import {
   resolveFrequencyWindow,
 } from './schedule'
 import {
-  resolveTrainingEvaluationWindow,
+  resolveEvidenceEvaluationWindow,
   type TrainingEvidence,
-  trainingEvidenceInWindow,
+  evidenceInWindow,
   trainingEvidenceOutcome,
-} from './training-evaluation'
+} from './evidence-evaluation'
 
 export type ComplianceObligation = typeof complianceObligations.$inferSelect
 
@@ -142,9 +142,10 @@ export async function evaluateObligation(
   switch (ob.sourceModule) {
     case 'training':
     case 'cert_requirement':
+    case 'skill_requirement':
       return evalTraining(tx, tenantId, await aud(), ob, clock)
     case 'document':
-      return evalDocument(tx, tenantId, await aud(), ob, today)
+      return evalDocument(tx, tenantId, await aud(), ob, clock)
     case 'journal':
       return evalJournal(tx, tenantId, await aud(), ob, clock)
     case 'form':
@@ -198,19 +199,29 @@ async function evalTraining(
   const names = await loadNames(tx, tid, ids)
   const ref = ob.targetRef ?? {}
   const today = complianceDate(clock)
-  const window = resolveTrainingEvaluationWindow(ob.recurrence, clock, ob.createdAt)
+  const window = resolveEvidenceEvaluationWindow(ob.recurrence, clock, ob.createdAt)
   const done = new Map<string, TrainingEvidence>()
   const inProgress = new Set<string>()
 
   const remember = (personId: string, evidence: TrainingEvidence) => {
     // Outside expiry mode an expired credential cannot satisfy an assignment.
-    if (ob.recurrence.kind !== 'expiry' && evidence.expiresOn && evidence.expiresOn < today) return
+    if (
+      ob.recurrence.kind !== 'expiry' &&
+      (evidence.expired || (evidence.expiresOn && evidence.expiresOn < today))
+    )
+      return
     const prior = done.get(personId)
     if (!prior) {
       done.set(personId, evidence)
       return
     }
     if (ob.recurrence.kind === 'expiry') {
+      const priorValid = !prior.expired && (!prior.expiresOn || prior.expiresOn >= today)
+      const nextValid = !evidence.expired && (!evidence.expiresOn || evidence.expiresOn >= today)
+      if (priorValid !== nextValid) {
+        if (nextValid) done.set(personId, evidence)
+        return
+      }
       // Pick the credential with the longest remaining validity. No expiry is
       // stronger than any dated expiry, even if another row was completed later.
       if (!prior.expiresOn) return
@@ -252,7 +263,7 @@ async function evalTraining(
         ),
       )
     for (const r of rows) {
-      if (!r.completedAt || !trainingEvidenceInWindow(r.completedAt, window)) continue
+      if (!r.completedAt || !evidenceInWindow(r.completedAt, window)) continue
       remember(r.personId, {
         completedOn: complianceDate({ now: r.completedAt, timezone: clock.timezone }),
         expiresOn: null,
@@ -279,7 +290,7 @@ async function evalTraining(
         ),
       )
     for (const attempt of attempts) {
-      if (trainingEvidenceInWindow(attempt.startedAt, window)) inProgress.add(attempt.personId)
+      if (evidenceInWindow(attempt.startedAt, window)) inProgress.add(attempt.personId)
     }
   } else if (ref.courseId) {
     const rows = await tx
@@ -304,7 +315,7 @@ async function evalTraining(
     for (const r of rows) {
       // personId is nullable (blank drafts); the inArray filter already excludes
       // nulls, so this guard only narrows the type.
-      if (!r.personId || !trainingEvidenceInWindow(r.completedOn, window)) continue
+      if (!r.personId || !evidenceInWindow(r.completedOn, window)) continue
       remember(r.personId, { completedOn: r.completedOn, expiresOn: r.expiresOn })
     }
 
@@ -325,16 +336,17 @@ async function evalTraining(
         ),
       )
     for (const enrollment of enrollments) {
-      if (trainingEvidenceInWindow(enrollment.startedAt ?? enrollment.createdAt, window)) {
+      if (evidenceInWindow(enrollment.startedAt ?? enrollment.createdAt, window)) {
         inProgress.add(enrollment.personId)
       }
     }
   } else if (ref.skillTypeId) {
-    // cert_requirement satisfied by holding a valid (non-expired) skill grant of this type
+    // A skill requirement accepts only completed, live tickets of its skill type.
     const rows = await tx
       .select({
         personId: trainingSkillAssignments.personId,
         grantedOn: trainingSkillAssignments.grantedOn,
+        status: trainingSkillAssignments.status,
         expiresOn: trainingSkillAssignments.expiresOn,
       })
       .from(trainingSkillAssignments)
@@ -342,13 +354,18 @@ async function evalTraining(
         and(
           eq(trainingSkillAssignments.tenantId, tid),
           eq(trainingSkillAssignments.skillTypeId, ref.skillTypeId),
-          eq(trainingSkillAssignments.status, 'complete'),
+          inArray(trainingSkillAssignments.status, ['complete', 'expired']),
           inArray(trainingSkillAssignments.personId, ids),
           isNull(trainingSkillAssignments.deletedAt),
         ),
       )
     for (const r of rows) {
-      if (r.personId) remember(r.personId, { completedOn: r.grantedOn, expiresOn: r.expiresOn })
+      if (r.personId)
+        remember(r.personId, {
+          completedOn: r.grantedOn,
+          expiresOn: r.expiresOn,
+          expired: r.status === 'expired',
+        })
     }
   } else {
     throw new Error(`Training obligation ${ob.id} has no supported target`)
@@ -383,15 +400,12 @@ async function evalDocument(
   tid: string,
   members: ResolvedMember[],
   ob: Ob,
-  today: string,
+  clock: ComplianceClock,
 ): Promise<EvalResult> {
   if (members.length === 0 || !ob.targetRef?.documentId) return empty()
   const ids = members.map((m) => m.personId)
   const names = await loadNames(tx, tid, ids)
-  // Acknowledgments are per-version: republishing a document requires everyone to
-  // re-acknowledge. Resolve the document's current published version (latest
-  // published `document_versions` row, matching the module's own _ack-actions
-  // logic) and only count acks for that version so republish resets compliance.
+  const window = resolveEvidenceEvaluationWindow(ob.recurrence, clock, ob.createdAt)
   const [current] = await tx
     .select({ id: documentVersions.id })
     .from(documentVersions)
@@ -404,47 +418,54 @@ async function evalDocument(
     )
     .orderBy(desc(documentVersions.version))
     .limit(1)
-  if (!current) {
-    // No published version yet — nobody can have acknowledged the current one.
-    const dueOnNoVer = ob.recurrence?.dueOn ?? null
-    return tally(
-      ids.map((pid) =>
-        personRow(
-          pid,
-          names.get(pid) ?? '(unnamed)',
-          dueOnNoVer && dueOnNoVer < today ? 'overdue' : 'pending',
-          { dueOn: dueOnNoVer, completedOn: null },
-        ),
-      ),
-    )
-  }
-  const acks = await tx
-    .select({
-      personId: documentAcknowledgments.personId,
-      at: documentAcknowledgments.acknowledgedAt,
-    })
-    .from(documentAcknowledgments)
-    .where(
-      and(
-        eq(documentAcknowledgments.tenantId, tid),
-        eq(documentAcknowledgments.documentId, ob.targetRef.documentId),
-        eq(documentAcknowledgments.versionId, current.id),
-        inArray(documentAcknowledgments.personId, ids),
-      ),
-    )
+  const acks = current
+    ? await tx
+        .select({
+          personId: documentAcknowledgments.personId,
+          at: documentAcknowledgments.acknowledgedAt,
+        })
+        .from(documentAcknowledgments)
+        .where(
+          and(
+            eq(documentAcknowledgments.tenantId, tid),
+            eq(documentAcknowledgments.documentId, ob.targetRef.documentId),
+            eq(documentAcknowledgments.versionId, current.id),
+            inArray(documentAcknowledgments.personId, ids),
+            lte(documentAcknowledgments.acknowledgedAt, clock.now),
+            window.evidenceStartAt
+              ? gte(documentAcknowledgments.acknowledgedAt, window.evidenceStartAt)
+              : undefined,
+            window.evidenceEndAt
+              ? lt(documentAcknowledgments.acknowledgedAt, window.evidenceEndAt)
+              : undefined,
+          ),
+        )
+    : []
   const ackedAt = new Map<string, Date>()
-  for (const a of acks) ackedAt.set(a.personId, a.at)
-  const dueOn = ob.recurrence?.dueOn ?? null
-  return tally(
+  for (const ack of acks) {
+    if (
+      evidenceInWindow(ack.at, window) &&
+      (!ackedAt.has(ack.personId) || ack.at > ackedAt.get(ack.personId)!)
+    )
+      ackedAt.set(ack.personId, ack.at)
+  }
+  const result = tally(
     ids.map((pid) => {
-      const a = ackedAt.get(pid)
-      const status: EvalStatus = a ? 'completed' : dueOn && dueOn < today ? 'overdue' : 'pending'
-      return personRow(pid, names.get(pid) ?? '(unnamed)', status, {
-        dueOn,
-        completedOn: a ? a.toISOString().slice(0, 10) : null,
-      })
+      const ack = ackedAt.get(pid)
+      return personRow(
+        pid,
+        names.get(pid) ?? '(unnamed)',
+        ack ? 'completed' : window.deadlinePassed ? 'overdue' : 'pending',
+        {
+          dueOn: window.dueOn,
+          completedOn: ack ? complianceDate({ now: ack, timezone: clock.timezone }) : null,
+          periodStart: window.periodStart,
+          periodEnd: window.periodEnd,
+        },
+      )
     }),
   )
+  return { ...result, nextDueAt: window.nextDueAt }
 }
 
 async function evalJournal(

@@ -665,6 +665,8 @@ When reviewing a hazard assessment for signing, linked forms show every step and
 
 ## What this is for
 
+Skill and certificate requirements return to **Overdue** when your ticket expires. A current replacement ticket restores compliance. Recurring document requirements need a new acknowledgment in each period, even when the document stays the same.
+
 Companies assign required items to roles and crews — a yearly training course, a monthly inspection, a policy to acknowledge. This page shows exactly what is on your plate and when it is due, so nothing sneaks up on you.
 
 ## Where to find it

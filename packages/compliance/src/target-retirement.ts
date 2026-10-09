@@ -56,7 +56,7 @@ const PLANS: Record<RetirableComplianceTarget, ComplianceTargetRetirementPlan> =
     label: 'assessment type',
   },
   skill_type: {
-    sourceModules: ['cert_requirement'],
+    sourceModules: ['skill_requirement'],
     targetRefKey: 'skillTypeId',
     label: 'skill type',
   },

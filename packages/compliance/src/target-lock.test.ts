@@ -16,7 +16,7 @@ describe('compliance target lock plan', () => {
         assessmentTypeId: id,
       }),
     ).toEqual({ entity: 'assessment_type', id, label: 'assessment type' })
-    expect(planComplianceTargetLock('cert_requirement', { skillTypeId: id })).toEqual({
+    expect(planComplianceTargetLock('skill_requirement', { skillTypeId: id })).toEqual({
       entity: 'skill_type',
       id,
       label: 'skill type',
@@ -31,7 +31,10 @@ describe('compliance target lock plan', () => {
     )
     expect(() =>
       planComplianceTargetLock('cert_requirement', { courseId: id, skillTypeId: id }),
-    ).toThrow('ambiguous')
+    ).toThrow('must target a course')
+    expect(() => planComplianceTargetLock('skill_requirement', { courseId: id })).toThrow(
+      'must target a skill type',
+    )
     expect(() =>
       planComplianceTargetLock('training', { courseId: id, assessmentTypeId: id }),
     ).toThrow('ambiguous')

@@ -37,7 +37,7 @@ export type ComplianceEvidenceTarget =
       targetRef: { assessmentTypeId: string; courseId?: never; skillTypeId?: never }
     }
   | {
-      sourceModule: 'cert_requirement'
+      sourceModule: 'skill_requirement'
       targetRef: { skillTypeId: string; courseId?: never; assessmentTypeId?: never }
     }
 
@@ -160,14 +160,15 @@ export function planComplianceEvidenceTarget(
           { sourceModule: 'cert_requirement', targetKey: 'courseId' },
         ],
       }
-    case 'cert_requirement':
-      if (owner.entity === 'skill_type') {
-        return {
-          owner: 'skill_type',
-          ownerId: owner.id,
-          matches: [{ sourceModule: 'cert_requirement', targetKey: 'skillTypeId' }],
-        }
+    case 'skill_requirement':
+      if (owner.entity !== 'skill_type')
+        throw new ComplianceTargetError('Compliance skill evidence target is invalid')
+      return {
+        owner: 'skill_type',
+        ownerId: owner.id,
+        matches: [{ sourceModule: 'skill_requirement', targetKey: 'skillTypeId' }],
       }
+    case 'cert_requirement':
       if (owner.entity !== 'course') {
         throw new ComplianceTargetError('Compliance certification evidence target is invalid')
       }

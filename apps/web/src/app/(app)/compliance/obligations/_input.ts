@@ -54,7 +54,6 @@ const obligationInputSchema = z
     trainingItemKind: z.enum(['course', 'assessment_type']).optional(),
     courseId: uuid.optional(),
     assessmentTypeId: uuid.optional(),
-    certItemKind: z.enum(['course', 'skill']).optional(),
     skillTypeId: uuid.optional(),
     formTemplateId: uuid.optional(),
     equipmentTypeId: uuid.optional(),

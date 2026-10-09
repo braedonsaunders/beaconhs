@@ -18,7 +18,10 @@ import {
   orgUnits,
   people,
 } from '@beaconhs/db/schema'
-import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
+import {
+  currentDocumentAcknowledgment,
+  materializeEvidenceTargetObligations,
+} from '@beaconhs/compliance'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import type { RequestContext } from '@beaconhs/tenant'
 import { assertCan, can } from '@beaconhs/tenant'
@@ -183,18 +186,13 @@ export async function acknowledgeDocument(input: unknown): Promise<Ok | Err> {
         .limit(1)
       if (!person) throw new AcknowledgmentError('Your person record is no longer active')
 
-      const [existing] = await tx
-        .select({ id: documentAcknowledgments.id })
-        .from(documentAcknowledgments)
-        .where(
-          and(
-            eq(documentAcknowledgments.tenantId, ctx.tenantId),
-            eq(documentAcknowledgments.documentId, documentId),
-            eq(documentAcknowledgments.versionId, versionId),
-            eq(documentAcknowledgments.personId, person.id),
-          ),
-        )
-        .limit(1)
+      const existing = await currentDocumentAcknowledgment(
+        tx,
+        ctx.tenantId,
+        documentId,
+        versionId,
+        person.id,
+      )
       if (existing) {
         // Throw so withStoredSignatureAttachment rolls back and removes a newly
         // uploaded signature instead of leaving an unattached object.
@@ -331,18 +329,13 @@ export async function addSignOffSigner(
           sessionId = session.id
         }
 
-        const [existing] = await tx
-          .select({ id: documentAcknowledgments.id })
-          .from(documentAcknowledgments)
-          .where(
-            and(
-              eq(documentAcknowledgments.tenantId, ctx.tenantId),
-              eq(documentAcknowledgments.documentId, documentId),
-              eq(documentAcknowledgments.versionId, versionId),
-              eq(documentAcknowledgments.personId, personId),
-            ),
-          )
-          .limit(1)
+        const existing = await currentDocumentAcknowledgment(
+          tx,
+          ctx.tenantId,
+          documentId,
+          versionId,
+          personId,
+        )
         const name = `${person.firstName} ${person.lastName}`.trim() || '(unnamed)'
         if (existing) {
           throw new AcknowledgmentError(`${name} already acknowledged this version`)

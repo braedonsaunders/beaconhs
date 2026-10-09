@@ -266,7 +266,11 @@ export default async function MyTrainingPage({
       eq(complianceStatus.tenantId, ctx.tenantId),
       eq(complianceStatus.personId, personId),
       inArray(complianceStatus.status, ['pending', 'in_progress', 'overdue', 'expiring']),
-      inArray(complianceObligations.sourceModule, ['training', 'cert_requirement']),
+      inArray(complianceObligations.sourceModule, [
+        'training',
+        'cert_requirement',
+        'skill_requirement',
+      ]),
       eq(complianceObligations.status, 'active'),
       isNull(complianceObligations.deletedAt),
     ) as SQL<unknown>
@@ -1002,7 +1006,9 @@ export default async function MyTrainingPage({
                             skillType?.name ??
                             (obligation.sourceModule === 'cert_requirement'
                               ? 'Certification requirement'
-                              : 'Training requirement')
+                              : obligation.sourceModule === 'skill_requirement'
+                                ? 'Skill requirement'
+                                : 'Training requirement')
                           return (
                             <TableRow key={status.id}>
                               <TableCell>

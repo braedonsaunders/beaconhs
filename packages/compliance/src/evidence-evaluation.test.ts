@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  resolveTrainingEvaluationWindow,
-  trainingEvidenceInWindow,
+  resolveEvidenceEvaluationWindow,
+  evidenceInWindow,
   trainingEvidenceOutcome,
-} from './training-evaluation'
+} from './evidence-evaluation'
 
 describe('training compliance evidence windows', () => {
   it('rejects an unexpired course record from a previous frequency period', () => {
@@ -13,15 +13,15 @@ describe('training compliance evidence windows', () => {
       cron: '0 8 * * 1',
     }
     const clock = { now: new Date('2026-07-15T14:00:00Z'), timezone: 'UTC' }
-    const window = resolveTrainingEvaluationWindow(
+    const window = resolveEvidenceEvaluationWindow(
       recurrence,
       clock,
       new Date('2026-01-01T00:00:00Z'),
     )
 
     expect(window.periodStart).toBe('2026-07-13')
-    expect(trainingEvidenceInWindow('2026-07-12', window)).toBe(false)
-    expect(trainingEvidenceInWindow('2026-07-13', window)).toBe(true)
+    expect(evidenceInWindow('2026-07-12', window)).toBe(false)
+    expect(evidenceInWindow('2026-07-13', window)).toBe(true)
     expect(
       trainingEvidenceOutcome({
         recurrence,
@@ -40,21 +40,21 @@ describe('training compliance evidence windows', () => {
       dueOffsetMinutes: 60,
     }
     const clock = { now: new Date('2026-07-15T10:00:00Z'), timezone: 'UTC' }
-    const window = resolveTrainingEvaluationWindow(
+    const window = resolveEvidenceEvaluationWindow(
       recurrence,
       clock,
       new Date('2026-01-01T00:00:00Z'),
     )
 
-    expect(trainingEvidenceInWindow(new Date('2026-07-15T06:59:59Z'), window)).toBe(false)
-    expect(trainingEvidenceInWindow(new Date('2026-07-15T07:00:00Z'), window)).toBe(true)
+    expect(evidenceInWindow(new Date('2026-07-15T06:59:59Z'), window)).toBe(false)
+    expect(evidenceInWindow(new Date('2026-07-15T07:00:00Z'), window)).toBe(true)
     expect(window.deadlinePassed).toBe(true)
   })
 
   it('does not start a cron period before the first eligible fire', () => {
     const recurrence = { kind: 'cron' as const, cron: '0 7 * * 1-5' }
     const clock = { now: new Date('2026-07-15T10:00:00Z'), timezone: 'UTC' }
-    const window = resolveTrainingEvaluationWindow(
+    const window = resolveEvidenceEvaluationWindow(
       recurrence,
       clock,
       new Date('2026-07-15T11:00:00Z'),
@@ -70,7 +70,7 @@ describe('training compliance evidence outcomes', () => {
 
   it('lets a valid historical credential satisfy a one-time requirement', () => {
     const recurrence = { kind: 'one_time' as const, dueOn: '2026-07-20' }
-    const window = resolveTrainingEvaluationWindow(
+    const window = resolveEvidenceEvaluationWindow(
       recurrence,
       clock,
       new Date('2026-07-15T09:00:00Z'),
@@ -88,7 +88,7 @@ describe('training compliance evidence outcomes', () => {
 
   it('marks credentials inside the configured expiry horizon as expiring', () => {
     const recurrence = { kind: 'expiry' as const, remindBeforeDays: 30 }
-    const window = resolveTrainingEvaluationWindow(
+    const window = resolveEvidenceEvaluationWindow(
       recurrence,
       clock,
       new Date('2026-01-01T00:00:00Z'),
@@ -106,7 +106,7 @@ describe('training compliance evidence outcomes', () => {
 
   it('keeps an expired credential overdue even when retraining has started', () => {
     const recurrence = { kind: 'expiry' as const, remindBeforeDays: 30 }
-    const window = resolveTrainingEvaluationWindow(
+    const window = resolveEvidenceEvaluationWindow(
       recurrence,
       clock,
       new Date('2026-01-01T00:00:00Z'),

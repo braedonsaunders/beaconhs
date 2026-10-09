@@ -76,7 +76,7 @@ export function RecurrencePicker({
 
         <GeneratedValue
           value={
-            value.kind === 'one_time' ? (
+            fields.oneTime && value.kind === 'one_time' ? (
               <div className="space-y-1.5">
                 <Label htmlFor="rec-due">
                   <GeneratedText id="m_18244bb4488b03" />
@@ -88,7 +88,7 @@ export function RecurrencePicker({
                   onChange={(e) => set({ dueOn: e.target.value || undefined })}
                 />
               </div>
-            ) : (
+            ) : fields.recurring ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="rec-freq">
@@ -194,7 +194,7 @@ export function RecurrencePicker({
                   }
                 />
               </div>
-            )
+            ) : null
           }
         />
 

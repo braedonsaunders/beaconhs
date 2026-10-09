@@ -49,7 +49,7 @@ async function materializeSkillEvidence(
     tx,
     tenantId,
     [...new Set(skillTypeIds.filter((id): id is string => Boolean(id)))].map((skillTypeId) => ({
-      sourceModule: 'cert_requirement' as const,
+      sourceModule: 'skill_requirement' as const,
       targetRef: { skillTypeId },
     })),
   )

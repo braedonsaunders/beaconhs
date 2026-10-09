@@ -21,7 +21,7 @@ describe('planComplianceTargetRetirement', () => {
     ['inspection_type', ['inspection'], 'inspectionTypeId'],
     ['document', ['document'], 'documentId'],
     ['assessment_type', ['training'], 'assessmentTypeId'],
-    ['skill_type', ['cert_requirement'], 'skillTypeId'],
+    ['skill_type', ['skill_requirement'], 'skillTypeId'],
     ['form_template', ['form'], 'formTemplateId'],
     ['equipment_type', ['equipment_inspection'], 'equipmentTypeId'],
     ['ppe_type', ['ppe_inspection'], 'ppeTypeId'],

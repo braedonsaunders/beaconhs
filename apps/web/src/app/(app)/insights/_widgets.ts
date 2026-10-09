@@ -828,7 +828,7 @@ export const BUILTIN_QUERIES: Record<
               {
                 field: 'obligation_id.source_module',
                 op: 'in',
-                value: ['training', 'cert_requirement'],
+                value: ['training', 'cert_requirement', 'skill_requirement'],
               },
             ],
           },

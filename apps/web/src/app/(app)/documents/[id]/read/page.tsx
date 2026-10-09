@@ -1,7 +1,8 @@
+import { currentDocumentAcknowledgment } from '@beaconhs/compliance'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { notFound } from 'next/navigation'
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
-import { documentAcknowledgments, documentVersions, documents } from '@beaconhs/db/schema'
+import { documentVersions, documents } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { isUuid } from '@/lib/list-params'
@@ -50,20 +51,13 @@ export default async function DocumentReadPage({ params }: { params: Promise<{ i
 
     const myAck =
       ctx.personId && publishedVersion
-        ? ((
-            await tx
-              .select({ acknowledgedAt: documentAcknowledgments.acknowledgedAt })
-              .from(documentAcknowledgments)
-              .where(
-                and(
-                  eq(documentAcknowledgments.documentId, id),
-                  eq(documentAcknowledgments.personId, ctx.personId),
-                  eq(documentAcknowledgments.versionId, publishedVersion.id),
-                ),
-              )
-              .orderBy(desc(documentAcknowledgments.acknowledgedAt))
-              .limit(1)
-          )[0] ?? null)
+        ? await currentDocumentAcknowledgment(
+            tx,
+            ctx.tenantId,
+            id,
+            publishedVersion.id,
+            ctx.personId,
+          )
         : null
 
     return { doc, publishedVersion: publishedVersion ?? null, myAck }

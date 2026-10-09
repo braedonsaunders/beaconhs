@@ -176,12 +176,12 @@ describe('evidence-target compliance materialization', () => {
     })
     expect(
       planComplianceEvidenceTarget({
-        sourceModule: 'cert_requirement',
+        sourceModule: 'skill_requirement',
         targetRef: { skillTypeId: TARGET_ID },
       }),
     ).toMatchObject({
       owner: 'skill_type',
-      matches: [{ sourceModule: 'cert_requirement', targetKey: 'skillTypeId' }],
+      matches: [{ sourceModule: 'skill_requirement', targetKey: 'skillTypeId' }],
     })
     expect(
       planComplianceEvidenceTarget({

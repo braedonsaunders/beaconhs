@@ -78,7 +78,7 @@ describe('training compliance evidence lifecycle', () => {
       '// ---------------------------------------------------------------------------\n// Files',
     )
 
-    expect(skillActions).toContain("sourceModule: 'cert_requirement' as const")
+    expect(skillActions).toContain("sourceModule: 'skill_requirement' as const")
     expect(skillActions).toContain('targetRef: { skillTypeId }')
     expect(update).toContain('assignment.skillTypeId')
     expect(update).toContain(

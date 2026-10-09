@@ -6,7 +6,7 @@ import {
   resolveFrequencyWindow,
 } from './schedule'
 
-type TrainingEvaluationWindow = {
+type EvidenceEvaluationWindow = {
   kind: ComplianceRecurrence['kind']
   evidenceStartAt: Date | null
   evidenceEndAt: Date | null
@@ -22,6 +22,7 @@ type TrainingEvaluationWindow = {
 export type TrainingEvidence = {
   completedOn: string
   expiresOn: string | null
+  expired?: boolean
 }
 
 type TrainingEvidenceOutcome = {
@@ -31,18 +32,18 @@ type TrainingEvidenceOutcome = {
 }
 
 /**
- * Resolve the evidence boundary for a training requirement.
+ * Resolve the evidence boundary for a scheduled completion requirement.
  *
  * One-time and expiry requirements intentionally accept an existing credential:
  * assigning a course does not make a still-valid certificate disappear. A
  * recurring requirement is different — only evidence from its active schedule
  * interval may satisfy it.
  */
-export function resolveTrainingEvaluationWindow(
+export function resolveEvidenceEvaluationWindow(
   recurrence: ComplianceRecurrence,
   clock: ComplianceClock,
   activeFrom: Date,
-): TrainingEvaluationWindow {
+): EvidenceEvaluationWindow {
   if (recurrence.kind === 'one_time' || recurrence.kind === 'expiry') {
     const today = complianceDate(clock)
     const dueOn = recurrence.kind === 'one_time' ? (recurrence.dueOn ?? null) : null
@@ -100,14 +101,11 @@ export function resolveTrainingEvaluationWindow(
     }
   }
 
-  throw new Error(`Training obligations do not support ${recurrence.kind} recurrence`)
+  throw new Error(`Completion obligations do not support ${recurrence.kind} recurrence`)
 }
 
 /** True when a completion/start belongs to the active recurring interval. */
-export function trainingEvidenceInWindow(
-  value: string | Date,
-  window: TrainingEvaluationWindow,
-): boolean {
+export function evidenceInWindow(value: string | Date, window: EvidenceEvaluationWindow): boolean {
   if (!window.evidenceStartAt || !window.evidenceEndAt) return true
   if (value instanceof Date) {
     const time = value.getTime()
@@ -125,7 +123,7 @@ export function trainingEvidenceInWindow(
  */
 export function trainingEvidenceOutcome(args: {
   recurrence: ComplianceRecurrence
-  window: TrainingEvaluationWindow
+  window: EvidenceEvaluationWindow
   today: string
   evidence: TrainingEvidence | null
   hasProgress: boolean
@@ -141,6 +139,7 @@ export function trainingEvidenceOutcome(args: {
       }
     }
     const dueOn = evidence.expiresOn
+    if (evidence.expired) return { status: 'overdue', dueOn, completedOn: null }
     if (!dueOn) return { status: 'completed', dueOn: null, completedOn: evidence.completedOn }
     if (dueOn < today) return { status: 'overdue', dueOn, completedOn: null }
 
@@ -154,7 +153,8 @@ export function trainingEvidenceOutcome(args: {
     }
   }
 
-  const currentEvidence = evidence && (!evidence.expiresOn || evidence.expiresOn >= today)
+  const currentEvidence =
+    evidence && !evidence.expired && (!evidence.expiresOn || evidence.expiresOn >= today)
   if (currentEvidence) {
     return {
       status: 'completed',

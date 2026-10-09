@@ -1,3 +1,4 @@
+import { currentDocumentAcknowledgment } from '@beaconhs/compliance'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -657,20 +658,13 @@ export default async function DocumentDetailPage({
     const publishedVersion = publishedVersions[0] ?? null
     const myAck =
       currentPerson && publishedVersion
-        ? ((
-            await tx
-              .select({ acknowledgedAt: documentAcknowledgments.acknowledgedAt })
-              .from(documentAcknowledgments)
-              .where(
-                and(
-                  eq(documentAcknowledgments.documentId, id),
-                  eq(documentAcknowledgments.personId, currentPerson.id),
-                  eq(documentAcknowledgments.versionId, publishedVersion.id),
-                ),
-              )
-              .orderBy(desc(documentAcknowledgments.acknowledgedAt))
-              .limit(1)
-          )[0] ?? null)
+        ? await currentDocumentAcknowledgment(
+            tx,
+            ctx.tenantId,
+            id,
+            publishedVersion.id,
+            currentPerson.id,
+          )
         : null
 
     return {
