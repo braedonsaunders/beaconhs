@@ -3,16 +3,14 @@ import { readProductionCutoverSection } from './test/read-production-cutover-sec
 import { REPORT_VIEWS_SQL } from './views'
 
 describe('reporting view cutover', () => {
-  it('appends skill report columns after the installed view shape', () => {
+  it('exposes tenant additional fields without industry-specific projection columns', () => {
     const skills = REPORT_VIEWS_SQL.find((statement) =>
       statement.includes('CREATE OR REPLACE VIEW report_skill_assignments'),
     )
-    expect(skills).toBeDefined()
-
-    const installedTailAt = skills?.indexOf('END AS status') ?? -1
-    const appendedColumnsAt = skills?.indexOf('AS cwb_standard') ?? -1
-    expect(installedTailAt).toBeGreaterThan(-1)
-    expect(appendedColumnsAt).toBeGreaterThan(installedTailAt)
+    expect(skills).toContain('AS additional_fields')
+    expect(skills).toContain("definition.value_mode = 'type'")
+    expect(skills).toContain('answer.skill_assignment_id = a.id')
+    expect(skills).not.toMatch(/cwb|shop_field_layoff/i)
   })
 
   it('reads equipment categories from each asset rather than its type', () => {

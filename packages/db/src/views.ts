@@ -4,20 +4,46 @@
 // RLS policies. RLS still applies: the views read the FORCE-RLS base tables,
 // so rows are tenant-scoped by the app.tenant_id GUC exactly as usual.
 
+/** Resolve the same type/authority defaults and employee answers as the ticket UI. */
+function skillAdditionalFields(
+  tenant: string,
+  type: string,
+  authority: string,
+  assignment: string,
+): string {
+  return `(SELECT coalesce(jsonb_object_agg(field_key, field_value), '{}'::jsonb) FROM (
+    SELECT DISTINCT ON (field_key) field_key, field_value FROM (
+      SELECT lower(definition.field_key) AS field_key,
+        CASE WHEN definition.value_mode = 'type' THEN definition.field_value ELSE answer.field_value END AS field_value,
+        CASE WHEN definition.skill_type_id IS NOT NULL THEN 0 ELSE 1 END AS priority, definition.id
+      FROM training_extra_fields definition
+      LEFT JOIN training_extra_fields answer ON answer.tenant_id = definition.tenant_id
+        AND answer.skill_assignment_id = ${assignment} AND lower(answer.field_key) = lower(definition.field_key)
+      WHERE definition.tenant_id = ${tenant}
+        AND (definition.skill_type_id = ${type} OR definition.authority_id = ${authority})
+      UNION ALL
+      SELECT lower(answer.field_key), answer.field_value, 2, answer.id FROM training_extra_fields answer
+      WHERE answer.tenant_id = ${tenant} AND answer.skill_assignment_id = ${assignment}
+    ) candidates ORDER BY field_key, priority, id
+  ) fields)`
+}
+
 export const REPORT_VIEWS_SQL: string[] = [
   // report_equipment_fleet shed its financial columns and report_equipment_charges
   // was removed entirely (equipment financials moved to a separate financial system).
   // CREATE OR REPLACE can neither shrink a view's column set nor drop a removed
-  // view, so drop both up front every migrate (idempotent); the operational fleet view
-  // is recreated further down.
-  `DROP VIEW IF EXISTS report_equipment_charges;
+  // view. Drop changed projections in dependency order, then recreate them below.
+  // Skills now expose generic additional-field JSON instead of industry columns.
+  `DROP VIEW IF EXISTS report_skill_coverage;
+   DROP VIEW IF EXISTS report_skill_assignments;
+   DROP VIEW IF EXISTS report_equipment_charges;
    DROP VIEW IF EXISTS report_vehicle_log_monthly;
    DROP VIEW IF EXISTS report_vehicle_log_entries;
    DROP VIEW IF EXISTS report_equipment_fleet`,
 
-  // Externally-issued skills & certifications per person (the shape the old
-  // hardcoded CWB welder report produced — now any tenant user can build /
-  // clone reports over it).
+  // One current externally-issued qualification per employee and skill type.
+  // Tenant additional fields are discovered by the report catalogue, never
+  // promoted to industry-specific columns in this shared projection.
   `CREATE OR REPLACE VIEW report_skill_assignments AS
    SELECT
      a.id,
@@ -38,28 +64,7 @@ export const REPORT_VIEWS_SQL: string[] = [
        WHEN a.expires_on < CURRENT_DATE THEN 'expired'
        WHEN a.expires_on <= CURRENT_DATE + 90 THEN 'expiring'
        ELSE 'valid'
-     END AS status,
-     -- New columns must stay appended: PostgreSQL only permits CREATE OR REPLACE
-     -- VIEW to add columns after the installed view's existing column sequence.
-     (SELECT ef.field_value
-        FROM training_extra_fields ef
-       WHERE ef.tenant_id = a.tenant_id
-         AND ef.skill_type_id = t.id
-         AND lower(ef.field_key) = 'standard'
-       ORDER BY ef.sort_order, ef.id
-       LIMIT 1) AS cwb_standard,
-     (SELECT ef.field_value FROM training_extra_fields ef
-       WHERE ef.tenant_id = a.tenant_id AND ef.skill_type_id = t.id
-         AND lower(ef.field_key) = 'type' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_type,
-     (SELECT ef.field_value FROM training_extra_fields ef
-       WHERE ef.tenant_id = a.tenant_id AND ef.skill_type_id = t.id
-         AND lower(ef.field_key) = 'process' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_process,
-     (SELECT ef.field_value FROM training_extra_fields ef
-       WHERE ef.tenant_id = a.tenant_id AND ef.skill_assignment_id = a.id
-         AND lower(ef.field_key) = 'position' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_position,
-     (SELECT ef.field_value FROM training_extra_fields ef
-       WHERE ef.tenant_id = a.tenant_id AND ef.skill_assignment_id = a.id
-         AND lower(ef.field_key) = 'level (w47.2 only)' ORDER BY ef.sort_order, ef.id LIMIT 1) AS cwb_level
+     END AS status
      ,p.id AS person_id
      ,p.department_id AS department_id
      ,coalesce(
@@ -87,7 +92,8 @@ export const REPORT_VIEWS_SQL: string[] = [
      ,au.code AS authority_code
      ,p.status AS person_status
      ,(p.first_name || ' ' || p.last_name) AS person_name
-     ,CASE WHEN p.status <> 'active' THEN 'L' WHEN EXISTS (SELECT 1 FROM departments d WHERE d.id = p.department_id AND (lower(d.code) = 's' OR lower(d.name) = 'shop')) THEN 'S' ELSE 'F' END AS shop_field_layoff
+     ,(SELECT d.code FROM departments d WHERE d.id = p.department_id AND d.tenant_id = p.tenant_id) AS department_code
+     ,${skillAdditionalFields('a.tenant_id', 't.id', 'au.id', 'a.id')} AS additional_fields
    FROM (
      SELECT DISTINCT ON (tenant_id, person_id, skill_type_id) *
      FROM training_skill_assignments
@@ -97,9 +103,9 @@ export const REPORT_VIEWS_SQL: string[] = [
        CASE WHEN status = 'complete' THEN coalesce(expires_on, DATE '9999-12-31') END DESC NULLS LAST,
        granted_on DESC, created_at DESC, id DESC
    ) a
-   JOIN training_skill_types t ON t.id = a.skill_type_id
-   JOIN training_skill_authorities au ON au.id = t.authority_id
-   JOIN people p ON p.id = a.person_id
+   JOIN training_skill_types t ON t.id = a.skill_type_id AND t.tenant_id = a.tenant_id
+   JOIN training_skill_authorities au ON au.id = t.authority_id AND au.tenant_id = t.tenant_id
+   JOIN people p ON p.id = a.person_id AND p.tenant_id = a.tenant_id
    LEFT JOIN trades tr ON tr.id = p.trade_id
    WHERE a.deleted_at IS NULL
      AND p.deleted_at IS NULL AND t.deleted_at IS NULL`,
@@ -119,7 +125,8 @@ export const REPORT_VIEWS_SQL: string[] = [
        ON co.id = cs.obligation_id AND co.tenant_id = cs.tenant_id
        WHERE cs.tenant_id = p.tenant_id AND cs.person_id = p.id
          AND co.source_module = 'cert_requirement' AND co.target_ref->>'skillTypeId' = t.id::text
-         AND co.status = 'active' AND co.deleted_at IS NULL) AS is_required
+         AND co.status = 'active' AND co.deleted_at IS NULL) AS is_required,
+     ${skillAdditionalFields('p.tenant_id', 't.id', 'au.id', 'a.id')} AS additional_fields
    FROM people p JOIN training_skill_types t ON t.tenant_id = p.tenant_id
    JOIN training_skill_authorities au ON au.id = t.authority_id AND au.tenant_id = t.tenant_id
    LEFT JOIN report_skill_assignments a ON a.person_id = p.id AND a.skill_type_id = t.id AND a.tenant_id = p.tenant_id

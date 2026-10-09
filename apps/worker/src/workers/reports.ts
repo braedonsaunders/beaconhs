@@ -136,6 +136,7 @@ export async function processReportRun(job: Job<ReportRunJobData>): Promise<void
         )
         const result = await runBeaconReport(tx, tenantId, snapshot.definition.query, catalog, {
           maxRows: 10_000,
+          layout: snapshot.definition.layout,
           runtimeFilters: normalizeReportRuntimeFilters(snapshot.filters),
         })
         return { result, locale, requestCtx }

@@ -594,40 +594,6 @@ export const BEACON_REPORT_SEEDS: BeaconReportSeed[] = [
     ),
   ),
   seed(
-    'skills_cwb',
-    'Skills — CWB (Welding)',
-    'Canadian Welding Bureau qualification roster.',
-    'training',
-    rows(
-      'skill_assignments',
-      [
-        'person_name',
-        'cwb_type',
-        'cwb_process',
-        'cwb_position',
-        'cwb_level',
-        'expires_on',
-        'authority_code',
-        'shop_field_layoff',
-      ],
-      {
-        filters: {
-          combinator: 'and',
-          rules: [
-            { field: 'authority_code', op: 'eq', value: 'CWB' },
-            { field: 'outcome', op: 'eq', value: 'complete' },
-          ],
-        },
-        groupBy: 'cwb_standard',
-        sorts: [
-          { column: 'last_name', direction: 'asc' },
-          { column: 'first_name', direction: 'asc' },
-        ],
-      },
-    ),
-    { density: 'compact', showSummary: true },
-  ),
-  seed(
     'corrective_actions_list',
     'Corrective Actions — List',
     'Every corrective action grouped by status and sorted by due date.',

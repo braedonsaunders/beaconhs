@@ -118,13 +118,15 @@ On the type, select which **Cards and certificates to generate**. Set **View ope
 
 **Holders** shows one current ticket per employee and puts valid qualifications first. Search, filter, and use **Next** or **Prev** to move through all results. **People → Skills** follows the same rule: an older expired ticket is hidden when a replacement exists. Select the title or **View** there to open the employee's skill record.
 
-Define **Additional fields** once on the authority or skill type. Blank definitions become ready-to-fill inputs on each employee's ticket. A filled type value is fixed for that type, such as CWB Standard or Process. Employees' saved answers stay on their own records. There is no **Add field** button on an employee's skill record.
+Define **Additional fields** once on the authority or skill type. Blank definitions become ready-to-fill inputs on each employee's ticket. A filled type value is fixed for that type, such as a licence class or qualification process. Employees' saved answers stay on their own records. There is no **Add field** button on an employee's skill record.
 
 On each ticket, **Person** and **Skill / certification** share one row. Select **Status**: **Complete**, **Expired**, **Tested**, **Recommended**, or **Failed**. **Draft** is for unfinished entries. Only **Complete** tickets count as qualifications; their expiry determines whether they are valid, expiring or expired. **Files** shows PDF and image previews. Search and paginate to find an attachment; training certificates use the same previews.
 
 In **Insights**, open **Training — Skills Matrix** for employee-by-skill coverage. **Reports → Skills — Missing** shows required skills that are missing, expired or expiring. Skill reports use one current ticket per employee and skill, and do not mix course certificates into skill obligations. Green means valid, orange means expiring, red means missing or expired. Group by skill, employee, department or people group.
 
-**Skills — CWB (Welding)** follows the CWB Form 108E roster: one current Complete ticket per employee and type, grouped by Standard, with company code, employee count, month, year, Type, Process, Position, Level, Expiry, Authority, Shop/Field/Layoff and the supervisor signature line. Managers can edit the authority's **Account number**. PDF, preview and scheduled deliveries use the same report.
+Skill reports offer your tenant’s **Additional fields** as columns, filters and grouping choices. Fixed values come from the skill type. Employee inputs come from each ticket. Type definitions take precedence over authority definitions with the same name. Fields from other tenants are never offered.
+
+A saved tenant report can include its own headings, qualification key, company code and signature line. Company name and address come from your tenant settings. A company code stored as a fixed **Additional field** can be edited on the skill type. Preview, PDF and scheduled deliveries use the same saved report content.
 
 When you edit a worker's held skill, **Person** and **Skill / certification** search the complete active tenant directory and skill catalogue. The currently saved value stays visible while you review an older record, even if that value is no longer active. If the picker says more results exist, add more of the name, employee number, code, or authority to the search.
 

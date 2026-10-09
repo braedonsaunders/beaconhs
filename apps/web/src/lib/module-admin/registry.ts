@@ -532,7 +532,7 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
       { key: 'classes', label: 'Classes', href: '/training/classes' },
       { key: 'assessments', label: 'Assessments', href: '/training/assessments' },
       // No Reports tab — training reporting lives in the global /reports
-      // builder (incl. the seeded "CWB welder roster" custom definition). The
+      // builder (including saved tenant qualification rosters). The
       // coverage matrix lives in Insights (seeded "Training — Certificate
       // Matrix" card). Library and Card studio live under Manage below.
       // Per-person training history lives on each person's page (/people/[id]).

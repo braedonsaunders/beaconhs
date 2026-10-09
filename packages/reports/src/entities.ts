@@ -105,7 +105,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     label: 'Skills & certifications',
     category: 'training',
     description:
-      'Externally-issued skills and certifications per person — authority, code, granted and expiry dates (e.g. CWB welder rosters).',
+      'Externally-issued skills and certifications per person — authority, code, granted and expiry dates.',
     // Join-baked view (packages/db/src/views.ts) — RLS flows through from base tables.
     table: 'report_skill_assignments',
     columns: [
@@ -116,17 +116,13 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'authority', label: 'Authority', kind: 'text' },
       { key: 'certification_code', label: 'Certification code', kind: 'text' },
       { key: 'certification_name', label: 'Certification name', kind: 'text' },
-      { key: 'cwb_standard', label: 'CWB standard', kind: 'text' },
-      { key: 'cwb_type', label: 'Type', kind: 'text' },
-      { key: 'cwb_process', label: 'Process', kind: 'text' },
-      { key: 'cwb_position', label: 'Position', kind: 'text' },
-      { key: 'cwb_level', label: 'Level', kind: 'text' },
       { key: 'granted_on', label: 'Granted on', kind: 'date' },
       { key: 'expires_on', label: 'Expires on', kind: 'date' },
       { key: 'status', label: 'Status', kind: 'enum' },
       { key: 'person_id', label: 'Person (id)', kind: 'uuid' },
       { key: 'department_id', label: 'Department', kind: 'uuid' },
       { key: 'department_name', label: 'Department name', kind: 'text' },
+      { key: 'department_code', label: 'Department code', kind: 'text' },
       {
         key: 'group_id_list',
         label: 'Person group',
@@ -139,7 +135,6 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'authority_code', label: 'Qualifying authority', kind: 'text' },
       { key: 'person_status', label: 'Employment status', kind: 'enum' },
       { key: 'person_name', label: 'First and last name', kind: 'text' },
-      { key: 'shop_field_layoff', label: 'Shop (S) / Field (F) / Layoff (L)', kind: 'enum' },
     ],
     defaultSort: { column: 'expires_on', direction: 'asc' },
   },

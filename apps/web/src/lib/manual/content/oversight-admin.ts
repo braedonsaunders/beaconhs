@@ -248,7 +248,7 @@ Coverage is colour-coded: **expired** and **missing** read red, **expiring** amb
 
 In **Training — Missing**, the **Coverage** column shows **booked** in blue when an employee with missing or expired training has a seat on an upcoming class for that course. **Booked for** shows the class date. A cancelled, completed, or past class does not count as booked. Filter on **Booked** to find employees with or without an upcoming class. A booking does not make a certificate valid or satisfy a training requirement; the employee must complete the course.
 
-The seeded catalogue replaces the former Beacon reports for training certificates, missing and expired training, skill matrices, missing and expired skills, CWB qualifications, corrective actions, PPE, compliance by entity, compliance by person, Hazard ID signatures, equipment fleet, equipment inspections, and equipment oil changes. The old training matrix is the live **Training — Certificate Matrix** card in Insights, so it is not duplicated in Reports. Equipment charges and ROI are intentionally excluded.
+The seeded catalogue replaces the former Beacon reports for training certificates, missing and expired training, missing and expired skills, corrective actions, PPE, compliance by entity, compliance by person, Hazard ID signatures, equipment fleet, equipment inspections, and equipment oil changes. Employee-by-qualification matrices are the live **Training — Certificate Matrix** and **Training — Skills Matrix** cards in Insights. They are not duplicated in Reports. Company-specific qualification rosters use tenant additional fields and saved report content; they are not global default reports. Equipment charges and ROI are intentionally excluded.
 
 ## Export a report
 

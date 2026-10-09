@@ -12,7 +12,6 @@ const LEGACY_REPORT_REPLACEMENTS = [
   'training_missing',
   'skills_expired_upcoming',
   'skills_missing',
-  'skills_cwb',
   'ppe_list',
   'ppe_expired_upcoming',
   'compliance_by_entity',
@@ -41,7 +40,7 @@ describe('Beacon AppKit report catalogue', () => {
   it('contains every intended legacy replacement exactly once', () => {
     const keys = new Set(EXPECTED_BEACON_REPORT_SEED_KEYS)
     expect(EXPECTED_BEACON_REPORT_SEED_KEYS).toHaveLength(keys.size)
-    expect(BEACON_REPORT_SEEDS).toHaveLength(31)
+    expect(BEACON_REPORT_SEEDS).toHaveLength(30)
     for (const key of LEGACY_REPORT_REPLACEMENTS) expect(keys.has(key)).toBe(true)
   })
 

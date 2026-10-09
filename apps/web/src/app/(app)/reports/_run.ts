@@ -31,7 +31,7 @@ export async function runReportForViewer(
           ...(options.groupBy === undefined ? {} : { groupBy: options.groupBy }),
         },
         catalog,
-        { maxRows: options.maxRows ?? DOCUMENT_PREVIEW_MAX_ROWS },
+        { maxRows: options.maxRows ?? DOCUMENT_PREVIEW_MAX_ROWS, layout: definition.layout },
       )
     })
     return { result, error: null }

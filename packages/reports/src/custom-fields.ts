@@ -1,3 +1,4 @@
+import { loadSkillAdditionalReportColumns } from './skill-additional-columns'
 import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
@@ -86,7 +87,7 @@ export async function loadBeaconCustomReportColumns(
   table: string,
 ): Promise<ReportEntityColumn[]> {
   const kind = TABLE_TO_KIND[table]
-  if (!kind) return []
+  if (!kind) return loadSkillAdditionalReportColumns(tx, table)
   const definitions: CustomReportFieldDefinition[] = await tx
     .select({
       key: customFieldDefinitions.key,
@@ -331,10 +332,6 @@ export async function loadBeaconReportCatalog(
     [
       'skill_coverage.authority',
       authorityRows.map((row) => ({ value: row.label, label: row.label })),
-    ],
-    [
-      'skill_assignments.cwb_standard',
-      ['W47.1', 'W47.2', 'W186'].map((value) => ({ value, label: value })),
     ],
     [
       'skill_assignments.last_name',

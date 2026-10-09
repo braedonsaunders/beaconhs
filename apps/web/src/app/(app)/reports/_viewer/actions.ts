@@ -39,7 +39,7 @@ export async function runReportWithControls(
           groupBy: controls.groupBy,
         },
         catalog,
-        { maxRows: 500 },
+        { maxRows: 500, layout: definition.layout },
       )
     })
     return { ok: true, result }

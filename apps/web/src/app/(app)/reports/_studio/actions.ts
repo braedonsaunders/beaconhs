@@ -12,7 +12,11 @@ import {
   type ReportEntityCatalog,
   type ReportRunResult,
 } from '@beaconhs/reports'
-import { runBeaconReport } from '@beaconhs/reports/server'
+import {
+  reportPresentationFromLayout,
+  validateReportPresentation,
+  runBeaconReport,
+} from '@beaconhs/reports/server'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
@@ -30,6 +34,7 @@ export async function previewReportDefinition(
     validateDefinition(definition, ctx.tenantId!, catalog)
     return runBeaconReport(tx, ctx.tenantId!, definition.query, catalog, {
       maxRows: 500,
+      layout: definition.layout,
     })
   })
 }
@@ -193,5 +198,10 @@ function validateDefinition(
   catalog: ReportEntityCatalog,
 ): void {
   assertCustomReportDefinition(definition)
+  validateReportPresentation(
+    reportPresentationFromLayout(definition.layout),
+    definition.query,
+    catalog,
+  )
   compileCustomReport(definition.query, tenantId, catalog, { maxRows: 1 })
 }

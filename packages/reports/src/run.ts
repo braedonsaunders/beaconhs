@@ -1,6 +1,11 @@
+import { reportCountProjection, extractReportCounts } from './presentation-counts'
 import { eq } from 'drizzle-orm'
-import { tenants, trainingSkillAuthorities } from '@beaconhs/db/schema'
-import { cwbRosterResult, isCwbRoster } from './cwb-roster'
+import { tenants } from '@beaconhs/db/schema'
+import {
+  presentReportResult,
+  reportPresentationFromLayout,
+  validateReportPresentation,
+} from './presentation'
 import { executeParameterizedRows, type Database } from '@beaconhs/db'
 import { withDomainCellTones } from './cell-tones'
 import {
@@ -14,6 +19,7 @@ import {
 
 export type BeaconReportRunOptions = {
   maxRows?: number
+  layout?: unknown
   fiscalStartMonth?: number
   runtimeFilters?: ReportRuleGroup | null
 }
@@ -55,27 +61,38 @@ export async function runBeaconReport(
   options: BeaconReportRunOptions = {},
 ): Promise<ReportRunResult> {
   const filters = mergeFilters(query.filters ?? null, options.runtimeFilters ?? null)
-  const compiled = compileCustomReport({ ...query, filters }, tenantId, catalog, options)
+  const presentation = reportPresentationFromLayout(options.layout)
+  validateReportPresentation(presentation, query, catalog)
+  const { compiled, fields } = reportCountProjection(
+    compileCustomReport({ ...query, filters }, tenantId, catalog, options),
+    query.entity,
+    catalog,
+    presentation,
+  )
   const startedAt = performance.now()
   const rows = await executeParameterizedRows(tx, compiled.sql, compiled.params)
   let result = customReportResult(compiled, [...rows], performance.now() - startedAt)
-  if (isCwbRoster(query)) {
+  if (presentation) {
+    const extracted = extractReportCounts(result, fields)
+    result = extracted.result
     const [tenant] = await tx
       .select({ name: tenants.name, settings: tenants.settings })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1)
-    const [authority] = await tx
-      .select({ accountNumber: trainingSkillAuthorities.accountNumber })
-      .from(trainingSkillAuthorities)
-      .where(eq(trainingSkillAuthorities.code, 'CWB'))
-      .limit(1)
-    const settings = tenant?.settings ?? {}
-    result = cwbRosterResult(result, {
-      name: typeof settings.companyName === 'string' ? settings.companyName : (tenant?.name ?? ''),
-      address: typeof settings.companyAddress === 'string' ? settings.companyAddress : '',
-      accountNumber: authority?.accountNumber ?? '',
-    })
+    if (!tenant) throw new Error('Report tenant not found.')
+    const settings = tenant.settings ?? {}
+    result = presentReportResult(
+      result,
+      presentation,
+      {
+        name: tenant.name,
+        companyName: typeof settings.companyName === 'string' ? settings.companyName : tenant.name,
+        companyAddress: typeof settings.companyAddress === 'string' ? settings.companyAddress : '',
+      },
+      new Date(),
+      extracted.counts,
+    )
   }
   return withDomainCellTones(result)
 }
