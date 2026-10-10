@@ -28,15 +28,19 @@ export function EquipmentTelemetryMap({
   large = false,
   compact = false,
   footer,
+  embedded = false,
 }: {
   points: EquipmentMapPoint[]
   large?: boolean
   compact?: boolean
   footer?: ReactNode
+  /** Fill a resizable dashboard cell without page-sized expansion controls. */
+  embedded?: boolean
 }) {
   const t = useGeneratedValueTranslations()
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<LeafletMap | null>(null)
+  const viewport = useRef<{ pointIds: string; center: [number, number]; zoom: number } | null>(null)
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(false)
@@ -52,6 +56,8 @@ export function EquipmentTelemetryMap({
       if (disposed || !container.current) return
       setLoading(true)
       setError(false)
+      const pointIds = points.map((point) => point.id).join('|')
+      let positioned = false
       const map = L.map(container.current, {
         scrollWheelZoom: false,
         maxZoom: 18,
@@ -63,6 +69,10 @@ export function EquipmentTelemetryMap({
       })
       mapRef.current = map
       remove = () => {
+        if (positioned) {
+          const center = map.getCenter()
+          viewport.current = { pointIds, center: [center.lat, center.lng], zoom: map.getZoom() }
+        }
         map.remove()
         mapRef.current = null
       }
@@ -159,8 +169,11 @@ export function EquipmentTelemetryMap({
           }
         }
       }
-      if (coordinates.length) map.fitBounds(coordinates, { padding: [48, 48], maxZoom: 15 })
+      const previous = viewport.current
+      if (previous?.pointIds === pointIds) map.setView(previous.center, previous.zoom)
+      else if (coordinates.length) map.fitBounds(coordinates, { padding: [48, 48], maxZoom: 15 })
       else map.setView([0, 0], 2)
+      positioned = true
       renderMarkers()
       map.on('zoomend', renderMarkers)
       const observer = new ResizeObserver(() => map.invalidateSize())
@@ -186,44 +199,58 @@ export function EquipmentTelemetryMap({
     }
   }, [points, t])
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <MapPin size={16} className="text-teal-600" />
-          <GeneratedValue value={compact ? 'Tracker location' : 'Equipment map'} />
-          <span className="font-normal text-slate-500">
-            · {points.length}{' '}
-            <GeneratedValue value={points.length === 1 ? 'position' : 'positions'} />
-          </span>
+    <div
+      className={`${embedded ? 'flex h-full min-h-0 flex-col' : ''} overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900`}
+    >
+      {!embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <MapPin size={16} className="text-teal-600" />
+            <GeneratedValue value={compact ? 'Tracker location' : 'Equipment map'} />
+            <span className="font-normal text-slate-500">
+              · {points.length}{' '}
+              <GeneratedValue value={points.length === 1 ? 'position' : 'positions'} />
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={fit}
+              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <LocateFixed size={15} />
+              <GeneratedValue value={'Fit view'} />
+            </button>
+            <button
+              type="button"
+              aria-pressed={expanded}
+              onClick={() => setExpanded((value) => !value)}
+              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {expanded ? <Minimize size={15} /> : <Expand size={15} />}
+              <GeneratedValue value={expanded ? 'Compact' : 'Expand'} />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={fit}
-            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            <LocateFixed size={15} />
-            <GeneratedValue value={'Fit view'} />
-          </button>
-          <button
-            type="button"
-            aria-pressed={expanded}
-            onClick={() => setExpanded((value) => !value)}
-            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            {expanded ? <Minimize size={15} /> : <Expand size={15} />}
-            <GeneratedValue value={expanded ? 'Compact' : 'Expand'} />
-          </button>
-        </div>
-      </div>
+      ) : null}
       <div
-        className={`relative ${expanded ? 'h-[80vh]' : large ? 'h-[62vh] min-h-[420px]' : 'h-[380px] max-h-[50vh] min-h-[280px]'}`}
+        className={`relative ${embedded ? 'min-h-64 flex-1' : expanded ? 'h-[80vh]' : large ? 'h-[62vh] min-h-[420px]' : 'h-[380px] max-h-[50vh] min-h-[280px]'}`}
       >
         <div
           ref={container}
           aria-label={t('Equipment tracker locations')}
-          className="relative z-0 h-full bg-slate-100 dark:bg-slate-800"
+          className={`${embedded ? 'absolute inset-0' : 'relative h-full'} z-0 bg-slate-100 dark:bg-slate-800`}
         />
+        {embedded ? (
+          <button
+            type="button"
+            onClick={fit}
+            className="absolute top-3 right-3 z-[400] flex items-center gap-1.5 rounded-lg bg-white/95 px-2 py-1.5 text-xs text-slate-700 shadow dark:bg-slate-900/95 dark:text-slate-200"
+          >
+            <LocateFixed size={15} />
+            <GeneratedValue value="Fit view" />
+          </button>
+        ) : null}
         {loading ? (
           <div
             role="status"

@@ -16,6 +16,7 @@ function context(result: ExecuteResult): RequestContext {
 }
 
 const signalRow = {
+  stable_key: 'document-1',
   module: 'documents',
   family: 'Review due',
   subject: 'Emergency response plan',
@@ -41,6 +42,7 @@ describe('listDueSignals', () => {
     expect(result).toEqual({
       rows: [
         {
+          key: 'documents:document-1',
           module: 'documents',
           family: 'Review due',
           subject: 'Emergency response plan',

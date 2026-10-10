@@ -19,7 +19,12 @@ export async function generateMetadata() {
 }
 export const dynamic = 'force-dynamic'
 
-export default async function CustomiseDashboardPage() {
+export default async function CustomiseDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
   const ctx = await requireRequestContext()
   const { layout, role } = await loadDashboardLayout(ctx)
   // Same security gate as view mode (dashboard/page.tsx): drop org widgets the
@@ -35,6 +40,7 @@ export default async function CustomiseDashboardPage() {
   const allowedWidgetIds = Object.keys(WIDGETS).filter((id) => canSeeWidget(ctx, id))
   const { nodes, libraryCards } = await loadDashboardEditCanvas(ctx, visibleLayout, {
     includeLibraryCards: canViewInsights(ctx),
+    searchParams: sp,
     allowedWidgetIds: new Set(allowedWidgetIds),
   })
 

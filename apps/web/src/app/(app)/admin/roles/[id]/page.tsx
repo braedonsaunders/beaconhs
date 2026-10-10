@@ -196,6 +196,9 @@ export default async function AdminRoleEditPage({
     active === 'dashboard'
       ? await loadDashboardEditCanvas(ctx, dashboardLayout, {
           includeLibraryCards: roleCanViewInsights,
+          allowedWidgetIds: new Set(allowedWidgetIds),
+          searchParams: sp,
+          basePath: `/admin/roles/${id}`,
           filterLibraryCard: (card) =>
             card.status === 'published' &&
             (roleCanSeeAllPublishedInsights ||

@@ -413,7 +413,7 @@ An obligation is a rule like "everyone in the Field department completes fall pr
 
 ## Where to find it
 
-Open [Compliance](/compliance) from the sidebar. The tabs are **Overview**, **Obligations**, **By person**, **Aging**, **Due & expiring**, and **Mine**. Use the **Skills** module filter in **Due & expiring** to review current skill tickets nearing expiry. Replaced tickets do not appear.
+Open [Compliance](/compliance) from the sidebar. The tabs are **Overview**, **Obligations**, **By person**, **Aging**, **Due & expiring**, and **Mine**. Use the **Skills** module filter in **Due & expiring** to review current skill tickets nearing expiry. Replaced tickets do not appear. Equipment inspection schedules appear separately so no additional due inspection is hidden. Outstanding equipment reminders also appear.
 
 The **Overview** tab shows the big picture: total obligations, subjects tracked, overdue and expiring counts, and overall compliance. Search the obligation list and use the **Kind** chips to show only training, documents, inspections, or another kind. The four score cards stay company-wide.
 

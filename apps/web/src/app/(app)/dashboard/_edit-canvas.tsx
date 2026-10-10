@@ -8,6 +8,7 @@ import { CardCell } from '../insights/_viz/card-cell.client'
 import { loadDashboardMetrics } from './_metrics'
 import { WIDGETS, WIDGET_CARD_KEY } from './_widget-registry'
 import { WidgetCard } from './_widget-views'
+import { OperationalWidget, isOperationalWidget } from './_operational-widgets'
 import { isUuid } from '@/lib/list-params'
 
 export async function loadDashboardEditCanvas(
@@ -23,6 +24,8 @@ export async function loadDashboardEditCanvas(
      * mode hides; the admin role-default editor passes the role's set instead.
      */
     allowedWidgetIds?: ReadonlySet<string>
+    searchParams?: Record<string, string | string[] | undefined>
+    basePath?: string
   },
 ): Promise<{
   nodes: Record<string, React.ReactNode>
@@ -44,6 +47,16 @@ export async function loadDashboardEditCanvas(
   const nodes: Record<string, React.ReactNode> = {}
   for (const id of Object.keys(WIDGETS)) {
     if (!widgetAllowed(id)) continue
+    if (isOperationalWidget(id)) {
+      nodes[id] = await OperationalWidget({
+        id,
+        ctx,
+        sp: opts.searchParams,
+        edit: true,
+        basePath: opts.basePath,
+      })
+      continue
+    }
     nodes[id] = (
       <WidgetCard
         widgetId={id}

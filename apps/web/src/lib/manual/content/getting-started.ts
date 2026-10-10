@@ -100,11 +100,19 @@ Saved records keep their original names for history. A former employee shown on 
 Your dashboard is made of tiles (widgets), and you choose which ones you see and where they sit. Changes are yours alone — they do not affect anyone else.
 
 1. Open the [Dashboard](/dashboard) and select **Customize** in the header.
-2. Select **Add widget** to open the **Widget library**, then select a widget to put it on the dashboard. **My PPE**, **My training**, and your other personal tiles are all in this list.
+2. Select **Add widget** to open the **Widget library**, then select a widget to put it on the dashboard. **My PPE**, **My equipment**, and **My compliance** are all in this list.
 3. Drag a tile to move it. Drag its bottom-right corner to resize it. Select the **✕** on a tile to take it off.
 4. Select **Save layout** when it looks right. A widget you added only appears after you save.
 
 Use **Hide widgets** to put a tile away without losing your arrangement, and **Reset to default** to go back to the standard layout for your role.
+
+Tool crib managers can add **Equipment maintenance agenda** and **Equipment GPS map**. The agenda includes inspections, reminders, oil changes, warranties and open work orders. Choose **Type → Inspection** to focus on inspections. It shows the next 30 days and outstanding work, with search, status filters and pages. Open an item to review or complete it.
+
+Welding supervisors can add **Expiring skill tickets** and **Skill requirements**. Tickets include current assignments expiring within 30 days and already expired tickets. Replaced tickets stay out of this list. Requirements show active skill obligations and their completed, overdue and expiring counts. Choose **View → Needs attention** to focus on overdue or expiring requirements. Search by skill or obligation title. Your training and compliance permissions control which widgets you can add.
+
+The GPS widget groups nearby pins with a count. Select a pin for equipment and the original GPS observation time. It refreshes displayed positions every minute while the dashboard is visible. It does not request new positions from the provider: the integration's **Schedule** controls that frequency. Search, health and movement filters, and pages apply to the map. Use **Open** for the full map. Equipment permissions and site scope apply.
+
+Administrators can place these same widgets in a role's default dashboard under **Admin → Roles**. Existing personal layouts stay yours.
 
 This is a different thing from an Insights dashboard. This one is your personal home screen; Insights dashboards are shared charts and are covered in [Insights](/help/insights).
 

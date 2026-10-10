@@ -13,6 +13,7 @@ import { loadCardsForPalette } from '../insights/cards/_data'
 import { loadDashboardCardRenders } from '../insights/_data'
 import { ensureSystemCards } from '../insights/_system-cards'
 import { CardCell } from '../insights/_viz/card-cell.client'
+import { OperationalWidget, isOperationalWidget } from './_operational-widgets'
 import { isUuid } from '@/lib/list-params'
 
 export async function generateMetadata() {
@@ -33,7 +34,12 @@ export const dynamic = 'force-dynamic'
  * "Customize" CTA in the header navigates to /dashboard/customize where
  * the same grid is rendered in edit mode.
  */
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
   const ctx = await requireRequestContext()
   const t = await getTranslations('Dashboard')
   const today = new Date()
@@ -90,6 +96,8 @@ export default async function DashboardPage() {
     if (cardId) {
       const render = renderByCardId.get(cardId)
       if (render) nodes[w.id] = <CardCell key={w.id} render={render} />
+    } else if (isOperationalWidget(w.id)) {
+      nodes[w.id] = await OperationalWidget({ id: w.id, ctx, sp })
     } else if (w.id in WIDGETS) {
       nodes[w.id] = (
         <WidgetCard

@@ -7,7 +7,7 @@
 //   • defaultSize   — w/h on a 12-col grid (h is in row units)
 //   • min/max sizes — react-grid-layout constraints
 //
-// Rendering is done in `_render-widgets.tsx` (keeps registry serialisable so
+// Rendering is done in `_widget-views.tsx` and `_operational-widgets.tsx` (keeps registry serialisable so
 // we can ship it to the client without dragging the whole RSC tree).
 
 import type { RoleTier } from './_role-tier'
@@ -203,6 +203,42 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     description: 'Person × course pairs with certs lapsing in 30 days.',
     defaultSize: { w: 6, h: 5 },
     minSize: { w: 4, h: 4 },
+  },
+
+  'skills-expiring-tickets': {
+    id: 'skills-expiring-tickets',
+    category: 'training',
+    label: 'Expiring skill tickets',
+    description:
+      'Current skill tickets expiring within 30 days, plus expired tickets. Replaced tickets are excluded.',
+    defaultSize: { w: 6, h: 6 },
+    minSize: { w: 4, h: 5 },
+  },
+  'skills-requirements': {
+    id: 'skills-requirements',
+    category: 'training',
+    label: 'Skill requirements',
+    description: 'Active skill obligations with completed, overdue and expiring counts.',
+    defaultSize: { w: 6, h: 6 },
+    minSize: { w: 4, h: 5 },
+  },
+  'equipment-maintenance-agenda': {
+    id: 'equipment-maintenance-agenda',
+    category: 'equipment',
+    label: 'Equipment maintenance agenda',
+    description:
+      'Upcoming and overdue inspections, reminders, oil changes, warranties and open work orders.',
+    defaultSize: { w: 6, h: 6 },
+    minSize: { w: 4, h: 5 },
+  },
+  'equipment-gps-map': {
+    id: 'equipment-gps-map',
+    category: 'equipment',
+    label: 'Equipment GPS map',
+    description:
+      'Latest known tracker positions with clusters, observation times and equipment links. Refreshes every minute while visible.',
+    defaultSize: { w: 6, h: 9 },
+    minSize: { w: 4, h: 9 },
   },
 
   // ---- PPE / Equipment ----------------------------------------------------

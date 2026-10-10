@@ -48,7 +48,13 @@ type ObligationOverview = {
 /** Searchable, server-paged obligation aggregates plus an uncapped org-wide summary. */
 export async function obligationOverview(
   ctx: Ctx,
-  opts: { q?: string; kind?: ObligationKind; page: number; perPage: number },
+  opts: {
+    q?: string
+    kind?: ObligationKind
+    page: number
+    perPage: number
+    needsAttention?: boolean
+  },
 ): Promise<ObligationOverview> {
   return ctx.db(async (tx) => {
     const live = and(eq(complianceObligations.tenantId, ctx.tenantId), ...liveFilter())
@@ -57,6 +63,14 @@ export async function obligationOverview(
       ...liveFilter(),
       opts.q ? ilike(complianceObligations.title, `%${opts.q}%`) : undefined,
       opts.kind ? eq(complianceObligations.sourceModule, opts.kind) : undefined,
+      opts.needsAttention
+        ? sql`exists (
+        select 1 from ${complianceStatus}
+        where ${complianceStatus.obligationId} = ${complianceObligations.id}
+          and ${complianceStatus.tenantId} = ${complianceObligations.tenantId}
+          and ${complianceStatus.status} in ('overdue', 'expiring')
+      )`
+        : undefined,
     )
     const [summaryRows, totalRows] = await Promise.all([
       tx

@@ -17,6 +17,8 @@ import {
   correctiveActions,
   documents,
   equipmentInspectionSchedules,
+  equipmentInspectionTypes,
+  equipmentReminders,
   equipmentItems,
   equipmentWorkOrders,
   incidentPreventativeSteps,
@@ -28,6 +30,7 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
+import { moduleScopeWhere } from '@/lib/visibility'
 
 export type SignalStatus = 'overdue' | 'expired' | 'due_soon' | 'open'
 
@@ -53,6 +56,7 @@ export const SIGNAL_MODULE_LABELS: Record<SignalModule, string> = {
 }
 
 export type ComplianceSignal = {
+  key: string
   module: SignalModule
   family: string
   subject: string
@@ -75,6 +79,7 @@ type DueSignalListOptions = {
   q?: string
   module?: SignalModule
   status?: SignalStatus
+  family?: string
   sort?: 'module' | 'item' | 'person' | 'due' | 'status'
   dir?: 'asc' | 'desc'
   page?: number
@@ -88,6 +93,7 @@ type DueSignalListResult = {
 }
 
 type SignalQueryRow = {
+  stable_key: string | null
   module: SignalModule | null
   family: string | null
   subject: string | null
@@ -121,6 +127,7 @@ export async function listDueSignals(
   const offset = (page - 1) * perPage
   const filteredConditions: SQL<unknown>[] = []
   if (options.module) filteredConditions.push(sql`module = ${options.module}`)
+  if (options.family) filteredConditions.push(sql`family = ${options.family}`)
   if (options.status) filteredConditions.push(sql`status = ${options.status}`)
   const searchQuery = options.q?.trim()
   if (searchQuery) {
@@ -147,6 +154,15 @@ export async function listDueSignals(
     due_on asc nulls last, subject asc, module asc, family asc, stable_key asc`
 
   return ctx.db(async (tx) => {
+    // Dashboard equipment widgets share the module's site/holder visibility.
+    const equipmentScope =
+      options.module === 'equipment'
+        ? ((await moduleScopeWhere(ctx, tx, {
+            prefix: 'equipment',
+            siteCol: equipmentItems.currentSiteOrgUnitId,
+            personCol: equipmentItems.currentHolderPersonId,
+          })) ?? sql`true`)
+        : sql`true`
     const queryResult = await tx.execute<SignalQueryRow>(sql`
       with signals as (
         select 'training'::text as module, 'Certification expiry'::text as family,
@@ -201,20 +217,37 @@ export async function listDueSignals(
           and ${documents.nextReviewOn} is not null and ${documents.nextReviewOn} <= ${horizonIso}::date
 
         union all
-        select 'equipment', 'Inspection', ${equipmentItems.name} || ' (' || ${equipmentItems.assetTag} || ')',
+        select 'equipment', 'Inspection', ${equipmentItems.assetTag} || ' — ' ||
+          coalesce(${equipmentInspectionTypes.name}, ${equipmentInspectionSchedules.label}, 'Inspection'),
           nullif(trim(concat_ws(', ', ${people.lastName}, ${people.firstName})), ''),
-          ${equipmentItems.currentHolderPersonId}::text, min(${equipmentInspectionSchedules.nextDueOn})::date,
-          case when min(${equipmentInspectionSchedules.nextDueOn}) < ${today}::date then 'overdue' else 'due_soon' end,
-          '/equipment/' || ${equipmentItems.id}::text, ${equipmentItems.id}::text || ':inspection'
+          ${equipmentItems.currentHolderPersonId}::text, ${equipmentInspectionSchedules.nextDueOn}::date,
+          case when ${equipmentInspectionSchedules.nextDueOn} < ${today}::date then 'overdue' else 'due_soon' end,
+          '/equipment/maintenance?drawer=unit-' || ${equipmentItems.id}::text,
+          ${equipmentInspectionSchedules.id}::text || ':inspection'
         from ${equipmentItems}
         join ${equipmentInspectionSchedules} on ${equipmentInspectionSchedules.equipmentItemId} = ${equipmentItems.id}
           and ${equipmentInspectionSchedules.tenantId} = ${equipmentItems.tenantId}
           and ${equipmentInspectionSchedules.isActive} = true
+        left join ${equipmentInspectionTypes} on ${equipmentInspectionTypes.id} = ${equipmentInspectionSchedules.inspectionTypeId}
         left join ${people} on ${people.id} = ${equipmentItems.currentHolderPersonId}
         where ${equipmentItems.tenantId} = ${tid} and ${equipmentItems.deletedAt} is null
-          and ${equipmentItems.status} not in ('retired','lost')
-        group by ${equipmentItems.id}, ${people.lastName}, ${people.firstName}
-        having min(${equipmentInspectionSchedules.nextDueOn}) <= ${horizonIso}::date
+          and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
+          and ${equipmentInspectionSchedules.nextDueOn} <= ${horizonIso}::date
+
+        union all
+        select 'equipment', 'Reminder', ${equipmentItems.assetTag} || ' — ' || ${equipmentReminders.title},
+          nullif(trim(concat_ws(', ', ${people.lastName}, ${people.firstName})), ''),
+          ${equipmentReminders.assignedToPersonId}::text, ${equipmentReminders.dueOn}::date,
+          case when ${equipmentReminders.dueOn} < ${today}::date then 'overdue' else 'due_soon' end,
+          '/equipment/maintenance?drawer=unit-' || ${equipmentItems.id}::text,
+          ${equipmentReminders.id}::text || ':reminder'
+        from ${equipmentReminders}
+        join ${equipmentItems} on ${equipmentItems.id} = ${equipmentReminders.equipmentItemId}
+          and ${equipmentItems.tenantId} = ${equipmentReminders.tenantId}
+        left join ${people} on ${people.id} = ${equipmentReminders.assignedToPersonId}
+        where ${equipmentReminders.tenantId} = ${tid} and ${equipmentReminders.completedAt} is null
+          and ${equipmentItems.deletedAt} is null and ${equipmentItems.status} not in ('retired','lost')
+          and (${equipmentScope}) and ${equipmentReminders.dueOn} <= ${horizonIso}::date
 
         union all
         select 'equipment', 'Oil change', ${equipmentItems.name} || ' (' || ${equipmentItems.assetTag} || ')',
@@ -225,7 +258,7 @@ export async function listDueSignals(
         from ${equipmentItems}
         left join ${people} on ${people.id} = ${equipmentItems.currentHolderPersonId}
         where ${equipmentItems.tenantId} = ${tid} and ${equipmentItems.deletedAt} is null
-          and ${equipmentItems.status} not in ('retired','lost')
+          and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
           and ${equipmentItems.nextOilChangeDue} is not null and ${equipmentItems.nextOilChangeDue} <= ${horizonIso}::date
 
         union all
@@ -237,7 +270,7 @@ export async function listDueSignals(
         from ${equipmentItems}
         left join ${people} on ${people.id} = ${equipmentItems.currentHolderPersonId}
         where ${equipmentItems.tenantId} = ${tid} and ${equipmentItems.deletedAt} is null
-          and ${equipmentItems.status} not in ('retired','lost')
+          and ${equipmentItems.status} not in ('retired','lost') and (${equipmentScope})
           and ${equipmentItems.warrantyExpiresOn} is not null and ${equipmentItems.warrantyExpiresOn} <= ${horizonIso}::date
 
         union all
@@ -285,11 +318,12 @@ export async function listDueSignals(
         select 'equipment', 'Work order', ${equipmentWorkOrders.reference} ||
           case when ${equipmentItems.name} is not null then ' — ' || ${equipmentItems.name} else '' end,
           null, null, null::date, 'open',
-          case when ${equipmentWorkOrders.itemId} is not null then '/equipment/' || ${equipmentWorkOrders.itemId}::text else '/equipment' end,
+          '/equipment/work-orders/' || ${equipmentWorkOrders.id}::text,
           ${equipmentWorkOrders.id}::text
         from ${equipmentWorkOrders}
         left join ${equipmentItems} on ${equipmentItems.id} = ${equipmentWorkOrders.itemId}
-        where ${equipmentWorkOrders.tenantId} = ${tid}
+        where ${equipmentWorkOrders.tenantId} = ${tid} and (${equipmentScope})
+          and ${equipmentWorkOrders.deletedAt} is null and ${equipmentItems.deletedAt} is null
           and ${equipmentWorkOrders.status} in ('open','assigned','in_progress','awaiting_parts')
       ), filtered as (
         select * from signals ${filteredWhere}
@@ -302,7 +336,7 @@ export async function listDueSignals(
       ), filtered_total as (
         select count(*)::bigint as total from filtered
       )
-      select page_rows.module, page_rows.family, page_rows.subject, page_rows.person_name,
+      select page_rows.stable_key, page_rows.module, page_rows.family, page_rows.subject, page_rows.person_name,
         page_rows.person_id, page_rows.due_on, page_rows.status, page_rows.href,
         filtered_total.total, totals.overdue_count, totals.expired_count,
         totals.due_soon_count, totals.open_count
@@ -322,6 +356,7 @@ export async function listDueSignals(
       rows: resultRows
         .filter((row) => row.module !== null && row.status !== null)
         .map((row) => ({
+          key: row.module! + ':' + row.stable_key,
           module: row.module!,
           family: row.family ?? '',
           subject: row.subject ?? '',

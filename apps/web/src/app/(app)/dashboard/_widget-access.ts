@@ -49,6 +49,10 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   // Training
   'kpi-expiring-certs': TRAINING,
   'list-expiring-training': TRAINING,
+  'skills-expiring-tickets': TRAINING,
+  'skills-requirements': ['compliance.read'],
+  'equipment-maintenance-agenda': EQUIPMENT,
+  'equipment-gps-map': EQUIPMENT,
   // PPE
   'kpi-ppe-open-issues': PPE,
   'kpi-ppe-overdue': PPE,

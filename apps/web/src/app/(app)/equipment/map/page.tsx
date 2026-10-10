@@ -3,21 +3,13 @@ import { GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ArrowUpRight, MapPin } from 'lucide-react'
-import { and, asc, count, eq, ilike, isNull, or, sql } from 'drizzle-orm'
-import {
-  equipmentItems,
-  equipmentTelemetryAssets as assets,
-  orgUnits,
-  people,
-  syncConnections,
-} from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@beaconhs/ui'
 import { requireRequestContext } from '@/lib/auth'
-import { moduleScopeWhere } from '@/lib/visibility'
-import { isUuid, parseListParams, pickString } from '@/lib/list-params'
+import { parseListParams, pickString } from '@/lib/list-params'
 import { formatDateTime } from '@/lib/datetime'
-import { TELEMETRY_HEALTH_LABELS, telemetryHealthSql } from '@/lib/equipment/telemetry'
+import { TELEMETRY_HEALTH_LABELS } from '@/lib/equipment/telemetry'
+import { loadEquipmentMap, equipmentMapPoints } from '@/lib/equipment/map-data'
 import { PageContainer } from '@/components/page-layout'
 import { EquipmentSubNav } from '@/components/equipment-sub-nav'
 import { EquipmentTelemetryMap } from '@/components/equipment-telemetry-map'
@@ -51,95 +43,8 @@ export default async function EquipmentLocationPage({
   const health = pickString(sp.health)
   const motion = pickString(sp.motion)
   const source = pickString(sp.source)
-  const data = await ctx.db(async (tx) => {
-    const scope = await moduleScopeWhere(ctx, tx, {
-      prefix: 'equipment',
-      siteCol: equipmentItems.currentSiteOrgUnitId,
-      personCol: equipmentItems.currentHolderPersonId,
-    })
-    const visible = and(
-      isNull(equipmentItems.deletedAt),
-      isNull(syncConnections.deletedAt),
-      eq(assets.excluded, false),
-      scope,
-    )
-    const where = and(
-      visible,
-      params.q
-        ? or(
-            ilike(equipmentItems.assetTag, `%${params.q}%`),
-            ilike(equipmentItems.name, `%${params.q}%`),
-            ilike(assets.name, `%${params.q}%`),
-            ilike(assets.address, `%${params.q}%`),
-            ilike(orgUnits.name, `%${params.q}%`),
-          )
-        : undefined,
-      health && Object.hasOwn(TELEMETRY_HEALTH_LABELS, health)
-        ? eq(telemetryHealthSql, health as keyof typeof TELEMETRY_HEALTH_LABELS)
-        : undefined,
-      motion === 'moving'
-        ? sql`${assets.speedKph} > 0`
-        : motion === 'stationary'
-          ? eq(assets.speedKph, 0)
-          : undefined,
-      source && isUuid(source) ? eq(syncConnections.id, source) : undefined,
-    )
-    const query = () =>
-      tx
-        .select({
-          asset: assets,
-          item: equipmentItems,
-          connectionName: syncConnections.name,
-          health: telemetryHealthSql,
-          siteName: orgUnits.name,
-          holderFirstName: people.firstName,
-          holderLastName: people.lastName,
-        })
-        .from(assets)
-        .innerJoin(equipmentItems, eq(equipmentItems.id, assets.itemId))
-        .innerJoin(syncConnections, eq(syncConnections.id, assets.connectionId))
-        .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
-        .leftJoin(people, eq(people.id, equipmentItems.currentHolderPersonId))
-        .where(where)
-    const rows = await query()
-      .orderBy(asc(equipmentItems.assetTag), asc(assets.id))
-      .limit(params.perPage)
-      .offset((params.page - 1) * params.perPage)
-    const [total] = await tx
-      .select({ count: count() })
-      .from(assets)
-      .innerJoin(equipmentItems, eq(equipmentItems.id, assets.itemId))
-      .innerJoin(syncConnections, eq(syncConnections.id, assets.connectionId))
-      .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
-      .where(where)
-    const sources = await tx
-      .selectDistinct({ id: syncConnections.id, name: syncConnections.name })
-      .from(assets)
-      .innerJoin(equipmentItems, eq(equipmentItems.id, assets.itemId))
-      .innerJoin(syncConnections, eq(syncConnections.id, assets.connectionId))
-      .where(visible)
-      .orderBy(asc(syncConnections.name))
-    return { rows, sources, total: Number(total?.count ?? 0) }
-  })
-  const points = data.rows.flatMap(({ asset, item, health, connectionName }) =>
-    asset.latitude !== null && asset.longitude !== null && asset.locationObservedAt
-      ? [
-          {
-            id: asset.id,
-            label: item.assetTag + ' · ' + item.name,
-            latitude: asset.latitude,
-            longitude: asset.longitude,
-            observedAt: asset.locationObservedAt.toISOString(),
-            observedLabel: time(asset.locationObservedAt),
-            health: TELEMETRY_HEALTH_LABELS[health],
-            href: `/equipment/${item.id}?tab=location`,
-            address: asset.address,
-            source: connectionName,
-            speedKph: asset.speedKph,
-          },
-        ]
-      : [],
-  )
+  const data = await loadEquipmentMap(ctx, params, { health, motion, source })
+  const points = equipmentMapPoints(data, ctx)
   return (
     <PageContainer>
       <div className="space-y-5">

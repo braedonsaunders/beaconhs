@@ -235,8 +235,8 @@ export default async function ExpiringPage({
                   </TableHeader>
                   <TableBody>
                     <GeneratedValue
-                      value={rows.map((s, i) => (
-                        <SignalRow key={`${s.module}:${s.family}:${i}`} signal={s} />
+                      value={rows.map((s) => (
+                        <SignalRow key={s.key} signal={s} />
                       ))}
                     />
                   </TableBody>

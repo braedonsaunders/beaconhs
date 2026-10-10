@@ -36,6 +36,8 @@ describe('dashboard widget access', () => {
     'admin.org.manage',
     'reports.read',
     'insights.read',
+    'equipment.read.all',
+    'compliance.read',
   ])
 
   it('limits self-tier users to personal widgets', () => {
@@ -51,6 +53,18 @@ describe('dashboard widget access', () => {
     }
     expect(canSeeWidget(manager, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')).toBe(true)
     expect(canSeeOrgAggregates(manager)).toBe(true)
+  })
+
+  it('keeps equipment positions and skill tickets behind their module access', () => {
+    const toolCrib = context(['equipment.read.site'])
+    expect(canSeeWidget(toolCrib, 'equipment-gps-map')).toBe(true)
+    expect(canSeeWidget(toolCrib, 'equipment-maintenance-agenda')).toBe(true)
+    expect(canSeeWidget(toolCrib, 'skills-expiring-tickets')).toBe(false)
+    const welding = context(['training.read.all', 'compliance.read'])
+    expect(canSeeWidget(welding, 'skills-expiring-tickets')).toBe(true)
+    expect(canSeeWidget(welding, 'skills-requirements')).toBe(true)
+    expect(canSeeWidget(welding, 'equipment-gps-map')).toBe(false)
+    expect(canSeeWidget(context(['insights.read']), 'equipment-gps-map')).toBe(false)
   })
 
   it('allows super-admins to see every widget', () => {
