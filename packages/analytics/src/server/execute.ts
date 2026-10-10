@@ -23,7 +23,7 @@ import type {
 import { compileBhql, type CompiledBhql } from './compile'
 
 /** Wide pivots become unrenderable DOM; cap distinct column tuples. */
-const MAX_PIVOT_COLUMNS = 100
+const MAX_PIVOT_COLUMNS = 500
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)

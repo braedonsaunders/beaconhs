@@ -273,3 +273,15 @@ describe('people filter and assignment SQL boundaries', () => {
     expect(query.values.filter((value) => value === 'active')).toHaveLength(2)
   })
 })
+
+describe('matrix picker permission', () => {
+  it.each(['people', 'departments', 'groups', 'courses', 'skill-types'])(
+    'requires Insights view access for %s',
+    async (suffix) => {
+      const db = vi.fn()
+      state.context = { isSuperAdmin: false, permissions: new Set(['training.records.view']), db }
+      expect((await request(`lookup=insight-matrix-${suffix}`)).status).toBe(403)
+      expect(db).not.toHaveBeenCalled()
+    },
+  )
+})

@@ -77,11 +77,13 @@ export function VizRenderer({
   result,
   settings = {},
   label,
+  tableKey,
 }: {
   vizType: string
   result: BhqlResult
   settings?: VizSettings
   label?: string
+  tableKey?: string
 }) {
   const tGeneratedValue = useGeneratedValueTranslations()
   const check = validateRenderable(vizType, result, settings)
@@ -94,11 +96,13 @@ export function VizRenderer({
   }
 
   if (vizType === 'pivot') {
-    return <PivotTable result={result as PivotResult} settings={settings} />
+    return <PivotTable result={result as PivotResult} settings={settings} tableKey={tableKey} />
   }
   if (vizType === 'heatmap') {
     const pivot = result as PivotResult
-    return <PivotTable result={pivot} settings={heatmapSettings(pivot, settings)} />
+    return (
+      <PivotTable result={pivot} settings={heatmapSettings(pivot, settings)} tableKey={tableKey} />
+    )
   }
   if (vizType === 'table') {
     return <DataTable result={result as FlatResult} settings={settings} />

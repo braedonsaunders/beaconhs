@@ -18,10 +18,24 @@ import { AiCardView } from '../../_viz/ai-card-view.client'
 import { CardToolbar } from '../_studio/card-toolbar.client'
 import { isTrustedSystemCard } from '../../_system-cards'
 import { isUuid } from '@/lib/list-params'
+import {
+  applyMatrixFilterRules,
+  MATRIX_FILTER_PARAM,
+  matrixSource,
+  parseMatrixFilters,
+} from '../../_matrix-filter-values'
+import { loadMatrixSelections } from '../../_matrix-filters'
+import { MatrixFilterButton } from '../../_matrix-filters.client'
 
 export const dynamic = 'force-dynamic'
 
-export default async function CardPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CardPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const tGeneratedValue = await getGeneratedValueTranslations()
   const { id } = await params
   if (!isUuid(id)) notFound()
@@ -35,13 +49,38 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
   const canExport = can(ctx, 'admin.data.export') && !ctx.impersonation
   const roleOptions = canEdit && canPublish ? await loadInsightRoleOptions(ctx) : []
 
+  const search = await searchParams
+  const matrix = matrixSource(card.query)
+  const tableKey = `matrix_${card.id}`
+  const peopleSearch = search[`${tableKey}_q`]
+  const exportParams = new URLSearchParams()
+  for (const key of [MATRIX_FILTER_PARAM, `${tableKey}_q`]) {
+    if (typeof search[key] === 'string') exportParams.set(key, search[key])
+  }
+  const exportHref = `/insights/cards/${card.id}/export${exportParams.size ? `?${exportParams}` : ''}`
+  let selections = await loadMatrixSelections(ctx, card.query, parseMatrixFilters())
   const isAi = card.kind === 'ai'
   const aiPrompt = card.config?.kind === 'ai' ? card.config.prompt : undefined
   let result: BhqlResult | null = null
   let error: string | null = null
   if (!isAi) {
     try {
-      result = await runAuthorizedBhql(ctx, card.query, {
+      const filters = matrix
+        ? parseMatrixFilters(
+            typeof search[MATRIX_FILTER_PARAM] === 'string'
+              ? search[MATRIX_FILTER_PARAM]
+              : undefined,
+          )
+        : parseMatrixFilters()
+      if (matrix) selections = await loadMatrixSelections(ctx, card.query, filters)
+      const query = matrix
+        ? applyMatrixFilterRules(
+            card.query,
+            filters,
+            typeof peopleSearch === 'string' ? peopleSearch : '',
+          )
+        : card.query
+      result = await runAuthorizedBhql(ctx, query, {
         maxRows: 50_000,
         trustedSystemCard: isTrustedSystemCard(card),
       })
@@ -58,6 +97,13 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
         back={{ href: '/insights/library', label: 'Library' }}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {matrix ? (
+              <MatrixFilterButton
+                cardId={card.id}
+                skillMatrix={matrix === 'skill_coverage'}
+                selected={selections}
+              />
+            ) : null}
             <span
               className={cn(
                 'rounded-full px-2 py-0.5 text-[11px] font-medium',
@@ -80,13 +126,13 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
               value={
                 canExport ? (
                   <>
-                    <DownloadLink href={`/insights/cards/${card.id}/export?format=pdf`}>
+                    <DownloadLink href={`${exportHref}${exportParams.size ? '&' : '?'}format=pdf`}>
                       <Button type="button" variant="outline" className="h-9 text-xs">
                         <FileText size={13} className="mr-1" />{' '}
                         <GeneratedText id="m_1a2b2ed6729166" />
                       </Button>
                     </DownloadLink>
-                    <DownloadLink href={`/insights/cards/${card.id}/export`}>
+                    <DownloadLink href={exportHref}>
                       <Button type="button" variant="outline" className="h-9 text-xs">
                         <Download size={13} className="mr-1" />{' '}
                         <GeneratedText id="m_13bc18467bfb44" />
@@ -131,6 +177,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
               </div>
             ) : result ? (
               <VizRenderer
+                tableKey={tableKey}
                 vizType={card.vizType}
                 result={result}
                 settings={card.vizSettings}

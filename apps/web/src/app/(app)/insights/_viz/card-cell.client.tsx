@@ -38,6 +38,7 @@ export function CardCell({ render }: { render: CardRender }) {
         result={render.result}
         settings={render.vizSettings}
         label={tGeneratedValue(render.name)}
+        tableKey={`matrix_${render.id}`}
       />
     ) : (
       <div className="grid h-full place-items-center text-xs text-slate-400">

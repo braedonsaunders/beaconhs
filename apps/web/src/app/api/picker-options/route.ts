@@ -235,6 +235,12 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'training-skill-assignment-people':
     case 'training-skill-assignment-types':
       return canManage('training')
+    case 'insight-matrix-people':
+    case 'insight-matrix-departments':
+    case 'insight-matrix-groups':
+    case 'insight-matrix-courses':
+    case 'insight-matrix-skill-types':
+      return can(ctx, 'insights.read')
     case 'report-people':
     case 'report-departments':
     case 'report-groups':
@@ -489,7 +495,11 @@ async function loadOptions(
       )
     }
 
-    if (lookup === 'compliance-obligation-audience-people' || lookup === 'report-people') {
+    if (
+      lookup === 'compliance-obligation-audience-people' ||
+      lookup === 'report-people' ||
+      lookup === 'insight-matrix-people'
+    ) {
       const rows = await tx
         .select(PERSON_OPTION_SELECTION)
         .from(people)
@@ -522,7 +532,8 @@ async function loadOptions(
 
     if (
       lookup === 'compliance-obligation-audience-departments' ||
-      lookup === 'report-departments'
+      lookup === 'report-departments' ||
+      lookup === 'insight-matrix-departments'
     ) {
       const match = input.hasQuery
         ? or(
@@ -640,7 +651,11 @@ async function loadOptions(
       return boundPickerOptions(rows.map((row) => option(row.id, row.title, row.key)))
     }
 
-    if (lookup === 'compliance-obligation-courses' || lookup === 'report-courses') {
+    if (
+      lookup === 'compliance-obligation-courses' ||
+      lookup === 'report-courses' ||
+      lookup === 'insight-matrix-courses'
+    ) {
       const match = input.hasQuery
         ? or(
             ilike(trainingCourses.name, input.term),
@@ -663,7 +678,11 @@ async function loadOptions(
       )
     }
 
-    if (lookup === 'report-groups' || lookup === 'compliance-obligation-audience-groups') {
+    if (
+      lookup === 'report-groups' ||
+      lookup === 'compliance-obligation-audience-groups' ||
+      lookup === 'insight-matrix-groups'
+    ) {
       const match = input.hasQuery
         ? or(
             ilike(personGroups.name, input.term),
@@ -779,7 +798,11 @@ async function loadOptions(
       return boundPickerOptions(rows.map((row) => option(row.id, row.name)))
     }
 
-    if (lookup === 'compliance-obligation-skill-types' || lookup === 'report-skill-types') {
+    if (
+      lookup === 'compliance-obligation-skill-types' ||
+      lookup === 'report-skill-types' ||
+      lookup === 'insight-matrix-skill-types'
+    ) {
       const match = input.hasQuery
         ? or(
             ilike(trainingSkillTypes.name, input.term),
@@ -794,7 +817,15 @@ async function loadOptions(
           code: trainingSkillTypes.code,
         })
         .from(trainingSkillTypes)
-        .where(match)
+        .where(
+          and(
+            isNull(trainingSkillTypes.deletedAt),
+            lookup === 'insight-matrix-skill-types'
+              ? eq(trainingSkillTypes.isActive, true)
+              : undefined,
+            match,
+          ),
+        )
         .orderBy(
           ...(input.selected ? [desc(sql`${trainingSkillTypes.id} = ${input.selected}`)] : []),
           asc(trainingSkillTypes.name),

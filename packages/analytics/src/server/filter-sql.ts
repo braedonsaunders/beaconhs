@@ -3,7 +3,7 @@
 // metrics, and pivots before execution.
 import { sql, type SQL } from 'drizzle-orm'
 import type { ReportRule, ReportRuleGroup } from '@beaconhs/db/schema'
-import { columnRef, type ReportEntity } from '@beaconhs/reports/entities'
+import { columnRef, entityColumn, type ReportEntity } from '@beaconhs/reports/entities'
 
 const MAX_TREE_DEPTH = 5
 const MAX_TREE_RULES = 60
@@ -45,6 +45,26 @@ function compileRule(
       })()
   if (!reference) return null
   const value = rule.value
+  if (
+    entityColumn(entity, rule.column)?.filterValueMode === 'csv-set' &&
+    ['eq', 'neq', 'in', 'not_in'].includes(rule.op)
+  ) {
+    const values = Array.isArray(value) ? value : value == null || value === '' ? [] : [value]
+    if (!values.length) return null
+    const overlap = sql.join(
+      [
+        sql.raw('string_to_array(coalesce('),
+        reference,
+        sql.raw(", ''), ',') && ARRAY["),
+        joinParams(values.map(String)),
+        sql.raw(']::text[]'),
+      ],
+      sql.raw(''),
+    )
+    return rule.op === 'neq' || rule.op === 'not_in'
+      ? sql.join([sql.raw('NOT ('), overlap, sql.raw(')')], sql.raw(''))
+      : sql.join([sql.raw('('), overlap, sql.raw(')')], sql.raw(''))
+  }
   switch (rule.op) {
     case 'eq':
       return value == null || value === '' ? null : sql`${reference} = ${value}`

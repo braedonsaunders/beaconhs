@@ -1,4 +1,9 @@
-import type { BhqlResult } from '@beaconhs/analytics'
+import {
+  pivotAxisLabel,
+  pivotDisplayValue,
+  type BhqlResult,
+  type VizSettings,
+} from '@beaconhs/analytics'
 import type { DatasetAnalysis } from '@beaconhs/ai'
 import type { ReportColumn, ReportGroup, ReportSummaryItem } from '@beaconhs/reports'
 
@@ -25,7 +30,10 @@ function rowFromValues(columns: ReportColumn[], values: unknown[]): Record<strin
   return Object.fromEntries(columns.map((column, index) => [column.key, values[index] ?? '']))
 }
 
-export function cardResultDocument(result: BhqlResult): {
+export function cardResultDocument(
+  result: BhqlResult,
+  settings: VizSettings = {},
+): {
   groups: ReportGroup[]
   summary: ReportSummaryItem[]
   rowCount: number
@@ -57,22 +65,38 @@ export function cardResultDocument(result: BhqlResult): {
   }
 
   const groups: ReportGroup[] = []
-  const measures = result.valueMeasures.length > 0 ? result.valueMeasures : [null]
+  const measures =
+    typeof settings.displayValueField === 'string'
+      ? [result.valueMeasures[0] ?? null]
+      : result.valueMeasures.length > 0
+        ? result.valueMeasures
+        : [null]
+  const dimensions =
+    typeof settings.rowLabelField === 'string'
+      ? result.rowDimensions.filter((dimension) => dimension.key === settings.rowLabelField)
+      : result.rowDimensions
   for (const measure of measures) {
     for (let start = 0; start < result.columnKeys.length; start += PIVOT_COLUMNS_PER_GROUP) {
       const columnKeys = result.columnKeys.slice(start, start + PIVOT_COLUMNS_PER_GROUP)
       const end = start + columnKeys.length
       const columns = [
-        ...result.rowDimensions.map((dimension) =>
+        ...dimensions.map((dimension) =>
           reportColumn(`row_${dimension.key}`, dimension.label, dimension.dataType),
         ),
         ...columnKeys.map((key, index) =>
-          reportColumn(`value_${start + index}`, key.labels.join(' · '), measure?.dataType),
+          reportColumn(
+            `value_${start + index}`,
+            pivotAxisLabel(key, result.columnDimensions, settings.columnLabelField),
+            measure?.dataType,
+          ),
         ),
       ]
       groups.push({
         kind: 'results',
-        title: measure?.label ?? 'Results',
+        title:
+          typeof settings.displayValueField === 'string'
+            ? 'Expiry dates'
+            : (measure?.label ?? 'Results'),
         subtitle:
           result.columnKeys.length > PIVOT_COLUMNS_PER_GROUP
             ? `Columns ${(start + 1).toLocaleString()}-${end.toLocaleString()} of ${result.columnKeys.length.toLocaleString()}`
@@ -80,10 +104,14 @@ export function cardResultDocument(result: BhqlResult): {
         columns,
         rows: result.rowKeys.map((rowKey, rowIndex) =>
           rowFromValues(columns, [
-            ...rowKey.labels,
+            ...(typeof settings.rowLabelField === 'string'
+              ? [pivotAxisLabel(rowKey, result.rowDimensions, settings.rowLabelField)]
+              : rowKey.labels),
             ...columnKeys.map((_key, offset) => {
               const cell = result.cells[rowIndex]?.[start + offset]
-              return printable(measure && cell ? cell[measure.key] : null)
+              return printable(
+                measure && cell ? pivotDisplayValue(cell, measure.key, settings) : null,
+              )
             }),
           ]),
         ),

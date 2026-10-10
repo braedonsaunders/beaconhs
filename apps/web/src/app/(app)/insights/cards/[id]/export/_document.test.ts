@@ -103,3 +103,38 @@ describe('card export documents', () => {
     expect(cardExportFilename('Training — Matrix!')).toBe('training-matrix')
   })
 })
+
+it('exports dates and readable names once, retaining all matching rows', () => {
+  const dimension = (key: string) => ({
+    key,
+    label: key,
+    role: 'dimension' as const,
+    semanticType: 'category' as const,
+    dataType: 'string' as const,
+  })
+  const result: PivotResult = {
+    shape: 'pivot',
+    rowDimensions: [dimension('person_name'), dimension('person_id')],
+    columnDimensions: [dimension('skill_name'), dimension('skill_type_id')],
+    valueMeasures: [
+      { ...dimension('coverage_status'), role: 'measure' },
+      { ...dimension('expires_on'), role: 'measure', dataType: 'date' },
+    ],
+    rowKeys: [{ values: ['Alex', 'person-id'], labels: ['Alex', 'person-id'] }],
+    columnKeys: [{ values: ['Welding', 'skill-id'], labels: ['Welding', 'skill-id'] }],
+    cells: [[{ coverage_status: 'valid', expires_on: '2027-10-01' }]],
+    rowCount: 1,
+    truncated: false,
+  }
+  const document = cardResultDocument(result, {
+    displayValueField: 'expires_on',
+    rowLabelField: 'person_name',
+    columnLabelField: 'skill_name',
+  })
+  expect(document.groups).toHaveLength(1)
+  expect(document.groups[0]?.columns.map((column) => column.label)).toEqual([
+    'person_name',
+    'Welding',
+  ])
+  expect(document.groups[0]?.rows).toEqual([{ row_person_name: 'Alex', value_0: '2027-10-01' }])
+})

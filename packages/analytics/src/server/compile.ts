@@ -49,6 +49,8 @@ function dataTypeOf(kind: ReportColumnKind): ResultDataType {
       return 'date'
     case 'timestamp':
       return 'timestamp'
+    case 'boolean':
+      return 'boolean'
     default:
       return 'string'
   }
@@ -329,6 +331,66 @@ function compileAggExpr(ctx: CompileCtx, e: Extract<BhqlExpr, { ex: 'agg' }>): S
   // No blanket ::numeric cast — an aggregate keeps its natural type (e.g.
   // max(timestamp) stays a timestamp); the enclosing expression casts as needed.
   return paren(core)
+}
+
+/** Keep expression result types aligned with Postgres in every compile path. */
+function expressionType(ctx: CompileCtx, e: BhqlExpr): ResultDataType | null {
+  switch (e.ex) {
+    case 'field':
+      return dataTypeOf(colMetaOf(ctx, e.field)?.col.kind ?? 'text')
+    case 'lit':
+      return e.value === null
+        ? null
+        : typeof e.value === 'number'
+          ? 'number'
+          : typeof e.value === 'boolean'
+            ? 'boolean'
+            : 'string'
+    case 'compare':
+    case 'logic':
+    case 'isnull':
+      return 'boolean'
+    case 'arith': {
+      const left = expressionType(ctx, e.left)
+      const right = expressionType(ctx, e.right)
+      return (e.op === '+' || e.op === '-') &&
+        (left === 'date' || left === 'timestamp') &&
+        right === 'number'
+        ? left
+        : 'number'
+    }
+    case 'agg':
+      return (e.fn === 'min' || e.fn === 'max') && e.arg ? expressionType(ctx, e.arg) : 'number'
+    case 'case':
+      return (
+        e.branches.map((branch) => expressionType(ctx, branch.then)).find(Boolean) ??
+        (e.else ? expressionType(ctx, e.else) : null)
+      )
+    case 'call':
+      if (e.fn === 'now' || e.fn === 'datetrunc') return 'timestamp'
+      if (e.fn === 'current_date') return 'date'
+      if (['concat', 'lower', 'upper', 'trim'].includes(e.fn)) return 'string'
+      if (e.fn === 'coalesce')
+        return e.args.map((arg) => expressionType(ctx, arg)).find(Boolean) ?? null
+      if (e.fn === 'nullif') return e.args[0] ? expressionType(ctx, e.args[0]) : null
+      return 'number'
+  }
+}
+
+function expressionMeasureColumn(ctx: CompileCtx, measure: BhqlExprMeasure): ResultColumn {
+  const dataType = expressionType(ctx, measure.expr) ?? 'string'
+  return {
+    key: measure.alias,
+    label: humanizeAlias(measure.alias),
+    role: 'measure',
+    semanticType:
+      dataType === 'number'
+        ? 'measure'
+        : dataType === 'date' || dataType === 'timestamp'
+          ? 'temporal'
+          : 'category',
+    dataType,
+  }
 }
 
 function compileExpr(ctx: CompileCtx, e: BhqlExpr): SQL {
@@ -682,13 +744,7 @@ function compileAggregatedSubquery(
   }
   for (const m of exprMeasures) {
     selects.push(aliased(compileExpr(ctx, m.expr), m.alias))
-    columns.push({
-      key: m.alias,
-      label: humanizeAlias(m.alias),
-      role: 'measure',
-      semanticType: 'measure',
-      dataType: 'number',
-    })
+    columns.push(expressionMeasureColumn(ctx, m))
   }
   if (selects.length === 0) throw new Error(`Source "${source}" selects no columns`)
 
@@ -1013,13 +1069,7 @@ function compileSpine(
   }
   for (const m of exprMeasures) {
     selects.push(aliased(compileExpr(ctx, m.expr), m.alias))
-    columns.push({
-      key: m.alias,
-      label: humanizeAlias(m.alias),
-      role: 'measure',
-      semanticType: 'measure',
-      dataType: 'string',
-    })
+    columns.push(expressionMeasureColumn(ctx, m))
   }
   if (selects.length === 0) throw new Error('Query selects no columns')
 
@@ -1216,13 +1266,7 @@ export function compileBhql(
     // nodes), e.g. datediff('day', max(occurred_at), now()) for "days since".
     for (const m of exprMeasures) {
       selects.push(aliased(compileExpr(ctx, m.expr), m.alias))
-      columns.push({
-        key: m.alias,
-        label: humanizeAlias(m.alias),
-        role: 'measure',
-        semanticType: 'measure',
-        dataType: 'number',
-      })
+      columns.push(expressionMeasureColumn(ctx, m))
     }
   } else {
     const cols = rawColumns.length ? rawColumns : entity.columns.map((c) => c.key)

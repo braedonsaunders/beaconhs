@@ -7,7 +7,7 @@ import type { AnalyticsEntity } from '@beaconhs/analytics'
 import { attachReportFilterOptions, loadBeaconReportCatalog } from '@beaconhs/reports/server'
 import { resolveAnalyticsAccess } from '@/lib/analytics-access'
 import { canSeePublishedInsight, getInsightRoleKeys } from '../_visibility'
-import { isTrustedSystemCard } from '../_system-cards'
+import { ensureSystemCards, isTrustedSystemCard } from '../_system-cards'
 
 type CardKind = 'question' | 'model' | 'metric' | 'ai'
 
@@ -45,6 +45,7 @@ function map(row: CardRow): CardRow {
 }
 
 export async function loadCard(ctx: RequestContext, id: string): Promise<CardRow | null> {
+  await ensureSystemCards(ctx)
   const [row] = await ctx.db((tx) =>
     tx
       .select(SELECT)

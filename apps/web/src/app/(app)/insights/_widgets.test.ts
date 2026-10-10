@@ -29,3 +29,17 @@ describe('built-in Insights queries', () => {
     })
   }
 })
+
+for (const key of ['training-skills-matrix', 'training-certificate-matrix']) {
+  it(`${key} preserves status and expiry types and includes all ticket columns`, () => {
+    const definition = BUILTIN_QUERIES[key]!
+    const compiled = compileBhql(definition.query, { entityMap: discoverEntityMap() })
+    expect(compiled.columns.find((column) => column.key === 'coverage_status')?.dataType).toBe(
+      'string',
+    )
+    expect(compiled.columns.find((column) => column.key === 'expires_on')?.dataType).toBe('date')
+    expect(compiled.effectiveLimit).toBe(50_000)
+    expect(definition.query.pivot?.rows).toContainEqual({ breakout: 'person_id' })
+    expect(definition.vizSettings?.displayValueField).toBe('expires_on')
+  })
+}

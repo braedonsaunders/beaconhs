@@ -244,3 +244,65 @@ show('Training matrix (spine, view-free)', {
     },
   ],
 })
+
+describe('expression result types', () => {
+  it.each([false, true])(
+    'preserves text, dates, booleans and numeric values with joined sources = %s',
+    (joined) => {
+      const query: BhqlQuery = {
+        version: 'bhql/1',
+        display: 'table',
+        pivot: null,
+        stages: [
+          {
+            source: 'training_records',
+            aggregations: [
+              {
+                kind: 'expr',
+                alias: 'status',
+                expr: {
+                  ex: 'agg',
+                  fn: 'min',
+                  arg: {
+                    ex: 'case',
+                    branches: [
+                      {
+                        when: { ex: 'isnull', arg: { ex: 'field', field: 'expires_on' } },
+                        then: { ex: 'lit', value: 'valid' },
+                      },
+                    ],
+                    else: { ex: 'lit', value: 'expired' },
+                  },
+                },
+              },
+              {
+                kind: 'expr',
+                alias: 'expiry',
+                expr: { ex: 'agg', fn: 'max', arg: { ex: 'field', field: 'expires_on' } },
+              },
+              { kind: 'expr', alias: 'flag', expr: { ex: 'lit', value: true } },
+              { kind: 'expr', alias: 'quantity', expr: { ex: 'lit', value: 3 } },
+            ],
+            ...(joined
+              ? {
+                  joinedSources: [
+                    {
+                      source: 'training_skill_assignments',
+                      on: [],
+                      measures: [{ fn: 'count', alias: 'tickets' }],
+                    },
+                  ],
+                }
+              : {}),
+          },
+        ],
+      }
+      const compiled = compileBhql(parseBhqlQuery(query, entityMap), { entityMap })
+      const type = (key: string) => compiled.columns.find((column) => column.key === key)?.dataType
+      expect(type('status')).toBe('string')
+      expect(type('expiry')).toBe('date')
+      expect(type('flag')).toBe('boolean')
+      expect(type('quantity')).toBe('number')
+    },
+  )
+})

@@ -248,30 +248,39 @@ export const DEFAULT_INSIGHT_LAYOUT: InsightDashboardLayout = {
  *  published system cards (ensureSystemCards) and rendered through the SAME
  *  engine + visualization as user-built cards. Widgets without an entry here
  *  (today only the AI journal analysis) render bespoke client code. */
-export const BUILTIN_QUERIES: Record<
-  string,
-  { query: BhqlQuery; vizType: string; vizSettings?: Record<string, unknown> }
-> = {
-  'training-skills-matrix': {
+function qualificationMatrix(
+  source: 'skill_coverage' | 'training_matrix',
+  typeId: string,
+  typeName: string,
+): { query: BhqlQuery; vizType: string; vizSettings: Record<string, unknown> } {
+  return {
     vizType: 'pivot',
+    vizSettings: {
+      displayValueField: 'expires_on',
+      rowLabelField: 'person_name',
+      columnLabelField: typeName,
+      noExpiryLabel: 'No expiry',
+    },
     query: {
       version: 'bhql/1',
       display: 'pivot',
       pivot: {
-        rows: [{ breakout: 'person_name' }],
-        columns: [{ breakout: 'skill_name' }],
-        values: [{ measure: 'coverage_status' }],
+        rows: [{ breakout: 'person_name' }, { breakout: 'person_id' }],
+        columns: [{ breakout: typeName }, { breakout: typeId }],
+        values: [{ measure: 'coverage_status' }, { measure: 'expires_on' }],
       },
       stages: [
         {
-          source: 'skill_coverage',
+          source,
           filter: {
             combinator: 'and',
             rules: [{ field: 'person_status', op: 'eq', value: 'active' }],
           },
           breakouts: [
             { alias: 'person_name', field: 'person_name' },
-            { alias: 'skill_name', field: 'skill_name' },
+            { alias: 'person_id', field: 'person_id' },
+            { alias: typeName, field: typeName },
+            { alias: typeId, field: typeId },
           ],
           aggregations: [
             {
@@ -309,133 +318,25 @@ export const BUILTIN_QUERIES: Record<
                 },
               },
             },
-          ],
-        },
-      ],
-    },
-  },
-  'training-certificate-matrix': {
-    vizType: 'pivot',
-    query: {
-      version: 'bhql/1',
-      display: 'pivot',
-      pivot: {
-        rows: [{ breakout: 'person_name' }],
-        columns: [{ breakout: 'course_name' }],
-        values: [{ measure: 'coverage_status' }],
-      },
-      stages: [
-        {
-          source: 'people',
-          spine: {
-            dimensions: [
-              {
-                alias: 'p',
-                source: 'people',
-                filter: {
-                  combinator: 'and',
-                  rules: [
-                    { field: 'status', op: 'eq', value: 'active' },
-                    { field: 'deleted_at', op: 'is_null' },
-                  ],
-                },
-              },
-              {
-                alias: 'c',
-                source: 'training_courses',
-                filter: {
-                  combinator: 'and',
-                  rules: [{ field: 'deleted_at', op: 'is_null' }],
-                },
-              },
-            ],
-            facts: [
-              {
-                alias: 'tr',
-                source: 'training_records',
-                on: [
-                  { field: 'person_id', equals: 'p.id' },
-                  { field: 'course_id', equals: 'c.id' },
-                ],
-                filter: {
-                  combinator: 'and',
-                  rules: [{ field: 'deleted_at', op: 'is_null' }],
-                },
-                latestBy: [{ ref: 'completed_on', direction: 'desc' }],
-              },
-            ],
-          },
-          breakouts: [
-            {
-              alias: 'person_name',
-              expr: {
-                ex: 'call',
-                fn: 'concat',
-                args: [
-                  { ex: 'field', field: 'p.last_name' },
-                  { ex: 'lit', value: ', ' },
-                  { ex: 'field', field: 'p.first_name' },
-                ],
-              },
-            },
-            { alias: 'course_name', field: 'c.name' },
-          ],
-          aggregations: [
-            {
-              kind: 'expr',
-              alias: 'coverage_status',
-              expr: {
-                ex: 'agg',
-                fn: 'min',
-                arg: {
-                  ex: 'case',
-                  branches: [
-                    {
-                      when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.id' } },
-                      then: { ex: 'lit', value: null },
-                    },
-                    {
-                      when: { ex: 'isnull', arg: { ex: 'field', field: 'tr.expires_on' } },
-                      then: { ex: 'lit', value: 'valid' },
-                    },
-                    {
-                      when: {
-                        ex: 'compare',
-                        op: '<',
-                        left: { ex: 'field', field: 'tr.expires_on' },
-                        right: { ex: 'call', fn: 'current_date', args: [] },
-                      },
-                      then: { ex: 'lit', value: 'expired' },
-                    },
-                    {
-                      when: {
-                        ex: 'compare',
-                        op: '<=',
-                        left: { ex: 'field', field: 'tr.expires_on' },
-                        right: {
-                          ex: 'arith',
-                          op: '+',
-                          left: { ex: 'call', fn: 'current_date', args: [] },
-                          right: { ex: 'lit', value: 90 },
-                        },
-                      },
-                      then: { ex: 'lit', value: 'expiring' },
-                    },
-                  ],
-                  else: { ex: 'lit', value: 'valid' },
-                },
-              },
-            },
+            { fn: 'max', field: 'expires_on', alias: 'expires_on' },
           ],
           orderBy: [
             { ref: 'person_name', direction: 'asc' },
-            { ref: 'course_name', direction: 'asc' },
+            { ref: typeName, direction: 'asc' },
           ],
           limit: 50_000,
         },
       ],
     },
-  },
+  }
+}
+
+export const BUILTIN_QUERIES: Record<
+  string,
+  { query: BhqlQuery; vizType: string; vizSettings?: Record<string, unknown> }
+> = {
+  'training-skills-matrix': qualificationMatrix('skill_coverage', 'skill_type_id', 'skill_name'),
+  'training-certificate-matrix': qualificationMatrix('training_matrix', 'course_id', 'course_name'),
   'kpi-incidents': {
     vizType: 'scalar',
     query: {

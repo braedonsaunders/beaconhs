@@ -2,7 +2,12 @@
 // the same branded document renderer as reports and split wide pivots into
 // readable sections. AI-card PDFs run the stored analysis on demand.
 
-import type { BhqlResult } from '@beaconhs/analytics'
+import {
+  pivotAxisLabel,
+  pivotDisplayValue,
+  type BhqlResult,
+  type VizSettings,
+} from '@beaconhs/analytics'
 import { renderReportPdf } from '@beaconhs/forms-pdf'
 import { createSystemTranslator } from '@beaconhs/i18n/messages'
 import { resolveReportLayout } from '@beaconhs/reports'
@@ -18,6 +23,12 @@ import { loadTenantBranding } from '../../../../reports/_run'
 import { runInsightAiCard } from '../../../_ai-actions'
 import { aiCardDocument, cardExportFilename, cardResultDocument } from './_document'
 import { isRouterPrefetch } from '@/lib/router-prefetch'
+import {
+  applyMatrixFilterRules,
+  MATRIX_FILTER_PARAM,
+  matrixSource,
+  parseMatrixFilters,
+} from '../../../_matrix-filter-values'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +38,7 @@ function cell(v: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-function toCsv(result: BhqlResult): string {
+function toCsv(result: BhqlResult, settings: VizSettings): string {
   if (result.shape === 'flat') {
     const header = result.columns.map((c) => cell(c.label)).join(',')
     const rows = result.rows.map((r) => result.columns.map((c) => cell(r[c.key])).join(','))
@@ -35,16 +46,27 @@ function toCsv(result: BhqlResult): string {
   }
   const valueKey = result.valueMeasures[0]?.key
   const header = [
-    ...result.rowDimensions.map((d) => d.label),
-    ...result.columnKeys.map((k) => k.labels.join(' · ')),
+    ...(typeof settings.rowLabelField === 'string'
+      ? result.rowDimensions.filter((d) => d.key === settings.rowLabelField)
+      : result.rowDimensions
+    ).map((d) => d.label),
+    ...result.columnKeys.map((k) =>
+      pivotAxisLabel(k, result.columnDimensions, settings.columnLabelField),
+    ),
   ]
     .map(cell)
     .join(',')
   const rows = result.rowKeys.map((rk, ri) => {
     const cells = result.columnKeys.map((_ck, ci) =>
-      cell(valueKey ? (result.cells[ri]?.[ci]?.[valueKey] ?? '') : ''),
+      cell(valueKey ? pivotDisplayValue(result.cells[ri]?.[ci] ?? null, valueKey, settings) : ''),
     )
-    return [...rk.labels.map(cell), ...cells].join(',')
+    return [
+      ...(typeof settings.rowLabelField === 'string'
+        ? [pivotAxisLabel(rk, result.rowDimensions, settings.rowLabelField)]
+        : rk.labels
+      ).map(cell),
+      ...cells,
+    ].join(',')
   })
   return [header, ...rows].join('\n')
 }
@@ -60,6 +82,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const card = await loadCard(ctx, id)
   if (!card) return new Response('Not found', { status: 404 })
 
+  let query = card.query
+  if (matrixSource(query)) {
+    try {
+      query = applyMatrixFilterRules(
+        query,
+        parseMatrixFilters(req.nextUrl.searchParams.get(MATRIX_FILTER_PARAM)),
+        req.nextUrl.searchParams.get(`matrix_${card.id}_q`) ?? '',
+      )
+    } catch {
+      return NextResponse.json({ error: 'Invalid matrix filters.' }, { status: 400 })
+    }
+  }
   const format = req.nextUrl.searchParams.get('format') === 'pdf' ? 'pdf' : 'csv'
   const filename = cardExportFilename(card.name)
 
@@ -74,10 +108,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         : {
             ok: true as const,
             ...cardResultDocument(
-              await runAuthorizedBhql(ctx, card.query, {
+              await runAuthorizedBhql(ctx, query, {
                 maxRows: 50_000,
                 trustedSystemCard: isTrustedSystemCard(card),
               }),
+              card.vizSettings,
             ),
           }
 
@@ -120,11 +155,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     })
   }
 
-  const result = await runAuthorizedBhql(ctx, card.query, {
+  const result = await runAuthorizedBhql(ctx, query, {
     maxRows: 50_000,
     trustedSystemCard: isTrustedSystemCard(card),
   })
-  const csv = toCsv(result)
+  const csv = toCsv(result, card.vizSettings)
   const rowCount = result.shape === 'flat' ? result.rows.length : result.rowKeys.length
   await recordAudit(ctx, {
     entityType: 'insight_card',

@@ -343,16 +343,18 @@ You can also build a card by hand using the same side panel, without asking AI. 
 
 For a custom grouping or measure, open **ƒ Fields & functions**. If the data source has many columns, type a field or related-table name in **Search fields or related tables…**. The search covers the complete available schema; no field is dropped after the first page of columns.
 
-## Open the training certificate matrix
+## Open the training matrices
 
-The live **Training — Certificate Matrix** is the one canonical training matrix. It replaces the old flat report.
+**Training — Certificate Matrix** shows employees by course. **Training — Skills Matrix** shows employees by skill type. Both are live cards in the Library.
 
-1. Open the [Library](/insights/library).
-2. Search for **Training — Certificate Matrix** and open it.
-3. Employees are the rows, courses are the columns, and each cell shows the latest certificate status.
-4. To put it on a dashboard, open that dashboard, click **Customise**, then **Add content** and choose the matrix card.
+1. Open the [Library](/insights/library) and open either matrix.
+2. Read the expiry date in each cell. Green means **Valid**, orange means **Expiring**, and red means **Expired**. **No expiry** means a valid ticket has no expiry date. A blank cell means there is no completed ticket.
+3. Click **Filters** to select **People**, **Departments / divisions**, **Groups**, **Courses** or **Skills**, and **Status**. You can choose several values in each filter. Click **Apply** or **Reset**. These filters only affect the current view and do not change the saved card.
+4. Use **Search people…** and the page controls to find employees. Hover over a column heading to read its full name. Use **Column width** to resize all ticket columns together.
+5. Click **Download CSV** or **PDF** to export all matching employees with the same filters and expiry dates. Exports include every matching page.
+6. To put a matrix on a dashboard, click **Customise**, then **Add content** and choose the matrix card.
 
-A person who has no record for a course has a blank cell. The matrix does not add an empty **None** course column. Edit the card to include only certain people, groups, departments, or courses — those filters use pick lists. Use **Download CSV** or **PDF** on the card when you need a snapshot. To print wallet cards for the same slice, open **Reports → Training — Wallet cards**, apply the same people and course filters, and click **PDF**.
+Only active employees appear. Renewed skill tickets replace older tickets in the matrix. Missing tickets are blank; **Missing** in the status filter selects people with a missing requirement. Imported divisions use the **Departments / divisions** filter because BeaconHS maintains them as departments. To print wallet cards, use **Reports → Training — Wallet cards** and apply the matching people and course filters.
 
 ## Save a card as PDF
 
