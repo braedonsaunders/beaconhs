@@ -108,6 +108,7 @@ export const equipmentTelemetryObservations = pgTable(
       t.itemId,
       t.observedAt,
     ),
+    retentionIdx: index('equipment_telemetry_observations_retention_idx').on(t.observedAt),
     coordinateCheck: check(
       'equipment_telemetry_observations_coordinate_ck',
       sql`${t.latitude} BETWEEN -90 AND 90 AND ${t.longitude} BETWEEN -180 AND 180`,

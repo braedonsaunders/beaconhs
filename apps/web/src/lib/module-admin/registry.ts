@@ -259,9 +259,9 @@ export const MODULE_ADMIN: ModuleAdmin[] = [
         permission: 'equipment.read.self',
       },
       {
-        key: 'location',
-        label: 'Location',
-        href: '/equipment/location',
+        key: 'map',
+        label: 'Map',
+        href: '/equipment/map',
         permission: 'equipment.read.self',
       },
       {

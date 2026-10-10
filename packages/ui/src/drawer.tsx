@@ -57,6 +57,7 @@ export function Drawer({
   bodyClassName?: string
 }) {
   const t = useUiText()
+  const titleId = React.useId()
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
 
@@ -154,6 +155,7 @@ export function Drawer({
             ref={panelRef}
             role="dialog"
             aria-modal="true"
+            aria-labelledby={title ? titleId : undefined}
             tabIndex={-1}
             initial={{ x: side === 'left' ? '-100%' : '100%' }}
             animate={{ x: 0 }}
@@ -169,7 +171,10 @@ export function Drawer({
               <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-4 dark:border-slate-800">
                 <div className="min-w-0 space-y-0.5">
                   {title ? (
-                    <h2 className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
+                    <h2
+                      id={titleId}
+                      className="truncate text-base font-semibold text-slate-900 dark:text-slate-100"
+                    >
                       {typeof title === 'string' ? t(title) : title}
                     </h2>
                   ) : null}

@@ -708,19 +708,19 @@ The list starts with **In service** equipment. The top-bar search also shows onl
 ## See who has a unit and where it is
 
 1. Open the unit, then tap the **Location & custody** tab.
-2. **Current site** and **Current holder** show where it is and who has it right now.
-3. **Location history** shows **In**, **Out**, and **Moved** entries together, with date, location, holder, condition, and notes. Search or filter by movement, then use **Prev** and **Next** to browse older entries. Imported location observations appear as **Moved**.
+2. Select **Custody** to see the current site and holder. **Transfer**, **Check in**, and **Check out** stay above the content when you have permission.
+3. Select **Custody history** to see **In**, **Out**, and **Moved** entries together, with date, location, holder, condition, and notes. Search or filter by movement, then use **Prev** and **Next** to browse older entries. Imported location observations appear as **Moved**.
 
 To check a unit in or out yourself, use the station. See [Equipment check-in / check-out](/help/equipment-station).
 
 ## Record a custody change (managers)
 
 1. Open the unit and select **Location & custody**.
-2. Select **Transfer** to change its site or holder. Add a note, then select **Record transfer**. When changing only the holder, you can leave the current location as it is, including an imported customer location. New locations can be active customers, projects, sites, or areas. New holders must be active people. The movement is added to **Location history**, and the drawer closes after saving.
+2. Select **Transfer** to change its site or holder. Add a note, then select **Record transfer**. When changing only the holder, you can leave the current location as it is, including an imported customer location. New locations can be active customers, projects, sites, or areas. New holders must be active people. The movement is added to **Custody history**, and the drawer closes after saving.
 3. Select **Check out** to issue an available unit. A **Destination site** is required; the person and expected return date are optional.
 4. Select **Check in** to return equipment that has an open check-out, a holder, or a location away from base. This also works for imported equipment without a check-out record. Choose its condition and add a note. The unit returns to the default check-in location configured for the station and its holder is cleared. A worker can return equipment issued to them; managers can return any unit they manage.
 
-An open check-out must be checked in before you can use **Transfer** or a bulk site/holder change. Every check-in, check-out, and transfer appears in the same **Location history** table. Equipment at a base or the default check-in location, without a holder or open check-out, is checked in. Repair, missing, and retired statuses prevent check-out but do not by themselves mean a unit is checked out.
+An open check-out must be checked in before you can use **Transfer** or a bulk site/holder change. Every check-in, check-out, and transfer appears in the same **Custody history** table. Equipment at a base or the default check-in location, without a holder or open check-out, is checked in. Repair, missing, and retired statuses prevent check-out but do not by themselves mean a unit is checked out.
 
 To update several visible units, select their checkboxes and choose **Transfer to location** or **Assign to holder** in the bulk bar. Search the location or holder field, choose the exact match, then select **Apply**. The search reads the complete current directory in small pages, so a site or person is not hidden just because the workspace is large.
 
@@ -739,14 +739,17 @@ To assign a department, open the unit, select **Overview**, and choose **Departm
 
 ## View tracker locations
 
-1. Open **Equipment**, then choose **Location**.
+1. Open **Equipment**, then choose **Map**. **Map** opens first. Choose **Table** to see location details instead of the map.
 2. Search for an equipment tag, name, address, or manual site. Use **Tracker health**, **Movement**, and **Source** to narrow the equipment shown.
-3. Click the equipment name to open **Location & custody**. **Tracker location** shows the source, GPS observation time, last tracker contact, and position.
-4. Search the GPS history by date or time in UTC. Use **Movement** and the page controls to narrow the history.
+3. Click an equipment name in a marker or the table to open **Location & custody**. **Map** shows its last-known position with the observation time and source below it.
+4. Choose **GPS history** to search readings by date or time in UTC. Use **Movement** and the page controls to narrow the history.
+5. Choose **Tracker details** for reporting times, coordinates, speed, engine state, device serials, and the equipment link. **Custody** and **Custody history** show manual records separately. Units without a linked tracker only show these custody sub-tabs.
 
-The equipment map shows positions from the current page. A unit map includes its latest known position and the current page of history. Click a marker to see equipment and observation details. Markers with a number contain equipment sharing a position. Use **Fit view** to see all visible markers, or **Expand** for a larger map. Map tiles use OpenStreetMap; coordinates remain listed if tiles cannot load.
+The equipment map shows positions from the current page. A unit map shows its latest known position. Click a marker to see equipment and observation details. Nearby equipment is grouped into numbered markers. Select a group to zoom in; groups separate as you zoom. Equipment at the same position stays together so you can choose every unit. Use **Fit view** to see all visible markers, or **Expand** for a larger map. Map tiles use OpenStreetMap; coordinates remain listed if tiles cannot load.
 
 **Reporting** means the GPS observation is within the integration's freshness limit. **Stale location** means the position is older. **No valid GPS fix** and **Never reported** mean a current position is unavailable. **Integration error** means collection failed. **Sync delayed** means successful collection is overdue. **Automatic sync off** means scheduled collection is disabled. **Inactive in source** means the provider removed or deactivated the asset.
+
+GPS history defaults to 90 days. Older readings are removed by nightly cleanup, while the last-known position and manual custody records remain. Ask a platform administrator if you need a longer history window.
 
 Tracker positions supplement the assigned location. They do not transfer equipment, change its holder, check it in, check it out, or mark missing equipment as found. Check the observation time before acting on a retained position. Ask an administrator to review an incorrect tracker link. Equipment GPS history begins when a tracker link takes effect; administrators can view earlier readings on the tracker record.
 

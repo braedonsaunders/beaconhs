@@ -470,6 +470,13 @@
       "when": 1791588431370,
       "tag": "0067_equipment_telemetry",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1791596976315,
+      "tag": "0068_telemetry_retention_indexes",
+      "breakpoints": true
     }
   ]
 }

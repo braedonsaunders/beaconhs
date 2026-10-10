@@ -278,7 +278,7 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
           assets: pulled.equipmentTelemetry,
           dryRun,
         })
-        if (runId && applied.length)
+        if (runId && applied.length && trigger !== 'scheduled')
           await tx.insert(syncRecordChanges).values(
             applied.map((decision) => ({
               tenantId,
@@ -296,6 +296,11 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
       })
       const stat = (stats.equipment = emptyStat())
       stat.pulled = decisions.length
+      if (!dryRun)
+        stat.observationsCreated = decisions.reduce(
+          (total, decision) => total + (decision.observationsCreated ?? 0),
+          0,
+        )
       for (const decision of decisions) actionStat(stats, 'equipment', decision.action)
       return finalize('success', stats, null, cursorAfter)
     } catch (error) {
@@ -404,7 +409,10 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
       // Committed — fold the batch delta into the run totals.
       for (const [entity, bs] of Object.entries(batchStats)) {
         const s = (stats[entity] ??= emptyStat())
-        for (const k of Object.keys(bs) as (keyof SyncEntityStat)[]) s[k] += bs[k]
+        for (const k of Object.keys(bs) as (keyof SyncEntityStat)[]) {
+          const delta = bs[k]
+          if (delta !== undefined) s[k] = (s[k] ?? 0) + delta
+        }
       }
       for (const entity of Object.keys(batchSeen) as SyncEntityKey[]) {
         for (const id of batchSeen[entity]) seen[entity].add(id)

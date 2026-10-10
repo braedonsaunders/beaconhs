@@ -18,6 +18,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import { id, softDelete, timestamps } from './_helpers'
 import { tenants } from './core'
 
@@ -44,6 +45,8 @@ export type SyncEntityStat = {
   failed: number
   archived: number
   conflict: number
+  /** Newly persisted supplemental GPS observations; absent for previews. */
+  observationsCreated?: number
 }
 
 export type SyncRunLogLine = { at: string; level: 'info' | 'warn' | 'error'; msg: string }
@@ -151,6 +154,9 @@ export const syncRuns = pgTable(
   (t) => ({
     tenantIdx: index('sync_runs_tenant_idx').on(t.tenantId),
     connectionIdx: index('sync_runs_connection_idx').on(t.tenantId, t.connectionId, t.startedAt),
+    retentionIdx: index('sync_runs_retention_idx')
+      .on(t.startedAt)
+      .where(sql`${t.status} IN ('success', 'partial', 'error') AND ${t.completedAt} IS NOT NULL`),
     tenantIdIdUx: uniqueIndex('sync_runs_tenant_id_id_ux').on(t.tenantId, t.id),
     connectionFk: foreignKey({
       name: 'sync_runs_tenant_connection_fk',

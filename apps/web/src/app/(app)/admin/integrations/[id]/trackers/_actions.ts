@@ -143,7 +143,7 @@ export async function saveTrackerBinding(input: {
       return tracker.connectionId
     })
     revalidatePath(`/admin/integrations/${connectionId}/trackers`)
-    revalidatePath('/equipment/location')
+    revalidatePath('/equipment/map')
     revalidatePath('/equipment/[id]', 'page')
     return { ok: true }
   } catch (error) {

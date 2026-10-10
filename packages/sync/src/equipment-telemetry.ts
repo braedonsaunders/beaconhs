@@ -1,9 +1,16 @@
-import { and, eq, isNull, sql } from 'drizzle-orm'
-import type { Database } from '@beaconhs/db'
+import { and, eq, isNull, notInArray, sql } from 'drizzle-orm'
+import {
+  MAINTENANCE_TABLES,
+  resolveRetentionDays,
+  type Database,
+  type DbMaintenanceSettings,
+} from '@beaconhs/db'
 import {
   equipmentTelemetryAssets,
   equipmentTelemetryObservations,
   syncConnections,
+  platformSettings,
+  PLATFORM_SETTINGS_ID,
   type SyncRecordAction,
 } from '@beaconhs/db/schema'
 import type { EquipmentTelemetryAsset, EquipmentTelemetryObservation } from './types'
@@ -55,6 +62,7 @@ export async function applyEquipmentTelemetry(
     canonicalId: string | null
     action: SyncRecordAction
     message: string
+    observationsCreated?: number
   }>
 > {
   const { tenantId, connectionId, assets, dryRun } = args
@@ -74,17 +82,29 @@ export async function applyEquipmentTelemetry(
     .where(and(eq(syncConnections.id, connectionId), isNull(syncConnections.deletedAt)))
     .limit(1)
   if (!connection) throw new Error('The tracking integration was deleted during this run.')
+  // Retention is deployment-wide. Read the existing maintenance policy once;
+  // retained latest positions still update even when source history is too old.
+  const [settings] = await tx
+    .select({ database: platformSettings.database })
+    .from(platformSettings)
+    .where(eq(platformSettings.id, PLATFORM_SETTINGS_ID))
+    .limit(1)
+  const historyTable = MAINTENANCE_TABLES.find(
+    (table) => table.table === 'equipment_telemetry_observations',
+  )!
+  const retentionDays = resolveRetentionDays(
+    (settings?.database ?? {}) as DbMaintenanceSettings,
+    historyTable,
+  )
+  const historyCutoff =
+    retentionDays !== null && retentionDays > 0 ? Date.now() - retentionDays * 86_400_000 : null
   const decisions: Array<{
     externalId: string
     canonicalId: string | null
     action: SyncRecordAction
     message: string
+    observationsCreated?: number
   }> = []
-  if (!dryRun)
-    await tx
-      .update(equipmentTelemetryAssets)
-      .set({ sourcePresent: false })
-      .where(eq(equipmentTelemetryAssets.connectionId, connectionId))
   for (const asset of assets) {
     const points = orderedTelemetryObservations(asset.observations)
     const latest = points.at(-1)
@@ -136,15 +156,22 @@ export async function applyEquipmentTelemetry(
       newerLocation ||
       (newerReport && reportedAt?.getTime() !== existing?.lastReportedAt?.getTime()) ||
       existing?.name !== asset.name ||
+      existing?.vin !== asset.vin ||
+      JSON.stringify(existing?.deviceSerials) !== JSON.stringify(asset.deviceSerials) ||
+      JSON.stringify(existing?.deviceModels) !== JSON.stringify(asset.deviceModels) ||
+      existing?.gpsValid !== values.gpsValid ||
+      existing?.address !== values.address ||
       !existing?.sourcePresent ||
       existing?.deactivated !== asset.deactivated
     const action: SyncRecordAction = !existing ? 'created' : changed ? 'updated' : 'unchanged'
-    decisions.push({
+    const decision = {
       externalId: asset.externalId,
       canonicalId: existing?.itemId ?? null,
       action,
       message: `${points.length} valid location observation(s); ${existing?.itemId ? 'equipment linked' : 'equipment mapping required'}.`,
-    })
+      observationsCreated: dryRun ? undefined : 0,
+    }
+    decisions.push(decision)
     if (dryRun) continue
     const [saved] = await tx
       .insert(equipmentTelemetryAssets)
@@ -161,10 +188,14 @@ export async function applyEquipmentTelemetry(
     if (!saved) throw new Error('Could not save telemetry asset.')
     // History imported before a tracker assignment stays unassigned. GPS
     // cannot establish who held an item before its binding became effective.
-    for (let offset = 0; offset < points.length; offset += 250) {
-      const batch = points.slice(offset, offset + 250)
-      if (batch.length)
-        await tx
+    const retainedPoints =
+      historyCutoff === null
+        ? points
+        : points.filter((point) => date(point.observedAt).getTime() >= historyCutoff)
+    for (let offset = 0; offset < retainedPoints.length; offset += 250) {
+      const batch = retainedPoints.slice(offset, offset + 250)
+      if (batch.length) {
+        const inserted = await tx
           .insert(equipmentTelemetryObservations)
           .values(
             batch.map((point) => ({
@@ -188,7 +219,24 @@ export async function applyEquipmentTelemetry(
               equipmentTelemetryObservations.observedAt,
             ],
           })
+          .returning({ id: equipmentTelemetryObservations.id })
+        decision.observationsCreated! += inserted.length
+      }
     }
   }
+  if (!dryRun)
+    await tx
+      .update(equipmentTelemetryAssets)
+      .set({ sourcePresent: false })
+      .where(
+        and(
+          eq(equipmentTelemetryAssets.connectionId, connectionId),
+          eq(equipmentTelemetryAssets.sourcePresent, true),
+          notInArray(
+            equipmentTelemetryAssets.externalId,
+            assets.map((asset) => asset.externalId),
+          ),
+        ),
+      )
   return decisions
 }

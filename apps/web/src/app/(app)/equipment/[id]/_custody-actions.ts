@@ -89,5 +89,5 @@ export async function transferLocation(formData: FormData) {
   revalidatePath('/equipment')
   revalidatePath('/equipment/station')
   revalidatePath('/dashboard')
-  redirect(`/equipment/${id}?tab=location`)
+  redirect(`/equipment/${id}?tab=location&locationView=custody`)
 }

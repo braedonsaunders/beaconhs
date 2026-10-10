@@ -778,6 +778,8 @@ BeaconHS blocks deletion while a People group is used by a notification rule, Fl
 - **Integrations** — sync data in and send events out to other systems.
 - **API keys** — credentials for the public REST API. Search by key name or prefix and filter by active, expired, or revoked status. Choose the smallest permissions and explicitly select every Builder app the integration may access; forms permissions alone expose no apps. After you click **Generate**, copy each highlighted secret before you dismiss it; a secret is shown only once. Write requests require an **Idempotency-Key**, and keys are rate-limited. API keys stop authenticating while the workspace is suspended or archived.
 
+Open an integration connection and choose **Settings**, **Schedule**, or **Run history**. **Settings** holds credentials, source mappings, and ownership rules. **Schedule** controls automatic runs. **Run history** has search, status and preview filters, and page controls. **Run now** and **Preview** stay at the top.
+
 For an inbound data-sync connection, the schedule controls automatic runs only. A connection set to manual still owns the records it imported, so source-managed fields stay read-only. Use **Delete connection** only when you want those records handed back to manual management. Deleting the connection keeps the imported records; it removes the source ownership link.
 
 A SQL inbound connection can map more than one table into **Locations & Projects**. Customers become locations. Jobs become projects under their customer.
@@ -785,14 +787,18 @@ A SQL inbound connection can map more than one table into **Locations & Projects
 ## Connect equipment trackers
 
 1. Open **Admin**, then **Integrations**. Add a tracking provider from the catalog. **Fleet Complete / Powerfleet Unity** is one supported provider.
-2. Enter the provider's API-account credentials and click **Save settings**. Credentials are encrypted. For Unity, leave **Fleet user ID** blank only if the account can access exactly one fleet. Choose **Coordinate units** after checking a known position; TELUS Unity has been verified to return decimal degrees.
-3. Click **Run now**. Wait for a successful run, then open **Tracker assignments**.
+2. On **Settings**, enter the provider's API-account credentials and click **Save settings**. Credentials are encrypted. For Unity, leave **Fleet user ID** blank only if the account can access exactly one fleet. Choose **Coordinate units** after checking a known position; TELUS Unity has been verified to return decimal degrees.
+3. Click **Run now**. Check **Run history** for a successful run. Return to **Settings**, then open **Tracker assignments**.
 4. Search by source asset name, device serial, VIN, or equipment tag. Use **Assignment** and **Tracker health** to review the inventory.
 5. Choose existing equipment and click **Save link**. **Use suggested** fills an exact, unique asset-tag or VIN match; review it before saving. To leave a tracker out, select **Exclude tracker** and click **Save link**.
-6. Choose **Every 5 minutes**, enable the schedule, and save it. Set **Tracker stale after (minutes)** to match the devices' reporting schedule. The default is 24 hours; a successful integration run never resets the GPS observation time.
-7. Open **Equipment**, then **Location**, to review linked equipment locations.
+6. Open **Schedule**. Choose **Every 5 minutes**, enable the schedule, and click **Save schedule**. Return to **Settings** to set **Tracker stale after (minutes)** to match the devices' reporting schedule. The default is 24 hours; a successful integration run never resets the GPS observation time.
+7. Open **Equipment**, then **Map**, to review linked equipment locations.
 
-Click a source asset name on **Tracker assignments** to see its source history, including observations collected before it was linked. Equipment history starts when its link takes effect. Unlink an equipment item's current tracker before assigning another. Moving a tracker preserves earlier observations and does not rewrite custody history.
+Click a source asset name on **Tracker assignments**. Choose **Map**, **GPS history**, or **Tracker details**. Source history includes observations collected before it was linked. Equipment history starts when its link takes effect. Unlink an equipment item's current tracker before assigning another. Moving a tracker preserves earlier observations and does not rewrite custody history.
+
+**Trackers checked** counts the existing inventory refreshed by a run. **New trackers** counts newly discovered devices. **New GPS observations** counts only new readings saved; repeated readings are not added again. Scheduled polls save one run summary without per-tracker run details. Manual runs and previews keep those details for review.
+
+GPS history and completed integration runs default to 90 days of retention. The nightly cleanup removes older history and run details. It keeps tracker inventory, last-known positions, active runs, and manual custody records. A platform super-admin can change these windows under **Platform → Database**, using **Equipment GPS history** and **Completed integration runs**. A blank window keeps history forever.
 
 Tracking integrations supplement equipment records. They do not claim source ownership, rename equipment, archive equipment, update manual meters, change its assigned location or holder, or mark missing equipment as found. The register's ownership and missing-record policies do not apply to tracker observations.
 

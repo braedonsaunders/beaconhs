@@ -40,25 +40,25 @@ export type Walkthrough = {
 
 export const WALKTHROUGHS: Walkthrough[] = [
   {
-    id: 'equipment-location',
+    id: 'equipment-map',
     title: 'Find tracked equipment',
     description: 'Find tracker positions and check how current they are.',
-    startPath: '/equipment/location',
+    startPath: '/equipment/map',
     defaultEnabled: true,
     defaultAutoStart: false,
     steps: [
       {
-        path: '/equipment/location',
+        path: '/equipment/map',
         title: 'Find equipment',
-        body: 'Search by equipment tag or name. Use Tracker health to find old positions or collection errors.',
+        body: 'Search by equipment tag or name. Use Tracker health to find old positions or collection errors. Map opens first; choose Table for location details.',
       },
       {
         title: 'Check the time',
-        body: 'GPS observed is when the tracker measured the position. Last contact is when it last reported. A recently collected reading can still be old.',
+        body: 'Select a numbered marker to zoom into nearby equipment. Select an individual marker to check GPS observed, the time the tracker measured the position. A recently collected reading can still be old.',
       },
       {
         title: 'Open the equipment',
-        body: 'Click an equipment name to open Location & custody. Tracker location shows its source and history. GPS does not change its assigned location or holder.',
+        body: 'Click an equipment name to open Location & custody. Use Map, GPS history, and Tracker details for tracking. Custody and Custody history show manual records. Transfer, Check in, and Check out stay above the content.',
       },
     ],
   },

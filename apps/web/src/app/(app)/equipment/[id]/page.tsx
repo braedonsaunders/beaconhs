@@ -89,12 +89,14 @@ import {
   equipmentInspectionTypes,
   equipmentItems,
   equipmentLocationHistory,
+  equipmentTelemetryAssets,
   equipmentLogEntries,
   equipmentReminders,
   equipmentTypes,
   equipmentWorkOrders,
   orgUnits,
   people,
+  syncConnections,
   users as user,
 } from '@beaconhs/db/schema'
 import { assertCan, can } from '@beaconhs/tenant'
@@ -172,6 +174,9 @@ type Tab = (typeof TABS)[number]
 // first row of the schedules table rather than a parallel place to look.
 const INSPECTION_TABS = ['schedules', 'oil', 'reminders', 'history'] as const
 type InspectionTab = (typeof INSPECTION_TABS)[number]
+
+const LOCATION_VIEWS = ['map', 'gps_history', 'tracker', 'custody', 'custody_history'] as const
+const CUSTODY_VIEWS = ['custody', 'custody_history'] as const
 
 // Sub-tables share one page; each gets prefixed search/pagination params
 // (e.g. ?wo_q=&wo_p=2) so filtering work orders never resets the log table.
@@ -459,7 +464,7 @@ async function checkOutFromItem(formData: FormData) {
   revalidatePath('/equipment')
   revalidatePath('/equipment/station')
   revalidatePath('/dashboard')
-  redirect(`/equipment/${itemId}?tab=location`)
+  redirect(`/equipment/${itemId}?tab=location&locationView=custody`)
 }
 
 // Returns issued or imported equipment through the same custody operation as
@@ -484,7 +489,7 @@ async function checkInFromItem(formData: FormData) {
     optionalTextInput(formData.get('returnedNotes'), 'Return notes', 2_000) ?? '',
   )
   await checkInEquipment(fd)
-  redirect(`/equipment/${itemId}?tab=location`)
+  redirect(`/equipment/${itemId}?tab=location&locationView=custody`)
 }
 
 // ---------------- Typed server actions (drawer-friendly) ----------------
@@ -1063,8 +1068,16 @@ export default async function EquipmentDetailPage({
         : Promise.resolve([]),
     ])
 
+    const [tracker] = await tx
+      .select({ id: equipmentTelemetryAssets.id })
+      .from(equipmentTelemetryAssets)
+      .innerJoin(syncConnections, eq(syncConnections.id, equipmentTelemetryAssets.connectionId))
+      .where(and(eq(equipmentTelemetryAssets.itemId, id), isNull(syncConnections.deletedAt)))
+      .limit(1)
+
     return {
       ...row,
+      hasTracker: Boolean(tracker),
       photoUrl: row.item.photoAttachmentId ? attachmentUrl(row.item.photoAttachmentId) : null,
       history,
       historyTotal,
@@ -1089,6 +1102,12 @@ export default async function EquipmentDetailPage({
   })
 
   if (!data) notFound()
+  const locationView = pickActiveTab(
+    sp,
+    data.hasTracker ? LOCATION_VIEWS : CUSTODY_VIEWS,
+    data.hasTracker ? 'map' : 'custody',
+    'locationView',
+  )
   const {
     item,
     isCheckedOut,
@@ -1915,248 +1934,317 @@ export default async function EquipmentDetailPage({
                 value={
                   active === 'location' ? (
                     <div className="space-y-4">
-                      <EquipmentTelemetryPanel
-                        itemId={id}
-                        basePath={basePath}
-                        searchParams={{ ...sp, tab: 'location' }}
-                      />
-                      <Card>
-                        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
-                          <CardTitle>
-                            <GeneratedText id="m_0de40eb20074ca" />
-                          </CardTitle>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <GeneratedValue
-                              value={
-                                canTransferCustody ? (
-                                  <Link href={`${basePath}?tab=location&drawer=transfer` as Route}>
-                                    <Button size="sm" variant="outline">
-                                      <ArrowLeftRight size={14} />{' '}
-                                      <GeneratedText id="m_164016b2b73317" />
-                                    </Button>
-                                  </Link>
-                                ) : null
-                              }
-                            />
-                            <GeneratedValue
-                              value={
-                                canCheckIn ? (
-                                  <Link href={`${basePath}?tab=location&drawer=check-in` as Route}>
-                                    <Button size="sm">
-                                      <LogIn size={14} /> <GeneratedText id="m_1aa025f1523915" />
-                                    </Button>
-                                  </Link>
-                                ) : canCheckOut ? (
-                                  <Link href={`${basePath}?tab=location&drawer=check-out` as Route}>
-                                    <Button size="sm">
-                                      <LogOut size={14} /> <GeneratedText id="m_0a8918b3f9c991" />
-                                    </Button>
-                                  </Link>
-                                ) : null
-                              }
-                            />
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4 text-sm">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <MapPin size={16} className="text-slate-400" />
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="max-w-full min-w-0">
+                          <TabNav
+                            variant="pills"
+                            paramKey="locationView"
+                            basePath={basePath}
+                            currentParams={{ ...sp, tab: 'location' }}
+                            active={locationView}
+                            tabs={[
+                              { key: 'map', label: 'Map', hidden: !data.hasTracker },
+                              {
+                                key: 'gps_history',
+                                label: 'GPS history',
+                                hidden: !data.hasTracker,
+                              },
+                              {
+                                key: 'tracker',
+                                label: 'Tracker details',
+                                hidden: !data.hasTracker,
+                              },
+                              { key: 'custody', label: 'Custody' },
+                              {
+                                key: 'custody_history',
+                                label: 'Custody history',
+                                count: historyTotal,
+                              },
+                            ]}
+                          />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <GeneratedValue
+                            value={
+                              canTransferCustody ? (
+                                <Link
+                                  href={
+                                    mergeHref(basePath, sp, {
+                                      tab: 'location',
+                                      drawer: 'transfer',
+                                    }) as Route
+                                  }
+                                >
+                                  <Button size="sm" variant="outline">
+                                    <ArrowLeftRight size={14} />{' '}
+                                    <GeneratedText id="m_164016b2b73317" />
+                                  </Button>
+                                </Link>
+                              ) : null
+                            }
+                          />
+                          <GeneratedValue
+                            value={
+                              canCheckIn ? (
+                                <Link
+                                  href={
+                                    mergeHref(basePath, sp, {
+                                      tab: 'location',
+                                      drawer: 'check-in',
+                                    }) as Route
+                                  }
+                                >
+                                  <Button size="sm">
+                                    <LogIn size={14} /> <GeneratedText id="m_1aa025f1523915" />
+                                  </Button>
+                                </Link>
+                              ) : canCheckOut ? (
+                                <Link
+                                  href={
+                                    mergeHref(basePath, sp, {
+                                      tab: 'location',
+                                      drawer: 'check-out',
+                                    }) as Route
+                                  }
+                                >
+                                  <Button size="sm">
+                                    <LogOut size={14} /> <GeneratedText id="m_0a8918b3f9c991" />
+                                  </Button>
+                                </Link>
+                              ) : null
+                            }
+                          />
+                        </div>
+                      </div>
+                      {locationView === 'map' ||
+                      locationView === 'gps_history' ||
+                      locationView === 'tracker' ? (
+                        <EquipmentTelemetryPanel
+                          itemId={id}
+                          basePath={basePath}
+                          searchParams={{ ...sp, tab: 'location', locationView }}
+                          view={
+                            locationView === 'gps_history'
+                              ? 'history'
+                              : locationView === 'tracker'
+                                ? 'details'
+                                : 'map'
+                          }
+                        />
+                      ) : null}
+
+                      {locationView === 'custody' ? (
+                        <Card>
+                          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+                            <CardTitle>
+                              <GeneratedText id="m_0de40eb20074ca" />
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-4 text-sm">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <MapPin size={16} className="text-slate-400" />
+                                <GeneratedValue
+                                  value={site?.name ?? <GeneratedText id="m_10d1d0d92a9aaa" />}
+                                />
+                              </div>
                               <GeneratedValue
-                                value={site?.name ?? <GeneratedText id="m_10d1d0d92a9aaa" />}
+                                value={
+                                  holder ? (
+                                    <div className="text-slate-600 dark:text-slate-400">
+                                      <GeneratedText id="m_0c7e58476facb9" />
+                                      <GeneratedValue value={' '} />
+                                      <Link
+                                        href={`/people/${holder.id}`}
+                                        className="text-teal-700 hover:underline dark:text-teal-400"
+                                      >
+                                        <GeneratedValue value={holder.firstName} />{' '}
+                                        <GeneratedValue value={holder.lastName} />
+                                      </Link>
+                                    </div>
+                                  ) : null
+                                }
+                              />
+                              <GeneratedValue
+                                value={
+                                  openCheckout ? (
+                                    <div className="text-slate-600 dark:text-slate-400">
+                                      <GeneratedText id="m_0e13fb7d29d9df" />
+                                      <GeneratedValue
+                                        value={
+                                          openCheckout.co.expectedReturnOn ? (
+                                            <GeneratedText
+                                              id="m_1f5072ac43774e"
+                                              values={{ value0: openCheckout.co.expectedReturnOn }}
+                                            />
+                                          ) : (
+                                            ''
+                                          )
+                                        }
+                                      />
+                                      .
+                                    </div>
+                                  ) : null
+                                }
+                              />
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ) : null}
+
+                      {locationView === 'custody_history' ? (
+                        <Card>
+                          <CardHeader>
+                            <CardTitle>
+                              <GeneratedValue value={'Custody history'} />
+                              <span className="ml-1 font-normal text-slate-500">
+                                ({historyTotal})
+                              </span>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <div className="min-w-0 flex-1">
+                                <SearchInput
+                                  paramKey="lh_q"
+                                  pageParamKey="lh_p"
+                                  placeholder={tGenerated('m_0f68bc19b64344')}
+                                />
+                              </div>
+                              <SearchFilter
+                                basePath={basePath}
+                                currentParams={sp}
+                                paramKey="lh_kind"
+                                pageParamKey="lh_p"
+                                options={[
+                                  { value: 'check_in', label: 'In' },
+                                  { value: 'check_out', label: 'Out' },
+                                  { value: 'transfer', label: 'Moved' },
+                                ]}
+                                placeholder={tGenerated('m_00896a07ebfbd6')}
                               />
                             </div>
                             <GeneratedValue
                               value={
-                                holder ? (
-                                  <div className="text-slate-600 dark:text-slate-400">
-                                    <GeneratedText id="m_0c7e58476facb9" />
-                                    <GeneratedValue value={' '} />
-                                    <Link
-                                      href={`/people/${holder.id}`}
-                                      className="text-teal-700 hover:underline dark:text-teal-400"
-                                    >
-                                      <GeneratedValue value={holder.firstName} />{' '}
-                                      <GeneratedValue value={holder.lastName} />
-                                    </Link>
-                                  </div>
-                                ) : null
-                              }
-                            />
-                            <GeneratedValue
-                              value={
-                                openCheckout ? (
-                                  <div className="text-slate-600 dark:text-slate-400">
-                                    <GeneratedText id="m_0e13fb7d29d9df" />
+                                history.length === 0 ? (
+                                  <p className="text-sm text-slate-500 dark:text-slate-400">
                                     <GeneratedValue
                                       value={
-                                        openCheckout.co.expectedReturnOn ? (
-                                          <GeneratedText
-                                            id="m_1f5072ac43774e"
-                                            values={{ value0: openCheckout.co.expectedReturnOn }}
-                                          />
+                                        lhP.q || sp.lh_kind ? (
+                                          <GeneratedText id="m_0df9a3c13764d8" />
                                         ) : (
-                                          ''
+                                          <GeneratedText id="m_0700918f8ecf46" />
                                         )
                                       }
                                     />
-                                    .
-                                  </div>
-                                ) : null
-                              }
-                            />
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>
-                            <GeneratedText id="m_10e91cc30d2743" />
-                            <GeneratedValue value={historyTotal} />)
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <div className="flex items-center gap-2">
-                            <div className="min-w-0 flex-1">
-                              <SearchInput
-                                paramKey="lh_q"
-                                pageParamKey="lh_p"
-                                placeholder={tGenerated('m_0f68bc19b64344')}
-                              />
-                            </div>
-                            <SearchFilter
-                              basePath={basePath}
-                              currentParams={sp}
-                              paramKey="lh_kind"
-                              pageParamKey="lh_p"
-                              options={[
-                                { value: 'check_in', label: 'In' },
-                                { value: 'check_out', label: 'Out' },
-                                { value: 'transfer', label: 'Moved' },
-                              ]}
-                              placeholder={tGenerated('m_00896a07ebfbd6')}
-                            />
-                          </div>
-                          <GeneratedValue
-                            value={
-                              history.length === 0 ? (
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                  <GeneratedValue
-                                    value={
-                                      lhP.q || sp.lh_kind ? (
-                                        <GeneratedText id="m_0df9a3c13764d8" />
-                                      ) : (
-                                        <GeneratedText id="m_0700918f8ecf46" />
-                                      )
-                                    }
-                                  />
-                                </p>
-                              ) : (
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>
-                                        <GeneratedText id="m_102c6fce820610" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_13cc128f69897c" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_020146dd3d3d5a" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_1dd437d2b4ab7f" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_0c33471afd0f99" />
-                                      </TableHead>
-                                      <TableHead>
-                                        <GeneratedText id="m_16d241f76641bb" />
-                                      </TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    <GeneratedValue
-                                      value={history.map((row) => (
-                                        <TableRow key={row.history.id}>
-                                          <TableCell>
-                                            <Badge
-                                              variant={
-                                                row.history.movementKind === 'check_in'
-                                                  ? 'success'
-                                                  : row.history.movementKind === 'check_out'
-                                                    ? 'warning'
-                                                    : 'default'
-                                              }
-                                            >
+                                  </p>
+                                ) : (
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>
+                                          <GeneratedText id="m_102c6fce820610" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_13cc128f69897c" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_020146dd3d3d5a" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_1dd437d2b4ab7f" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_0c33471afd0f99" />
+                                        </TableHead>
+                                        <TableHead>
+                                          <GeneratedText id="m_16d241f76641bb" />
+                                        </TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      <GeneratedValue
+                                        value={history.map((row) => (
+                                          <TableRow key={row.history.id}>
+                                            <TableCell>
+                                              <Badge
+                                                variant={
+                                                  row.history.movementKind === 'check_in'
+                                                    ? 'success'
+                                                    : row.history.movementKind === 'check_out'
+                                                      ? 'warning'
+                                                      : 'default'
+                                                }
+                                              >
+                                                <GeneratedValue
+                                                  value={
+                                                    row.history.movementKind === 'check_in'
+                                                      ? 'In'
+                                                      : row.history.movementKind === 'check_out'
+                                                        ? 'Out'
+                                                        : 'Moved'
+                                                  }
+                                                />
+                                              </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                              <GeneratedValue
+                                                value={formatDateTime(
+                                                  new Date(row.history.recordedAt),
+                                                  ctx.timezone,
+                                                  ctx.locale,
+                                                )}
+                                              />
+                                            </TableCell>
+                                            <TableCell>
+                                              <GeneratedValue value={row.site?.name ?? '—'} />
+                                            </TableCell>
+                                            <TableCell>
                                               <GeneratedValue
                                                 value={
-                                                  row.history.movementKind === 'check_in'
-                                                    ? 'In'
-                                                    : row.history.movementKind === 'check_out'
-                                                      ? 'Out'
-                                                      : 'Moved'
+                                                  row.holder
+                                                    ? `${row.holder.firstName} ${row.holder.lastName}`
+                                                    : '—'
                                                 }
                                               />
-                                            </Badge>
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue
-                                              value={formatDateTime(
-                                                new Date(row.history.recordedAt),
-                                                ctx.timezone,
-                                                ctx.locale,
-                                              )}
-                                            />
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue value={row.site?.name ?? '—'} />
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue
-                                              value={
-                                                row.holder
-                                                  ? `${row.holder.firstName} ${row.holder.lastName}`
-                                                  : '—'
-                                              }
-                                            />
-                                          </TableCell>
-                                          <TableCell>
-                                            <GeneratedValue
-                                              value={
-                                                row.history.condition
-                                                  ? (
-                                                      {
-                                                        good: 'Good',
-                                                        fair: 'Fair',
-                                                        damaged: 'Damaged',
-                                                        unusable: 'Unusable',
-                                                      } as const
-                                                    )[row.history.condition]
-                                                  : '—'
-                                              }
-                                            />
-                                          </TableCell>
-                                          <TableCell className="text-slate-600 dark:text-slate-300">
-                                            <GeneratedValue value={row.history.note ?? '—'} />
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
-                                    />
-                                  </TableBody>
-                                </Table>
-                              )
-                            }
-                          />
-                          <SubPagination
-                            basePath={basePath}
-                            sp={sp}
-                            prefix="lh"
-                            total={historyTotal}
-                            page={lhP.page}
-                          />
-                        </CardContent>
-                      </Card>
+                                            </TableCell>
+                                            <TableCell>
+                                              <GeneratedValue
+                                                value={
+                                                  row.history.condition
+                                                    ? (
+                                                        {
+                                                          good: 'Good',
+                                                          fair: 'Fair',
+                                                          damaged: 'Damaged',
+                                                          unusable: 'Unusable',
+                                                        } as const
+                                                      )[row.history.condition]
+                                                    : '—'
+                                                }
+                                              />
+                                            </TableCell>
+                                            <TableCell className="text-slate-600 dark:text-slate-300">
+                                              <GeneratedValue value={row.history.note ?? '—'} />
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      />
+                                    </TableBody>
+                                  </Table>
+                                )
+                              }
+                            />
+                            <SubPagination
+                              basePath={basePath}
+                              sp={sp}
+                              prefix="lh"
+                              total={historyTotal}
+                              page={lhP.page}
+                            />
+                          </CardContent>
+                        </Card>
+                      ) : null}
                     </div>
                   ) : null
                 }

@@ -23,6 +23,19 @@ type MaintenanceTable = {
 }
 
 export const MAINTENANCE_TABLES: MaintenanceTable[] = [
+  {
+    table: 'equipment_telemetry_observations',
+    timeColumn: 'observed_at',
+    label: 'Equipment GPS history',
+    defaultRetentionDays: 90,
+  },
+  {
+    table: 'sync_runs',
+    timeColumn: 'started_at',
+    label: 'Completed integration runs',
+    defaultRetentionDays: 90,
+    retentionWhere: "status IN ('success', 'partial', 'error') AND completed_at IS NOT NULL",
+  },
   { table: 'audit_log', timeColumn: 'occurred_at', label: 'Audit log', defaultRetentionDays: 730 },
   {
     table: 'notifications',

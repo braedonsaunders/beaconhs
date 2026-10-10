@@ -85,7 +85,9 @@ describe('direct equipment custody transfers', () => {
       ctx,
       expect.objectContaining({ before: { siteOrgUnitId: customer, holderPersonId: null } }),
     )
-    expect(mocks.redirect).toHaveBeenCalledWith(`/equipment/${id}?tab=location`)
+    expect(mocks.redirect).toHaveBeenCalledWith(
+      `/equipment/${id}?tab=location&locationView=custody`,
+    )
   })
   it('still rejects a newly selected location that is not an active location', async () => {
     selections.push([])

@@ -29,6 +29,8 @@ import {
   syncRuns,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
+import { getConnector } from '@beaconhs/sync'
+import { EquipmentTelemetryRunStats } from '@/components/equipment-telemetry-run-stats'
 import { formatDateTime } from '@/lib/datetime'
 import { PageContainer } from '@/components/page-layout'
 import { FilterChips } from '@/components/filter-bar'
@@ -196,7 +198,7 @@ export default async function SyncRunPage({
       <div className="space-y-6">
         <div className="space-y-1">
           <SmartBackLink
-            href={`/admin/integrations/${data.conn.id}`}
+            href={`/admin/integrations/${data.conn.id}?tab=history`}
             label={tGeneratedValue(data.conn.name)}
             className="text-xs text-slate-400 hover:text-slate-600"
           />
@@ -246,7 +248,12 @@ export default async function SyncRunPage({
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
             <p>
-              <GeneratedValue value={statText(data.run.stats)} />
+              {getConnector(data.conn.connectorKey)?.supportsEquipmentTelemetry &&
+              data.run.stats.equipment ? (
+                <EquipmentTelemetryRunStats stats={data.run.stats.equipment} />
+              ) : (
+                <GeneratedValue value={statText(data.run.stats)} />
+              )}
             </p>
             <GeneratedValue
               value={
@@ -298,7 +305,15 @@ export default async function SyncRunPage({
                   <p className="text-sm text-slate-400">
                     <GeneratedValue
                       value={
-                        listParams.q || actionFilter || entityFilter ? (
+                        data.run.trigger === 'scheduled' &&
+                        data.run.stats.equipment?.observationsCreated !== undefined &&
+                        getConnector(data.conn.connectorKey)?.supportsEquipmentTelemetry ? (
+                          <GeneratedValue
+                            value={
+                              'Scheduled tracker polls store the summary above without repeating per-tracker run details. Open GPS history on the equipment or tracker to see newly stored observations.'
+                            }
+                          />
+                        ) : listParams.q || actionFilter || entityFilter ? (
                           <GeneratedText id="m_118a748294ce10" />
                         ) : (
                           <GeneratedText id="m_04cae0f709a038" />

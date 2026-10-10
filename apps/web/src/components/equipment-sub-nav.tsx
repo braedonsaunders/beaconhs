@@ -10,7 +10,7 @@ import { ModuleNav } from '@/components/module-admin/module-nav'
 
 type EquipmentSubNavKey =
   | 'equipment'
-  | 'location'
+  | 'map'
   | 'maintenance'
   | 'work-orders'
   | 'vehicle-log'

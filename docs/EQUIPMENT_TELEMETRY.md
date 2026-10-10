@@ -11,8 +11,10 @@ assignments, permissions, and health indicators are provider-neutral.
 2. Add a supplemental telemetry contract to the existing integrations system.
 3. Persist tracker inventory and time-stamped observations with tenant isolation.
 4. Let administrators review tracker-to-equipment assignments.
-5. Add **Location** after **Maintenance**, with a map, reporting health, search,
-   filters, and paginated details. Show the linked tracker on equipment unit pages.
+5. Add **Map** after **Maintenance**, with a map, reporting health, search,
+   filters, and paginated details behind a Map / Table switch. Show the linked
+   tracker on equipment unit pages, with separate map, GPS history, tracker details,
+   custody, and custody history sub-tabs.
 6. Validate the full CI gates and repeated database migrations.
 7. Deploy the validated application, pull the live inventory through its worker,
    link verified equipment, and enable updates every five minutes.
@@ -34,7 +36,8 @@ flowchart LR
 ```
 
 Connectors use the existing encrypted connection settings, execution ledger,
-worker queue, and cadence scanner. GPS does not create equipment items, claim
+worker queue, and cadence scanner. Integration connections have Settings,
+Schedule, and Run history sub-tabs. GPS does not create equipment items, claim
 canonical import ownership, change odometers, rename equipment, or record a
 custody transfer.
 
@@ -79,10 +82,11 @@ paused health state.
 - Stale or invalid readings remain identifiable. Refreshing the integration does
   not make an old GPS fix appear current.
 - Equipment without a position remains in the searchable details list.
-- Map markers group equipment at the same coordinates so overlapping units remain
-  selectable. The map reflects the current page and filters.
-- The unit page shows the last-known position and the current page of its assigned
-  GPS history. Earlier unassigned source history is available under Integrations.
+- Map markers group nearby equipment into numbered clusters that separate as the
+  user zooms in. Co-located equipment remains selectable. The map reflects the current page and filters.
+- The unit Map sub-tab shows the last-known position with a compact observation
+  strip. GPS history and Tracker details have their own sub-tabs. Custody actions
+  stay above the content; manual custody and custody history are separate views. Earlier unassigned source history is available under Integrations.
 - OpenStreetMap provides the basemap. If tiles cannot load, equipment coordinates,
   observation times, and details remain available.
 
@@ -90,6 +94,22 @@ Equipment visibility follows the existing equipment permissions and scope.
 Integration configuration and tracker assignment require
 `admin.integrations.manage`. Assignment changes are audited. GPS observations do
 not overwrite manually recorded site or holder information.
+
+## Storage bounds
+
+Tracker inventory is upserted by connection and source identity. A poll does not
+create another copy of each tracker. GPS observations are inserted only once per
+tracker and observation timestamp. Run statistics separately show checked
+trackers, newly discovered trackers, changed/unchanged trackers, and newly stored
+GPS observations.
+
+Scheduled telemetry polls keep aggregate execution summaries, not one repeated
+per-tracker run-detail row. Manual runs and previews keep their reviewed detail
+rows. The existing nightly database maintenance job defaults GPS observations and
+completed integration runs to 90 days. Old run details cascade with their run.
+Platform super-admins can change the windows under Platform → Database. Active
+runs, current tracker inventory, retained latest positions, equipment and manual
+custody are not pruned. Dedicated retention indexes keep cleanup scans bounded.
 
 ## Rollout and verification
 

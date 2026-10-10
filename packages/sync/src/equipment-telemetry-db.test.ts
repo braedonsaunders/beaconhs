@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { test } from 'node:test'
-import { and, eq } from 'drizzle-orm'
-import { createClient, createSuperClient, withTenant } from '@beaconhs/db'
+import { and, eq, lt, sql } from 'drizzle-orm'
+import {
+  createClient,
+  createSuperClient,
+  withTenant,
+  MAINTENANCE_TABLES,
+  resolveRetentionDays,
+} from '@beaconhs/db'
 import {
   equipmentItems,
   equipmentTelemetryAssets as inventory,
@@ -10,10 +16,12 @@ import {
   syncConnections,
   syncCrosswalk,
   syncRuns,
+  syncRecordChanges,
   tenants,
 } from '@beaconhs/db/schema'
 import { applyEquipmentTelemetry } from './equipment-telemetry'
 import { runSync } from './orchestrator'
+import { CONNECTORS, getConnector } from './registry'
 import type { EquipmentTelemetryAsset } from './types'
 
 // CI explicitly enables this against disposable PostgreSQL; never borrow
@@ -34,7 +42,7 @@ test(
       otherConnection = randomUUID(),
       itemId = randomUUID(),
       otherItem = randomUUID()
-    const at = new Date('2026-01-03T10:00:00Z')
+    const at = new Date(Date.now() - 10_000)
     const point = {
       observedAt: at.toISOString(),
       latitude: 43,
@@ -96,7 +104,12 @@ test(
           qrToken: randomUUID(),
         })
       })
-      await apply([asset])
+      const initial = await apply([asset])
+      assert.equal(initial[0]?.action, 'created')
+      assert.equal(initial[0]?.observationsCreated, 1)
+      const repeated = await apply([asset])
+      assert.equal(repeated[0]?.action, 'unchanged')
+      assert.equal(repeated[0]?.observationsCreated, 0)
       const [first] = await read()
       assert.ok(first)
       await withTenant(app.db, a, (tx) =>
@@ -228,6 +241,163 @@ test(
       assert.equal(blocked.status, 'error')
       assert.match(blocked.error ?? '', /already running/)
       assert.equal((await withTenant(app.db, a, (tx) => tx.select().from(syncRuns))).length, 1)
+      await withTenant(app.db, a, (tx) =>
+        tx.delete(syncRuns).where(eq(syncRuns.connectionId, connectionId)),
+      )
+      const fixtureConnector = {
+        ...getConnector('unity')!,
+        key: `telemetry-fixture-${connectionId}`,
+        pull: async () => ({ records: [], equipmentTelemetry: [asset] }),
+      }
+      CONNECTORS.push(fixtureConnector)
+      try {
+        await withTenant(app.db, a, (tx) =>
+          tx
+            .update(syncConnections)
+            .set({ connectorKey: fixtureConnector.key })
+            .where(eq(syncConnections.id, connectionId)),
+        )
+        const scheduled = await runSync({
+          db: app.db,
+          tenantId: a,
+          connectionId,
+          trigger: 'scheduled',
+        })
+        assert.equal(scheduled.status, 'success')
+        assert.equal(scheduled.stats.equipment?.pulled, 1)
+        assert.equal(scheduled.stats.equipment?.observationsCreated, 0)
+        assert.deepEqual(
+          await withTenant(app.db, a, (tx) =>
+            tx
+              .select()
+              .from(syncRecordChanges)
+              .where(eq(syncRecordChanges.runId, scheduled.runId!)),
+          ),
+          [],
+        )
+        const manual = await runSync({ db: app.db, tenantId: a, connectionId, trigger: 'manual' })
+        assert.equal(manual.status, 'success')
+        assert.equal(manual.stats.equipment?.unchanged, 1)
+        assert.equal(
+          (
+            await withTenant(app.db, a, (tx) =>
+              tx.select().from(syncRecordChanges).where(eq(syncRecordChanges.runId, manual.runId!)),
+            )
+          ).length,
+          1,
+        )
+      } finally {
+        CONNECTORS.splice(CONNECTORS.indexOf(fixtureConnector), 1)
+      }
+
+      // The maintenance policy prunes history and finished run details without
+      // deleting current inventory, custody, recent evidence, or active work.
+      const retention = MAINTENANCE_TABLES.find((table) => table.table === 'sync_runs')!
+      const gpsRetention = MAINTENANCE_TABLES.find(
+        (table) => table.table === 'equipment_telemetry_observations',
+      )!
+      const cutoff = new Date(Date.now() - resolveRetentionDays({}, retention)! * 86_400_000)
+      const old = new Date(cutoff.getTime() - 86_400_000)
+      const oldRun = randomUUID(),
+        activeRun = randomUUID()
+      await withTenant(app.db, a, async (tx) => {
+        await tx.insert(syncRuns).values([
+          {
+            id: oldRun,
+            tenantId: a,
+            connectionId,
+            trigger: 'scheduled',
+            status: 'success',
+            startedAt: old,
+            completedAt: old,
+          },
+          {
+            id: activeRun,
+            tenantId: a,
+            connectionId,
+            trigger: 'scheduled',
+            status: 'running',
+            startedAt: old,
+          },
+        ])
+        await tx.insert(syncRecordChanges).values({
+          tenantId: a,
+          connectionId,
+          runId: oldRun,
+          entity: 'equipment',
+          externalId: asset.externalId,
+          action: 'updated',
+        })
+        await tx
+          .delete(syncRuns)
+          .where(and(lt(syncRuns.startedAt, cutoff), sql.raw(retention.retentionWhere!)))
+        assert.equal((await tx.select().from(syncRuns).where(eq(syncRuns.id, activeRun))).length, 1)
+        assert.equal(
+          (await tx.select().from(syncRecordChanges).where(eq(syncRecordChanges.runId, oldRun)))
+            .length,
+          0,
+        )
+      })
+      const recent = { ...point, observedAt: new Date().toISOString() }
+      const oldPoint = { ...point, observedAt: old.toISOString() }
+      await apply([
+        { ...asset, lastReportedAt: recent.observedAt, observations: [oldPoint, recent] },
+      ])
+      assert.equal(
+        (
+          await withTenant(app.db, a, (tx) =>
+            tx
+              .select()
+              .from(history)
+              .where(and(eq(history.telemetryAssetId, first.id), eq(history.observedAt, old))),
+          )
+        ).length,
+        0,
+      )
+      // Seed previously retained evidence to verify nightly cleanup as well.
+      await withTenant(app.db, a, (tx) =>
+        tx.insert(history).values({
+          tenantId: a,
+          telemetryAssetId: first.id,
+          itemId,
+          observedAt: old,
+          latitude: point.latitude,
+          longitude: point.longitude,
+        }),
+      )
+      const gpsCutoff = new Date(Date.now() - resolveRetentionDays({}, gpsRetention)! * 86_400_000)
+      await withTenant(app.db, a, (tx) =>
+        tx.delete(history).where(lt(history.observedAt, gpsCutoff)),
+      )
+      assert.equal(
+        (
+          await withTenant(app.db, a, (tx) =>
+            tx
+              .select()
+              .from(history)
+              .where(and(eq(history.telemetryAssetId, first.id), eq(history.observedAt, old))),
+          )
+        ).length,
+        0,
+      )
+      assert.equal(
+        (
+          await withTenant(app.db, a, (tx) =>
+            tx
+              .select()
+              .from(history)
+              .where(
+                and(
+                  eq(history.telemetryAssetId, first.id),
+                  eq(history.observedAt, new Date(recent.observedAt)),
+                ),
+              ),
+          )
+        ).length,
+        1,
+      )
+      assert.equal((await read())[0]?.itemId, itemId)
+      assert.equal((await read())[0]?.latitude, point.latitude)
       await withTenant(app.db, a, (tx) =>
         tx
           .update(syncConnections)

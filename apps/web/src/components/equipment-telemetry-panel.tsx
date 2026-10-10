@@ -11,25 +11,31 @@ import { assertCan } from '@beaconhs/tenant'
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '@beaconhs/ui'
 import { requireRequestContext } from '@/lib/auth'
 import { moduleScopeWhere } from '@/lib/visibility'
-import { parsePrefixedListParams, pickString } from '@/lib/list-params'
+import { mergeHref, parsePrefixedListParams, pickString } from '@/lib/list-params'
 import { formatDateTime } from '@/lib/datetime'
 import { TELEMETRY_HEALTH_LABELS, telemetryHealthSql } from '@/lib/equipment/telemetry'
 import { EquipmentTelemetryMap, type EquipmentMapPoint } from './equipment-telemetry-map'
 import { SearchInput } from './search-input'
 import { FilterChips } from './filter-bar'
 import { Pagination } from './pagination'
+import { TabNav, pickActiveTab } from './tab-nav'
 
 export async function EquipmentTelemetryPanel({
   itemId,
   trackerId,
   basePath,
   searchParams,
+  view,
 }: {
   itemId?: string
   trackerId?: string
   basePath: string
   searchParams: Record<string, string | string[] | undefined>
+  view?: 'map' | 'history' | 'details'
 }) {
+  const activeView =
+    view ??
+    pickActiveTab(searchParams, ['map', 'history', 'details'] as const, 'map', 'trackerView')
   const t = await getGeneratedValueTranslations()
   const ctx = await requireRequestContext()
   const time = (date: Date | null) => (date ? formatDateTime(date, ctx.timezone, ctx.locale) : '—')
@@ -90,19 +96,7 @@ export async function EquipmentTelemetryPanel({
   })
   if (!data) return null
   const { asset, health } = data
-  const points: EquipmentMapPoint[] = data.history
-    .slice()
-    .reverse()
-    .map((point) => ({
-      id: point.id,
-      label: asset.name,
-      latitude: point.latitude,
-      longitude: point.longitude,
-      observedAt: point.observedAt.toISOString(),
-      observedLabel: time(point.observedAt),
-      health: 'Historical observation',
-      href: basePath,
-    }))
+  const points: EquipmentMapPoint[] = []
   if (asset.latitude !== null && asset.longitude !== null && asset.locationObservedAt) {
     const latestPoint = {
       id: asset.id,
@@ -112,14 +106,12 @@ export async function EquipmentTelemetryPanel({
       observedAt: asset.locationObservedAt.toISOString(),
       observedLabel: time(asset.locationObservedAt),
       health: TELEMETRY_HEALTH_LABELS[health],
-      href: basePath,
+      href: mergeHref(basePath, searchParams, {}),
       address: asset.address,
       source: data.sourceName,
       speedKph: asset.speedKph,
     }
-    const index = points.findIndex((point) => point.observedAt === latestPoint.observedAt)
-    if (index >= 0) points[index] = latestPoint
-    else points.push(latestPoint)
+    points.push(latestPoint)
   }
   const details = [
     ['GPS observed', time(asset.locationObservedAt)],
@@ -145,157 +137,182 @@ export async function EquipmentTelemetryPanel({
     ['Linked to equipment', time(asset.boundAt)],
   ]
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <CardTitle>
-              <GeneratedValue value={'Tracker location'} />
-            </CardTitle>
-            <p className="mt-1 text-sm text-slate-500">
-              {data.sourceName} · {asset.name}
-            </p>
-          </div>
-          <Badge>
-            <GeneratedValue value={TELEMETRY_HEALTH_LABELS[health]} />
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <div className="rounded-xl bg-teal-50 px-4 py-3 dark:bg-teal-950/50">
-          <p className="text-xs font-medium tracking-wide text-teal-700 uppercase dark:text-teal-400">
-            <GeneratedValue value={'Last known position'} />
-          </p>
-          <p className="mt-1 font-medium">
-            <GeneratedValue
-              value={
-                asset.address ||
-                (asset.latitude !== null && asset.longitude !== null
-                  ? `${asset.latitude.toFixed(5)}, ${asset.longitude.toFixed(5)}`
-                  : 'Awaiting a valid GPS fix')
-              }
-            />
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            <GeneratedValue value={'Observed'} /> {time(asset.locationObservedAt)}
-            <GeneratedValue
-              value={'. Always check this time before relying on a retained position.'}
-            />
-          </p>
-        </div>
-        {points.length ? (
-          <EquipmentTelemetryMap points={points} trail />
-        ) : (
-          <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700">
-            <GeneratedValue
-              value={
-                'This tracker has not supplied a valid position. Its connection and reporting details remain available below.'
-              }
-            />
-          </p>
-        )}
-        <dl className="grid grid-cols-2 gap-4 rounded-xl border border-slate-200 p-4 text-sm lg:grid-cols-3 dark:border-slate-800">
-          {details.map(([label, value]) => (
-            <div key={label}>
-              <dt className="text-xs text-slate-500">
-                <GeneratedValue value={label} />
-              </dt>
-              <dd className="mt-1 font-medium break-words">
-                <GeneratedValue value={value} />
-              </dd>
-            </div>
-          ))}
-        </dl>
-        <p className="text-xs text-slate-500">
-          <GeneratedValue
-            value={
-              'GPS readings supplement manual location and custody. The map includes the latest known position and this page of history. History records which equipment was linked when the reading occurred.'
-            }
-          />
-        </p>
-        <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
-          <h3 className="font-semibold">
-            <GeneratedValue value={'Location history'} />{' '}
-            <span className="font-normal text-slate-500">({data.total})</span>
-          </h3>
-        </div>
-        <SearchInput
-          placeholder={t('Search GPS history date or time (UTC)')}
-          paramKey="gpsQ"
-          pageParamKey="gpsPage"
-        />
-        <FilterChips
+    <div className="space-y-4">
+      {!view ? (
+        <TabNav
+          variant="pills"
           basePath={basePath}
           currentParams={searchParams}
-          paramKey="gpsMotion"
-          label={t('Movement')}
-          options={[
-            { value: 'moving', label: 'Moving' },
-            { value: 'stationary', label: 'Stationary' },
+          paramKey="trackerView"
+          active={activeView}
+          tabs={[
+            { key: 'map', label: 'Map' },
+            { key: 'history', label: 'GPS history' },
+            { key: 'details', label: 'Tracker details' },
           ]}
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700">
-                <th className="p-2">
-                  <GeneratedValue value={'GPS observed'} />
-                </th>
-                <th className="p-2">
-                  <GeneratedValue value={'Latitude'} />
-                </th>
-                <th className="p-2">
-                  <GeneratedValue value={'Longitude'} />
-                </th>
-                <th className="p-2">
-                  <GeneratedValue value={'Speed'} />
-                </th>
-                <th className="p-2">
-                  <GeneratedValue value={'Engine'} />
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.history.map((point) => (
-                <tr key={point.id} className="border-b border-slate-100 dark:border-slate-800">
-                  <td className="p-2">{time(point.observedAt)}</td>
-                  <td className="p-2">{point.latitude.toFixed(5)}</td>
-                  <td className="p-2">{point.longitude.toFixed(5)}</td>
-                  <td className="p-2">
-                    <GeneratedValue
-                      value={point.speedKph === null ? '—' : `${point.speedKph} km/h`}
-                    />
-                  </td>
-                  <td className="p-2">
-                    <GeneratedValue
-                      value={point.engineOn === null ? '—' : point.engineOn ? 'On' : 'Off'}
-                    />
-                  </td>
-                </tr>
-              ))}
-              {!data.history.length ? (
-                <tr>
-                  <td colSpan={5} className="p-4 text-center text-slate-500">
+      ) : null}
+      {activeView === 'map' ? (
+        points.length ? (
+          <EquipmentTelemetryMap
+            points={points}
+            compact
+            footer={
+              <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1 text-sm">
+                  <p className="font-medium break-words">
                     <GeneratedValue
                       value={
-                        'No matching GPS history. Equipment history begins when its tracker link takes effect; earlier source history is available to administrators on the tracker record.'
+                        asset.address ||
+                        `${asset.latitude?.toFixed(5)}, ${asset.longitude?.toFixed(5)}`
                       }
                     />
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-        <Pagination
-          basePath={basePath}
-          currentParams={searchParams}
-          total={data.total}
-          page={params.page}
-          perPage={params.perPage}
-          pageParamKey="gpsPage"
-        />
-      </CardContent>
-    </Card>
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    <GeneratedValue value={'GPS observed'} />: {time(asset.locationObservedAt)}
+                    <span className="mx-2">·</span>
+                    {data.sourceName}
+                  </p>
+                </div>
+                <Badge>
+                  <GeneratedValue value={TELEMETRY_HEALTH_LABELS[health]} />
+                </Badge>
+              </div>
+            }
+          />
+        ) : (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-slate-500">
+              <GeneratedValue
+                value={
+                  'This tracker has not supplied a valid position. Open Tracker details to check its connection and reporting times.'
+                }
+              />
+            </CardContent>
+          </Card>
+        )
+      ) : (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle>
+                  <GeneratedValue
+                    value={activeView === 'history' ? 'GPS history' : 'Tracker details'}
+                  />
+                  {activeView === 'history' ? (
+                    <span className="ml-1 font-normal text-slate-500">({data.total})</span>
+                  ) : null}
+                </CardTitle>
+                <p className="mt-1 text-sm text-slate-500">
+                  {data.sourceName} · {asset.name}
+                </p>
+              </div>
+              <Badge>
+                <GeneratedValue value={TELEMETRY_HEALTH_LABELS[health]} />
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {activeView === 'details' ? (
+              <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                {details.map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <dt className="text-xs text-slate-500">
+                      <GeneratedValue value={label} />
+                    </dt>
+                    <dd className="mt-1 font-medium break-words">
+                      <GeneratedValue value={value} />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <>
+                <SearchInput
+                  placeholder={t('Search GPS history date or time (UTC)')}
+                  paramKey="gpsQ"
+                  pageParamKey="gpsPage"
+                />
+                <FilterChips
+                  basePath={basePath}
+                  currentParams={searchParams}
+                  paramKey="gpsMotion"
+                  label={t('Movement')}
+                  options={[
+                    { value: 'moving', label: 'Moving' },
+                    { value: 'stationary', label: 'Stationary' },
+                  ]}
+                />
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-700">
+                        <th className="p-2">
+                          <GeneratedValue value={'GPS observed'} />
+                        </th>
+                        <th className="p-2">
+                          <GeneratedValue value={'Latitude'} />
+                        </th>
+                        <th className="p-2">
+                          <GeneratedValue value={'Longitude'} />
+                        </th>
+                        <th className="p-2">
+                          <GeneratedValue value={'Speed'} />
+                        </th>
+                        <th className="p-2">
+                          <GeneratedValue value={'Engine'} />
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.history.map((point) => (
+                        <tr
+                          key={point.id}
+                          className="border-b border-slate-100 dark:border-slate-800"
+                        >
+                          <td className="p-2">{time(point.observedAt)}</td>
+                          <td className="p-2">{point.latitude.toFixed(5)}</td>
+                          <td className="p-2">{point.longitude.toFixed(5)}</td>
+                          <td className="p-2">
+                            <GeneratedValue
+                              value={point.speedKph === null ? '—' : `${point.speedKph} km/h`}
+                            />
+                          </td>
+                          <td className="p-2">
+                            <GeneratedValue
+                              value={point.engineOn === null ? '—' : point.engineOn ? 'On' : 'Off'}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                      {!data.history.length ? (
+                        <tr>
+                          <td colSpan={5} className="p-4 text-center text-slate-500">
+                            <GeneratedValue
+                              value={
+                                'No matching GPS history. Equipment history begins when its tracker link takes effect; earlier source history is available to administrators on the tracker record.'
+                              }
+                            />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination
+                  basePath={basePath}
+                  currentParams={searchParams}
+                  total={data.total}
+                  page={params.page}
+                  perPage={params.perPage}
+                  pageParamKey="gpsPage"
+                />
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
   )
 }

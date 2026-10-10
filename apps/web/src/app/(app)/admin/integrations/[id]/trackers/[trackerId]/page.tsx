@@ -51,7 +51,7 @@ export default async function TrackerHistoryPage({
           <GeneratedValue value={'Back to tracker assignments'} />
         </Link>
         <h1 className="text-xl font-semibold">
-          {tracker.name} <GeneratedValue value={'· Location history'} />
+          {tracker.name} <GeneratedValue value={'· Tracker'} />
         </h1>
         <EquipmentTelemetryPanel
           trackerId={trackerId}

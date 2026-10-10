@@ -208,7 +208,7 @@ export async function deleteConnection(formData: FormData): Promise<void> {
   })
   if (!deleted) return
   revalidatePath('/admin/integrations')
-  revalidatePath('/equipment/location')
+  revalidatePath('/equipment/map')
   revalidatePath('/equipment/[id]', 'page')
 }
 
