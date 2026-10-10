@@ -50,7 +50,7 @@ export const WALKTHROUGHS: Walkthrough[] = [
       {
         path: '/equipment/map',
         title: 'Find equipment',
-        body: 'Search by equipment tag or name. Use Tracker health to find old positions or collection errors. Map opens first; choose Table for location details.',
+        body: 'Search by equipment tag or name. Use Tracker health to find old positions or collection errors. Map opens first; use the Map / Table switch on the right of the search and filter row for location details.',
       },
       {
         title: 'Check the time',

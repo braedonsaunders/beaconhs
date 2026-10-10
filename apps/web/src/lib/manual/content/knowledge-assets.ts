@@ -739,7 +739,7 @@ To assign a department, open the unit, select **Overview**, and choose **Departm
 
 ## View tracker locations
 
-1. Open **Equipment**, then choose **Map**. **Map** opens first. Choose **Table** to see location details instead of the map.
+1. Open **Equipment**, then choose **Map**. **Map** opens first. Use the **Map** / **Table** switch on the right of the search and filter row to see location details instead of the map.
 2. Search for an equipment tag, name, address, or manual site. Use **Tracker health**, **Movement**, and **Source** to narrow the equipment shown.
 3. Click an equipment name in a marker or the table to open **Location & custody**. **Map** shows its last-known position with the observation time and source below it.
 4. Choose **GPS history** to search readings by date or time in UTC. Use **Movement** and the page controls to narrow the history.

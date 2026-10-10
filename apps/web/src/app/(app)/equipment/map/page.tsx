@@ -2,7 +2,7 @@ import { getGeneratedValueTranslations } from '@/i18n/generated.server'
 import { GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Activity, ArrowUpRight, MapPin, Radio, Satellite, TriangleAlert } from 'lucide-react'
+import { ArrowUpRight, MapPin } from 'lucide-react'
 import { and, asc, count, eq, ilike, isNull, or, sql } from 'drizzle-orm'
 import {
   equipmentItems,
@@ -112,17 +112,6 @@ export default async function EquipmentLocationPage({
       .innerJoin(syncConnections, eq(syncConnections.id, assets.connectionId))
       .leftJoin(orgUnits, eq(orgUnits.id, equipmentItems.currentSiteOrgUnitId))
       .where(where)
-    const summary = await tx
-      .select({
-        health: telemetryHealthSql,
-        count: count(),
-        unplaced: sql<number>`count(*) filter (where ${assets.latitude} is null)`,
-      })
-      .from(assets)
-      .innerJoin(equipmentItems, eq(equipmentItems.id, assets.itemId))
-      .innerJoin(syncConnections, eq(syncConnections.id, assets.connectionId))
-      .where(visible)
-      .groupBy(telemetryHealthSql)
     const sources = await tx
       .selectDistinct({ id: syncConnections.id, name: syncConnections.name })
       .from(assets)
@@ -130,11 +119,8 @@ export default async function EquipmentLocationPage({
       .innerJoin(syncConnections, eq(syncConnections.id, assets.connectionId))
       .where(visible)
       .orderBy(asc(syncConnections.name))
-    return { rows, sources, summary, total: Number(total?.count ?? 0) }
+    return { rows, sources, total: Number(total?.count ?? 0) }
   })
-  const tracked = data.summary.reduce((sum, row) => sum + Number(row.count), 0)
-  const reporting = Number(data.summary.find((row) => row.health === 'fresh')?.count ?? 0)
-  const unplaced = data.summary.reduce((sum, row) => sum + Number(row.unplaced), 0)
   const points = data.rows.flatMap(({ asset, item, health, connectionName }) =>
     asset.latitude !== null && asset.longitude !== null && asset.locationObservedAt
       ? [
@@ -154,12 +140,6 @@ export default async function EquipmentLocationPage({
         ]
       : [],
   )
-  const stats = [
-    { label: 'Tracked equipment', value: tracked, icon: Radio },
-    { label: 'Reporting', value: reporting, icon: Activity },
-    { label: 'Needs attention', value: tracked - reporting, icon: TriangleAlert },
-    { label: 'Without a position', value: unplaced, icon: Satellite },
-  ]
   return (
     <PageContainer>
       <div className="space-y-5">
@@ -186,76 +166,66 @@ export default async function EquipmentLocationPage({
           ) : null}
         </div>
         <EquipmentSubNav active="map" />
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {stats.map(({ label, value, icon: Icon }) => (
-            <div
-              key={label}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900"
-            >
-              <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
-                <span>
-                  <GeneratedValue value={label} />
-                </span>
-                <Icon size={16} className="text-teal-600 dark:text-teal-400" />
-              </div>
-              <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SearchInput placeholder={t('Search equipment, tracker, address or manual site')} />
-          <FilterChips
-            basePath="/equipment/map"
-            currentParams={sp}
-            paramKey="health"
-            label={t('Tracker health')}
-            options={Object.entries(TELEMETRY_HEALTH_LABELS).map(([value, label]) => ({
-              value,
-              label,
-            }))}
+        <div className="flex flex-wrap items-start gap-2">
+          <SearchInput
+            className="relative min-w-0 flex-1 lg:w-72 lg:flex-none"
+            placeholder={t('Search equipment, tracker, address or manual site')}
           />
-          <FilterChips
+          <div className="order-2 flex w-full min-w-0 flex-wrap items-center gap-2 lg:order-none lg:w-auto lg:flex-1">
+            <FilterChips
+              basePath="/equipment/map"
+              currentParams={sp}
+              paramKey="health"
+              label={t('Tracker health')}
+              options={Object.entries(TELEMETRY_HEALTH_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+            />
+            <FilterChips
+              basePath="/equipment/map"
+              currentParams={sp}
+              paramKey="motion"
+              label={t('Movement')}
+              options={[
+                { value: 'moving', label: 'Moving' },
+                { value: 'stationary', label: 'Stationary' },
+              ]}
+            />
+            <FilterChips
+              basePath="/equipment/map"
+              currentParams={sp}
+              paramKey="source"
+              label={t('Source')}
+              options={data.sources.map((row) => ({ value: row.id, label: row.name }))}
+            />
+            <FilterChips
+              basePath="/equipment/map"
+              currentParams={sp}
+              paramKey="perPage"
+              label={t('Rows')}
+              defaultValue="100"
+              hideAll
+              options={[
+                { value: '25', label: '25' },
+                { value: '50', label: '50' },
+                { value: '100', label: '100' },
+              ]}
+            />
+          </div>
+          <TabNav
+            className="ml-auto shrink-0 pb-0 sm:pb-0"
+            variant="pills"
             basePath="/equipment/map"
             currentParams={sp}
-            paramKey="motion"
-            label={t('Movement')}
-            options={[
-              { value: 'moving', label: 'Moving' },
-              { value: 'stationary', label: 'Stationary' },
+            paramKey="view"
+            active={view}
+            tabs={[
+              { key: 'map', label: 'Map' },
+              { key: 'table', label: 'Table', count: data.total },
             ]}
           />
-          <FilterChips
-            basePath="/equipment/map"
-            currentParams={sp}
-            paramKey="source"
-            label={t('Source')}
-            options={data.sources.map((row) => ({ value: row.id, label: row.name }))}
-          />
-          <FilterChips
-            basePath="/equipment/map"
-            currentParams={sp}
-            paramKey="perPage"
-            label={t('Rows')}
-            defaultValue="100"
-            hideAll
-            options={[
-              { value: '25', label: '25' },
-              { value: '50', label: '50' },
-              { value: '100', label: '100' },
-            ]}
-          />
         </div>
-        <TabNav
-          variant="pills"
-          basePath="/equipment/map"
-          currentParams={sp}
-          paramKey="view"
-          active={view}
-          tabs={[
-            { key: 'map', label: 'Map' },
-            { key: 'table', label: 'Table', count: data.total },
-          ]}
-        />
         {view === 'map' ? (
           <div className="space-y-3">
             {points.length ? (
