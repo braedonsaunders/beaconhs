@@ -737,6 +737,19 @@ Managers can change **Type**, **Category**, and **Department** on **Overview** b
 
 To assign a department, open the unit, select **Overview**, and choose **Department**. The change saves automatically. Choose **No department** to clear it. Department belongs to the unit and does not change when its site or holder changes. QR labels and equipment PDFs use the saved department.
 
+## View tracker locations
+
+1. Open **Equipment**, then choose **Location**.
+2. Search for an equipment tag, name, address, or manual site. Use **Tracker health**, **Movement**, and **Source** to narrow the equipment shown.
+3. Click the equipment name to open **Location & custody**. **Tracker location** shows the source, GPS observation time, last tracker contact, and position.
+4. Search the GPS history by date or time in UTC. Use **Movement** and the page controls to narrow the history.
+
+The equipment map shows positions from the current page. A unit map includes its latest known position and the current page of history. Click a marker to see equipment and observation details. Markers with a number contain equipment sharing a position. Use **Fit view** to see all visible markers, or **Expand** for a larger map. Map tiles use OpenStreetMap; coordinates remain listed if tiles cannot load.
+
+**Reporting** means the GPS observation is within the integration's freshness limit. **Stale location** means the position is older. **No valid GPS fix** and **Never reported** mean a current position is unavailable. **Integration error** means collection failed. **Sync delayed** means successful collection is overdue. **Automatic sync off** means scheduled collection is disabled. **Inactive in source** means the provider removed or deactivated the asset.
+
+Tracker positions supplement the assigned location. They do not transfer equipment, change its holder, check it in, check it out, or mark missing equipment as found. Check the observation time before acting on a retained position. Ask an administrator to review an incorrect tracker link. Equipment GPS history begins when a tracker link takes effect; administrators can view earlier readings on the tracker record.
+
 ## Add a log entry (managers)
 
 1. Open the unit, select **Log**, then **Add log entry**.

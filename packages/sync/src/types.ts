@@ -120,12 +120,35 @@ export interface ConnectStartResult {
 
 export interface ConnectorPullResult {
   records: CanonicalRecord[]
+  /** Supplemental equipment telemetry; never claims register ownership. */
+  equipmentTelemetry?: EquipmentTelemetryAsset[]
   nextCursor?: Record<string, unknown> | null
   mode?: 'full' | 'incremental'
   // Entities for which a full pull is an authoritative snapshot. The
   // orchestrator only applies the missing-record policy to this explicit set;
   // an empty entity snapshot is still fail-closed and never archived.
   authoritativeEntities?: SyncEntityKey[]
+}
+
+export interface EquipmentTelemetryObservation {
+  observedAt: string
+  latitude: number
+  longitude: number
+  speedKph: number | null
+  engineOn: boolean | null
+}
+
+export interface EquipmentTelemetryAsset {
+  externalId: string
+  name: string
+  vin: string | null
+  deviceSerials: string[]
+  deviceModels: string[]
+  deactivated: boolean
+  lastReportedAt: string | null
+  gpsValid: boolean
+  address: string | null
+  observations: EquipmentTelemetryObservation[]
 }
 
 // --- Declarative settings form (simple connectors render from these) ------
@@ -156,6 +179,8 @@ export interface Connector {
   kind: 'native' | 'provider'
   iconKey?: string
   entities: SyncEntityKey[]
+  /** UI uses this capability, rather than provider names, to offer tracker mapping. */
+  supportsEquipmentTelemetry?: boolean
   configFields?: ConfigField[]
   secretFields?: SecretField[]
   supportsIntrospection?: boolean

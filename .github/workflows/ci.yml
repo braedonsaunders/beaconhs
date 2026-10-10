@@ -40,6 +40,7 @@ jobs:
       DATABASE_URL: postgresql://beaconhs_app:beaconhs_app@localhost:5432/beaconhs_test
       MIGRATION_DATABASE_URL: postgresql://beaconhs_migrator:beaconhs_migrator@localhost:5432/beaconhs_test
       SUPERADMIN_DATABASE_URL: postgresql://beaconhs_super:beaconhs_super@localhost:5432/beaconhs_test
+      BEACON_TELEMETRY_DB_TEST: '1'
       DATABASE_OWNER_ROLE: beaconhs_owner
       DATABASE_BACKUP_ROLE: beaconhs_backup
       REDIS_URL: redis://localhost:6379

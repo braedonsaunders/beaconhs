@@ -6,10 +6,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@beaconhs/db'
 import {
   personTitleAssignments,
+  equipmentTelemetryAssets,
   syncConnections,
   syncCrosswalk,
   tenantIntegrations,
@@ -164,6 +165,9 @@ export async function deleteConnection(formData: FormData): Promise<void> {
   const id = String(formData.get('id') ?? '')
   if (!isUuid(id)) return
   const deleted = await ctx.db(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`telemetry:${ctx.tenantId}:${id}`}, 0))`,
+    )
     const [row] = await tx
       .update(syncConnections)
       .set({ deletedAt: new Date(), enabled: false })
@@ -184,6 +188,11 @@ export async function deleteConnection(formData: FormData): Promise<void> {
       .delete(syncCrosswalk)
       .where(eq(syncCrosswalk.connectionId, id))
       .returning({ id: syncCrosswalk.id })
+    const releasedTrackers = await tx
+      .update(equipmentTelemetryAssets)
+      .set({ itemId: null, boundAt: null })
+      .where(eq(equipmentTelemetryAssets.connectionId, id))
+      .returning({ id: equipmentTelemetryAssets.id })
     await recordAuditInTransaction(tx, ctx, {
       entityType: 'sync_connection',
       entityId: id,
@@ -192,12 +201,15 @@ export async function deleteConnection(formData: FormData): Promise<void> {
       metadata: {
         handedOffTitleAssignments: handedOffTitles.length,
         releasedCanonicalRecords: removedCrosswalks.length,
+        releasedTrackers: releasedTrackers.length,
       },
     })
     return row
   })
   if (!deleted) return
   revalidatePath('/admin/integrations')
+  revalidatePath('/equipment/location')
+  revalidatePath('/equipment/[id]', 'page')
 }
 
 export type RenameConnectionState =
@@ -285,7 +297,7 @@ export async function saveConfig(formData: FormData): Promise<void> {
 
 // Presets the scanner understands (apps/worker/src/lib/sync-scanner.ts). An
 // unknown token would persist but silently never run, so reject it.
-const SCHEDULE_PRESETS = new Set(['15min', 'hourly', '6h', 'daily', 'weekly'])
+const SCHEDULE_PRESETS = new Set(['5min', '15min', 'hourly', '6h', 'daily', 'weekly'])
 
 export async function saveSchedule(formData: FormData): Promise<void> {
   const ctx = await guard()

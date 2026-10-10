@@ -200,6 +200,29 @@ export default async function ConnectionPage({
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-6">
+            {connector?.supportsEquipmentTelemetry ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    <GeneratedValue value={'Equipment tracking'} />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-slate-500">
+                    <GeneratedValue
+                      value={
+                        'Run the integration to retrieve tracker inventory, then link its assets to existing equipment. GPS supplements manual custody and does not take ownership of the equipment register.'
+                      }
+                    />
+                  </p>
+                  <Link href={`/admin/integrations/${conn.id}/trackers`}>
+                    <Button variant="outline">
+                      <GeneratedValue value={'Tracker assignments'} />
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ) : null}
             {/* Connection settings (DB credentials, Nango ids) */}
             <GeneratedValue
               value={
@@ -377,8 +400,18 @@ export default async function ConnectionPage({
                           <p className="text-xs text-slate-400">
                             <GeneratedText id="m_032fc8d5305d5b" />
                             <GeneratedValue value={' '} />
-                            <code>first name</code>, <code>employee no</code>,{' '}
-                            <code>asset tag</code>).
+                            <code>
+                              <GeneratedValue value={'first name'} />
+                            </code>
+                            ,{' '}
+                            <code>
+                              <GeneratedValue value={'employee no'} />
+                            </code>
+                            ,{' '}
+                            <code>
+                              <GeneratedValue value={'asset tag'} />
+                            </code>
+                            ).
                           </p>
                         </div>
                         <div className="space-y-1.5">
@@ -570,6 +603,7 @@ export default async function ConnectionPage({
                     <Select id="schedule" name="schedule" defaultValue={conn.schedule ?? 'manual'}>
                       <option value="manual">{'Manual only'}</option>
                       <option value="15min">{'Every 15 minutes'}</option>
+                      <option value="5min">{'Every 5 minutes'}</option>
                       <option value="hourly">{'Hourly'}</option>
                       <option value="6h">{'Every 6 hours'}</option>
                       <option value="daily">{'Daily'}</option>
@@ -594,87 +628,93 @@ export default async function ConnectionPage({
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  <GeneratedText id="m_0e6369fca51e15" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                <p>
-                  <GeneratedText id="m_07ee809dd08f1c" />
-                </p>
-                <p>
-                  <GeneratedText id="m_139a88dfcb4df6" />
-                  <GeneratedValue value={' '} />
-                  <GeneratedValue
-                    value={
-                      syncPolicy.missing === 'archive' ? (
-                        <GeneratedText id="m_0089327db45055" />
-                      ) : (
-                        <GeneratedText id="m_0d8e28c8edd530" />
-                      )
-                    }
-                  />
-                </p>
-                <p className="text-xs text-slate-400">
-                  <GeneratedText id="m_1b76b31ba13e6b" />{' '}
-                  <strong>
-                    <GeneratedValue value={summary?.name ?? conn.connectorKey} />
-                  </strong>{' '}
-                  ·<GeneratedValue value={' '} />
-                  <GeneratedValue
-                    value={(summary?.entities ?? []).map((e) => ENTITY_LABELS[e] ?? e).join(', ')}
-                  />
-                </p>
-              </CardContent>
-            </Card>
+            {!connector?.supportsEquipmentTelemetry ? (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      <GeneratedText id="m_0e6369fca51e15" />
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                    <p>
+                      <GeneratedText id="m_07ee809dd08f1c" />
+                    </p>
+                    <p>
+                      <GeneratedText id="m_139a88dfcb4df6" />
+                      <GeneratedValue value={' '} />
+                      <GeneratedValue
+                        value={
+                          syncPolicy.missing === 'archive' ? (
+                            <GeneratedText id="m_0089327db45055" />
+                          ) : (
+                            <GeneratedText id="m_0d8e28c8edd530" />
+                          )
+                        }
+                      />
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      <GeneratedText id="m_1b76b31ba13e6b" />{' '}
+                      <strong>
+                        <GeneratedValue value={summary?.name ?? conn.connectorKey} />
+                      </strong>{' '}
+                      ·<GeneratedValue value={' '} />
+                      <GeneratedValue
+                        value={(summary?.entities ?? [])
+                          .map((e) => ENTITY_LABELS[e] ?? e)
+                          .join(', ')}
+                      />
+                    </p>
+                  </CardContent>
+                </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings2 size={16} /> <GeneratedText id="m_04f5150f3bc07d" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form action={saveSyncPolicy} className="space-y-3">
-                  <input type="hidden" name="id" value={conn.id} />
-                  <div className="space-y-1.5">
-                    <Label htmlFor="ownership">
-                      <GeneratedText id="m_01f10f36302149" />
-                    </Label>
-                    <Select
-                      id="ownership"
-                      name="ownership"
-                      defaultValue={
-                        syncPolicy.ownership === 'manual_wins' ? 'manual_wins' : 'source_wins'
-                      }
-                    >
-                      <option value="source_wins">{'Source updates mapped fields'}</option>
-                      <option value="manual_wins">{'Flag local edits as conflicts'}</option>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="missing">
-                      <GeneratedText id="m_05aaaf61d424e3" />
-                    </Label>
-                    <Select
-                      id="missing"
-                      name="missing"
-                      defaultValue={syncPolicy.missing === 'archive' ? 'archive' : 'keep'}
-                    >
-                      <option value="keep">{'Keep BeaconHS rows'}</option>
-                      <option value="archive">{'Archive after safe full pulls'}</option>
-                    </Select>
-                  </div>
-                  <div className="flex justify-end">
-                    <Button type="submit" variant="outline" size="sm">
-                      <GeneratedText id="m_0d15976b151872" />
-                    </Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Settings2 size={16} /> <GeneratedText id="m_04f5150f3bc07d" />
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form action={saveSyncPolicy} className="space-y-3">
+                      <input type="hidden" name="id" value={conn.id} />
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ownership">
+                          <GeneratedText id="m_01f10f36302149" />
+                        </Label>
+                        <Select
+                          id="ownership"
+                          name="ownership"
+                          defaultValue={
+                            syncPolicy.ownership === 'manual_wins' ? 'manual_wins' : 'source_wins'
+                          }
+                        >
+                          <option value="source_wins">{'Source updates mapped fields'}</option>
+                          <option value="manual_wins">{'Flag local edits as conflicts'}</option>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="missing">
+                          <GeneratedText id="m_05aaaf61d424e3" />
+                        </Label>
+                        <Select
+                          id="missing"
+                          name="missing"
+                          defaultValue={syncPolicy.missing === 'archive' ? 'archive' : 'keep'}
+                        >
+                          <option value="keep">{'Keep BeaconHS rows'}</option>
+                          <option value="archive">{'Archive after safe full pulls'}</option>
+                        </Select>
+                      </div>
+                      <div className="flex justify-end">
+                        <Button type="submit" variant="outline" size="sm">
+                          <GeneratedText id="m_0d15976b151872" />
+                        </Button>
+                      </div>
+                    </form>
+                  </CardContent>
+                </Card>
+              </>
+            ) : null}
           </div>
         </div>
       </div>

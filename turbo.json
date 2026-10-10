@@ -44,6 +44,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
+      "env": ["BEACON_TELEMETRY_DB_TEST", "SUPERADMIN_DATABASE_URL"],
       "outputs": []
     },
     "clean": {

@@ -1,4 +1,4 @@
-// External data-sync scheduling. The 15-minute `sync_scan` tick finds enabled
+// External data-sync scheduling. The one-minute `sync_scan` tick finds enabled
 // connections whose cadence is due (relative to lastRunAt) and enqueues a
 // `sync_run` tick per connection. `sync_run` executes one connection via the
 // @beaconhs/sync orchestrator (pull → upsert → ledger).
@@ -16,10 +16,11 @@ import { db, withSuperAdmin, withTenant } from '@beaconhs/db'
 import { syncConnections, syncRuns } from '@beaconhs/db/schema'
 import { materializeTenant } from '@beaconhs/compliance'
 import { enqueueScheduled } from '@beaconhs/jobs'
-import { type RunSyncResult, runSync } from '@beaconhs/sync'
+import { getConnector, type RunSyncResult, runSync } from '@beaconhs/sync'
 
 // Friendly cadence keys (stored in sync_connections.schedule) → minutes.
 const CADENCE_MINUTES: Record<string, number> = {
+  '5min': 5,
   '15min': 15,
   hourly: 60,
   '6h': 360,
@@ -92,6 +93,16 @@ export async function runSyncConnection(
 ): Promise<RunSyncResult> {
   const result = await runSync({ db, tenantId, connectionId, trigger })
   if (result.status !== 'error') {
+    const [connection] = await withTenant(db, tenantId, (tx) =>
+      tx
+        .select({ key: syncConnections.connectorKey })
+        .from(syncConnections)
+        .where(eq(syncConnections.id, connectionId))
+        .limit(1),
+    )
+    // Supplemental location readings do not change compliance evidence or
+    // audience. Avoid rebuilding the tenant scoreboard on every GPS poll.
+    if (connection && getConnector(connection.key)?.supportsEquipmentTelemetry) return result
     // A people sync can add/remove canonical title assignments. Refresh the
     // unified scoreboard before the worker reports completion so job-title
     // sign-off status never waits for the next daily compliance scan.

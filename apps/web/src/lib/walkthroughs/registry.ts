@@ -40,6 +40,29 @@ export type Walkthrough = {
 
 export const WALKTHROUGHS: Walkthrough[] = [
   {
+    id: 'equipment-location',
+    title: 'Find tracked equipment',
+    description: 'Find tracker positions and check how current they are.',
+    startPath: '/equipment/location',
+    defaultEnabled: true,
+    defaultAutoStart: false,
+    steps: [
+      {
+        path: '/equipment/location',
+        title: 'Find equipment',
+        body: 'Search by equipment tag or name. Use Tracker health to find old positions or collection errors.',
+      },
+      {
+        title: 'Check the time',
+        body: 'GPS observed is when the tracker measured the position. Last contact is when it last reported. A recently collected reading can still be old.',
+      },
+      {
+        title: 'Open the equipment',
+        body: 'Click an equipment name to open Location & custody. Tracker location shows its source and history. GPS does not change its assigned location or holder.',
+      },
+    ],
+  },
+  {
     id: 'welcome',
     title: 'Welcome to BeaconHS',
     description: 'A quick lap of the app: the menu, your workspace, and where to get help.',

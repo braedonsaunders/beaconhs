@@ -1,5 +1,6 @@
 import { setEquipmentDeleted } from '../_lifecycle-actions'
 import { transferLocation } from './_custody-actions'
+import { EquipmentTelemetryPanel } from '@/components/equipment-telemetry-panel'
 import { activePeopleWhere } from '@beaconhs/db'
 import { CompleteSchedule } from '../_complete-schedule'
 import { OilChangeCard } from './_oil-change'
@@ -1439,8 +1440,8 @@ export default async function EquipmentDetailPage({
           }
         />
 
-        <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
-          <aside className="space-y-3">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="min-w-0 space-y-3">
             <Card>
               <CardContent className="space-y-3 p-5 text-sm">
                 <GeneratedValue
@@ -1526,7 +1527,7 @@ export default async function EquipmentDetailPage({
             </Card>
           </aside>
 
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <TabNav
               basePath={basePath}
               currentParams={sp}
@@ -1914,6 +1915,11 @@ export default async function EquipmentDetailPage({
                 value={
                   active === 'location' ? (
                     <div className="space-y-4">
+                      <EquipmentTelemetryPanel
+                        itemId={id}
+                        basePath={basePath}
+                        searchParams={{ ...sp, tab: 'location' }}
+                      />
                       <Card>
                         <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
                           <CardTitle>

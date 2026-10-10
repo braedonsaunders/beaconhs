@@ -161,7 +161,7 @@ const SCHEDULES: Array<{
   {
     name: 'tick:sync_scan',
     data: { kind: 'sync_scan' },
-    pattern: '*/15 * * * *',
+    pattern: '* * * * *',
     jobId: 'tick:sync_scan',
     repeatKey: 'tick-sync-scan',
   },

@@ -463,6 +463,13 @@
       "when": 1791587538880,
       "tag": "0066_compliance_skill_requirements",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1791588431370,
+      "tag": "0067_equipment_telemetry",
+      "breakpoints": true
     }
   ]
 }

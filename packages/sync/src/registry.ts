@@ -7,6 +7,7 @@ import { databaseConnector } from './connectors/database'
 import { httpJsonConnector } from './connectors/http-json'
 import { nangoConnector } from './connectors/nango'
 import { netsuiteConnector } from './connectors/netsuite'
+import { unityConnector } from './connectors/unity'
 import type { Connector } from './types'
 
 export const CONNECTORS: Connector[] = [
@@ -15,6 +16,7 @@ export const CONNECTORS: Connector[] = [
   netsuiteConnector,
   csvConnector,
   nangoConnector,
+  unityConnector,
 ]
 
 export function listConnectors(): Connector[] {

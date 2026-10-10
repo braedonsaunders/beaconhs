@@ -2,7 +2,7 @@
 // tenant-scoped batches (RLS) → record run + per-record ledgers. Called by the
 // worker (scheduled/manual) and by admin preview actions.
 
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, gte, isNull } from 'drizzle-orm'
 import { type Database, withTenant } from '@beaconhs/db'
 import {
   type SyncEntityKey,
@@ -25,6 +25,7 @@ import {
 } from './upsert'
 import type { CanonicalRecord, ConnectorPullResult, ConnectorRunContext, SyncLogger } from './types'
 import { planSnapshotArchives } from './snapshot-policy'
+import { applyEquipmentTelemetry } from './equipment-telemetry'
 
 const BATCH = 250
 
@@ -72,6 +73,7 @@ function normalizePull(
   if (Array.isArray(pulled)) {
     return {
       records: pulled,
+      equipmentTelemetry: [],
       nextCursor: null,
       mode: 'full',
       authoritativeEntities: [...new Set(pulled.map((record) => record.entity))],
@@ -79,6 +81,7 @@ function normalizePull(
   }
   return {
     records: pulled.records,
+    equipmentTelemetry: pulled.equipmentTelemetry ?? [],
     nextCursor: pulled.nextCursor ?? null,
     mode: pulled.mode ?? 'full',
     authoritativeEntities: pulled.authoritativeEntities ?? [
@@ -115,15 +118,52 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
   const { db, tenantId, connectionId, trigger } = args
   const dryRun = args.dryRun ?? trigger === 'preview'
 
-  const conn = await withTenant(db, tenantId, async (tx) => {
+  const startedAt = new Date()
+  const claim = await withTenant(db, tenantId, async (tx) => {
     const [c] = await tx
       .select()
       .from(syncConnections)
       .where(and(eq(syncConnections.id, connectionId), isNull(syncConnections.deletedAt)))
+      .for('update')
       .limit(1)
-    return c ?? null
+    if (!c) return null
+    const [running] = await tx
+      .select({ id: syncRuns.id })
+      .from(syncRuns)
+      .where(
+        and(
+          eq(syncRuns.connectionId, connectionId),
+          eq(syncRuns.status, 'running'),
+          gte(syncRuns.startedAt, new Date(startedAt.getTime() - 6 * 3600_000)),
+        ),
+      )
+      .limit(1)
+    if (running) return { connection: c, runId: null }
+    const [run] = await tx
+      .insert(syncRuns)
+      .values({
+        tenantId,
+        connectionId,
+        trigger,
+        dryRun,
+        status: 'running',
+        startedAt,
+        cursorBefore: c.cursor,
+        cursorAfter: c.cursor,
+      })
+      .returning({ id: syncRuns.id })
+    if (!run) throw new Error('Could not start sync run.')
+    return { connection: c, runId: run.id }
   })
-  if (!conn) return { runId: null, status: 'error', stats: {}, error: 'Connection not found.' }
+  if (!claim) return { runId: null, status: 'error', stats: {}, error: 'Connection not found.' }
+  if (!claim.runId)
+    return {
+      runId: null,
+      status: 'error',
+      stats: {},
+      error: 'A sync or preview is already running. Wait for it to finish before retrying.',
+    }
+  const { connection: conn, runId } = claim
 
   const config = (conn.config as Record<string, unknown>) ?? {}
   const policy = policyOf(config)
@@ -136,24 +176,6 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
     if (level === 'error') console.error(line)
     else console.log(line)
   }
-
-  const startedAt = new Date()
-  const runId = await withTenant(db, tenantId, async (tx) => {
-    const [r] = await tx
-      .insert(syncRuns)
-      .values({
-        tenantId,
-        connectionId,
-        trigger,
-        dryRun,
-        status: 'running',
-        startedAt,
-        cursorBefore,
-        cursorAfter: cursorBefore,
-      })
-      .returning({ id: syncRuns.id })
-    return r?.id ?? null
-  })
 
   const finalize = async (
     status: SyncRunStatus,
@@ -232,7 +254,12 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
   try {
     log('info', dryRun ? 'Previewing source records...' : 'Pulling records...')
     pulled = normalizePull(await connector.pull(ctx))
-    log('info', `Pulled ${pulled.records.length} record(s).`)
+    log(
+      'info',
+      connector.supportsEquipmentTelemetry
+        ? `Pulled ${pulled.equipmentTelemetry.length} tracker asset(s).`
+        : `Pulled ${pulled.records.length} record(s).`,
+    )
   } catch (e) {
     const m = errMsg(e)
     log('error', `Pull failed: ${m}`)
@@ -242,6 +269,45 @@ export async function runSync(args: RunSyncArgs): Promise<RunSyncResult> {
   const records = pulled.records
   const cursorAfter = pulled.nextCursor ? pulled.nextCursor : cursorBefore
   const stats: Record<string, SyncEntityStat> = {}
+  if (connector.supportsEquipmentTelemetry) {
+    try {
+      const decisions = await withTenant(db, tenantId, async (tx) => {
+        const applied = await applyEquipmentTelemetry(tx, {
+          tenantId,
+          connectionId,
+          assets: pulled.equipmentTelemetry,
+          dryRun,
+        })
+        if (runId && applied.length)
+          await tx.insert(syncRecordChanges).values(
+            applied.map((decision) => ({
+              tenantId,
+              connectionId,
+              runId,
+              entity: 'equipment' as const,
+              externalId: decision.externalId,
+              canonicalId: decision.canonicalId,
+              action: decision.action,
+              dryRun,
+              message: decision.message,
+            })),
+          )
+        return applied
+      })
+      const stat = (stats.equipment = emptyStat())
+      stat.pulled = decisions.length
+      for (const decision of decisions) actionStat(stats, 'equipment', decision.action)
+      return finalize('success', stats, null, cursorAfter)
+    } catch (error) {
+      const detail =
+        error instanceof Error && error.name === 'DrizzleQueryError'
+          ? 'Could not persist tracker observations. Review database health and retry.'
+          : errMsg(error)
+      const message = `Telemetry pull was not applied: ${detail}`
+      log('error', message)
+      return finalize('error', {}, message)
+    }
+  }
   const seen: Record<SyncEntityKey, Set<string>> = {
     people: new Set(),
     org_unit: new Set(),

@@ -780,6 +780,22 @@ For an inbound data-sync connection, the schedule controls automatic runs only. 
 
 A SQL inbound connection can map more than one table into **Locations & Projects**. Customers become locations. Jobs become projects under their customer.
 
+## Connect equipment trackers
+
+1. Open **Admin**, then **Integrations**. Add a tracking provider from the catalog. **Fleet Complete / Powerfleet Unity** is one supported provider.
+2. Enter the provider's API-account credentials and click **Save settings**. Credentials are encrypted. For Unity, leave **Fleet user ID** blank only if the account can access exactly one fleet. Choose **Coordinate units** after checking a known position; TELUS Unity has been verified to return decimal degrees.
+3. Click **Run now**. Wait for a successful run, then open **Tracker assignments**.
+4. Search by source asset name, device serial, VIN, or equipment tag. Use **Assignment** and **Tracker health** to review the inventory.
+5. Choose existing equipment and click **Save link**. **Use suggested** fills an exact, unique asset-tag or VIN match; review it before saving. To leave a tracker out, select **Exclude tracker** and click **Save link**.
+6. Choose **Every 5 minutes**, enable the schedule, and save it. Set **Tracker stale after (minutes)** to match the devices' reporting schedule. The default is 24 hours; a successful integration run never resets the GPS observation time.
+7. Open **Equipment**, then **Location**, to review linked equipment locations.
+
+Click a source asset name on **Tracker assignments** to see its source history, including observations collected before it was linked. Equipment history starts when its link takes effect. Unlink an equipment item's current tracker before assigning another. Moving a tracker preserves earlier observations and does not rewrite custody history.
+
+Tracking integrations supplement equipment records. They do not claim source ownership, rename equipment, archive equipment, update manual meters, change its assigned location or holder, or mark missing equipment as found. The register's ownership and missing-record policies do not apply to tracker observations.
+
+Unity collects available history in windows of 1–24 hours per run. **History window (hours)** defaults to 24. Later runs overlap ten minutes and resume from the last successful window after an outage. Source retention and reporting schedules determine what history is available. Failed pulls preserve the last position and resume point; review the run error instead of treating retained coordinates as current.
+
 A **Database (SQL)** connection and an **External SQL database** automation both require **Use SSL/TLS**. If the host is an IP address, enter the **TLS certificate host name** from the database certificate. For a private or self-signed certificate, paste the **Pinned CA certificate**. On-prem private hosts also have to be allowlisted by the platform operator.
 
 ## Configure AI
