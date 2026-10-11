@@ -81,7 +81,7 @@ The left menu lists everything you can use. Items are grouped:
 
 You only see the items your role allows. If a page is missing, ask your supervisor or admin.
 
-The **Dashboard** shows your open work at a glance. Tap any card to jump to it.
+The **Dashboard** starts with a personal greeting and shows your open work at a glance. Tap any card to jump to it.
 
 ## Finding records
 

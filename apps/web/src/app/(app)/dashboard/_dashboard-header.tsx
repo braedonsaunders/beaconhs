@@ -1,34 +1,18 @@
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
-// Dashboard header: a plain, typographic greeting + tenant summary, with the
+// Dashboard header: a plain, typographic greeting, with the
 // Customise action on the right. Deliberately understated — the card grid
 // below carries the visual weight, so the header stays out of the way.
 
 import Link from 'next/link'
 import { Settings2 } from 'lucide-react'
 
-export function DashboardHeader({
-  greeting,
-  tenantSummary,
-}: {
-  greeting: string
-  /** Org rollup ("N people · M incidents"); omitted for self-only viewers. */
-  tenantSummary?: string | null
-}) {
+export function DashboardHeader({ greeting }: { greeting: string }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
         <h1 className="truncate text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
           <GeneratedValue value={greeting} />
         </h1>
-        <GeneratedValue
-          value={
-            tenantSummary ? (
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                <GeneratedValue value={tenantSummary} />
-              </p>
-            ) : null
-          }
-        />
       </div>
       <Link
         href="/dashboard/customize"

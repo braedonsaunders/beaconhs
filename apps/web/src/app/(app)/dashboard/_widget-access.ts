@@ -94,19 +94,3 @@ export function canSeeWidget(ctx: RequestContext, id: string): boolean {
   if (id in WIDGETS) return true // known personal widget → everyone
   return canViewInsights(ctx) // unknown id = placed Insights library card
 }
-
-/** Does the viewer see ANY org aggregate? Drives the header tenant summary. */
-export function canSeeOrgAggregates(ctx: RequestContext): boolean {
-  if (ctx.isSuperAdmin || canViewInsights(ctx)) return true
-  return [
-    ...INCIDENTS,
-    ...CA,
-    ...TRAINING,
-    ...PPE,
-    ...EQUIPMENT,
-    ...FORMS,
-    ...INSPECT,
-    'admin.org.manage',
-    'documents.manage',
-  ].some((p) => can(ctx, p))
-}

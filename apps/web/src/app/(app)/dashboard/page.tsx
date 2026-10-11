@@ -7,7 +7,7 @@ import { loadDashboardLayout } from './_load-layout'
 import { DashboardGrid } from './_dashboard-grid'
 import { WidgetCard } from './_widget-views'
 import { WIDGETS, WIDGET_CARD_KEY } from './_widget-registry'
-import { canSeeOrgAggregates, canSeeWidget } from './_widget-access'
+import { canSeeWidget } from './_widget-access'
 import { DashboardHeader } from './_dashboard-header'
 import { loadCardsForPalette } from '../insights/cards/_data'
 import { loadDashboardCardRenders } from '../insights/_data'
@@ -116,16 +116,10 @@ export default async function DashboardPage({
     afternoon: t('goodAfternoon'),
     evening: t('goodEvening'),
   })
-  // The tenant rollup is org data — omit it for self-only viewers (they'd have
-  // no org cards either, so the number would be the only leak).
-  const tenantSummary = canSeeOrgAggregates(ctx)
-    ? t('tenantSummary', { people: data.peopleCount, incidents: data.incidents30 })
-    : null
-
   return (
     <PageContainer>
       <div className="space-y-5">
-        <DashboardHeader greeting={greeting} tenantSummary={tenantSummary} />
+        <DashboardHeader greeting={greeting} />
 
         <DashboardGrid initialLayout={visibleLayout} nodes={nodes} role={role} mode="view" />
       </div>

@@ -3,7 +3,6 @@ import { WIDGETS } from './_widget-registry'
 import {
   canPermissionSetPublishInsights,
   canPermissionSetViewInsights,
-  canSeeOrgAggregates,
   canSeeWidget,
 } from './_widget-access'
 
@@ -44,7 +43,6 @@ describe('dashboard widget access', () => {
     for (const id of Object.keys(WIDGETS)) {
       expect(canSeeWidget(worker, id), id).toBe(id.startsWith('personal-'))
     }
-    expect(canSeeOrgAggregates(worker)).toBe(false)
   })
 
   it('allows managers to see registry and Insights widgets', () => {
@@ -52,7 +50,6 @@ describe('dashboard widget access', () => {
       expect(canSeeWidget(manager, id), id).toBe(true)
     }
     expect(canSeeWidget(manager, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')).toBe(true)
-    expect(canSeeOrgAggregates(manager)).toBe(true)
   })
 
   it('keeps equipment positions and skill tickets behind their module access', () => {
