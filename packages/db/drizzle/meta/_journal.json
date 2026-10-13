@@ -477,6 +477,13 @@
       "when": 1791596976315,
       "tag": "0068_telemetry_retention_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1791899029324,
+      "tag": "0069_ppe_other_inspections",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import {
   asc,
   desc,
   eq,
+  exists,
   ilike,
   inArray,
   isNotNull,
@@ -45,6 +46,7 @@ import {
   personTitles,
   ppeIssues,
   ppeItems,
+  ppeTypeInspectionCriteria,
   ppeTypes,
   roles,
   tenantUsers,
@@ -312,6 +314,8 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'ppe-active-people':
       return can(ctx, 'ppe.issue') || can(ctx, 'ppe.manage')
     case 'ppe-inspection-supervisors':
+    case 'ppe-inspection-sites':
+    case 'ppe-other-inspection-types':
       return can(ctx, 'ppe.inspect')
     // Filtering the register is a READ. Gating this on the write
     // permissions would deny the filter to read-only PPE users.
@@ -1481,6 +1485,7 @@ async function loadOptions(
       lookup === 'incident-sites' ||
       lookup === 'inspection-sites' ||
       lookup === 'equipment-inspection-sites' ||
+      lookup === 'ppe-inspection-sites' ||
       lookup === 'corrective-action-sites'
     ) {
       const match = input.hasQuery
@@ -1832,6 +1837,43 @@ async function loadOptions(
         .orderBy(...personOrder(input.selected))
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(personOptions(rows))
+    }
+
+    if (lookup === 'ppe-other-inspection-types') {
+      // Other PPE takes a pre-use check only, so offer the types that have one.
+      const match = input.hasQuery
+        ? or(
+            ilike(ppeTypes.name, input.term),
+            ilike(ppeTypes.category, input.term),
+            input.selected ? eq(ppeTypes.id, input.selected) : undefined,
+          )
+        : undefined
+      const rows = await tx
+        .select({ id: ppeTypes.id, name: ppeTypes.name, category: ppeTypes.category })
+        .from(ppeTypes)
+        .where(
+          and(
+            match,
+            exists(
+              tx
+                .select({ id: ppeTypeInspectionCriteria.id })
+                .from(ppeTypeInspectionCriteria)
+                .where(
+                  and(
+                    eq(ppeTypeInspectionCriteria.ppeTypeId, ppeTypes.id),
+                    eq(ppeTypeInspectionCriteria.inspectionKind, 'pre_use'),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .orderBy(
+          ...(input.selected ? [desc(sql`${ppeTypes.id} = ${input.selected}`)] : []),
+          asc(ppeTypes.name),
+          asc(ppeTypes.id),
+        )
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(rows.map((row) => option(row.id, row.name, row.category)))
     }
 
     if (lookup === 'ppe-types' || lookup === 'report-ppe-types') {

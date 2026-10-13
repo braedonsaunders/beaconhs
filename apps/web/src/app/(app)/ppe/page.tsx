@@ -5,7 +5,7 @@ import { PeopleStatusFilter } from '@/components/people-status-filter'
 import { includeInactivePeople } from '@/lib/people-filter'
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import Link from 'next/link'
-import { HardHat } from 'lucide-react'
+import { ClipboardCheck, HardHat } from 'lucide-react'
 import { and, asc, count, eq, isNull, sql } from 'drizzle-orm'
 import { Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { people, ppeItems, ppeTypeInspectionCriteria, ppeTypes } from '@beaconhs/db/schema'
@@ -23,6 +23,8 @@ import { TableToolbar } from '@/components/table-toolbar'
 import { PpeSubNav } from '@/components/ppe-sub-nav'
 import { createAndIssuePpe } from './_actions'
 import { PpeDrawers } from './_drawers'
+import { PpeInspectionDetailDrawer } from './_inspection-detail-drawer'
+import { PpeOtherInspectionDrawer } from './_other-inspection-drawer'
 import { PpeRecordsTable, type PpeTableRow } from './_records-table'
 
 export async function generateMetadata() {
@@ -75,6 +77,7 @@ export default async function PpePage({
   const ctx = await requireRequestContext()
   const canExport = can(ctx, 'admin.data.export') && can(ctx, 'ppe.read.all')
   const canIssue = can(ctx, 'ppe.issue') || can(ctx, 'ppe.manage')
+  const canInspect = can(ctx, 'ppe.inspect')
 
   const { rows, total, statusCounts, types, selectedHolder } = await ctx.db(async (tx) => {
     const [tot] = await tx
@@ -139,7 +142,8 @@ export default async function PpePage({
     }
   })
 
-  const issueDrawer = pickString(sp.drawer) === 'issue' ? 'issue' : null
+  const drawer = pickString(sp.drawer)
+  const issueDrawer = drawer === 'issue' ? 'issue' : null
 
   const tableRows: PpeTableRow[] = rows.map(
     ({ item, type, holder, assignedAt, preUseCriteriaCount, annualCriteriaCount }) => {
@@ -195,6 +199,17 @@ export default async function PpePage({
                           <GeneratedText id="m_14c6440eca1edc" />
                         </Button>
                       </DownloadLink>
+                    ) : null
+                  }
+                />
+                <GeneratedValue
+                  value={
+                    canInspect ? (
+                      <Link href="/ppe?drawer=inspect-other" scroll={false}>
+                        <Button variant="outline">
+                          <ClipboardCheck size={14} /> <GeneratedText id="m_14b75074ab6734" />
+                        </Button>
+                      </Link>
                     ) : null
                   }
                 />
@@ -300,6 +315,17 @@ export default async function PpePage({
         closeHref="/ppe"
         types={types}
         issueAction={createAndIssuePpe}
+      />
+      <PpeInspectionDetailDrawer
+        ctx={ctx}
+        inspectionId={drawer === 'inspection' ? pickString(sp.inspectionId) : undefined}
+        closeHref="/ppe"
+      />
+      <PpeOtherInspectionDrawer
+        ctx={ctx}
+        open={drawer === 'inspect-other'}
+        typeId={pickString(sp.otherType)}
+        basePath="/ppe"
       />
     </ListPageLayout>
   )

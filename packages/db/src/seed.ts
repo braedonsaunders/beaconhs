@@ -615,6 +615,7 @@ async function main() {
         await tx.insert(ppeInspections).values({
           tenantId: tenant.id,
           itemId: item!.id,
+          typeId: harness.id,
           kind: 'pre_use',
           result: 'pass',
           inspectedOn: isoDate(new Date(today.getTime() - (14 + n * 14) * dayMs)),
@@ -625,6 +626,7 @@ async function main() {
       await tx.insert(ppeInspections).values({
         tenantId: tenant.id,
         itemId: item!.id,
+        typeId: harness.id,
         kind: 'annual',
         result: 'pass',
         inspectedOn: isoDate(new Date(today.getTime() - 200 * dayMs)),

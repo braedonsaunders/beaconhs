@@ -2,6 +2,7 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import Link from 'next/link'
 import { and, asc, count, desc, eq, ilike, or, sql, type AnyColumn } from 'drizzle-orm'
+import { ClipboardCheck } from 'lucide-react'
 import {
   orgUnits,
   ppeInspections,
@@ -10,9 +11,10 @@ import {
   tenantUsers,
   users,
 } from '@beaconhs/db/schema'
-import { assertCan } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import {
   Badge,
+  Button,
   PageHeader,
   Table,
   TableBody,
@@ -30,6 +32,8 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { TableToolbar } from '@/components/table-toolbar'
 import { DownloadLink } from '@/components/download-link'
+import { PpeInspectionDetailDrawer } from '../_inspection-detail-drawer'
+import { PpeOtherInspectionDrawer } from '../_other-inspection-drawer'
 
 export const dynamic = 'force-dynamic'
 export async function generateMetadata() {
@@ -41,7 +45,10 @@ const SORTS = ['date', 'item', 'kind', 'result', 'status'] as const
 const KINDS = ['pre_use', 'annual'] as const
 const RESULTS = ['pass', 'fail', 'n_a'] as const
 const STATUSES = ['in_progress', 'submitted'] as const
+const SOURCES = ['register', 'other'] as const
 const LABELS: Record<string, string> = {
+  register: 'Register',
+  other: 'Other PPE',
   pre_use: 'Pre-use',
   annual: 'Annual',
   pass: 'Pass',
@@ -70,6 +77,11 @@ export default async function PpeInspectionsPage({
   const kind = KINDS.find((value) => value === pickString(sp.kind))
   const result = RESULTS.find((value) => value === pickString(sp.result))
   const status = STATUSES.find((value) => value === pickString(sp.status))
+  const source = SOURCES.find((value) => value === pickString(sp.source))
+  const drawer = pickString(sp.drawer)
+  const serial = sql<
+    string | null
+  >`coalesce(${ppeItems.serialNumber}, ${ppeInspections.serialNumber})`
   const inspector = sql<string>`coalesce(${ppeInspections.inspectorNameSnapshot}, ${users.name}, '')`
   const term = `%${params.q}%`
   const where = and(
@@ -77,9 +89,12 @@ export default async function PpeInspectionsPage({
     kind ? eq(ppeInspections.kind, kind) : undefined,
     result ? eq(ppeInspections.result, result) : undefined,
     status ? eq(ppeInspections.status, status) : undefined,
+    source ? eq(ppeInspections.isOther, source === 'other') : undefined,
     params.q
       ? or(
           ilike(ppeItems.serialNumber, term),
+          ilike(ppeInspections.serialNumber, term),
+          ilike(ppeInspections.suppliedBy, term),
           ilike(ppeTypes.name, term),
           ilike(inspector, term),
           ilike(orgUnits.name, term),
@@ -98,14 +113,14 @@ export default async function PpeInspectionsPage({
     const query = tx
       .select({
         inspection: ppeInspections,
-        serial: ppeItems.serialNumber,
+        serial,
         type: ppeTypes.name,
         inspector,
         site: orgUnits.name,
       })
       .from(ppeInspections)
-      .innerJoin(ppeItems, eq(ppeItems.id, ppeInspections.itemId))
-      .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
+      .innerJoin(ppeTypes, eq(ppeTypes.id, ppeInspections.typeId))
+      .leftJoin(ppeItems, eq(ppeItems.id, ppeInspections.itemId))
       .leftJoin(tenantUsers, eq(tenantUsers.id, ppeInspections.inspectedByTenantUserId))
       .leftJoin(users, eq(users.id, tenantUsers.userId))
       .leftJoin(orgUnits, eq(orgUnits.id, ppeInspections.siteOrgUnitId))
@@ -129,6 +144,15 @@ export default async function PpeInspectionsPage({
           <PageHeader
             title={tGenerated('m_1219871c3f3a8f')}
             description={tGenerated('m_188bba91bd3aac', { value0: total.toLocaleString() })}
+            actions={
+              can(ctx, 'ppe.inspect') ? (
+                <Link href={`${BASE}?drawer=inspect-other`} scroll={false}>
+                  <Button>
+                    <ClipboardCheck size={14} /> <GeneratedText id="m_14b75074ab6734" />
+                  </Button>
+                </Link>
+              ) : undefined
+            }
           />
           <PpeSubNav active="inspections" />
           <TableToolbar>
@@ -138,6 +162,7 @@ export default async function PpeInspectionsPage({
                 ['kind', kind, KINDS, 'All kinds'],
                 ['result', result, RESULTS, 'All results'],
                 ['status', status, STATUSES, 'All statuses'],
+                ['source', source, SOURCES, 'All PPE'],
               ] as const
             ).map(([key, selected, options, all]) => (
               <div key={key} className="flex flex-wrap gap-1" role="group" aria-label={key}>
@@ -223,13 +248,30 @@ export default async function PpeInspectionsPage({
                     {row.inspection.inspectedOn ?? '—'}
                   </TableCell>
                   <TableCell>
-                    <Link
-                      className="text-teal-700 hover:underline dark:text-teal-400"
-                      href={`/ppe/${row.inspection.itemId}?tab=inspections&drawer=inspection&inspectionId=${row.inspection.id}`}
-                    >
-                      {row.type}
-                      {row.serial ? ` · ${row.serial}` : ''}
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Link
+                        className="text-teal-700 hover:underline dark:text-teal-400"
+                        href={mergeHref(BASE, sp, {
+                          drawer: 'inspection',
+                          inspectionId: row.inspection.id,
+                        })}
+                        scroll={false}
+                      >
+                        <GeneratedValue
+                          value={row.serial ? `${row.type} · ${row.serial}` : row.type}
+                        />
+                      </Link>
+                      {row.inspection.isOther ? (
+                        <Badge variant="secondary">
+                          <GeneratedText id="m_172b20c7c26e49" />
+                        </Badge>
+                      ) : null}
+                    </div>
+                    {row.inspection.suppliedBy ? (
+                      <div className="text-xs text-slate-500">
+                        <GeneratedValue value={row.inspection.suppliedBy} />
+                      </div>
+                    ) : null}
                   </TableCell>
                   <TableCell className="capitalize">
                     <GeneratedValue value={label(row.inspection.kind)} />
@@ -257,7 +299,7 @@ export default async function PpeInspectionsPage({
                   <TableCell>
                     <DownloadLink
                       className="text-teal-700 hover:underline dark:text-teal-400"
-                      href={`/ppe/${row.inspection.itemId}/inspections/${row.inspection.id}/pdf`}
+                      href={`/ppe/inspections/${row.inspection.id}/pdf`}
                       target="_blank"
                     >
                       <GeneratedText id="m_1a2b2ed6729166" />
@@ -275,6 +317,17 @@ export default async function PpeInspectionsPage({
         total={total}
         page={params.page}
         perPage={params.perPage}
+      />
+      <PpeInspectionDetailDrawer
+        ctx={ctx}
+        inspectionId={drawer === 'inspection' ? pickString(sp.inspectionId) : undefined}
+        closeHref={mergeHref(BASE, sp, { drawer: undefined, inspectionId: undefined })}
+      />
+      <PpeOtherInspectionDrawer
+        ctx={ctx}
+        open={drawer === 'inspect-other'}
+        typeId={pickString(sp.otherType)}
+        basePath={BASE}
       />
     </ListPageLayout>
   )

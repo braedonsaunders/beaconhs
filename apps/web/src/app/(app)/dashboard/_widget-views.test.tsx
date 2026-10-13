@@ -22,11 +22,15 @@ vi.mock('@/i18n/generated', async () => {
 })
 import { WidgetCard } from './_widget-views'
 
-function render(items: DashboardMetrics['myPpe'], myPersonId: string | null = null) {
+function render(
+  items: DashboardMetrics['myPpe'],
+  myPersonId: string | null = null,
+  canInspectOtherPpe = false,
+) {
   return renderToStaticMarkup(
     <WidgetCard
       widgetId="personal-my-ppe"
-      data={{ myPpe: items, myPersonId } as DashboardMetrics}
+      data={{ myPpe: items, myPersonId, canInspectOtherPpe } as DashboardMetrics}
       todayIso="2026-10-01"
     />,
   )
@@ -103,5 +107,9 @@ describe('My PPE assigned gear', () => {
     const personId = '10000000-0000-4000-8000-000000000001'
     expect(render([], personId)).toContain(`href="/ppe?holder=${personId}"`)
     expect(render([])).toContain('href="/ppe"')
+  })
+  it('offers other-PPE inspection only to people who can inspect PPE', () => {
+    expect(render([], null, true)).toContain('href="/ppe?drawer=inspect-other"')
+    expect(render([], null, false)).not.toContain('drawer=inspect-other')
   })
 })

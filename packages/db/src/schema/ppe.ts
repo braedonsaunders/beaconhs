@@ -176,7 +176,10 @@ export const ppeIssues = pgTable(
   }),
 )
 
-// Inspection record (per-item, per-event). Pre-use or scheduled annual.
+// Inspection record. Pre-use or scheduled annual on a registered item, or a
+// pre-use check of "other" PPE that is not in the register (rental, client-
+// supplied, a subcontractor's or a worker's own gear). Other PPE has no item:
+// the type, serial, and supplier are captured on the inspection itself.
 export const ppeInspectionKind = pgEnum('ppe_inspection_kind', ['pre_use', 'annual'])
 export const ppeInspectionResult = pgEnum('ppe_inspection_result', ['pass', 'fail', 'n_a'])
 export const ppeInspectionStatus = pgEnum('ppe_inspection_status', ['in_progress', 'submitted'])
@@ -194,7 +197,15 @@ export const ppeInspections = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    itemId: uuid('item_id').notNull(),
+    // Null for other PPE (is_other) — there is no register item to attach to.
+    itemId: uuid('item_id'),
+    // The PPE type whose checklist was inspected, snapshot at inspection time
+    // so a later type change on the item never re-labels history.
+    typeId: uuid('type_id').notNull(),
+    isOther: boolean('is_other').default(false).notNull(),
+    // Other PPE only: the gear's own identity, typed by the inspector.
+    serialNumber: text('serial_number'),
+    suppliedBy: text('supplied_by'),
     kind: ppeInspectionKind('kind').notNull(),
     status: ppeInspectionStatus('status').default('submitted').notNull(),
     result: ppeInspectionResult('result'),
@@ -215,6 +226,7 @@ export const ppeInspections = pgTable(
   },
   (t) => ({
     itemIdx: index('ppe_inspections_item_idx').on(t.tenantId, t.itemId, t.inspectedOn),
+    typeIdx: index('ppe_inspections_type_idx').on(t.tenantId, t.typeId),
     tenantIdIdUx: uniqueIndex('ppe_inspections_tenant_id_id_ux').on(t.tenantId, t.id),
     inspectedByIdx: index('ppe_inspections_inspected_by_idx').on(
       t.tenantId,
@@ -228,6 +240,11 @@ export const ppeInspections = pgTable(
       columns: [t.tenantId, t.itemId],
       foreignColumns: [ppeItems.tenantId, ppeItems.id],
     }).onDelete('cascade'),
+    typeFk: foreignKey({
+      name: 'ppe_inspections_tenant_type_fk',
+      columns: [t.tenantId, t.typeId],
+      foreignColumns: [ppeTypes.tenantId, ppeTypes.id],
+    }),
     inspectedByFk: foreignKey({
       name: 'ppe_inspections_tenant_inspected_by_fk',
       columns: [t.tenantId, t.inspectedByTenantUserId],
@@ -246,6 +263,13 @@ export const ppeInspections = pgTable(
     submittedResultCk: check(
       'ppe_inspections_submitted_result_ck',
       sql`${t.status} <> 'submitted' OR (${t.result} IS NOT NULL AND ${t.inspectedOn} IS NOT NULL)`,
+    ),
+    targetCk: check(
+      'ppe_inspections_target_ck',
+      sql`(
+        (${t.isOther} = false AND ${t.itemId} IS NOT NULL AND ${t.serialNumber} IS NULL AND ${t.suppliedBy} IS NULL)
+        OR (${t.isOther} = true AND ${t.itemId} IS NULL)
+      )`,
     ),
   }),
 )
@@ -352,7 +376,8 @@ export const ppeInspectionAttachments = pgTable(
   }),
 )
 
-// Issues / damage reports against a PPE item.
+// Issues / damage reports against a PPE item. Legacy defect reports raised by a
+// failed other-PPE inspection have no item; they hang off that inspection.
 export const ppeIssueStatus = pgEnum('ppe_issue_status', ['open', 'resolved', 'replaced'])
 
 export const ppeIssueReports = pgTable(
@@ -362,7 +387,7 @@ export const ppeIssueReports = pgTable(
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    itemId: uuid('item_id').notNull(),
+    itemId: uuid('item_id'),
     inspectionId: uuid('inspection_id'),
     reportedByTenantUserId: uuid('reported_by_tenant_user_id'),
     reportedByNameSnapshot: text('reported_by_name_snapshot'),
@@ -397,6 +422,10 @@ export const ppeIssueReports = pgTable(
       columns: [t.tenantId, t.reportedByTenantUserId],
       foreignColumns: [tenantUsers.tenantId, tenantUsers.id],
     }),
+    subjectCk: check(
+      'ppe_issue_reports_subject_ck',
+      sql`${t.itemId} IS NOT NULL OR ${t.inspectionId} IS NOT NULL`,
+    ),
   }),
 )
 
@@ -418,6 +447,7 @@ export const ppeItemsRelations = relations(ppeItems, ({ one, many }) => ({
 export const ppeTypesRelations = relations(ppeTypes, ({ one, many }) => ({
   tenant: one(tenants, { fields: [ppeTypes.tenantId], references: [tenants.id] }),
   items: many(ppeItems),
+  inspections: many(ppeInspections),
 }))
 
 export const ppeIssuesRelations = relations(ppeIssues, ({ one }) => ({
@@ -439,6 +469,10 @@ export const ppeInspectionsRelations = relations(ppeInspections, ({ one, many })
   item: one(ppeItems, {
     fields: [ppeInspections.tenantId, ppeInspections.itemId],
     references: [ppeItems.tenantId, ppeItems.id],
+  }),
+  type: one(ppeTypes, {
+    fields: [ppeInspections.tenantId, ppeInspections.typeId],
+    references: [ppeTypes.tenantId, ppeTypes.id],
   }),
   inspectedBy: one(tenantUsers, {
     fields: [ppeInspections.tenantId, ppeInspections.inspectedByTenantUserId],

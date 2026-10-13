@@ -285,6 +285,12 @@ export const WALKTHROUGHS: Walkthrough[] = [
         title: 'Damaged gear',
         body: 'If something fails, say so in the inspection. The item goes out of service automatically and cannot be issued again until someone from health and safety records a passing return-to-service check. Tag the gear out and tell your supervisor — do not keep using it.',
       },
+      {
+        path: '/ppe',
+        target: 'a[href="/ppe?drawer=inspect-other"]',
+        title: 'Gear not in the register',
+        body: 'Using rental, client, subcontractor, or your own gear? Tap Inspect other PPE, choose the PPE type, and run its pre-use check. Add the serial number and who supplied it. A failed check is recorded only — tag the gear out and return it to whoever supplied it.',
+      },
     ],
   },
   {

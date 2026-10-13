@@ -1,6 +1,6 @@
 import { and, count, eq } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
-import { ppeItems, ppeTypes } from '@beaconhs/db/schema'
+import { ppeInspections, ppeItems, ppeTypes } from '@beaconhs/db/schema'
 import { assertComplianceTargetCanRetire } from '@beaconhs/compliance'
 import { assertSubtypeHasNoCustomFields } from '@/lib/custom-fields/subtype-retirement'
 
@@ -32,6 +32,18 @@ export async function deletePpeTypeInTransaction(
   if (itemCount > 0) {
     throw new Error(
       `Cannot delete — ${itemCount} item${itemCount === 1 ? '' : 's'} reference this type`,
+    )
+  }
+
+  // Other-PPE inspections carry only their type; history must keep it.
+  const [inspectionTally] = await tx
+    .select({ c: count() })
+    .from(ppeInspections)
+    .where(and(eq(ppeInspections.tenantId, tenantId), eq(ppeInspections.typeId, typeId)))
+  const inspectionCount = Number(inspectionTally?.c ?? 0)
+  if (inspectionCount > 0) {
+    throw new Error(
+      `Cannot delete — ${inspectionCount} inspection${inspectionCount === 1 ? '' : 's'} reference this type`,
     )
   }
 

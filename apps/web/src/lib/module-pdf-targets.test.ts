@@ -40,7 +40,7 @@ const ROUTES: Record<string, string> = {
   equipment: 'equipment/work-orders/[id]/pdf/route.ts',
   'equipment-assets': 'equipment/[id]/pdf/route.ts',
   'equipment-inspections': 'equipment/inspections/[id]/pdf/route.ts',
-  ppe: 'ppe/[id]/inspections/[inspectionId]/pdf/route.ts',
+  ppe: 'ppe/inspections/[inspectionId]/pdf/route.ts',
   'ppe-issues': 'ppe/[id]/issues/[issueId]/pdf/route.ts',
   journals: 'journals/[id]/pdf/route.ts',
   inspections: 'inspections/records/[id]/pdf/route.ts',

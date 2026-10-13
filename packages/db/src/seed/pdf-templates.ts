@@ -708,6 +708,7 @@ const PPE_INSPECTION = wrap(
       p('Serial #', '{{item_serial}}'),
       p('Size', '{{item_size}}'),
       p('Issued to', '{{holder_name}}'),
+      pIf('supplied_by', 'Supplied by', '{{supplied_by}}'),
     ]) +
     collection('Inspection items', 'criteria', [
       ['#', '{{@number}}', 'width:4%;'],

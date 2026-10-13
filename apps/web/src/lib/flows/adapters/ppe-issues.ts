@@ -4,11 +4,14 @@ import 'server-only'
 // damage / defect report against a PPE item), distinct from the 'ppe' subject
 // (inspections). Exposes everything the bespoke issue-report PDF prints so a
 // userland PDF document template reaches full parity. Field-map keys mirror
-// MODULE_FLOW_PROFILES['ppe-issues'].
+// MODULE_FLOW_PROFILES['ppe-issues']. A legacy report raised by a failed
+// other-PPE inspection has no item; its type and serial come from that
+// inspection.
 
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import {
   people,
+  ppeInspections,
   ppeIssueReports,
   ppeItems,
   ppeTypes,
@@ -50,6 +53,8 @@ export function createPpeIssueReportFlowAdapter(
           .select({
             r: ppeIssueReports,
             item: ppeItems,
+            inspectionSerial: ppeInspections.serialNumber,
+            inspectionTypeId: ppeInspections.typeId,
             typeName: ppeTypes.name,
             typeCategory: ppeTypes.category,
             holderFirst: people.firstName,
@@ -58,8 +63,12 @@ export function createPpeIssueReportFlowAdapter(
             reportedByName: users.name,
           })
           .from(ppeIssueReports)
-          .innerJoin(ppeItems, eq(ppeItems.id, ppeIssueReports.itemId))
-          .leftJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
+          .leftJoin(ppeItems, eq(ppeItems.id, ppeIssueReports.itemId))
+          .leftJoin(ppeInspections, eq(ppeInspections.id, ppeIssueReports.inspectionId))
+          .leftJoin(
+            ppeTypes,
+            eq(ppeTypes.id, sql`coalesce(${ppeItems.typeId}, ${ppeInspections.typeId})`),
+          )
           .leftJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
           .leftJoin(tenantUsers, eq(tenantUsers.id, ppeIssueReports.reportedByTenantUserId))
           .leftJoin(users, eq(users.id, tenantUsers.userId))
@@ -69,9 +78,10 @@ export function createPpeIssueReportFlowAdapter(
       if (!head) return {}
       const r = head.r
       const item = head.item
+      const serial = item?.serialNumber ?? head.inspectionSerial ?? null
 
       return {
-        reference: item.serialNumber || `PPE-${issueReportId.slice(0, 8)}`,
+        reference: serial || `PPE-${issueReportId.slice(0, 8)}`,
         description: r.description ?? '',
         status: r.status ?? null,
         status_label: titleize(r.status),
@@ -84,21 +94,21 @@ export function createPpeIssueReportFlowAdapter(
         // Linked PPE item (the bespoke PDF's PPE Item panel).
         type_name: head.typeName ?? '',
         type_category: head.typeCategory ?? '',
-        item_serial: item.serialNumber ?? '',
-        item_size: item.size ?? '',
-        item_status: item.status ?? null,
-        item_status_label: titleize(item.status),
+        item_serial: serial ?? '',
+        item_size: item?.size ?? '',
+        item_status: item?.status ?? null,
+        item_status_label: titleize(item?.status ?? null),
         holder_name: personName({
           firstName: head.holderFirst,
           lastName: head.holderLast,
           formalName: head.holderFormal,
         }),
-        purchase_date: fmtDate(item.purchaseDate),
-        expires_on: fmtDate(item.expiresOn),
+        purchase_date: fmtDate(item?.purchaseDate ?? null),
+        expires_on: fmtDate(item?.expiresOn ?? null),
         // FK ids for conditions / recipient `field` targets.
         item_id: r.itemId ?? null,
-        type_id: item.typeId ?? null,
-        holder_person_id: item.currentHolderPersonId ?? null,
+        type_id: item?.typeId ?? head.inspectionTypeId ?? null,
+        holder_person_id: item?.currentHolderPersonId ?? null,
         reported_by_tenant_user_id: r.reportedByTenantUserId ?? null,
       }
     },

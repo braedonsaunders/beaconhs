@@ -183,7 +183,7 @@ describe('PPE relational integrity', () => {
     }
   })
 
-  it('keeps all 19 ORM relation joins tenant-qualified', () => {
+  it('keeps all 20 ORM relation joins tenant-qualified', () => {
     const { tables, tableNamesMap } = extractTablesRelationalConfig(
       schema,
       createTableRelationsHelpers,
@@ -207,6 +207,7 @@ describe('PPE relational integrity', () => {
         ['tenant_id', 'inspected_by_tenant_user_id'],
       ],
       ['ppeInspections', 'item', 'ppe_items', ['tenant_id', 'item_id']],
+      ['ppeInspections', 'type', 'ppe_types', ['tenant_id', 'type_id']],
       ['ppeIssueReports', 'item', 'ppe_items', ['tenant_id', 'item_id']],
       ['ppeIssueReports', 'inspection', 'ppe_inspections', ['tenant_id', 'inspection_id']],
       [

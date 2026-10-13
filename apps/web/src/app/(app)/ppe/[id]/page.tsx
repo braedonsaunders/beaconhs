@@ -1,4 +1,3 @@
-import { activePeopleWhere } from '@beaconhs/db'
 import { getGeneratedValueTranslations, getGeneratedTranslations } from '@/i18n/generated.server'
 
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
@@ -14,21 +13,22 @@ import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 //   history      → issue / return / replace ledger
 //   status       → status mutator with holder picker when switching to 'issued'
 //
-// All mutations recordAudit. Failing pre-use inspections with severity ≥ high
-// auto-spawn a CA in the same transaction as the inspection evidence.
+// All mutations recordAudit. Inspections are recorded by the shared
+// ../_inspection-actions path (also used for other PPE); on an item, a failure
+// takes it out of service and severity ≥ high auto-spawns a CA in the same
+// transaction as the inspection evidence.
 
 import Link from 'next/link'
 import { DownloadLink } from '@/components/download-link'
 import { Fragment } from 'react'
-import { notFound, redirect, unstable_rethrow } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
 import {
   AlertTriangle,
   ClipboardCheck,
   FileText,
   Plus,
-  Printer,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -59,8 +59,6 @@ import {
   correctiveActions,
   people,
   ppeAnnualRecords,
-  ppeInspectionAttachments,
-  ppeInspectionCriteria,
   ppeInspections,
   ppeIssueReports,
   ppeIssues,
@@ -69,9 +67,8 @@ import {
   tenantUsers,
 } from '@beaconhs/db/schema'
 import { isUniqueViolation, safeDbErrorMessage } from '@beaconhs/db'
-import { assertCan, can, ForbiddenError } from '@beaconhs/tenant'
+import { assertCan, can } from '@beaconhs/tenant'
 import { canManageModule } from '@/lib/module-admin/guard'
-import { recordModuleFlowEvent } from '@beaconhs/events'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
@@ -83,7 +80,8 @@ import { materializePpeTypeEvidence } from '@/lib/compliance-type-evidence'
 import { CertificateDrawer, type CertificateInput } from './_certificate-drawer'
 import { deletePpeItem } from '../_actions'
 import { DeletePpeButton } from './_delete-button'
-import { PpeInspectionForm } from './_inspection-form'
+import { PpeInspectionForm } from '../_inspection-form'
+import { PpeInspectionDetailDrawer } from '../_inspection-detail-drawer'
 import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { DetailGrid } from '@/components/detail-grid'
 import { FilterChips } from '@/components/filter-bar'
@@ -93,18 +91,13 @@ import { Section } from '@/components/section'
 import { TableToolbar } from '@/components/table-toolbar'
 import { DetailPageLayout } from '@/components/page-layout'
 import { TabNav, pickActiveTab } from '@/components/tab-nav'
-import { RawImage } from '@/components/raw-image'
-import { nextPpeInspectionDue } from '@/lib/ppe-inspection-due'
 import {
   PPE_ANNUAL_RECORD_YEAR_UNIQUE_CONSTRAINT,
   PPE_SERIAL_UNIQUE_CONSTRAINT,
-  applyPpeStatusTransition,
   daysUntil,
   deriveAnnualYear,
   loadInspectionCriteriaForType,
   recordPpeIssueAction,
-  shouldSpawnCorrectiveAction,
-  createCorrectiveActionForFailedPpeInspection,
 } from '../_lib'
 
 export const dynamic = 'force-dynamic'
@@ -281,329 +274,6 @@ async function updatePpeField(formData: FormData) {
   }
   revalidatePath(`/ppe/${id}`)
   revalidatePath('/ppe')
-}
-
-async function recordInspection(formData: FormData) {
-  const ctx = await requireRequestContext()
-  assertCan(ctx, 'ppe.inspect')
-  const itemId = String(formData.get('itemId') ?? '')
-  const typeId = String(formData.get('typeId') ?? '')
-  const kindRaw = String(formData.get('kind') ?? 'pre_use')
-  const kind: 'pre_use' | 'annual' = kindRaw === 'annual' ? 'annual' : 'pre_use'
-  if (kind === 'annual') assertCan(ctx, 'ppe.manage')
-  const notes = String(formData.get('notes') ?? '').trim() || null
-  const supervisorPersonId = String(formData.get('supervisorPersonId') ?? '').trim() || null
-  if (!isUuid(itemId) || !isUuid(typeId)) throw new Error('Invalid PPE item')
-  if (supervisorPersonId && !isUuid(supervisorPersonId)) throw new Error('Invalid supervisor')
-  if (notes && notes.length > 10_000) throw new Error('Inspection notes are too long')
-  const today = new Date().toISOString().slice(0, 10)
-
-  // Pull the criteria list so we can validate the per-row answers + compute
-  // whether any fail is high+ severity (drives the auto-CA). The overall result
-  // is DERIVED from the answers — there is no manual override.
-  const criteria = await loadInspectionCriteriaForType(ctx, typeId, kind)
-  if (criteria.length === 0) throw new Error('This PPE type has no criteria for that inspection')
-  const escalatedFailures: {
-    question: string
-    reason: string
-    severity: 'high' | 'critical'
-  }[] = []
-  let anyFail = false
-  let anyApplicable = false
-  const submissions: {
-    criterion: (typeof criteria)[number]
-    sequence: number
-    answer: 'pass' | 'fail' | 'n_a'
-    reason: string | null
-    photoIds: string[]
-  }[] = []
-  for (const [sequence, c] of criteria.entries()) {
-    const raw = String(formData.get(`criterion_${c.id}`) ?? '')
-    // Every criterion must be answered (the client enforces this too).
-    if (raw !== 'pass' && raw !== 'fail' && raw !== 'n_a') {
-      throw new Error('Answer every criterion before recording the inspection')
-    }
-    const answer = raw as 'pass' | 'fail' | 'n_a'
-    const reason = String(formData.get(`criterion_reason_${c.id}`) ?? '').trim()
-    if (reason.length > 10_000) throw new Error('A criterion failure description is too long')
-    if (answer === 'fail' && !reason) {
-      throw new Error(`Describe what failed for “${c.question}”`)
-    }
-    const photoIds = Array.from(
-      new Set(
-        String(formData.get(`criterion_photos_${c.id}`) ?? '')
-          .split(',')
-          .map((value) => value.trim())
-          .filter(Boolean),
-      ),
-    )
-    if (photoIds.some((id) => !isUuid(id))) throw new Error('Invalid inspection photo')
-    if (photoIds.length > 10) throw new Error('Attach no more than 10 photos to each criterion')
-    if (c.requiresPhoto && answer !== 'n_a' && photoIds.length === 0) {
-      throw new Error(`Attach photo evidence for “${c.question}”`)
-    }
-    if (answer !== 'n_a') anyApplicable = true
-    if (answer === 'fail') {
-      anyFail = true
-      if (shouldSpawnCorrectiveAction(answer, c.severity)) {
-        escalatedFailures.push({
-          question: c.question,
-          reason,
-          severity: c.severity as 'high' | 'critical',
-        })
-      }
-    }
-    submissions.push({
-      criterion: c,
-      sequence,
-      answer,
-      reason: answer === 'fail' ? reason : null,
-      photoIds,
-    })
-  }
-  const allPhotoIds = submissions.flatMap((submission) => submission.photoIds)
-  if (new Set(allPhotoIds).size !== allPhotoIds.length) {
-    throw new Error('Each inspection photo can be attached to only one criterion')
-  }
-  // Derived result: any failed criterion fails the inspection; an all-N/A
-  // checklist remains N/A instead of being misreported as a pass.
-  const finalResult: 'pass' | 'fail' | 'n_a' = anyFail ? 'fail' : anyApplicable ? 'pass' : 'n_a'
-  const correctiveActionInput =
-    escalatedFailures.length > 0
-      ? (() => {
-          const severity = escalatedFailures.some((failure) => failure.severity === 'critical')
-            ? ('critical' as const)
-            : ('high' as const)
-          const primaryFailure =
-            escalatedFailures.find((failure) => failure.severity === 'critical') ??
-            escalatedFailures[0]!
-          return {
-            title:
-              escalatedFailures.length === 1
-                ? `PPE inspection finding: ${primaryFailure.question.slice(0, 80)}`
-                : `PPE inspection findings: ${escalatedFailures.length} high-risk failures`,
-            description: [
-              `PPE item ${itemId} failed a ${kind === 'pre_use' ? 'pre-use' : 'annual'} inspection.`,
-              `High-risk findings:\n${escalatedFailures
-                .map(
-                  (failure) =>
-                    `- [${failure.severity.toUpperCase()}] ${failure.question}: ${failure.reason}`,
-                )
-                .join('\n')}`,
-              notes ? `Inspector notes: ${notes}` : null,
-            ]
-              .filter(Boolean)
-              .join('\n\n'),
-            severity,
-          }
-        })()
-      : null
-
-  await ctx.db(async (tx) => {
-    const [item] = await tx
-      .select({
-        typeId: ppeItems.typeId,
-        status: ppeItems.status,
-        deletedAt: ppeItems.deletedAt,
-        inspectionSchedule: ppeTypes.inspectionSchedule,
-      })
-      .from(ppeItems)
-      .innerJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
-      .where(eq(ppeItems.id, itemId))
-      .limit(1)
-      .for('update')
-    if (!item || item.typeId !== typeId) throw new Error('PPE item or type not found')
-    if (item.deletedAt || item.status === 'discarded' || item.status === 'expired') {
-      throw new Error('Discarded or expired PPE cannot be inspected')
-    }
-    // Inspecting out-of-service gear IS the return-to-service decision, so it
-    // needs the narrower permission — ppe.inspect alone (which every foreman
-    // holds for pre-use checks) must not be able to declare failed PPE safe.
-    if (item.status === 'out_of_service' && !can(ctx, 'ppe.return_to_service')) {
-      throw new Error(
-        'This PPE is out of service. Only someone with permission to return PPE to service can inspect it.',
-      )
-    }
-    if (supervisorPersonId) {
-      const [supervisor] = await tx
-        .select({ id: people.id })
-        .from(people)
-        .where(and(eq(people.id, supervisorPersonId), activePeopleWhere()))
-        .limit(1)
-      if (!supervisor) throw new Error('Supervisor was not found')
-    }
-    const nextDueOn = nextPpeInspectionDue(kind, today, item.inspectionSchedule)
-
-    if (allPhotoIds.length > 0) {
-      const ownedPhotos = await tx
-        .select({ id: attachments.id })
-        .from(attachments)
-        .where(
-          and(
-            eq(attachments.tenantId, ctx.tenantId),
-            eq(attachments.uploadedBy, ctx.userId),
-            eq(attachments.kind, 'image'),
-            inArray(attachments.id, allPhotoIds),
-          ),
-        )
-      if (ownedPhotos.length !== allPhotoIds.length) {
-        throw new Error('One or more inspection photos are unavailable')
-      }
-    }
-
-    const [row] = await tx
-      .insert(ppeInspections)
-      .values({
-        tenantId: ctx.tenantId,
-        itemId,
-        kind,
-        status: 'submitted',
-        result: finalResult,
-        inspectedOn: today,
-        nextDueOn,
-        notes,
-        inspectedByTenantUserId: ctx.membership?.id,
-        inspectorNameSnapshot: ctx.membership?.displayName ?? null,
-        supervisorPersonId,
-      })
-      .returning({ id: ppeInspections.id })
-    if (!row) throw new Error('Inspection could not be recorded')
-
-    const responseRows = await tx
-      .insert(ppeInspectionCriteria)
-      .values(
-        submissions.map((submission) => ({
-          tenantId: ctx.tenantId,
-          inspectionId: row.id,
-          criterionId: submission.criterion.id,
-          questionTextSnapshot: submission.criterion.question,
-          descriptionSnapshot: submission.criterion.description,
-          severity: submission.criterion.severity,
-          requiresPhoto: submission.criterion.requiresPhoto,
-          sequence: submission.sequence,
-          answer: submission.answer,
-          nonComplianceReason: submission.reason,
-        })),
-      )
-      .returning({ id: ppeInspectionCriteria.id, criterionId: ppeInspectionCriteria.criterionId })
-    if (responseRows.length !== submissions.length) {
-      throw new Error('Inspection evidence could not be recorded')
-    }
-    const responseByCriterion = new Map(responseRows.map((entry) => [entry.criterionId, entry.id]))
-    const photoLinks = submissions.flatMap((submission) => {
-      const criterionResultId = responseByCriterion.get(submission.criterion.id)
-      if (!criterionResultId && submission.photoIds.length > 0) {
-        throw new Error('Inspection photo evidence could not be linked')
-      }
-      return submission.photoIds.map((attachmentId) => ({
-        tenantId: ctx.tenantId,
-        criterionResultId: criterionResultId!,
-        attachmentId,
-      }))
-    })
-    if (photoLinks.length > 0) await tx.insert(ppeInspectionAttachments).values(photoLinks)
-
-    const set =
-      kind === 'pre_use'
-        ? { lastInspectionOn: today, nextInspectionDue: nextDueOn }
-        : { lastAnnualInspectionOn: today, nextAnnualInspectionDue: nextDueOn }
-    await tx.update(ppeItems).set(set).where(eq(ppeItems.id, itemId))
-
-    // A failed inspection takes the item out of service immediately; a pass on
-    // out-of-service gear clears it. The holder is preserved either way — the
-    // item is physically still with whoever has it. Same transaction as the
-    // inspection itself, so the two can never disagree.
-    // Clearing an out-of-service item requires passing the SAME check that
-    // failed it — a pre-use pass says nothing about a failed annual. If that
-    // kind no longer has criteria (type edited, or the item moved types) the
-    // item would otherwise be stuck out of service forever, so any pass clears
-    // it in that case.
-    let clearsOutOfService = false
-    if (finalResult === 'pass' && item.status === 'out_of_service') {
-      const [failed] = await tx
-        .select({ kind: ppeInspections.kind })
-        .from(ppeInspections)
-        .where(and(eq(ppeInspections.itemId, itemId), eq(ppeInspections.result, 'fail')))
-        .orderBy(desc(ppeInspections.inspectedOn), desc(ppeInspections.id))
-        .limit(1)
-      const failedKind = failed?.kind ?? null
-      const failedKindStillRuns =
-        failedKind === null
-          ? false
-          : (await loadInspectionCriteriaForType(ctx, typeId, failedKind)).length > 0
-      clearsOutOfService = !failedKindStillRuns || failedKind === kind
-    }
-    const transition =
-      finalResult === 'fail' && item.status !== 'out_of_service'
-        ? ('mark_out_of_service' as const)
-        : clearsOutOfService
-          ? ('return_to_service' as const)
-          : null
-    if (transition) {
-      await applyPpeStatusTransition(tx, ctx, {
-        itemId,
-        personId: null,
-        action: transition,
-        note:
-          transition === 'mark_out_of_service'
-            ? `Failed ${kind === 'pre_use' ? 'pre-use' : 'annual'} inspection`
-            : `Passed ${kind === 'pre_use' ? 'pre-use' : 'annual'} return-to-service inspection`,
-      })
-    }
-    const correctiveActionId = correctiveActionInput
-      ? await createCorrectiveActionForFailedPpeInspection(tx, ctx, {
-          inspectionId: row.id,
-          itemId,
-          ...correctiveActionInput,
-        })
-      : null
-    await recordModuleFlowEvent(tx, ctx, {
-      subjectId: row.id,
-      moduleKey: 'ppe',
-      event: 'on_submit',
-      occurrenceKey: row.id,
-    })
-    await recordAuditInTransaction(tx, ctx, {
-      entityType: 'ppe_inspection',
-      entityId: row.id,
-      action: 'create',
-      summary: `Recorded ${kind === 'pre_use' ? 'pre-use' : 'annual'} inspection — ${finalResult}`,
-      after: {
-        itemId,
-        kind,
-        result: finalResult,
-        criteriaCount: submissions.length,
-        failedCriteriaCount: submissions.filter((submission) => submission.answer === 'fail')
-          .length,
-        photoCount: allPhotoIds.length,
-        correctiveActionId,
-      },
-    })
-    await materializePpeTypeEvidence(tx, ctx.tenantId, [item.typeId])
-    return row.id
-  })
-
-  revalidatePath(`/ppe/${itemId}`)
-  redirect(`/ppe/${itemId}?tab=inspections`)
-}
-
-async function submitPpeInspection(formData: FormData) {
-  'use server'
-  try {
-    await recordInspection(formData)
-  } catch (error) {
-    unstable_rethrow(error)
-    if (error instanceof ForbiddenError) {
-      return {
-        error:
-          'You need Inspect PPE permission to record an inspection. Ask your administrator for access.',
-      }
-    }
-    console.error('[ppe-inspection] submit failed', error)
-    return {
-      error: safeDbErrorMessage(error, 'Could not record the inspection. Please try again.'),
-    }
-  }
 }
 
 async function setStatus(formData: FormData) {
@@ -1235,49 +905,6 @@ export default async function PpeDetailPage({
     }
   })
   const { inspections, annualRecords, issueReports, issuesLog, itemCAs } = listData
-  // The checklist lives in a drawer, so its evidence is fetched only for the
-  // one inspection being opened — previously every inspection on the page paid
-  // for two extra queries whether or not anyone looked.
-  const openInspectionId = pickString(sp.inspectionId) ?? ''
-  const openInspection =
-    drawerKey === 'inspection' && isUuid(openInspectionId)
-      ? await ctx.db(async (tx) => {
-          const [row] = await tx
-            .select({ insp: ppeInspections, supervisor: people })
-            .from(ppeInspections)
-            .leftJoin(people, eq(people.id, ppeInspections.supervisorPersonId))
-            .where(and(eq(ppeInspections.id, openInspectionId), eq(ppeInspections.itemId, id)))
-            .limit(1)
-          return row
-        })
-      : undefined
-  const inspectionEvidence = openInspection
-    ? await ctx.db(async (tx) => {
-        const inspectionIds = [openInspection.insp.id]
-        const [criteria, photoLinks] = await Promise.all([
-          tx
-            .select()
-            .from(ppeInspectionCriteria)
-            .where(inArray(ppeInspectionCriteria.inspectionId, inspectionIds))
-            .orderBy(asc(ppeInspectionCriteria.inspectionId), asc(ppeInspectionCriteria.sequence)),
-          tx
-            .select({ link: ppeInspectionAttachments, attachment: attachments })
-            .from(ppeInspectionAttachments)
-            .innerJoin(attachments, eq(attachments.id, ppeInspectionAttachments.attachmentId))
-            .leftJoin(
-              ppeInspectionCriteria,
-              eq(ppeInspectionCriteria.id, ppeInspectionAttachments.criterionResultId),
-            )
-            .where(
-              or(
-                inArray(ppeInspectionAttachments.inspectionId, inspectionIds),
-                inArray(ppeInspectionCriteria.inspectionId, inspectionIds),
-              ),
-            ),
-        ])
-        return { criteria, photoLinks }
-      })
-    : { criteria: [], photoLinks: [] }
   const openIssues = countData.openIssues
   // When the current holder actually received it — the newest issue/replace in
   // the ledger, which is where a back-dated handover is recorded.
@@ -1859,14 +1486,6 @@ export default async function PpeDetailPage({
                             <GeneratedValue
                               value={inspections.map((row) => {
                                 const ca = itemCAs.find((c) => c.sourceEntityId === row.insp.id)
-                                const criteria = inspectionEvidence.criteria.filter(
-                                  (criterion) => criterion.inspectionId === row.insp.id,
-                                )
-                                const recordPhotos = inspectionEvidence.photoLinks.filter(
-                                  ({ link }) =>
-                                    link.inspectionId === row.insp.id &&
-                                    link.criterionResultId === null,
-                                )
                                 return (
                                   <Fragment key={row.insp.id}>
                                     <TableRow>
@@ -2441,11 +2060,10 @@ export default async function PpeDetailPage({
             ? tGenerated('m_1835964e76a7d5')
             : tGenerated('m_18e0e5e1c782f7'),
         )}
-        itemId={id}
+        target={{ kind: 'item', itemId: id }}
         typeId={type.id}
         kind={inspectionKind}
         criteria={inspectionCriteria}
-        action={submitPpeInspection}
       />
 
       <UrlDrawer
@@ -2529,157 +2147,12 @@ export default async function PpeDetailPage({
         </form>
       </UrlDrawer>
 
-      <UrlDrawer
-        open={Boolean(openInspection)}
+      <PpeInspectionDetailDrawer
+        ctx={ctx}
+        inspectionId={drawerKey === 'inspection' ? pickString(sp.inspectionId) : undefined}
         closeHref={`${basePath}?tab=inspections`}
-        title={tGenerated('m_1045d684f7a2d8')}
-        description={
-          openInspection
-            ? tGeneratedValue(
-                `${openInspection.insp.kind === 'pre_use' ? 'Pre-use' : 'Annual'} · ${openInspection.insp.inspectedOn ?? '—'} · ${openInspection.insp.result ?? '—'}`,
-              )
-            : undefined
-        }
-        size="lg"
-        footer={
-          openInspection ? (
-            <DownloadLink
-              href={`/ppe/${id}/inspections/${openInspection.insp.id}/pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button variant="outline">
-                <Printer size={14} /> <GeneratedText id="m_016088be0b1e51" />
-              </Button>
-            </DownloadLink>
-          ) : undefined
-        }
-      >
-        <GeneratedValue
-          value={
-            openInspection
-              ? (() => {
-                  const criteria = inspectionEvidence.criteria
-                  const recordPhotos = inspectionEvidence.photoLinks.filter(
-                    ({ link }) => link.criterionResultId === null,
-                  )
-                  return (
-                    <div className="mt-3 space-y-2">
-                      <GeneratedValue
-                        value={
-                          criteria.length === 0 ? (
-                            <p className="text-sm text-slate-500">
-                              <GeneratedText id="m_0b4b0b10211872" />
-                            </p>
-                          ) : (
-                            <ol className="space-y-2">
-                              {criteria.map((criterion) => {
-                                const photos = inspectionEvidence.photoLinks.filter(
-                                  ({ link }) => link.criterionResultId === criterion.id,
-                                )
-                                return (
-                                  <li
-                                    key={criterion.id}
-                                    className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
-                                  >
-                                    <div className="flex flex-wrap items-start justify-between gap-2">
-                                      <div className="min-w-0">
-                                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                          {criterion.sequence + 1}. {criterion.questionTextSnapshot}
-                                        </p>
-                                        {criterion.descriptionSnapshot ? (
-                                          <p className="mt-1 text-xs text-slate-500">
-                                            {criterion.descriptionSnapshot}
-                                          </p>
-                                        ) : null}
-                                      </div>
-                                      <div className="flex items-center gap-1.5">
-                                        <Badge variant="secondary">{criterion.severity}</Badge>
-                                        <Badge
-                                          variant={
-                                            criterion.answer === 'pass'
-                                              ? 'success'
-                                              : criterion.answer === 'fail'
-                                                ? 'destructive'
-                                                : 'secondary'
-                                          }
-                                        >
-                                          {criterion.answer?.replace('_', ' ') ?? (
-                                            <GeneratedText id="m_001b53ad38955a" />
-                                          )}
-                                        </Badge>
-                                      </div>
-                                    </div>
-                                    {criterion.nonComplianceReason ? (
-                                      <p className="mt-2 text-sm text-red-700 dark:text-red-300">
-                                        {criterion.nonComplianceReason}
-                                      </p>
-                                    ) : null}
-                                    {photos.length > 0 ? (
-                                      <div className="mt-3 flex flex-wrap gap-2">
-                                        {photos.map(({ attachment }) => (
-                                          <a
-                                            key={attachment.id}
-                                            href={attachmentUrl(attachment.id)}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            title={attachment.filename}
-                                            className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
-                                          >
-                                            <RawImage
-                                              src={attachmentUrl(attachment.id)}
-                                              alt={attachment.filename}
-                                              optimizationReason="authenticated"
-                                              className="h-full w-full object-cover"
-                                            />
-                                          </a>
-                                        ))}
-                                      </div>
-                                    ) : null}
-                                  </li>
-                                )
-                              })}
-                            </ol>
-                          )
-                        }
-                      />
-                      <GeneratedValue
-                        value={
-                          recordPhotos.length > 0 ? (
-                            <div>
-                              <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
-                                <GeneratedText id="m_020f32bc59d098" />
-                              </p>
-                              <div className="flex flex-wrap gap-2">
-                                {recordPhotos.map(({ attachment }) => (
-                                  <a
-                                    key={attachment.id}
-                                    href={attachmentUrl(attachment.id)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    title={attachment.filename}
-                                    className="block h-16 w-16 overflow-hidden rounded border border-slate-200 dark:border-slate-700"
-                                  >
-                                    <RawImage
-                                      src={attachmentUrl(attachment.id)}
-                                      alt={attachment.filename}
-                                      optimizationReason="authenticated"
-                                      className="h-full w-full object-cover"
-                                    />
-                                  </a>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null
-                        }
-                      />
-                    </div>
-                  )
-                })()
-              : null
-          }
-        />
-      </UrlDrawer>
+        itemId={id}
+      />
 
       <UrlDrawer
         open={drawerKey === 'change-status'}

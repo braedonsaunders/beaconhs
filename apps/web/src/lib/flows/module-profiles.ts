@@ -709,7 +709,7 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
     ],
   },
   // PPE INSPECTIONS — one ppe_inspections row (pre-use or annual check on a
-  // PPE item). The legacy "PPE Inspection (date)" email is an on_submit flow.
+  // PPE item, or a pre-use check of other PPE that is not in the register). The legacy "PPE Inspection (date)" email is an on_submit flow.
   // Immutable criterion snapshots and photo links are available to email/PDF
   // templates as collections.
   ppe: {
@@ -730,6 +730,8 @@ export const MODULE_FLOW_PROFILES: Record<string, FlowSubjectProfile> = {
       { key: 'item_serial', label: 'Serial number', kind: 'text' },
       { key: 'item_size', label: 'Size', kind: 'text' },
       { key: 'holder_name', label: 'Issued to', kind: 'text' },
+      { key: 'supplied_by', label: 'Supplied by', kind: 'text' },
+      { key: 'other_ppe', label: 'Other PPE (not in the register)', kind: 'bool' },
       { key: 'inspector_name', label: 'Inspected by', kind: 'text' },
       { key: 'site_name', label: 'Site', kind: 'text' },
       // raw enums + FK ids for conditions / recipient `field` targets.

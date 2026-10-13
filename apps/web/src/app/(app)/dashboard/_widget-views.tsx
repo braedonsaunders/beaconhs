@@ -318,7 +318,13 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
 
     // Personal
     case 'personal-my-ppe':
-      return <MyPpeCard items={data.myPpe} personId={data.myPersonId} />
+      return (
+        <MyPpeCard
+          items={data.myPpe}
+          personId={data.myPersonId}
+          canInspectOther={data.canInspectOtherPpe}
+        />
+      )
     case 'personal-my-equipment':
       return <MyEquipmentCard items={data.myEquipment} todayIso={todayIso} />
     case 'personal-my-compliance':
@@ -1437,9 +1443,11 @@ function inspectDueBadge(dueIso: string | null, todayIso: string) {
 function MyPpeCard({
   items,
   personId,
+  canInspectOther,
 }: {
   items: DashboardMetrics['myPpe']
   personId: string | null
+  canInspectOther: boolean
 }) {
   const tGenerated = useGeneratedTranslations()
   return (
@@ -1518,6 +1526,16 @@ function MyPpeCard({
           )
         }
       />
+      {canInspectOther ? (
+        <div className="px-4 pb-3">
+          <Link
+            href={'/ppe?drawer=inspect-other' as any}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:underline dark:text-teal-300"
+          >
+            <ClipboardCheck size={12} /> <GeneratedText id="m_14b75074ab6734" />
+          </Link>
+        </div>
+      ) : null}
     </CardShell>
   )
 }

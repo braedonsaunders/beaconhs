@@ -1012,6 +1012,13 @@ If you manage equipment, submitted inspections can send emails on their own — 
       'defect',
       'return gear',
       'custom fields',
+      'other PPE',
+      'rental',
+      'rented harness',
+      'client-supplied',
+      'subcontractor gear',
+      'own gear',
+      'supplied by',
     ],
     body: `PPE tracks the protective gear issued to you — harnesses, hard hats, gloves, glasses — through its whole life.
 
@@ -1029,11 +1036,11 @@ Open **PPE** in the left menu. That opens the list at [PPE](/ppe). It starts on 
 2. Find your items — **Assigned to** shows the holder and assignment date. **Inspection** shows **Overdue**, **Due today**, **Due soon**, **Current**, **Never inspected**, or **Not required**.
 3. Tap an item to open it. The **Status & schedule** panel shows **Currently with**, **Last inspection**, and **Next inspection due**.
 
-The **My PPE** dashboard card shows assigned gear with an inspection checklist. Gear that needs no inspection is hidden from this card. **View all** opens the PPE register with your name already selected in the **Holder** filter, even when the card is empty. Clear that filter to browse other holders. Full item names and serial numbers wrap onto extra lines on a phone. Annual inspection warnings appear below the item details when an annual check is missing, due, or coming due. Current annual inspections and pre-use checks do not have a status badge here. Items marked **Out of service** must not be used. Tap **Inspect** beside an item with a pre-use checklist to open that checklist directly. The annual warning does not change which checklist the shortcut opens. Only PPE managers can record annual inspections.
+The **My PPE** dashboard card shows assigned gear with an inspection checklist. Gear that needs no inspection is hidden from this card. **View all** opens the PPE register with your name already selected in the **Holder** filter, even when the card is empty. Clear that filter to browse other holders. Full item names and serial numbers wrap onto extra lines on a phone. Annual inspection warnings appear below the item details when an annual check is missing, due, or coming due. Current annual inspections and pre-use checks do not have a status badge here. Items marked **Out of service** must not be used. Tap **Inspect** beside an item with a pre-use checklist to open that checklist directly. The annual warning does not change which checklist the shortcut opens. Only PPE managers can record annual inspections. **Inspect other PPE** at the bottom of the card checks gear that is not in the register.
 
 ## Review all PPE inspections (managers)
 
-People with **Manage PPE** permission can open **PPE → Inspections**, between **Records** and **Manage**. This list covers every PPE item, including historical items. Search by item, inspector, location, or notes. Filter by kind, result, or status, select a column heading to sort, and use **Prev** and **Next** to move through results. Select the PPE item to open that exact checklist, or **PDF** to print it.
+People with **Manage PPE** permission can open **PPE → Inspections**, between **Records** and **Manage**. This list covers every PPE inspection: registered items, historical items, and other PPE that is not in the register. Search by item, serial number, supplier, inspector, location, or notes. Filter by kind, result, status, or **Register** and **Other PPE**, select a column heading to sort, and use **Prev** and **Next** to move through results. Select the PPE item to open that exact checklist on the same page, or **PDF** to print it. In the checklist, **Open PPE item** goes to a registered item's record. **Inspect other PPE** is at the top of this list too.
 
 ## Inspect your PPE
 
@@ -1046,7 +1053,7 @@ Items marked **Discarded** or **Expired** are historical records. They cannot be
 3. Answer every criterion: **Pass**, **Fail**, or **N/A**.
 4. If a criterion fails, describe what is wrong in **What failed?**.
 5. Add **Photo evidence** wherever it is required. Tap **Take photo or upload** to use the camera or choose pictures from your phone's photo library. You can also add optional photos to another answered criterion.
-6. Choose an optional **Supervisor** from active people, or choose **None**. Add anything worth flagging overall in the **Notes** box.
+6. Choose an optional **Location** and an optional **Supervisor** from active people, or choose **None**. Add anything worth flagging overall in the **Notes** box.
 7. Tap **Record inspection**. If something failed, the button reads **Record failed inspection** — that is fine, record it honestly.
 
 If saving fails, the panel shows an error and keeps your answers, notes, and photos. Correct the issue shown and retry.
@@ -1054,6 +1061,20 @@ If saving fails, the panel shows an error and keeps your answers, notes, and pho
 The result is worked out from your answers. An all-**N/A** checklist stays **N/A** instead of being shown as a pass. A high-severity failure automatically opens a corrective action, so it gets dealt with.
 
 **A failed inspection takes the item out of service.** It stays with you — it is physically in your hands — but it cannot be issued to anyone until it passes again. Stop using it.
+
+## Inspect PPE that is not in the register
+
+Rental gear, a client's harness, a subcontractor's gear, or your own: check it before you use it, even though it has no record in [PPE](/ppe).
+
+1. Open [PPE](/ppe) and tap **Inspect other PPE**. The **My PPE** dashboard card has the same link.
+2. Choose the **PPE type**. Only types with a pre-use checklist appear. Tap **Change** to pick a different type.
+3. Enter the **Serial number** and who it was **Supplied by**: the rental company, client, subcontractor, or your own gear. Both are optional, but they help trace the gear later.
+4. Answer every criterion, describe every failure, and add any required photos, the same as a registered item.
+5. Choose an optional **Location** and **Supervisor**, add **Notes**, and tap **Record inspection**.
+
+Other PPE only takes pre-use checks. Annual inspections and recertification belong to whoever owns the gear. A failed check is recorded, and nothing else happens: there is no item to take out of service and no corrective action. Tag the gear out, stop using it, and return it to whoever supplied it.
+
+The saved checklist opens as soon as you record it. Find it later in **PPE → Inspections** with the **Other PPE** filter. Checks recorded as "Other PPE" in the old Beacon app are there too, with the old harness and lanyard details in **Notes**.
 
 ## Return failed gear to service
 
@@ -1098,7 +1119,7 @@ If you manage PPE, recorded inspections can send emails on their own — for exa
 1. Open the Manage hub at [PPE manage](/ppe/manage) and tap **Automations**.
 2. Add the **A record is submitted** trigger.
 3. Connect actions like **Send email**, **Notify role**, or **Create CAPA**.
-4. Turn the flow on. It runs every time an inspection is recorded on any item.
+4. Turn the flow on. It runs every time an inspection is recorded, including other PPE. Use the **Other PPE (not in the register)** and **Supplied by** fields in conditions and templates. A flow cannot change an item status for other PPE, because there is no item.
 
 ${CSV_EXPORT_LIMIT_GUIDANCE}
 

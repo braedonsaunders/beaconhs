@@ -19,6 +19,7 @@ const equipmentBulk = source('../app/(app)/equipment/_actions.ts')
 const equipmentSchedules = source('../app/(app)/equipment/_maintenance-actions.ts')
 const equipmentInspections = source('../app/(app)/equipment/inspections/_lib.ts')
 const ppeDetail = source('../app/(app)/ppe/[id]/page.tsx')
+const ppeInspectionActions = source('../app/(app)/ppe/_inspection-actions.ts')
 const ppeBulk = source('../app/(app)/ppe/_actions.ts')
 const ppeLifecycle = source('../app/(app)/ppe/_lib.ts')
 const api = source('./api/write.ts')
@@ -77,15 +78,11 @@ describe('equipment and PPE compliance evidence lifecycle', () => {
   })
 
   it('refreshes PPE field, inspection, status, and certificate evidence in locked transactions', () => {
-    const update = between(
-      ppeDetail,
-      'async function updatePpeField',
-      'async function recordInspection',
-    )
+    const update = between(ppeDetail, 'async function updatePpeField', 'async function setStatus')
     const inspection = between(
-      ppeDetail,
-      'async function recordInspection',
-      'async function setStatus',
+      ppeInspectionActions,
+      'async function recordPpeInspection',
+      'export async function submitPpeInspection',
     )
     const certificate = between(ppeDetail, 'async function addCertificate', '')
 

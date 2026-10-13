@@ -2,19 +2,22 @@
 
 import { GeneratedText, useGeneratedTranslations, GeneratedValue } from '@/i18n/generated'
 
-// Criteria-driven inspection form for the PPE record page.
+// Criteria-driven PPE inspection form, for a registered item (its record page)
+// or for other PPE that is not in the register (the register and inspections
+// list).
 //
 // Behaviour (per spec):
 //   - No "manual overall result" — the result is derived from the answers.
 //   - Every criterion MUST be answered before the form can submit.
 //   - A live Pass / Fail / Incomplete status shows as you go.
 //
-// The radios carry `name="criterion_<id>"` so the existing server action reads
-// them straight from FormData; the controlled state drives the live status and
-// the submit gate. High+ severity fails still auto-spawn a corrective action
-// server-side.
+// The radios carry `name="criterion_<id>"` so the server action reads them
+// straight from FormData; the controlled state drives the live status and the
+// submit gate. On a registered item, high+ severity fails still auto-spawn a
+// corrective action server-side; other PPE failures are recorded only.
 
 import * as React from 'react'
+import Link from 'next/link'
 import {
   Alert,
   AlertDescription,
@@ -29,6 +32,7 @@ import {
 import { FileUpload, type AttachedFile } from '@/components/file-upload'
 import { InspectionStatusPill } from '@/components/inspection-status-pill'
 import { RemoteSelectField } from '@/components/remote-search-select'
+import { submitPpeInspection } from './_inspection-actions'
 
 type Answer = 'pass' | 'fail' | 'n_a'
 type Criterion = {
@@ -45,26 +49,29 @@ const ANSWERS: { value: Answer; label: string }[] = [
   { value: 'n_a', label: 'N/A' },
 ]
 
+type InspectionTarget =
+  | { kind: 'item'; itemId: string }
+  /** Other PPE: type chosen in the drawer, gear identity typed by the inspector. */
+  | { kind: 'other'; typeName: string; changeTypeHref: string; returnTo: string }
+
 export function PpeInspectionForm({
   open,
   closeHref,
   title,
   description,
-  itemId,
+  target,
   typeId,
   kind,
   criteria,
-  action,
 }: {
   open: boolean
   closeHref: string
   title: string
   description?: string
-  itemId: string
+  target: InspectionTarget
   typeId: string
   kind: 'pre_use' | 'annual'
   criteria: Criterion[]
-  action: (fd: FormData) => Promise<{ error: string } | void>
 }) {
   const tGenerated = useGeneratedTranslations()
   const [answers, setAnswers] = React.useState<Record<string, Answer>>({})
@@ -139,7 +146,7 @@ export function PpeInspectionForm({
           setError(null)
           start(async () => {
             try {
-              const result = await action(data)
+              const result = await submitPpeInspection(data)
               if (result?.error) setError(result.error)
             } catch {
               setError('Could not record the inspection. Your answers are kept. Please try again.')
@@ -147,7 +154,14 @@ export function PpeInspectionForm({
           })
         }}
       >
-        <input type="hidden" name="itemId" value={itemId} />
+        {target.kind === 'item' ? (
+          <input type="hidden" name="itemId" value={target.itemId} />
+        ) : (
+          <>
+            <input type="hidden" name="target" value="other" />
+            <input type="hidden" name="returnTo" value={target.returnTo} />
+          </>
+        )}
         <input type="hidden" name="typeId" value={typeId} />
         <input type="hidden" name="kind" value={kind} />
 
@@ -158,6 +172,49 @@ export function PpeInspectionForm({
                 <GeneratedValue value={error} />
               </AlertDescription>
             </Alert>
+          ) : null}
+          {target.kind === 'other' ? (
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/60">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                    <GeneratedText id="m_172b20c7c26e49" />
+                  </p>
+                  <p className="text-sm font-semibold [overflow-wrap:anywhere] text-slate-900 dark:text-slate-100">
+                    <GeneratedValue value={target.typeName} />
+                  </p>
+                </div>
+                <Link
+                  href={target.changeTypeHref as never}
+                  scroll={false}
+                  className="shrink-0 text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
+                >
+                  <GeneratedText id="m_11c7ed8124774d" />
+                </Link>
+              </div>
+              <p className="text-xs text-slate-500">
+                <GeneratedText id="m_05ea800287e27e" />
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ppe-other-serial">
+                    <GeneratedText id="m_0ff1343b241439" />
+                  </Label>
+                  <Input id="ppe-other-serial" name="serialNumber" maxLength={200} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ppe-other-supplied-by">
+                    <GeneratedText id="m_15112cdc334968" />
+                  </Label>
+                  <Input
+                    id="ppe-other-supplied-by"
+                    name="suppliedBy"
+                    maxLength={200}
+                    placeholder={tGenerated('m_1507cb4f441bb1')}
+                  />
+                </div>
+              </div>
+            </div>
           ) : null}
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -344,6 +401,18 @@ export function PpeInspectionForm({
               ))}
             />
           </ul>
+
+          <div className="space-y-1.5">
+            <Label>
+              <GeneratedText id="m_055f11420b2da4" />
+            </Label>
+            <RemoteSelectField
+              name="siteOrgUnitId"
+              lookup="ppe-inspection-sites"
+              placeholder={tGenerated('m_00833db103546a')}
+              searchPlaceholder={tGenerated('m_016e087c3c8544')}
+            />
+          </div>
 
           <div className="space-y-1.5">
             <Label>

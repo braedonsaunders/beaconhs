@@ -1,12 +1,13 @@
-// GET /ppe/:id/inspections/:inspectionId/pdf
+// GET /ppe/inspections/:inspectionId/pdf
 //
 // Render a fresh PPE inspection PDF on demand and stream it back to the
-// browser — the printable record of a pre-use or annual check, with every
-// criterion as a line item. Uses the tenant's configured template for the
-// `ppe` module when one is set, else the generic record summary.
+// browser — the printable record of a pre-use or annual check, registered item
+// or other PPE, with every criterion as a line item. Uses the tenant's
+// configured template for the `ppe` module when one is set, else the generic
+// record summary.
 
 import { assertCan, can } from '@beaconhs/tenant'
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { ppeInspections } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
@@ -18,12 +19,12 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ id: string; inspectionId: string }> },
+  { params }: { params: Promise<{ inspectionId: string }> },
 ): Promise<Response> {
   if (isRouterPrefetch(request)) return new Response(null, { status: 204 })
 
-  const { id, inspectionId } = await params
-  if (!isUuid(id) || !isUuid(inspectionId)) {
+  const { inspectionId } = await params
+  if (!isUuid(inspectionId)) {
     return Response.json({ error: 'Not found' }, { status: 404 })
   }
 
@@ -31,18 +32,18 @@ export async function GET(
   if (!ctx.tenantId) {
     return Response.json({ error: 'No active tenant' }, { status: 400 })
   }
-  if (!can(ctx, 'ppe.manage')) assertCan(ctx, 'ppe.read.all')
 
-  // Re-scope before rendering: the inspection must belong to the item in the
-  // URL, so a guessed id can't pull another item's inspection.
   const [inspection] = await ctx.db((tx) =>
     tx
-      .select({ id: ppeInspections.id })
+      .select({ id: ppeInspections.id, inspectedBy: ppeInspections.inspectedByTenantUserId })
       .from(ppeInspections)
-      .where(and(eq(ppeInspections.id, inspectionId), eq(ppeInspections.itemId, id)))
+      .where(eq(ppeInspections.id, inspectionId))
       .limit(1),
   )
   if (!inspection) return Response.json({ error: 'Not found' }, { status: 404 })
+  // Readers of all PPE may print any inspection; an inspector may print their own.
+  const ownInspection = ctx.membership?.id != null && inspection.inspectedBy === ctx.membership.id
+  if (!ownInspection && !can(ctx, 'ppe.manage')) assertCan(ctx, 'ppe.read.all')
 
   const response = await renderModulePdfResponse(ctx, { moduleKey: 'ppe', recordId: inspectionId })
   if (response.ok)

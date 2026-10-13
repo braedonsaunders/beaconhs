@@ -145,6 +145,8 @@ export type DashboardMetrics = {
   // Empty / zeroed when the account isn't linked to a person (`linked: false`).
   myPersonId: string | null
   myPpe: Awaited<ReturnType<typeof loadPersonalPpe>>
+  /** May start a pre-use check of PPE that is not in the register. */
+  canInspectOtherPpe: boolean
   myEquipment: Array<{
     id: string
     checkoutId: string
@@ -1124,6 +1126,7 @@ export async function loadDashboardMetrics(
 
       myPersonId,
       myPpe,
+      canInspectOtherPpe: can(ctx, 'ppe.inspect'),
       myEquipment,
       myCompliance,
       inProgressEntries,

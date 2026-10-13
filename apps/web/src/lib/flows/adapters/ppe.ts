@@ -2,7 +2,9 @@ import 'server-only'
 
 // PPE inspection FlowSubjectAdapter — subject = one ppe_inspections row (the
 // legacy "PPE Inspection (date)" email fires when an inspection is recorded).
-// Field-map keys mirror MODULE_FLOW_PROFILES.ppe.
+// The row is either a registered item's inspection or other PPE that is not in
+// the register, which carries its own type, serial, and supplier and has no
+// item, holder, or item status. Field-map keys mirror MODULE_FLOW_PROFILES.ppe.
 //
 // The PPE model derives the overall result from immutable per-criterion
 // snapshots. The flow subject currently exposes the record-level fields used
@@ -57,9 +59,8 @@ export function createPpeInspectionFlowAdapter(
     subjectId: inspectionId,
     notifyCategory: 'ppe',
     auditEntityType: 'ppe_inspection',
-    // There is no per-inspection page — inspections live on the item's
-    // Inspections tab, and the item id isn't resolvable synchronously here.
-    deepLink: () => '/ppe',
+    // The register opens any inspection's checklist in a drawer.
+    deepLink: () => `/ppe?drawer=inspection&inspectionId=${inspectionId}`,
     pdfJob: (values) =>
       buildRecordSummaryPdfJob({
         tenantId: ctx.tenantId,
@@ -89,8 +90,8 @@ export function createPpeInspectionFlowAdapter(
             siteName: orgUnits.name,
           })
           .from(ppeInspections)
-          .innerJoin(ppeItems, eq(ppeItems.id, ppeInspections.itemId))
-          .leftJoin(ppeTypes, eq(ppeTypes.id, ppeItems.typeId))
+          .leftJoin(ppeItems, eq(ppeItems.id, ppeInspections.itemId))
+          .leftJoin(ppeTypes, eq(ppeTypes.id, ppeInspections.typeId))
           .leftJoin(people, eq(people.id, ppeItems.currentHolderPersonId))
           .leftJoin(tenantUsers, eq(tenantUsers.id, ppeInspections.inspectedByTenantUserId))
           .leftJoin(users, eq(users.id, tenantUsers.userId))
@@ -138,7 +139,7 @@ export function createPpeInspectionFlowAdapter(
       ])
 
       return {
-        reference: item.serialNumber || `PPE-${inspectionId.slice(0, 8)}`,
+        reference: item?.serialNumber || i.serialNumber || `PPE-${inspectionId.slice(0, 8)}`,
         kind: i.kind ?? null,
         kind_label: kindLabel(i.kind),
         result: i.result ?? null,
@@ -148,9 +149,11 @@ export function createPpeInspectionFlowAdapter(
         notes: i.notes ?? '',
         type_name: head.typeName ?? '',
         type_category: head.typeCategory ?? '',
-        item_serial: item.serialNumber ?? '',
-        item_size: item.size ?? '',
-        item_status: item.status,
+        item_serial: item?.serialNumber ?? i.serialNumber ?? '',
+        item_size: item?.size ?? '',
+        item_status: item?.status ?? null,
+        other_ppe: i.isOther,
+        supplied_by: i.suppliedBy ?? '',
         holder_name: personName({
           firstName: head.holderFirst,
           lastName: head.holderLast,
@@ -165,9 +168,9 @@ export function createPpeInspectionFlowAdapter(
         site_name: head.siteName ?? '',
         // FK ids for conditions / recipient `field` targets.
         item_id: i.itemId ?? null,
-        type_id: item.typeId ?? null,
+        type_id: i.typeId,
         site_org_unit_id: i.siteOrgUnitId ?? null,
-        holder_person_id: item.currentHolderPersonId ?? null,
+        holder_person_id: item?.currentHolderPersonId ?? null,
         inspected_by_tenant_user_id: i.inspectedByTenantUserId ?? null,
         supervisor_person_id: i.supervisorPersonId ?? null,
         criteria: criteria.map((criterion) => ({
@@ -244,6 +247,10 @@ export function createPpeInspectionFlowAdapter(
           .limit(1),
       )
       if (!inspection) throw new Error('The PPE inspection no longer exists.')
+      if (!inspection.itemId) {
+        throw new Error('Other PPE is not in the register, so a Flow has no item status to set.')
+      }
+      const itemId = inspection.itemId
       // Route through the shared transition so a Flow-driven status change is
       // as visible and attributable in History as a human one. Issuing needs a
       // holder, which a Flow cannot supply, so it is not offered here.
@@ -259,7 +266,7 @@ export function createPpeInspectionFlowAdapter(
         throw new Error('A Flow cannot issue PPE — it has no holder to issue to.')
       }
       await recordPpeIssueAction(ctx, {
-        itemId: inspection.itemId,
+        itemId,
         personId: null,
         action,
         note: `Set by a Flow on inspection ${inspectionId}`,

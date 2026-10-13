@@ -84,11 +84,19 @@ vi.mock('@beaconhs/ui', () => {
     ),
   }
 })
-const state = vi.hoisted(() => ({ start: vi.fn() }))
+const state = vi.hoisted(() => ({ start: vi.fn(), submitPpe: vi.fn() }))
 vi.mock('../app/(app)/equipment/inspections/_actions', () => ({
   startEquipmentInspection: state.start,
 }))
-import { PpeInspectionForm } from '../app/(app)/ppe/[id]/_inspection-form'
+vi.mock('../app/(app)/ppe/_inspection-actions', () => ({
+  submitPpeInspection: state.submitPpe,
+}))
+vi.mock('next/link', () => ({
+  default: ({ href, children }: { href: string; children: ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
+}))
+import { PpeInspectionForm } from '../app/(app)/ppe/_inspection-form'
 import { NewEquipmentInspectionDrawer } from '../app/(app)/equipment/inspections/_new-drawer'
 
 let container: HTMLDivElement
@@ -127,6 +135,7 @@ beforeEach(() => {
   })
   vi.stubGlobal('fetch', fetchMock)
   state.start.mockReset()
+  state.submitPpe.mockReset()
 })
 afterEach(async () => {
   await act(async () => root.unmount())
@@ -136,16 +145,14 @@ afterEach(async () => {
 })
 describe('inspection creation', () => {
   it('loads supervisors with the inspection capability and keeps PPE answers and notes after failure', async () => {
-    const action = vi.fn(async (_data: FormData) => ({
-      error: 'Inspection cannot be recorded yet',
-    }))
+    state.submitPpe.mockResolvedValue({ error: 'Inspection cannot be recorded yet' })
     await act(async () =>
       root.render(
         <PpeInspectionForm
           open
           closeHref="/ppe/item"
           title="Inspect"
-          itemId="item"
+          target={{ kind: 'item', itemId: 'item' }}
           typeId="type"
           kind="pre_use"
           criteria={[
@@ -157,7 +164,6 @@ describe('inspection creation', () => {
               requiresPhoto: false,
             },
           ]}
-          action={action}
         />,
       ),
     )
@@ -179,8 +185,11 @@ describe('inspection creation', () => {
         .querySelector('form')!
         .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
     )
-    const data = action.mock.calls[0]![0] as unknown as FormData
+    const data = state.submitPpe.mock.calls[0]![0] as unknown as FormData
+    expect(data.get('itemId')).toBe('item')
+    expect(data.get('target')).toBeNull()
     expect(data.get('supervisorPersonId')).toBe('')
+    expect(data.get('siteOrgUnitId')).toBe('')
     expect(data.get('criterion_criterion')).toBe('pass')
     expect(data.get('notes')).toBe('Keep these notes')
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
@@ -188,6 +197,65 @@ describe('inspection creation', () => {
     )
     expect(notes.value).toBe('Keep these notes')
     expect(container.querySelector<HTMLInputElement>('input[value="pass"]')!.checked).toBe(true)
+  })
+
+  it('records other PPE with its own serial and supplier, without an item', async () => {
+    state.submitPpe.mockResolvedValue(undefined)
+    await act(async () =>
+      root.render(
+        <PpeInspectionForm
+          open
+          closeHref="/ppe"
+          title="Inspect other PPE"
+          target={{
+            kind: 'other',
+            typeName: 'Full-body harness',
+            changeTypeHref: '/ppe?drawer=inspect-other',
+            returnTo: '/ppe',
+          }}
+          typeId="type"
+          kind="pre_use"
+          criteria={[
+            {
+              id: 'criterion',
+              question: 'Webbing intact?',
+              description: null,
+              severity: 'high',
+              requiresPhoto: false,
+            },
+          ]}
+        />,
+      ),
+    )
+    await tick()
+    expect(container.textContent).toContain('Full-body harness')
+    expect(
+      container.querySelector<HTMLAnchorElement>('a[href="/ppe?drawer=inspect-other"]'),
+    ).not.toBeNull()
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) =>
+          new URL(url, 'http://localhost').searchParams.get('lookup') === 'ppe-inspection-sites',
+      ),
+    ).toBe(true)
+    container.querySelector<HTMLInputElement>('input[name="serialNumber"]')!.value = 'H-2210'
+    container.querySelector<HTMLInputElement>('input[name="suppliedBy"]')!.value = 'Sunbelt Rentals'
+    await act(async () =>
+      container.querySelector<HTMLInputElement>('input[type="radio"][value="pass"]')!.click(),
+    )
+    await act(async () =>
+      container
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    )
+    const data = state.submitPpe.mock.calls[0]![0] as unknown as FormData
+    expect(data.get('target')).toBe('other')
+    expect(data.get('itemId')).toBeNull()
+    expect(data.get('returnTo')).toBe('/ppe')
+    expect(data.get('typeId')).toBe('type')
+    expect(data.get('kind')).toBe('pre_use')
+    expect(data.get('serialNumber')).toBe('H-2210')
+    expect(data.get('suppliedBy')).toBe('Sunbelt Rentals')
   })
 
   it('searches rental inspection types remotely beyond the initial result page and preserves failed starts', async () => {
