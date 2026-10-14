@@ -21,6 +21,7 @@ import {
   type SQL,
 } from 'drizzle-orm'
 import {
+  auditLog,
   correctiveActions,
   complianceObligations,
   crews,
@@ -311,6 +312,8 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
     case 'management-review-actions':
     case 'document-book-documents':
       return can(ctx, 'documents.manage')
+    case 'audit-log-actors':
+      return can(ctx, 'admin.audit.read')
     case 'ppe-active-people':
       return can(ctx, 'ppe.issue') || can(ctx, 'ppe.manage')
     case 'ppe-inspection-supervisors':
@@ -511,6 +514,41 @@ async function loadOptions(
         .orderBy(...personOrder(input.selected))
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(personOptions(rows))
+    }
+
+    if (lookup === 'audit-log-actors') {
+      // Accounts are global; only people who acted in this tenant's audit log
+      // (RLS-scoped) are offered, including since-removed members.
+      const match = input.hasQuery
+        ? or(
+            ilike(users.name, input.term),
+            ilike(users.email, input.term),
+            input.selectedKey ? eq(users.id, input.selectedKey) : undefined,
+          )
+        : undefined
+      const rows = await tx
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(users)
+        .where(
+          and(
+            match,
+            exists(
+              tx
+                .select({ id: auditLog.id })
+                .from(auditLog)
+                .where(eq(auditLog.actorUserId, users.id)),
+            ),
+          ),
+        )
+        .orderBy(
+          ...(input.selectedKey ? [desc(sql`${users.id} = ${input.selectedKey}`)] : []),
+          asc(users.name),
+          asc(users.id),
+        )
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(
+        rows.map((row) => option(row.id, row.name || row.email || row.id, row.email)),
+      )
     }
 
     if (lookup === 'compliance-obligation-audience-roles') {

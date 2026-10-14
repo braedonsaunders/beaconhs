@@ -21,6 +21,7 @@ import { parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
+import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { PageContainer } from '@/components/page-layout'
 import { TableToolbar } from '@/components/table-toolbar'
 
@@ -55,19 +56,28 @@ export default async function AuditLogPage({
   })
   const actionFilter = pickString(sp.action)
   const entityFilter = pickString(sp.entityType)
+  // Account ids are opaque text (not always UUIDs); reject anything else.
+  const actorRaw = pickString(sp.actor)
+  const actorFilter = actorRaw && /^[a-z0-9][a-z0-9._:-]{0,99}$/i.test(actorRaw) ? actorRaw : null
   const ctx = await requireRequestContext()
   // The audit log is a sensitive security/forensics surface — restrict reads.
   if (!can(ctx, 'admin.audit.read')) redirect('/admin')
 
-  const { rows, total, entityTypes } = await ctx.db(async (tx) => {
+  const { rows, total, entityTypes, selectedActor } = await ctx.db(async (tx) => {
     const filters: SQL<unknown>[] = []
     if (params.q) {
       const term = `%${params.q}%`
-      const cond = or(ilike(auditLog.entityType, term), ilike(auditLog.summary, term))
+      const cond = or(
+        ilike(auditLog.entityType, term),
+        ilike(auditLog.summary, term),
+        ilike(user.name, term),
+        ilike(user.email, term),
+      )
       if (cond) filters.push(cond)
     }
     if (actionFilter) filters.push(eq(auditLog.action, actionFilter))
     if (entityFilter) filters.push(eq(auditLog.entityType, entityFilter))
+    if (actorFilter) filters.push(eq(auditLog.actorUserId, actorFilter))
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     const data = await tx
@@ -78,15 +88,29 @@ export default async function AuditLogPage({
       .orderBy(desc(auditLog.occurredAt))
       .limit(params.perPage)
       .offset((params.page - 1) * params.perPage)
-    const [c] = await tx.select({ n: count() }).from(auditLog).where(whereClause)
+    const [c] = await tx
+      .select({ n: count() })
+      .from(auditLog)
+      .leftJoin(user, eq(user.id, auditLog.actorUserId))
+      .where(whereClause)
     const types = await tx
       .selectDistinct({ entityType: auditLog.entityType })
       .from(auditLog)
       .orderBy(asc(auditLog.entityType))
+    const [actor] = actorFilter
+      ? await tx
+          .select({ id: user.id, name: user.name, email: user.email })
+          .from(user)
+          .where(eq(user.id, actorFilter))
+          .limit(1)
+      : []
     return {
       rows: data,
       total: Number(c?.n ?? 0),
       entityTypes: types.map((t) => t.entityType),
+      selectedActor: actor
+        ? { value: actor.id, label: actor.name || actor.email, hint: actor.email }
+        : undefined,
     }
   })
 
@@ -99,7 +123,18 @@ export default async function AuditLogPage({
           subtitle={tGenerated('m_1d95d3a826b700')}
         />
         <TableToolbar>
-          <SearchInput placeholder={tGenerated('m_0548446a641230')} />
+          <SearchInput placeholder={tGenerated('m_0a68d918001940')} />
+          <RemoteSearchFilter
+            lookup="audit-log-actors"
+            basePath="/admin/audit"
+            currentParams={sp}
+            paramKey="actor"
+            placeholder={tGenerated('m_163dfc4f85857d')}
+            allLabel="All actors"
+            searchPlaceholder={tGenerated('m_0b842b664b4f3b')}
+            ariaLabel="Actor"
+            initialOption={selectedActor}
+          />
           <FilterChips
             basePath="/admin/audit"
             currentParams={sp}

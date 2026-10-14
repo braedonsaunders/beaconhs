@@ -68,6 +68,7 @@ const PICKER_LOOKUPS = [
   'document-book-documents',
   'ppe-active-people',
   'ppe-inspection-supervisors',
+  'audit-log-actors',
   'ppe-inspection-sites',
   'ppe-other-inspection-types',
   'ppe-register-filter-holders',

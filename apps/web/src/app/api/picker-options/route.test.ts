@@ -146,6 +146,7 @@ describe('picker options route policy', () => {
     ['lookup=ppe-active-people', 'ppe.issue'],
     ['lookup=ppe-inspection-supervisors', 'ppe.inspect'],
     ['lookup=ppe-inspection-sites', 'ppe.inspect'],
+    ['lookup=audit-log-actors', 'admin.audit.read'],
     ['lookup=ppe-other-inspection-types', 'ppe.inspect'],
     ['lookup=equipment-rental-inspection-types', 'equipment.inspect'],
     ['lookup=vehicle-customers', 'equipment.manage'],

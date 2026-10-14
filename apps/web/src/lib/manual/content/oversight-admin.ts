@@ -896,7 +896,7 @@ On a sync run, use the record-decision search and the **Action** and **Entity** 
 
 ## Activity
 
-- **Audit log** — every change captured, with who did it and what changed.
+- **Audit log** — every change captured, with who did it and what changed. Search by entity type, summary, or the person who made the change. Filter by **Action**, **Entity**, or **Actor** — the actor list includes former members who still appear in the log.
 - **Email log** and **SMS log** — every message the system sent.
 - **Assistant log** — saved assistant usage by user, date, and response outcome. Conversation contents stay private.
 
