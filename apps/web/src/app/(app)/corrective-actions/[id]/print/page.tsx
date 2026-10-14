@@ -15,7 +15,7 @@ import {
 import { attachmentUrl } from '@/lib/attachment-url'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recordAudit } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
 import { RawImage } from '@/components/raw-image'

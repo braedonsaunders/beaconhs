@@ -17,6 +17,7 @@ function between(value: string, start: string, end: string): string {
 
 const submitLifecycle = source('./form-response-lifecycle.ts')
 const fillActions = source('../../app/(app)/apps/templates/[id]/fill/actions.ts')
+const draftPersistence = source('../../app/(app)/apps/_lib/draft-persistence.ts')
 const lifecycleActions = source('../../app/(app)/apps/responses/[id]/_lifecycle-actions.ts')
 const workflowActions = source('../../app/(app)/apps/responses/[id]/_actions.ts')
 const monitorActions = source('../../app/(app)/apps/responses/[id]/_monitor-actions.ts')
@@ -55,11 +56,11 @@ function runtimeResponseWriters(
 describe('generic form-response parent-lock contract', () => {
   it('keeps an exhaustive inventory of every web and worker response writer', () => {
     expect(runtimeResponseWriters(new URL('../../', import.meta.url))).toEqual([
+      'app/(app)/apps/_lib/draft-persistence.ts',
       'app/(app)/apps/_lib/form-flow-adapter.ts',
       'app/(app)/apps/responses/[id]/_actions.ts',
       'app/(app)/apps/responses/[id]/_lifecycle-actions.ts',
       'app/(app)/apps/responses/[id]/_monitor-actions.ts',
-      'app/(app)/apps/templates/[id]/fill/actions.ts',
       'app/(app)/hazard-assessments/_actions.ts',
       'lib/api/builder-apps.ts',
       'lib/forms/form-response-lifecycle.ts',
@@ -71,8 +72,8 @@ describe('generic form-response parent-lock contract', () => {
     ])
 
     expect(runtimeResponseWriters(new URL('../../', import.meta.url), 'insert')).toEqual([
+      'app/(app)/apps/_lib/draft-persistence.ts',
       'app/(app)/apps/_lib/form-flow-adapter.ts',
-      'app/(app)/apps/templates/[id]/fill/actions.ts',
       'app/(app)/hazard-assessments/_actions.ts',
       'lib/forms/form-response-lifecycle.ts',
     ])
@@ -88,8 +89,9 @@ describe('generic form-response parent-lock contract', () => {
   it('keeps every non-submission response create evidence-ineligible', () => {
     expect(formFlow.match(/\.insert\(formResponses\)/gu)).toHaveLength(2)
     expect(formFlow.match(/status: 'draft'/gu)).toHaveLength(2)
-    expect(fillActions.match(/\.insert\(formResponses\)/gu)).toHaveLength(1)
-    expect(fillActions).toContain("status: 'draft'")
+    expect(fillActions).not.toContain('.insert(formResponses)')
+    expect(draftPersistence.match(/\.insert\(formResponses\)/gu)).toHaveLength(1)
+    expect(draftPersistence).toContain("status: 'draft'")
     expect(hazardOwner.match(/\.insert\(formResponses\)/gu)).toHaveLength(1)
     expect(hazardOwner).toContain("status: 'draft'")
 
@@ -101,7 +103,7 @@ describe('generic form-response parent-lock contract', () => {
   it('guards every runtime form-response update writer outside the owning HazID action', () => {
     const guardedWriters = [
       [submitLifecycle, 1, 1],
-      [fillActions, 2, 2],
+      [draftPersistence, 2, 2],
       [lifecycleActions, 4, 4],
       [workflowActions, 4, 3],
       [monitorActions, 2, 2],
@@ -115,6 +117,7 @@ describe('generic form-response parent-lock contract', () => {
       expect(writer.match(/await lockFormResponseForMutation\(/gu)).toHaveLength(guardCount)
     }
 
+    expect(fillActions).not.toContain('.update(formResponses)')
     expect(api.match(/\.update\(formResponses\)/gu)).toHaveLength(2)
     expect(api.match(/await lockApiResponseForMutation\(/gu)).toHaveLength(2)
     expect(api).toContain('return await lockFormResponseForMutation(tx, ctx.tenantId, responseId)')
@@ -188,6 +191,7 @@ describe('generic form-response parent-lock contract', () => {
 
   it('never takes a response row lock before the shared parent-first guard', () => {
     expect(fillActions).not.toContain(".for('update', { of: formResponses })")
+    expect(draftPersistence).not.toContain(".for('update', { of: formResponses })")
     expect(pdfWorker).not.toMatch(/\.from\(formResponses\)[\s\S]{0,300}\.for\('update'\)/u)
     expect(scheduledWorker).not.toContain(".for('update', { skipLocked: true })")
   })
@@ -229,6 +233,7 @@ describe('generic form-response parent-lock contract', () => {
 
   it('does not rematerialize compliance for draft payload or monitor-only writes', () => {
     expect(fillActions).not.toContain('materializeFormResponseEvidenceChange')
+    expect(draftPersistence).not.toContain('materializeFormResponseEvidenceChange')
     expect(monitorActions).not.toContain('materializeFormResponseEvidenceChange')
     expect(pdfWorker).not.toContain('materializeFormResponseEvidenceChange')
     expect(scheduledWorker).not.toContain('materializeFormResponseEvidenceChange')

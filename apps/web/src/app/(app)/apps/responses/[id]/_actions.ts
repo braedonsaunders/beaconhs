@@ -41,7 +41,7 @@ import {
   type FormWorkflowStep,
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recordAudit } from '@/lib/audit'
 import { withStoredSignatureAttachment } from '@/lib/signature-storage'
 import { canAccessResponseTemplate } from '@/app/(app)/apps/_lib/access'

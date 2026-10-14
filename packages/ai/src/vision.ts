@@ -51,7 +51,7 @@ export async function describePhoto(
   config: AiConfig | null | undefined,
   args: { image: Uint8Array },
 ): Promise<PhotoInsight | null> {
-  const model = getModel(config, 'smart')
+  const model = getModel(config, 'smart', 'vision')
   if (!model) return null
   assertVisionRequest({ images: [args.image] })
 
@@ -151,7 +151,7 @@ export async function runVisionAnalysis(
   args: { images: Uint8Array[]; prompt?: string },
 ): Promise<SafetyVisionAnalysis | null> {
   if (!args.images || args.images.length === 0) return null
-  const model = getModel(config, 'smart')
+  const model = getModel(config, 'smart', 'vision')
   if (!model) return null
   assertVisionRequest(args)
 

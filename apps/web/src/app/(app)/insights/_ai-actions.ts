@@ -1,21 +1,10 @@
 'use server'
 
-// Insights AI: stored journal-analysis snapshots (worker-written) plus on-demand
-// dataset cards. Journal analysis never runs on a page request.
+// Insights AI cards: analyse a card's BHQL dataset on demand under its stored
+// instruction. Scheduled, cited analyses are AI briefs (Reports → AI briefs).
 
-import { and, desc, eq, inArray } from 'drizzle-orm'
-import { analyseDataset, type DatasetAnalysis, type JournalAnalysis } from '@beaconhs/ai'
-import {
-  journalAnalysisRuns,
-  type AiCardConfig,
-  type JournalAnalysisResult,
-} from '@beaconhs/db/schema'
-import {
-  enqueueAiJob,
-  JOURNAL_ANALYSIS_PERIODS,
-  isJournalAnalysisPeriod,
-  type JournalAnalysisPeriod,
-} from '@beaconhs/jobs'
+import { analyseDataset, type DatasetAnalysis } from '@beaconhs/ai'
+import type { AiCardConfig } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { recordAudit } from '@/lib/audit'
@@ -23,103 +12,6 @@ import { runAuthorizedBhql } from '@/lib/analytics-access'
 import { canViewInsights } from './_access'
 import { loadCard } from './cards/_data'
 import { isUuid } from '@/lib/list-params'
-
-export type JournalAnalysisSnapshot = {
-  days: JournalAnalysisPeriod
-  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'empty'
-  analysis: JournalAnalysis | null
-  entryCount: number
-  finishedAt: string | null
-  error: string | null
-}
-
-function asAnalysis(result: JournalAnalysisResult | null): JournalAnalysis | null {
-  if (!result || typeof result.summary !== 'string') return null
-  return result as JournalAnalysis
-}
-
-export async function loadJournalAnalysisSnapshot(): Promise<JournalAnalysisSnapshot[]> {
-  const ctx = await requireRequestContext()
-  if (!canViewInsights(ctx)) return []
-  const rows = await ctx.db((tx) =>
-    tx
-      .select({
-        days: journalAnalysisRuns.days,
-        status: journalAnalysisRuns.status,
-        result: journalAnalysisRuns.result,
-        entryCount: journalAnalysisRuns.entryCount,
-        finishedAt: journalAnalysisRuns.finishedAt,
-        error: journalAnalysisRuns.error,
-        createdAt: journalAnalysisRuns.createdAt,
-      })
-      .from(journalAnalysisRuns)
-      .where(inArray(journalAnalysisRuns.days, [...JOURNAL_ANALYSIS_PERIODS]))
-      .orderBy(desc(journalAnalysisRuns.createdAt)),
-  )
-  return JOURNAL_ANALYSIS_PERIODS.map((days) => {
-    const row = rows.find((r) => r.days === days)
-    if (!row) {
-      return {
-        days,
-        status: 'empty',
-        analysis: null,
-        entryCount: 0,
-        finishedAt: null,
-        error: null,
-      }
-    }
-    return {
-      days,
-      status: row.status,
-      analysis: asAnalysis(row.result),
-      entryCount: row.entryCount,
-      finishedAt: row.finishedAt?.toISOString() ?? row.createdAt.toISOString(),
-      error: row.error,
-    }
-  })
-}
-
-export async function enqueueJournalAnalysis(
-  days: number,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const ctx = await requireRequestContext()
-  if (!canViewInsights(ctx)) {
-    return { ok: false, error: 'You do not have access to insights.' }
-  }
-  if (!isJournalAnalysisPeriod(days)) {
-    return { ok: false, error: 'Choose 7, 30, or 90 days.' }
-  }
-  const aiConfig = await getTenantAiConfig(ctx)
-  if (!aiConfig) return { ok: false, error: 'AI is not configured. Set it up under Admin → AI.' }
-
-  const existing = await ctx.db((tx) =>
-    tx
-      .select({ id: journalAnalysisRuns.id, status: journalAnalysisRuns.status })
-      .from(journalAnalysisRuns)
-      .where(and(eq(journalAnalysisRuns.days, days)))
-      .orderBy(desc(journalAnalysisRuns.createdAt))
-      .limit(1),
-  )
-  const current = existing[0]
-  if (!current || (current.status !== 'pending' && current.status !== 'running')) {
-    await ctx.db((tx) =>
-      tx.insert(journalAnalysisRuns).values({
-        tenantId: ctx.tenantId,
-        days,
-        status: 'pending',
-        createdByTenantUserId: ctx.membership?.id ?? null,
-      }),
-    )
-  }
-  await enqueueAiJob({ kind: 'journal_analysis_run', tenantId: ctx.tenantId, days })
-  await recordAudit(ctx, {
-    entityType: 'journal_entry',
-    action: 'export',
-    summary: `Queued AI journal analysis (${days}d)`,
-    metadata: { days },
-  })
-  return { ok: true }
-}
 
 export type InsightAiResult =
   { ok: true; analysis: DatasetAnalysis; rowCount: number } | { ok: false; error: string }

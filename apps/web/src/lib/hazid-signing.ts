@@ -16,7 +16,7 @@ import {
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { HazidSigningError } from './hazid-signing-result'
-import { canSeeRecord } from './visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { createHazidFlowAdapter } from './flows/adapters/hazid'
 import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
 import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'

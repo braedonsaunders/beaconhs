@@ -11,12 +11,12 @@ import {
   type PickerOptionsResponse,
 } from '@/lib/picker-options'
 import { parseRemoteSearchInput, remoteSearchTerm } from '@/lib/remote-search-policy'
+import { getAuthorPersonId } from '../_lib'
 import {
-  getAuthorPersonId,
   journalCanBrowseAll,
   journalScopeWhere,
   journalAuthorPersonId,
-} from '../_lib'
+} from '@beaconhs/tenant/journal-scope'
 
 async function reviewerScope() {
   const ctx = await requireRequestContext()

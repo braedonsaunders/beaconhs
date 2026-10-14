@@ -31,7 +31,7 @@ import {
 } from '@beaconhs/db/schema'
 import { htmlToSnippet } from '@beaconhs/forms-core'
 import { requireRequestContext } from '@/lib/auth'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { formatDate } from '@/lib/datetime'
 import { SearchInput } from '@/components/search-input'

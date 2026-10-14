@@ -3,13 +3,12 @@
 // recordable; the report_* views are list-only and 404 here.
 
 import { NextResponse } from 'next/server'
-import { REPORT_ENTITY_MAP } from '@beaconhs/reports'
 import { authenticateApiKey } from '@/lib/api/auth'
 import { readApiJsonBody } from '@/lib/api/body'
 import { ApiError, errorResponse, noStore } from '@/lib/api/errors'
 import { getEntityRecord } from '@/lib/api/query'
 import { isRecordable, isUuid } from '@/lib/api/records'
-import { keyHasPermission, readPermissionForEntity } from '@/lib/api/permissions'
+import { keyHasPermission, readPermissionForEntity, publicApiEntity } from '@/lib/api/permissions'
 import {
   deleteEntity,
   deletePermissionForEntity,
@@ -32,7 +31,7 @@ export async function GET(
     if (!isUuid(id)) throw ApiError.invalid('Record id must be a uuid')
 
     const { ctx, key } = await authenticateApiKey(req)
-    const entity = REPORT_ENTITY_MAP[entityKey]
+    const entity = publicApiEntity(entityKey)
     if (!entity || !isRecordable(entityKey)) {
       throw ApiError.notFound(`No record endpoint for "${entityKey}"`)
     }
@@ -64,7 +63,7 @@ export async function PATCH(
 
     const auth = await authenticateApiKey(req)
     const { ctx, key } = auth
-    const entity = REPORT_ENTITY_MAP[entityKey]
+    const entity = publicApiEntity(entityKey)
     if (!entity || !isRecordable(entityKey)) {
       throw ApiError.notFound(`No record endpoint for "${entityKey}"`)
     }
@@ -109,7 +108,7 @@ export async function DELETE(
 
     const auth = await authenticateApiKey(req)
     const { ctx, key } = auth
-    const entity = REPORT_ENTITY_MAP[entityKey]
+    const entity = publicApiEntity(entityKey)
     if (!entity || !isRecordable(entityKey)) {
       throw ApiError.notFound(`No record endpoint for "${entityKey}"`)
     }

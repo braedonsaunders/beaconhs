@@ -49,8 +49,17 @@ export async function saveTenantAi(formData: FormData) {
   gateTenant(ctx)
   const input = parseInput(formData)
   const autoJournalAi = formData.get('autoJournalAi') === 'on'
-  const autoJournalAnalysis = formData.get('autoJournalAnalysis') === 'on'
-  await saveTenantAiSettings(ctx, { ...input, autoJournalAi, autoJournalAnalysis })
+  const budgetRaw = String(formData.get('monthlyTokenBudget') ?? '').trim()
+  const monthlyTokenBudget = budgetRaw ? Number(budgetRaw) : null
+  if (
+    monthlyTokenBudget !== null &&
+    (!Number.isInteger(monthlyTokenBudget) ||
+      monthlyTokenBudget < 1 ||
+      monthlyTokenBudget > 10_000_000_000)
+  ) {
+    throw new Error('Monthly token budget must be a whole number of tokens, or blank for no limit')
+  }
+  await saveTenantAiSettings(ctx, { ...input, autoJournalAi, monthlyTokenBudget })
   await recordAudit(ctx, {
     entityType: 'tenant',
     entityId: ctx.tenantId,
@@ -60,6 +69,7 @@ export async function saveTenantAi(formData: FormData) {
       provider: input.provider,
       enabled: input.enabled,
       keyChanged: Boolean(input.apiKey),
+      monthlyTokenBudget,
     },
   })
   revalidatePath('/admin/ai')

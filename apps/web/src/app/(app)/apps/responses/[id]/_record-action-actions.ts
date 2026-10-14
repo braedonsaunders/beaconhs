@@ -15,7 +15,7 @@ import { evaluateLogicRule, planAutomation, type AutomationPlan } from '@beaconh
 import { formAutomations, formResponses, people } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recordAudit } from '@/lib/audit'
 import { executeFlowPlan } from '@/app/(app)/apps/_lib/run-automations'
 import { createFormFlowAdapter } from '@/app/(app)/apps/_lib/form-flow-adapter'

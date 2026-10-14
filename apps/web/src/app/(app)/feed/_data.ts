@@ -31,13 +31,8 @@ import type { Database } from '@beaconhs/db'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { templateAccessWhere } from '@/app/(app)/apps/_lib/access'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
-import {
-  getAuthorPersonId,
-  htmlToText,
-  journalScopeWhere,
-  journalAuthorPersonId,
-  snippetOf,
-} from '../journals/_lib'
+import { getAuthorPersonId, htmlToText, snippetOf } from '../journals/_lib'
+import { journalScopeWhere, journalAuthorPersonId } from '@beaconhs/tenant/journal-scope'
 import type { FeedEvent, FeedKind, FeedPage, FeedSummary, FeedTag } from './_types'
 
 const PAGE = 20

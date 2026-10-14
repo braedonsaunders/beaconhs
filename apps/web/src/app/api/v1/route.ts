@@ -2,7 +2,6 @@
 // spec live, and the list of readable entities with their endpoints + permissions.
 
 import { NextResponse } from 'next/server'
-import { REPORT_ENTITIES } from '@beaconhs/reports'
 import { authenticateApiKey } from '@/lib/api/auth'
 import {
   BUILDER_APP_CREATE_PERMISSION,
@@ -12,7 +11,11 @@ import {
   listBuilderApps,
 } from '@/lib/api/builder-apps'
 import { ApiError, errorResponse, noStore } from '@/lib/api/errors'
-import { keyHasPermission, readPermissionForEntity } from '@/lib/api/permissions'
+import {
+  keyHasPermission,
+  PUBLIC_API_ENTITIES,
+  readPermissionForEntity,
+} from '@/lib/api/permissions'
 import { isRecordable } from '@/lib/api/records'
 import {
   deletePermissionForEntity,
@@ -56,7 +59,7 @@ export async function GET(req: Request): Promise<NextResponse> {
           record: '/api/v1/apps/{templateKey}/responses/{id}',
           concrete_apps: builderApps,
         },
-        entities: REPORT_ENTITIES.map((e) => ({
+        entities: PUBLIC_API_ENTITIES.map((e) => ({
           key: e.key,
           label: e.label,
           description: e.description,

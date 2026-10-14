@@ -11,7 +11,10 @@ import {
   stripHopByHopOutboundHeaders,
   validateOutboundRequestConfiguration,
 } from '@beaconhs/sync/egress'
-import { generateText, type LanguageModel } from 'ai'
+import { generateText, wrapLanguageModel, type LanguageModel } from 'ai'
+import { meteringMiddleware, type AiUsageSink } from './metering'
+
+type ProviderLanguageModel = Parameters<typeof wrapLanguageModel>[0]['model']
 
 const MAX_AI_REQUEST_BYTES = 16 * 1024 * 1024
 const MAX_AI_RESPONSE_BYTES = 16 * 1024 * 1024
@@ -55,6 +58,11 @@ export type AiConfig = {
    * prompt, analysis/vision paths ignore it.
    */
   org?: { name: string } | null
+  /**
+   * Where per-call usage goes. Set by the tenant config resolvers so every
+   * model call is metered; absent in tests and connection checks.
+   */
+  usage?: AiUsageSink | null
 }
 
 // How a provider's language model is constructed. The OpenAI-compatible kind
@@ -338,18 +346,45 @@ export function isAiConfigured(config: AiConfig | null | undefined): config is A
   return true
 }
 
-/** Resolve a language model from a tenant's config, or null when not configured. */
+/** The model id a config resolves to for a tier (explicit, else provider default). */
+export function resolveModelId(config: AiConfig, tier: ModelTier): string | null {
+  return (
+    (tier === 'smart' ? config.modelSmart : config.modelFast) || defaultModel(config.provider, tier)
+  )
+}
+
+/**
+ * Resolve a language model from a tenant's config, or null when not configured.
+ * `feature` labels the call in usage metering (Admin → AI → Usage).
+ */
 export function getModel(
   config: AiConfig | null | undefined,
   tier: ModelTier = 'fast',
+  feature = 'general',
 ): LanguageModel | null {
   if (!isAiConfigured(config)) return null
   const spec = SPEC_BY_VALUE[config.provider]
-  const modelId =
-    (tier === 'smart' ? config.modelSmart : config.modelFast) || defaultModel(config.provider, tier)
+  const modelId = resolveModelId(config, tier)
   // `custom` has no default model — without an explicit one, AI stays disabled.
   if (!modelId) return null
+  const model = providerModel(config, spec, modelId)
+  if (!model || !config.usage) return model
+  return wrapLanguageModel({
+    model,
+    middleware: meteringMiddleware(config.usage, {
+      feature,
+      tier,
+      provider: config.provider,
+      model: modelId,
+    }),
+  })
+}
 
+function providerModel(
+  config: AiConfig,
+  spec: ProviderSpec,
+  modelId: string,
+): ProviderLanguageModel | null {
   switch (spec.kind) {
     case 'anthropic':
       return createAnthropic({ apiKey: config.apiKey })(modelId)
@@ -381,7 +416,7 @@ export class AIDisabledError extends Error {
 export async function pingModel(
   config: AiConfig | null | undefined,
 ): Promise<{ ok: boolean; message: string }> {
-  const model = getModel(config, 'fast')
+  const model = getModel(config, 'fast', 'connection.test')
   if (!model) {
     return {
       ok: false,

@@ -3,8 +3,8 @@ import { PgDialect } from 'drizzle-orm/pg-core'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { RoleScope } from '@beaconhs/db/schema'
 vi.mock('@/lib/reference', () => ({ nextReference: vi.fn() }))
-vi.mock('@/lib/visibility', () => import('../../../lib/visibility'))
-import { journalAuthorScopeWhere, journalScopeWhere } from './_lib'
+vi.mock('@beaconhs/tenant/visibility', () => import('@beaconhs/tenant/visibility'))
+import { journalAuthorScopeWhere, journalScopeWhere } from '@beaconhs/tenant/journal-scope'
 
 function context(permissions: string[], scopes: RoleScope[]): RequestContext {
   return {

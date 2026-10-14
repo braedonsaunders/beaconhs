@@ -38,6 +38,7 @@ import {
 } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
+import { unstable_rethrow } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import {
   AlertTriangle,
@@ -47,8 +48,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Cloud,
-  CloudOff,
   Eye,
   MapPin,
   Minus,
@@ -104,13 +103,10 @@ import {
 import { localizeText } from '@beaconhs/i18n'
 import {
   analyzePhotos,
-  createDraftResponse,
   draftSketchDiagram,
   fetchEntityAttrs,
   listOrgUnitOptions,
-  saveFormResponseDraft,
   submitFormResponse,
-  updateResponseField,
 } from './actions'
 import type { SafetyVisionAnalysis } from '@beaconhs/ai'
 import {
@@ -137,6 +133,10 @@ import { RemoteSearchSelect } from '@/components/remote-search-select'
 import { Section } from '@/components/section'
 import type { PickerOption } from '@/lib/picker-options'
 import { toast } from '@/lib/toast'
+import { useOfflineDraft } from '@/lib/offline-drafts/use-offline-draft'
+import { useOfflineRecordEdits } from '@/lib/offline-drafts/use-offline-record-edits'
+import type { DraftServerCursor, DraftSnapshot } from '@/lib/offline-drafts/model'
+import { DraftRecoveryBanner, DraftSyncIndicator } from '@/components/draft-sync-status'
 import { canvasCss, columnsCss, gridClass, resolveCanvas } from '@/app/(app)/apps/_lib/canvas'
 import { attachmentIdsEqual } from './photo-field-state'
 
@@ -182,11 +182,8 @@ const OrgUnitOptionsCacheContext = createContext<Record<
   OrgUnitOption[] | undefined
 > | null>(null)
 
-function getOrCreateDraftSessionId(ref: { current: string | null }): string {
-  if (ref.current) return ref.current
-  ref.current = crypto.randomUUID()
-  return ref.current
-}
+// Cursor for a response whose draft the server has never saved.
+const NO_SERVER_DRAFT: DraftServerCursor = { revision: 0, sessionId: null, sequence: 0 }
 
 const FIELD_MODE_STORAGE_KEY = 'bhs_field_mode'
 const FIELD_MODE_CHANGE_EVENT = 'beaconhs:field-mode-change'
@@ -225,7 +222,7 @@ export function FormRenderer({
   initialValues = {},
   initialRows = {},
   initialStepIndex = 0,
-  initialDraftRevision = 0,
+  initialDraftCursor = NO_SERVER_DRAFT,
   isResumed = false,
   returnTo = null,
   readOnly = false,
@@ -254,9 +251,9 @@ export function FormRenderer({
   initialValues?: Record<string, unknown>
   initialRows?: Record<string, Array<Record<string, unknown>>>
   initialStepIndex?: number
-  // Database revision of the hydrated draft. A different tab must still be
-  // on this revision before its first write can claim the editing session.
-  initialDraftRevision?: number
+  // Server ordering cursor of the hydrated draft (revision + last writer's
+  // session/sequence). Decides whether an unsynced device copy is newer.
+  initialDraftCursor?: DraftServerCursor
   // True when we successfully resumed a saved draft — drives the "Welcome
   // back, your draft was restored" toast on mount.
   isResumed?: boolean
@@ -327,50 +324,74 @@ export function FormRenderer({
     }
   }, [])
 
-  // --- Autosave state -------------------------------------------------------
+  // --- Local-first draft ----------------------------------------------------
   //
-  // `responseId` is the row we're writing against on each draft save. It's
-  // null until the user makes a content change AND `createDraftResponse`
-  // returns — see the dirty-tracking effect below. Once non-null, every
-  // subsequent save updates the same row.
-  const [responseId, setResponseId] = useState<string | null>(initialResponseId)
-  // 'idle' before any change; 'pending' during in-flight save; 'saved' on
-  // success; 'error' on failure. Drives the indicator in the header.
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'pending' | 'saved' | 'error'>('idle')
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  // Tick state so "Saved Xs ago" updates without us calling render every
-  // change. Bumped every 5s by an effect once a save has happened.
-  const [, setSavedTick] = useState(0)
-  // Tracks whether the user has actually interacted and gives each local edit
-  // a monotonic sequence. State keeps field event handlers ref-free; the
-  // unload path reads the mirrored latestRef below.
-  const [draftEditState, setDraftEditState] = useState({ dirty: false, sequence: 0 })
-  // Every caller awaits the same lazy-create request, so a second edit that
-  // arrives before the first round-trip is not dropped.
-  const creatingRef = useRef<ReturnType<typeof createDraftResponse> | null>(null)
-  // Whole-draft saves are ordered independently of network completion order.
-  // The session id distinguishes tabs; the edit sequence distinguishes local
-  // payload snapshots; the revision detects a stale tab taking over.
-  const draftSessionIdRef = useRef<string | null>(null)
-  const acknowledgedSequenceRef = useRef(0)
-  const draftRevisionRef = useRef(initialDraftRevision)
-  // The latest values + rows + stepIndex, captured in a ref so the
-  // beforeunload handler can read them synchronously without re-binding.
-  const latestRef = useRef<{
-    values: Record<string, unknown>
-    rows: Record<string, Array<Record<string, unknown>>>
-    stepIndex: number
-    responseId: string | null
-    dirty: boolean
-    editSequence: number
-  }>({
-    values: normalizedInitial.values,
-    rows: normalizedInitial.rows,
-    stepIndex: initialStepIndex,
+  // Every edit bumps `editVersion`; the effect below hands the latest answers
+  // to the offline-draft layer, which writes them to the device and syncs them
+  // to the server's draft (see @/lib/offline-drafts).
+  const [editVersion, setEditVersion] = useState(0)
+  const serverSnapshot = useMemo<DraftSnapshot>(
+    () => ({
+      values: normalizedInitial.values,
+      rows: normalizedInitial.rows,
+      stepIndex: initialStepIndex,
+    }),
+    [normalizedInitial, initialStepIndex],
+  )
+  const stepCount = schema.workflow.steps.length
+  // Swap in a whole draft (device copy, or the server version on discard).
+  // Not an edit: it resets editVersion so it is not written back.
+  const restoreDraft = useCallback(
+    (snapshot: DraftSnapshot) => {
+      const restored = normalizeFormResponseDraftData(schema, snapshot.values, snapshot.rows)
+      setValues(restored.values)
+      setRowsByStep(restored.rows)
+      setStepIndex(Math.min(Math.max(0, snapshot.stepIndex), Math.max(0, stepCount - 1)))
+      setErrors(new Map())
+      setEditVersion(0)
+    },
+    [schema, stepCount],
+  )
+  const draft = useOfflineDraft({
+    enabled: !readOnly && !inlineAutosave,
+    templateId,
+    complianceObligationId,
+    initialResponseId,
+    serverCursor: initialDraftCursor,
+    serverSnapshot,
+    onRestore: restoreDraft,
+  })
+  const { update: updateDraft } = draft
+  // Record page (inline mode): the same offline layer, queuing per-field
+  // edits instead of whole-draft snapshots.
+  const restoreRecordValues = useCallback(
+    (restoredValues: Record<string, unknown>) => {
+      const sectionIds = new Set(schema.sections.filter((s) => s.repeating).map((s) => s.id))
+      const fieldEntries = Object.entries(restoredValues).filter(([id]) => !sectionIds.has(id))
+      const rowEntries = Object.entries(restoredValues).filter(([id]) => sectionIds.has(id))
+      if (fieldEntries.length > 0) {
+        setValues((current) => ({ ...current, ...Object.fromEntries(fieldEntries) }))
+      }
+      if (rowEntries.length > 0) {
+        setRowsByStep((current) => ({
+          ...current,
+          ...Object.fromEntries(
+            rowEntries.map(([id, rows]) => [
+              id,
+              Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [],
+            ]),
+          ),
+        }))
+      }
+    },
+    [schema],
+  )
+  const recordEdits = useOfflineRecordEdits({
+    enabled: inlineAutosave && !readOnly,
+    templateId,
     responseId: initialResponseId,
-    dirty: false,
-    editSequence: 0,
+    serverValues: initialValues,
+    onRestore: restoreRecordValues,
   })
   // Per-picker entity attribute maps, fed into the evaluator on every render
   // so `entity_attr` formula fields stay live. Refreshed via the
@@ -498,20 +519,14 @@ export function FormRenderer({
     return () => window.clearTimeout(handle)
   }, [evalCtx, readOnly, step.key, stepSections])
 
-  // --- Autosave -------------------------------------------------------------
+  // --- Draft persistence ------------------------------------------------------
   //
-  // Keep the latest values/rows/step in a ref so the beforeunload handler can
-  // read them synchronously when the browser is tearing down.
+  // Hand every edited state to the offline-draft layer. It debounces the
+  // device write, queues the server sync, and flushes on page hide.
   useEffect(() => {
-    latestRef.current = {
-      values,
-      rows: rowsByStep,
-      stepIndex,
-      responseId,
-      dirty: draftEditState.dirty,
-      editSequence: draftEditState.sequence,
-    }
-  }, [draftEditState, values, rowsByStep, stepIndex, responseId])
+    if (editVersion === 0) return
+    updateDraft({ values, rows: rowsByStep, stepIndex })
+  }, [editVersion, values, rowsByStep, stepIndex, updateDraft])
 
   // Surface a one-shot toast when we resumed from a saved draft so the user
   // understands they're not on a fresh form.
@@ -521,162 +536,10 @@ export function FormRenderer({
     }
   }, [isResumed, tGenerated])
 
-  // Tick "Saved Xs ago" every 5s once a save has happened so the label
-  // stays current without re-saving.
-  useEffect(() => {
-    if (!lastSavedAt) return
-    const t = setInterval(() => setSavedTick((n) => n + 1), 5000)
-    return () => clearInterval(t)
-  }, [lastSavedAt])
-
-  // Core save helper. Centralised so the debounced effect, step navigation,
-  // and the retry-on-click path all share one implementation. Returns true
-  // on a successful save.
-  const persistDraft = useCallback(
-    async (args: {
-      values: Record<string, unknown>
-      rows: Record<string, Array<Record<string, unknown>>>
-      stepIndex: number
-    }): Promise<boolean> => {
-      const clientSequence = latestRef.current.editSequence
-      try {
-        const clientSessionId = getOrCreateDraftSessionId(draftSessionIdRef)
-
-        // Lazily create a draft row on the first save. Concurrent saves share
-        // and await the same request, then each submits its ordered snapshot.
-        let id = latestRef.current.responseId
-        if (!id) {
-          const creation =
-            creatingRef.current ?? createDraftResponse({ templateId, complianceObligationId })
-          creatingRef.current = creation
-          try {
-            const res = await creation
-            if (!res.ok) {
-              setSaveStatus('error')
-              setSaveError(res.error)
-              return false
-            }
-            id = res.responseId
-            setResponseId(id)
-            latestRef.current.responseId = id
-          } finally {
-            if (creatingRef.current === creation) creatingRef.current = null
-          }
-        }
-        setSaveStatus('pending')
-        setSaveError(null)
-        const res = await saveFormResponseDraft({
-          responseId: id,
-          values: args.values,
-          rows: args.rows,
-          stepIndex: args.stepIndex,
-          clientSessionId,
-          clientSequence,
-          baseRevision: draftRevisionRef.current,
-        })
-        if (!res.ok) {
-          if (clientSequence >= acknowledgedSequenceRef.current) {
-            setSaveStatus('error')
-            setSaveError(res.error)
-          }
-          return false
-        }
-        draftRevisionRef.current = Math.max(draftRevisionRef.current, res.revision)
-        if (res.sequence >= acknowledgedSequenceRef.current) {
-          acknowledgedSequenceRef.current = res.sequence
-          setLastSavedAt(new Date(res.savedAt))
-          if (latestRef.current.editSequence > res.sequence) {
-            setSaveStatus('pending')
-          } else {
-            // Clear dirty only when the acknowledged payload includes every
-            // local edit. An older response completing later must not erase a
-            // newer unsaved change.
-            setSaveStatus('saved')
-            setDraftEditState((current) =>
-              current.sequence <= res.sequence && current.dirty
-                ? { ...current, dirty: false }
-                : current,
-            )
-          }
-        }
-        return true
-      } catch (error) {
-        if (clientSequence >= acknowledgedSequenceRef.current) {
-          setSaveStatus('error')
-          setSaveError(
-            error instanceof Error
-              ? error.message
-              : 'Could not save. Check your connection and retry.',
-          )
-        }
-        return false
-      }
-    },
-    [complianceObligationId, templateId],
-  )
-
-  // Debounced autosave on any values / rows / step change. The 1500ms delay
-  // is the spec; each new change cancels and reschedules. We also gate on
-  // draftEditState so the very first render (just hydrated state) doesn't trigger
-  // a no-op save.
-  useEffect(() => {
-    if (!draftEditState.dirty) return
-    const handle = setTimeout(() => {
-      void persistDraft({ values, rows: rowsByStep, stepIndex })
-    }, 1500)
-    return () => clearTimeout(handle)
-  }, [draftEditState.dirty, values, rowsByStep, stepIndex, persistDraft])
-
-  // Save-on-unload. Uses navigator.sendBeacon — only this API reliably
-  // delivers a POST as the document unloads. Best-effort: failure is
-  // silent (the in-app autosave will have run on the previous keystroke).
-  useEffect(() => {
-    function handleUnload() {
-      const {
-        values: v,
-        rows,
-        stepIndex: si,
-        responseId: rid,
-        dirty,
-        editSequence,
-      } = latestRef.current
-      if (!dirty) return
-      if (!rid) return // No draft row yet — nothing to persist to.
-      try {
-        const clientSessionId = getOrCreateDraftSessionId(draftSessionIdRef)
-        const payload = JSON.stringify({
-          responseId: rid,
-          values: v,
-          rows,
-          stepIndex: si,
-          clientSessionId,
-          clientSequence: editSequence,
-          baseRevision: draftRevisionRef.current,
-        })
-        const blob = new Blob([payload], { type: 'application/json' })
-        navigator.sendBeacon?.('/api/apps/draft-save', blob)
-      } catch {
-        // Swallow — there's nothing we can do mid-unload.
-      }
-    }
-    window.addEventListener('beforeunload', handleUnload)
-    // visibilitychange catches the "switched apps on mobile" case where
-    // beforeunload doesn't fire reliably.
-    function handleVisibility() {
-      if (document.visibilityState === 'hidden') handleUnload()
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => {
-      window.removeEventListener('beforeunload', handleUnload)
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
-  }, [])
-
   const markDirty = useCallback(() => {
-    // In read-only mode nothing is editable; never flip dirty so autosave +
-    // the unload beacon stay silent.
+    // In read-only mode nothing is editable; never record an edit.
     if (readOnly) return
-    setDraftEditState((current) => ({ dirty: true, sequence: current.sequence + 1 }))
+    setEditVersion((current) => current + 1)
   }, [readOnly])
 
   // --- Helpers ---------------------------------------------------------------
@@ -852,28 +715,6 @@ export function FormRenderer({
     return errs
   }
 
-  // Save-before-navigation. Best-effort and time-boxed: the user shouldn't
-  // be blocked by a slow save when they want to switch steps. If the save
-  // hasn't returned in 500ms we proceed anyway — the next debounce tick
-  // will catch up on the new step.
-  async function saveBeforeNavigation(targetStepIndex: number) {
-    if (!draftEditState.dirty || !responseId) return
-    const savePromise = persistDraft({
-      values,
-      rows: rowsByStep,
-      stepIndex: targetStepIndex,
-    })
-    const timeoutPromise = new Promise<'timeout'>((resolve) =>
-      setTimeout(() => resolve('timeout'), 500),
-    )
-    const result = await Promise.race([savePromise, timeoutPromise])
-    if (result === false) {
-      // persistDraft already set saveStatus/saveError; show a toast so the
-      // user knows their navigation succeeded but the save lagged.
-      toast.error(tGenerated('m_1d8a295c4b1d4b'))
-    }
-  }
-
   function next() {
     const errs = validateCurrentStep()
     if (errs.size > 0) {
@@ -885,15 +726,11 @@ export function FormRenderer({
     }
     setErrors(new Map())
     setCompletedSteps((s) => new Set(s).add(step.key))
-    const target = Math.min(totalSteps - 1, stepIndex + 1)
-    void saveBeforeNavigation(target)
-    setStepIndex(target)
+    setStepIndex(Math.min(totalSteps - 1, stepIndex + 1))
   }
 
   function back() {
-    const target = Math.max(0, stepIndex - 1)
-    void saveBeforeNavigation(target)
-    setStepIndex(target)
+    setStepIndex(Math.max(0, stepIndex - 1))
     setErrors(new Map())
   }
 
@@ -902,7 +739,6 @@ export function FormRenderer({
     // gated by per-step validation.
     if (i === stepIndex) return
     if (i < stepIndex || completedSteps.has(steps[i]!.key)) {
-      void saveBeforeNavigation(i)
       setStepIndex(i)
       setErrors(new Map())
     }
@@ -948,18 +784,49 @@ export function FormRenderer({
       }
       return
     }
+    // Submitting is never queued: it finalizes the entry, runs its flows, and
+    // navigates, so it needs a live connection. The answers stay saved on
+    // the device and in the sync queue until then.
+    if (!navigator.onLine) {
+      setServerError(tGenerated('m_141f981f5fa71b'))
+      toast.error(tGenerated('m_141f981f5fa71b'))
+      return
+    }
     start(async () => {
-      const res = await submitFormResponse({
-        templateId,
-        complianceObligationId,
-        data: payload,
-        siteOrgUnitId: siteId || null,
-        // Pass the in-flight draft id (if any) so the server finalizes that
-        // row in-place rather than inserting a duplicate.
-        responseId,
-        returnTo,
-      })
+      // Deliver the latest draft first so the server row exists (a new entry's
+      // id is minted on the device) and holds every answer.
+      const synced = await draft.flush()
+      if (!synced.ok) {
+        const message = synced.offline
+          ? tGenerated('m_196a145165d29d')
+          : synced.error
+            ? tGeneratedValue(synced.error)
+            : tGenerated('m_051fb158550e48')
+        setServerError(message)
+        toast.error(message)
+        return
+      }
+      draft.setSubmitting(true)
+      let res: Awaited<ReturnType<typeof submitFormResponse>>
+      try {
+        res = await submitFormResponse({
+          templateId,
+          complianceObligationId,
+          data: payload,
+          siteOrgUnitId: siteId || null,
+          // Finalize the draft row in place rather than inserting a duplicate.
+          responseId: draft.getServerResponseId(),
+          returnTo,
+        })
+      } catch (error) {
+        unstable_rethrow(error)
+        draft.setSubmitting(false)
+        setServerError(tGenerated('m_196a145165d29d'))
+        toast.error(tGenerated('m_196a145165d29d'))
+        return
+      }
       if (!res.ok) {
+        draft.setSubmitting(false)
         if (res.errors) {
           setErrors(new Map(res.errors.map((e) => [e.fieldId, e.message])))
           toast.error(tGenerated('m_182296d9886284'))
@@ -968,9 +835,6 @@ export function FormRenderer({
           toast.error(tGenerated('m_051fb158550e48'))
         }
       } else {
-        // Clear dirty so the unload-handler doesn't try to overwrite our
-        // freshly-submitted row with a stale draft payload.
-        setDraftEditState((current) => (current.dirty ? { ...current, dirty: false } : current))
         toast.success(tGenerated('m_1de0dacba80c75'))
       }
       // ok-path navigates via server redirect.
@@ -987,28 +851,24 @@ export function FormRenderer({
   // Repeating sections + `table` fields persist their WHOLE array on any row
   // add/remove/cell change. Computed/static elements never save.
   if (inlineAutosave) {
-    // `initialResponseId` is always present in this mode (the parent page
-    // creates/loads the row). Fall back to live `responseId` defensively.
-    const rid = (initialResponseId ?? responseId) as string
-
-    // Persist one top-level field (scalar/array/object) by its id, validating
-    // first. Returns void; the per-field hook owns the status indicator.
-    const saveField = (field: FormField, v: unknown) => {
+    // Queue one top-level field (scalar/array/object) by its id, validating
+    // first. Invalid values are never queued; `quiet` defers showing the
+    // error until the worker leaves the field.
+    const saveField = (field: FormField, v: unknown, quiet = false) => {
       const err = validateFieldValue(field, v)
       setErrors((m) => {
+        if (err ? quiet || m.get(field.id) === err : !m.has(field.id)) return m
         const next = new Map(m)
         if (err) next.set(field.id, err)
         else next.delete(field.id)
         return next
       })
-      if (err) return Promise.resolve<{ ok: boolean; error?: string }>({ ok: false, error: err })
-      return updateResponseField({ responseId: rid, fieldId: field.id, value: v })
+      if (!err) recordEdits.recordField(field.id, v)
     }
 
-    // Persist a whole repeating-section / table array under its id (no
-    // per-field validation — submit-time still runs full validation).
-    const saveArray = (id: string, arr: unknown) =>
-      updateResponseField({ responseId: rid, fieldId: id, value: arr })
+    // Queue a whole repeating-section / table array under its id (no
+    // per-field validation — Finalize still runs full validation).
+    const saveArray = (id: string, arr: unknown) => recordEdits.recordField(id, arr)
 
     // Presentational content tabs (same model as the wizard/fill path). When
     // the app authored 2+ tabs, render a tab bar and show only the active
@@ -1023,7 +883,27 @@ export function FormRenderer({
       <FillReadOnlyContext.Provider value={readOnly}>
         <SketchAiDraftContext.Provider value={{ enabled: aiDraftEnabled, templateId }}>
           <OrgUnitOptionsCacheContext.Provider value={orgUnitOptionsCache}>
-            <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
+            <GeneratedValue
+              value={
+                recordEdits.state ? (
+                  <div className="mb-3 flex justify-end empty:hidden">
+                    <DraftSyncIndicator state={recordEdits.state} onRetry={recordEdits.retry} />
+                  </div>
+                ) : null
+              }
+            />
+            <DraftRecoveryBanner
+              restored={recordEdits.restored}
+              conflict={recordEdits.conflict}
+              onDismiss={recordEdits.dismissRestored}
+              onDiscard={recordEdits.discardDeviceCopy}
+              onTakeDeviceCopy={recordEdits.takeDeviceCopy}
+              onTakeSavedVersion={recordEdits.takeSavedVersion}
+            />
+            <fieldset
+              disabled={readOnly || recordEdits.awaitingChoice}
+              className="m-0 min-w-0 space-y-5 border-0 p-0"
+            >
               <GeneratedValue
                 value={
                   inlineTabbed ? (
@@ -1184,14 +1064,7 @@ export function FormRenderer({
                         </Badge>
                       ) : null
                     ) : (
-                      <SaveStatus
-                        status={saveStatus}
-                        lastSavedAt={lastSavedAt}
-                        error={saveError}
-                        onRetry={() => {
-                          void persistDraft({ values, rows: rowsByStep, stepIndex })
-                        }}
-                      />
+                      <DraftSyncIndicator state={draft.state} onRetry={draft.retry} />
                     )
                   }
                   actions={
@@ -1254,14 +1127,7 @@ export function FormRenderer({
                       >
                         <Sun size={15} />
                       </button>
-                      <SaveStatus
-                        status={saveStatus}
-                        lastSavedAt={lastSavedAt}
-                        error={saveError}
-                        onRetry={() => {
-                          void persistDraft({ values, rows: rowsByStep, stepIndex })
-                        }}
-                      />
+                      <DraftSyncIndicator state={draft.state} onRetry={draft.retry} />
                       <Badge variant="outline">
                         <GeneratedText id="m_1c693e59d64fb2" />
                         <GeneratedValue value={version} />
@@ -1372,7 +1238,7 @@ export function FormRenderer({
                         ) : (
                           <Button
                             onClick={submit}
-                            disabled={pending}
+                            disabled={pending || draft.awaitingChoice}
                             size="lg"
                             className="h-12 flex-1 text-base"
                           >
@@ -1420,7 +1286,18 @@ export function FormRenderer({
                 ) : null
               }
             />
-            <fieldset disabled={readOnly} className="m-0 min-w-0 space-y-5 border-0 p-0">
+            <DraftRecoveryBanner
+              restored={draft.restored}
+              conflict={draft.conflict}
+              onDismiss={draft.dismissRestored}
+              onDiscard={draft.discardDeviceCopy}
+              onTakeDeviceCopy={draft.takeDeviceCopy}
+              onTakeSavedVersion={draft.takeSavedVersion}
+            />
+            <fieldset
+              disabled={readOnly || draft.awaitingChoice}
+              className="m-0 min-w-0 space-y-5 border-0 p-0"
+            >
               <GeneratedValue
                 value={
                   stepIndex === 0 ? (
@@ -1859,98 +1736,12 @@ function FieldRow({
 // in inline mode. Their FieldInput render path is purely presentational.
 const INLINE_NON_SAVING_TYPES = new Set(['formula', 'metric', 'heading', 'paragraph', 'divider'])
 
-type InlineSaveState = 'idle' | 'saving' | 'saved' | 'error'
-
-/**
- * Per-field autosave hook for inline mode — modelled on live-field.tsx
- * `useAutoSave` but value-agnostic: it accepts any JSON `value: unknown` and
- * persists it through a caller-supplied saver (which wires the right
- * `updateResponseField` payload). Coalesces while a save is in flight and
- * re-saves the latest value when the previous round-trip returns.
- */
-// Sentinel so the very first save always runs even when the value is undefined.
-const UNSAVED = Symbol('unsaved')
-
-function useFieldAutosave(saver: (value: unknown) => Promise<{ ok: boolean; error?: string }>) {
-  const [state, setState] = useState<InlineSaveState>('idle')
-  const [, start] = useTransition()
-  const latest = useRef<unknown>(undefined)
-  const saved = useRef<unknown>(UNSAVED)
-  const inFlight = useRef(false)
-  const saverRef = useRef(saver)
-  useEffect(() => {
-    saverRef.current = saver
-  }, [saver])
-
-  const save = useCallback((value: unknown) => {
-    latest.current = value
-    if (inFlight.current) return
-    inFlight.current = true
-    setState('saving')
-    start(async () => {
-      let ok = true
-      // Drain: keep persisting until the newest value is saved (the user may
-      // have typed more while a round-trip was in flight). A loop, not
-      // recursion, so the callback never references itself before declaration.
-      while (latest.current !== saved.current) {
-        const v = latest.current
-        try {
-          const res = await saverRef.current(v)
-          if (!res.ok) {
-            ok = false
-            break
-          }
-          saved.current = v
-        } catch {
-          ok = false
-          break
-        }
-      }
-      inFlight.current = false
-      if (ok) {
-        setState('saved')
-        setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2000)
-      } else {
-        setState('error')
-      }
-    })
-  }, [])
-
-  return { state, save }
-}
-
-function InlineSaveDot({ state }: { state: InlineSaveState }) {
-  if (state === 'idle') return null
-  return (
-    <span
-      className={
-        state === 'saving'
-          ? 'text-[11px] font-medium text-slate-400'
-          : state === 'saved'
-            ? 'text-[11px] font-medium text-emerald-600'
-            : 'text-[11px] font-medium text-red-600'
-      }
-    >
-      <GeneratedValue
-        value={
-          state === 'saving' ? (
-            <GeneratedText id="m_106811f2aac664" />
-          ) : state === 'saved' ? (
-            <GeneratedText id="m_0a3bcf685192f1" />
-          ) : (
-            <GeneratedText id="m_13b78c61dbb517" />
-          )
-        }
-      />
-    </span>
-  )
-}
-
 /**
  * Inline-mode field wrapper. Reuses the exact `FieldInput` control but
- * autosaves THIS field on its own: debounce ~800ms after a change + save on
- * blur. `table` fields persist their whole array; render-only element types
- * never save. The per-field status dot mirrors live-field.tsx.
+ * queues THIS field on its own through the offline-draft layer: written to
+ * the device ~300ms after a change (and immediately when the page hides or
+ * the field loses focus), then synced. `table` fields persist their whole
+ * array; render-only element types never save.
  */
 function InlineFieldRow({
   field,
@@ -1974,65 +1765,82 @@ function InlineFieldRow({
   evalCtx: EvalContext
   loading?: boolean
   readOnly: boolean
-  // Saves one top-level field (validates first). Resolves to {ok}.
-  saveField: (field: FormField, v: unknown) => Promise<{ ok: boolean; error?: string }>
-  // Saves a whole array (table / repeating) by id. Resolves to {ok}.
-  saveArray: (id: string, arr: unknown) => Promise<{ ok: boolean; error?: string }>
+  // Queues one top-level field (validates first; `quiet` hides the error).
+  saveField: (field: FormField, v: unknown, quiet?: boolean) => void
+  // Queues a whole array (table / repeating) by id.
+  saveArray: (id: string, arr: unknown) => void
 }) {
   const locale = useLocale()
   const formT = useTranslations('Forms')
-  const tGenerated = useGeneratedTranslations()
   const helpText = localizeText(field.helpText, locale, '')
   const nonSaving = INLINE_NON_SAVING_TYPES.has(field.type)
   const isTable = field.type === 'table'
 
-  const { state, save } = useFieldAutosave(
-    useCallback(
-      (v: unknown) => (isTable ? saveArray(field.id, v) : saveField(field, v)),
-      [isTable, field, saveField, saveArray],
-    ),
-  )
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const uncommitted = useRef(false)
   const latestValue = useRef(value)
   useEffect(() => {
     latestValue.current = value
   }, [value])
 
-  function commit(v: unknown) {
-    if (timer.current) {
-      clearTimeout(timer.current)
-      timer.current = null
+  const commit = useCallback(
+    (v: unknown, quiet: boolean) => {
+      if (timer.current) {
+        clearTimeout(timer.current)
+        timer.current = null
+      }
+      uncommitted.current = false
+      if (readOnly || nonSaving) return
+      if (isTable) saveArray(field.id, v)
+      else saveField(field, v, quiet)
+    },
+    [field, isTable, nonSaving, readOnly, saveArray, saveField],
+  )
+  const commitRef = useRef(commit)
+  useEffect(() => {
+    commitRef.current = commit
+  }, [commit])
+
+  // iOS may freeze or discard the page without another event: write the
+  // field's pending value to the device as soon as the page hides.
+  useEffect(() => {
+    const flushPending = () => {
+      if (uncommitted.current) commitRef.current(latestValue.current, true)
     }
-    if (readOnly || nonSaving) return
-    save(v)
-  }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushPending()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', flushPending)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', flushPending)
+      // Unmounting (tab switch, navigation) must not drop a pending edit.
+      flushPending()
+    }
+  }, [])
 
   function handleChange(v: unknown) {
     latestValue.current = v
     onChange(v)
     if (readOnly || nonSaving) return
-    if (timer.current) clearTimeout(timer.current)
     if (field.type === 'sketch') {
-      commit(v)
+      commit(v, false)
       return
     }
-    timer.current = setTimeout(() => commit(v), 800)
+    uncommitted.current = true
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => commit(v, true), 300)
   }
 
   async function persistImmediately(v: unknown) {
-    if (timer.current) {
-      clearTimeout(timer.current)
-      timer.current = null
-    }
     latestValue.current = v
     onChange(v)
-    if (readOnly || nonSaving) return
-    const result = isTable ? await saveArray(field.id, v) : await saveField(field, v)
-    if (!result.ok) throw new Error(result.error ?? tGenerated('m_0660fd925b42de'))
+    commit(v, false)
   }
 
   return (
-    <div className="space-y-1" onBlur={() => commit(latestValue.current)}>
+    <div className="space-y-1" onBlur={() => commit(latestValue.current, false)}>
       <div className="flex items-center justify-between gap-2">
         <Label>
           <GeneratedValue value={localizeText(field.label, locale, field.id)} />
@@ -2053,7 +1861,6 @@ function InlineFieldRow({
             }
           />
         </Label>
-        <GeneratedValue value={nonSaving ? null : <InlineSaveDot state={state} />} />
       </div>
       <GeneratedValue
         value={
@@ -4746,68 +4553,4 @@ function SketchField({
       ) : null}
     </div>
   )
-}
-
-// --- Save status indicator -------------------------------------------------
-//
-// Small chip rendered in the top-right of the wizard header. Mirrors the
-// 'idle' | 'pending' | 'saved' | 'error' state machine driven by the
-// autosave hook. Clickable in the error state to manually retry the save.
-
-function SaveStatus({
-  status,
-  lastSavedAt,
-  error,
-  onRetry,
-}: {
-  status: 'idle' | 'pending' | 'saved' | 'error'
-  lastSavedAt: Date | null
-  error: string | null
-  onRetry: () => void
-}) {
-  const tGeneratedValue = useGeneratedValueTranslations()
-  const tGenerated = useGeneratedTranslations()
-  if (status === 'idle') return null
-
-  if (status === 'pending') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-        <Cloud size={11} className="animate-pulse" />
-        <GeneratedText id="m_106811f2aac664" />
-      </span>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <button
-        type="button"
-        onClick={onRetry}
-        title={tGeneratedValue(error ?? tGenerated('m_0731204fbd1b17'))}
-        className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100"
-      >
-        <CloudOff size={11} />
-        <GeneratedText id="m_0f20f0bc8118a7" />
-      </button>
-    )
-  }
-
-  // 'saved'
-  const label = lastSavedAt ? formatSavedAgo(lastSavedAt) : 'Saved'
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200">
-      <Check size={11} />
-      <GeneratedValue value={label} />
-    </span>
-  )
-}
-
-function formatSavedAgo(at: Date): string {
-  const seconds = Math.floor((Date.now() - at.getTime()) / 1000)
-  if (seconds < 5) return 'Saved'
-  if (seconds < 60) return `Saved ${seconds}s ago`
-  const mins = Math.floor(seconds / 60)
-  if (mins < 60) return `Saved ${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  return `Saved ${hours}h ago`
 }

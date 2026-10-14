@@ -10,7 +10,7 @@ import {
 import { assertCan } from '@beaconhs/tenant'
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '@beaconhs/ui'
 import { requireRequestContext } from '@/lib/auth'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { mergeHref, parsePrefixedListParams, pickString } from '@/lib/list-params'
 import { formatDateTime } from '@/lib/datetime'
 import { TELEMETRY_HEALTH_LABELS, telemetryHealthSql } from '@/lib/equipment/telemetry'

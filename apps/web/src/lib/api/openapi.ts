@@ -1,16 +1,11 @@
 // OpenAPI 3.1 document, generated from the reports entity registry so the spec
 // can never drift from what /api/v1/[entity] actually serves. Hand-built plain
 // objects (no extra dependency): every path, schema and filter parameter is
-// derived from REPORT_ENTITIES.
+// derived from PUBLIC_API_ENTITIES.
 
-import {
-  REPORT_ENTITIES,
-  type ReportColumnKind,
-  type ReportEntity,
-  type ReportEntityColumn,
-} from '@beaconhs/reports'
+import type { ReportColumnKind, ReportEntity, ReportEntityColumn } from '@beaconhs/reports'
 import { DEFAULT_LIMIT, MAX_LIMIT } from './query'
-import { readPermissionForEntity } from './permissions'
+import { PUBLIC_API_ENTITIES, readPermissionForEntity } from './permissions'
 import { isRecordable } from './records'
 import {
   BUILDER_APP_CREATE_PERMISSION,
@@ -20,6 +15,7 @@ import {
   responseDataOpenApiSchema,
   type BuilderAppOpenApiEntity,
 } from './builder-apps'
+import { BRIEF_MANAGE_PERMISSION, BRIEF_READ_PERMISSION } from '@/lib/briefs/access'
 import {
   deletePermissionForEntity,
   isDeletable,
@@ -741,6 +737,282 @@ function builderResponseRecordPath(options: {
   }
 }
 
+const BRIEF_ERRORS: Json = {
+  '401': {
+    description: 'Missing, invalid, revoked or expired API key, or inactive workspace.',
+    content: errorContent(),
+  },
+  '403': { description: 'API key lacks the required permission.', content: errorContent() },
+}
+
+function briefIdParam(): Json {
+  return { name: 'briefId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }
+}
+
+function pageParams(): Json[] {
+  return [
+    {
+      name: 'limit',
+      in: 'query',
+      schema: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
+    },
+    { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+  ]
+}
+
+function listOf(ref: string): Json {
+  return {
+    'application/json': {
+      schema: {
+        type: 'object',
+        properties: {
+          data: { type: 'array', items: { $ref: ref } },
+          pagination: { $ref: '#/components/schemas/Pagination' },
+        },
+      },
+    },
+  }
+}
+
+function dataOf(ref: string): Json {
+  return {
+    'application/json': {
+      schema: { type: 'object', properties: { data: { $ref: ref } } },
+    },
+  }
+}
+
+function briefPaths(): Record<string, Json> {
+  const read = `Requires permission \`${BRIEF_READ_PERMISSION}\`.`
+  return {
+    '/api/v1/briefs': {
+      get: {
+        tags: ['AI briefs'],
+        operationId: 'list_briefs',
+        summary: 'List AI briefs',
+        description: `List the AI briefs defined in this workspace. ${read}`,
+        'x-beaconhs-required-permission': BRIEF_READ_PERMISSION,
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          ...pageParams(),
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['active', 'archived'] } },
+        ],
+        responses: {
+          '200': { description: 'AI briefs.', content: listOf('#/components/schemas/Brief') },
+          ...BRIEF_ERRORS,
+        },
+      },
+    },
+    '/api/v1/briefs/{briefId}': {
+      get: {
+        tags: ['AI briefs'],
+        operationId: 'get_brief',
+        summary: 'Get an AI brief',
+        description: `One brief's sources, sections and writing instructions. ${read}`,
+        'x-beaconhs-required-permission': BRIEF_READ_PERMISSION,
+        security: [{ bearerAuth: [] }],
+        parameters: [briefIdParam()],
+        responses: {
+          '200': { description: 'The brief.', content: dataOf('#/components/schemas/Brief') },
+          '404': { description: 'Brief not found.', content: errorContent() },
+          ...BRIEF_ERRORS,
+        },
+      },
+    },
+    '/api/v1/briefs/{briefId}/runs': {
+      get: {
+        tags: ['AI briefs'],
+        operationId: 'list_brief_runs',
+        summary: 'List brief runs',
+        description: `Scheduled, manual, preview and API runs of one brief, newest first. ${read}`,
+        'x-beaconhs-required-permission': BRIEF_READ_PERMISSION,
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          briefIdParam(),
+          ...pageParams(),
+          {
+            name: 'status',
+            in: 'query',
+            schema: { type: 'string', enum: ['queued', 'running', 'succeeded', 'failed'] },
+          },
+          {
+            name: 'trigger',
+            in: 'query',
+            schema: { type: 'string', enum: ['scheduled', 'manual', 'preview', 'api'] },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Brief runs.',
+            content: listOf('#/components/schemas/BriefRunSummary'),
+          },
+          '404': { description: 'Brief not found.', content: errorContent() },
+          ...BRIEF_ERRORS,
+        },
+      },
+      post: {
+        tags: ['AI briefs'],
+        operationId: 'generate_brief_run',
+        summary: 'Generate a brief',
+        description: `Write the brief for an explicit date range, now. The brief reads data with this key's permissions and record visibility, and nothing is emailed. \`sources\` overrides the brief's saved source parameters for this run only — for example \`{"journals.entries": {"authorEmployeeNos": ["1042"]}}\`. The request waits for the finished run. Requires permission \`${BRIEF_MANAGE_PERMISSION}\` plus read access to every source the brief uses.`,
+        'x-beaconhs-required-permission': BRIEF_MANAGE_PERMISSION,
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          briefIdParam(),
+          {
+            name: 'Idempotency-Key',
+            in: 'header',
+            required: true,
+            schema: { type: 'string', pattern: '^[A-Za-z0-9._:-]{1,128}$' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/BriefGenerateRequest' } },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'The finished run.',
+            content: dataOf('#/components/schemas/BriefRun'),
+          },
+          '400': { description: 'Invalid request.', content: errorContent() },
+          '404': { description: 'Brief not found.', content: errorContent() },
+          '409': { description: 'The brief is archived.', content: errorContent() },
+          ...BRIEF_ERRORS,
+        },
+      },
+    },
+    '/api/v1/briefs/{briefId}/runs/{runId}': {
+      get: {
+        tags: ['AI briefs'],
+        operationId: 'get_brief_run',
+        summary: 'Get a brief run',
+        description: `The written brief with the facts and source records it cites. ${read}`,
+        'x-beaconhs-required-permission': BRIEF_READ_PERMISSION,
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          briefIdParam(),
+          { name: 'runId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        ],
+        responses: {
+          '200': { description: 'The run.', content: dataOf('#/components/schemas/BriefRun') },
+          '404': { description: 'Run not found.', content: errorContent() },
+          ...BRIEF_ERRORS,
+        },
+      },
+    },
+  }
+}
+
+const BRIEF_RUN_BASE: Json = {
+  id: { type: 'string', format: 'uuid' },
+  briefId: { type: 'string', format: 'uuid' },
+  trigger: { type: 'string', enum: ['scheduled', 'manual', 'preview', 'api'] },
+  status: { type: 'string', enum: ['queued', 'running', 'succeeded', 'failed'] },
+  window: {
+    type: 'object',
+    properties: {
+      start: { type: 'string', format: 'date-time' },
+      end: { type: 'string', format: 'date-time' },
+      label: { type: 'string' },
+      timezone: { type: 'string' },
+    },
+  },
+  department: {
+    type: ['object', 'null'],
+    properties: { id: { type: 'string', format: 'uuid' }, name: { type: ['string', 'null'] } },
+  },
+  finishedAt: { type: ['string', 'null'], format: 'date-time' },
+  error: { type: ['string', 'null'] },
+}
+
+function briefSchemas(): Json {
+  return {
+    Brief: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        name: { type: 'string' },
+        description: { type: ['string', 'null'] },
+        status: { type: 'string', enum: ['active', 'archived'] },
+        specVersion: { type: 'integer' },
+        sources: { type: 'array', items: { type: 'string' } },
+        sections: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { key: { type: 'string' }, title: { type: 'string' } },
+          },
+        },
+        updatedAt: { type: 'string', format: 'date-time' },
+        instructions: { type: 'string', description: 'Only on GET /briefs/{briefId}.' },
+        targetWords: { type: 'integer', description: 'Only on GET /briefs/{briefId}.' },
+        sourceParams: {
+          type: 'array',
+          description: 'Only on GET /briefs/{briefId}.',
+          items: {
+            type: 'object',
+            properties: {
+              key: { type: 'string' },
+              params: { type: 'object', additionalProperties: true },
+            },
+          },
+        },
+      },
+    },
+    BriefRunSummary: {
+      type: 'object',
+      properties: { ...BRIEF_RUN_BASE, headline: { type: ['string', 'null'] } },
+    },
+    BriefRun: {
+      type: 'object',
+      properties: {
+        ...BRIEF_RUN_BASE,
+        result: {
+          type: ['object', 'null'],
+          description:
+            'The written brief: headline, summary, sections of bullets (each citing record refs such as "J12"), follow-ups and changes since the previous brief.',
+          additionalProperties: true,
+        },
+        facts: {
+          type: 'array',
+          description: 'Counts computed from the data, not by the model.',
+          items: { type: 'object', additionalProperties: true },
+        },
+        records: {
+          type: 'array',
+          description: 'Source records the brief could cite, keyed by ref.',
+          items: { type: 'object', additionalProperties: true },
+        },
+        sources: { type: 'array', items: { type: 'object', additionalProperties: true } },
+        model: { type: ['object', 'null'], additionalProperties: true },
+      },
+    },
+    BriefGenerateRequest: {
+      type: 'object',
+      required: ['from', 'to'],
+      additionalProperties: false,
+      properties: {
+        from: { type: 'string', format: 'date', description: 'First day, inclusive.' },
+        to: {
+          type: 'string',
+          format: 'date',
+          description: 'Last day, inclusive. At most 93 days.',
+        },
+        timezone: { type: 'string', description: "IANA zone. Defaults to the workspace's zone." },
+        departmentId: { type: ['string', 'null'], format: 'uuid' },
+        sources: {
+          type: 'object',
+          description: 'Per-source parameter overrides keyed by source key.',
+          additionalProperties: { type: 'object', additionalProperties: true },
+        },
+      },
+    },
+  }
+}
+
 export function buildOpenApiDocument(
   origin: string,
   options: {
@@ -828,9 +1100,10 @@ export function buildOpenApiDocument(
     BuilderAppPatchRequest: builderAppPatchSchema({
       $ref: '#/components/schemas/BuilderAppResponseData',
     }),
+    ...briefSchemas(),
   }
   const paths: Json = {}
-  for (const baseEntity of REPORT_ENTITIES) {
+  for (const baseEntity of PUBLIC_API_ENTITIES) {
     const extra = options.customColumns?.[baseEntity.key] ?? []
     const entity: ReportEntity = extra.length
       ? { ...baseEntity, columns: [...baseEntity.columns, ...extra] }
@@ -842,6 +1115,7 @@ export function buildOpenApiDocument(
     }
   }
   paths['/api/v1/apps'] = builderAppsPath()
+  Object.assign(paths, briefPaths())
   paths['/api/v1/apps/{templateKey}/responses'] = builderResponsesPath({
     responseSchemaRef: '#/components/schemas/BuilderAppResponse',
     submitSchemaRef: '#/components/schemas/BuilderAppSubmitRequest',
@@ -909,8 +1183,9 @@ export function buildOpenApiDocument(
     servers: [{ url: origin, description: 'This tenant' }],
     security: [{ bearerAuth: [] }],
     tags: [
-      ...[...new Set(REPORT_ENTITIES.map((e) => e.category))].map((c) => ({ name: c })),
+      ...[...new Set(PUBLIC_API_ENTITIES.map((e) => e.category))].map((c) => ({ name: c })),
       { name: 'Builder apps' },
+      { name: 'AI briefs' },
       ...(options.builderApps ?? []).map((app) => ({ name: `Builder app: ${app.name}` })),
     ],
     components: {

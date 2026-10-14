@@ -20,6 +20,7 @@ const GROUP_LABELS: Record<string, string> = {
   ca: 'Corrective actions',
   compliance: 'Compliance',
   reports: 'Reports',
+  briefs: 'AI briefs',
   dashboards: 'Dashboards',
   insights: 'Insights',
   tools: 'Field tools',
@@ -114,6 +115,9 @@ const PERMISSION_LABELS: Record<string, string> = {
   'reports.read': 'View reports',
   'reports.builder': 'Build reports',
   'reports.schedule': 'Schedule reports',
+
+  'briefs.read': 'View AI briefs',
+  'briefs.manage': 'Manage AI briefs',
 
   'dashboards.read': 'View dashboards',
   'dashboards.edit': 'Edit dashboards',

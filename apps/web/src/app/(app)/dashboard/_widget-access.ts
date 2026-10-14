@@ -55,6 +55,8 @@ const WIDGET_PERMISSIONS: Record<string, readonly string[]> = {
   'equipment-gps-map': EQUIPMENT,
   // PPE
   'kpi-ppe-open-issues': PPE,
+  // AI briefs — leadership briefings built from org data
+  'ai-briefs': ['briefs.read', 'briefs.manage'],
   'kpi-ppe-overdue': PPE,
   'equipment-vehicle-log-status': [...EQUIPMENT, ...ANALYTICS],
   // People headcount

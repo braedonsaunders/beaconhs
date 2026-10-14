@@ -16,7 +16,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { canPublishInsights, canViewInsights } from './_access'
 import { canSeePublishedInsight, getInsightRoleKeys } from './_visibility'
-import { INSIGHT_WIDGET_MAP } from './_widgets'
+import { briefIdFromWidget, INSIGHT_WIDGET_MAP } from './_widgets'
 import { isUuid } from '@/lib/list-params'
 import {
   INSIGHT_DASHBOARD_NAME_MAX_LENGTH,
@@ -169,7 +169,9 @@ export async function saveDashboardLayout(input: {
   if (!(await ownedDashboard(ctx, input.id))) return { ok: false, error: 'Dashboard not found.' }
   const parsed = LayoutSchema.safeParse(input.layout)
   if (!parsed.success) return { ok: false, error: 'Invalid layout.' }
-  const widgets = parsed.data.widgets.filter((w) => INSIGHT_WIDGET_MAP.has(w.id) || isUuid(w.id))
+  const widgets = parsed.data.widgets.filter(
+    (w) => INSIGHT_WIDGET_MAP.has(w.id) || isUuid(w.id) || briefIdFromWidget(w.id) !== null,
+  )
   await ctx.db((tx) =>
     tx
       .update(insightDashboards)

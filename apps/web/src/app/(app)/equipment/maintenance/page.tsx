@@ -50,7 +50,7 @@ import {
 import { can } from '@beaconhs/tenant'
 import type { AppLocale } from '@beaconhs/i18n'
 import { requireRequestContext } from '@/lib/auth'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { clamp, isUuid, mergeHref, pickString } from '@/lib/list-params'
 import { EquipmentInspectionDrawer } from '../inspections/_inspection-panel'
 import { StartInspectionButton } from '../inspections/_start-button'

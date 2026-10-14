@@ -7,7 +7,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./regulatory": "./src/regulatory.ts"
+    "./regulatory": "./src/regulatory.ts",
+    "./visibility": "./src/visibility.ts",
+    "./journal-scope": "./src/journal-scope.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -43,6 +43,8 @@ const META: Record<string, { label: string; icon: LucideIcon }> = {
   find_compliance_gaps: { label: 'Searched outstanding compliance', icon: Search },
   search_user_guide: { label: 'Searched the user guide', icon: Search },
   read_user_guide: { label: 'Read a user-guide article', icon: FileText },
+  find_briefs: { label: 'Searched AI briefs', icon: Search },
+  read_brief_run: { label: 'Read an AI brief', icon: FileText },
   draft_corrective_action: { label: 'Drafted a corrective action', icon: Sparkles },
   draft_incident: { label: 'Drafted an incident report', icon: Sparkles },
   draft_journal_entry: { label: 'Drafted a journal entry', icon: Sparkles },

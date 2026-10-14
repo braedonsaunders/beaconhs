@@ -590,6 +590,10 @@ Open **Settings** from the vehicle log to choose which entry modes the company u
       'signature',
       'paperwork',
       'checklist',
+      'offline',
+      'no signal',
+      'sync',
+      'saved on device',
     ],
     body: `Your company builds its own digital forms in BeaconHS — toolbox talks, lift plans, permits, checklists, and more. You fill them in the app instead of on paper.
 
@@ -622,6 +626,32 @@ Person fields on forms offer active people who have not been deleted. If a perso
 1. Open your [Workspace](/my) or the notification you received.
 2. Tap the assigned form to open it.
 3. Fill it in and submit the same way.
+
+## Working without signal
+
+Every form keeps your answers on your phone or tablet as you type — entries you start with **New entry**, assigned forms in your Workspace, **Tools**, and forms inside an assessment. Losing signal, switching apps, or the phone closing the page does not lose them.
+
+You need signal to tap **New entry**, because BeaconHS creates the entry on the server. Open the entry before you head into a dead zone. Once it is open, keep filling it with no signal.
+
+Check the badge at the top of the form:
+
+- **Saved on device** with **Pending (2)** — your answers are on this device. Two changes are waiting to send.
+- **Offline · saved on device** — no signal. Keep working. Your answers send by themselves when signal comes back, even if you close the form.
+- **Syncing…** — sending now.
+- **Synced** — BeaconHS has everything. It is safe to close the form.
+- **Sync failed — retry** — BeaconHS could not accept the save. Tap it to try again. If it keeps failing, tell your supervisor.
+
+If the form closed before your answers synced, open it again:
+
+1. Your unsynced answers come back, and **Recovered unsynced changes** appears at the top.
+2. Tap **Dismiss** to keep going.
+3. To throw them away instead, tap **Discard and use saved version**. On a brand-new entry from **Tools** or your Workspace the button reads **Discard and start over**.
+
+If someone saved the same answer from another tab or device in the meantime, **This form was changed somewhere else** appears and the form pauses. Tap **Use this device's copy** to keep your answers, or **Use saved version** to keep the other copy.
+
+You need signal to tap **Submit**, **Finalize**, or **Lock**. BeaconHS sends anything still waiting first. When you are offline, your answers stay on the device and BeaconHS asks you to try again once you have signal.
+
+When you sign out, BeaconHS first tries to send anything waiting. If a form still has not synced, you are warned before it is deleted from the device. Always sign out of a shared tablet so the next person never sees your drafts.
 
 ## Finding a past entry
 

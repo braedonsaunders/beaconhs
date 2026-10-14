@@ -31,7 +31,7 @@ import {
 import { assertCan, can } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireRequestContext } from '@/lib/auth'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recentActivityForEntity, recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { isUuid, pickString } from '@/lib/list-params'
 import { formatDate, formatDateTime } from '@/lib/datetime'

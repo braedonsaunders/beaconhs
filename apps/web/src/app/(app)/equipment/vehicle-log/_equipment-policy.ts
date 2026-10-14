@@ -2,7 +2,7 @@ import { and, count, isNull, sql, type SQL } from 'drizzle-orm'
 import type { Database } from '@beaconhs/db'
 import { equipmentCategories, equipmentItems, equipmentTypes } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
-import { moduleScopeWhere } from '../../../../lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 
 /**
  * One vehicle-list policy for the workspace, annual summary, and CSV export.

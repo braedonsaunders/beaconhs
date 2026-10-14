@@ -19,7 +19,7 @@ import { canAccessTemplate, canEditResponsePayload } from '@/app/(app)/apps/_lib
 import { parseBuilderReturnTo } from '@/app/(app)/apps/_lib/return-to'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { isUuid } from '@/lib/list-params'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { loadApplicableFormObligation } from '@/lib/forms/form-compliance-obligation'
 import { FormRenderer } from './form-renderer'
 
@@ -242,7 +242,7 @@ export default async function FillTemplatePage({
 
   // Hydrate the renderer: drafts from draftData; submitted/closed from the
   // final `data` (repeating-section rows live at data[sectionId]).
-  const { initialValues, initialRows, initialStepIndex, initialDraftRevision, isResumed } =
+  const { initialValues, initialRows, initialStepIndex, initialDraftCursor, isResumed } =
     responseInitialState(data.version.schema, response)
   const initialResponseId = response?.id ?? null
 
@@ -276,7 +276,7 @@ export default async function FillTemplatePage({
       initialValues={initialValues}
       initialRows={initialRows}
       initialStepIndex={initialStepIndex}
-      initialDraftRevision={initialDraftRevision}
+      initialDraftCursor={initialDraftCursor}
       isResumed={isResumed}
       returnTo={returnTo}
       readOnly={readOnly}

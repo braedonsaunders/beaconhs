@@ -24,6 +24,7 @@ export const DEFAULT_ROLES_BY_CATEGORY: Readonly<Record<string, string[]>> = {
   ca: ['safety_manager', 'tenant_admin'],
   compliance: ['safety_manager', 'tenant_admin'],
   equipment: ['safety_manager', 'tenant_admin'],
+  journal: ['tenant_admin'],
 }
 
 /**

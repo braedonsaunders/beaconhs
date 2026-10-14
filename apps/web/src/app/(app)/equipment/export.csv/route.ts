@@ -10,7 +10,7 @@ import {
 } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireExportContext } from '@/lib/auth'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { recordAudit } from '@/lib/audit'
 import {
   CSV_EXPORT_QUERY_LIMIT,

@@ -86,7 +86,7 @@ export async function POST(req: Request): Promise<Response> {
     getTenantAiConfig(ctx),
     getSessionUser(),
   ])
-  const model = getModel(aiConfig, 'fast')
+  const model = getModel(aiConfig, 'fast', 'feedback')
   if (!runtime) {
     console.error('[feedback/turn] destination is not ready')
     return jsonResult(unavailable(), 503)

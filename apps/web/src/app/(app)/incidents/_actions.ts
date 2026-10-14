@@ -18,7 +18,7 @@ import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { csvRow } from '@/lib/csv'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { isBulkActionId, newBulkActionBatchId, parseBulkActionIds } from '@/lib/bulk-actions'
 
 type BulkActionResult =

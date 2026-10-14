@@ -30,7 +30,7 @@ import {
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { isUuid, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'

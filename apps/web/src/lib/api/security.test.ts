@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { parseApiBearerToken } from './token'
-import { hasBuilderAppGrant } from './permissions'
+import {
+  hasBuilderAppGrant,
+  PUBLIC_API_ENTITIES,
+  publicApiEntity,
+  readPermissionForEntity,
+} from './permissions'
 import { apiIdempotencyRequestDigest } from './idempotency'
 
 describe('public API security policy', () => {
@@ -49,5 +54,13 @@ describe('public API security policy', () => {
     expect(apiIdempotencyRequestDigest(first, { a: 1 })).not.toBe(
       apiIdempotencyRequestDigest(otherPath, { a: 1 }),
     )
+  })
+
+  it('maps a read permission for every entity it serves and keeps Builder data behind app grants', () => {
+    for (const entity of PUBLIC_API_ENTITIES) {
+      expect(() => readPermissionForEntity(entity), entity.key).not.toThrow()
+    }
+    expect(publicApiEntity('compliance_status')).toBeDefined()
+    expect(publicApiEntity('monitored_sessions')).toBeUndefined()
   })
 })

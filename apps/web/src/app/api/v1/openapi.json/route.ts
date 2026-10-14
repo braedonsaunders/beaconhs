@@ -4,13 +4,13 @@
 // Builder app paths and schemas.
 
 import { NextResponse } from 'next/server'
-import { REPORT_ENTITIES, type ReportEntityColumn } from '@beaconhs/reports'
+import type { ReportEntityColumn } from '@beaconhs/reports'
 import { loadBeaconCustomReportColumns } from '@beaconhs/reports/server'
 import { authenticateApiKey } from '@/lib/api/auth'
 import { BUILDER_APP_READ_PERMISSION, listBuilderAppOpenApiEntities } from '@/lib/api/builder-apps'
 import { ApiError, errorResponse, noStore } from '@/lib/api/errors'
 import { buildOpenApiDocument } from '@/lib/api/openapi'
-import { keyHasPermission } from '@/lib/api/permissions'
+import { keyHasPermission, PUBLIC_API_ENTITIES } from '@/lib/api/permissions'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -32,7 +32,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     // Fold the tenant's custom-field columns into the documented schema/params.
     const customColumns = await ctx.db(async (tx) => {
       const out: Record<string, ReportEntityColumn[]> = {}
-      for (const entity of REPORT_ENTITIES) {
+      for (const entity of PUBLIC_API_ENTITIES) {
         const cols = await loadBeaconCustomReportColumns(tx, entity.table)
         if (cols.length) out[entity.key] = cols
       }

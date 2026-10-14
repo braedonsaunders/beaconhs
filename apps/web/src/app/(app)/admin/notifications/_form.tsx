@@ -812,21 +812,23 @@ export function NotificationSettingsForm({
                         </>
                       ) : (
                         <p className="text-sm text-slate-500">
-                          <GeneratedValue value="Recipients are the unsigned crew members selected on the assessment." />
+                          <GeneratedValue value={cat.recipientsNote ?? ''} />
                         </p>
                       )}
-                      <div className="space-y-1.5">
-                        <Label>
-                          <GeneratedText id="m_010d889813e53e" />
-                        </Label>
-                        <ChannelChips
-                          value={cfg.channels}
-                          onChange={(v) => patch(cat.key, { channels: v })}
-                          availability={channelAvailability}
-                        />
-                      </div>
+                      {!cat.emailOnly ? (
+                        <div className="space-y-1.5">
+                          <Label>
+                            <GeneratedText id="m_010d889813e53e" />
+                          </Label>
+                          <ChannelChips
+                            value={cfg.channels}
+                            onChange={(v) => patch(cat.key, { channels: v })}
+                            availability={channelAvailability}
+                          />
+                        </div>
+                      ) : null}
 
-                      {!cat.directRecipients ? (
+                      {!cat.directRecipients && !cat.emailOnly ? (
                         <div className="space-y-1.5">
                           <Label>
                             <GeneratedText id="m_1b8f85dba7b244" />

@@ -520,6 +520,34 @@ export function ToolResultView({ name, output }: { name: string; output: unknown
       )
     }
 
+    case 'find_briefs': {
+      const rows = rowsOf(data).map((brief) => {
+        const runs = Array.isArray(brief.recentRuns) ? (brief.recentRuns as AnyRow[]) : []
+        const latest = runs[0]
+        return {
+          id: str(brief.id),
+          href: latest ? str(latest.url) : str(brief.url),
+          cells: {
+            name: str(brief.name) || 'Brief',
+            window: latest ? str(latest.window) : '—',
+            headline: latest ? str(latest.headline) || '—' : '—',
+          },
+        }
+      })
+      return (
+        <RecordLinkTable
+          noun="brief"
+          data={data}
+          rows={rows}
+          columns={[
+            { key: 'name', label: 'Brief', primary: true, className: 'whitespace-nowrap' },
+            { key: 'window', label: 'Covers', className: 'whitespace-nowrap' },
+            { key: 'headline', label: 'Headline', className: 'w-full max-w-0 truncate' },
+          ]}
+        />
+      )
+    }
+
     case 'find_people': {
       const rows = rowsOf(data).map((r) => ({
         id: str(r.id),

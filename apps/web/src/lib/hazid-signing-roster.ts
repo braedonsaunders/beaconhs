@@ -9,7 +9,7 @@ import {
   tenantUsers,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
-import { canSeeRecord } from './visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { attachmentUrl } from './attachment-url'
 import { parsePrefixedListParams } from './list-params'
 

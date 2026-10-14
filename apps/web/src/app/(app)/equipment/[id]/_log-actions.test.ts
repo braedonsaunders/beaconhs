@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   redirect: vi.fn(),
 }))
 vi.mock('../../../../lib/auth', () => ({ requireRequestContext: mocks.auth }))
-vi.mock('../../../../lib/visibility', () => ({ canSeeRecord: mocks.visible }))
+vi.mock('@beaconhs/tenant/visibility', () => ({ canSeeRecord: mocks.visible }))
 vi.mock('../../../../lib/audit', () => ({ recordAuditInTransaction: mocks.audit }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/navigation', () => ({ redirect: mocks.redirect }))

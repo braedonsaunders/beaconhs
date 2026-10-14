@@ -43,7 +43,7 @@ export function streamWritingAssist(
   config: AiConfig | null | undefined,
   args: { mode: WritingMode; text: string; tone?: string; context?: string },
 ): Response {
-  const model = getModel(config, 'fast')
+  const model = getModel(config, 'fast', 'journals.writing')
   if (!model) throw new AIDisabledError()
 
   const instruction = INSTRUCTIONS[args.mode].replace(

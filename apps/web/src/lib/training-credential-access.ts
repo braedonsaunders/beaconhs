@@ -8,7 +8,7 @@ import {
 } from '@beaconhs/db/schema'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { canManageModule } from '@/lib/module-admin/guard'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import {
   issueTrainingCertificate,
   issueTrainingSkillCertificate,

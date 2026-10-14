@@ -121,7 +121,7 @@ describe('training completion clean cutover', () => {
       ...new Set([
         ...ATTACHMENT_TENANT_REFERENCES.map(({ table }) => table).filter(
           // Added after the squashed cutover migration this test audits.
-          (table) => table !== 'training_record_files',
+          (table) => table !== 'training_record_files' && table !== 'brief_runs',
         ),
         'attachments',
         'audit_log',

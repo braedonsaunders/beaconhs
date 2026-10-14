@@ -27,17 +27,6 @@ const CHART = { defaultSize: { w: 6, h: 4 }, minSize: { w: 3, h: 3 } }
 const MATRIX = { defaultSize: { w: 12, h: 7 }, minSize: { w: 6, h: 4 } }
 
 const INSIGHT_WIDGETS: InsightWidgetMeta[] = [
-  // AI
-  {
-    id: 'ai-analysis',
-    label: 'AI journal analysis',
-    description:
-      'Automatic background analysis of recent journals: sentiment, issues, and recommended actions.',
-    category: 'ai',
-    defaultSize: { w: 6, h: 6 },
-    minSize: { w: 4, h: 5 },
-  },
-
   // Journals
   {
     id: 'journal-total',
@@ -234,7 +223,6 @@ export const DEFAULT_INSIGHT_LAYOUT: InsightDashboardLayout = {
     { id: 'journal-last30', x: 3, y: 0, w: 3, h: 2 },
     { id: 'kpi-incidents', x: 6, y: 0, w: 3, h: 2 },
     { id: 'kpi-open-cas', x: 9, y: 0, w: 3, h: 2 },
-    { id: 'ai-analysis', x: 0, y: 2, w: 6, h: 6 },
     { id: 'journal-activity', x: 6, y: 2, w: 6, h: 4 },
     { id: 'chart-severity', x: 6, y: 6, w: 6, h: 4 },
     { id: 'journal-top-topics', x: 0, y: 8, w: 6, h: 4 },
@@ -246,8 +234,8 @@ export const DEFAULT_INSIGHT_LAYOUT: InsightDashboardLayout = {
 
 /** Built-in widgets that are real BHQL-backed cards: materialized per tenant as
  *  published system cards (ensureSystemCards) and rendered through the SAME
- *  engine + visualization as user-built cards. Widgets without an entry here
- *  (today only the AI journal analysis) render bespoke client code. */
+ *  engine + visualization as user-built cards. AI brief widgets (`brief:<id>`)
+ *  are the only non-card widgets; the page loads their latest run. */
 function qualificationMatrix(
   source: 'skill_coverage' | 'training_matrix',
   typeId: string,
@@ -959,8 +947,15 @@ export const BUILTIN_QUERIES: Record<
   },
 }
 
-/** Widgets that are NOT BHQL system cards and still render bespoke client code —
- *  today only the on-demand AI journal analysis. Everything in BUILTIN_QUERIES
- *  is materialized as a published system card and reaches the palette as a Card,
- *  so only these belong in the add palette's widget section. */
-export const BESPOKE_INSIGHT_WIDGETS = INSIGHT_WIDGETS.filter((w) => !(w.id in BUILTIN_QUERIES))
+/** Insights widget id for an AI brief: the brief's latest run renders in place.
+ *  Everything in BUILTIN_QUERIES is materialized as a published system card, so
+ *  briefs are the only non-card widgets in the add palette. */
+export function briefWidgetId(briefId: string): string {
+  return `brief:${briefId}`
+}
+
+const BRIEF_WIDGET = /^brief:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+
+export function briefIdFromWidget(widgetId: string): string | null {
+  return BRIEF_WIDGET.exec(widgetId)?.[1] ?? null
+}

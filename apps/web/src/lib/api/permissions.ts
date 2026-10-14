@@ -6,7 +6,8 @@
 // docs and enforcement move together.
 
 import { PERMISSION_CATALOGUE, type CataloguePermission } from '@beaconhs/db/schema'
-import type { ReportEntity } from '@beaconhs/reports'
+import { REPORT_ENTITIES } from '@beaconhs/reports'
+import type { ReportEntity } from '@beaconhs/reports/entities'
 
 const VALID_PERMISSIONS = new Set<string>(PERMISSION_CATALOGUE as unknown as string[])
 
@@ -20,6 +21,20 @@ const READ_PERMISSION_BY_CATEGORY: Record<string, CataloguePermission> = {
   equipment: 'equipment.read.all',
   ppe: 'ppe.read.all',
   corrective_actions: 'ca.read.all',
+  compliance: 'compliance.read',
+}
+
+/** Report entities served by /api/v1/{entity}. Builder-app data — including
+ *  monitored sessions — is reachable only through /api/v1/apps, where every app
+ *  needs an explicit grant on the key, so the `apps` category is excluded. */
+export const PUBLIC_API_ENTITIES: readonly ReportEntity[] = REPORT_ENTITIES.filter(
+  (entity) => entity.category in READ_PERMISSION_BY_CATEGORY,
+)
+
+const PUBLIC_API_ENTITY_MAP = new Map(PUBLIC_API_ENTITIES.map((entity) => [entity.key, entity]))
+
+export function publicApiEntity(key: string): ReportEntity | undefined {
+  return PUBLIC_API_ENTITY_MAP.get(key)
 }
 
 function isApiPermission(permission: string): boolean {
@@ -44,7 +59,9 @@ export function hasBuilderAppGrant(grantedTemplateIds: readonly string[], templa
   return grantedTemplateIds.includes(templateId)
 }
 
-export function readPermissionForEntity(entity: ReportEntity): CataloguePermission {
+export function readPermissionForEntity(
+  entity: Pick<ReportEntity, 'category'>,
+): CataloguePermission {
   const permission = READ_PERMISSION_BY_CATEGORY[entity.category]
   if (!permission) {
     throw new Error(`No public API read permission mapped for entity category "${entity.category}"`)

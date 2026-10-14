@@ -14,7 +14,7 @@ export async function runBuilderPrompt(
   config: AiConfig | null | undefined,
   args: { system: string; prompt: string; tier?: ModelTier },
 ): Promise<string | null> {
-  const model = getModel(config, args.tier ?? 'smart')
+  const model = getModel(config, args.tier ?? 'smart', 'builder')
   if (!model) return null
   try {
     const { text } = await generateText({

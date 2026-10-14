@@ -17,25 +17,16 @@ import {
   type AiPolicyMode,
   type AiProvider,
 } from '@beaconhs/ai'
+import {
+  buildAiConfig,
+  readStoredAiSettings,
+  resolveTenantAi,
+  type StoredAiSettings as RawAi,
+  type StoredPlatformAiSettings as PlatformRawAi,
+  type TenantAiResolution,
+} from '@beaconhs/ai/tenant-config'
 import type { RequestContext } from '@beaconhs/tenant'
-import { sealSecret, unsealSecret } from '@beaconhs/crypto'
-
-type RawAi = {
-  enabled?: boolean
-  provider?: string
-  modelFast?: string
-  modelSmart?: string
-  baseUrl?: string
-  keyCiphertext?: string
-  keyNonce?: string
-  /** Auto-summarise & categorise journal entries on submit (background). Tenant-only. */
-  autoJournalAi?: boolean
-  /** Nightly/hourly Insights journal analysis. Default on when AI is configured. */
-  autoJournalAnalysis?: boolean
-}
-
-/** Platform-wide AI config: the provider PLUS the policy governing tenant overrides. */
-type PlatformRawAi = RawAi & { mode?: AiPolicyMode }
+import { sealSecret } from '@beaconhs/crypto'
 
 function normProvider(p: string | undefined): AiProvider {
   return isAiProvider(p) ? p : 'anthropic'
@@ -64,7 +55,7 @@ function toCommon(ai: RawAi): CommonAiSettings {
 
 type TenantAiSettings = CommonAiSettings & {
   autoJournalAi: boolean
-  autoJournalAnalysis: boolean
+  monthlyTokenBudget: number | null
 }
 type PlatformAiSettings = CommonAiSettings & { mode: AiPolicyMode }
 
@@ -82,24 +73,6 @@ export type AiSettingsInput = {
 async function validateAiSettingsInput<T extends AiSettingsInput>(input: T): Promise<T> {
   const baseUrl = await validateAiBaseUrl(input.provider, input.baseUrl)
   return { ...input, baseUrl: baseUrl ?? '' }
-}
-
-// Build a runtime AiConfig (decrypted key) from stored config, or null when the
-// scope is disabled / has no usable key. `org` grounds generated content in the
-// real tenant name; it is null for platform-scope tests.
-function buildConfig(ai: RawAi, org: { name: string } | null): AiConfig | null {
-  if (ai.enabled === false) return null
-  if (!ai.keyCiphertext || !ai.keyNonce) return null
-  const apiKey = unsealSecret({ ciphertext: ai.keyCiphertext, nonce: ai.keyNonce })
-  if (!apiKey) return null
-  return {
-    provider: normProvider(ai.provider),
-    apiKey,
-    modelFast: ai.modelFast || null,
-    modelSmart: ai.modelSmart || null,
-    baseUrl: ai.baseUrl || null,
-    org,
-  }
 }
 
 // Merge form input over the previously-stored config, re-sealing the key only
@@ -129,16 +102,8 @@ function mergeRaw<T extends RawAi>(prev: T, input: AiSettingsInput, extra: Parti
 // ---------------------------------------------------------------------------
 
 async function readAi(tenantId: string): Promise<{ ai: RawAi; orgName: string | null }> {
-  return withSuperAdmin(db, async (tx) => {
-    const [t] = await tx
-      .select({ settings: tenants.settings, name: tenants.name })
-      .from(tenants)
-      .where(eq(tenants.id, tenantId))
-      .limit(1)
-    const raw = (t?.settings as Record<string, unknown> | undefined)?.ai
-    const ai = (raw && typeof raw === 'object' ? raw : {}) as RawAi
-    return { ai, orgName: t?.name ?? null }
-  })
+  const { tenant, orgName } = await readStoredAiSettings(tenantId)
+  return { ai: tenant, orgName }
 }
 
 /** UI-facing tenant settings (no secret material). */
@@ -147,7 +112,10 @@ export async function getTenantAiSettings(ctx: RequestContext): Promise<TenantAi
   return {
     ...toCommon(ai),
     autoJournalAi: ai.autoJournalAi === true,
-    autoJournalAnalysis: ai.autoJournalAnalysis !== false,
+    monthlyTokenBudget:
+      typeof ai.monthlyTokenBudget === 'number' && ai.monthlyTokenBudget > 0
+        ? ai.monthlyTokenBudget
+        : null,
   }
 }
 
@@ -155,12 +123,6 @@ export async function getTenantAiSettings(ctx: RequestContext): Promise<TenantAi
 export async function getTenantAutoJournalAi(ctx: RequestContext): Promise<boolean> {
   const { ai } = await readAi(ctx.tenantId)
   return ai.enabled !== false && ai.autoJournalAi === true
-}
-
-/** Whether Insights journal analysis runs automatically in the worker. */
-export async function getTenantAutoJournalAnalysis(ctx: RequestContext): Promise<boolean> {
-  const { ai } = await readAi(ctx.tenantId)
-  return ai.enabled !== false && ai.autoJournalAnalysis !== false
 }
 
 /**
@@ -172,30 +134,23 @@ export async function getTenantAutoJournalAnalysis(ctx: RequestContext): Promise
  * The tenant org name always travels with the resolved config for grounding.
  */
 export async function getTenantAiConfig(ctx: RequestContext): Promise<AiConfig | null> {
-  const [{ ai: tenantAi, orgName }, platformAi] = await Promise.all([
-    readAi(ctx.tenantId),
-    readPlatformAi(),
-  ])
-  const mode: AiPolicyMode = platformAi.mode ?? 'tenant_optional'
-  if (mode === 'disabled') return null
+  return (await getTenantAiResolution(ctx)).config
+}
 
-  const org = orgName ? { name: orgName } : null
-  if (mode !== 'global_only') {
-    const tenantConfig = buildConfig(tenantAi, org)
-    if (tenantConfig) return tenantConfig
-  }
-  return buildConfig(platformAi, org)
+/** The resolved config plus why AI is unavailable and the monthly budget state. */
+export async function getTenantAiResolution(ctx: RequestContext): Promise<TenantAiResolution> {
+  return resolveTenantAi(ctx.tenantId, { tenantUserId: ctx.membership?.id ?? null })
 }
 
 /** The tenant's OWN config, ignoring platform policy — for the "Test connection" button. */
 export async function getTenantOwnAiConfig(ctx: RequestContext): Promise<AiConfig | null> {
   const { ai, orgName } = await readAi(ctx.tenantId)
-  return buildConfig(ai, orgName ? { name: orgName } : null)
+  return buildAiConfig(ai, orgName ? { name: orgName } : null)
 }
 
 export async function saveTenantAiSettings(
   ctx: RequestContext,
-  input: AiSettingsInput & { autoJournalAi: boolean; autoJournalAnalysis: boolean },
+  input: AiSettingsInput & { autoJournalAi: boolean; monthlyTokenBudget: number | null },
 ): Promise<void> {
   const validatedInput = await validateAiSettingsInput(input)
   await withSuperAdmin(db, async (tx) => {
@@ -209,7 +164,7 @@ export async function saveTenantAiSettings(
     const prev = (settings.ai && typeof settings.ai === 'object' ? settings.ai : {}) as RawAi
     const next = mergeRaw(prev, validatedInput, {
       autoJournalAi: validatedInput.autoJournalAi,
-      autoJournalAnalysis: validatedInput.autoJournalAnalysis,
+      monthlyTokenBudget: validatedInput.monthlyTokenBudget ?? undefined,
     })
     await tx
       .update(tenants)
@@ -261,7 +216,7 @@ export async function getPlatformAiSettings(): Promise<PlatformAiSettings> {
 
 /** Runtime platform config (decrypted key) — for the platform "Test connection". */
 export async function getPlatformAiConfig(): Promise<AiConfig | null> {
-  return buildConfig(await readPlatformAi(), null)
+  return buildAiConfig(await readPlatformAi(), null)
 }
 
 /** The current platform policy — used to decide whether a tenant may self-configure. */

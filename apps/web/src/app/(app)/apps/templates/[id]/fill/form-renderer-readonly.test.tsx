@@ -7,13 +7,10 @@ import type { FormSchemaV1 } from '@beaconhs/forms-core'
 const mocks = vi.hoisted(() => ({ listOrgUnitOptions: vi.fn(), save: vi.fn() }))
 vi.mock('./actions', () => ({
   analyzePhotos: vi.fn(),
-  createDraftResponse: mocks.save,
   draftSketchDiagram: vi.fn(),
   fetchEntityAttrs: vi.fn(),
   listOrgUnitOptions: mocks.listOrgUnitOptions,
-  saveFormResponseDraft: mocks.save,
   submitFormResponse: mocks.save,
-  updateResponseField: mocks.save,
 }))
 vi.mock('@/app/(app)/apps/_lib/data-sources', () => ({
   aggregateDataSource: vi.fn(),

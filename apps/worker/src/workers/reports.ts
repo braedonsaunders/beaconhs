@@ -13,7 +13,6 @@ import { db, withTenant, withSuperAdmin, type Database } from '@beaconhs/db'
 import {
   attachments,
   formTemplates,
-  people,
   reportRunDeliveries,
   reportRuns,
   reportSchedules,
@@ -23,7 +22,6 @@ import {
   type ReportRunRequestSnapshot,
 } from '@beaconhs/db/schema'
 import { assertReportRunJobData, enqueueEmail, type ReportRunJobData } from '@beaconhs/jobs'
-import { resolveLocalePreferences } from '@beaconhs/i18n'
 import { createSystemTranslator } from '@beaconhs/i18n/messages'
 import {
   assertBoundedReportFilters,
@@ -40,12 +38,7 @@ import {
   normalizeReportRuntimeFilters,
   runBeaconReport,
 } from '@beaconhs/reports/server'
-import {
-  can,
-  canAccessTemplate,
-  makeTenantContext,
-  resolveMembershipAccess,
-} from '@beaconhs/tenant'
+import { can, canAccessTemplate } from '@beaconhs/tenant'
 import { renderReportPdf, renderWalletCardsForReport } from '@beaconhs/forms-pdf'
 import {
   deleteObject,
@@ -57,6 +50,7 @@ import {
   resolveTenantLogoUrl,
 } from '@beaconhs/storage'
 import { appBaseUrl } from '../lib/app-base-url'
+import { resolveRunAsContext } from '../lib/run-as-context'
 import { escapeHtml } from '../lib/escape-html'
 
 // Attach the rendered PDF to recipient emails up to this size; larger reports
@@ -460,70 +454,12 @@ async function resolveScheduledReportContext(
   tenantId: string,
   snapshot: ReportRunRequestSnapshot,
 ) {
-  const [principal] = await tx
-    .select({
-      id: tenantUsers.id,
-      tenantId: tenantUsers.tenantId,
-      userId: tenantUsers.userId,
-      displayName: tenantUsers.displayName,
-      status: tenantUsers.status,
-      localeOverride: tenantUsers.localeOverride,
-      timezone: users.timezone,
-      isSuperAdmin: users.isSuperAdmin,
-      personId: people.id,
-    })
-    .from(tenantUsers)
-    .innerJoin(users, eq(users.id, tenantUsers.userId))
-    .leftJoin(
-      people,
-      and(
-        eq(people.userId, tenantUsers.userId),
-        eq(people.tenantId, tenantUsers.tenantId),
-        isNull(people.deletedAt),
-      ),
-    )
-    .where(
-      and(
-        eq(tenantUsers.id, snapshot.runAsTenantUserId),
-        eq(tenantUsers.tenantId, tenantId),
-        eq(tenantUsers.status, 'active'),
-      ),
-    )
-    .limit(1)
-  if (!principal || principal.status !== 'active') {
-    throw new Error('Scheduled report run-as membership is no longer active')
-  }
-  const [tenantLocale] = await tx
-    .select({
-      defaultLanguage: tenants.defaultLanguage,
-      enabledLanguages: tenants.enabledLanguages,
-    })
-    .from(tenants)
-    .where(eq(tenants.id, tenantId))
-    .limit(1)
-  if (!tenantLocale) throw new Error('Scheduled report tenant no longer exists')
-  const localePolicy = resolveLocalePreferences({
-    defaultLocale: tenantLocale.defaultLanguage,
-    enabledLocales: tenantLocale.enabledLanguages,
-    userLocale: principal.localeOverride,
-  })
-
-  const resolved = await resolveMembershipAccess(tx, principal.id, snapshot.runAsRoleId)
-  if (snapshot.runAsRoleId && resolved.appliedRoleId !== snapshot.runAsRoleId) {
-    throw new Error('Scheduled report run-as role is no longer assigned to that member')
-  }
-  const requestCtx = makeTenantContext(db, {
-    userId: principal.userId,
+  const { requestCtx, locale, roleKeys } = await resolveRunAsContext(
+    tx,
     tenantId,
-    isSuperAdmin: principal.isSuperAdmin,
-    timezone: principal.timezone,
-    ...localePolicy,
-    membership: { id: principal.id, displayName: principal.displayName ?? principal.userId },
-    personId: principal.personId ?? null,
-    permissions: resolved.permissions,
-    scopes: resolved.scopes,
-    activeRoleId: resolved.appliedRoleId,
-  })
+    { tenantUserId: snapshot.runAsTenantUserId, roleId: snapshot.runAsRoleId },
+    'Scheduled report',
+  )
   if (
     !requestCtx.isSuperAdmin &&
     !can(requestCtx, 'reports.read') &&
@@ -543,7 +479,7 @@ async function resolveScheduledReportContext(
     .from(formTemplates)
     .where(isNull(formTemplates.deletedAt))
   const accessibleApps = templates.filter((template) =>
-    canAccessTemplate(requestCtx, template, resolved.roleKeys, 'operate'),
+    canAccessTemplate(requestCtx, template, roleKeys, 'operate'),
   )
   const sources = await discoverEntitiesWithScopedApps(
     tx,
@@ -552,7 +488,7 @@ async function resolveScheduledReportContext(
 
   return {
     catalog: await loadBeaconReportCatalog(tx, sources),
-    locale: localePolicy.locale,
+    locale,
     requestCtx,
   }
 }

@@ -12,6 +12,7 @@ type AttachmentTenantReference = {
  */
 export const ATTACHMENT_TENANT_REFERENCES = [
   { table: 'attachment_upload_reservations', column: 'attachment_id', onDelete: 'set null' },
+  { table: 'brief_runs', column: 'pdf_attachment_id', onDelete: 'set null' },
   { table: 'ca_complete_steps', column: 'signature_attachment_id', onDelete: 'set null' },
   { table: 'ca_photos', column: 'attachment_id', onDelete: 'cascade' },
   { table: 'document_acknowledgments', column: 'signature_attachment_id', onDelete: 'set null' },

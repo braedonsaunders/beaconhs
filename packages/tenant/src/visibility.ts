@@ -15,7 +15,7 @@ import { eq, inArray, or, sql, type SQL } from 'drizzle-orm'
 import type { PgColumn } from 'drizzle-orm/pg-core'
 import { people } from '@beaconhs/db/schema'
 import type { Database } from '@beaconhs/db'
-import { can, type RequestContext } from '@beaconhs/tenant'
+import { can, type RequestContext } from './index'
 
 type RecordOwnerColumns = {
   /** Person the record is about/assigned to (holder, owner, assignee, author). */

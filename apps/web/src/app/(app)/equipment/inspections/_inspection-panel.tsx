@@ -23,7 +23,7 @@ import {
 } from '@beaconhs/db/schema'
 import { assertCan, can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recentActivityForEntity } from '@/lib/audit'
 import { isUuid, pickString } from '@/lib/list-params'
 import { ActivityFeed } from '@/components/activity-feed'

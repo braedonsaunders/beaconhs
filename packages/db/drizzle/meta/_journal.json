@@ -484,6 +484,13 @@
       "when": 1791899029324,
       "tag": "0069_ppe_other_inspections",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1792007021899,
+      "tag": "0070_ai_briefs",
+      "breakpoints": true
     }
   ]
 }

@@ -112,6 +112,8 @@ Welding supervisors can add **Expiring skill tickets** and **Skill requirements*
 
 The GPS widget groups nearby pins with a count. Select a pin for equipment and the original GPS observation time. It refreshes displayed positions every minute while the dashboard is visible. It does not request new positions from the provider: the integration's **Schedule** controls that frequency. Search, health and movement filters, and pages apply to the map. Use **Open** for the full map. Equipment permissions and site scope apply.
 
+People who can view AI briefs can add **AI briefs**. It shows the headline of the latest brief from each one; tap it to read the full brief.
+
 Administrators can place these same widgets in a role's default dashboard under **Admin → Roles**. Existing personal layouts stay yours.
 
 This is a different thing from an Insights dashboard. This one is your personal home screen; Insights dashboards are shared charts and are covered in [Insights](/help/insights).

@@ -33,7 +33,7 @@ type AiFormInitial = {
   baseUrl: string
   hasKey: boolean
   autoJournalAi?: boolean
-  autoJournalAnalysis?: boolean
+  monthlyTokenBudget?: number | null
   mode?: string
 }
 
@@ -456,22 +456,25 @@ export function AiSettingsForm({
                   </span>
                 </span>
               </label>
-              <label className="flex items-start gap-2.5">
-                <input
-                  type="checkbox"
-                  name="autoJournalAnalysis"
-                  defaultChecked={initial.autoJournalAnalysis !== false}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
+              <div className="space-y-1.5 pt-1">
+                <Label htmlFor="ai-monthly-token-budget">
+                  <GeneratedText id="m_18800adcea67f8" />
+                </Label>
+                <Input
+                  id="ai-monthly-token-budget"
+                  name="monthlyTokenBudget"
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  defaultValue={initial.monthlyTokenBudget ?? ''}
+                  placeholder={tGenerated('m_05b5e35d09b0bf')}
+                  className="max-w-xs"
                 />
-                <span className="text-sm">
-                  <span className="font-medium text-slate-800 dark:text-slate-100">
-                    <GeneratedText id="m_1b547f5bc68503" />
-                  </span>
-                  <span className="mt-0.5 block text-xs text-slate-400 dark:text-slate-500">
-                    <GeneratedText id="m_132812ebfd0418" />
-                  </span>
-                </span>
-              </label>
+                <p className="text-xs text-slate-400 dark:text-slate-500">
+                  <GeneratedText id="m_00ab5fa78596f3" />
+                </p>
+              </div>
             </div>
           ) : null
         }

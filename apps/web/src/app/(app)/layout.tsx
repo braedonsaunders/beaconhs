@@ -27,6 +27,7 @@ import { resolveNavGroups } from '@/lib/nav/resolve'
 import { resolveWalkthroughs } from '@/lib/walkthroughs/service'
 import { getPlatformFeedbackSettings } from '@/lib/feedback-config'
 import { RegulatoryTerminologyProvider } from '@/components/regulatory-terminology'
+import { OfflineDraftsProvider } from '@/lib/offline-drafts/provider'
 
 // Every page in the authenticated app shell requires the per-request context
 // (auth + tenant + RLS-scoped DB), so none can be statically prerendered.
@@ -100,27 +101,35 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <ThemeProvider>
       <NavigationProvider>
-        <AppShell
-          ctx={{
-            isSuperAdmin: ctx.isSuperAdmin,
-            membership: ctx.membership,
-            tenantId: tenant.id,
-            tenantName: tenant.name,
-          }}
-          account={account}
-          groups={navGroups}
-          availableTenants={available}
-          availableRoles={roles}
-          activeRole={activeRole}
-          unreadCount={unread}
-          defaultCollapsed={defaultCollapsed}
-          impersonation={impersonation}
-          canUseAssistant={can(ctx, 'assistant.use')}
-          canUseFeedback={can(ctx, 'feedback.use') && feedback.ready}
-          appVersion={appVersion()}
-          locale={ctx.locale}
+        {/* Device-side form drafts are scoped to this tenant + user (and the
+            real admin while impersonating) so a shared tablet never shows
+            someone else's unsynced work. */}
+        <OfflineDraftsProvider
+          tenantId={ctx.tenantId}
+          userId={ctx.userId}
+          actorUserId={ctx.impersonation?.actor.userId ?? null}
         >
-          {/* Remount the page subtree when the active tenant — or effective
+          <AppShell
+            ctx={{
+              isSuperAdmin: ctx.isSuperAdmin,
+              membership: ctx.membership,
+              tenantId: tenant.id,
+              tenantName: tenant.name,
+            }}
+            account={account}
+            groups={navGroups}
+            availableTenants={available}
+            availableRoles={roles}
+            activeRole={activeRole}
+            unreadCount={unread}
+            defaultCollapsed={defaultCollapsed}
+            impersonation={impersonation}
+            canUseAssistant={can(ctx, 'assistant.use')}
+            canUseFeedback={can(ctx, 'feedback.use') && feedback.ready}
+            appVersion={appVersion()}
+            locale={ctx.locale}
+          >
+            {/* Remount the page subtree when the active tenant — or effective
               user, while impersonating — changes. router.refresh() (fired by the
               tenant switcher) re-renders server components but PRESERVES client
               state across the refresh, so any 'use client' page that seeds
@@ -128,25 +137,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               would keep showing the previous tenant's values. Keying here resets
               that whole class of state in one place; the shell/sidebar stay
               mounted and update via fresh props as before. */}
-          <RiskMatrixProvider matrix={tenant.riskMatrix}>
-            <RegulatoryTerminologyProvider value={ctx.regulatory ?? DEFAULT_REGULATORY_TERMINOLOGY}>
-              <BackNavProviders>
-                <Fragment key={`${ctx.tenantId}:${ctx.userId}:${ctx.activeRoleId ?? 'all'}`}>
-                  <GeneratedValue value={children} />
-                </Fragment>
-              </BackNavProviders>
-            </RegulatoryTerminologyProvider>
-          </RiskMatrixProvider>
-          <Toaster richColors position="top-right" />
-          <ConfirmRoot />
-          {/* Suspense: the provider reads useSearchParams (tour launch links). */}
-          <Suspense fallback={null}>
-            <WalkthroughProvider
-              availableIds={walkthroughs.visible.map((v) => v.walkthrough.id)}
-              autoStartId={walkthroughs.autoStartId}
-            />
-          </Suspense>
-        </AppShell>
+            <RiskMatrixProvider matrix={tenant.riskMatrix}>
+              <RegulatoryTerminologyProvider
+                value={ctx.regulatory ?? DEFAULT_REGULATORY_TERMINOLOGY}
+              >
+                <BackNavProviders>
+                  <Fragment key={`${ctx.tenantId}:${ctx.userId}:${ctx.activeRoleId ?? 'all'}`}>
+                    <GeneratedValue value={children} />
+                  </Fragment>
+                </BackNavProviders>
+              </RegulatoryTerminologyProvider>
+            </RiskMatrixProvider>
+            <Toaster richColors position="top-right" />
+            <ConfirmRoot />
+            {/* Suspense: the provider reads useSearchParams (tour launch links). */}
+            <Suspense fallback={null}>
+              <WalkthroughProvider
+                availableIds={walkthroughs.visible.map((v) => v.walkthrough.id)}
+                autoStartId={walkthroughs.autoStartId}
+              />
+            </Suspense>
+          </AppShell>
+        </OfflineDraftsProvider>
       </NavigationProvider>
     </ThemeProvider>
   )

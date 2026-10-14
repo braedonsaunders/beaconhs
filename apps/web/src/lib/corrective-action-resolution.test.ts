@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   materialize: vi.fn(),
 }))
 vi.mock('@beaconhs/tenant', () => ({ assertCan: mocks.assertCan }))
-vi.mock('./visibility', () => ({ canSeeRecord: mocks.canSee }))
+vi.mock('@beaconhs/tenant/visibility', () => ({ canSeeRecord: mocks.canSee }))
 vi.mock('./audit', () => ({ recordAuditInTransaction: mocks.audit }))
 vi.mock('@beaconhs/compliance', () => ({ materializeEvidenceTargetObligations: mocks.materialize }))
 vi.mock('@beaconhs/events', () => ({

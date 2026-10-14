@@ -6,8 +6,8 @@ import type { SigningContext } from './hazid-signing'
 vi.mock('server-only', () => ({}))
 vi.mock('./flows/adapters/hazid', () => ({ createHazidFlowAdapter: vi.fn() }))
 vi.mock('@/app/(app)/apps/_lib/entity-loader', () => ({ loadEntitiesForPickers: vi.fn() }))
-vi.mock('./visibility', () => ({ canSeeRecord: vi.fn() }))
-import { canSeeRecord } from './visibility'
+vi.mock('@beaconhs/tenant/visibility', () => ({ canSeeRecord: vi.fn() }))
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { lockHazidForSigning, requireOwnHazidSignature } from './hazid-signing'
 
 const ctx = { tenantId: 'tenant-123', userId: 'user-456', permissions: new Set() } as SigningContext

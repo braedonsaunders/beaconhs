@@ -20,7 +20,7 @@ import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
-import { canSeeRecord, moduleScopeWhere } from '@/lib/visibility'
+import { canSeeRecord, moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import {
   addIntervalToDate,
   formatInterval,

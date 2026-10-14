@@ -21,7 +21,7 @@ import { nextReference } from '@/lib/reference'
 import { addInterval } from '@/lib/equipment/intervals'
 import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'
 import { recordAuditInTransaction } from '@/lib/audit'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 
 type EqAnswer = 'pass' | 'fail' | 'n_a'
 type EqSeverity = 'low' | 'medium' | 'high' | 'critical'

@@ -27,9 +27,14 @@ describe('reopening a builder response', () => {
       decideDraftSave(draftData, {
         sessionId: 'new-session',
         sequence: 1,
-        baseRevision: state.initialDraftRevision,
+        baseRevision: state.initialDraftCursor.revision,
       }),
     ).toEqual({ kind: 'apply', nextRevision: 8 })
+    expect(state.initialDraftCursor).toEqual({
+      revision: 7,
+      sessionId: 'previous-session',
+      sequence: 9,
+    })
   })
   it('reads final answers after submission instead of a stale draft', () => {
     const state = responseInitialState(schema, {

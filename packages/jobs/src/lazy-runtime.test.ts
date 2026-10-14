@@ -281,8 +281,8 @@ describe('lazy jobs runtime', () => {
       pattern: '* * * * *',
     })
     expect(repeatOptions).toContainEqual({
-      key: 'tick-journal-analysis',
-      pattern: '20 * * * *',
+      key: 'tick-briefs',
+      pattern: '* * * * *',
     })
   })
 

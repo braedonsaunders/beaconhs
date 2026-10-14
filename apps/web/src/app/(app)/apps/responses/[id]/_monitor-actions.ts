@@ -12,7 +12,7 @@ import { isFormResponseParentLockedError, lockFormResponseForMutation } from '@b
 import { formResponseCheckins, formResponses, formTemplates } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recordAudit } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
 import { canAccessTemplate } from '@/app/(app)/apps/_lib/access'

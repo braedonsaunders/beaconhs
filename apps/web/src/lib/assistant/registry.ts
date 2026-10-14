@@ -8,10 +8,11 @@ import { tool, type ToolSet } from 'ai'
 import type { RequestContext } from '@beaconhs/tenant'
 import { canRunTool } from './gate'
 import { READ_TOOLS } from './tools'
+import { BRIEF_TOOLS } from './tools-briefs'
 import { WRITE_TOOLS } from './tools-write'
 import type { AssistantToolDef, ToolResult, VisionToolData } from './types'
 
-const ASSISTANT_TOOLS: AssistantToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS]
+const ASSISTANT_TOOLS: AssistantToolDef[] = [...READ_TOOLS, ...BRIEF_TOOLS, ...WRITE_TOOLS]
 
 /** Provider-derived capabilities that change which tools are exposed this turn. */
 type ToolCapabilities = {

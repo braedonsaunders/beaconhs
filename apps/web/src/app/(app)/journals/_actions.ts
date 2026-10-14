@@ -24,22 +24,17 @@ import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { getObject, headObject } from '@beaconhs/storage'
 import type { RequestContext } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import {
-  getTenantAiConfig,
-  getTenantAutoJournalAi,
-  getTenantAutoJournalAnalysis,
-} from '@/lib/ai-config'
+import { getTenantAiConfig, getTenantAutoJournalAi } from '@/lib/ai-config'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { journalEntrySubmittedEvent } from '@beaconhs/integrations'
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'
+import { getAuthorPersonId, htmlToText } from './_lib'
 import {
-  getAuthorPersonId,
-  htmlToText,
   journalCanBrowseAll,
   journalCanReadAll,
   journalSelfScopeWhere,
   journalScopeWhere,
-} from './_lib'
+} from '@beaconhs/tenant/journal-scope'
 import { buildTree, getEntry, getOrCreateEntryForDate, getWorkspaceData } from './_data'
 import { sendJournalEntryEmail } from './_send-email'
 import type {
@@ -377,14 +372,6 @@ export async function submitEntry(id: string): Promise<ActionOk | ActionErr> {
     if (await getTenantAutoJournalAi(ctx)) await applyEntryAi(ctx, id)
   } catch {
     /* ignore AI failures on submit */
-  }
-  try {
-    if (await getTenantAutoJournalAnalysis(ctx)) {
-      const { enqueueAiJob } = await import('@beaconhs/jobs')
-      await enqueueAiJob({ kind: 'journal_analysis_run', tenantId: ctx.tenantId, days: 7 })
-    }
-  } catch {
-    /* queueing a refresh must never block submit */
   }
   revalidatePath('/journals')
   return { ok: true }

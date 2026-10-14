@@ -5,7 +5,7 @@
 import { and, eq, isNull } from 'drizzle-orm'
 import { incidents } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recordAudit } from '@/lib/audit'
 import { renderModulePdfResponse } from '@/lib/module-pdf'
 import { isUuid } from '@/lib/list-params'

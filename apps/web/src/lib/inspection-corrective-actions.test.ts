@@ -11,7 +11,7 @@ vi.mock('./corrective-action-resolution', () => ({
   resumeCorrectiveActionInTx: mocks.resume,
 }))
 vi.mock('./audit', () => ({ recordAuditInTransaction: vi.fn() }))
-vi.mock('./visibility', () => ({ canSeeRecord: vi.fn().mockResolvedValue(true) }))
+vi.mock('@beaconhs/tenant/visibility', () => ({ canSeeRecord: vi.fn().mockResolvedValue(true) }))
 vi.mock('./reference', () => ({ nextReference: vi.fn().mockResolvedValue('CA-TEST') }))
 vi.mock('./attachment-validation', () => ({ validateTenantImageAttachmentIdsInTx: vi.fn() }))
 vi.mock('@beaconhs/compliance', () => ({ materializeEvidenceTargetObligations: vi.fn() }))

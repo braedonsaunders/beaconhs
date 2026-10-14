@@ -12,7 +12,7 @@ import { recordModuleFlowEvent } from '@beaconhs/events'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import {
   optionalTextInput,
   optionalUuidInput,

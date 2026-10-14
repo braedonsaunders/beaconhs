@@ -78,11 +78,13 @@ describe('queue payload validation', () => {
       assertAiJobData({
         kind: 'journal_analysis_run',
         tenantId: TENANT_ID,
-        days: 14,
       } as unknown as Parameters<typeof assertAiJobData>[0]),
-    ).toThrow(/7, 30, or 90/)
+    ).toThrow(/kind/)
+    expect(() => assertAiJobData({ kind: 'brief_run', tenantId: TENANT_ID, runId: 'bad' })).toThrow(
+      /runId/,
+    )
     expect(() =>
-      assertAiJobData({ kind: 'journal_analysis_run', tenantId: TENANT_ID, days: 30 }),
+      assertAiJobData({ kind: 'brief_run', tenantId: TENANT_ID, runId: OTHER_ID }),
     ).not.toThrow()
   })
 

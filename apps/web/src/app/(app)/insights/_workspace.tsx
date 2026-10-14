@@ -21,10 +21,10 @@ import { vizDef, type AnalyticsEntity } from '@beaconhs/analytics'
 import type { DashboardParam, DashboardParamMap } from '@beaconhs/db/schema'
 import { InsightsGrid, type GridItem } from './_grid'
 import { DashboardFilters, type ParamCard } from './_filter-bar.client'
-import { JournalAnalysisWidget } from './_ai-widget'
+import { BriefWidget, type BriefWidgetData } from '@/components/briefs/brief-widget'
 import { CardCell } from './_viz/card-cell.client'
 import { PublishControl, type PublishRoleOption } from './_publish-control.client'
-import { BESPOKE_INSIGHT_WIDGETS, INSIGHT_CATEGORY_LABELS } from './_widgets'
+import { briefWidgetId, INSIGHT_CATEGORY_LABELS } from './_widgets'
 import {
   createDashboard,
   deleteDashboard,
@@ -35,7 +35,6 @@ import {
   unpublishDashboard,
 } from './_actions'
 import type { CardRender, InsightDashboardRow } from './_data'
-import type { JournalAnalysisSnapshot } from './_ai-actions'
 import type { CardRow } from './cards/_data'
 import { confirmDialog } from '@/lib/confirm'
 import { INSIGHT_DASHBOARD_NAME_MAX_LENGTH } from '@/lib/persisted-text-policy'
@@ -53,8 +52,7 @@ type Board = {
 
 export function InsightsWorkspace({
   initialDashboards,
-  aiEnabled,
-  journalAnalysisRuns,
+  briefWidgets,
   paletteCards,
   cardRenders,
   canCreate,
@@ -63,8 +61,8 @@ export function InsightsWorkspace({
   entities,
 }: {
   initialDashboards: InsightDashboardRow[]
-  aiEnabled: boolean
-  journalAnalysisRuns: JournalAnalysisSnapshot[]
+  /** AI briefs the viewer may read, each placeable as a widget. */
+  briefWidgets: BriefWidgetData[]
   paletteCards: CardRow[]
   cardRenders: Record<string, CardRender>
   canCreate: boolean
@@ -104,14 +102,11 @@ export function InsightsWorkspace({
   const dirty = active ? JSON.stringify(active.widgets) !== baselines[active.id] : false
 
   // Card renders are keyed by `${dashboardId}:${cardId}` so each board sees its
-  // own params applied. Resolve the active board's cards into the node map; the
-  // AI journal analysis is the one remaining bespoke (non-card) widget.
+  // own params applied. Resolve the active board's cards into the node map; AI
+  // briefs render their latest run.
   const nodes = useMemo(() => {
-    const r: Record<string, ReactNode> = {
-      'ai-analysis': (
-        <JournalAnalysisWidget aiEnabled={aiEnabled} initialRuns={journalAnalysisRuns} />
-      ),
-    }
+    const r: Record<string, ReactNode> = {}
+    for (const brief of briefWidgets) r[briefWidgetId(brief.id)] = <BriefWidget data={brief} />
     if (active) {
       for (const w of active.widgets) {
         const render = cardRenders[`${active.id}:${w.id}`]
@@ -119,7 +114,7 @@ export function InsightsWorkspace({
       }
     }
     return r
-  }, [aiEnabled, journalAnalysisRuns, cardRenders, active])
+  }, [briefWidgets, cardRenders, active])
 
   // The cards currently placed on the active board + their entity columns — the
   // targets the filter-settings drawer maps params onto.
@@ -149,13 +144,13 @@ export function InsightsWorkspace({
   // BHQL built-in is already a published Card and would otherwise show twice.
   const paletteItems = useMemo<GridItem[]>(
     () => [
-      ...BESPOKE_INSIGHT_WIDGETS.map((w) => ({
-        id: w.id,
-        label: w.label,
-        description: w.description,
-        category: w.category as string,
-        minSize: w.minSize,
-        defaultSize: w.defaultSize,
+      ...briefWidgets.map((brief) => ({
+        id: briefWidgetId(brief.id),
+        label: brief.name,
+        description: 'AI brief — the latest delivered brief',
+        category: 'ai',
+        minSize: { w: 4, h: 4 },
+        defaultSize: { w: 6, h: 6 },
       })),
       ...paletteCards.map((c) => {
         const vd = vizDef(c.vizType)
@@ -169,7 +164,7 @@ export function InsightsWorkspace({
         }
       }),
     ],
-    [paletteCards],
+    [briefWidgets, paletteCards],
   )
   const categoryLabels = useMemo(() => ({ ...INSIGHT_CATEGORY_LABELS, cards: 'Cards' }), [])
 

@@ -45,7 +45,7 @@ import {
   freezeHazidSigning,
   setHazidAppsLocked as setLinkedAssessmentAppsLocked,
 } from '@/lib/hazid-signing'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { moduleFlowCommand, recordDomainEvent, recordModuleFlowEvent } from '@beaconhs/events'

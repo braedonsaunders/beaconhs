@@ -29,20 +29,16 @@ import {
 import { getTenantAiConfig } from '@/lib/ai-config'
 import { attachmentUrl } from '@/lib/attachment-url'
 import { can, type RequestContext } from '@beaconhs/tenant'
+import { getAuthorPersonId, htmlToText, nextJournalReference, snippetOf, todayISO } from './_lib'
 import {
   authorTenantUserId,
-  getAuthorPersonId,
-  htmlToText,
   journalAuthorScopeWhere,
   journalAuthorPersonId,
   journalCanBrowseAll,
   journalCanReadAll,
   journalScopeWhere,
   journalSelfScopeWhere,
-  nextJournalReference,
-  snippetOf,
-  todayISO,
-} from './_lib'
+} from '@beaconhs/tenant/journal-scope'
 import { canCreateJournal, canMutateJournalEntry } from './_mutation-policy'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'

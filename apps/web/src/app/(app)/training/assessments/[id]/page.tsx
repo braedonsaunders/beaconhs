@@ -29,7 +29,7 @@ import {
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate, formatDateTime } from '@/lib/datetime'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { PageContainer } from '@/components/page-layout'
 import { DetailGrid } from '@/components/detail-grid'
 import { DownloadLink } from '@/components/download-link'

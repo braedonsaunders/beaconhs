@@ -3,7 +3,7 @@
 import { and, asc, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm'
 import { hazidAssessments, orgUnits } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import {
   boundPickerOptions,
   PICKER_RESULT_LIMIT,

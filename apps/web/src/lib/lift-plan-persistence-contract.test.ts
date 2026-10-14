@@ -10,7 +10,7 @@ const sketchPad = readFileSync(new URL('../components/sketch-pad.tsx', import.me
 describe('lift-plan field persistence contract', () => {
   it('flushes the newest rich-text value on blur', () => {
     expect(renderer).toContain('latestValue.current = v')
-    expect(renderer).toContain('onBlur={() => commit(latestValue.current)}')
+    expect(renderer).toContain('onBlur={() => commit(latestValue.current, false)}')
     expect(renderer).not.toContain('onBlur={() => commit(value)}')
   })
 

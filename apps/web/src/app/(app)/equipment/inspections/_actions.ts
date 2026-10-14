@@ -38,7 +38,7 @@ import {
 import { isUuid } from '@/lib/list-params'
 import { sanitizeFrom } from '@/lib/back-nav'
 import { parsePhotoEdits } from '@/lib/photo-edits'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import {
   finaliseEquipmentInspection,
   reconcileEquipmentInspectionDatesInTx,

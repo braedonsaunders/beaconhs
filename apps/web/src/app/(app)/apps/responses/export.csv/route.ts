@@ -15,7 +15,7 @@ import {
 } from '@beaconhs/db/schema'
 import { requireExportContext } from '@/lib/auth'
 import { responsePayload } from '../../_lib/response-payload'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { recordAudit } from '@/lib/audit'
 import {
   CSV_EXPORT_QUERY_LIMIT,

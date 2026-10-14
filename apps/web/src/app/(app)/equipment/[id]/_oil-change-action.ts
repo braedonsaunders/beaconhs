@@ -8,7 +8,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { recordAuditInTransaction } from '@/lib/audit'
 import { optionalDateInput, requireUuidInput } from '@/lib/mutation-input'
 import { addIntervalToDate } from '@/lib/equipment/intervals'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 
 export async function saveOilChange(form: FormData) {
   const ctx = await requireRequestContext()

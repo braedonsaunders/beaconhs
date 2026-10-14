@@ -2,7 +2,13 @@ import type { Job } from 'bullmq'
 import { and, eq } from 'drizzle-orm'
 import { sendVia } from '@beaconhs/emails'
 import { db, withSuperAdmin } from '@beaconhs/db'
-import { emailLog, reportRunDeliveries, reportRuns } from '@beaconhs/db/schema'
+import {
+  briefRunDeliveries,
+  briefRuns,
+  emailLog,
+  reportRunDeliveries,
+  reportRuns,
+} from '@beaconhs/db/schema'
 import { isNotificationCategoryEnabled } from '@beaconhs/events'
 import type { EmailJobData } from '@beaconhs/jobs'
 import { requireEmailTransport, resolveEmailDelivery } from '../lib/resolve-email-transport'
@@ -38,29 +44,27 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
   const recipients = asArray(job.data.to)
   const tenantId = job.data.meta?.tenantId ?? null
   const categoryKey = job.data.meta?.category ?? null
-  const reportRunDeliveryId = job.data.meta?.reportRunDeliveryId ?? null
-  if (reportRunDeliveryId) {
-    const delivery = await withSuperAdmin(db, async (tx) => {
-      const [row] = await tx
+  const runDelivery = deliveryRef(job.data.meta)
+  if (runDelivery) {
+    const ledger = runDelivery.kind === 'report' ? reportRunDeliveries : briefRunDeliveries
+    const row = await withSuperAdmin(db, async (tx) => {
+      const [found] = await tx
         .select({
-          tenantId: reportRunDeliveries.tenantId,
-          recipientEmail: reportRunDeliveries.recipientEmail,
-          status: reportRunDeliveries.status,
+          tenantId: ledger.tenantId,
+          recipientEmail: ledger.recipientEmail,
+          status: ledger.status,
         })
-        .from(reportRunDeliveries)
-        .where(eq(reportRunDeliveries.id, reportRunDeliveryId))
+        .from(ledger)
+        .where(eq(ledger.id, runDelivery.id))
         .limit(1)
-      return row ?? null
+      return found ?? null
     })
-    if (!delivery) throw new Error('Report email delivery record was not found')
-    if (delivery.tenantId !== tenantId) throw new Error('Report email delivery tenant mismatch')
-    if (
-      recipients.length !== 1 ||
-      recipients[0]?.trim().toLowerCase() !== delivery.recipientEmail
-    ) {
-      throw new Error('Report email recipient does not match its delivery record')
+    if (!row) throw new Error('Email delivery record was not found')
+    if (row.tenantId !== tenantId) throw new Error('Email delivery tenant mismatch')
+    if (recipients.length !== 1 || recipients[0]?.trim().toLowerCase() !== row.recipientEmail) {
+      throw new Error('Email recipient does not match its delivery record')
     }
-    if (delivery.status === 'sent') return
+    if (row.status === 'sent') return
   }
 
   // A worker can be marked stalled after the provider succeeded but before
@@ -83,7 +87,7 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
         .limit(1),
     )
     if (alreadySent) {
-      await updateReportDelivery(reportRunDeliveryId, {
+      await updateRunDelivery(runDelivery, {
         status: 'sent',
         error: null,
         sentAt: new Date(),
@@ -151,7 +155,7 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
 
   // Global kill switch: recorded, not sent, not retried.
   if (suppressed) {
-    await updateReportDelivery(reportRunDeliveryId, {
+    await updateRunDelivery(runDelivery, {
       status: 'failed',
       error: categorySuppressed
         ? `Automatic ${categoryKey} notifications are disabled for this workspace.`
@@ -190,7 +194,7 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
           .where(eqLogId(logId)),
       )
     }
-    await updateReportDelivery(reportRunDeliveryId, {
+    await updateRunDelivery(runDelivery, {
       status: 'sent',
       error: null,
       sentAt: new Date(),
@@ -209,7 +213,7 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
       )
     }
     const finalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1)
-    await updateReportDelivery(reportRunDeliveryId, {
+    await updateRunDelivery(runDelivery, {
       status: finalAttempt ? 'failed' : 'enqueued',
       error: message,
     })
@@ -217,37 +221,51 @@ export async function processEmail(job: Job<EmailJobData>): Promise<void> {
   }
 }
 
-async function updateReportDelivery(
-  id: string | null,
+type DeliveryRef = { kind: 'report' | 'brief'; id: string }
+
+function deliveryRef(meta: EmailJobData['meta']): DeliveryRef | null {
+  if (meta?.reportRunDeliveryId) return { kind: 'report', id: meta.reportRunDeliveryId }
+  if (meta?.briefRunDeliveryId) return { kind: 'brief', id: meta.briefRunDeliveryId }
+  return null
+}
+
+/**
+ * Record a per-recipient outcome on a scheduled report or brief run, and set
+ * the run's terminal status once no delivery is still pending.
+ */
+async function updateRunDelivery(
+  ref: DeliveryRef | null,
   values: {
     status: 'enqueued' | 'sent' | 'failed'
     error: string | null
     sentAt?: Date
   },
 ): Promise<void> {
-  if (!id) return
+  if (!ref) return
+  const ledger = ref.kind === 'report' ? reportRunDeliveries : briefRunDeliveries
+  const runs = ref.kind === 'report' ? reportRuns : briefRuns
   await withSuperAdmin(db, async (tx) => {
     const [delivery] = await tx
-      .update(reportRunDeliveries)
+      .update(ledger)
       .set(values)
-      .where(eq(reportRunDeliveries.id, id))
-      .returning({ runId: reportRunDeliveries.runId })
+      .where(eq(ledger.id, ref.id))
+      .returning({ runId: ledger.runId })
     if (!delivery || values.status === 'enqueued') return
 
     const deliveries = await tx
-      .select({ status: reportRunDeliveries.status, error: reportRunDeliveries.error })
-      .from(reportRunDeliveries)
-      .where(eq(reportRunDeliveries.runId, delivery.runId))
+      .select({ status: ledger.status, error: ledger.error })
+      .from(ledger)
+      .where(eq(ledger.runId, delivery.runId))
     if (deliveries.some((row) => row.status === 'queued' || row.status === 'enqueued')) return
 
     const failures = deliveries.filter((row) => row.status === 'failed')
     await tx
-      .update(reportRuns)
+      .update(runs)
       .set(
         failures.length > 0
           ? {
               status: 'failed',
-              error: `${failures.length} report email delivery attempt(s) failed: ${failures
+              error: `${failures.length} email delivery attempt(s) failed: ${failures
                 .map((row) => row.error)
                 .filter(Boolean)
                 .join('; ')}`,
@@ -255,7 +273,7 @@ async function updateReportDelivery(
             }
           : { status: 'succeeded', error: null, finishedAt: new Date() },
       )
-      .where(eq(reportRuns.id, delivery.runId))
+      .where(eq(runs.id, delivery.runId))
   })
 }
 

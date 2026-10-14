@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Database } from '@beaconhs/db'
 import { BUILTIN_ROLES, PERMISSION_CATALOGUE } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
-import { canSeeRecord, moduleScopeWhere } from './visibility'
+import { canSeeRecord, moduleScopeWhere } from '@beaconhs/tenant/visibility'
 
 function context(permissions: string[]): RequestContext {
   return {

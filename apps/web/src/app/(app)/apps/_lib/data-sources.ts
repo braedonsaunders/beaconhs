@@ -30,7 +30,7 @@ import {
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { isUuid } from '@/lib/list-params'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import {
   DataSourceQueryInputError,
   assertDataSourceColumn,

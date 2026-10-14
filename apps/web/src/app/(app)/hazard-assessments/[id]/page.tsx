@@ -63,7 +63,7 @@ import { attachmentUrl } from '@/lib/attachment-url'
 import { revalidatePath } from 'next/cache'
 import { requireRequestContext } from '@/lib/auth'
 import { can } from '@beaconhs/tenant'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { FlowApprovals } from '@/components/flows/flow-approvals'
 import { getPendingFlowGatesForSubject } from '@/lib/flows/gate-store'
@@ -81,6 +81,7 @@ import {
   templateAccessWhere,
 } from '@/app/(app)/apps/_lib/access'
 import { FormRenderer } from '@/app/(app)/apps/templates/[id]/fill/form-renderer'
+import type { DraftServerCursor } from '@/lib/offline-drafts/model'
 import type { EntityAttrsByField, FormSchemaV1 } from '@beaconhs/forms-core'
 import { PhotoGallery } from '@/components/photo-gallery'
 import { PremiumSection as Section } from '@/components/premium-section'
@@ -493,7 +494,7 @@ export default async function HazidAssessmentDetailPage({
     initialValues: Record<string, unknown>
     initialRows: Record<string, Array<Record<string, unknown>>>
     initialStepIndex: number
-    initialDraftRevision: number
+    initialDraftCursor: DraftServerCursor
     resumeOk: boolean
   } | null = null
   if (appParam) {
@@ -541,7 +542,7 @@ export default async function HazidAssessmentDetailPage({
       })
       if (loaded) {
         const resp = response
-        const { initialValues, initialRows, initialStepIndex, initialDraftRevision, isResumed } =
+        const { initialValues, initialRows, initialStepIndex, initialDraftCursor, isResumed } =
           responseInitialState(loaded.version.schema, resp)
         const entitiesByField = await loadEntitiesForPickers(
           ctx,
@@ -566,7 +567,7 @@ export default async function HazidAssessmentDetailPage({
           initialValues,
           initialRows,
           initialStepIndex,
-          initialDraftRevision,
+          initialDraftCursor,
           resumeOk: isResumed,
         }
       }
@@ -1623,7 +1624,7 @@ export default async function HazidAssessmentDetailPage({
                 initialValues={appFill.initialValues}
                 initialRows={appFill.initialRows}
                 initialStepIndex={appFill.initialStepIndex}
-                initialDraftRevision={appFill.initialDraftRevision}
+                initialDraftCursor={appFill.initialDraftCursor}
                 isResumed={appFill.resumeOk}
                 returnTo={`/hazard-assessments/${id}#section-apps`}
               />

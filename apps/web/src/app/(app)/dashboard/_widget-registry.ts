@@ -295,6 +295,15 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     defaultSize: { w: 6, h: 5 },
     minSize: { w: 3, h: 4 },
   },
+  'ai-briefs': {
+    id: 'ai-briefs',
+    category: 'operations',
+    label: 'AI briefs',
+    description: 'The headline of the latest delivered brief from each AI brief you can read.',
+    defaultSize: { w: 6, h: 5 },
+    minSize: { w: 3, h: 4 },
+    rolesShown: ['super_admin', 'tenant_admin', 'safety_manager', 'foreman'],
+  },
   'personal-my-compliance': {
     id: 'personal-my-compliance',
     category: 'personal',

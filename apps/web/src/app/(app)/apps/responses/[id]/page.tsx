@@ -52,7 +52,7 @@ import { loadEntitiesForPickers } from '@/app/(app)/apps/_lib/entity-loader'
 import { responsePayload } from '@/app/(app)/apps/_lib/response-payload'
 import { requireRequestContext } from '@/lib/auth'
 import { attachmentUrl } from '@/lib/attachment-url'
-import { canSeeRecord, moduleScopeWhere } from '@/lib/visibility'
+import { canSeeRecord, moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { activityPageForEntity, recordAuditInTransaction } from '@/lib/audit'
 import { Section } from '@/components/section'
 import { DetailPageLayout } from '@/components/page-layout'
@@ -75,6 +75,7 @@ import {
 } from '@/app/(app)/apps/_lib/access'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { FormRenderer } from '@/app/(app)/apps/templates/[id]/fill/form-renderer'
+import { OnlineActionForm } from '@/components/online-action-form'
 import {
   finalizeResponse,
   lockResponse,
@@ -823,24 +824,34 @@ export default async function FormResponsePage({
                         value={
                           canEditRecord &&
                           (response.status === 'draft' || response.status === 'in_progress') ? (
-                            <form action={finalizeResponse} className="inline">
+                            <OnlineActionForm
+                              action={finalizeResponse}
+                              purpose="finish"
+                              syncResponseId={id}
+                              className="inline"
+                            >
                               <input type="hidden" name="responseId" value={id} />
                               <Button type="submit" variant="default">
                                 <CheckCircle2 size={14} /> <GeneratedText id="m_0263993096fef0" />
                               </Button>
-                            </form>
+                            </OnlineActionForm>
                           ) : null
                         }
                       />
                       <GeneratedValue
                         value={
                           canLockRecord ? (
-                            <form action={lockResponse} className="inline">
+                            <OnlineActionForm
+                              action={lockResponse}
+                              purpose="finish"
+                              syncResponseId={id}
+                              className="inline"
+                            >
                               <input type="hidden" name="responseId" value={id} />
                               <Button type="submit" variant="outline">
                                 <Lock size={14} /> <GeneratedText id="m_19f2c846c5777a" />
                               </Button>
-                            </form>
+                            </OnlineActionForm>
                           ) : null
                         }
                       />

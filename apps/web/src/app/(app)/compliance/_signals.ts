@@ -30,7 +30,7 @@ import {
   trainingRecords,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 
 export type SignalStatus = 'overdue' | 'expired' | 'due_soon' | 'open'
 

@@ -1,4 +1,4 @@
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { activePeopleWhere, activeTenantUsersWhere } from '@beaconhs/db'
 import { recordSearchWhere } from '@/lib/record-search'
 import { NextResponse } from 'next/server'
@@ -66,6 +66,7 @@ import {
 import { primaryPersonTitleName } from '@beaconhs/db'
 import { can, type RequestContext } from '@beaconhs/tenant'
 import { getRequestContext } from '../../../lib/auth'
+import { canManageBriefs } from '../../../lib/briefs/access'
 import { getEffectiveRoleKeys } from '../../../lib/effective-roles'
 import { moduleAdminByKey } from '../../../lib/module-admin/registry'
 import {
@@ -76,7 +77,7 @@ import {
   type PickerOptionsResponse,
 } from '../../../lib/picker-options'
 import { isUuid } from '../../../lib/list-params'
-import { moduleScopeWhere } from '../../../lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { templateAccessWhere } from '../../(app)/apps/_lib/access'
 import { vehicleDriverScopeWhere } from '../../(app)/equipment/vehicle-log/_access-policy'
 import { resolveVehicleEquipmentWhere } from '../../(app)/equipment/vehicle-log/_equipment-policy'
@@ -314,6 +315,10 @@ function pickerAuthorized(ctx: RequestContext, lookup: PickerLookup): boolean {
       return can(ctx, 'documents.manage')
     case 'audit-log-actors':
       return can(ctx, 'admin.audit.read')
+    case 'brief-recipient-users':
+    case 'brief-recipient-groups':
+    case 'brief-departments':
+      return canManageBriefs(ctx)
     case 'ppe-active-people':
       return can(ctx, 'ppe.issue') || can(ctx, 'ppe.manage')
     case 'ppe-inspection-supervisors':
@@ -514,6 +519,71 @@ async function loadOptions(
         .orderBy(...personOrder(input.selected))
         .limit(PICKER_RESULT_LIMIT + 1)
       return boundPickerOptions(personOptions(rows))
+    }
+
+    if (lookup === 'brief-recipient-users') {
+      // Recipients are accounts (users.id): active members of this workspace.
+      const displayName = sql<string>`coalesce(${tenantUsers.displayName}, ${users.name}, ${users.email})`
+      const match = input.hasQuery
+        ? or(
+            ilike(tenantUsers.displayName, input.term),
+            ilike(users.name, input.term),
+            ilike(users.email, input.term),
+            input.selectedKey ? eq(users.id, input.selectedKey) : undefined,
+          )
+        : undefined
+      const rows = await tx
+        .select({ id: users.id, displayName, email: users.email })
+        .from(tenantUsers)
+        .innerJoin(users, eq(users.id, tenantUsers.userId))
+        .where(and(activeTenantUsersWhere(), match))
+        .orderBy(
+          ...(input.selectedKey ? [desc(sql`${users.id} = ${input.selectedKey}`)] : []),
+          asc(displayName),
+          asc(users.id),
+        )
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(rows.map((row) => option(row.id, row.displayName, row.email)))
+    }
+
+    if (lookup === 'brief-recipient-groups') {
+      const match = input.hasQuery
+        ? or(
+            ilike(personGroups.name, input.term),
+            input.selected ? eq(personGroups.id, input.selected) : undefined,
+          )
+        : undefined
+      const rows = await tx
+        .select({ id: personGroups.id, name: personGroups.name })
+        .from(personGroups)
+        .where(and(isNull(personGroups.deletedAt), match))
+        .orderBy(
+          ...(input.selected ? [desc(sql`${personGroups.id} = ${input.selected}`)] : []),
+          asc(personGroups.name),
+          asc(personGroups.id),
+        )
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(rows.map((row) => option(row.id, row.name)))
+    }
+
+    if (lookup === 'brief-departments') {
+      const match = input.hasQuery
+        ? or(
+            ilike(departments.name, input.term),
+            input.selected ? eq(departments.id, input.selected) : undefined,
+          )
+        : undefined
+      const rows = await tx
+        .select({ id: departments.id, name: departments.name })
+        .from(departments)
+        .where(match)
+        .orderBy(
+          ...(input.selected ? [desc(sql`${departments.id} = ${input.selected}`)] : []),
+          asc(departments.name),
+          asc(departments.id),
+        )
+        .limit(PICKER_RESULT_LIMIT + 1)
+      return boundPickerOptions(rows.map((row) => option(row.id, row.name)))
     }
 
     if (lookup === 'audit-log-actors') {

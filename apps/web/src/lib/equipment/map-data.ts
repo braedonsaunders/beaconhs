@@ -7,7 +7,7 @@ import {
   syncConnections,
 } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { isUuid } from '@/lib/list-params'
 import { formatDateTime } from '@/lib/datetime'
 import { TELEMETRY_HEALTH_LABELS, telemetryHealthSql } from './telemetry'

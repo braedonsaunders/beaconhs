@@ -251,6 +251,11 @@ export const PERMISSION_CATALOGUE = [
   'reports.read',
   'reports.builder',
   'reports.schedule',
+  // AI Briefs — scheduled, AI-written analyses of tenant data. `read` = view
+  // briefs, their runs, and brief widgets; `manage` = create/edit briefs and
+  // schedules, preview, and run them on demand.
+  'briefs.read',
+  'briefs.manage',
   // Dashboards
   'dashboards.read',
   'dashboards.edit',
@@ -370,6 +375,7 @@ export const BUILTIN_ROLES: Record<
       'compliance.read',
       'compliance.assign',
       'reports.read',
+      'briefs.read',
       'dashboards.read',
       'insights.read',
       'tools.safe-distance.use',
@@ -438,6 +444,8 @@ export const BUILTIN_ROLES: Record<
       'reports.read',
       'reports.builder',
       'reports.schedule',
+      'briefs.read',
+      'briefs.manage',
       'dashboards.read',
       'dashboards.edit',
       'insights.read',

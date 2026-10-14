@@ -87,7 +87,7 @@ import { Pagination } from '@/components/pagination'
 import { isUuid, pickString } from '@/lib/list-params'
 import { CustomFieldsSection } from '@/components/custom-fields/custom-fields-section'
 import { assertCanManageModule, canManageModule } from '@/lib/module-admin/guard'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import {
   getPersonSyncOrigin,
   SYNC_OWNED_PERSON_FIELDS,

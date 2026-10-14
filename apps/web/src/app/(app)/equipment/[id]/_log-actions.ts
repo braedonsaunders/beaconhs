@@ -7,7 +7,7 @@ import type { Database } from '@beaconhs/db'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { requireRequestContext } from '../../../../lib/auth'
-import { canSeeRecord } from '../../../../lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { recordAuditInTransaction } from '../../../../lib/audit'
 import {
   EQUIPMENT_LOG_KINDS,

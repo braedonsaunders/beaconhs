@@ -3,12 +3,11 @@
 // exist without a valid key), then check the relevant permission.
 
 import { NextResponse } from 'next/server'
-import { REPORT_ENTITY_MAP } from '@beaconhs/reports'
 import { authenticateApiKey } from '@/lib/api/auth'
 import { readApiJsonBody } from '@/lib/api/body'
 import { ApiError, errorResponse, noStore } from '@/lib/api/errors'
 import { readEntityRows } from '@/lib/api/query'
-import { keyHasPermission, readPermissionForEntity } from '@/lib/api/permissions'
+import { keyHasPermission, readPermissionForEntity, publicApiEntity } from '@/lib/api/permissions'
 import { createEntity, isWritable, writePermissionForEntity } from '@/lib/api/write'
 import { runIdempotentMutation } from '@/lib/api/idempotency'
 
@@ -22,7 +21,7 @@ export async function GET(
   try {
     const { ctx, key } = await authenticateApiKey(req)
     const { entity: entityKey } = await params
-    const entity = REPORT_ENTITY_MAP[entityKey]
+    const entity = publicApiEntity(entityKey)
     if (!entity) throw ApiError.notFound(`Unknown entity "${entityKey}"`)
     const requiredPermission = readPermissionForEntity(entity)
     if (!keyHasPermission(key.permissions, requiredPermission)) {
@@ -50,7 +49,7 @@ export async function POST(
     const auth = await authenticateApiKey(req)
     const { ctx, key } = auth
     const { entity: entityKey } = await params
-    const entity = REPORT_ENTITY_MAP[entityKey]
+    const entity = publicApiEntity(entityKey)
     if (!entity) throw ApiError.notFound(`Unknown entity "${entityKey}"`)
     if (!isWritable(entityKey)) {
       throw ApiError.methodNotAllowed(`"${entityKey}" is read-only — POST is not supported.`)

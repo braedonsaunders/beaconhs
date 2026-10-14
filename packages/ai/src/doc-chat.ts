@@ -55,7 +55,7 @@ export async function runDocAgent(
     maxSteps?: number
   },
 ): Promise<DocAgentResult> {
-  const model = getModel(config, 'smart')
+  const model = getModel(config, 'smart', 'documents')
   if (!model) throw new AIDisabledError()
 
   // Org identity rides on the config (see getTenantAiConfig).

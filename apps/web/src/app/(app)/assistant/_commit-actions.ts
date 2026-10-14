@@ -17,7 +17,7 @@ import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { requireRequestContext } from '@/lib/auth'
 import { recordAudit } from '@/lib/audit'
 import { nextReference } from '@/lib/reference'
-import { recordVisibilityWhere } from '@/lib/visibility'
+import { recordVisibilityWhere } from '@beaconhs/tenant/visibility'
 import { verifyProposal, type CaPreview, type IncidentPreview } from '@/lib/assistant/proposals'
 
 export type CommitResult =

@@ -1,6 +1,8 @@
 import { GeneratedText, GeneratedValue } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { BarChart3 } from 'lucide-react'
 import { AI_PROVIDER_SPECS } from '@beaconhs/ai'
 import { Button, Card, CardContent, DetailHeader } from '@beaconhs/ui'
 import { can } from '@beaconhs/tenant'
@@ -43,6 +45,13 @@ export default async function AiSettingsPage() {
           back={{ href: '/admin', label: 'Back to admin' }}
           title={tGenerated('m_037a53472f4289')}
           subtitle={tGenerated('m_01f771b5a5af6f')}
+          actions={
+            <Link href="/admin/ai/usage">
+              <Button variant="outline">
+                <BarChart3 size={14} /> <GeneratedText id="m_0ae3b4ff7213f7" />
+              </Button>
+            </Link>
+          }
         />
         <Card>
           <CardContent className="space-y-6 pt-6">
@@ -62,7 +71,7 @@ export default async function AiSettingsPage() {
                         baseUrl: s.baseUrl,
                         hasKey: s.hasKey,
                         autoJournalAi: s.autoJournalAi,
-                        autoJournalAnalysis: s.autoJournalAnalysis,
+                        monthlyTokenBudget: s.monthlyTokenBudget,
                       }}
                     />
                     <div className="flex items-end justify-between border-t border-slate-100 pt-4 dark:border-slate-800">

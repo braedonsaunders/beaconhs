@@ -7,7 +7,7 @@ import { incidents } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import type { RequestContext } from '@beaconhs/tenant'
 import type { Database } from '@beaconhs/db'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { signProposal, type CaPreview, type IncidentPreview } from './proposals'
 import type { AssistantToolDef, ToolResult } from './types'
 import {

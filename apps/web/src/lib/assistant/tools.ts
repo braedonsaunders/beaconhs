@@ -24,7 +24,7 @@ import {
 import { can } from '@beaconhs/tenant'
 import { manualArticleForUser, searchManualArticles } from '@/lib/manual/registry'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
-import { moduleScopeWhere, recordVisibilityWhere } from '@/lib/visibility'
+import { moduleScopeWhere, recordVisibilityWhere } from '@beaconhs/tenant/visibility'
 import { documentReadFilter } from './doc-access'
 import { getDocumentPdfBytes, getDocumentText } from './document-content'
 import {

@@ -17,7 +17,7 @@ import {
 import { formResponses, formTemplates, tenantUsers, users as user } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { ListPageLayout } from '@/components/page-layout'

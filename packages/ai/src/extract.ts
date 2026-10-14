@@ -22,7 +22,7 @@ export async function extractEntryMeta(
   config: AiConfig | null | undefined,
   bodyText: string,
 ): Promise<EntryMeta | null> {
-  const model = getModel(config, 'fast')
+  const model = getModel(config, 'fast', 'journals.entry')
   if (!model) return null
   const text = bodyText.trim()
   if (text.length < 12) return null

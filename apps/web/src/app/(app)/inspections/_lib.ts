@@ -27,7 +27,7 @@ import {
 } from '@/lib/corrective-action-resolution'
 import { inspectionCriterionIsAnswered } from '@/lib/inspection-response-config'
 import { inspectionStatusMilestonePatch } from '@/lib/inspection-record-lifecycle'
-import { canSeeRecord } from '@/lib/visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 import { validateTenantImageAttachmentIdsInTx } from '@/lib/attachment-validation'
 
 export { inspectionStatusMilestonePatch } from '@/lib/inspection-record-lifecycle'

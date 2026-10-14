@@ -38,8 +38,9 @@ import {
 } from '@beaconhs/db/schema'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { createDraftResponse } from '@/app/(app)/apps/templates/[id]/fill/actions'
+import { OnlineActionForm } from '@/components/online-action-form'
 import { isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -318,11 +319,11 @@ export default async function AppRecordsPage({
   }
 
   const newEntryButton = canSubmitResponses ? (
-    <form action={createEntry}>
+    <OnlineActionForm action={createEntry} purpose="start">
       <Button type="submit">
         <Plus size={14} /> <GeneratedText id="m_0036397741744c" />
       </Button>
-    </form>
+    </OnlineActionForm>
   ) : null
 
   // Resolve display columns from config; index app fields by id for headers + cells.

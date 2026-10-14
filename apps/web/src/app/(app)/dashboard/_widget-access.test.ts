@@ -37,6 +37,7 @@ describe('dashboard widget access', () => {
     'insights.read',
     'equipment.read.all',
     'compliance.read',
+    'briefs.read',
   ])
 
   it('limits self-tier users to personal widgets', () => {
@@ -50,6 +51,12 @@ describe('dashboard widget access', () => {
       expect(canSeeWidget(manager, id), id).toBe(true)
     }
     expect(canSeeWidget(manager, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')).toBe(true)
+  })
+
+  it('shows AI briefs only to people who can read briefs', () => {
+    expect(canSeeWidget(context(['briefs.read']), 'ai-briefs')).toBe(true)
+    expect(canSeeWidget(context(['briefs.manage']), 'ai-briefs')).toBe(true)
+    expect(canSeeWidget(context(['journals.read.all', 'reports.read']), 'ai-briefs')).toBe(false)
   })
 
   it('keeps equipment positions and skill tickets behind their module access', () => {

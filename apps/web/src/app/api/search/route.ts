@@ -25,7 +25,7 @@ import {
 import { can } from '@beaconhs/tenant'
 import { getRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { documentReadFilter } from '@/lib/assistant/doc-access'
 
 export const dynamic = 'force-dynamic'

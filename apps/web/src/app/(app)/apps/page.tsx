@@ -21,7 +21,8 @@ import { AiGenerateButton } from './_ai-generate-button'
 import { canAccessTemplate, isTemplateBuilder, templateAccessWhere } from './_lib/access'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { createDraftResponse } from './templates/[id]/fill/actions'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { OnlineActionForm } from '@/components/online-action-form'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 
 export async function generateMetadata() {
   const tGenerated = await getGeneratedTranslations()
@@ -359,12 +360,12 @@ export default async function FormsPage({
                           <GeneratedValue
                             value={
                               canSubmitResponses && canOperate ? (
-                                <form action={createEntry}>
+                                <OnlineActionForm action={createEntry} purpose="start">
                                   <input type="hidden" name="templateId" value={t.id} />
                                   <Button size="sm" type="submit">
                                     <GeneratedText id="m_0036397741744c" />
                                   </Button>
-                                </form>
+                                </OnlineActionForm>
                               ) : null
                             }
                           />

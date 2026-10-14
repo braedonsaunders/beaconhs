@@ -1,20 +1,26 @@
-// Draft autosave endpoint.
+// Draft sync endpoint for the Builder form filler.
 //
-// The fill page's client-side autosave normally hits the `saveFormResponseDraft`
-// Server Action. But on `beforeunload` the browser tears the page down before
-// any fetch can settle — and Server Action invocations require an alive React
-// tree on the client. The reliable cross-browser path for "save before exit"
-// is `navigator.sendBeacon`, which fires a fire-and-forget POST with a Blob
-// body even as the document is unloading.
+// The filler's local-first draft queue (apps/web/src/lib/offline-drafts) posts
+// every queued draft save here with fetch, and sends the same body with
+// `navigator.sendBeacon` when the page is hidden or unloaded. A route handler
+// (not a Server Action) is used because a beacon outlives the React tree and a
+// fetch can be timed out and retried from any page.
 //
-// This route accepts the same shape `saveFormResponseDraft` does and delegates
-// to the shared `persistDraft` helper (which carries the Zod validation,
-// tenant scoping, ownership check, and DB writes). The handler itself just
-// resolves the request context and shuttles the parsed JSON through.
+// The body is either a whole-draft snapshot from the guided fill page (with
+// the server ordering cursor and, for an entry whose id was minted on the
+// device, an idempotent `create` block) or a batch of record-page field
+// patches (`kind: 'fields'`, each a compare-and-set against the value the
+// device last saw). Validation, tenant scoping, ownership, ordering, and DB
+// writes all live in `saveDraftSyncRequest`. Failures carry a machine-readable
+// `reason` the queue uses to decide between retrying, asking the worker, or
+// dropping its copy.
 
 import { NextResponse } from 'next/server'
 import { getRequestContext } from '@/lib/auth'
-import { persistDraft, type SaveDraftInput } from '@/app/(app)/apps/templates/[id]/fill/actions'
+import {
+  saveDraftSyncRequest,
+  type DraftSaveFailureReason,
+} from '@/app/(app)/apps/_lib/draft-persistence'
 import {
   readBoundedJsonBody,
   RequestBodyLengthError,
@@ -27,14 +33,32 @@ export const dynamic = 'force-dynamic'
 const MAX_DRAFT_BYTES = 1024 * 1024
 const MAX_DRAFT_READ_MS = 15_000
 
+const STATUS_BY_REASON: Record<DraftSaveFailureReason, number> = {
+  invalid: 400,
+  unauthorized: 401,
+  forbidden: 403,
+  not_found: 404,
+  conflict: 409,
+  closed: 409,
+  locked: 423,
+  too_large: 413,
+  unavailable: 503,
+}
+
+function failure(reason: DraftSaveFailureReason, error: string) {
+  return NextResponse.json({ ok: false, error, reason }, { status: STATUS_BY_REASON[reason] })
+}
+
 export async function POST(req: Request): Promise<NextResponse> {
-  const ctx = await getRequestContext()
-  if (!ctx) {
-    // sendBeacon ignores response status, so this only matters for the
-    // explicit-fetch fallback path. Still return a real status so the
-    // browser doesn't try to retry.
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
+  // Drafts are only ever written by this app's own pages. Browsers label
+  // cross-site requests (including beacons), so refuse them outright.
+  const fetchSite = req.headers.get('sec-fetch-site')
+  if (fetchSite && fetchSite !== 'same-origin') {
+    return failure('forbidden', 'You do not have access to this app')
   }
+
+  const ctx = await getRequestContext()
+  if (!ctx) return failure('unauthorized', 'Sign in again to sync your changes.')
 
   let body: unknown
   try {
@@ -44,24 +68,21 @@ export async function POST(req: Request): Promise<NextResponse> {
     })
   } catch (error) {
     if (error instanceof RequestBodyTooLargeError) {
-      return NextResponse.json({ ok: false, error: 'draft payload too large' }, { status: 413 })
+      return failure('too_large', 'This draft is too large to save')
     }
     if (error instanceof RequestBodyTimeoutError) {
-      return NextResponse.json({ ok: false, error: 'draft request timed out' }, { status: 408 })
+      return failure('unavailable', 'Unable to save this draft right now')
     }
     if (error instanceof RequestBodyLengthError || error instanceof RequestBodyParseError) {
-      return NextResponse.json({ ok: false, error: 'invalid JSON body' }, { status: 400 })
+      return failure('invalid', 'Invalid draft payload')
     }
     console.error('[forms] failed to read draft request', error)
-    return NextResponse.json({ ok: false, error: 'invalid JSON body' }, { status: 400 })
+    return failure('invalid', 'Invalid draft payload')
   }
 
-  // persistDraft runs the same Zod validation as the Server Action — if the
-  // shape is wrong it returns { ok: false, error }, which we forward as a
-  // 400. Tenant scoping + ownership are enforced inside persistDraft.
-  const result = await persistDraft(ctx, body as SaveDraftInput)
+  const result = await saveDraftSyncRequest(ctx, body)
   if (!result.ok) {
-    return NextResponse.json(result, { status: 400 })
+    return NextResponse.json(result, { status: STATUS_BY_REASON[result.reason] })
   }
   return NextResponse.json(result)
 }

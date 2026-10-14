@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   scope: vi.fn(),
 }))
 vi.mock('../../../lib/auth', () => ({ getRequestContext: async () => mocks.context }))
-vi.mock('../../../lib/visibility', () => ({
+vi.mock('@beaconhs/tenant/visibility', () => ({
   moduleScopeWhere: (...args: unknown[]) => mocks.scope(...args),
 }))
 import { GET } from './route'

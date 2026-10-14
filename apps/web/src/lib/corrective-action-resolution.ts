@@ -6,7 +6,7 @@ import { materializeEvidenceTargetObligations } from '@beaconhs/compliance'
 import { moduleFlowCommand, recordDomainEvent } from '@beaconhs/events'
 import { correctiveActionClosedEvent } from '@beaconhs/integrations'
 import { recordAuditInTransaction } from './audit'
-import { canSeeRecord } from './visibility'
+import { canSeeRecord } from '@beaconhs/tenant/visibility'
 
 /** One atomic resolution path for the action screen and submitted inspection findings. */
 export async function resolveCorrectiveActionInTx(

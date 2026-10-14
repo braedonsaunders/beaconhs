@@ -31,6 +31,8 @@ import {
   truckLogEntries,
 } from '@beaconhs/db/schema'
 import { latestTrainingRecordOnly } from '@/lib/training-latest'
+import { canReadBriefs } from '@/lib/briefs/access'
+import { loadLatestBriefHeadlines, type BriefHeadline } from '@/lib/briefs/data'
 import { getEffectiveRoleKeys } from '@/lib/effective-roles'
 import { resolveComplianceLink } from '../compliance/_resolve-link'
 import { templateAccessWhere } from '../apps/_lib/access'
@@ -144,6 +146,8 @@ export type DashboardMetrics = {
   // Personal — "my" widgets, scoped to the logged-in user's person record.
   // Empty / zeroed when the account isn't linked to a person (`linked: false`).
   myPersonId: string | null
+  /** Latest AI brief headlines (empty unless the viewer may read briefs). */
+  latestBriefs: BriefHeadline[]
   myPpe: Awaited<ReturnType<typeof loadPersonalPpe>>
   /** May start a pre-use check of PPE that is not in the register. */
   canInspectOtherPpe: boolean
@@ -895,6 +899,7 @@ export async function loadDashboardMetrics(
     const myPersonId = ctx.personId
 
     const myPpe = await loadPersonalPpe(tx, myPersonId, todayIso, can(ctx, 'ppe.inspect'))
+    const latestBriefs = canReadBriefs(ctx) ? await loadLatestBriefHeadlines(tx) : []
 
     // Equipment checked out to me — open checkouts (returnedAt IS NULL) are the
     // source of truth; oldest checkout first.
@@ -1125,6 +1130,7 @@ export async function loadDashboardMetrics(
       expiringTraining30d,
 
       myPersonId,
+      latestBriefs,
       myPpe,
       canInspectOtherPpe: can(ctx, 'ppe.inspect'),
       myEquipment,

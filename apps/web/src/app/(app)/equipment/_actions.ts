@@ -27,7 +27,7 @@ import {
 import { assertCan, can } from '@beaconhs/tenant'
 import { recordModuleFlowEvent } from '@beaconhs/events'
 import { requireExportContext, requireRequestContext } from '@/lib/auth'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { recordAudit, recordAuditInTransaction } from '@/lib/audit'
 import { optionalTextInput, optionalUuidInput, requireEnumInput } from '@/lib/mutation-input'
 import { materializeEquipmentTypeEvidence } from '@/lib/compliance-type-evidence'

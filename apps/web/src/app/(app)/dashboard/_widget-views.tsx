@@ -43,6 +43,7 @@ import {
   Radio,
   ShieldAlert,
   ShieldCheck,
+  Sparkles,
   TrendingDown,
   Truck,
   Users,
@@ -327,6 +328,8 @@ export function WidgetCard({ widgetId, data, todayIso, quickActions }: Props) {
       )
     case 'personal-my-equipment':
       return <MyEquipmentCard items={data.myEquipment} todayIso={todayIso} />
+    case 'ai-briefs':
+      return <LatestBriefsCard items={data.latestBriefs} />
     case 'personal-my-compliance':
       return <MyComplianceCard data={data.myCompliance} />
     case 'personal-in-progress':
@@ -1884,6 +1887,44 @@ function MyComplianceCard({ data }: { data: DashboardMetrics['myCompliance'] }) 
 // =====================================================================
 // Card shell — shared list/chart wrapper
 // =====================================================================
+
+/** The newest delivered brief from each AI brief the viewer may read. */
+function LatestBriefsCard({ items }: { items: DashboardMetrics['latestBriefs'] }) {
+  const tGenerated = useGeneratedTranslations()
+  return (
+    <CardShell
+      title={tGenerated('m_13b7eb67d8d34a')}
+      caption={tGenerated('m_0b9a480cfaf0d8')}
+      icon={Sparkles}
+      href="/reports/briefs"
+      accent="teal"
+    >
+      {items.length === 0 ? (
+        <EmptyRow>
+          <GeneratedText id="m_0a4ae0f6fd30d8" />
+        </EmptyRow>
+      ) : (
+        <ul className="space-y-0.5 px-2 pb-2">
+          {items.map((item) => (
+            <li key={item.runId}>
+              <Link
+                href={`/reports/briefs/${item.briefId}/runs/${item.runId}` as never}
+                className="block rounded-lg px-3 py-2 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60"
+              >
+                <span className="block text-xs font-semibold text-teal-700 dark:text-teal-300">
+                  <GeneratedValue value={`${item.briefName} · ${item.windowLabel}`} />
+                </span>
+                <span className="mt-0.5 line-clamp-2 block text-sm text-slate-800 dark:text-slate-200">
+                  <GeneratedValue value={item.headline} />
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </CardShell>
+  )
+}
 
 function CardShell({
   title,

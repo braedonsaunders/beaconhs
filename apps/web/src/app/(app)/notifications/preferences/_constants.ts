@@ -3,7 +3,7 @@
 // notifications — the native engines emit `incident`, `ca`, and `compliance`
 // (see packages/events), the training/document Flow adapters emit `training`
 // and `document`, and the monitored-session overdue scanner emits
-// `monitored_session`. Channels mirror the notificationChannel pgEnum in
+// `monitored_session`; AI briefs emit `brief`. Channels mirror the notificationChannel pgEnum in
 // @beaconhs/db/schema.
 //
 // A user without a row for (category, channel) is treated as "enabled" by the
@@ -17,6 +17,7 @@ export const NOTIFICATION_CATEGORIES = [
   'training',
   'document',
   'monitored_session',
+  'brief',
 ] as const
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number]
@@ -51,6 +52,10 @@ export const CATEGORY_LABELS: Record<NotificationCategory, { title: string; desc
     monitored_session: {
       title: 'Monitored sessions',
       description: 'Missed check-ins, escalations, and overdue session alerts.',
+    },
+    brief: {
+      title: 'AI briefs',
+      description: 'A brief you receive is ready, or a brief you schedule failed.',
     },
   }
 

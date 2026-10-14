@@ -11,7 +11,7 @@ import { and, inArray, isNull } from 'drizzle-orm'
 import { equipmentItems } from '@beaconhs/db/schema'
 import { assertCan } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
-import { moduleScopeWhere } from '@/lib/visibility'
+import { moduleScopeWhere } from '@beaconhs/tenant/visibility'
 import { recordAudit } from '@/lib/audit'
 import { isUuid } from '@/lib/list-params'
 

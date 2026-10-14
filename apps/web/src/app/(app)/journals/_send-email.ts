@@ -9,12 +9,12 @@ import { sanitizeDocumentHtml } from '@beaconhs/forms-core'
 import { journalEntries, orgUnits, people } from '@beaconhs/db/schema'
 import type { RequestContext } from '@beaconhs/tenant'
 import { recordAudit } from '@/lib/audit'
+import { getAuthorPersonId } from './_lib'
 import {
-  getAuthorPersonId,
   journalCanReadAll,
   journalScopeWhere,
   journalAuthorPersonId,
-} from './_lib'
+} from '@beaconhs/tenant/journal-scope'
 import { textToHtml } from './_format'
 
 const authorPerson = alias(people, 'jmail_author')

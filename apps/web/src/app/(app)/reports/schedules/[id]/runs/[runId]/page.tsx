@@ -1,10 +1,17 @@
 import { notFound } from 'next/navigation'
-import { and, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { Download } from 'lucide-react'
-import { attachments, reportDefinitions, reportRuns, reportSchedules } from '@beaconhs/db/schema'
+import {
+  attachments,
+  reportDefinitions,
+  reportRunDeliveries,
+  reportRuns,
+  reportSchedules,
+} from '@beaconhs/db/schema'
 import { ReportRunDetail } from '@beaconhs/reports/react'
 import { assertCan } from '@beaconhs/tenant'
 import { Button, DetailHeader } from '@beaconhs/ui'
+import { DeliveryStatusTable } from '@/components/delivery-status-table'
 import { DownloadLink } from '@/components/download-link'
 import { PageContainer } from '@/components/page-layout'
 import { GeneratedText } from '@/i18n/generated'
@@ -15,8 +22,10 @@ import { toSchedule } from '../../../page'
 
 export default async function RunDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; runId: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { id, runId } = await params
   if (!isUuid(id) || !isUuid(runId)) notFound()
@@ -65,6 +74,20 @@ export default async function RunDetailPage({
     return result ?? null
   })
   if (!row) notFound()
+  const sp = await searchParams
+  const deliveries = await ctx.db((tx) =>
+    tx
+      .select({
+        id: reportRunDeliveries.id,
+        recipientEmail: reportRunDeliveries.recipientEmail,
+        status: reportRunDeliveries.status,
+        error: reportRunDeliveries.error,
+        sentAt: reportRunDeliveries.sentAt,
+      })
+      .from(reportRunDeliveries)
+      .where(eq(reportRunDeliveries.runId, runId))
+      .orderBy(asc(reportRunDeliveries.recipientEmail)),
+  )
   const pdfHref = row.attachment ? `/reports/schedules/${id}/runs/${runId}/pdf` : undefined
 
   return (
@@ -107,6 +130,18 @@ export default async function RunDetailPage({
             : null,
         }}
       />
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          <GeneratedText id="m_03db87cb2e7846" />
+        </h2>
+        <DeliveryStatusTable
+          rows={deliveries}
+          basePath={`/reports/schedules/${id}/runs/${runId}`}
+          currentParams={sp}
+          timezone={ctx.timezone}
+          locale={ctx.locale}
+        />
+      </section>
     </PageContainer>
   )
 }

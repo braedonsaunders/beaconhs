@@ -27,7 +27,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { buildExportHref, isUuid, parseListParams, pickString } from '@/lib/list-params'
 import { countEntries, listEntries, listRecordsFacets, listTagColors } from '../_data'
-import { journalCanBrowseAll } from '../_lib'
+import { journalCanBrowseAll } from '@beaconhs/tenant/journal-scope'
 import {
   JOURNAL_TAG_NAME_LIMIT,
   type JournalDefinition,

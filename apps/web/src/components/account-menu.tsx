@@ -15,6 +15,7 @@ import { Popover } from '@beaconhs/ui'
 import { signOut } from '@beaconhs/auth/client'
 import { ThemeToggle } from './theme-toggle'
 import { formatAppVersion } from '@/lib/format-app-version'
+import { useOfflineDraftsContext } from '@/lib/offline-drafts/provider'
 
 // Two-letter monogram from a display name, falling back to the email. Handles the
 // "Last, First" directory convention so the initials read First+Last either way.
@@ -49,6 +50,7 @@ export function AccountMenu({
   const common = useTranslations('Common')
   const [open, setOpen] = useState(false)
   const [pending, startSignOut] = useTransition()
+  const offlineDrafts = useOfflineDraftsContext()
   const label = name || email || common('account')
   const initials = initialsFrom(name, email)
 
@@ -145,6 +147,9 @@ export function AccountMenu({
           role="menuitem"
           onClick={() =>
             startSignOut(async () => {
+              // Sync (or, with consent, delete) unsynced form drafts on this
+              // device before the next person picks it up.
+              if (offlineDrafts && !(await offlineDrafts.prepareSignOut())) return
               await signOut()
               router.replace('/login')
             })

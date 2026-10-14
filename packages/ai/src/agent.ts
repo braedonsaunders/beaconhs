@@ -45,7 +45,7 @@ export function runAgentTurn(
   config: AiConfig | null | undefined,
   args: RunAgentTurnArgs,
 ): Response {
-  const model = getModel(config, args.tier ?? 'smart')
+  const model = getModel(config, args.tier ?? 'smart', 'assistant')
   if (!model) throw new AIDisabledError()
 
   const result = streamText({

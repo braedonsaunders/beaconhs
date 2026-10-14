@@ -230,7 +230,7 @@ Use Reports when you need a document: a weekly incident summary for a meeting, a
 
 ## Where to find it
 
-Open [Reports](/reports) from the sidebar. It has two tabs: **Reports** and **Schedules**.
+Open [Reports](/reports) from the sidebar. It has the **Reports** and **Schedules** tabs. People who can view AI briefs also see a **Briefs** tab — see [AI briefs](/help/ai-briefs).
 
 ## Run a report
 
@@ -276,6 +276,8 @@ The **Schedules** tab shows every schedule with its next run and last run. Use *
 
 Open a schedule to see **Run history**. Search by trigger or failure message, or use **Status** to show queued, running, succeeded, or failed runs. Use **Next** and **Previous** to move through older deliveries.
 
+Open a run to see **Delivery** — every recipient with **Sent**, **Sending**, **Queued**, or **Failed**, and the reason when an email failed. Use **Search recipients** to find one person.
+
 ## Edit or build a report
 
 Seeded and team-created reports use the same editable report definition. There is no separate built-in execution path.
@@ -293,6 +295,77 @@ Seeded and team-created reports use the same editable report definition. There i
 Every published Builder app you can currently open appears as its own named data source under **Apps**. The source is automatically limited to that app's responses. Draft, archived, and role-restricted apps are not exposed. Timed check-ins appear as **Monitored sessions**; they are a general Builder app capability, not a separate native module.
 
 The report list, full viewer, exports, and schedules all run this same saved definition. Seed provenance only lets BeaconHS restore a missing default during setup; it does not make the report read-only.`,
+  },
+  {
+    slug: 'ai-briefs',
+    title: 'AI briefs',
+    group: 'Oversight & reports',
+    iconKey: 'file',
+    summary:
+      'Get an AI-written summary of journals, incidents, and inspections by email, every day or week.',
+    requiredAnyPermission: ['briefs.read', 'briefs.manage'],
+    keywords: [
+      'ai briefs',
+      'brief',
+      'daily journal summary',
+      'company journal summary',
+      'ai summary',
+      'ai report',
+      'journal analysis',
+      'morning email',
+      'weekly safety pulse',
+    ],
+    body: `An AI brief is a short written summary of what happened — for example, yesterday's journals across the company. BeaconHS reads the records, the AI writes the summary, and the brief is emailed on a schedule.
+
+## What this is for
+
+Use a brief when leaders need the story, not a table: what went well, what is at risk, and what needs follow-up. Every point in a brief links to the journal, incident, or inspection it came from, so you can check it.
+
+Counts in a brief (entries, authors, drafts, failed items) are worked out exactly by BeaconHS. The AI only writes the words around them.
+
+## Where to find it
+
+Open [Reports](/reports) and click the **Briefs** tab. You only see this tab if you can view AI briefs.
+
+## Read a brief
+
+1. Open **Briefs** and click a brief.
+2. Click the **Runs** tab, then click a date.
+3. Read the headline, the sections, and **Follow-ups**. Each small tag such as **J12** is a source. Click it to open that record.
+4. Click **PDF** to download it, or **Ask the assistant** to ask questions about it.
+
+The **Delivery** list shows who it was emailed to and whether each email was sent.
+
+## Create a brief
+
+You need permission to manage AI briefs.
+
+1. Open **Briefs** and click **New brief**.
+2. Pick a template — **Daily company journal brief** matches the old morning summary — or click **Start blank**.
+3. On the **Design** tab, choose the **Sources**, edit the sections, and write **Instructions for the writer** (who reads it and what they care about).
+4. Pick dates under the preview and click **Generate preview**. Nothing is emailed. Changes save as you type.
+
+Journal briefs include draft entries, so late writers still show up.
+
+## Send a brief on a schedule
+
+1. Open the brief and click the **Schedules** tab.
+2. Click **New schedule**.
+3. Set **Repeats** and the time. Tick **Weekdays only (Monday to Friday)** for a working-day brief.
+4. Under **Each brief covers**, pick the period. **The previous business day** means Monday's brief covers Friday, Saturday, and Sunday.
+5. Add recipients: members, People groups, or **Other email addresses**.
+6. Tick **One brief per department** if each person should get a brief about their own department only.
+7. Click **Save schedule**.
+
+The brief reads data as the person who saved the schedule, with their permissions at the time it runs. Use the play button on a schedule to write and send it now.
+
+## Briefs on dashboards
+
+Add a brief to an [Insights dashboard](/help/insights) under **Add content → AI briefs**. On your home dashboard, select **Add widget** and choose **AI briefs** to see the latest headline of each brief.
+
+## When AI is not available
+
+If AI is turned off, not set up, or over its monthly budget, scheduled briefs still go out with the counts and a note explaining why there is no written summary. See [Admin → AI](/help/admin).`,
   },
   {
     slug: 'insights',
@@ -373,14 +446,15 @@ Use **Download CSV** on the open card when you need the same live data in a spre
 3. Drag and resize cards until the layout works.
 4. Click **Save**, then **Done**.
 
-## Read the AI journal analysis
+## Add an AI brief to a dashboard
 
-The **AI journal analysis** card shows sentiment, themes, issues, and recommended actions from recent journals. BeaconHS writes this in the background. Changing **7d**, **30d**, or **90d** only switches the saved result — it does not call the model.
+People who can view AI briefs can show the latest one on a dashboard. See [AI briefs](/help/ai-briefs).
 
-1. Open [Insights](/insights) and find **AI journal analysis**.
-2. Tap a period to see that window's last result.
-3. Tap **Refresh** only when you want a new background run. The card updates when that run finishes.
-4. An admin can turn automatic runs on or off under [Admin → AI](/admin/ai) with **Automatic journal analysis**.
+1. On a dashboard, click **Customise**, then **Add content**.
+2. Under **AI briefs**, choose the brief. The card shows its latest headline, summary, and cited sources.
+3. Click **Save**, then **Done**.
+
+The card only reads the saved brief. It never calls the AI model, so opening a dashboard costs nothing.
 
 ## Share dashboards
 
@@ -518,7 +592,7 @@ If a person has several roles and switches roles in BeaconHS, the app gallery, p
 
 Builders can review records belonging to a draft or archived app, but those records are read-only. Publish the app before testing live entry, workflow, comment, monitoring, or record-action behaviour.
 
-When you fill a published app, watch for **Saved** at the top. You can leave and resume the entry from **In progress**. If the same draft was changed in another tab, BeaconHS stops the older tab from overwriting it and asks you to refresh before continuing.
+When you fill a published app — step by step or on its record page — the badge at the top shows where the answers are. **Saved on device** with **Pending** means they are on this device and waiting to send. **Synced** means BeaconHS has them. Answers survive a lost signal or a closed tab and send automatically. You can leave and resume the entry from **In progress**. If the same draft was changed in another tab or on another device, BeaconHS stops the older copy from overwriting it and asks which copy to keep. See [Filling out forms](/help/forms).
 
 The first publish also generates the app's **PDF template** — the document its record downloads and flow attachments use. Admins can restyle it (or generate one for an older app) under **Admin → PDF templates**.
 
@@ -718,7 +792,7 @@ Open [Admin](/admin) from the sidebar. You only see the tiles your permissions a
 ## Workspace
 
 - **Tenant settings** — branding, languages, regulatory terminology, and hierarchy. In **Branding**, **Primary color (hex)** sets the colour for individual document headers and document books. Press **Save settings**, then regenerate the draft PDF or publish the next version to use it. Already published PDFs keep their saved colour. Risk matrices are configured in each module's own **Manage** area.
-- **Notifications** — who gets automatic alerts and how often reminders repeat.
+- **Notifications** — who gets automatic alerts and how often reminders repeat. **Journal emails** sets who gets a copy when someone emails a journal entry. **AI briefs** sets how brief alerts reach their recipients.
 - **Navigation** — reorder the sidebar and pin forms as modules.
 - **Data sources** — reference lists and live data your apps bind to. Search by name, key, or description and filter by **Reference** or **Live responses**. Click **New data source** to create a reference list or a live source from an app; the form opens in a side panel. Inside a reference source, search its row values and its Builder references separately.
 - **Data export** — audited CSV exports across modules and Builder apps. Search and filter the source catalogue, then sort it by name, group, or sensitivity. Builder app sources follow the role you are currently using; template builders can also export records from draft and archived apps for review.
@@ -814,6 +888,17 @@ A **Database (SQL)** connection and an **External SQL database** automation both
 4. For **Custom (OpenAI-compatible)**, enter a public **HTTPS** base URL with a valid certificate. Private, local, reserved, and unresolvable addresses are blocked. Named providers can use their built-in address by leaving **Base URL** blank.
 5. Turn on the provider and click **Save AI settings**.
 6. Click **Test saved connection** and confirm the model replies.
+
+Every AI feature in this workspace uses the provider and models saved here, including the Assistant, Builder AI, Insights cards, and [AI briefs](/help/ai-briefs).
+
+## Track AI usage and set a budget
+
+1. Open **Admin**, then **AI**, and click **Usage**.
+2. Read **Tokens**, **Calls**, and **Monthly budget** for the month. **By feature** and **By model** show where the tokens went.
+3. Use the **Month** filter to look at an earlier month. Search or filter the call list by **Feature** or **Outcome**.
+4. To cap spending, go back to **AI** and enter a **Monthly token budget**, then click **Save AI settings**. Leave it blank for no limit.
+
+Months run on UTC time. When the budget is used up, AI features stop until the next month starts. Scheduled briefs still send, with a note that AI is paused.
 
 The platform policy can let tenants choose their own provider, force every tenant to use the platform provider, or disable AI everywhere. API keys are encrypted at rest. Removing a key disables that saved provider; it does not bypass a platform default that still applies.
 

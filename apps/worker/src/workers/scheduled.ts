@@ -19,7 +19,7 @@ import { runSessionOverdueFlows } from '../lib/session-overdue-flows'
 import { runDatabaseMaintenance } from '../lib/db-maintenance'
 import { drainDomainEventOutbox } from '../lib/domain-event-outbox'
 import { reconcileOfficeRenders } from '../lib/office-render-reconciler'
-import { scanJournalAnalysis } from '../lib/journal-analysis'
+import { scanBriefSchedules } from '../lib/brief-scheduler'
 import { drainStorageObjectDeletionOutbox } from '../lib/storage-object-deletion-outbox'
 import { reconcileExpiredAttachmentUploads } from '../lib/attachment-upload-reconciler'
 
@@ -123,11 +123,11 @@ export async function processScheduledTick(job: Job<ScheduledTick>): Promise<voi
       }
       return
     }
-    case 'journal_analysis_scan': {
-      const result = await scanJournalAnalysis()
-      if (result.enqueued > 0) {
+    case 'brief_schedule_scan': {
+      const result = await scanBriefSchedules()
+      if (result.claimed > 0 || result.published > 0) {
         console.log(
-          `[scheduled] journal_analysis_scan: ${result.enqueued} runs enqueued across ${result.tenants} tenants`,
+          `[scheduled] brief_schedule_scan: ${result.claimed} run(s) claimed, ${result.published} published`,
         )
       }
       return
