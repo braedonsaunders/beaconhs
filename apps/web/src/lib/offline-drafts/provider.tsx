@@ -17,7 +17,15 @@
 // (<OnlineActionForm>) or that work without the server opt out with
 // `data-offline-ok`.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react'
 import { useGeneratedTranslations } from '@/i18n/generated'
 import { confirmDialog } from '@/lib/confirm'
 import { toast } from '@/lib/toast'
@@ -103,7 +111,20 @@ export function OfflineDraftsProvider({
     return () => window.removeEventListener('submit', onSubmit, true)
   }, [tGenerated])
 
+  // Translations get a new identity whenever the server re-renders the layout
+  // (any revalidating Server Action). Read them through a ref so the context
+  // value — and every claimed record keyed on it — only changes when the
+  // signed-in scope does. A context that churned on each refresh made record
+  // pages release and re-claim their queue mid-edit, losing the last
+  // confirmed value the next edit is based on (false "changed somewhere else"
+  // conflicts on journals after adding a photo).
+  const tGeneratedRef = useRef(tGenerated)
+  useEffect(() => {
+    tGeneratedRef.current = tGenerated
+  })
+
   const prepareSignOut = useCallback(async () => {
+    const tGenerated = tGeneratedRef.current
     const engine = getDraftSyncEngine()
     await Promise.race([
       engine.drain(scopeKey, { force: true }),
@@ -121,11 +142,12 @@ export function OfflineDraftsProvider({
     }
     await engine.purgeUser(userId)
     return true
-  }, [scopeKey, tGenerated, userId])
+  }, [scopeKey, userId])
 
+  const scope = useMemo(() => ({ tenantId, userId, actorUserId }), [actorUserId, tenantId, userId])
   const value = useMemo(
-    () => ({ scope: { tenantId, userId, actorUserId }, scopeKey, prepareSignOut }),
-    [actorUserId, prepareSignOut, scopeKey, tenantId, userId],
+    () => ({ scope, scopeKey, prepareSignOut }),
+    [prepareSignOut, scope, scopeKey],
   )
 
   return <OfflineDraftsContext.Provider value={value}>{children}</OfflineDraftsContext.Provider>

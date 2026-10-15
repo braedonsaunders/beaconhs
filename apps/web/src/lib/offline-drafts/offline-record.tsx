@@ -263,7 +263,6 @@ export function useRecordField<T>(fieldId: string, serverValue: T): RecordFieldH
   const { key, paused, bind, recordField, noteServerValue, retry } = useOfflineRecordFields()
   const [value, setValue] = useState<T>(serverValue)
   const latestRef = useRef(value)
-  const serverRef = useRef(serverValue)
   // The last value the server is known to hold (rendered or acknowledged).
   const confirmedRef = useRef<unknown>(serverValue)
   // Typed input not yet written to the device (ref for handlers, state for render).
@@ -321,14 +320,14 @@ export function useRecordField<T>(fieldId: string, serverValue: T): RecordFieldH
     timerRef.current = setTimeout(() => commitRef.current(), DEVICE_WRITE_DEBOUNCE_MS)
   }, [])
 
-  useEffect(() => {
-    serverRef.current = serverValue
-  })
-
   useEffect(
     () =>
       bind(fieldId, {
-        server: () => serverRef.current,
+        // What the server is known to hold for this field: the rendered value,
+        // then every acknowledged save. Pages that keep the record in client
+        // state (the journal workspace) never re-render the prop, so the prop
+        // alone would hand later edits a stale base.
+        server: () => confirmedRef.current,
         restore: (restored) => {
           if (timerRef.current) clearTimeout(timerRef.current)
           timerRef.current = null
@@ -374,7 +373,11 @@ export function useRecordField<T>(fieldId: string, serverValue: T): RecordFieldH
       const next = engine.fieldStatus(key, fieldId)
       // Dropped because the record closed is not saved: no confirmation.
       if (previous === 'pending' && next === 'none' && !engine.getState(key).closed) {
-        confirmedRef.current = latestRef.current
+        // The stored value the server acknowledged (input typed since then is
+        // not on the server yet).
+        const work = engine.getWork(key)
+        confirmedRef.current =
+          work?.kind === 'fields' && fieldId in work.known ? work.known[fieldId] : latestRef.current
         adoptedRef.current = serverKeyRef.current
         setSavedFlash(true)
         if (timer) clearTimeout(timer)
