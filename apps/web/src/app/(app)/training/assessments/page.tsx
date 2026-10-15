@@ -36,6 +36,7 @@ import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { RemoteSearchFilter } from '@/components/remote-search-select'
 import { ListPageLayout } from '@/components/page-layout'
 import { TrainingSubNav } from '../_components/training-sub-nav'
@@ -339,7 +340,7 @@ export default async function AssessmentsPage({
             }
           />
           <TrainingSubNav active="assessments" />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder={tGenerated('m_07d616cb909bf5')} />
             <form className="flex items-center gap-1 text-xs">
               {/* A GET form replaces the whole query string, so carry every
@@ -421,7 +422,7 @@ export default async function AssessmentsPage({
               allLabel="All courses"
               searchPlaceholder={tGenerated('m_030db64e0bf790')}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >

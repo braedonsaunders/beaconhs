@@ -21,6 +21,7 @@ import { confirmDialog } from '@/lib/confirm'
 import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { TAG_COLOR_KEYS, tagSwatch } from '../_tag-colors'
 import { mergeTag, removeTag, saveTag, type TagActionResult } from './_actions'
 import type { ManagedTag } from './_data'
@@ -93,7 +94,7 @@ export function TagsAdmin({
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
+      <TableToolbar>
         <SearchInput placeholder={tGenerated('m_1ecc0f944484dc')} />
         <FilterChips
           basePath="/journals/tags"
@@ -126,7 +127,7 @@ export function TagsAdmin({
         >
           <Plus size={15} /> <GeneratedText id="m_00566fa6f2f7f3" />
         </Button>
-      </div>
+      </TableToolbar>
 
       {/* Create composer */}
       <GeneratedValue

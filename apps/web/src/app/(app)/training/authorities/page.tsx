@@ -20,6 +20,7 @@ import { requireModuleManage } from '@/lib/module-admin/guard'
 import { parseListParams } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { TrainingSubNav } from '../_components/training-sub-nav'
 import { createAuthority } from '../_actions/authorities'
 import { SortableTh } from '@/components/sortable-th'
@@ -122,9 +123,9 @@ export default async function TrainingAuthoritiesPage({
             }
           />
           <TrainingSubNav active="authorities" />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder={tGenerated('m_1cfc76cec68c43')} />
-          </div>
+          </TableToolbar>
         </>
       }
     >

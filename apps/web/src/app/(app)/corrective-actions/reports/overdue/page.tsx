@@ -191,12 +191,12 @@ export default async function OverdueReport({
     <ListPageLayout
       header={
         <>
-          <CorrectiveActionsSubNav active="overdue" />
           <PageHeader
             title={tGenerated('m_03032d85571ba1')}
             description={tGenerated('m_03ba4f1cffe4d3')}
             back={{ href: '/corrective-actions', label: 'Back to records' }}
           />
+          <CorrectiveActionsSubNav active="overdue" />
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="destructive">
               <AlertTriangle size={10} className="mr-1" /> <GeneratedValue value={totalCount} />{' '}

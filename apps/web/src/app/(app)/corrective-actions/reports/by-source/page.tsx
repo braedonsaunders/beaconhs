@@ -178,12 +178,12 @@ export default async function BySourceReport({
     <ListPageLayout
       header={
         <>
-          <CorrectiveActionsSubNav active="by-source" />
           <PageHeader
             title={tGenerated('m_08aa0c5fc7cee4')}
             description={tGenerated('m_1a2d5139205245')}
             back={{ href: '/corrective-actions', label: 'Back to records' }}
           />
+          <CorrectiveActionsSubNav active="by-source" />
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <GeneratedValue
               value={Array.from(typeTotals.entries())

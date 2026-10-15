@@ -137,7 +137,6 @@ export default async function PpeTypesPage({
     <ListPageLayout
       header={
         <>
-          <PpeSubNav active="types" />
           <PageHeader
             title={tGenerated('m_0f5423f9b22ae3')}
             description={tGenerated('m_1f13ad253e1349')}
@@ -149,6 +148,7 @@ export default async function PpeTypesPage({
               </Link>
             }
           />
+          <PpeSubNav active="types" />
           <TableToolbar>
             <SearchInput placeholder={tGenerated('m_11a12aae7257b0')} />
           </TableToolbar>

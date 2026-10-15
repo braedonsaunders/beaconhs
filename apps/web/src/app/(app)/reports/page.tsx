@@ -16,6 +16,7 @@ import { FilterChips } from '@/components/filter-bar'
 import { ListPageLayout } from '@/components/page-layout'
 import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { GeneratedText } from '@/i18n/generated'
 import { getGeneratedTranslations } from '@/i18n/generated.server'
 import { requireRequestContext } from '@/lib/auth'
@@ -68,22 +69,20 @@ export default async function ReportsPage({
               ) : null
             }
           />
-          <div className="flex flex-wrap items-center gap-2">
-            <ReportsSubNav active="reports" />
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <SearchInput placeholder={tGenerated('m_0224c155374ff8')} />
-              <FilterChips
-                basePath="/reports"
-                currentParams={params}
-                paramKey="category"
-                label={tGenerated('m_108b41637f364f')}
-                options={categories.map((value) => ({
-                  value,
-                  label: value.replaceAll('_', ' '),
-                }))}
-              />
-            </div>
-          </div>
+          <ReportsSubNav active="reports" />
+          <TableToolbar>
+            <SearchInput placeholder={tGenerated('m_0224c155374ff8')} />
+            <FilterChips
+              basePath="/reports"
+              currentParams={params}
+              paramKey="category"
+              label={tGenerated('m_108b41637f364f')}
+              options={categories.map((value) => ({
+                value,
+                label: value.replaceAll('_', ' '),
+              }))}
+            />
+          </TableToolbar>
         </>
       }
     >

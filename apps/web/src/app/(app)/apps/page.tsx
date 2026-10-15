@@ -5,13 +5,14 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { ClipboardCheck, PencilRuler, Plus } from 'lucide-react'
 import { and, asc, count, desc, eq, ilike, inArray, isNull, max, or, type SQL } from 'drizzle-orm'
-import { Badge, Button, EmptyState } from '@beaconhs/ui'
+import { Badge, Button, EmptyState, PageHeader } from '@beaconhs/ui'
 import { formResponses, formTemplateKind, formTemplates } from '@beaconhs/db/schema'
 import { can } from '@beaconhs/tenant'
 import { requireRequestContext } from '@/lib/auth'
 import { formatDate } from '@/lib/datetime'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { Pagination } from '@/components/pagination'
 import { FilterChips } from '@/components/filter-bar'
 import { NavIcon } from '@/components/sidebar-nav'
@@ -173,62 +174,56 @@ export default async function FormsPage({
     <ListPageLayout
       header={
         <>
-          <header className="flex flex-wrap items-end justify-between gap-3">
-            <div className="space-y-1">
-              <h1 className="text-2xl font-semibold">
-                <GeneratedText id="m_07f039d1ce81ec" />
-              </h1>
-              <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                <GeneratedText id="m_181eacbaca4566" />
-              </p>
-              <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-slate-500 dark:text-slate-400">
-                <span>
-                  <strong className="text-slate-800 dark:text-slate-200">
-                    <GeneratedValue value={stats.templates} />
-                  </strong>
-                  <GeneratedValue value={' '} />
-                  <GeneratedText id="m_02877322a055ff" />
-                </span>
-                <span>
-                  <strong className="text-slate-800 dark:text-slate-200">
-                    <GeneratedValue value={stats.published} />
-                  </strong>
-                  <GeneratedValue value={' '} />
-                  <GeneratedText id="m_17f8c524f67082" />
-                </span>
-                <span>
-                  <strong className="text-slate-800 dark:text-slate-200">
-                    <GeneratedValue value={stats.responses} />
-                  </strong>
-                  <GeneratedValue value={' '} />
-                  <GeneratedText id="m_0c3df2423f6796" />
-                </span>
-                <Link href="/apps/responses" className="text-teal-700 hover:underline">
-                  <GeneratedText id="m_1ff3e44ad33662" />
-                </Link>
+          <PageHeader
+            title={tGenerated('m_07f039d1ce81ec')}
+            description={tGenerated('m_181eacbaca4566')}
+            actions={
+              <div className="flex items-center gap-2">
+                <GeneratedValue value={canGenerate ? <AiGenerateButton /> : null} />
+                <GeneratedValue
+                  value={
+                    canCreate ? (
+                      <Link href="/apps/templates/new">
+                        <Button>
+                          <Plus size={15} /> <GeneratedText id="m_1a050bcb668962" />
+                        </Button>
+                      </Link>
+                    ) : null
+                  }
+                />
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <GeneratedValue value={canGenerate ? <AiGenerateButton /> : null} />
-              <GeneratedValue
-                value={
-                  canCreate ? (
-                    <Link href="/apps/templates/new">
-                      <Button>
-                        <Plus size={15} /> <GeneratedText id="m_1a050bcb668962" />
-                      </Button>
-                    </Link>
-                  ) : null
-                }
-              />
-            </div>
-          </header>
+            }
+          />
+          <div className="hidden flex-wrap items-center gap-4 text-xs text-slate-500 sm:flex dark:text-slate-400">
+            <span>
+              <strong className="text-slate-800 dark:text-slate-200">
+                <GeneratedValue value={stats.templates} />
+              </strong>
+              <GeneratedValue value={' '} />
+              <GeneratedText id="m_02877322a055ff" />
+            </span>
+            <span>
+              <strong className="text-slate-800 dark:text-slate-200">
+                <GeneratedValue value={stats.published} />
+              </strong>
+              <GeneratedValue value={' '} />
+              <GeneratedText id="m_17f8c524f67082" />
+            </span>
+            <span>
+              <strong className="text-slate-800 dark:text-slate-200">
+                <GeneratedValue value={stats.responses} />
+              </strong>
+              <GeneratedValue value={' '} />
+              <GeneratedText id="m_0c3df2423f6796" />
+            </span>
+            <Link href="/apps/responses" className="text-teal-700 hover:underline">
+              <GeneratedText id="m_1ff3e44ad33662" />
+            </Link>
+          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <FormsKindNav active={kindFilter} currentParams={sp} />
-            <div className="ml-auto w-full sm:w-72">
-              <SearchInput placeholder={tGenerated('m_1924fb5aeba7f0')} />
-            </div>
+          <FormsKindNav active={kindFilter} currentParams={sp} />
+          <TableToolbar>
+            <SearchInput placeholder={tGenerated('m_1924fb5aeba7f0')} />
             <FilterChips
               basePath="/apps"
               currentParams={sp}
@@ -247,7 +242,7 @@ export default async function FormsPage({
               defaultValue="desc"
               hideAll
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >

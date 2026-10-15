@@ -134,6 +134,8 @@ BeaconHS works in any modern browser and is built for the field. You can also in
 
 Installing it also lets you get push notifications on iPhone. See [Notifications & Inbox](/help/notifications).
 
+On a phone, list pages keep the main button (like **New assessment**) next to the page title. Other buttons, such as **Export CSV** or **Print blank**, are behind the **⋯** button beside it. Tap **⋯** to show them and tap it again to hide them. Filters sit in one row under the search box. Swipe that row sideways to see every filter.
+
 ## Getting help
 
 - Open this user guide any time at [Help](/help). Use the search box to find an answer fast.

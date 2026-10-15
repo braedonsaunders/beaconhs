@@ -95,7 +95,6 @@ export default async function GroupsPage({
     <ListPageLayout
       header={
         <>
-          <PeopleSubNav active="groups" />
           <PageHeader
             title={tGenerated('m_1668000fa2a811')}
             description={tGenerated('m_0e4410137a242e')}
@@ -107,6 +106,7 @@ export default async function GroupsPage({
               </form>
             }
           />
+          <PeopleSubNav active="groups" />
           <SearchInput placeholder={tGenerated('m_05fb9a41d3a163')} />
           <GeneratedValue
             value={

@@ -27,6 +27,7 @@ import { formatDate } from '@/lib/datetime'
 import { parseListParams, pickString } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
 import { HazidSubNav } from '../../_subnav'
@@ -162,9 +163,9 @@ export default async function HazardTypesPage({
               </Link>
             }
           />
-          <div className="flex items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder={tGenerated('m_1e88f4afb9d57e')} />
-          </div>
+          </TableToolbar>
         </>
       }
     >

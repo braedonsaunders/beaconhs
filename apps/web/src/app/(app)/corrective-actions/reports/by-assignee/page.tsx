@@ -175,12 +175,12 @@ export default async function ByAssigneeReport({
     <ListPageLayout
       header={
         <>
-          <CorrectiveActionsSubNav active="by-assignee" />
           <PageHeader
             title={tGenerated('m_14207dd46d2936')}
             description={tGenerated('m_052a61649aca3e')}
             back={{ href: '/corrective-actions', label: 'Back to records' }}
           />
+          <CorrectiveActionsSubNav active="by-assignee" />
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="secondary">
               <GeneratedValue value={stats.length} /> <GeneratedText id="m_0f7bac1646a471" />

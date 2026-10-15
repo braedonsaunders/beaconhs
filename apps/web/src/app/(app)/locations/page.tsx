@@ -36,6 +36,7 @@ import { requireRequestContext } from '@/lib/auth'
 import { getTenantHierarchy } from '@/lib/org-hierarchy'
 import { buildExportHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { FilterChips } from '@/components/filter-bar'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -177,7 +178,6 @@ export default async function LocationsPage({
     <ListPageLayout
       header={
         <>
-          <LocationsSubNav active="locations" />
           <PageHeader
             title={tGenerated('m_1c045021411277')}
             description={tGenerated('m_109888cfb5cab9')}
@@ -208,7 +208,8 @@ export default async function LocationsPage({
               </div>
             }
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <LocationsSubNav active="locations" />
+          <TableToolbar>
             <SearchInput placeholder={tGenerated('m_1b2c753f4c06fa')} />
             <FilterChips
               basePath="/locations"
@@ -221,7 +222,7 @@ export default async function LocationsPage({
                 { value: 'archived', label: 'Archived', count: archivedCount },
               ]}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >

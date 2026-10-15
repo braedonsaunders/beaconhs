@@ -14,6 +14,7 @@ import { canManageModule } from '@/lib/module-admin/guard'
 import { DownloadLink } from '@/components/download-link'
 import { buildExportHref, mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { FilterChips } from '@/components/filter-bar'
 import { Pagination } from '@/components/pagination'
 import { ListPageLayout } from '@/components/page-layout'
@@ -186,7 +187,7 @@ export default async function PeoplePage({
             }
           />
           <PeopleSubNav active="directory" />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <FilterChips
               basePath="/people"
               currentParams={sp}
@@ -230,7 +231,7 @@ export default async function PeoplePage({
                 ) : null
               }
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >

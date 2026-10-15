@@ -28,6 +28,7 @@ import { getOrgUnitSyncOrigins } from '@/lib/org-sync'
 import { levelLabel } from '@/lib/org-hierarchy'
 import { mergeHref, parseListParams, pickString } from '@/lib/list-params'
 import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { FilterChips } from '@/components/filter-bar'
 import { SortableTh } from '@/components/sortable-th'
 import { Pagination } from '@/components/pagination'
@@ -156,7 +157,6 @@ export default async function OrgUnitsPage({
     <ListPageLayout
       header={
         <>
-          <LocationsSubNav active="units" />
           <PageHeader
             title={tGenerated('m_13ba3f5fafdada')}
             description={tGenerated('m_05cd0fbb913bf1')}
@@ -168,6 +168,7 @@ export default async function OrgUnitsPage({
               </Link>
             }
           />
+          <LocationsSubNav active="units" />
           <GeneratedValue
             value={
               errorMsg ? (
@@ -177,7 +178,7 @@ export default async function OrgUnitsPage({
               ) : null
             }
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <TableToolbar>
             <SearchInput placeholder={tGenerated('m_1b2c753f4c06fa')} />
             <FilterChips
               basePath={BASE}
@@ -202,7 +203,7 @@ export default async function OrgUnitsPage({
                 count: levelCounts.get(l) ?? 0,
               }))}
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >

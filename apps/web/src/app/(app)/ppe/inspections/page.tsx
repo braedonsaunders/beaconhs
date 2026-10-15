@@ -32,6 +32,7 @@ import { SearchInput } from '@/components/search-input'
 import { SortableTh } from '@/components/sortable-th'
 import { TableToolbar } from '@/components/table-toolbar'
 import { DownloadLink } from '@/components/download-link'
+import { FilterChips } from '@/components/filter-bar'
 import { PpeInspectionDetailDrawer } from '../_inspection-detail-drawer'
 import { PpeOtherInspectionDrawer } from '../_other-inspection-drawer'
 
@@ -159,30 +160,21 @@ export default async function PpeInspectionsPage({
             <SearchInput placeholder={tGenerated('m_03945ee3d559c0')} />
             {(
               [
-                ['kind', kind, KINDS, 'All kinds'],
-                ['result', result, RESULTS, 'All results'],
-                ['status', status, STATUSES, 'All statuses'],
-                ['source', source, SOURCES, 'All PPE'],
+                ['kind', KINDS, 'Kind', 'All kinds'],
+                ['result', RESULTS, 'Result', 'All results'],
+                ['status', STATUSES, 'Status', 'All statuses'],
+                ['source', SOURCES, 'PPE', 'All PPE'],
               ] as const
-            ).map(([key, selected, options, all]) => (
-              <div key={key} className="flex flex-wrap gap-1" role="group" aria-label={key}>
-                {[['', all], ...options.map((value) => [value, label(value)])].map(
-                  ([value, text]) => (
-                    <Link
-                      key={value}
-                      href={mergeHref(BASE, sp, { [key]: value || undefined, page: 1 })}
-                      aria-current={(selected ?? '') === value ? 'page' : undefined}
-                      className={
-                        (selected ?? '') === value
-                          ? 'rounded-full bg-teal-600 px-3 py-1 text-xs text-white'
-                          : 'rounded-full border border-slate-200 px-3 py-1 text-xs capitalize dark:border-slate-700'
-                      }
-                    >
-                      <GeneratedValue value={text} />
-                    </Link>
-                  ),
-                )}
-              </div>
+            ).map(([key, options, title, all]) => (
+              <FilterChips
+                key={key}
+                basePath={BASE}
+                currentParams={sp}
+                paramKey={key}
+                label={title}
+                allLabel={all}
+                options={options.map((value) => ({ value, label: label(value) }))}
+              />
             ))}
           </TableToolbar>
         </>

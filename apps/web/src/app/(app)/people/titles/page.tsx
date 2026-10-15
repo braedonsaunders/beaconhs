@@ -22,6 +22,7 @@ import { parseListParams } from '@/lib/list-params'
 import { ListPageLayout } from '@/components/page-layout'
 import { Pagination } from '@/components/pagination'
 import { SearchInput } from '@/components/search-input'
+import { TableToolbar } from '@/components/table-toolbar'
 import { SortableTh } from '@/components/sortable-th'
 import { FilterChips } from '@/components/filter-bar'
 import { PeopleSubNav } from '../_components/people-sub-nav'
@@ -120,7 +121,6 @@ export default async function TitlesPage({
     <ListPageLayout
       header={
         <>
-          <PeopleSubNav active="titles" />
           <PageHeader
             title={tGenerated('m_05624b55a0531d')}
             description={tGenerated('m_1e813b0e14cf1f')}
@@ -132,7 +132,8 @@ export default async function TitlesPage({
               </Link>
             }
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <PeopleSubNav active="titles" />
+          <TableToolbar>
             <SearchInput placeholder={tGenerated('m_16ad092d045e11')} />
             <FilterChips
               basePath={BASE}
@@ -146,7 +147,7 @@ export default async function TitlesPage({
               ]}
               allLabel="All"
             />
-          </div>
+          </TableToolbar>
         </>
       }
     >

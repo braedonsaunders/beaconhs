@@ -63,7 +63,6 @@ const RESULT_VARIANT: Record<string, 'success' | 'destructive' | 'secondary'> = 
   incomplete: 'secondary',
 }
 const STATUS_FILTERS = [
-  { value: '', label: 'All' },
   { value: 'draft', label: 'Draft' },
   { value: 'in_progress', label: 'In progress' },
   { value: 'submitted', label: 'Submitted' },
@@ -263,26 +262,13 @@ export default async function EquipmentInspectionsPage({
           <EquipmentSubNav active="inspections" />
           <TableToolbar>
             <SearchInput placeholder={tGenerated('m_17c97e2e4a7a11')} />
-            <div className="flex flex-wrap items-center gap-1.5">
-              <GeneratedValue
-                value={STATUS_FILTERS.map((f) => {
-                  const active = statusFilter === f.value
-                  return (
-                    <Link
-                      key={f.value || 'all'}
-                      href={mergeHref(BASE, sp, { status: f.value || undefined, page: 1 }) as never}
-                      className={
-                        active
-                          ? 'rounded-full bg-teal-600 px-3 py-1 text-xs font-medium text-white'
-                          : 'rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
-                      }
-                    >
-                      <GeneratedValue value={f.label} />
-                    </Link>
-                  )
-                })}
-              />
-            </div>
+            <FilterChips
+              basePath={BASE}
+              currentParams={sp}
+              paramKey="status"
+              label={tGenerated('m_0b9da892d6faf0')}
+              options={STATUS_FILTERS}
+            />
             {canManageModule(ctx, 'equipment') ? (
               <FilterChips
                 basePath={BASE}

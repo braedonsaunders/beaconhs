@@ -207,12 +207,12 @@ export default async function AgingReport({
     <ListPageLayout
       header={
         <>
-          <CorrectiveActionsSubNav active="aging" />
           <PageHeader
             title={tGenerated('m_112ed207438629')}
             description={tGenerated('m_04061670db1e74')}
             back={{ href: '/corrective-actions', label: 'Back to records' }}
           />
+          <CorrectiveActionsSubNav active="aging" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <GeneratedValue
               value={BUCKETS.map((b) => (

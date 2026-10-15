@@ -153,7 +153,6 @@ export default async function PpeBanksPage({
     <ListPageLayout
       header={
         <>
-          <PpeSubNav active="banks" />
           <PageHeader
             title={tGenerated('m_17d1f0b9fab4d0')}
             description={tGenerated('m_03bf7faae069d6')}
@@ -165,6 +164,7 @@ export default async function PpeBanksPage({
               </Link>
             }
           />
+          <PpeSubNav active="banks" />
           <TableToolbar>
             <SearchInput placeholder={tGenerated('m_0a377ecaa4554e')} />
             <FilterChips
